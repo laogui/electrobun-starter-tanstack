@@ -11,7 +11,8 @@
     "type-check": "tsgo --noEmit",
     "lint": "eslint --fix",
     "format": "oxfmt --write .",
-    "ci": "concurrently \"bun run type-check\" \"bun run lint\" \"bun run format\""
+    "ci": "concurrently \"bun run type-check\" \"bun run lint\" \"bun run format\"",
+    "machine-translate": "inlang machine translate --project project.inlang"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -71,6 +72,8 @@
     "typescript": "^5.7.2",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
-    "web-vitals": "^5.1.0"
+    "web-vitals": "^5.1.0",
+    "@inlang/paraglide-js": "^2.15.1",
+    "@inlang/cli": "^3.0.0"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "example_message": "你好世界 {username}",
+  "home_title": "欢迎",
+  "home_description": "这是 paraglide-js 国际化的演示。"
+}

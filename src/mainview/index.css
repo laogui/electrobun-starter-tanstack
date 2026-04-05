@@ -1,3 +1,37 @@
 @import "tailwindcss";
 
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
+  }
+}
+
+.folder-scroll-container {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+.folder-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+body.resizing-nwse,
+body.resizing-nwse * {
+  cursor: nwse-resize !important;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));

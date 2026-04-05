@@ -12,6 +12,7 @@
       "*": ["./*"]
     },
     "types": ["vite/client"],
+    "allowJs": true,
     "allowImportingTsExtensions": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true,
@@ -27,6 +28,13 @@
     "skipLibCheck": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*tsx", "src/**/*.tx"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.tx",
+    "src/**/*.js",
+    "*.ts",
+    "*.mts"
+  ],
   "exclude": ["node_modules", "dist", "build", "../../package/dist"]
 }

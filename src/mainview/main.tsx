@@ -1,3 +1,4 @@
+import { ThemeProvider } from "better-themes";
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 import { router } from "@/router";
@@ -10,4 +11,8 @@ if (rootElement == null) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(<RouterProvider router={router} />);
+root.render(
+  <ThemeProvider enableSystem attribute="class" defaultTheme="system">
+    <RouterProvider router={router} />
+  </ThemeProvider>,
+);

@@ -3,7 +3,7 @@ import nirtamir2 from "@nirtamir2/eslint-config";
 
 export default nirtamir2(
   {
-    ignores: [""],
+    ignores: ["**/*.md", "src/paraglide/**/*.js"],
     formatters: false,
     react: true,
     jsx: true,
@@ -26,6 +26,7 @@ export default nirtamir2(
         "jsonc/sort-keys": "off",
         "react-refresh/only-export-components": "off",
         "eslint-plugin-sort-destructure-keys-typescript/sort-jsx-attributes-by-type": "off",
+        "antfu/no-top-level-await": "off",
       },
     },
   ],

@@ -1,7 +1,9 @@
 import { memo, useState } from 'react';
-import { useReactFlow, useViewport, NodeResizeControl } from '@xyflow/react';
+import { useReactFlow, useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const handleClassName = "!w-3 !h-3 !bg-blue-500 !border-none opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 nodrag";
 
 export const CardContent = ({ data, isFocused, onChange }: any) => {
   const [newItem, setNewItem] = useState('');
@@ -104,11 +106,7 @@ const CardNode = ({ id, data }: any) => {
         "transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg",
         data.isHidden ? "opacity-0 pointer-events-none" : "opacity-100"
       )}
-      onClick={(e) => {
-        e.stopPropagation();
-        const rect = e.currentTarget.getBoundingClientRect();
-        data.setFocusedNode({ id, data, rect });
-      }}
+      
     >
       <NodeResizeControl
         minWidth={250}
@@ -125,6 +123,11 @@ const CardNode = ({ id, data }: any) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><g fill="none" fillRule="evenodd"><path fill="#1B2536" fillOpacity="0.5" d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"/><path fill="#FFF" fillOpacity="0.7" d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"/></g></svg>
         </div>
       </NodeResizeControl>
+      <Handle type="target" position={Position.Top} className={handleClassName} />
+      <Handle type="source" position={Position.Right} className={handleClassName} />
+      <Handle type="source" position={Position.Bottom} className={handleClassName} />
+      <Handle type="target" position={Position.Left} className={handleClassName} />
+
       {isZoomedOut ? (
         <div className={cn("w-full h-full p-6 flex flex-col", data.color)}>
            {data.tag && <div className={cn("w-12 h-4 rounded-md mb-4", data.tagColor)}></div>}

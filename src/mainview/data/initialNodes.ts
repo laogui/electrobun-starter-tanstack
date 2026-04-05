@@ -1,4 +1,6 @@
-export const initialNodes = [
+import type { Node } from '@xyflow/react';
+
+export const initialNodes: Node[] = [
   {
     id: '1',
     type: 'card',
@@ -52,6 +54,7 @@ export const initialNodes = [
     id: '4',
     type: 'folder',
     position: { x: 900, y: 600 },
+    style: { width: 350, height: 350 },
     data: {
       title: '3 items',
       subtitle: 'The really great ideas to implement',
@@ -86,6 +89,7 @@ export const initialNodes = [
     id: '6',
     type: 'folder',
     position: { x: 1300, y: 600 },
+    style: { width: 350, height: 350 },
     data: {
       title: '5 items',
       subtitle: 'The critical bug reports to fix asap',

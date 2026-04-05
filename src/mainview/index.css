@@ -34,4 +34,11 @@ body.resizing-nwse * {
   cursor: nwse-resize !important;
 }
 
+/* Selected node styling */
+.react-flow__node.selected > div {
+  outline: 2px solid #0096ff;
+  outline-offset: 2px;
+  border-radius: 24px;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));

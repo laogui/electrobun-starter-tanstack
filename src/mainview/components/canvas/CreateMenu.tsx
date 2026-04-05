@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, StickyNote, Folder, File } from 'lucide-react';
 
@@ -8,8 +8,7 @@ const menuItems = [
   { id: 'file', label: 'File', icon: File, enabled: false },
 ];
 
-export function CreateMenu({ onCreateNode }: { onCreateNode: (type: 'card' | 'folder') => void }) {
-  const [open, setOpen] = useState(false);
+export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (type: 'card' | 'folder') => void; open: boolean; setOpen: (v: boolean) => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

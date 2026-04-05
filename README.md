@@ -59,3 +59,25 @@ When you run `bun run dev` (without HMR):
 - **Vite settings**: Edit `vite.config.ts`
 - **Window settings**: Edit `src/bun/index.ts`
 - **App metadata**: Edit `electrobun.config.ts`
+
+## Unit Testing
+
+This project now uses **Vitest** as the recommended unit test runner.
+
+Recommended approach for this codebase:
+
+- **Renderer unit tests**: use `Vitest` for fast feedback and colocate tests as `*.test.ts` / `*.test.tsx` under `src/mainview/`
+- **React component tests**: use `@testing-library/react` for user-facing behavior
+- **Main-process code** (`src/bun/`): prefer integration or app-level tests later, because Electrobun runtime APIs are harder to isolate in unit tests
+
+Current setup:
+
+```bash
+# Run all unit tests once
+bun run test
+
+# Run Vitest in watch mode
+bun run test:watch
+```
+
+The initial example test covers `src/mainview/lib/canvasUtils.ts`, which is a good pattern to follow for pure canvas logic before expanding into component tests.

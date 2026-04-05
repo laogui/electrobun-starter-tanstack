@@ -489,6 +489,36 @@ interface AppConfig {
   → 重新解析 frontmatter → diff → 更新内存状态 → 重新渲染
 ```
 
+#### 5.8.1 状态管理建议
+
+当前这个项目**不需要一开始就上重量级全局状态库**。更合适的分层是：
+
+- **画布本地交互状态**（`nodes`、`edges`、选中态、聚焦态、右键菜单等）：优先放在画布路由内，用 `useState` / `useReducer` 管理。
+- **跨组件但只在画布内共享的更新能力**：继续使用轻量 `Context`，避免把所有 UI 状态都抬到全局。
+- **异步 / 服务端 / 文件系统状态**：继续使用现有的 **TanStack React Query**，负责加载、缓存、重试和错误提示。
+
+如果后续因为以下需求而需要引入统一的客户端状态容器：
+
+- 撤销 / 重做历史栈
+- 画布持久化与 debounce flush
+- 多视图共享同一 workspace 状态
+- 搜索、选择、剪贴板等跨组件协同变复杂
+
+则**优先推荐 `Zustand`**，而不是 Redux 一类更重的方案。原因：
+
+1. **更贴合当前项目规模**：当前核心状态集中在单个画布页面，Redux 的模板代码和心智负担偏重。
+2. **TypeScript 成本低**：`Zustand` API 更轻，适合和 React Flow 的 `nodes` / `edges` 数据直接结合。
+3. **更容易扩展到持久化与撤销/重做**：后续可通过 middleware 或自定义历史栈承接 P1 / P2 的数据层需求。
+4. **不会和 React Query 职责冲突**：`Zustand` 管本地交互状态，React Query 管异步数据，边界清晰。
+
+因此建议的演进路线是：
+
+- **MVP 当前阶段**：保持 `useState` / `useReducer` + 轻量 `Context` + React Query。
+- **P1（撤销 / 重做）**：若画布状态开始分散，优先把画布交互状态收敛到 `useReducer` 或 `Zustand` store。
+- **P2（数据持久化）**：实现持久化时，再把 `nodes`、`edges`、历史栈、待 flush 队列迁移到 `Zustand` 会更顺手。
+
+一句话结论：**这个项目当前最适合“本地状态 + React Query”的分层；如果要补一个状态管理工具，首选 Zustand。**
+
 ### 5.9 导入/导出 (Import / Export)
 * **导出**：
     * **JSON**：导出完整画布数据（manifest + 关联的 .md 内容），可用于备份或迁移。

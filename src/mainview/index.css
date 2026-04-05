@@ -34,11 +34,96 @@ body.resizing-nwse * {
   cursor: nwse-resize !important;
 }
 
-/* Selected node styling */
-.react-flow__node.selected > div {
+/* ── Design tokens ── */
+:root {
+  --group-blue: 210 85% 94%;
+  --group-blue-border: 210 85% 80%;
+  --group-green: 145 60% 93%;
+  --group-green-border: 145 60% 75%;
+  --group-yellow: 45 90% 93%;
+  --group-yellow-border: 45 90% 75%;
+  --group-pink: 340 75% 94%;
+  --group-pink-border: 340 75% 80%;
+  --group-orange: 28 90% 93%;
+  --group-orange-border: 28 90% 78%;
+  --connection: 220 15% 55%;
+  --connection-active: 220 90% 52%;
+}
+
+/* ── Group styles ── */
+.canvas-group {
+  border-radius: 6px;
+  border: 1.5px dashed transparent;
+  transition: border-color 0.15s;
+}
+
+.canvas-group.group-blue   { background: hsl(var(--group-blue));   border-color: hsl(var(--group-blue-border));   }
+.canvas-group.group-green  { background: hsl(var(--group-green));  border-color: hsl(var(--group-green-border));  }
+.canvas-group.group-yellow { background: hsl(var(--group-yellow)); border-color: hsl(var(--group-yellow-border)); }
+.canvas-group.group-pink   { background: hsl(var(--group-pink));   border-color: hsl(var(--group-pink-border));   }
+.canvas-group.group-orange { background: hsl(var(--group-orange)); border-color: hsl(var(--group-orange-border)); }
+
+.canvas-group.selected {
+  border-color: hsl(var(--connection-active));
+  border-width: 2px;
+  border-style: dashed;
+}
+
+/* ── React Flow node overrides ── */
+
+/* Selected card/folder node styling */
+.react-flow__node.selected:not(.react-flow__node-group) > div {
   outline: 2px solid #0096ff;
   outline-offset: 2px;
   border-radius: 24px;
+}
+
+/* Remove default React Flow node border on groups */
+.react-flow__node-group {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* ── Connection handles ── */
+.react-flow__handle.conn-handle {
+  width: 10px;
+  height: 10px;
+  background: hsl(var(--connection-active));
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px hsl(var(--connection-active));
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.react-flow__node:hover .react-flow__handle.conn-handle {
+  opacity: 1;
+}
+
+.react-flow__handle.conn-handle:hover {
+  transform: scale(1.4);
+}
+
+/* ── Edge styling ── */
+.react-flow__edge-path {
+  stroke: hsl(var(--connection));
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: hsl(var(--connection-active));
+  stroke-width: 2;
+}
+
+/* Connection line while dragging */
+.react-flow__connection-path {
+  stroke: hsl(var(--connection-active));
+  stroke-width: 1.5;
+  fill: none;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));

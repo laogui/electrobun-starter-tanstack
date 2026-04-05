@@ -66,6 +66,16 @@ export const initialNodes: Node[] = [
     }
   },
   {
+    id: 'g1',
+    type: 'group',
+    position: { x: 100, y: 600 },
+    style: { width: 800, height: 400 },
+    data: {
+      label: 'Design Research',
+      color: 'blue',
+    }
+  },
+  {
     id: '5',
     type: 'card',
     position: { x: 1300, y: 100 },

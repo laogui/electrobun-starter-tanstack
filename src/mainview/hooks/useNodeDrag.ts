@@ -3,12 +3,10 @@ import { useReactFlow, type Node } from '@xyflow/react';
 import type { OnNodeDrag } from '@xyflow/react';
 import { sortNodesByParent, isDescendant } from '@/lib/canvasUtils';
 import { CARD_W, CARD_H, FOLDER_W, FOLDER_H } from '@/lib/canvasConstants';
+import { useCanvasStore } from '@/store/canvasStore';
 
-interface UseNodeDragOptions {
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
-}
-
-export function useNodeDrag({ setNodes }: UseNodeDragOptions) {
+export function useNodeDrag() {
+  const setNodes = useCanvasStore((s) => s.setNodes);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const rf = useReactFlow();
@@ -75,7 +73,6 @@ export function useNodeDrag({ setNodes }: UseNodeDragOptions) {
           ),
         );
 
-        // Push away non-child cards
         const PADDING = 20;
         const intersecting = rf
           .getIntersectingNodes(node)

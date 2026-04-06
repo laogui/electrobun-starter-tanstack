@@ -1,28 +1,25 @@
-import { useState, useCallback, useRef } from 'react';
-import type { Node, Edge, ReactFlowInstance } from '@xyflow/react';
+import { useState, useCallback } from 'react';
+import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
-import { GROUP_COLORS, CARD_COLORS, STICKY_COLORS, STICKY_W, STICKY_H } from '@/lib/canvasConstants';
+import { STICKY_W, STICKY_H, STICKY_COLORS, GROUP_COLORS } from '@/lib/canvasConstants';
+import { useCanvasStore } from '@/store/canvasStore';
 
 interface UseContextMenuOptions {
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
-  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
-  setFocusedNode: (v: any) => void;
-  setFocusedFolder: (v: any) => void;
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
-  clipboardRef: React.MutableRefObject<any[]>;
-  nodeIdCounter: React.MutableRefObject<number>;
 }
 
-export function useContextMenu({
-  setNodes,
-  setEdges,
-  setFocusedNode,
-  setFocusedFolder,
-  rfInstance,
-  clipboardRef,
-  nodeIdCounter,
-}: UseContextMenuOptions) {
+export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
+  const setNodes = useCanvasStore((s) => s.setNodes);
+  const setEdges = useCanvasStore((s) => s.setEdges);
+  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
+  const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
+  const deleteNodes = useCanvasStore((s) => s.deleteNodes);
+  const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
+  const addFolderChild = useCanvasStore((s) => s.addFolderChild);
+  const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
+  const nextNodeId = useCanvasStore((s) => s.nextNodeId);
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
   const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
@@ -54,7 +51,7 @@ export function useContextMenu({
     switch (action) {
       case 'new-note': {
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-        const id = `new-${++nodeIdCounter.current}`;
+        const id = nextNodeId();
         setNodes(nds => [...nds, {
           id,
           type: 'card' as const,
@@ -65,7 +62,7 @@ export function useContextMenu({
       }
       case 'new-folder': {
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-        const id = `new-${++nodeIdCounter.current}`;
+        const id = nextNodeId();
         setNodes(nds => [...nds, {
           id,
           type: 'folder' as const,
@@ -77,7 +74,7 @@ export function useContextMenu({
       }
       case 'new-sticky': {
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-        const id = `new-${++nodeIdCounter.current}`;
+        const id = nextNodeId();
         const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
         setNodes(nds => [...nds, {
           id,
@@ -90,7 +87,7 @@ export function useContextMenu({
       }
       case 'new-group': {
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-        const id = `new-${++nodeIdCounter.current}`;
+        const id = nextNodeId();
         const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
         setNodes(nds => [...nds, {
           id,
@@ -101,18 +98,9 @@ export function useContextMenu({
         }]);
         break;
       }
-      case 'paste': {
-        if (clipboardRef.current.length === 0) return;
-        const offset = 30;
-        const newNodes = clipboardRef.current.map(n => ({
-          ...n,
-          id: `paste-${nanoid(8)}`,
-          position: { x: n.position.x + offset, y: n.position.y + offset },
-          selected: true,
-        }));
-        setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), ...newNodes]);
+      case 'paste':
+        pasteClipboard();
         break;
-      }
       case 'reset-zoom':
         rfInstance.current?.zoomTo(1, { duration: 300 });
         break;
@@ -121,11 +109,9 @@ export function useContextMenu({
           const el = document.querySelector(`[data-id="${nodeId}"]`);
           const rect = el?.getBoundingClientRect();
           if (!rect) return;
-          setNodes(nds => {
-            const node = nds.find(n => n.id === nodeId);
-            if (node) setFocusedNode({ id: nodeId, type: node.type, data: node.data, rect });
-            return nds;
-          });
+          const nodes = useCanvasStore.getState().nodes;
+          const node = nodes.find(n => n.id === nodeId);
+          if (node) setFocusedNode({ id: nodeId, type: node.type, data: node.data, rect });
         }
         break;
       case 'open-folder':
@@ -133,75 +119,34 @@ export function useContextMenu({
           const el = document.querySelector(`[data-id="${nodeId}"]`);
           const rect = el?.getBoundingClientRect();
           if (!rect) return;
-          setNodes(nds => {
-            const node = nds.find(n => n.id === nodeId);
-            if (node) setFocusedFolder({ id: nodeId, data: node.data, rect });
-            return nds;
-          });
+          const nodes = useCanvasStore.getState().nodes;
+          const node = nodes.find(n => n.id === nodeId);
+          if (node) setFocusedFolder({ id: nodeId, data: node.data, rect });
         }
         break;
       case 'copy':
         if (nodeId) {
-          setNodes(nds => {
-            const node = nds.find(n => n.id === nodeId);
-            if (node) {
-              const { isHidden, isDropTarget, ...cleanData } = node.data as any;
-              clipboardRef.current = [{ ...node, data: cleanData }];
-            }
-            return nds;
-          });
+          const nodes = useCanvasStore.getState().nodes;
+          const node = nodes.find(n => n.id === nodeId);
+          if (node) {
+            const { isHidden, isDropTarget, ...cleanData } = node.data as any;
+            useCanvasStore.setState({
+              clipboard: [{ ...node, data: cleanData }],
+            });
+          }
         }
         break;
       case 'delete':
-        if (nodeId) {
-          setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
-          setNodes(nds => {
-            const deletedNode = nds.find(n => n.id === nodeId);
-            if (deletedNode?.type === 'group') {
-              return nds
-                .filter(n => n.id !== nodeId)
-                .map(n => n.parentId === nodeId ? { ...n, parentId: undefined, extent: undefined } : n);
-            }
-            return nds.filter(n => n.id !== nodeId);
-          });
-        }
+        if (nodeId) deleteNodes([nodeId]);
         break;
       case 'change-color':
-        if (nodeId) {
-          setNodes(nds => nds.map(n => {
-            if (n.id !== nodeId) return n;
-            if (n.type === 'group') {
-              const currentIdx = GROUP_COLORS.indexOf((n.data as any).color ?? 'blue');
-              const nextColor = GROUP_COLORS[(currentIdx + 1) % GROUP_COLORS.length];
-              return { ...n, data: { ...n.data, color: nextColor } };
-            }
-            if (n.type === 'sticky') {
-              const currentIdx = STICKY_COLORS.indexOf((n.data as any).color ?? STICKY_COLORS[0]);
-              const nextColor = STICKY_COLORS[(currentIdx + 1) % STICKY_COLORS.length];
-              return { ...n, data: { ...n.data, color: nextColor } };
-            }
-            const currentIdx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
-            const nextColor = CARD_COLORS[(currentIdx + 1) % CARD_COLORS.length];
-            return { ...n, data: { ...n.data, color: nextColor } };
-          }));
-        }
+        if (nodeId) changeNodeColor(nodeId);
         break;
       case 'new-child':
-        if (nodeId) {
-          const childId = `child-${nanoid(8)}`;
-          setNodes(nds => nds.map(n => {
-            if (n.id !== nodeId) return n;
-            const children = [...((n.data as any).children || []), {
-              id: childId,
-              type: 'card' as const,
-              data: { type: 'text' as const, title: '', content: '', color: 'bg-white' },
-            }];
-            return { ...n, data: { ...n.data, children, title: `${children.length} items` } };
-          }));
-        }
+        if (nodeId) addFolderChild(nodeId);
         break;
     }
-  }, [contextMenu, rfInstance, setNodes, setEdges, setFocusedNode, setFocusedFolder, clipboardRef, nodeIdCounter]);
+  }, [contextMenu, rfInstance, setNodes, setFocusedNode, setFocusedFolder, deleteNodes, changeNodeColor, addFolderChild, pasteClipboard, nextNodeId]);
 
   return {
     contextMenu,

@@ -1,13 +1,13 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { useUpdateNodeData } from '@/components/canvas/CanvasContext';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = "conn-handle nodrag";
 
 const StickyNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
-  const onUpdate = useUpdateNodeData();
+  const onUpdate = useCanvasStore((s) => s.updateNodeData);
   const isZoomedOut = zoom < 0.4;
   const [editing, setEditing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);

@@ -2,14 +2,14 @@ import { memo, useCallback, useRef, useState } from 'react';
 import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { useUpdateNodeData } from '@/components/canvas/CanvasContext';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = "conn-handle nodrag";
 
 const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
-  const onUpdate = useUpdateNodeData();
+  const onUpdate = useCanvasStore((s) => s.updateNodeData);
   const rf = useReactFlow();
 
   const handleBlur = useCallback(() => {

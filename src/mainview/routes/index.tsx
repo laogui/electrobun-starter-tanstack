@@ -1,7 +1,7 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { createFileRoute } from "@tanstack/react-router";
-import { ReactFlow, Background, MiniMap, applyEdgeChanges, addEdge, ConnectionMode, ReactFlowProvider, type ReactFlowInstance } from '@xyflow/react';
-import type { Node, Connection, Edge } from '@xyflow/react';
+import { ReactFlow, Background, MiniMap, ConnectionMode, ReactFlowProvider, type ReactFlowInstance } from '@xyflow/react';
+import type { Node, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { AnimatePresence } from 'motion/react';
 import { FocusedView } from '@/components/canvas/FocusedView';
@@ -9,65 +9,54 @@ import { FolderView } from '@/components/canvas/FolderView';
 import { CreateMenu } from '@/components/canvas/CreateMenu';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
-import { CanvasUpdateProvider } from '@/components/canvas/CanvasContext';
-import { initialNodes } from '@/data/initialNodes';
+
 import { nodeTypes } from '@/lib/canvasConstants';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
+import { useCanvasStore } from '@/store/canvasStore';
 
 export const Route = createFileRoute("/")({
   component: CanvasRoute,
 });
 
 function CanvasComponent() {
-  const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const [focusedNode, setFocusedNode] = useState<any>(null);
-  const [focusedFolder, setFocusedFolder] = useState<any>(null);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
+  const focusedNode = useCanvasStore((s) => s.focusedNode);
+  const focusedFolder = useCanvasStore((s) => s.focusedFolder);
+  const createMenuOpen = useCanvasStore((s) => s.createMenuOpen);
+  const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
+  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
+  const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
+  const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
+  const addConnection = useCanvasStore((s) => s.addConnection);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
-  const nodeIdCounter = useRef(100);
-  const clipboardRef = useRef<any[]>([]);
-
-  const updateNodeData = useCallback(
-    (nodeId: string, updates: Record<string, unknown>) => {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n,
-        ),
-      );
-    },
-    [setNodes],
-  );
 
   const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } =
-    useNodeDrag({ setNodes });
+    useNodeDrag();
 
   const { helperLineH, helperLineV, onNodesChange } =
-    useHelperLines({ setNodes });
+    useHelperLines();
 
   const { contextMenu, setContextMenu, onPaneContextMenu, onNodeContextMenu, handleContextMenuAction } =
-    useContextMenu({ setNodes, setEdges, setFocusedNode, setFocusedFolder, rfInstance, clipboardRef, nodeIdCounter });
+    useContextMenu({ rfInstance });
 
   const { onCreateNode } =
-    useNodeCreation({ setNodes, rfInstance, nodeIdCounter });
+    useNodeCreation({ rfInstance });
 
-  useCanvasKeyboard({
-    focusedNode, focusedFolder, setFocusedNode, setFocusedFolder,
-    setNodes, setEdges, setCreateMenuOpen, clipboardRef,
-  });
+  useCanvasKeyboard();
 
   const onEdgesChange = useCallback(
-    (changes: any) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+    (changes: any) => applyEdgesChange(changes),
+    [applyEdgesChange]
   );
 
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge({ ...connection, type: 'smoothstep' }, eds)),
-    []
+    (connection: Connection) => addConnection(connection),
+    [addConnection]
   );
 
   const onNodeDoubleClick = useCallback((_: any, node: Node) => {
@@ -79,7 +68,7 @@ function CanvasComponent() {
     } else if (node.type === 'card') {
       setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
     }
-  }, []);
+  }, [setFocusedNode, setFocusedFolder]);
 
   const nodesWithState = useMemo(() => {
     return nodes.map(node => ({
@@ -94,7 +83,6 @@ function CanvasComponent() {
 
   return (
     <div className="w-screen h-screen bg-stone-50 font-sans overflow-hidden">
-      <CanvasUpdateProvider value={updateNodeData}>
         <ReactFlow
           nodes={nodesWithState}
           edges={edges}
@@ -131,7 +119,6 @@ function CanvasComponent() {
             zoomable
           />
         </ReactFlow>
-      </CanvasUpdateProvider>
 
       <AnimatePresence>
         {focusedFolder && (

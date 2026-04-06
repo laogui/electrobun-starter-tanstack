@@ -1,12 +1,10 @@
 import { useState, useCallback } from 'react';
-import { applyNodeChanges, type Node, type NodeChange, type NodePositionChange } from '@xyflow/react';
+import { applyNodeChanges, type NodeChange, type NodePositionChange } from '@xyflow/react';
 import { getHelperLines } from '@/lib/getHelperLines';
+import { useCanvasStore } from '@/store/canvasStore';
 
-interface UseHelperLinesOptions {
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
-}
-
-export function useHelperLines({ setNodes }: UseHelperLinesOptions) {
+export function useHelperLines() {
+  const setNodes = useCanvasStore((s) => s.setNodes);
   const [helperLineH, setHelperLineH] = useState<number | undefined>();
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 

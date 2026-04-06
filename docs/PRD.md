@@ -22,7 +22,7 @@
     * **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。
     * **长文本/文档**：承载长篇幅的文章。
     * **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。
-    * **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。
+    * **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；双击进入原地编辑模式，失焦后自动保存。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
 * **卡片通用能力**：
     * **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。
     * **复制/粘贴**：支持 `Cmd+C` / `Cmd+V` 复制粘贴卡片。
@@ -669,7 +669,7 @@ interface AppConfig {
 |---|------|--------|----------|----------|
 | 6 | **Group 开放式分组** | 高 | 新建 `GroupNode.tsx`, `index.tsx` | 可调整大小的彩色容器区域，子节点 `parentId` 指向 Group。三阶段拖拽处理：`onNodeDragStart`（拖出时解除 `parentId`，局部→绝对坐标）、`onNodeDrag`（`getIntersectingNodes` 检测交叉，高亮目标）、`onNodeDragStop`（确认 drop，设置 `parentId` + `extent: "parent"`，绝对→局部坐标）。预设颜色：blue/green/yellow/pink/orange |
 | 7 | **撤销/重做 (Undo/Redo)** | 中 | `index.tsx`, 新建 `useUndoRedo.ts` | 操作历史栈，记录 nodes+edges 快照或增量 diff。`Cmd+Z` 撤销、`Cmd+Shift+Z` 重做。覆盖：节点增删、移动、resize、内容编辑、拖入 Folder、连线 |
-| 8 | **便签 (Sticky Note)** | 低 | `CardNode.tsx`, `CreateMenu.tsx`, `initialNodes.ts` | 新 `displayHint: 'sticky'` 类型，轻量彩色便签（无标题栏），多种预设颜色可选，默认较小尺寸（200×200），可自由调整大小 |
+| 8 | **便签 (Sticky Note)** ✅ | 低 | `StickyNode.tsx`, `CreateMenu.tsx`, `initialNodes.ts` | 独立 `sticky` 节点类型（非 CardNode 子类型），轻量彩色便签（无标题栏），6 种预设颜色，默认 200×200（120–500 可调）。默认可拖拽，双击原地编辑（`contentEditable`），失焦保存。**不进入 FocusedView**，双击事件由组件内部消费 |
 | 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 支持拖拽图片文件到画布 / `Cmd+V` 粘贴图片创建卡片。画布上显示等比缩略图，聚焦模式显示原图。图片数据 MVP 阶段存为 base64 或 blob URL，后续迁移到 `attachments/` 目录 |
 
 ### 🟢 P2 — 数据层与增强功能

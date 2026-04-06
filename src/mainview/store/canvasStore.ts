@@ -8,6 +8,14 @@ import {
   CARD_W, CARD_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H,
   GROUP_COLORS, CARD_COLORS, STICKY_COLORS,
 } from '@/lib/canvasConstants';
+import {
+  createUndoRedoState,
+  pushSnapshot,
+  undo as undoSnapshot,
+  redo as redoSnapshot,
+  type UndoRedoState,
+  type CanvasSnapshot,
+} from '@/lib/undoRedo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +66,14 @@ export interface CanvasState {
   changeNodeColor: (nodeId: string) => void;
   addFolderChild: (folderId: string) => void;
 
+  // Undo / Redo
+  _undoRedo: UndoRedoState;
+  saveSnapshot: () => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+
   // Helpers
   nextNodeId: () => string;
 }
@@ -75,6 +91,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   createMenuOpen: false,
   clipboard: [],
   nodeIdCounter: 100,
+  _undoRedo: createUndoRedoState(),
 
   // -- core actions ---------------------------------------------------------
   setNodes: (updater) =>
@@ -93,10 +110,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   applyEdgesChange: (changes) =>
     set((s) => ({ edges: applyEdgeChanges(changes, s.edges) })),
 
-  addConnection: (connection) =>
+  addConnection: (connection) => {
+    get().saveSnapshot();
     set((s) => ({
       edges: addEdge({ ...connection, type: 'smoothstep' }, s.edges),
-    })),
+    }));
+  },
 
   updateNodeData: (nodeId, updates) =>
     set((s) => ({
@@ -129,6 +148,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   pasteClipboard: (offset = 30) => {
     const { clipboard } = get();
     if (clipboard.length === 0) return;
+    get().saveSnapshot();
     const newNodes = clipboard.map((n) => ({
       ...n,
       id: `paste-${nanoid(8)}`,
@@ -148,6 +168,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   createNode: (type, rfInstance) => {
+    get().saveSnapshot();
     const id = get().nextNodeId();
     const viewport = rfInstance?.getViewport();
     const cx = window.innerWidth / 2;
@@ -190,6 +211,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   deleteNodes: (ids) => {
+    get().saveSnapshot();
     const idSet = new Set(ids);
     set((s) => ({
       edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
@@ -205,7 +227,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }));
   },
 
-  changeNodeColor: (nodeId) =>
+  changeNodeColor: (nodeId) => {
+    get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes.map((n) => {
         if (n.id !== nodeId) return n;
@@ -220,9 +243,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         const idx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
         return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
       }),
-    })),
+    }));
+  },
 
   addFolderChild: (folderId) => {
+    get().saveSnapshot();
     const childId = `child-${nanoid(8)}`;
     set((s) => ({
       nodes: s.nodes.map((n) => {
@@ -236,4 +261,35 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }),
     }));
   },
+
+  // -- undo / redo ----------------------------------------------------------
+  saveSnapshot: () => {
+    const { nodes, edges, _undoRedo } = get();
+    set({ _undoRedo: pushSnapshot(_undoRedo, { nodes, edges }) });
+  },
+
+  undo: () => {
+    const { nodes, edges, _undoRedo } = get();
+    const result = undoSnapshot(_undoRedo, { nodes, edges });
+    if (!result) return;
+    set({
+      nodes: result.snapshot.nodes,
+      edges: result.snapshot.edges,
+      _undoRedo: result.state,
+    });
+  },
+
+  redo: () => {
+    const { nodes, edges, _undoRedo } = get();
+    const result = redoSnapshot(_undoRedo, { nodes, edges });
+    if (!result) return;
+    set({
+      nodes: result.snapshot.nodes,
+      edges: result.snapshot.edges,
+      _undoRedo: result.state,
+    });
+  },
+
+  canUndo: () => get()._undoRedo.past.length > 0,
+  canRedo: () => get()._undoRedo.future.length > 0,
 }));

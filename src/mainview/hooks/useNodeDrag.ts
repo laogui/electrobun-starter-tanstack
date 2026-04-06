@@ -7,6 +7,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 export function useNodeDrag() {
   const setNodes = useCanvasStore((s) => s.setNodes);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const rf = useReactFlow();
@@ -25,6 +26,7 @@ export function useNodeDrag() {
 
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_, node) => {
+      saveSnapshot();
       if ((node.type !== 'card' && node.type !== 'group') || !node.parentId) return;
       const abs = rf.getInternalNode(node.id)?.internals.positionAbsolute ?? node.position;
       setNodes((nds) =>
@@ -36,7 +38,7 @@ export function useNodeDrag() {
       );
       setActiveGroupId(null);
     },
-    [rf, setNodes],
+    [rf, setNodes, saveSnapshot],
   );
 
   const onNodeDrag: OnNodeDrag = useCallback(

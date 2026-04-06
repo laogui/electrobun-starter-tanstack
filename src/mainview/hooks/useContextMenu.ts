@@ -19,6 +19,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
   const nextNodeId = useCanvasStore((s) => s.nextNodeId);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -50,6 +51,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
 
     switch (action) {
       case 'new-note': {
+        saveSnapshot();
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
         const id = nextNodeId();
         setNodes(nds => [...nds, {
@@ -61,6 +63,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         break;
       }
       case 'new-folder': {
+        saveSnapshot();
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
         const id = nextNodeId();
         setNodes(nds => [...nds, {
@@ -73,6 +76,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         break;
       }
       case 'new-sticky': {
+        saveSnapshot();
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
         const id = nextNodeId();
         const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
@@ -86,6 +90,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         break;
       }
       case 'new-group': {
+        saveSnapshot();
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
         const id = nextNodeId();
         const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
@@ -146,7 +151,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         if (nodeId) addFolderChild(nodeId);
         break;
     }
-  }, [contextMenu, rfInstance, setNodes, setFocusedNode, setFocusedFolder, deleteNodes, changeNodeColor, addFolderChild, pasteClipboard, nextNodeId]);
+  }, [contextMenu, rfInstance, setNodes, setFocusedNode, setFocusedFolder, deleteNodes, changeNodeColor, addFolderChild, pasteClipboard, nextNodeId, saveSnapshot]);
 
   return {
     contextMenu,

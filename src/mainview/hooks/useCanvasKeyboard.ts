@@ -11,6 +11,8 @@ export function useCanvasKeyboard() {
   const copySelected = useCanvasStore((s) => s.copySelected);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
+  const undo = useCanvasStore((s) => s.undo);
+  const redo = useCanvasStore((s) => s.redo);
 
   useEffect(() => {
     const isModal = () => focusedNode || focusedFolder;
@@ -25,6 +27,17 @@ export function useCanvasKeyboard() {
       if (e.key === 'Escape') {
         if (focusedNode) { setFocusedNode(null); return; }
         if (focusedFolder) { setFocusedFolder(null); return; }
+        return;
+      }
+
+      if (mod && e.key === 'z') {
+        if (isEditing()) return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
         return;
       }
 
@@ -79,5 +92,5 @@ export function useCanvasKeyboard() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedNode, focusedFolder, setFocusedNode, setFocusedFolder, setNodes, deleteNodes, copySelected, pasteClipboard, setCreateMenuOpen]);
+  }, [focusedNode, focusedFolder, setFocusedNode, setFocusedFolder, setNodes, deleteNodes, copySelected, pasteClipboard, setCreateMenuOpen, undo, redo]);
 }

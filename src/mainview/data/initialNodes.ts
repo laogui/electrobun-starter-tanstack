@@ -131,5 +131,16 @@ export const initialNodes: Node[] = [
         { id: '6-5', type: 'card', data: { type: 'text', content: 'Missing translations in settings', color: 'bg-white' } },
       ]
     }
-  }
+  },
+  {
+    id: 'img1',
+    type: 'image',
+    position: { x: 100, y: 1100 },
+    style: { width: 350, height: 350 },
+    data: {
+      imageUrl: '',
+      title: 'Drop an image here',
+      color: 'bg-white',
+    },
+  },
 ];

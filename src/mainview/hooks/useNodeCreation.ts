@@ -10,7 +10,7 @@ export function useNodeCreation({ rfInstance }: UseNodeCreationOptions) {
   const createNode = useCanvasStore((s) => s.createNode);
 
   const onCreateNode = useCallback(
-    (type: 'card' | 'folder' | 'group' | 'sticky') => {
+    (type: 'card' | 'image' | 'folder' | 'group' | 'sticky') => {
       createNode(type, rfInstance.current);
     },
     [createNode, rfInstance],

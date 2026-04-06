@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 import { initialNodes } from '@/data/initialNodes';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import {
-  CARD_W, CARD_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H,
+  CARD_W, CARD_H, IMAGE_W, IMAGE_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H,
   GROUP_COLORS, CARD_COLORS, STICKY_COLORS,
 } from '@/lib/canvasConstants';
 import {
@@ -59,7 +59,7 @@ export interface CanvasState {
 
   // Actions – node CRUD
   createNode: (
-    type: 'card' | 'folder' | 'group' | 'sticky',
+    type: 'card' | 'image' | 'folder' | 'group' | 'sticky',
     rfInstance: ReactFlowInstance<any, any> | null,
   ) => void;
   deleteNodes: (ids: string[]) => void;
@@ -200,6 +200,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         newNode = { id, type: 'folder', position: pos, data: { title: '0 items', subtitle: '', children: [] } };
         break;
       }
+      case 'image': {
+        const pos = toFlow(IMAGE_W, IMAGE_H);
+        newNode = { id, type: 'image', position: pos, style: { width: IMAGE_W, height: IMAGE_H }, data: { imageUrl: '', title: '', color: 'bg-white' } };
+        break;
+      }
       default: {
         const pos = toFlow(CARD_W, CARD_H);
         newNode = { id, type: 'card', position: pos, style: { width: CARD_W, height: CARD_H }, data: { type: 'text', title: '', content: '', color: 'bg-white' } };
@@ -239,6 +244,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         if (n.type === 'sticky') {
           const idx = STICKY_COLORS.indexOf((n.data as any).color ?? STICKY_COLORS[0]);
           return { ...n, data: { ...n.data, color: STICKY_COLORS[(idx + 1) % STICKY_COLORS.length] } };
+        }
+        if (n.type === 'image') {
+          const idx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
+          return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
         }
         const idx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
         return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };

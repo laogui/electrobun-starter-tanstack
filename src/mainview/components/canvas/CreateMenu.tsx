@@ -1,16 +1,17 @@
 import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, StickyNote, Folder, File, Group, NotebookPen } from 'lucide-react';
+import { Plus, StickyNote, Folder, File, Group, NotebookPen, ImageIcon } from 'lucide-react';
 
 const menuItems = [
   { id: 'note', label: 'Note', icon: StickyNote, enabled: true },
   { id: 'sticky', label: 'Sticky', icon: NotebookPen, enabled: true },
+  { id: 'image', label: 'Image', icon: ImageIcon, enabled: true },
   { id: 'folder', label: 'Folder', icon: Folder, enabled: true },
   { id: 'group', label: 'Group', icon: Group, enabled: true },
   { id: 'file', label: 'File', icon: File, enabled: false },
 ];
 
-export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (type: 'card' | 'folder' | 'group' | 'sticky') => void; open: boolean; setOpen: (v: boolean) => void }) {
+export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (type: 'card' | 'image' | 'folder' | 'group' | 'sticky') => void; open: boolean; setOpen: (v: boolean) => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (typ
   const handleSelect = (id: string) => {
     if (id === 'note') onCreateNode('card');
     else if (id === 'sticky') onCreateNode('sticky');
+    else if (id === 'image') onCreateNode('image');
     else if (id === 'folder') onCreateNode('folder');
     else if (id === 'group') onCreateNode('group');
     setOpen(false);

@@ -65,7 +65,7 @@ function CanvasComponent() {
     if (!rect) return;
     if (node.type === 'folder') {
       setFocusedFolder({ id: node.id, data: node.data, rect });
-    } else if (node.type === 'card') {
+    } else if (node.type === 'card' || node.type === 'image') {
       setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
     }
   }, [setFocusedNode, setFocusedFolder]);

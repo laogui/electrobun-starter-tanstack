@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
-import { STICKY_W, STICKY_H, STICKY_COLORS, GROUP_COLORS } from '@/lib/canvasConstants';
+import { STICKY_W, STICKY_H, IMAGE_W, IMAGE_H, STICKY_COLORS, GROUP_COLORS } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface UseContextMenuOptions {
@@ -33,7 +33,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : node.type === 'sticky' ? 'sticky' : 'card',
+      target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : node.type === 'sticky' ? 'sticky' : node.type === 'image' ? 'image' : 'card',
       nodeId: node.id,
     });
   }, []);
@@ -100,6 +100,19 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           position: pos,
           style: { width: 500, height: 300 },
           data: { label: 'New Group', color },
+        }]);
+        break;
+      }
+      case 'new-image': {
+        saveSnapshot();
+        const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
+        const id = nextNodeId();
+        setNodes(nds => [...nds, {
+          id,
+          type: 'image' as const,
+          position: pos,
+          style: { width: IMAGE_W, height: IMAGE_H },
+          data: { imageUrl: '', title: '', color: 'bg-white' },
         }]);
         break;
       }

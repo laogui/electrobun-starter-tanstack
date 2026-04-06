@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 import { CardContent } from './nodes/CardNode';
+import { ImageContent } from './nodes/ImageNode';
 import { useEffect, useMemo } from 'react';
 
 export const FocusedView = ({ node, onClose }: any) => {
@@ -90,7 +91,11 @@ export const FocusedView = ({ node, onClose }: any) => {
         transition={{ type: 'spring', damping: 28, stiffness: 260 }}
       >
         <div className="h-full">
-          <CardContent data={node.data} isFocused={true} />
+          {node.type === 'image' ? (
+            <ImageContent data={node.data} isFocused={true} />
+          ) : (
+            <CardContent data={node.data} isFocused={true} />
+          )}
         </div>
       </motion.div>
     </motion.div>

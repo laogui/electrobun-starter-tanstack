@@ -14,6 +14,7 @@ import {
   PenLine,
   FilePlus,
   Group,
+  NotebookPen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,12 +29,13 @@ type MenuItem = {
 type ContextMenuState = {
   x: number;
   y: number;
-  target: 'canvas' | 'card' | 'folder' | 'group';
+  target: 'canvas' | 'card' | 'folder' | 'group' | 'sticky';
   nodeId?: string;
 } | null;
 
 const canvasItems: MenuItem[] = [
   { id: 'new-note', label: 'New Note', icon: StickyNote, shortcut: '⌘N' },
+  { id: 'new-sticky', label: 'New Sticky', icon: NotebookPen },
   { id: 'new-folder', label: 'New Folder', icon: Folder },
   { id: 'new-group', label: 'New Group', icon: Group },
   { id: 'paste', label: 'Paste', icon: ClipboardPaste, shortcut: '⌘V' },
@@ -52,6 +54,12 @@ const folderItems: MenuItem[] = [
   { id: 'open-folder', label: 'Open', icon: FolderOpen, shortcut: 'Enter' },
   { id: 'rename', label: 'Rename', icon: PenLine },
   { id: 'new-child', label: 'New Card Inside', icon: FilePlus },
+  { id: 'delete', label: 'Delete', icon: Trash2, shortcut: '⌫', danger: true },
+];
+
+const stickyItems: MenuItem[] = [
+  { id: 'copy', label: 'Copy', icon: Copy, shortcut: '⌘C' },
+  { id: 'change-color', label: 'Change Color', icon: Palette },
   { id: 'delete', label: 'Delete', icon: Trash2, shortcut: '⌫', danger: true },
 ];
 
@@ -97,9 +105,11 @@ export function CanvasContextMenu({
       ? folderItems
       : menu?.target === 'group'
         ? groupItems
-        : menu?.target === 'card'
-          ? cardItems
-          : canvasItems;
+        : menu?.target === 'sticky'
+          ? stickyItems
+          : menu?.target === 'card'
+            ? cardItems
+            : canvasItems;
 
   // Position clamping
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;

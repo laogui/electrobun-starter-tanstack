@@ -66,6 +66,26 @@ export const initialNodes: Node[] = [
     }
   },
   {
+    id: 's1',
+    type: 'sticky',
+    position: { x: 500, y: 600 },
+    style: { width: 200, height: 200 },
+    data: {
+      content: 'Remember to review the onboarding flow before next sprint!',
+      color: 'bg-[#FEF08A]',
+    },
+  },
+  {
+    id: 's2',
+    type: 'sticky',
+    position: { x: 730, y: 600 },
+    style: { width: 200, height: 200 },
+    data: {
+      content: 'Ask design team about new color palette 🎨',
+      color: 'bg-[#BBF7D0]',
+    },
+  },
+  {
     id: 'g1',
     type: 'group',
     position: { x: 100, y: 600 },

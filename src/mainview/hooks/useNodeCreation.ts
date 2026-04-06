@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { Node, ReactFlowInstance } from '@xyflow/react';
-import { CARD_W, CARD_H, FOLDER_W, FOLDER_H, GROUP_COLORS } from '@/lib/canvasConstants';
+import { CARD_W, CARD_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H, GROUP_COLORS, STICKY_COLORS } from '@/lib/canvasConstants';
 
 interface UseNodeCreationOptions {
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
@@ -9,7 +9,7 @@ interface UseNodeCreationOptions {
 }
 
 export function useNodeCreation({ setNodes, rfInstance, nodeIdCounter }: UseNodeCreationOptions) {
-  const onCreateNode = useCallback((type: 'card' | 'folder' | 'group') => {
+  const onCreateNode = useCallback((type: 'card' | 'folder' | 'group' | 'sticky') => {
     const id = `new-${++nodeIdCounter.current}`;
     const viewport = rfInstance.current?.getViewport();
     const cx = window.innerWidth / 2;
@@ -26,6 +26,20 @@ export function useNodeCreation({ setNodes, rfInstance, nodeIdCounter }: UseNode
         position: { x: flowX, y: flowY },
         style: { width: 500, height: 300 },
         data: { label: 'New Group', color },
+      }]);
+      return;
+    }
+
+    if (type === 'sticky') {
+      const flowX = ((cx - (viewport?.x ?? 0)) / zoom) - STICKY_W / 2;
+      const flowY = ((cy - (viewport?.y ?? 0)) / zoom) - STICKY_H / 2;
+      const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+      setNodes(nds => [...nds, {
+        id,
+        type: 'sticky',
+        position: { x: flowX, y: flowY },
+        style: { width: STICKY_W, height: STICKY_H },
+        data: { content: '', color },
       }]);
       return;
     }

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import type { Node, Edge, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
-import { GROUP_COLORS, CARD_COLORS } from '@/lib/canvasConstants';
+import { GROUP_COLORS, CARD_COLORS, STICKY_COLORS, STICKY_W, STICKY_H } from '@/lib/canvasConstants';
 
 interface UseContextMenuOptions {
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
@@ -35,7 +35,7 @@ export function useContextMenu({
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : 'card',
+      target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : node.type === 'sticky' ? 'sticky' : 'card',
       nodeId: node.id,
     });
   }, []);
@@ -75,6 +75,19 @@ export function useContextMenu({
         }]);
         break;
       }
+      case 'new-sticky': {
+        const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
+        const id = `new-${++nodeIdCounter.current}`;
+        const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+        setNodes(nds => [...nds, {
+          id,
+          type: 'sticky' as const,
+          position: pos,
+          style: { width: STICKY_W, height: STICKY_H },
+          data: { content: '', color },
+        }]);
+        break;
+      }
       case 'new-group': {
         const pos = contextMenu ? screenToFlow(contextMenu.x, contextMenu.y) : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
         const id = `new-${++nodeIdCounter.current}`;
@@ -110,7 +123,7 @@ export function useContextMenu({
           if (!rect) return;
           setNodes(nds => {
             const node = nds.find(n => n.id === nodeId);
-            if (node) setFocusedNode({ id: nodeId, data: node.data, rect });
+            if (node) setFocusedNode({ id: nodeId, type: node.type, data: node.data, rect });
             return nds;
           });
         }
@@ -160,6 +173,11 @@ export function useContextMenu({
             if (n.type === 'group') {
               const currentIdx = GROUP_COLORS.indexOf((n.data as any).color ?? 'blue');
               const nextColor = GROUP_COLORS[(currentIdx + 1) % GROUP_COLORS.length];
+              return { ...n, data: { ...n.data, color: nextColor } };
+            }
+            if (n.type === 'sticky') {
+              const currentIdx = STICKY_COLORS.indexOf((n.data as any).color ?? STICKY_COLORS[0]);
+              const nextColor = STICKY_COLORS[(currentIdx + 1) % STICKY_COLORS.length];
               return { ...n, data: { ...n.data, color: nextColor } };
             }
             const currentIdx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');

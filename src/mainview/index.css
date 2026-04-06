@@ -72,10 +72,17 @@ body.resizing-nwse * {
 /* ── React Flow node overrides ── */
 
 /* Selected card/folder node styling */
-.react-flow__node.selected:not(.react-flow__node-group) > div {
+.react-flow__node.selected:not(.react-flow__node-group):not(.react-flow__node-sticky) > div {
   outline: 2px solid #0096ff;
   outline-offset: 2px;
   border-radius: 24px;
+}
+
+/* Selected sticky node styling */
+.react-flow__node-sticky.selected > div {
+  outline: 2px solid #0096ff;
+  outline-offset: 2px;
+  border-radius: 12px;
 }
 
 /* Remove default React Flow node border on groups */

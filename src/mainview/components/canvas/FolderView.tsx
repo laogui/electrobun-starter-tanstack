@@ -1,7 +1,25 @@
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 import { CardContent } from './nodes/CardNode';
+import { ImageContent } from './nodes/ImageNode';
+import { cn } from '@/lib/utils';
 import React, { useEffect, useRef, useCallback } from 'react';
+
+const FolderChildContent = ({ child }: { child: any }) => {
+  if (child.type === 'image') {
+    return <ImageContent data={child.data} />;
+  }
+  if (child.type === 'sticky') {
+    return (
+      <div className={cn('w-full h-full p-4 flex flex-col', child.data.color)}>
+        <div className="flex-1 whitespace-pre-wrap break-words leading-relaxed text-sm">
+          {child.data.content}
+        </div>
+      </div>
+    );
+  }
+  return <CardContent data={child.data} />;
+};
 
 export const FolderView = ({ folder, onClose, onCardDoubleClick }: any) => {
   const children = folder.data.children || [];
@@ -180,7 +198,7 @@ export const FolderView = ({ folder, onClose, onCardDoubleClick }: any) => {
                 delay: index * 0.05
               }}
             >
-              <CardContent data={child.data} />
+              <FolderChildContent child={child} />
             </motion.div>
           ))}
         </div>

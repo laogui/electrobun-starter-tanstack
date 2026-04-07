@@ -1,7 +1,9 @@
 import { memo } from 'react';
 import { Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useViewport, NodeResizeControl } from '@xyflow/react';
+import { useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
+
+const handleClassName = 'conn-handle nodrag';
 
 const FolderNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
@@ -31,6 +33,10 @@ const FolderNode = ({ id, data }: any) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><g fill="none" fillRule="evenodd"><path fill="#1B2536" fillOpacity="0.5" d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"/><path fill="#FFF" fillOpacity="0.7" d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"/></g></svg>
         </div>
       </NodeResizeControl>
+      <Handle type="target" position={Position.Top} id="top" className={handleClassName} />
+      <Handle type="source" position={Position.Right} id="right" className={handleClassName} />
+      <Handle type="source" position={Position.Bottom} id="bottom" className={handleClassName} />
+      <Handle type="target" position={Position.Left} id="left" className={handleClassName} />
       {/* Stack backgrounds */}
       <div className={cn(
         "absolute inset-0 bg-white/40 rounded-3xl shadow-sm transition-transform duration-200 ease-out",

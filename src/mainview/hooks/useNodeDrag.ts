@@ -5,6 +5,10 @@ import { sortNodesByParent, isDescendant } from '@/lib/canvasUtils';
 import { CARD_W, CARD_H, FOLDER_W, FOLDER_H } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
 
+/** Node types that can be placed inside a Group or Folder (i.e. content nodes). */
+const CONTENT_TYPES = new Set(['card', 'image', 'sticky']);
+const isContentNode = (node: Node) => CONTENT_TYPES.has(node.type ?? '');
+
 export function useNodeDrag() {
   const setNodes = useCanvasStore((s) => s.setNodes);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
@@ -13,9 +17,11 @@ export function useNodeDrag() {
   const rf = useReactFlow();
 
   const findOverlappingFolder = useCallback((draggedNode: Node, allNodes: Node[]) => {
-    if (draggedNode.type !== 'card') return null;
-    const dx = draggedNode.position.x + CARD_W / 2;
-    const dy = draggedNode.position.y + CARD_H / 2;
+    if (!isContentNode(draggedNode)) return null;
+    const nodeW = (draggedNode.measured?.width ?? (draggedNode.style?.width as number)) || CARD_W;
+    const nodeH = (draggedNode.measured?.height ?? (draggedNode.style?.height as number)) || CARD_H;
+    const dx = draggedNode.position.x + nodeW / 2;
+    const dy = draggedNode.position.y + nodeH / 2;
     return allNodes.find(n =>
       n.type === 'folder' &&
       n.id !== draggedNode.id &&
@@ -27,7 +33,7 @@ export function useNodeDrag() {
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_, node) => {
       saveSnapshot();
-      if ((node.type !== 'card' && node.type !== 'group') || !node.parentId) return;
+      if ((!isContentNode(node) && node.type !== 'group') || !node.parentId) return;
       const abs = rf.getInternalNode(node.id)?.internals.positionAbsolute ?? node.position;
       setNodes((nds) =>
         sortNodesByParent(nds.map((n) => {
@@ -43,7 +49,7 @@ export function useNodeDrag() {
 
   const onNodeDrag: OnNodeDrag = useCallback(
     (_, node) => {
-      if (node.type === 'card') {
+      if (isContentNode(node)) {
         const group = rf.getIntersectingNodes(node).find((n) => n.type === 'group');
         setActiveGroupId(group?.id ?? null);
         setNodes((nds) => {
@@ -78,7 +84,7 @@ export function useNodeDrag() {
         const PADDING = 20;
         const intersecting = rf
           .getIntersectingNodes(node)
-          .filter((n) => n.type === 'card' && n.parentId !== node.id);
+          .filter((n) => isContentNode(n) && n.parentId !== node.id);
 
         if (intersecting.length === 0) return;
 
@@ -155,14 +161,14 @@ export function useNodeDrag() {
     (_, node) => {
       setDropTargetId(null);
 
-      if (node.type === 'card') {
+      if (isContentNode(node)) {
         setNodes(nds => {
           const folder = findOverlappingFolder(node, nds);
           if (folder) {
             const cardNode = nds.find(n => n.id === node.id);
             if (!cardNode) return nds;
             const { isHidden: _, isDropTarget: __, ...cleanData } = cardNode.data as any;
-            const childEntry = { id: cardNode.id, type: 'card' as const, data: cleanData };
+            const childEntry = { id: cardNode.id, type: (cardNode.type ?? 'card') as string, data: cleanData };
             return nds
               .filter(n => n.id !== node.id)
               .map(n => {

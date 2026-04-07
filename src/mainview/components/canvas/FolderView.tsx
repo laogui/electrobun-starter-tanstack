@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
 import { cn } from '@/lib/utils';
+import { colorToStyle } from '@/lib/colorUtils';
 import React, { useEffect, useRef, useCallback } from 'react';
 
 const FolderChildContent = ({ child }: { child: any }) => {
@@ -11,7 +12,7 @@ const FolderChildContent = ({ child }: { child: any }) => {
   }
   if (child.type === 'sticky') {
     return (
-      <div className={cn('w-full h-full p-4 flex flex-col', child.data.color)}>
+      <div className="w-full h-full p-4 flex flex-col" style={colorToStyle(child.data.color)}>
         <div className="flex-1 whitespace-pre-wrap break-words leading-relaxed text-sm">
           {child.data.content}
         </div>

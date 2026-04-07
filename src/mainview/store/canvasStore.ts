@@ -66,6 +66,10 @@ export interface CanvasState {
   changeNodeColor: (nodeId: string) => void;
   addFolderChild: (folderId: string) => void;
 
+  // Hydration
+  _hydrated: boolean;
+  hydrate: (nodes: Node[], edges: Edge[]) => void;
+
   // Undo / Redo
   _undoRedo: UndoRedoState;
   saveSnapshot: () => void;
@@ -86,12 +90,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- initial state --------------------------------------------------------
   nodes: initialNodes,
   edges: [],
+  _hydrated: false,
   focusedNode: null,
   focusedFolder: null,
   createMenuOpen: false,
   clipboard: [],
   nodeIdCounter: 100,
   _undoRedo: createUndoRedoState(),
+
+  // -- hydration ------------------------------------------------------------
+  hydrate: (nodes, edges) =>
+    set({ nodes, edges, _hydrated: true }),
 
   // -- core actions ---------------------------------------------------------
   setNodes: (updater) =>
@@ -202,12 +211,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
       case 'image': {
         const pos = toFlow(IMAGE_W, IMAGE_H);
-        newNode = { id, type: 'image', position: pos, style: { width: IMAGE_W, height: IMAGE_H }, data: { imageUrl: '', title: '', color: 'bg-white' } };
+        newNode = { id, type: 'image', position: pos, style: { width: IMAGE_W, height: IMAGE_H }, data: { imageUrl: '', title: '', color: '#FFFFFF' } };
         break;
       }
       default: {
         const pos = toFlow(CARD_W, CARD_H);
-        newNode = { id, type: 'card', position: pos, style: { width: CARD_W, height: CARD_H }, data: { type: 'text', title: '', content: '', color: 'bg-white' } };
+        newNode = { id, type: 'card', position: pos, style: { width: CARD_W, height: CARD_H }, data: { type: 'text', title: '', content: '', color: '#FFFFFF' } };
         break;
       }
     }
@@ -246,10 +255,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           return { ...n, data: { ...n.data, color: STICKY_COLORS[(idx + 1) % STICKY_COLORS.length] } };
         }
         if (n.type === 'image') {
-          const idx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
+          const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
           return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
         }
-        const idx = CARD_COLORS.indexOf((n.data as any).color ?? 'bg-white');
+        const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
         return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
       }),
     }));
@@ -264,7 +273,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         const children = [...((n.data as any).children || []), {
           id: childId,
           type: 'card' as const,
-          data: { type: 'text' as const, title: '', content: '', color: 'bg-white' },
+          data: { type: 'text' as const, title: '', content: '', color: '#FFFFFF' },
         }];
         return { ...n, data: { ...n.data, children, title: `${children.length} items` } };
       }),

@@ -1,6 +1,7 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
+import { colorToStyle } from '@/lib/colorUtils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = "conn-handle nodrag";
@@ -57,14 +58,14 @@ const StickyNode = ({ id, data }: any) => {
       <Handle type="target" position={Position.Left} id="left" className={handleClassName} />
 
       {isZoomedOut ? (
-        <div className={cn("w-full h-full p-3", data.color)}>
+        <div className="w-full h-full p-3" style={colorToStyle(data.color)}>
           <div className="mt-1 space-y-2 opacity-30">
             <div className="h-2 bg-current rounded-full w-full" />
             <div className="h-2 bg-current rounded-full w-4/6" />
           </div>
         </div>
       ) : (
-        <div className={cn("w-full h-full p-4 flex flex-col", data.color)}>
+        <div className="w-full h-full p-4 flex flex-col" style={colorToStyle(data.color)}>
           <div
             ref={textRef}
             contentEditable={editing}

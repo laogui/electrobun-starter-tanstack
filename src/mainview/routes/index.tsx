@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { createFileRoute } from "@tanstack/react-router";
 import { ReactFlow, Background, MiniMap, ConnectionMode, ReactFlowProvider, type ReactFlowInstance } from '@xyflow/react';
 import type { Node, Connection } from '@xyflow/react';
@@ -17,6 +17,9 @@ import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
+import { loadCanvas, rpcSaveManifest, isRpcAvailable } from '@/lib/rpc';
+import { sanitizeForPersistence } from '@/lib/sanitize';
 
 export const Route = createFileRoute("/")({
   component: CanvasRoute,
@@ -46,6 +49,28 @@ function CanvasComponent() {
 
   const { onCreateNode } =
     useNodeCreation({ rfInstance });
+
+  const hydrate = useCanvasStore((s) => s.hydrate);
+  const hydrated = useCanvasStore((s) => s._hydrated);
+
+  useCanvasPersistence();
+
+  useEffect(() => {
+    if (hydrated) return;
+    loadCanvas('default').then(async (data) => {
+      if (data && data.nodes.length > 0) {
+        hydrate(data.nodes, data.edges);
+      } else if (await isRpcAvailable()) {
+        // First run: seed workspace with initialNodes
+        const { nodes, edges } = useCanvasStore.getState();
+        const sanitized = sanitizeForPersistence(nodes, edges);
+        await rpcSaveManifest('default', sanitized.nodes, sanitized.edges);
+        console.log('[persistence] Seeded default canvas from initialNodes');
+      }
+    }).catch((err) => {
+      console.error('[persistence] Failed to load canvas:', err);
+    });
+  }, [hydrate, hydrated]);
 
   useCanvasKeyboard();
 

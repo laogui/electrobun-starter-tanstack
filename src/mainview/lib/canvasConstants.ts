@@ -4,6 +4,8 @@ import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
 
+export { CARD_COLORS, STICKY_COLORS, GROUP_COLORS, colorToStyle, isColorDark } from './colorUtils';
+
 export const CARD_W = 350;
 export const CARD_H = 450;
 export const IMAGE_W = 350;
@@ -12,26 +14,6 @@ export const FOLDER_W = 350;
 export const FOLDER_H = 350;
 export const STICKY_W = 200;
 export const STICKY_H = 200;
-
-export const GROUP_COLORS = ['blue', 'green', 'yellow', 'pink', 'orange'] as const;
-
-export const CARD_COLORS = [
-  'bg-white',
-  'bg-[#FDF2F8]',
-  'bg-[#EAF2B8]',
-  'bg-[#DBEAFE]',
-  'bg-[#FEF3C7]',
-  'bg-[#E0E7FF]',
-] as const;
-
-export const STICKY_COLORS = [
-  'bg-[#FEF08A]',
-  'bg-[#BBF7D0]',
-  'bg-[#FBCFE8]',
-  'bg-[#BFDBFE]',
-  'bg-[#FED7AA]',
-  'bg-[#E9D5FF]',
-] as const;
 
 export const nodeTypes = {
   card: CardNode,

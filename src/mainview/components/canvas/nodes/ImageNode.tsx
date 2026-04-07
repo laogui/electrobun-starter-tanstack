@@ -2,6 +2,7 @@ import { memo, useCallback, useRef } from 'react';
 import { useReactFlow, useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { ImagePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { colorToStyle } from '@/lib/colorUtils';
 
 const handleClassName = 'conn-handle nodrag';
 
@@ -23,10 +24,8 @@ export const ImageContent = ({
   if (!data.imageUrl) {
     return (
       <div
-        className={cn(
-          'w-full h-full flex flex-col items-center justify-center gap-3',
-          data.color,
-        )}
+        className="w-full h-full flex flex-col items-center justify-center gap-3"
+        style={colorToStyle(data.color)}
       >
         <ImagePlus size={isFocused ? 64 : 40} className="text-gray-300" />
         <span className="text-sm text-gray-400">No image</span>
@@ -35,7 +34,7 @@ export const ImageContent = ({
   }
 
   return (
-    <div className={cn('w-full h-full flex flex-col', data.color)}>
+    <div className="w-full h-full flex flex-col" style={colorToStyle(data.color)}>
       <div className="flex-1 min-h-0 overflow-hidden">
         <img
           src={data.imageUrl}
@@ -209,10 +208,8 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       {isZoomedOut ? (
         <div
-          className={cn(
-            'w-full h-full flex items-center justify-center',
-            data.color,
-          )}
+          className="w-full h-full flex items-center justify-center"
+          style={colorToStyle(data.color)}
         >
           {data.imageUrl ? (
             <img
@@ -228,7 +225,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       ) : data.imageUrl ? (
         <ImageContent data={data} />
       ) : (
-        <div className={cn('w-full h-full flex flex-col items-center justify-center gap-3', data.color)}>
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3" style={colorToStyle(data.color)}>
           <button
             className="nodrag nopan flex flex-col items-center gap-3 p-6 rounded-2xl hover:bg-black/5 transition-colors cursor-pointer"
             onClick={openFilePicker}

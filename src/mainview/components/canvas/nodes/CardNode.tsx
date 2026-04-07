@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { useReactFlow, useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 
 const handleClassName = "conn-handle nodrag";
 
@@ -10,7 +11,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
 
   if (data.type === 'image') {
     return (
-      <div className={cn("h-full flex flex-col", data.color)}>
+      <div className={cn("h-full flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
         <div className="p-6">
           <h2 className={cn("font-bold whitespace-pre-wrap", isFocused ? "text-4xl" : "text-xl")}>{data.title}</h2>
         </div>
@@ -37,9 +38,9 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
 
   if (data.type === 'checklist') {
     return (
-      <div className={cn("p-6 h-full flex flex-col", data.color)}>
+      <div className={cn("p-6 h-full flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
         <div className="flex items-center gap-2 mb-4">
-          {data.tag && <span className={cn("px-2 py-1 text-xs font-semibold rounded-md", data.tagColor)}>{data.tag}</span>}
+          {data.tag && <span className="px-2 py-1 text-xs font-semibold rounded-md" style={colorToStyle(data.tagColor)}>{data.tag}</span>}
         </div>
         {data.title && <h2 className={cn("font-bold mb-4", isFocused ? "text-3xl" : "text-xl")}>{data.title}</h2>}
         <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
@@ -85,7 +86,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
 
   // Default text card
   return (
-    <div className={cn("p-6 h-full flex flex-col", data.color)}>
+    <div className={cn("p-6 h-full flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
       {data.title && <h2 className={cn("font-bold mb-4", isFocused ? "text-4xl" : "text-xl")}>{data.title}</h2>}
       <div className={cn("whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar", isFocused ? "text-lg" : "text-sm")}>
         {data.content}
@@ -129,8 +130,8 @@ const CardNode = ({ id, data }: any) => {
       <Handle type="target" position={Position.Left} id="left" className={handleClassName} />
 
       {isZoomedOut ? (
-        <div className={cn("w-full h-full p-6 flex flex-col", data.color)}>
-           {data.tag && <div className={cn("w-12 h-4 rounded-md mb-4", data.tagColor)}></div>}
+        <div className={cn("w-full h-full p-6 flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
+           {data.tag && <div className="w-12 h-4 rounded-md mb-4" style={colorToStyle(data.tagColor)}></div>}
            <h2 className="text-2xl font-bold leading-tight">{data.title || 'Untitled'}</h2>
            <div className="mt-6 space-y-3 opacity-30">
              <div className="h-3 bg-current rounded-full w-full"></div>

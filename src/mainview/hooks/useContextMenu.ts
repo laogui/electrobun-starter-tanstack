@@ -58,7 +58,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           id,
           type: 'card' as const,
           position: pos,
-          data: { type: 'text' as const, title: '', content: '', color: 'bg-white' },
+          data: { type: 'text' as const, title: '', content: '', color: '#FFFFFF' },
         }]);
         break;
       }
@@ -112,7 +112,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           type: 'image' as const,
           position: pos,
           style: { width: IMAGE_W, height: IMAGE_H },
-          data: { imageUrl: '', title: '', color: 'bg-white' },
+          data: { imageUrl: '', title: '', color: '#FFFFFF' },
         }]);
         break;
       }

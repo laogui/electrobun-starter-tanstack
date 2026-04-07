@@ -1,0 +1,73 @@
+/**
+ * RPC client for communicating with the Bun main process.
+ * Returns null when running outside Electrobun (e.g., Vite dev server only).
+ *
+ * `electrobun/view` is dynamically imported to avoid crashing Vite.
+ */
+
+let electrobunInstance: any = null;
+let initPromise: Promise<any> | null = null;
+
+async function initElectrobun() {
+  if (typeof (window as any).__electrobunWebviewId === 'undefined') {
+    console.warn('[persistence] Not running inside Electrobun — persistence disabled');
+    return null;
+  }
+  try {
+    const mod = await import('electrobun/view');
+    const Electrobun = mod.default;
+    const { Electroview } = mod;
+
+    const rpc = Electroview.defineRPC({
+      maxRequestTime: 10000,
+      handlers: { requests: {}, messages: {} },
+    });
+
+    return new Electrobun.Electroview({ rpc });
+  } catch (err) {
+    console.warn('[persistence] Failed to initialize Electrobun RPC:', err);
+    return null;
+  }
+}
+
+async function getElectrobun() {
+  if (!initPromise) {
+    initPromise = initElectrobun();
+  }
+  return initPromise;
+}
+
+export async function loadCanvas(viewId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.loadCanvas({ viewId });
+}
+
+export async function rpcSaveManifest(viewId: string, nodes: any[], edges: any[], viewport?: any) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return { success: false };
+  return eb.rpc.request.saveManifest({ viewId, nodes, edges, viewport });
+}
+
+export async function rpcSaveNote(noteId: string, frontmatter: Record<string, unknown>, body: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return { success: false };
+  return eb.rpc.request.saveNote({ noteId, frontmatter, body });
+}
+
+export async function rpcCreateNote(id: string, title: string, displayHint: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.createNote({ id, title, displayHint });
+}
+
+export async function rpcDeleteNote(noteId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return { success: false };
+  return eb.rpc.request.deleteNote({ noteId });
+}
+
+export async function isRpcAvailable(): Promise<boolean> {
+  const eb = await getElectrobun();
+  return eb?.rpc != null;
+}

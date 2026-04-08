@@ -2,7 +2,10 @@ import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
 import { initWorkspace, loadWorkspaceConfig } from "./workspace";
 import { loadManifest, saveManifest as writeManifest } from "./manifest";
 import type { CanvasManifest, ManifestNode, ManifestEdge } from "./manifest";
-import { buildNoteIndex, loadNote, saveNote as writeNote, createNote, deleteNoteFile } from "./notes";
+import {
+  buildNoteIndex, loadNote, saveNote as writeNote, createNote, deleteNoteFile,
+  cardDataToNote, noteToCardData,
+} from "./notes";
 
 const DEV_SERVER_PORT = "5173";
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -107,25 +110,27 @@ async function main() {
 
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
+              // Only hydrate card nodes that have a noteId reference
               if (node.type === "card" && node.data.noteId) {
                 const filePath =
                   (node.data.file as string) || noteIndex.get(node.data.noteId as string);
                 if (filePath) {
                   const doc = await loadNote(wsPath, filePath);
                   if (doc) {
-                    const { id, displayHint, ...rest } = doc.frontmatter;
+                    // Use the shared helper that handles checklist parsing
+                    const hydrated = noteToCardData(doc);
                     return {
                       ...node,
                       data: {
                         ...node.data,
-                        ...rest,
-                        type: displayHint === "note" ? "text" : (displayHint || "text"),
-                        content: doc.body,
-                        file: filePath,
+                        ...hydrated,
+                        noteId: node.data.noteId,
                       },
                     };
                   }
                 }
+                // .md file missing → return node as-is (broken reference)
+                console.warn(`[persistence] Note file not found for noteId=${node.data.noteId}`);
               }
               return node;
             }),
@@ -143,11 +148,68 @@ async function main() {
           const viewEntry = config.views.find((v) => v.id === viewId);
           if (!viewEntry) return { success: false };
 
+          // Build note index so we can find existing .md files
+          const noteIndex = await buildNoteIndex(wsPath);
+
+          // Process nodes: extract card content into .md files
+          const manifestNodes = await Promise.all(
+            nodes.map(async (node) => {
+              // Only extract content for card nodes
+              if (node.type !== "card") return node;
+
+              // Assign noteId if not present
+              const noteId = (node.data.noteId as string) ||
+                `note_${crypto.randomUUID().slice(0, 8)}`;
+
+              // Read existing frontmatter to preserve createdAt
+              const existingFile = noteIndex.get(noteId);
+              let existingFm: Record<string, unknown> | undefined;
+              if (existingFile) {
+                const doc = await loadNote(wsPath, existingFile);
+                if (doc) existingFm = doc.frontmatter;
+              }
+
+              // Convert node data to frontmatter + body
+              const { frontmatter, body } = cardDataToNote(noteId, node.data, existingFm);
+
+              // Write .md file (create or update)
+              let filePath: string;
+              if (existingFile) {
+                filePath = existingFile;
+                await writeNote(wsPath, filePath, frontmatter, body);
+              } else {
+                filePath = await createNote(
+                  wsPath, noteId,
+                  String(node.data.title || ""),
+                  String(frontmatter.displayHint),
+                );
+                // createNote writes frontmatter but with empty body; rewrite with actual body
+                await writeNote(wsPath, filePath, frontmatter, body);
+                noteIndex.set(noteId, filePath);
+              }
+
+              // Return manifest-only node: strip content fields, keep reference
+              return {
+                id: node.id,
+                type: node.type,
+                position: node.position,
+                ...(node.style ? { style: node.style } : {}),
+                ...(node.parentId ? { parentId: node.parentId } : {}),
+                ...(node.extent ? { extent: node.extent } : {}),
+                data: {
+                  noteId,
+                  file: filePath,
+                  type: node.data.type, // keep for quick component selection
+                },
+              };
+            }),
+          );
+
           const manifest: CanvasManifest = {
             schema: "spatial-canvas/v1",
             viewId,
             viewport,
-            nodes,
+            nodes: manifestNodes,
             edges,
           };
           await writeManifest(wsPath, viewEntry.file, manifest);

@@ -1,7 +1,7 @@
 import type { Node, Edge } from '@xyflow/react';
 
 const RUNTIME_NODE_KEYS = new Set([
-  'selected', 'dragging', 'measured', 'draggable',
+  'selected', 'dragging', 'resizing', 'measured', 'draggable',
   'selectable', 'deletable', 'focusable',
   'width', 'height', 'internals',
 ]);

@@ -58,6 +58,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           id,
           type: 'card' as const,
           position: pos,
+          style: { width: 350, height: 450 },
           data: { type: 'text' as const, title: '', content: '', color: '#FFFFFF' },
         }]);
         break;

@@ -2,9 +2,11 @@ import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useCanvasStore } from '@/store/canvasStore';
 
 export const FocusedView = ({ node, onClose }: any) => {
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   // Target dimensions (final size)
   const targetWidth = Math.min(800, window.innerWidth * 0.8);
   const targetHeight = Math.min(900, window.innerHeight * 0.85);
@@ -94,7 +96,7 @@ export const FocusedView = ({ node, onClose }: any) => {
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
           ) : (
-            <CardContent data={node.data} isFocused={true} />
+            <CardContent data={node.data} isFocused={true} onChange={(newData: any) => updateNodeData(node.id, newData)} />
           )}
         </div>
       </motion.div>

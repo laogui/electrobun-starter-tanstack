@@ -22,7 +22,7 @@ const FolderChildContent = ({ child }: { child: any }) => {
   return <CardContent data={child.data} />;
 };
 
-export const FolderView = ({ folder, onClose, onCardDoubleClick }: any) => {
+export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   const children = folder.data.children || [];
   const count = children.length;
   const cardWidth = 350;
@@ -152,8 +152,8 @@ export const FolderView = ({ folder, onClose, onCardDoubleClick }: any) => {
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
-                if (onCardDoubleClick) {
-                  onCardDoubleClick(child, rect);
+                if (onCardClick) {
+                  onCardClick(child, rect);
                 }
               }}
               initial={() => {

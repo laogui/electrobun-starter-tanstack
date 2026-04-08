@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { useReactFlow, useViewport, NodeResizeControl, Handle, Position } from '@xyflow/react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -84,11 +84,59 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
     );
   }
 
-  // Default text card
+  // Default text card — editable only in focused (expanded) view
+  if (!isFocused) {
+    return (
+      <div className={cn("p-6 h-full flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
+        <h2 className={cn("font-bold mb-4 text-xl", !data.title && "opacity-40")}>{data.title || 'Untitled'}</h2>
+        <div className={cn("whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar text-sm", !data.content && "opacity-40")}>
+          {data.content || 'Empty note'}
+        </div>
+      </div>
+    );
+  }
+
+  return <EditableCardContent data={data} onChange={onChange} />;
+};
+
+const EditableCardContent = ({ data, onChange }: any) => {
+  const titleRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleTitleBlur = useCallback(() => {
+    const text = titleRef.current?.innerText ?? '';
+    if (text !== data.title && onChange) {
+      onChange({ title: text });
+    }
+  }, [data.title, onChange]);
+
+  const handleContentBlur = useCallback(() => {
+    const text = contentRef.current?.innerText ?? '';
+    if (text !== data.content && onChange) {
+      onChange({ content: text });
+    }
+  }, [data.content, onChange]);
+
   return (
     <div className={cn("p-6 h-full flex flex-col", isColorDark(data.color) && 'text-white')} style={colorToStyle(data.color)}>
-      {data.title && <h2 className={cn("font-bold mb-4", isFocused ? "text-4xl" : "text-xl")}>{data.title}</h2>}
-      <div className={cn("whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar", isFocused ? "text-lg" : "text-sm")}>
+      <div
+        ref={titleRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder="Untitled"
+        className="font-bold mb-4 text-4xl outline-none cursor-text empty:before:content-[attr(data-placeholder)] empty:before:opacity-40"
+        onBlur={handleTitleBlur}
+      >
+        {data.title}
+      </div>
+      <div
+        ref={contentRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder="Write something..."
+        className="whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar text-lg outline-none cursor-text empty:before:content-[attr(data-placeholder)] empty:before:opacity-40"
+        onBlur={handleContentBlur}
+      >
         {data.content}
       </div>
     </div>

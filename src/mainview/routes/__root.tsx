@@ -7,6 +7,7 @@ import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { Toaster } from "@/components/ui/Toaster";
 import { getLocale, setLocale } from "../../paraglide/runtime.js";
+import * as m from "../../paraglide/messages.js";
 
 export interface RouterAppContext {
   queryClient: QueryClient;

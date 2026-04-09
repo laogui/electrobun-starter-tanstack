@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { STICKY_W, STICKY_H, IMAGE_W, IMAGE_H, STICKY_COLORS, GROUP_COLORS } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
@@ -72,7 +73,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           type: 'folder' as const,
           position: pos,
           style: { width: 350, height: 350 },
-          data: { title: '0 items', subtitle: '', children: [] },
+          data: { title: m.default_folder_title(), subtitle: '', children: [] },
         }]);
         break;
       }
@@ -100,7 +101,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           type: 'group' as const,
           position: pos,
           style: { width: 500, height: 300 },
-          data: { label: 'New Group', color },
+          data: { label: m.default_new_group_label(), color },
         }]);
         break;
       }
@@ -150,7 +151,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           if (node) {
             const { isHidden, isDropTarget, ...cleanData } = node.data as any;
             useCanvasStore.setState({
-              clipboard: [{ ...node, data: cleanData }],
+              clipboard: [{ ...node, id: nanoid(), data: cleanData }],
             });
           }
         }
@@ -163,6 +164,8 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         break;
       case 'new-child':
         if (nodeId) addFolderChild(nodeId);
+        break;
+      default:
         break;
     }
   }, [contextMenu, rfInstance, setNodes, setFocusedNode, setFocusedFolder, deleteNodes, changeNodeColor, addFolderChild, pasteClipboard, nextNodeId, saveSnapshot]);

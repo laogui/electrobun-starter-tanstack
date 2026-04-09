@@ -1,14 +1,15 @@
 import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, StickyNote, Folder, File, Group, NotebookPen, ImageIcon } from 'lucide-react';
+import * as m from '../../../paraglide/messages.js';
 
-const menuItems = [
-  { id: 'note', label: 'Note', icon: StickyNote, enabled: true },
-  { id: 'sticky', label: 'Sticky', icon: NotebookPen, enabled: true },
-  { id: 'image', label: 'Image', icon: ImageIcon, enabled: true },
-  { id: 'folder', label: 'Folder', icon: Folder, enabled: true },
-  { id: 'group', label: 'Group', icon: Group, enabled: true },
-  { id: 'file', label: 'File', icon: File, enabled: false },
+const getMenuItems = () => [
+  { id: 'note', label: m.menu_note(), icon: StickyNote, enabled: true },
+  { id: 'sticky', label: m.menu_sticky(), icon: NotebookPen, enabled: true },
+  { id: 'image', label: m.menu_image(), icon: ImageIcon, enabled: true },
+  { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
+  { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
+  { id: 'file', label: m.menu_file(), icon: File, enabled: false },
 ];
 
 export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (type: 'card' | 'image' | 'folder' | 'group' | 'sticky') => void; open: boolean; setOpen: (v: boolean) => void }) {
@@ -33,6 +34,8 @@ export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (typ
     else if (id === 'group') onCreateNode('group');
     setOpen(false);
   };
+
+  const menuItems = getMenuItems();
 
   return (
     <div ref={menuRef} className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">

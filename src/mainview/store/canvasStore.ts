@@ -8,6 +8,7 @@ import {
   CARD_W, CARD_H, IMAGE_W, IMAGE_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H,
   GROUP_COLORS, CARD_COLORS, STICKY_COLORS,
 } from '@/lib/canvasConstants';
+import * as m from '../../paraglide/messages.js';
 import {
   createUndoRedoState,
   pushSnapshot,
@@ -195,7 +196,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       case 'group': {
         const pos = toFlow(500, 300);
         const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-        newNode = { id, type: 'group', position: pos, style: { width: 500, height: 300 }, data: { label: 'New Group', color } };
+        newNode = { id, type: 'group', position: pos, style: { width: 500, height: 300 }, data: { label: m.default_new_group_label(), color } };
         break;
       }
       case 'sticky': {
@@ -206,7 +207,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
       case 'folder': {
         const pos = toFlow(FOLDER_W, FOLDER_H);
-        newNode = { id, type: 'folder', position: pos, data: { title: '0 items', subtitle: '', children: [] } };
+        newNode = { id, type: 'folder', position: pos, data: { title: m.default_folder_title(), subtitle: '', children: [] } };
         break;
       }
       case 'image': {

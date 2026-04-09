@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import * as m from "../../paraglide/messages.js";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -11,7 +12,7 @@ export const queryClient = new QueryClient({
     onError: (error, query) => {
       toast.error(`Error: ${error.message}`, {
         action: {
-          label: "retry",
+          label: m.action_retry(),
           onClick: () => {
             query.invalidate();
           },

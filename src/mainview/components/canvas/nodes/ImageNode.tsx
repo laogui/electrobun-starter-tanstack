@@ -3,6 +3,7 @@ import { useReactFlow, useViewport, NodeResizeControl, Handle, Position } from '
 import { ImagePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { colorToStyle } from '@/lib/colorUtils';
+import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = 'conn-handle nodrag';
 

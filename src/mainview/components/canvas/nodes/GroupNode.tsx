@@ -3,6 +3,7 @@ import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = "conn-handle nodrag";
 
@@ -13,7 +14,7 @@ const GroupNode = ({ id, data, selected }: any) => {
   const rf = useReactFlow();
 
   const handleBlur = useCallback(() => {
-    const text = labelRef.current?.innerText.trim() || 'Group';
+    const text = labelRef.current?.innerText.trim() || m.default_group_label();
     onUpdate(id, { label: text });
     setEditingLabel(false);
   }, [id, onUpdate]);

@@ -1,5 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { ErrorComponent, useRouter } from "@tanstack/react-router";
+import * as m from "../../../paraglide/messages.js";
 
 export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
   const router = useRouter();

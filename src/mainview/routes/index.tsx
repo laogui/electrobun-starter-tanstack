@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useTheme } from 'better-themes';
 import { createFileRoute } from "@tanstack/react-router";
 import { ReactFlow, Background, MiniMap, ConnectionMode, ReactFlowProvider, type ReactFlowInstance } from '@xyflow/react';
 import type { Node, Connection } from '@xyflow/react';
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/")({
 });
 
 function CanvasComponent() {
+  const { theme, systemTheme } = useTheme();
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const focusedNode = useCanvasStore((s) => s.focusedNode);
@@ -106,8 +108,15 @@ function CanvasComponent() {
     }));
   }, [nodes, focusedNode, focusedFolder, dropTargetId]);
 
+  const isDarkTheme = theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+  const canvasBackground = isDarkTheme ? '#141414' : '#f5f5f4';
+  const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.14)' : '#d6d3d1';
+  const miniMapBackground = isDarkTheme ? 'rgba(28, 28, 28, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+  const miniMapBorder = isDarkTheme ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.08)';
+  const miniMapMask = isDarkTheme ? 'rgba(20, 20, 20, 0.7)' : 'rgba(240, 239, 237, 0.7)';
+
   return (
-    <div className="w-screen h-screen bg-stone-50 font-sans overflow-hidden">
+    <div className="h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]">
         <ReactFlow
           nodes={nodesWithState}
           edges={edges}
@@ -130,16 +139,21 @@ function CanvasComponent() {
           minZoom={0.1}
           maxZoom={4}
           proOptions={{ hideAttribution: true }}
+          style={{ backgroundColor: canvasBackground }}
           fitView
         >
-          <Background color="#ddd" gap={24} size={2} />
+          <Background color={gridColor} gap={24} size={2} />
           <HelperLines horizontal={helperLineH} vertical={helperLineV} />
           <MiniMap
             position="bottom-right"
             nodeStrokeColor="#999"
             nodeColor="#ddd"
-            maskColor="rgba(240, 239, 237, 0.7)"
-            style={{ borderRadius: 8 }}
+            maskColor={miniMapMask}
+            style={{
+              backgroundColor: miniMapBackground,
+              border: miniMapBorder,
+              borderRadius: 8,
+            }}
             pannable
             zoomable
           />

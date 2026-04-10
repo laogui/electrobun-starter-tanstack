@@ -89,6 +89,8 @@ width, height, isHidden, isDropTarget, internals
 └─────────────────────────────────────────┘     └──────────────────────────────────────┘
 ```
 
+**写入协调补充**：`saveNote` 与 `saveManifest` 虽然保留各自的 debounce 节奏，但最终必须汇入同一个 per-workspace 串行写入队列；窗口失焦、应用关闭、切换 workspace 时需要先 `flush` 再 `await drain`，避免内容和 manifest 落盘顺序错乱。
+
 ---
 
 ## 3. 文件结构（与 PRD §5.3 一致）
@@ -252,7 +254,7 @@ type CanvasRPC = {
         response: { noteId: string; file: string };
       };
 
-      // 删除笔记
+      // 删除笔记（仅显式“永久删除内容”时调用，不由普通删节点触发）
       deleteNote: {
         params: { noteId: string };
         response: { success: boolean };
@@ -279,7 +281,13 @@ type CanvasRPC = {
 | 布局变化（拖拽、resize、增删节点、连线） | 2500ms trailing | `.canvas.json`（通过 `saveManifest`） |
 | 窗口失焦 / 应用关闭 | 立即 flush | 所有 pending |
 
-### 7.2 原子写入
+### 7.2 串行写入队列
+
+- 所有 `saveNote` / `saveManifest` 请求进入同一个 per-workspace 持久化队列，按提交顺序串行执行。
+- `blur`、`beforeunload`、workspace 切换时，需要先触发 debounce `flush`，再等待队列 `drain`。
+- 普通“从当前画布移除节点”只更新 manifest，不调用 `deleteNote`；`deleteNote` 仅用于显式永久删除内容。
+
+### 7.3 原子写入
 
 所有文件写入采用 write-then-rename 模式：
 
@@ -295,7 +303,7 @@ async function atomicWrite(filePath: string, data: string) {
 
 避免崩溃/断电导致文件损坏。
 
-### 7.3 写盘前 Sanitize
+### 7.4 写盘前 Sanitize
 
 ```typescript
 // src/mainview/lib/sanitize.ts

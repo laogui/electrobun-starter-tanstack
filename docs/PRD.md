@@ -641,39 +641,62 @@ interface AppConfig {
 
 ---
 
-## 7. 未实现功能清单（待迭代）
+## 7. 迭代路线图 (Roadmap)
 
-以下功能已在数据结构中预留，但当前代码尚未实现：
+### 🔴 P0 — 核心交互完善
 
-### 🔴 高优先级
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
+|---|------|--------|----------|----------|----------|------|
+| 1 | **右键菜单 (Context Menu)** | 中 | `index.tsx`, `ContextMenu.tsx` | 三种上下文：画布空白处（新建卡片/Folder、粘贴、重置缩放）、卡片上（复制、移除、永久删除〔二次确认〕、改颜色、移入 Folder、聚焦）、Folder 上（打开、重命名、新建子卡片），drill-down 子卡片补 `Extract to Canvas` | — | ✅ 已完成 |
+| 2 | **键盘快捷键** | 低 | `index.tsx`, `useCanvasKeyboard.ts` | `Delete`/`Backspace` 删除、`Cmd+C/V` 复制粘贴、`Cmd+A` 全选、`Cmd+N` 新建。`focused`/`folder-drill-down` 模态中屏蔽画布级快捷键 | — | ✅ 已完成 |
+| 3 | **节点连线 (Edges)** | 中 | `CardNode.tsx`, `index.tsx` | 四向 Handle + `ConnectionMode.Loose` + `defaultEdgeOptions: { type: 'smoothstep' }` + 连线右键菜单 | ✅ `CanvasEdge` | ✅ 已完成 |
+| 4 | **选择模型重构** | 中 | `CardNode.tsx`, `FolderNode.tsx`, `index.tsx` | 单击→选中（描边高亮 + `selected`），`Shift+Click` 追加，双击/`Enter`→聚焦/drill-down。替代当前单击直接进入 FocusedView。多选支持批量拖拽和删除 | — | ❌ 待实现 |
+| 5 | **FolderNode Resize** | 低 | `FolderNode.tsx` | 复用 CardNode 的 `NodeResizeControl`，去掉硬编码 `w-[350px] h-[350px]`，改为 `style` 控制宽高 | ✅ `style: { width, height }` | ❌ 待实现 |
 
-| 功能 | 数据结构已支持 | 当前代码状态 | 说明 |
-|------|---------------|-------------|------|
-| **节点连线 (Edges)** | ✅ `CanvasEdge` 已定义 | ✅ 已实现 | CardNode 四向 Handle 已添加，`onConnect` 已启用，默认 `smoothstep` 连线 |
-| **Group 开放式分组** | ✅ `GroupNode` + `parentId` 已定义 | ✅ 已实现 | GroupNode 组件已完成，拖入/拖出子节点、坐标转换、drop target 高亮均已实现 |
-| **卡片 Resize** | ✅ `style: { width, height }` 已在 manifest 中 | ⚠️ CardNode 已有 `NodeResizeControl`（250–800 宽），FolderNode 仍固定 350×350 | CardNode resize 基本可用；FolderNode 需补充 resize 能力 |
-| **数据持久化** | ✅ 完整文件系统方案已设计 | ✅ 基础已实现 | Electrobun RPC + manifest 读写 + debounce 自动保存已完成；内容拆分为独立 `.md` 文件待完善 |
+### 🟡 P1 — 核心特性（差异化亮点）
 
-### 🟡 中优先级
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
+|---|------|--------|----------|----------|----------|------|
+| 6 | **Group 开放式分组** | 高 | `GroupNode.tsx`, `index.tsx`, `useNodeDrag.ts` | 三阶段拖拽（dragStart 解除 parentId + 坐标转换 → drag 检测交叉高亮 → dragStop 确认 drop）。预设颜色 5 种 | ✅ `GroupNode` + `parentId` | ✅ 已完成 |
+| 7 | **撤销/重做 (Undo/Redo)** | 中 | `canvasStore.ts`, `useCanvasKeyboard.ts` | nodes+edges 快照历史栈。覆盖增删、移动、resize、编辑、拖入 Folder、连线 | — | ✅ 已完成 |
+| 8 | **便签 (Sticky Note)** | 低 | `StickyNode.tsx`, `CreateMenu.tsx` | 独立 `sticky` 节点类型，6 种预设颜色，双击原地编辑，不进入 FocusedView | ✅ `StickyNodeData` | ✅ 已完成 |
+| 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 拖拽/粘贴图片创建卡片。画布显示等比缩略图，聚焦显示原图。MVP 存 base64，后续迁移 `attachments/` | ✅ `displayHint: 'image'` | ❌ 待实现 |
 
-| 功能 | 数据结构已支持 | 当前代码状态 | 说明 |
-|------|---------------|-------------|------|
-| **Group 嵌套** | ✅ `parentId` 支持多级 | ❌ 未实现 | 需处理祖先检测防止循环嵌套（参考 mind-map-weaver 的 `isDescendant`） |
-| **Group 拖拽推开外部卡片** | — | ❌ 未实现 | 拖拽 group 时自动推开重叠的非子节点卡片，避免视觉遮挡 |
-| **连线动画** | ✅ `animated` 字段已定义 | ❌ 未实现 | `animated: true` 的 edge 显示流动虚线动画 |
-| **连线标签** | ✅ `label` 字段已定义 | ❌ 未实现 | edge 上显示可编辑的文本标签 |
-| **多画布视图** | ✅ `workspace.json` + per-view manifest | ❌ 仅有单个默认画布 | 需实现视图切换 UI（初步方向为顶部 Tab 栏）和新建/删除视图 |
+### 🟢 P2 — 数据层与增强功能
 
-### 🟢 低优先级
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
+|---|------|--------|----------|----------|----------|------|
+| 10 | **数据持久化完善** | 高 | `src/bun/`, `useCanvasPersistence.ts` | manifest 读写 + debounce 2500ms + 窗口失焦 flush 已完成。待完善：内容拆分为独立 `.md` 文件 | ✅ 完整方案已设计 | ⚠️ 基础已完成，`.md` 拆分待实现 |
+| 11 | **全局搜索** | 中 | 新建 `SearchPanel.tsx`, `index.tsx` | `Cmd+F` 唤起搜索，实时匹配标题/正文/checklist。匹配高亮，未匹配降低透明度。点击结果 `fitView` 定位 | — | ❌ 待实现 |
+| 12 | **连线标签与动画** | 低 | `index.tsx` | `label` 渲染为可编辑文本（双击编辑），`animated: true` 显示流动虚线 | ✅ `label` / `animated` | ❌ 待实现 |
+| 13 | **Group 嵌套** | 中 | `GroupNode.tsx`, `index.tsx` | 多级 `parentId`，`isDescendant` 祖先检测防循环嵌套 | ✅ `parentId` 支持多级 | ❌ 待实现 |
+| 14 | **画布导出 PNG/JSON** | 低 | 新建 `export.ts` | PNG：`toObject()` + html2canvas。JSON：完整 manifest + 关联内容 | — | ❌ 待实现 |
 
-| 功能 | 数据结构已支持 | 当前代码状态 | 说明 |
-|------|---------------|-------------|------|
-| **节点锁定** | ✅ `locked` 字段已定义 | ❌ 未实现 | 锁定后不可拖拽/编辑/删除 |
-| **`extent: "parent"` 约束** | ✅ 已在类型中定义 | ❌ 未实现 | 子节点限制在 group 边界内，不可拖出 |
-| **多 workspace 管理** | ✅ `AppConfig` 已定义 | ❌ 未实现 | 需实现欢迎页、最近打开列表、workspace 切换 |
-| **Edge 颜色/样式** | ✅ `color`、`type` 字段已定义 | ❌ 未实现 | 支持 smoothstep/bezier/straight 和自定义颜色 |
+### ⚪ P3 — 后续迭代
 
-### 与 mind-map-weaver 的关键实现参考
+| # | 任务 | 复杂度 | 实现要点 | 数据结构 | 状态 |
+|---|------|--------|----------|----------|------|
+| 15 | **多画布视图切换** | 中 | 视图切换 UI（顶部 Tab 栏），新建/删除/重命名视图 | ✅ `workspace.json` + per-view manifest | ❌ 待实现 |
+| 16 | **多 workspace 管理** | 中 | 欢迎页、最近打开列表、workspace 创建/切换 | ✅ `AppConfig` | ❌ 待实现 |
+| 17 | **节点锁定** | 低 | 锁定后不可拖拽/编辑/删除，UI 显示锁定图标 | ✅ `locked` 字段 | ❌ 待实现 |
+| 18 | **框选 (Marquee Selection)** | 低 | 画布空白处左键拖拽框选，与中键平移互不冲突 | — | ❌ 待实现 |
+| 19 | **导入 JSON / .md** | 低 | 导入 JSON 恢复画布；拖拽 `.md` 创建笔记卡片 | — | ❌ 待实现 |
+| 20 | **移动端适配** | 高 | 触摸手势、响应式布局、触屏友好交互目标尺寸 | — | ❌ 待实现 |
+| 21 | **Group 拖拽推开** | 中 | 拖拽 group 时自动推开重叠的非子节点卡片 | — | ❌ 待实现 |
+| 22 | **`extent: "parent"` 约束** | 低 | 子节点限制在 group 边界内不可拖出 | ✅ 已在类型中定义 | ❌ 待实现 |
+| 23 | **Edge 颜色/样式** | 低 | smoothstep/bezier/straight + 自定义颜色 | ✅ `color` / `type` 字段 | ❌ 待实现 |
+
+### 🔮 远期
+
+| # | 任务 | 说明 |
+|---|------|------|
+| 24 | **视频卡片** | .mp4 / .gif / .webm 嵌入 |
+| 25 | **Web Clips** | 网页剪藏，Magazine 风格预览 |
+| 26 | **全局快捷键快速输入** | Quick Input from anywhere |
+| 27 | **AI 辅助** | Gemini 总结、生成、关联推荐 |
+| 28 | **商业化** | Free + Pro 订阅 |
+
+### 实现参考
 
 1. **拖入/拖出 Group 的三阶段处理**：
    - `onNodeDragStart`：拖出时解除 `parentId`，将局部坐标转换为画布绝对坐标
@@ -683,75 +706,3 @@ interface AppConfig {
 2. **祖先检测防循环**：group 拖入另一个 group 时，必须检查目标不是自己的后代节点
 
 3. **连线模式**：使用 `ConnectionMode.Loose` + `defaultEdgeOptions={{ type: 'smoothstep' }}`
-
----
-
-## 8. 迭代路线图 (Roadmap)
-
-### ✅ 已完成
-
-- [x] 无限画布（平移、缩放、语义化缩放两档：`zoom < 0.4` 切换为缩略态）
-- [x] 卡片类型：文本（text）、待办列表（checklist）、图文（image）
-- [x] 文件夹堆叠与 drill-down 展开（基于 `children` 数组，radial spread 动画）
-- [x] 聚焦模式（FLIP 过渡动画，单击卡片直接进入）
-- [x] 拖拽卡片入文件夹（检测重叠 → 移入 `children`，drop target 高亮）
-- [x] Helper Lines 对齐辅助（拖拽时吸附）
-- [x] CardNode Resize（`NodeResizeControl`，250–800 宽，300–900 高）
-- [x] CreateMenu 浮动按钮（新建 Card / Folder，视口中心创建）
-- [x] 节点连线（四向 Handle + `smoothstep` 连线 + `onConnect`）
-- [x] Group 开放式分组（GroupNode 组件 + 拖入/拖出 + 颜色预设）
-- [x] 右键菜单（画布空白处 / 卡片 / Folder 三种上下文）
-- [x] 键盘快捷键（Delete、Cmd+C/V、Cmd+Z/Shift+Z、Cmd+A 等）
-- [x] 撤销/重做（操作历史栈 + Cmd+Z / Cmd+Shift+Z）
-- [x] 便签 Sticky Note（独立节点类型，双击原地编辑，6 种预设颜色）
-- [x] 数据持久化（Electrobun RPC + manifest 读写 + debounce 自动保存）
-
----
-
-### 🔴 P0 — 核心交互完善（影响基本操作体验，最高优先级）
-
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
-|---|------|--------|----------|----------|------|
-| 1 | **右键菜单 (Context Menu)** | 中 | `index.tsx`, `ContextMenu.tsx` | 三种上下文：画布空白处（新建卡片/Folder、粘贴、重置缩放）、卡片上（复制、从当前画布移除、永久删除内容〔二次确认〕、改颜色、移入 Folder、聚焦）、Folder 上（打开、重命名、新建子卡片），Folder drill-down 子卡片菜单补 `Extract to Canvas` | ✅ 已实现 |
-| 2 | **键盘快捷键** | 低 | `index.tsx`, `useCanvasKeyboard.ts` | `Delete`/`Backspace` 删除选中节点、`Cmd+C`/`Cmd+V` 复制粘贴卡片（偏移放置）、`Cmd+A` 全选、`Cmd+N` 打开新建菜单。需在 `focused`/`folder-drill-down` 模态中屏蔽画布级快捷键 | ✅ 已实现 |
-| 3 | **选择模型重构** | 中 | `CardNode.tsx`, `FolderNode.tsx`, `index.tsx` | 单击→选中（描边高亮 + `selected` 状态），`Shift+Click` 追加选中，双击或 `Enter`→进入聚焦/drill-down。替代当前的单击直接进入 FocusedView 行为。多选集合支持批量拖拽和删除 | ❌ 待实现 |
-| 4 | **节点连线 (Edges)** | 中 | `CardNode.tsx`, `index.tsx` | CardNode 四向 `Handle`（`Position.Top/Right/Bottom/Left`），启用 `onConnect` 回调、`ConnectionMode.Loose`、`defaultEdgeOptions: { type: 'smoothstep' }`。连线右键菜单预留（删除连线） | ✅ 已实现 |
-| 5 | **FolderNode Resize** | 低 | `FolderNode.tsx` | 复用 CardNode 的 `NodeResizeControl` 模式，去掉硬编码 `w-[350px] h-[350px]`，改为 `style` 控制宽高 | ❌ 待实现 |
-
-### 🟡 P1 — 核心特性（PRD 差异化亮点）
-
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
-|---|------|--------|----------|----------|------|
-| 6 | **Group 开放式分组** | 高 | `GroupNode.tsx`, `index.tsx`, `useNodeDrag.ts` | 可调整大小的彩色容器区域，子节点 `parentId` 指向 Group。三阶段拖拽处理：`onNodeDragStart`（拖出时解除 `parentId`，局部→绝对坐标）、`onNodeDrag`（`getIntersectingNodes` 检测交叉，高亮目标）、`onNodeDragStop`（确认 drop，设置 `parentId` + `extent: "parent"`，绝对→局部坐标）。预设颜色：blue/green/yellow/pink/orange | ✅ 已实现 |
-| 7 | **撤销/重做 (Undo/Redo)** | 中 | `canvasStore.ts`, `useCanvasKeyboard.ts` | 操作历史栈，记录 nodes+edges 快照。`Cmd+Z` 撤销、`Cmd+Shift+Z` 重做。覆盖：节点增删、移动、resize、内容编辑、拖入 Folder、连线 | ✅ 已实现 |
-| 8 | **便签 (Sticky Note)** | 低 | `StickyNode.tsx`, `CreateMenu.tsx`, `initialNodes.ts` | 独立 `sticky` 节点类型（非 CardNode 子类型），轻量彩色便签（无标题栏），6 种预设颜色，默认 200×200（120–500 可调）。默认可拖拽，双击原地编辑（`contentEditable`），失焦保存。**不进入 FocusedView**，双击事件由组件内部消费 | ✅ 已实现 |
-| 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 支持拖拽图片文件到画布 / `Cmd+V` 粘贴图片创建卡片。画布上显示等比缩略图，聚焦模式显示原图。图片数据 MVP 阶段存为 base64 或 blob URL，后续迁移到 `attachments/` 目录 | ❌ 待实现 |
-
-### 🟢 P2 — 数据层与增强功能
-
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
-|---|------|--------|----------|----------|------|
-| 10 | **数据持久化** | 高 | `src/bun/`, `src/mainview/hooks/useCanvasPersistence.ts` | 通过 Electrobun RPC 实现 workspace 目录结构。manifest 读写 + debounce 2500ms 自动保存 + 窗口失焦 flush。当前内容内嵌在 manifest 中，尚未拆分为独立 `.md` 文件 | ✅ 基础已实现（内容拆分为 .md 待完善） |
-| 11 | **全局搜索** | 中 | 新建 `SearchPanel.tsx`, `index.tsx` | `Cmd+F` 唤起搜索面板，实时匹配卡片标题/正文/checklist 文本。匹配节点高亮，未匹配降低透明度。点击结果项 `fitView` 定位到对应卡片 |
-| 12 | **连线标签与动画** | 低 | `index.tsx` | Edge 的 `label` 字段渲染为可编辑文本（双击编辑），`animated: true` 时显示流动虚线动画 |
-| 13 | **Group 嵌套** | 中 | `GroupNode.tsx`, `index.tsx` | 多级 `parentId` 支持，Group 可嵌套 Group。拖入时执行 `isDescendant` 祖先检测，防止循环嵌套 |
-| 14 | **画布导出 PNG/JSON** | 低 | 新建 `export.ts` | PNG：使用 `@xyflow/react` 的 `toObject()` + html2canvas 或 `getNodesBounds` 导出视口。JSON：序列化完整 manifest + 关联内容 |
-
-### ⚪ P3 — 后续迭代
-
-| # | 任务 | 复杂度 | 说明 |
-|---|------|--------|------|
-| 15 | **多画布视图切换** | 中 | `workspace.json` + per-view manifest，视图切换 UI，新建/删除/重命名视图 |
-| 16 | **多 workspace 管理** | 中 | 欢迎页、最近打开列表、workspace 创建/切换（对应 `AppConfig`） |
-| 17 | **节点锁定** | 低 | `locked` 字段生效：锁定后不可拖拽/编辑/删除，UI 显示锁定图标 |
-| 18 | **框选 (Marquee Selection)** | 低 | 画布空白处左键拖拽框选多节点，需与中键平移手势互不冲突 |
-| 19 | **导入 JSON / .md** | 低 | 导入此前导出的 JSON 恢复画布；拖拽 `.md` 文件到画布创建笔记卡片 |
-| 20 | **移动端适配** | 高 | 触摸手势（双指平移/缩放）、响应式布局、触屏友好的交互目标尺寸 |
-
-### 🔮 Phase 远期
-
-- [ ] 视频卡片（.mp4 / .gif / .webm 嵌入）
-- [ ] Web Clips（网页剪藏，Magazine 风格预览）
-- [ ] 全局快捷键快速输入（Quick Input from anywhere）
-- [ ] AI 辅助（Gemini 总结、生成、关联推荐）
-- [ ] 商业化（Free + Pro 订阅）

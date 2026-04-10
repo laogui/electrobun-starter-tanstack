@@ -12,7 +12,10 @@
 * **交互逻辑**：
     * **平移 (Panning)**：支持触控板双指滑动或鼠标中键拖拽，实现画布的无级平移。
     * **缩放 (Zooming)**：支持触控板捏合或 `Ctrl/Cmd + 滚轮` 缩放。采用**语义化缩放 (Semantic Zoom)**：在极小比例下只显示色块和标题，放大后逐渐显示详细文本和可交互控件。
-  * **选择与聚焦 (Selection & Focus)**：MVP 采用稳定的“两步打开”模型：单击节点仅进入 `selected` 状态，用于高亮、批量操作和拖拽；双击或 `Enter` 才进入卡片聚焦模式（FocusedView）或 Folder drill-down 视图。`Shift+Click` 可追加/切换选中，多选集合支持批量拖拽、删除、复制粘贴、拖入 Group/Folder。为避免误触发，拖拽、连线和框选判定优先于双击/打开判定；鼠标位移超过轻微阈值（默认 `4px`）后不再视为点击。
+  * **选择与聚焦 (Selection & Focus)**：
+      * **当前实现**：单击卡片直接进入聚焦模式（FocusedView），单击 Folder 直接进入 drill-down 视图。尚无独立的 `selected` 状态。
+      * **目标模型（待重构）**：采用“两步打开”模型——单击节点仅进入 `selected` 状态，用于高亮、批量操作和拖拽；双击或 `Enter` 才进入聚焦模式或 Folder drill-down 视图。`Shift+Click` 可追加/切换选中，多选集合支持批量拖拽、删除、复制粘贴、拖入 Group/Folder。
+      * 为避免误触发，拖拽、连线和框选判定优先于双击/打开判定；鼠标位移超过轻微阈值（默认 `4px`）后不再视为点击。
   * **框选 (Marquee Selection)**：桌面端在画布空白处左键拖拽绘制选择框，选中矩形范围内的多个节点。当前 `selectionOnDrag` 默认关闭（避免与平移手势冲突），后续视交互体验决定是否启用。进入聚焦模式或 Folder drill-down 后，框选仅作用于当前上下文，不影响背景画布。
 
 ### 2.2 多模态信息卡片 (Content Cards)
@@ -31,7 +34,10 @@
 
 ### 2.3 沉浸式聚焦模式 (Focused View / Modal Expansion)
 * **功能描述**：当用户需要深度阅读或查看某一张卡片时，提供无干扰的阅读环境。
-* **交互逻辑（MVP）**：卡片在选中状态下通过双击、`Enter` 或右键菜单 `Open Focused` 进入聚焦模式。卡片通过 FLIP 动画从画布位置平滑放大至屏幕中央，成为主视图；背景画布被一层半透明遮罩（Overlay/Dimmer）覆盖，屏蔽其他元素的干扰。点击遮罩或按 `Escape` 退回画布，卡片收缩回原位。
+* **交互逻辑**：
+    * **当前实现**：单击卡片即进入聚焦模式。卡片通过 FLIP 动画从画布位置平滑放大至屏幕中央，成为主视图；背景画布被一层半透明遮罩（Overlay/Dimmer）覆盖，屏蔽其他元素的干扰。点击遮罩或按 `Escape` 退回画布，卡片收缩回原位。
+    * **目标交互（待重构）**：选中状态下通过双击、`Enter` 或右键菜单 `Open Focused` 进入聚焦模式。
+    * **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，双击进入原地编辑。
 
 ### 2.4 节点连线 (Edges / Connections)
 * **功能描述**：卡片之间可以建立有向连线，表达知识的关联、依赖或流转关系。
@@ -62,10 +68,10 @@
     * **外观**：在画布上表现为一个带有标签的堆叠卡片组（如演示中的 "3 items - The really great ideas..."）。
     * **进入图层 (Drill-down)**：选中文件夹后双击、按 `Enter`，或通过右键菜单 `Open` 触发**隔离层模式**。
         * 背景画布整体变暗或模糊（失去焦点）。
-      * 文件夹内的卡片从堆叠状态平滑展开（散开）到当前的临时图层上，供用户浏览或编辑。MVP 采用确定性的自动排布（横向 strip 或 grid），不提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
+      * 文件夹内的卡片从堆叠状态平滑展开（散开）到当前的临时图层上，供用户浏览或编辑。MVP 采用确定性的自动排布（横向 strip 或 grid），排列顺序按 `children` 数组索引（即拖入先后顺序），不提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
         * 在此模式下，画布上的其他非同组元素不可见或不可交互。
     * **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
-    * **成员来源**：Folder 的成员通过 `data.children` 数组内嵌在 manifest 中。用户可将画布上的卡片拖入 Folder，卡片从画布节点列表移除并追加到该 Folder 的 `children` 数组。Folder 封面上的计数标题（如 "3 items"）为运行时根据 `children.length` 派生。后续引入本地文件系统持久化后，可考虑迁移为目录驱动模型。为避免留下悬空连接，带现有 Edge 的卡片在 MVP 中不可直接拖入 Folder；用户需先断开相关连线，或创建新的无连线实例后再收纳。
+    * **成员来源**：Folder 的成员通过 `data.children` 数组内嵌在 manifest 中。用户可将画布上的卡片拖入 Folder，卡片从画布节点列表移除并追加到该 Folder 的 `children` 数组。Folder 封面上的计数标题（如 "3 items"）为运行时根据 `children.length` 派生。后续引入本地文件系统持久化后，可考虑迁移为目录驱动模型。为避免留下悬空连接，带现有 Edge 的卡片在 MVP 中不可直接拖入 Folder——拖入时系统应通过 toast 提示"请先断开该卡片的连线"并取消 drop 操作；用户需先手动断开相关连线，或创建新的无连线实例后再收纳。
     * **取回到主画布（MVP）**：drill-down 视图中仍不支持“自由拖拽穿出”回主画布，但必须提供显式 `Move to Canvas` / `Extract` 操作。执行后，会把该子卡片作为新的画布节点实例放回 Folder 邻近区域或当前视口中心，保证 Folder 不是“只进不出”的死胡同。
     * **Folder 内操作边界（MVP）**：支持在 drill-down 视图中浏览和聚焦子卡片；不支持自由拖拽改变卡片顺序，也不支持跨 Folder 边界直接建立子卡片连线。后续若需要自由布局，将升级为子画布模型单独设计。
     * **适用场景**：归档收纳、减少画布视觉噪音。
@@ -96,7 +102,7 @@
 |--------|------------------|------|
 | `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 撤销 / 重做 |
 | `Cmd+C` / `Cmd+V` | `Ctrl+C` / `Ctrl+V` | 复制 / 粘贴卡片 |
-| `Delete` / `Backspace` | `Delete` / `Backspace` | 删除选中的卡片或文件夹 |
+| `Delete` / `Backspace` | `Delete` / `Backspace` | 从当前画布移除选中的节点（不删除 .md 内容文件；永久删除需通过右键菜单二次确认） |
 | `Cmd+F` | `Ctrl+F` | 打开搜索 |
 | `Cmd+A` | `Ctrl+A` | 全选当前上下文中的节点 |
 | `Cmd+N` | `Ctrl+N` | 打开新建卡片菜单 |
@@ -108,12 +114,12 @@
 | 状态 | 进入条件 | 退出条件 | 约束 |
 |---|---|---|---|
 | `idle` | 默认状态；点击空白处；完成操作后回落 | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选 |
-| `selected` | 单击节点；`Shift+Click` 追加选择 | 点击空白、`Escape`、进入其他状态 | 允许批量拖拽、删除、复制 |
+| `selected` | （目标模型）单击节点；`Shift+Click` 追加选择。当前实现跳过此状态直接进入 `focused` | 点击空白、`Escape`、进入其他状态 | 允许批量拖拽、删除、复制 |
 | `marquee-selecting` | 在空白处左键拖拽 | 鼠标释放 | 仅桌面端启用；与中键平移互不冲突 |
 | `dragging` | 拖拽一个或多个已选节点 | 鼠标释放或取消 | 暂停双击判定，避免误触发编辑 |
-| `inline-editing` | 双击可编辑卡片；创建卡片后自动进入 | `Escape`、提交、点击其他区域 | 编辑期间禁用画布级快捷键，保留 `Cmd/Ctrl+Enter` 提交 |
-| `focused` | 双击已选中卡片、`Enter`、右键菜单 `Open Focused` | 返回按钮、点击遮罩、`Escape` | 背景画布不可交互 |
-| `folder-drill-down` | 双击已选中 Folder、`Enter`、右键菜单 `Open` | 返回按钮、背景空白、`Escape` | 仅当前 Folder 内容可交互；背景画布冻结 |
+| `inline-editing` | 双击 Sticky（便签）或可原地编辑的卡片；创建卡片后自动进入 | `Escape`、提交、点击其他区域 | 编辑期间禁用画布级快捷键，保留 `Cmd/Ctrl+Enter` 提交。仅适用于 Sticky 和 Group label；Card/Image 类型不进入 inline-editing，而是进入 `focused` |
+| `focused` | （当前）单击 Card/Image 节点；（目标）双击已选中卡片、`Enter`、右键菜单 `Open Focused` | 返回按钮、点击遮罩、`Escape` | 背景画布不可交互；Sticky 不可进入此状态 |
+| `folder-drill-down` | （当前）单击 Folder；（目标）双击已选中 Folder、`Enter`、右键菜单 `Open` | 返回按钮、背景空白、`Escape` | 仅当前 Folder 内容可交互；背景画布冻结 |
 | `connecting` | 从 Handle 开始拖出连线 | 连接成功、取消 | 禁止进入编辑与聚焦 |
 
 **状态优先级规则**：`dragging` 与 `connecting` 高于双击/编辑判定；`focused` 和 `folder-drill-down` 为全屏模态上下文，会冻结背景画布；`inline-editing` 期间不响应框选与节点拖拽。
@@ -185,7 +191,7 @@
 
 ### 5.1 核心原则
 
-1. **文件即数据源（File as Source of Truth）**—— 每张卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。
+1. **文件即数据源（File as Source of Truth）**—— 每张 **Card 类型**卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。Sticky（便签）的内容直接内嵌在 manifest `data.content` 中，不生成独立 `.md` 文件；Folder `children` 中的子卡片在 MVP 阶段同样内嵌在 manifest 中（参见 §5.10 Folder 模型决策）。
 2. **内容与布局解耦** —— 内容级属性（标题、标签、创建时间）存 frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
 4. **删除实例不等于删除内容** —— 删除 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留为可搜索的 `unplaced note`，直到用户显式执行永久删除。
@@ -234,7 +240,7 @@ workspace/
 │   ├── who-spatial-is-for.md
 │   ├── prio-before-launch.md
 │   ├── alpha-feedback.md
-│   └── great-ideas/                    # 文件夹即目录
+│   └── great-ideas/                    # 后续迁移目标：文件夹即目录（MVP 阶段 Folder children 内嵌在 manifest 中）
 │       ├── floating-notes.md
 │       └── drop-in-anything.md
 └── attachments/                        # 图片和附件（文件名带哈希前缀避免冲突）
@@ -242,7 +248,7 @@ workspace/
     └── e5f6g7h8-photo.jpg
 ```
 
-- **单一内容树**：所有笔记统一放在 `content/` 下，文件夹就是文件系统目录。
+- **单一内容树**：所有笔记统一放在 `content/` 下。MVP 阶段 Folder 子卡片内嵌在 manifest 的 `children` 数组中，不生成独立子目录；后续持久化迭代可迁移为"文件夹即目录"模型（参见 §5.10）。
 - **Per-view manifest**：每个画布视图独立一个 `.canvas.json`，避免单文件成为写入热点。
 - **附件去重**：附件文件名使用 `{hash}-{原始名}` 格式，避免同名冲突。路径统一为 workspace-relative POSIX 路径。
 
@@ -269,14 +275,15 @@ updatedAt: 2026-03-31T14:30:00Z
 - [ ] Highlight border around webclips isn't removed after undoing resize
 ```
 
-**`displayHint` 说明**（UI 渲染提示，非互斥枚举）：
+**`displayHint` 说明**（UI 渲染提示，互斥枚举——每张卡片有且仅有一个值）：
 
 | displayHint | 代码中对应 `data.type` | 含义 | 画布上的默认渲染 | 聚焦行为 |
 |---|---|---|---|---|
-| `note` | `text` | 普通文本笔记（默认值） | 显示标题 + 正文摘要 | ✅ 单击进入聚焦 |
-| `checklist` | `checklist` | 以待办列表为主 | 显示标题 + checkbox 列表（可直接勾选/添加） | ✅ 单击进入聚焦 |
-| `image` | `image` | 以图片为主 | 显示图表/图片内容 | ✅ 单击进入聚焦 |
-| `sticky` | —（未实现） | 便签，短文本 | 彩色便签，无标题栏 | ❌ 不可聚焦，仅随画布缩放 |
+| `note` | `text` | 普通文本笔记（默认值） | 显示标题 + 正文摘要 | ✅ 可进入聚焦 |
+| `checklist` | `checklist` | 以待办列表为主 | 显示标题 + checkbox 列表（可直接勾选/添加） | ✅ 可进入聚焦 |
+| `image` | `image` | 以图片为主 | 显示图表/图片内容 | ✅ 可进入聚焦 |
+
+> **Sticky 不属于 `displayHint` 枚举**：Sticky（便签）是独立的节点类型（manifest 中 `type: "sticky"`），其内容直接内嵌在 manifest `data.content` 中，不对应独立的 `.md` 文件，因此不使用 frontmatter 的 `displayHint` 字段。
 
 > **当前实现说明**：代码中使用 `data.type`（值为 `'text'` / `'checklist'` / `'image'`）作为卡片类型标识，与 PRD 定义的 `displayHint` 字段名和枚举值（`'note'`）存在差异。引入文件系统持久化时将统一为 `displayHint`。
 
@@ -287,10 +294,10 @@ updatedAt: 2026-03-31T14:30:00Z
 | `id` (noteId) | `id` (nodeId) |
 | `title`、`tags` | `position`、`style: { width, height }` |
 | `createdAt`、`updatedAt` | z-order（数组顺序） |
-| `color`（语义颜色） | `color`（视觉强调） |
+| `color`（内容默认颜色） | `color`（per-view 视觉覆盖，可选） |
 | `displayHint` | `locked`、`parentId`、`extent` |
 
-**颜色优先级**：渲染时使用 `manifest.data.color` 作为 per-view override；若不存在，则回退到 frontmatter 的 `color`；两者都不存在时使用组件默认色板。
+**颜色优先级**（三层回退）：`manifest.data.color`（per-view override）→ `frontmatter.color`（内容默认）→ 组件默认色板。当同一笔记出现在多个画布中时，每个画布可通过 manifest `color` 独立覆盖颜色，而不影响内容文件本身的默认颜色。
 
 ### 5.5 Workspace 配置
 
@@ -347,8 +354,8 @@ updatedAt: 2026-03-31T14:30:00Z
         "label": "Great Ideas",
         "subtitle": "The really great ideas...",
         "children": [
-          { "id": "child_1", "type": "card", "data": { "type": "text", "content": "Floating notes idea", "color": "bg-[#A3E635]" } },
-          { "id": "child_2", "type": "card", "data": { "type": "text", "content": "Drop in anything", "color": "bg-white" } }
+          { "id": "child_1", "type": "card", "data": { "type": "text", "content": "Floating notes idea", "color": "#A3E635" } },
+          { "id": "child_2", "type": "card", "data": { "type": "text", "content": "Drop in anything", "color": "#FFFFFF" } }
         ]
       }
     }
@@ -387,7 +394,7 @@ type ViewID = string;
 interface NoteFrontmatter {
   id: NoteID;
   title?: string;
-  displayHint?: 'note' | 'checklist' | 'image' | 'sticky';
+  displayHint?: 'note' | 'checklist' | 'image';  // sticky 是独立节点类型，不使用 .md 文件
   color?: string;
   tags?: string[];
   createdAt: string;    // ISO 8601
@@ -417,10 +424,11 @@ interface FolderChildEntry {
 }
 
 interface FolderNodeData {
-  title: string;        // 显示标题，如 "3 items"（运行时根据 children.length 派生）
+  label?: string;       // 用户自定义的 Folder 标签名，如 "Great Ideas"
   subtitle?: string;
   children: FolderChildEntry[];
   [key: string]: unknown;
+  // 注意：封面上显示的 "3 items" 计数标题为运行时根据 children.length 派生，不持久化
 }
 
 interface GroupNodeData {
@@ -429,11 +437,19 @@ interface GroupNodeData {
   [key: string]: unknown;
 }
 
+// -- Sticky 节点（内容内嵌在 manifest 中，不对应 .md 文件）--
+interface StickyNodeData {
+  content: string;      // 便签文本内容
+  color?: string;       // hex 颜色，如 "#FEF08A"
+  [key: string]: unknown;
+}
+
 // -- Node 类型（完全兼容 @xyflow/react）--
 type CardNode = Node<CardNodeData, 'card'>;
 type FolderNode = Node<FolderNodeData, 'folder'>;
 type GroupNode = Node<GroupNodeData, 'group'>;
-type CanvasNode = CardNode | FolderNode | GroupNode;
+type StickyNode = Node<StickyNodeData, 'sticky'>;
+type CanvasNode = CardNode | FolderNode | GroupNode | StickyNode;
 
 // -- Edge 类型（直接使用 React Flow 原生 Edge）--
 type CanvasEdge = Edge;
@@ -501,7 +517,7 @@ interface AppConfig {
   立即 flush 所有待写入内容，并 await 串行写入队列清空
   避免内容与布局落盘顺序错乱，减少最近一次编辑丢失
 
-文件系统变化:
+文件系统变化（⚠️ MVP 不实现，属于后续迭代）:
   watcher 检测到 .md 变化
   → 检查 pendingWrites:Set<filepath>，忽略自触发事件
   → 重新解析 frontmatter → diff → 更新内存状态 → 重新渲染
@@ -627,10 +643,10 @@ interface AppConfig {
 
 | 功能 | 数据结构已支持 | 当前代码状态 | 说明 |
 |------|---------------|-------------|------|
-| **节点连线 (Edges)** | ✅ `CanvasEdge` 已定义 | ❌ 未实现 | 需要为 CardNode 添加 Handle 连接点，启用 `onConnect`，使用 `ConnectionMode.Loose` |
-| **Group 开放式分组** | ✅ `GroupNode` + `parentId` 已定义 | ❌ 未实现 | 需实现 GroupNode 组件、拖入/拖出子节点逻辑（参考 mind-map-weaver 的 `onNodeDragStart/Drag/DragStop`） |
+| **节点连线 (Edges)** | ✅ `CanvasEdge` 已定义 | ✅ 已实现 | CardNode 四向 Handle 已添加，`onConnect` 已启用，默认 `smoothstep` 连线 |
+| **Group 开放式分组** | ✅ `GroupNode` + `parentId` 已定义 | ✅ 已实现 | GroupNode 组件已完成，拖入/拖出子节点、坐标转换、drop target 高亮均已实现 |
 | **卡片 Resize** | ✅ `style: { width, height }` 已在 manifest 中 | ⚠️ CardNode 已有 `NodeResizeControl`（250–800 宽），FolderNode 仍固定 350×350 | CardNode resize 基本可用；FolderNode 需补充 resize 能力 |
-| **数据持久化** | ✅ 完整文件系统方案已设计 | ❌ 当前使用内存 state | 需通过 Electrobun 文件系统 API 实现 |
+| **数据持久化** | ✅ 完整文件系统方案已设计 | ✅ 基础已实现 | Electrobun RPC + manifest 读写 + debounce 自动保存已完成；内容拆分为独立 `.md` 文件待完善 |
 
 ### 🟡 中优先级
 
@@ -676,33 +692,40 @@ interface AppConfig {
 - [x] Helper Lines 对齐辅助（拖拽时吸附）
 - [x] CardNode Resize（`NodeResizeControl`，250–800 宽，300–900 高）
 - [x] CreateMenu 浮动按钮（新建 Card / Folder，视口中心创建）
+- [x] 节点连线（四向 Handle + `smoothstep` 连线 + `onConnect`）
+- [x] Group 开放式分组（GroupNode 组件 + 拖入/拖出 + 颜色预设）
+- [x] 右键菜单（画布空白处 / 卡片 / Folder 三种上下文）
+- [x] 键盘快捷键（Delete、Cmd+C/V、Cmd+Z/Shift+Z、Cmd+A 等）
+- [x] 撤销/重做（操作历史栈 + Cmd+Z / Cmd+Shift+Z）
+- [x] 便签 Sticky Note（独立节点类型，双击原地编辑，6 种预设颜色）
+- [x] 数据持久化（Electrobun RPC + manifest 读写 + debounce 自动保存）
 
 ---
 
 ### 🔴 P0 — 核心交互完善（影响基本操作体验，最高优先级）
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 |
-|---|------|--------|----------|----------|
-| 1 | **右键菜单 (Context Menu)** | 中 | `index.tsx`, 新建 `ContextMenu.tsx` | 三种上下文：画布空白处（新建卡片/Folder、粘贴、重置缩放）、卡片上（复制、从当前画布移除、永久删除内容〔二次确认〕、改颜色、移入 Folder、聚焦）、Folder 上（打开、重命名、新建子卡片），Folder drill-down 子卡片菜单补 `Extract to Canvas`。可使用 `@base-ui/react` 的 Menu 组件 |
-| 2 | **键盘快捷键** | 低 | `index.tsx` | `Delete`/`Backspace` 删除选中节点、`Cmd+C`/`Cmd+V` 复制粘贴卡片（偏移放置）、`Cmd+A` 全选、`Cmd+N` 打开新建菜单。需在 `focused`/`folder-drill-down` 模态中屏蔽画布级快捷键 |
-| 3 | **选择模型重构** | 中 | `CardNode.tsx`, `FolderNode.tsx`, `index.tsx` | 单击→选中（描边高亮 + `selected` 状态），`Shift+Click` 追加选中，双击或 `Enter`→进入聚焦/drill-down。替代当前的单击直接进入 FocusedView 行为。多选集合支持批量拖拽和删除 |
-| 4 | **节点连线 (Edges)** | 中 | `CardNode.tsx`, `index.tsx` | CardNode 四向 `Handle`（`Position.Top/Right/Bottom/Left`），启用 `onConnect` 回调、`ConnectionMode.Loose`、`defaultEdgeOptions: { type: 'smoothstep' }`。连线右键菜单预留（删除连线） |
-| 5 | **FolderNode Resize** | 低 | `FolderNode.tsx` | 复用 CardNode 的 `NodeResizeControl` 模式，去掉硬编码 `w-[350px] h-[350px]`，改为 `style` 控制宽高 |
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
+|---|------|--------|----------|----------|------|
+| 1 | **右键菜单 (Context Menu)** | 中 | `index.tsx`, `ContextMenu.tsx` | 三种上下文：画布空白处（新建卡片/Folder、粘贴、重置缩放）、卡片上（复制、从当前画布移除、永久删除内容〔二次确认〕、改颜色、移入 Folder、聚焦）、Folder 上（打开、重命名、新建子卡片），Folder drill-down 子卡片菜单补 `Extract to Canvas` | ✅ 已实现 |
+| 2 | **键盘快捷键** | 低 | `index.tsx`, `useCanvasKeyboard.ts` | `Delete`/`Backspace` 删除选中节点、`Cmd+C`/`Cmd+V` 复制粘贴卡片（偏移放置）、`Cmd+A` 全选、`Cmd+N` 打开新建菜单。需在 `focused`/`folder-drill-down` 模态中屏蔽画布级快捷键 | ✅ 已实现 |
+| 3 | **选择模型重构** | 中 | `CardNode.tsx`, `FolderNode.tsx`, `index.tsx` | 单击→选中（描边高亮 + `selected` 状态），`Shift+Click` 追加选中，双击或 `Enter`→进入聚焦/drill-down。替代当前的单击直接进入 FocusedView 行为。多选集合支持批量拖拽和删除 | ❌ 待实现 |
+| 4 | **节点连线 (Edges)** | 中 | `CardNode.tsx`, `index.tsx` | CardNode 四向 `Handle`（`Position.Top/Right/Bottom/Left`），启用 `onConnect` 回调、`ConnectionMode.Loose`、`defaultEdgeOptions: { type: 'smoothstep' }`。连线右键菜单预留（删除连线） | ✅ 已实现 |
+| 5 | **FolderNode Resize** | 低 | `FolderNode.tsx` | 复用 CardNode 的 `NodeResizeControl` 模式，去掉硬编码 `w-[350px] h-[350px]`，改为 `style` 控制宽高 | ❌ 待实现 |
 
 ### 🟡 P1 — 核心特性（PRD 差异化亮点）
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 |
-|---|------|--------|----------|----------|
-| 6 | **Group 开放式分组** | 高 | 新建 `GroupNode.tsx`, `index.tsx` | 可调整大小的彩色容器区域，子节点 `parentId` 指向 Group。三阶段拖拽处理：`onNodeDragStart`（拖出时解除 `parentId`，局部→绝对坐标）、`onNodeDrag`（`getIntersectingNodes` 检测交叉，高亮目标）、`onNodeDragStop`（确认 drop，设置 `parentId` + `extent: "parent"`，绝对→局部坐标）。预设颜色：blue/green/yellow/pink/orange |
-| 7 | **撤销/重做 (Undo/Redo)** | 中 | `index.tsx`, 新建 `useUndoRedo.ts` | 操作历史栈，记录 nodes+edges 快照或增量 diff。`Cmd+Z` 撤销、`Cmd+Shift+Z` 重做。覆盖：节点增删、移动、resize、内容编辑、拖入 Folder、连线 |
-| 8 | **便签 (Sticky Note)** ✅ | 低 | `StickyNode.tsx`, `CreateMenu.tsx`, `initialNodes.ts` | 独立 `sticky` 节点类型（非 CardNode 子类型），轻量彩色便签（无标题栏），6 种预设颜色，默认 200×200（120–500 可调）。默认可拖拽，双击原地编辑（`contentEditable`），失焦保存。**不进入 FocusedView**，双击事件由组件内部消费 |
-| 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 支持拖拽图片文件到画布 / `Cmd+V` 粘贴图片创建卡片。画布上显示等比缩略图，聚焦模式显示原图。图片数据 MVP 阶段存为 base64 或 blob URL，后续迁移到 `attachments/` 目录 |
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
+|---|------|--------|----------|----------|------|
+| 6 | **Group 开放式分组** | 高 | `GroupNode.tsx`, `index.tsx`, `useNodeDrag.ts` | 可调整大小的彩色容器区域，子节点 `parentId` 指向 Group。三阶段拖拽处理：`onNodeDragStart`（拖出时解除 `parentId`，局部→绝对坐标）、`onNodeDrag`（`getIntersectingNodes` 检测交叉，高亮目标）、`onNodeDragStop`（确认 drop，设置 `parentId` + `extent: "parent"`，绝对→局部坐标）。预设颜色：blue/green/yellow/pink/orange | ✅ 已实现 |
+| 7 | **撤销/重做 (Undo/Redo)** | 中 | `canvasStore.ts`, `useCanvasKeyboard.ts` | 操作历史栈，记录 nodes+edges 快照。`Cmd+Z` 撤销、`Cmd+Shift+Z` 重做。覆盖：节点增删、移动、resize、内容编辑、拖入 Folder、连线 | ✅ 已实现 |
+| 8 | **便签 (Sticky Note)** | 低 | `StickyNode.tsx`, `CreateMenu.tsx`, `initialNodes.ts` | 独立 `sticky` 节点类型（非 CardNode 子类型），轻量彩色便签（无标题栏），6 种预设颜色，默认 200×200（120–500 可调）。默认可拖拽，双击原地编辑（`contentEditable`），失焦保存。**不进入 FocusedView**，双击事件由组件内部消费 | ✅ 已实现 |
+| 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 支持拖拽图片文件到画布 / `Cmd+V` 粘贴图片创建卡片。画布上显示等比缩略图，聚焦模式显示原图。图片数据 MVP 阶段存为 base64 或 blob URL，后续迁移到 `attachments/` 目录 | ❌ 待实现 |
 
 ### 🟢 P2 — 数据层与增强功能
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 |
-|---|------|--------|----------|----------|
-| 10 | **数据持久化** | 高 | `src/bun/`, 新建 `src/mainview/lib/persistence.ts` | 通过 Electrobun 文件系统 API 实现 workspace 目录结构。manifest 读写（加载→渲染、拖拽/resize→debounce 2500ms 写 manifest、内容编辑→debounce 1500ms 写 .md），但最终统一进入 per-workspace 串行写入队列并采用原子写。窗口失焦 / 切换 workspace 时立即 flush 并 await drain。删节点只删实例；零引用 `note` 保留为 `unplaced`，可通过搜索重新放回画布 |
+| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 状态 |
+|---|------|--------|----------|----------|------|
+| 10 | **数据持久化** | 高 | `src/bun/`, `src/mainview/hooks/useCanvasPersistence.ts` | 通过 Electrobun RPC 实现 workspace 目录结构。manifest 读写 + debounce 2500ms 自动保存 + 窗口失焦 flush。当前内容内嵌在 manifest 中，尚未拆分为独立 `.md` 文件 | ✅ 基础已实现（内容拆分为 .md 待完善） |
 | 11 | **全局搜索** | 中 | 新建 `SearchPanel.tsx`, `index.tsx` | `Cmd+F` 唤起搜索面板，实时匹配卡片标题/正文/checklist 文本。匹配节点高亮，未匹配降低透明度。点击结果项 `fitView` 定位到对应卡片 |
 | 12 | **连线标签与动画** | 低 | `index.tsx` | Edge 的 `label` 字段渲染为可编辑文本（双击编辑），`animated: true` 时显示流动虚线动画 |
 | 13 | **Group 嵌套** | 中 | `GroupNode.tsx`, `index.tsx` | 多级 `parentId` 支持，Group 可嵌套 Group。拖入时执行 `isDescendant` 祖先检测，防止循环嵌套 |

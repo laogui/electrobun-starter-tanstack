@@ -50,8 +50,9 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             ) : (
               <div key={i} className="flex items-start gap-3 py-1 group cursor-pointer" onClick={() => {
                 if (onChange) {
-                  const newItems = [...data.items];
-                  newItems[i].checked = !newItems[i].checked;
+                  const newItems = data.items.map((item: any, index: number) =>
+                    index === i ? { ...item, checked: !item.checked } : item
+                  );
                   onChange({ ...data, items: newItems });
                 }
               }}>

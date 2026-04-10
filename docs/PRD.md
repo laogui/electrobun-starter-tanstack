@@ -22,7 +22,7 @@
 * **功能描述**：画板上的基本元素，支持不同类型的数据载体。
 * **卡片类型**：
     * **图文卡片**：包含图片和文本（如演示中的 Target audience 饼图卡片）。
-    * **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。
+    * **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。画布上的勾选和添加条目操作不改变交互状态（保持 `idle` 或 `selected`），不触发 `inline-editing`；仅当需要完整编辑时通过聚焦模式处理。
     * **长文本/文档**：承载长篇幅的文章。
     * **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。
     * **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；双击进入原地编辑模式，失焦后自动保存。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
@@ -72,7 +72,7 @@
         * 在此模式下，画布上的其他非同组元素不可见或不可交互。
     * **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
     * **成员来源**：Folder 的成员通过 `data.children` 数组内嵌在 manifest 中。用户可将画布上的卡片拖入 Folder，卡片从画布节点列表移除并追加到该 Folder 的 `children` 数组。Folder 封面上的计数标题（如 "3 items"）为运行时根据 `children.length` 派生。后续引入本地文件系统持久化后，可考虑迁移为目录驱动模型。为避免留下悬空连接，带现有 Edge 的卡片在 MVP 中不可直接拖入 Folder——拖入时系统应通过 toast 提示"请先断开该卡片的连线"并取消 drop 操作；用户需先手动断开相关连线，或创建新的无连线实例后再收纳。
-    * **取回到主画布（MVP）**：drill-down 视图中仍不支持“自由拖拽穿出”回主画布，但必须提供显式 `Move to Canvas` / `Extract` 操作。执行后，会把该子卡片作为新的画布节点实例放回 Folder 邻近区域或当前视口中心，保证 Folder 不是“只进不出”的死胡同。
+    * **取回到主画布（MVP）**：drill-down 视图中仍不支持“自由拖拽穿出”回主画布，但必须提供显式 `Move to Canvas` / `Extract` 操作。执行后，会把该子卡片作为新的画布节点实例放回 Folder 邻近区域或当前视口中心，保证 Folder 不是“只进不出”的死胡同。**Extract 后的身份**：由于 Folder `children` 中的子卡片在 MVP 阶段没有独立 `.md` 文件，Extract 时需为其新建一个 `.md` 文件并分配 `noteId`，使之成为完整的独立 Card 节点（与 Sticky 不同，Sticky 保持无 `.md` 的轻量模型）。
     * **Folder 内操作边界（MVP）**：支持在 drill-down 视图中浏览和聚焦子卡片；不支持自由拖拽改变卡片顺序，也不支持跨 Folder 边界直接建立子卡片连线。后续若需要自由布局，将升级为子画布模型单独设计。
     * **适用场景**：归档收纳、减少画布视觉噪音。
 
@@ -90,12 +90,17 @@
     * 通过 `Cmd+F` 或顶部搜索图标唤起搜索面板。
     * 输入关键词后，实时高亮匹配的卡片，未匹配的卡片降低透明度。
     * 点击搜索结果项，若该内容已有画布实例，则自动平移缩放至对应卡片位置；若该内容当前没有任何节点实例，则提供“放回当前画布”操作，在视口中心创建新节点。
+    * **排序规则（MVP）**：标题匹配优先于正文匹配；同等匹配度下按 `updatedAt` 降序排列。Folder 内的子卡片内容纳入搜索范围。后续可引入相关性评分。
+    * **`unplaced notes` 的可见性（MVP）**：`unplaced notes` 在 MVP 阶段仅通过全局搜索可达，不提供独立的管理面板或侧边栏列表。搜索结果中会标注 `unplaced` 标签以区分。用户可通过搜索找到后"放回画布"或"永久删除"（二次确认）。专用 unplaced notes 管理面板属后续迭代。
 
 ### 2.8 撤销/重做 (Undo / Redo)
 * **功能描述**：对画布上所有操作（移动、创建、删除、编辑、拖入文件夹等）提供撤销和重做能力。
 * **交互逻辑**：
     * `Cmd+Z` 撤销，`Cmd+Shift+Z` 重做。
     * 维护一个操作历史栈（Operation History Stack），每次用户操作生成一个快照或差异记录。
+    * **栈深度上限**：最多保留 **100** 步操作历史，超出后丢弃最早记录，避免大画布场景下内存不可控增长。
+    * **撤销与持久化的一致性策略**：撤销/重做仅回滚内存状态，不直接触发磁盘反向写入。下一次 debounce 到期时，以当前内存状态为准覆盖磁盘文件。这意味着：用户编辑 → debounce 写盘 → `Cmd+Z` 撤销 → 内存回滚 → 下次 debounce 再次以内存状态覆盖磁盘，保证内存与磁盘最终一致。
+    * **生命周期**：撤销栈仅存在于内存中，关闭应用或切换 workspace 后清空，不做持久化。
 
 ### 2.9 键盘快捷键体系 (Keyboard Shortcuts)
 | macOS | Windows / Linux | 操作 |
@@ -114,10 +119,10 @@
 | 状态 | 进入条件 | 退出条件 | 约束 |
 |---|---|---|---|
 | `idle` | 默认状态；点击空白处；完成操作后回落 | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选 |
-| `selected` | （目标模型）单击节点；`Shift+Click` 追加选择。当前实现跳过此状态直接进入 `focused` | 点击空白、`Escape`、进入其他状态 | 允许批量拖拽、删除、复制 |
+| `selected` | （目标模型）单击节点；`Shift+Click` 追加选择。当前实现跳过此状态直接进入 `focused` | 点击空白、`Escape`、进入其他状态 | 允许批量拖拽、删除、复制。**Checklist 例外**：Checklist 卡片在 `selected` 状态下允许直接勾选 checkbox 和在列表末尾添加条目（局部交互），这些操作不改变交互状态，不触发 `inline-editing` 或 `focused` |
 | `marquee-selecting` | 在空白处左键拖拽 | 鼠标释放 | 仅桌面端启用；与中键平移互不冲突 |
 | `dragging` | 拖拽一个或多个已选节点 | 鼠标释放或取消 | 暂停双击判定，避免误触发编辑 |
-| `inline-editing` | 双击 Sticky（便签）或可原地编辑的卡片；创建卡片后自动进入 | `Escape`、提交、点击其他区域 | 编辑期间禁用画布级快捷键，保留 `Cmd/Ctrl+Enter` 提交。仅适用于 Sticky 和 Group label；Card/Image 类型不进入 inline-editing，而是进入 `focused` |
+| `inline-editing` | 双击 Sticky（便签）或 Group label；创建 Sticky 后自动进入 | `Escape`、提交、点击其他区域 | 编辑期间禁用画布级快捷键，保留 `Cmd/Ctrl+Enter` 提交。**仅适用于 Sticky 和 Group label**；Card/Image/Checklist 类型不进入此状态，而是进入 `focused` |
 | `focused` | （当前）单击 Card/Image 节点；（目标）双击已选中卡片、`Enter`、右键菜单 `Open Focused` | 返回按钮、点击遮罩、`Escape` | 背景画布不可交互；Sticky 不可进入此状态 |
 | `folder-drill-down` | （当前）单击 Folder；（目标）双击已选中 Folder、`Enter`、右键菜单 `Open` | 返回按钮、背景空白、`Escape` | 仅当前 Folder 内容可交互；背景画布冻结 |
 | `connecting` | 从 Handle 开始拖出连线 | 连接成功、取消 | 禁止进入编辑与聚焦 |
@@ -156,7 +161,7 @@
 ### 4.1 渲染引擎与动画技术
 
 1.  **渲染引擎**：使用 **@xyflow/react**（React Flow）作为画布引擎，DOM + 硬件加速方案。整个大画布通过 `transform: translate(x, y) scale(z)` 控制，内部节点绝对定位。当前 `selectionOnDrag` 默认关闭以避免与平移手势冲突；`onlyRenderVisibleElements` 按需启用以确保可见区裁剪。
-2.  **语义缩放与裁剪**：当前实现为两档——`zoom < 0.4` 时切换为缩略态（仅显示色块、标题和占位线条），`zoom >= 0.4` 时渲染完整内容。后续可扩展为三档（`thumbnail` / `summary` / `full`），在中间缩放比例下省略重型交互控件。
+2.  **语义缩放与裁剪**：采用**三档语义缩放**——`zoom < 0.4` 为 `thumbnail` 态（仅显示色块、标题和占位线条）；`0.4 ≤ zoom < 0.8` 为 `summary` 态（显示标题 + 内容摘要，Checklist 仅显示前 2 条条目，不挂载可交互控件）；`zoom ≥ 0.8` 为 `full` 态（渲染完整内容和交互控件，Checklist 显示完整列表并支持勾选/添加）。中间档通过省略重型交互控件降低 DOM 复杂度，在 500 节点画布中保证平移缩放性能。
 3.  **平滑动画：FLIP 原则**：对于"文件夹展开"和"卡片聚焦"使用 **FLIP (First, Last, Invert, Play)** 动画技术，借助 `Framer Motion`（motion/react）处理弹簧物理动画和共享元素过渡。
 4.  **独立动画层（Animation Layer）**：React Flow 持有节点 transform 状态，不能直接承担所有共享元素过渡。进入聚焦或 Folder drill-down 时，需要先记录源节点的屏幕坐标（`BoundingClientRect + viewport transform`），把视觉副本临时挂到独立的 overlay animation layer 中执行动画，同时隐藏源节点；动画完成后再挂载目标视图并恢复 React Flow 节点。这一层负责解决 React Flow transform 与 FLIP 过渡的兼容问题。`BoundingClientRect` 的读取仅在进入/退出过渡时执行一次，不进入持续平移、缩放、拖拽的热路径。
 5.  **层级隔离（文件夹视图）**：进入文件夹层级时，挂载全屏 `Backdrop` 与独立 drill-down 容器，背景 React Flow 保持冻结但不销毁，以维持空间连续性和返回动画所需的原始坐标。
@@ -177,8 +182,8 @@
 
 | 规模 | 目标体验 | 策略 |
 |---|---|---|
-| `<= 500` 节点 | 画布编辑保持 60fps | `onlyRenderVisibleElements` + 语义缩放 + 轻量节点 DOM（非选中态不挂载富编辑器） |
-| `500 - 1000` 节点 | 平移缩放保持流畅，编辑延迟可接受 | 低缩放时只渲染缩略态；富编辑器仅在选中/聚焦时挂载；Helper Lines 可按需降级关闭 |
+| `<= 500` 节点 | 画布编辑保持 60fps | `onlyRenderVisibleElements` + 三档语义缩放（`thumbnail` < 0.4 / `summary` 0.4–0.8 / `full` ≥ 0.8）+ 轻量节点 DOM（非选中态不挂载富编辑器；`summary` 档 Checklist 仅渲染前 2 条、不挂载交互控件） |
+| `500 - 1000` 节点 | 平移缩放保持流畅，编辑延迟可接受 | 低缩放时只渲染 `thumbnail` / `summary` 态；富编辑器仅在选中/聚焦时挂载；Helper Lines 可按需降级关闭 |
 | `> 1000` 节点 | 不承诺 MVP 全量流畅编辑 | 作为未来阶段引入更激进虚拟化、索引层或 Canvas/WebGL 降级的触发阈值 |
 
 **MVP 性能目标**：稳定支持单画布 `500` 个节点、`1000` 条边以内的日常编辑场景；超过阈值时优先保证导航和查看流畅，编辑器按需加载。
@@ -191,7 +196,7 @@
 
 ### 5.1 核心原则
 
-1. **文件即数据源（File as Source of Truth）**—— 每张 **Card 类型**卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。Sticky（便签）的内容直接内嵌在 manifest `data.content` 中，不生成独立 `.md` 文件；Folder `children` 中的子卡片在 MVP 阶段同样内嵌在 manifest 中（参见 §5.10 Folder 模型决策）。
+1. **文件即数据源（File as Source of Truth）**—— 每张 **Card 类型**卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。Sticky（便签）的内容直接内嵌在 manifest `data.content` 中，不生成独立 `.md` 文件；Folder `children` 中的子卡片在 MVP 阶段同样内嵌在 manifest 中（参见 §5.10 Folder 模型决策）。**⚠️ MVP 降级定位**：Folder 子卡片属于"草稿 / 闪念暂存"性质，其内容**仅在 Spatial Canvas 内可见**，无法通过 Obsidian、Typora 等外部编辑器打开或编辑，也不具备独立 `noteId`，不可被其他画布复用。UI 上需在 Folder drill-down 视图中标注"仅画布内可见"提示。用户若需将子卡片提升为正式笔记，应通过 `Extract to Canvas` 操作（Extract 时自动创建 `.md` 并分配 `noteId`）。后续迭代将把 Folder children 迁移为 `noteId` 引用 + 独立 `.md` 文件模型。
 2. **内容与布局解耦** —— 内容级属性（标题、标签、创建时间）存 frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
 4. **删除实例不等于删除内容** —— 删除 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留为可搜索的 `unplaced note`，直到用户显式执行永久删除。
@@ -297,7 +302,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | `color`（内容默认颜色） | `color`（per-view 视觉覆盖，可选） |
 | `displayHint` | `locked`、`parentId`、`extent` |
 
-**颜色优先级**（三层回退）：`manifest.data.color`（per-view override）→ `frontmatter.color`（内容默认）→ 组件默认色板。当同一笔记出现在多个画布中时，每个画布可通过 manifest `color` 独立覆盖颜色，而不影响内容文件本身的默认颜色。
+**颜色优先级**（三层回退）：`manifest.data.color`（per-view override）→ `frontmatter.color`（内容默认）→ 组件默认色板。当同一笔记出现在多个画布中时，每个画布可通过 manifest `color` 独立覆盖颜色，而不影响内容文件本身的默认颜色。**Sticky 例外**：Sticky 无 frontmatter，仅走两层回退——`manifest.data.color` → 组件默认色板。
 
 ### 5.5 Workspace 配置
 
@@ -381,6 +386,7 @@ updatedAt: 2026-03-31T14:30:00Z
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
 - Folder 的 `data.children` 存放被收纳的子卡片；封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生。
 - Folder `children` 在 drill-down 中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
+- **⚠️ MVP 限制**：Folder 子卡片内嵌在 manifest 中，无独立 `.md` 文件和 `noteId`，仅在 Spatial Canvas 内可见，外部编辑器无法访问。后续迭代将迁移为 `noteId` 引用模型。
 
 ### 5.7 TypeScript 类型定义
 
@@ -572,7 +578,7 @@ interface AppConfig {
 | 布局存储 | Per-view manifest，不放 frontmatter | 布局和内容解耦，避免单文件热点 |
 | 内容树结构 | 统一 `content/` 目录 | 避免 `notes/` + `folders/` 双根混乱 |
 | 内容生命周期 | 删 `node` 只删实例；零引用 `note` 保留为 `unplaced` | 避免误删共享内容，也避免内容文件无入口可找回 |
-| Folder 模型 | `children` 数组内嵌在 manifest 中 | 当前无持久化层，内嵌最直接；后续可迁移为目录驱动 |
+| Folder 模型 | `children` 数组内嵌在 manifest 中（⚠️ 子卡片仅画布内可见，定位为草稿/闪念暂存） | 当前无持久化层，内嵌最直接；后续迁移为 `noteId` 引用 + 独立 `.md` 文件模型 |
 | Folder / Edge 边界 | Folder 封面可连线；`children` 不跨层暴露 Handle | 避免 drill-down 时连线语义失真 |
 | Folder 内布局 | MVP 使用自动排布，不存子坐标 | 避免过早引入子画布复杂度 |
 | ID 生成 | `nanoid`，写入 frontmatter | 文件重命名不影响引用关系 |
@@ -599,7 +605,7 @@ interface AppConfig {
 | 带 Edge 的卡片被拖入 Folder | MVP 阻止该操作并提示先断开连线；后续若要支持，需补边重写规则 |
 | Edge 指向不存在的 node | 加载时 validation，静默过滤无效 edge 并 log 警告 |
 | Markdown / frontmatter 解析失败 | 卡片以只读错误态渲染，展示原始文件路径和错误摘要；允许用户在外部编辑器修复后自动恢复 |
-| 窗口失焦 / 关闭时仍有 pending writes | 阻塞退出流程直至串行写入队列 drain 完成；若失败则保留最近一次有效快照并提示恢复 |
+| 窗口失焦 / 关闭时仍有 pending writes | 阻塞退出流程直至串行写入队列 drain 完成。drain 期间窗口显示简短的"正在保存…"提示（spinner），超过 3 秒仍未完成则强制关闭并保留最近一次有效快照，下次启动时提示恢复 |
 | manifest JSON 损坏 | 启动时保留坏文件副本并尝试从最近一次有效备份恢复；若恢复失败，则以空画布只读打开并提示用户手动修复 |
 | displayHint 未知值 | 回退为 `note` 渲染，记录诊断日志，不阻塞加载 |
 | 单个画布节点过多（>1000） | 未来可引入 SQLite 本地索引层，但初期全量加载足够 |
@@ -656,7 +662,7 @@ interface AppConfig {
 | **Group 拖拽推开外部卡片** | — | ❌ 未实现 | 拖拽 group 时自动推开重叠的非子节点卡片，避免视觉遮挡 |
 | **连线动画** | ✅ `animated` 字段已定义 | ❌ 未实现 | `animated: true` 的 edge 显示流动虚线动画 |
 | **连线标签** | ✅ `label` 字段已定义 | ❌ 未实现 | edge 上显示可编辑的文本标签 |
-| **多画布视图** | ✅ `workspace.json` + per-view manifest | ❌ 仅有单个默认画布 | 需实现视图切换 UI 和新建/删除视图 |
+| **多画布视图** | ✅ `workspace.json` + per-view manifest | ❌ 仅有单个默认画布 | 需实现视图切换 UI（初步方向为顶部 Tab 栏）和新建/删除视图 |
 
 ### 🟢 低优先级
 

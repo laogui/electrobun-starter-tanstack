@@ -1,14 +1,18 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { STICKY_W, STICKY_H, IMAGE_W, IMAGE_H, STICKY_COLORS, GROUP_COLORS } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
+import { isTouchDevice } from '@/hooks/useTouchGesture';
 import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
+
+const LONG_PRESS_DURATION = 500; // milliseconds
+const MOVEMENT_THRESHOLD = 10; // pixels
 
 export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const setNodes = useCanvasStore((s) => s.setNodes);
@@ -23,6 +27,18 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number; node?: Node } | null>(null);
+  const isTouchSupported = useRef(isTouchDevice());
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        window.clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
 
   const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault();
@@ -37,6 +53,65 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : node.type === 'sticky' ? 'sticky' : node.type === 'image' ? 'image' : 'card',
       nodeId: node.id,
     });
+  }, []);
+
+  // Long press handlers for touch devices
+  const onPaneLongPressStart = useCallback((e: React.PointerEvent) => {
+    if (!isTouchSupported.current || e.pointerType === 'mouse') return;
+
+    longPressStartRef.current = { x: e.clientX, y: e.clientY };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (longPressStartRef.current) {
+        setContextMenu({
+          x: longPressStartRef.current.x,
+          y: longPressStartRef.current.y,
+          target: 'canvas',
+        });
+        longPressStartRef.current = null;
+      }
+    }, LONG_PRESS_DURATION);
+  }, []);
+
+  const onNodeLongPressStart = useCallback((e: React.PointerEvent, node: Node) => {
+    if (!isTouchSupported.current || e.pointerType === 'mouse') return;
+
+    longPressStartRef.current = { x: e.clientX, y: e.clientY, node };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (longPressStartRef.current && longPressStartRef.current.node) {
+        setContextMenu({
+          x: longPressStartRef.current.x,
+          y: longPressStartRef.current.y,
+          target: node.type === 'folder' ? 'folder' : node.type === 'group' ? 'group' : node.type === 'sticky' ? 'sticky' : node.type === 'image' ? 'image' : 'card',
+          nodeId: node.id,
+        });
+        longPressStartRef.current = null;
+      }
+    }, LONG_PRESS_DURATION);
+  }, []);
+
+  const onLongPressMove = useCallback((e: React.PointerEvent) => {
+    if (!longPressStartRef.current || !longPressTimerRef.current) return;
+
+    const dx = e.clientX - longPressStartRef.current.x;
+    const dy = e.clientY - longPressStartRef.current.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Cancel long press if moved too far
+    if (distance > MOVEMENT_THRESHOLD) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+      longPressStartRef.current = null;
+    }
+  }, []);
+
+  const onLongPressEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartRef.current = null;
   }, []);
 
   const handleContextMenuAction = useCallback((action: string, nodeId?: string) => {
@@ -175,6 +250,10 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onPaneLongPressStart,
+    onNodeLongPressStart,
+    onLongPressMove,
+    onLongPressEnd,
     handleContextMenuAction,
   };
 }

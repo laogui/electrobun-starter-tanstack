@@ -4,7 +4,8 @@ import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
 import { cn } from '@/lib/utils';
 import { colorToStyle } from '@/lib/colorUtils';
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useTouchDrag } from '@/hooks/useTouchGesture';
+import React, { useEffect, useRef } from 'react';
 
 const FolderChildContent = ({ child }: { child: any }) => {
   if (child.type === 'image') {
@@ -52,46 +53,15 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, hasDragged: false });
+
+  const { handlePointerDown, handlePointerMove, handlePointerUp, handleClickCapture } =
+    useTouchDrag(scrollRef);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = 'auto'; };
-  }, []);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    dragState.current = { isDown: true, startX: e.pageX, scrollLeft: el.scrollLeft, hasDragged: false };
-    el.style.cursor = 'grabbing';
-    el.style.userSelect = 'none';
-  }, []);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragState.current.isDown) return;
-    e.preventDefault();
-    const el = scrollRef.current;
-    if (!el) return;
-    const dx = e.pageX - dragState.current.startX;
-    if (Math.abs(dx) > 3) dragState.current.hasDragged = true;
-    el.scrollLeft = dragState.current.scrollLeft - dx * 1.2;
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    dragState.current.isDown = false;
-    const el = scrollRef.current;
-    if (el) {
-      el.style.cursor = '';
-      el.style.userSelect = '';
-    }
-  }, []);
-
-  const handleClickCapture = useCallback((e: React.MouseEvent) => {
-    if (dragState.current.hasDragged) {
-      e.stopPropagation();
-      e.preventDefault();
-      dragState.current.hasDragged = false;
-    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
   }, []);
 
   return (
@@ -127,13 +97,14 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
 
       <div
         ref={scrollRef}
-        className="absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden folder-scroll-container cursor-grab"
+        className="absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden folder-scroll-container cursor-grab touch-none"
         onClick={(e) => e.stopPropagation()}
         onClickCapture={handleClickCapture}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
       >
         <div
           className="flex items-center"

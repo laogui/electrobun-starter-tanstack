@@ -17,14 +17,14 @@ export function CreateMenu({ onCreateNode, open, setOpen }: { onCreateNode: (typ
 
   useEffect(() => {
     if (!open) return;
-    const handleClick = (e: MouseEvent) => {
+    const handleClick = (e: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as HTMLElement)) {
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
+    document.addEventListener('pointerdown', handleClick);
+    return () => document.removeEventListener('pointerdown', handleClick);
+  }, [open, setOpen]);
 
   const handleSelect = (id: string) => {
     if (id === 'note') onCreateNode('card');

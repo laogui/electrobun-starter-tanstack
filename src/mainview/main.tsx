@@ -3,6 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 import { router } from "@/router";
 import "./index.css";
+import "./styles/mobile-gestures.css";
 
 const rootElement = document.querySelector("#root");
 

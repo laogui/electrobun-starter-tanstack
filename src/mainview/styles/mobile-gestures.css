@@ -1,0 +1,92 @@
+/**
+ * Mobile gesture improvements for canvas interactions
+ *
+ * This file contains CSS optimizations for touch-based gestures on mobile devices.
+ * It works in conjunction with the touch gesture hooks in src/mainview/hooks/useTouchGesture.ts
+ */
+
+/* Improve touch responsiveness for all interactive elements */
+.react-flow__node {
+  /* Enable smooth touch interactions */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure resize handles are touch-friendly */
+.react-flow__resize-control {
+  /* Increase touch target size */
+  padding: 12px !important;
+  touch-action: none;
+}
+
+/* Optimize minimap for touch */
+.react-flow__minimap {
+  touch-action: pan-x pan-y;
+}
+
+/* Prevent touch selection during drag operations */
+.react-flow.dragging,
+.react-flow.resizing {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Improve folder scroll container for touch */
+.folder-scroll-container {
+  /* Allow horizontal scroll on touch devices */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+}
+
+/* Better touch feedback for buttons */
+button,
+.cursor-pointer {
+  /* Prevent text selection on tap */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Optimize canvas panning for touch */
+.react-flow__pane {
+  /* Allow custom touch handling */
+  touch-action: none;
+}
+
+/* Custom scrollbar for touch devices */
+@media (hover: none) and (pointer: coarse) {
+  /* Hide scrollbars on touch devices */
+  .custom-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Make resize handles larger on touch devices */
+  .react-flow__resize-control {
+    padding: 16px !important;
+  }
+
+  /* Increase hit areas for touch */
+  .react-flow__handle {
+    width: 24px !important;
+    height: 24px !important;
+  }
+}
+
+/* Prevent double-tap zoom on mobile browsers */
+@media (hover: none) {
+  * {
+    touch-action: manipulation;
+  }
+
+  .react-flow,
+  .react-flow__pane,
+  .react-flow__node {
+    touch-action: none;
+  }
+}

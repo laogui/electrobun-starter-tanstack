@@ -56,6 +56,10 @@ function CanvasComponent() {
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onPaneLongPressStart,
+    onNodeLongPressStart,
+    onLongPressMove,
+    onLongPressEnd,
     handleContextMenuAction,
   } = useContextMenu({ rfInstance });
 
@@ -132,7 +136,13 @@ function CanvasComponent() {
   const miniMapMask = isDarkTheme ? 'rgba(20, 20, 20, 0.7)' : 'rgba(240, 239, 237, 0.7)';
 
   return (
-    <div className='h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
+    <div
+      className="h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]"
+      onPointerDown={onPaneLongPressStart}
+      onPointerMove={onLongPressMove}
+      onPointerUp={onLongPressEnd}
+      onPointerCancel={onLongPressEnd}
+    >
       <ReactFlow
         nodes={nodesWithState}
         edges={edges}
@@ -153,7 +163,10 @@ function CanvasComponent() {
         nodeTypes={nodeTypes}
         panOnScroll={true}
         selectionOnDrag={false}
+        panOnScrollMode="vertical"
         zoomOnPinch={true}
+        zoomOnDoubleClick={false}
+        panOnDrag={true}
         minZoom={0.1}
         maxZoom={4}
         proOptions={{ hideAttribution: true }}

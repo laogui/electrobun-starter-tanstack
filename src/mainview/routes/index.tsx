@@ -97,7 +97,7 @@ function CanvasComponent() {
     [addConnection],
   );
 
-  const onNodeClick = useCallback(
+  const onNodeDoubleClick = useCallback(
     (_: any, node: Node) => {
       const el = document.querySelector(`[data-id="${node.id}"]`);
       const rect = el?.getBoundingClientRect();
@@ -139,7 +139,7 @@ function CanvasComponent() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
         connectionMode={ConnectionMode.Loose}
         onPaneContextMenu={onPaneContextMenu}

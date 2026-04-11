@@ -5,12 +5,14 @@
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
-let electrobunInstance: any = null;
+const electrobunInstance: any = null;
 let initPromise: Promise<any> | null = null;
 
 async function initElectrobun() {
-  if (typeof (window as any).__electrobunWebviewId === 'undefined') {
-    console.warn('[persistence] Not running inside Electrobun — persistence disabled');
+  if ((globalThis as any).__electrobunWebviewId === undefined) {
+    console.warn(
+      '[persistence] Not running inside Electrobun — persistence disabled'
+    );
     return null;
   }
   try {
@@ -24,8 +26,8 @@ async function initElectrobun() {
     });
 
     return new Electrobun.Electroview({ rpc });
-  } catch (err) {
-    console.warn('[persistence] Failed to initialize Electrobun RPC:', err);
+  } catch (error) {
+    console.warn('[persistence] Failed to initialize Electrobun RPC:', error);
     return null;
   }
 }
@@ -34,7 +36,7 @@ async function getElectrobun() {
   if (!initPromise) {
     initPromise = initElectrobun();
   }
-  return initPromise;
+  return await initPromise;
 }
 
 export async function loadCanvas(viewId: string) {
@@ -43,19 +45,32 @@ export async function loadCanvas(viewId: string) {
   return eb.rpc.request.loadCanvas({ viewId });
 }
 
-export async function rpcSaveManifest(viewId: string, nodes: any[], edges: any[], viewport?: any) {
+export async function rpcSaveManifest(
+  viewId: string,
+  nodes: Array<any>,
+  edges: Array<any>,
+  viewport?: any
+) {
   const eb = await getElectrobun();
   if (!eb?.rpc) return { success: false };
   return eb.rpc.request.saveManifest({ viewId, nodes, edges, viewport });
 }
 
-export async function rpcSaveNote(noteId: string, frontmatter: Record<string, unknown>, body: string) {
+export async function rpcSaveNote(
+  noteId: string,
+  frontmatter: Record<string, unknown>,
+  body: string
+) {
   const eb = await getElectrobun();
   if (!eb?.rpc) return { success: false };
   return eb.rpc.request.saveNote({ noteId, frontmatter, body });
 }
 
-export async function rpcCreateNote(id: string, title: string, displayHint: string) {
+export async function rpcCreateNote(
+  id: string,
+  title: string,
+  displayHint: string
+) {
   const eb = await getElectrobun();
   if (!eb?.rpc) return null;
   return eb.rpc.request.createNote({ id, title, displayHint });

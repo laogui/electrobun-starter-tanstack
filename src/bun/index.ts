@@ -1,13 +1,19 @@
-import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
-import { initWorkspace, loadWorkspaceConfig } from "./workspace";
-import { loadManifest, saveManifest as writeManifest } from "./manifest";
-import type { CanvasManifest, ManifestNode, ManifestEdge } from "./manifest";
-import {
-  buildNoteIndex, loadNote, saveNote as writeNote, createNote, deleteNoteFile,
-  cardDataToNote, noteToCardData,
-} from "./notes";
+import { BrowserView, BrowserWindow, Updater } from 'electrobun/bun';
 
-const DEV_SERVER_PORT = "5173";
+import { loadManifest, saveManifest as writeManifest } from './manifest';
+import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
+import {
+  buildNoteIndex,
+  cardDataToNote,
+  createNote,
+  deleteNoteFile,
+  loadNote,
+  noteToCardData,
+  saveNote as writeNote,
+} from './notes';
+import { initWorkspace, loadWorkspaceConfig } from './workspace';
+
+const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
@@ -19,7 +25,7 @@ async function sleep(ms: number) {
 async function waitForDevServer(): Promise<boolean> {
   for (let attempt = 0; attempt < DEV_SERVER_RETRY_COUNT; attempt += 1) {
     try {
-      await fetch(DEV_SERVER_URL, { method: "HEAD" });
+      await fetch(DEV_SERVER_URL, { method: 'HEAD' });
       return true;
     } catch {
       await sleep(DEV_SERVER_RETRY_DELAY_MS);
@@ -32,7 +38,7 @@ async function waitForDevServer(): Promise<boolean> {
 // Check if Vite dev server is running for HMR
 async function getMainViewUrl(): Promise<string> {
   const channel = await Updater.localInfo.channel();
-  if (channel === "dev") {
+  if (channel === 'dev') {
     const isDevServerReady = await waitForDevServer();
 
     if (isDevServerReady) {
@@ -40,9 +46,11 @@ async function getMainViewUrl(): Promise<string> {
       return DEV_SERVER_URL;
     }
 
-    console.warn("Vite dev server not running. Run 'bun run dev:hmr' for HMR support.");
+    console.warn(
+      "Vite dev server not running. Run 'bun run dev:hmr' for HMR support."
+    );
   }
-  return "views://mainview/index.html";
+  return 'views://mainview/index.html';
 }
 
 type CanvasRPC = {
@@ -51,16 +59,16 @@ type CanvasRPC = {
       loadCanvas: {
         params: { viewId: string };
         response: {
-          nodes: ManifestNode[];
-          edges: ManifestEdge[];
+          nodes: Array<ManifestNode>;
+          edges: Array<ManifestEdge>;
           viewport?: { x: number; y: number; zoom: number };
         } | null;
       };
       saveManifest: {
         params: {
           viewId: string;
-          nodes: ManifestNode[];
-          edges: ManifestEdge[];
+          nodes: Array<ManifestNode>;
+          edges: Array<ManifestEdge>;
           viewport?: { x: number; y: number; zoom: number };
         };
         response: { success: boolean };
@@ -82,11 +90,11 @@ type CanvasRPC = {
         response: { success: boolean };
       };
     };
-    messages: {};
+    messages: Record<string, unknown>;
   };
   webview: {
-    requests: {};
-    messages: {};
+    requests: Record<string, unknown>;
+    messages: Record<string, unknown>;
   };
 };
 
@@ -111,9 +119,10 @@ async function main() {
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
               // Only hydrate card nodes that have a noteId reference
-              if (node.type === "card" && node.data.noteId) {
+              if (node.type === 'card' && node.data.noteId) {
                 const filePath =
-                  (node.data.file as string) || noteIndex.get(node.data.noteId as string);
+                  (node.data.file as string) ||
+                  noteIndex.get(node.data.noteId as string);
                 if (filePath) {
                   const doc = await loadNote(wsPath, filePath);
                   if (doc) {
@@ -130,10 +139,12 @@ async function main() {
                   }
                 }
                 // .md file missing → return node as-is (broken reference)
-                console.warn(`[persistence] Note file not found for noteId=${node.data.noteId}`);
+                console.warn(
+                  `[persistence] Note file not found for noteId=${node.data.noteId}`
+                );
               }
               return node;
-            }),
+            })
           );
 
           return {
@@ -155,10 +166,11 @@ async function main() {
           const manifestNodes = await Promise.all(
             nodes.map(async (node) => {
               // Only extract content for card nodes
-              if (node.type !== "card") return node;
+              if (node.type !== 'card') return node;
 
               // Assign noteId if not present
-              const noteId = (node.data.noteId as string) ||
+              const noteId =
+                (node.data.noteId as string) ||
                 `note_${crypto.randomUUID().slice(0, 8)}`;
 
               // Read existing frontmatter to preserve createdAt
@@ -170,7 +182,11 @@ async function main() {
               }
 
               // Convert node data to frontmatter + body
-              const { frontmatter, body } = cardDataToNote(noteId, node.data, existingFm);
+              const { frontmatter, body } = cardDataToNote(
+                noteId,
+                node.data,
+                existingFm
+              );
 
               // Write .md file (create or update)
               let filePath: string;
@@ -179,9 +195,10 @@ async function main() {
                 await writeNote(wsPath, filePath, frontmatter, body);
               } else {
                 filePath = await createNote(
-                  wsPath, noteId,
-                  String(node.data.title || ""),
-                  String(frontmatter.displayHint),
+                  wsPath,
+                  noteId,
+                  String(node.data.title || ''),
+                  String(frontmatter.displayHint)
                 );
                 // createNote writes frontmatter but with empty body; rewrite with actual body
                 await writeNote(wsPath, filePath, frontmatter, body);
@@ -202,11 +219,11 @@ async function main() {
                   type: node.data.type, // keep for quick component selection
                 },
               };
-            }),
+            })
           );
 
           const manifest: CanvasManifest = {
-            schema: "spatial-canvas/v1",
+            schema: 'spatial-canvas/v1',
             viewId,
             viewport,
             nodes: manifestNodes,
@@ -245,7 +262,7 @@ async function main() {
   });
 
   return new BrowserWindow({
-    title: "React + Tailwind + Vite",
+    title: 'React + Tailwind + Vite',
     url,
     rpc,
     frame: {

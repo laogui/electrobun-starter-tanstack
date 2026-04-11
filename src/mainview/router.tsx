@@ -1,15 +1,17 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   createHashHistory,
   createRouter as createTanStackRouter,
-} from "@tanstack/react-router";
-import { ErrorBoundaryFallback } from "@/components/layout/ErrorBoundaryFallback";
-import { Loader } from "@/components/layout/Loader";
-import { queryClient } from "@/lib/queryClient";
-import { routeTree } from "./routeTree.gen";
+} from '@tanstack/react-router';
 
-const isHttpProtocol = ["http:", "https:"].includes(
-  globalThis.location.protocol,
+import { ErrorBoundaryFallback } from '@/components/layout/ErrorBoundaryFallback';
+import { Loader } from '@/components/layout/Loader';
+import { queryClient } from '@/lib/queryClient';
+
+import { routeTree } from './routeTree.gen';
+
+const isHttpProtocol = ['http:', 'https:'].includes(
+  globalThis.location.protocol
 );
 
 export const router = createTanStackRouter({
@@ -26,7 +28,7 @@ export const router = createTanStackRouter({
   ),
 });
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
   }

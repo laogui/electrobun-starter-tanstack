@@ -35,28 +35,28 @@
 
 ### 1.2 技术栈
 
-| 层级 | 技术选型 | 说明 |
-|------|----------|------|
-| 画布引擎 | @xyflow/react (React Flow) | DOM + 硬件加速，`transform: translate(x,y) scale(z)` |
-| UI 框架 | React 19 + TypeScript | — |
-| 状态管理 | Zustand | 画布交互状态 + undo/redo |
-| 异步数据 | TanStack React Query | 错误自动 toast，共享 queryClient |
-| 路由 | TanStack Router | 文件路由，hash history |
-| 表单 | TanStack React Form | — |
-| 样式 | Tailwind CSS v4 | `@tailwindcss/vite` 插件，无独立配置文件 |
-| 动画 | motion/react (Framer Motion) | 弹簧物理 + FLIP 过渡 |
-| 国际化 | Paraglide / Inlang | en / zh 双语 |
-| Toast | Sonner | 通过 queryClient 统一错误提示 |
-| 构建工具 | Vite + Bun | — |
-| 桌面运行时 | Electrobun | TypeScript 全栈，~14MB，Bun 原生集成 |
+| 层级       | 技术选型                     | 说明                                                 |
+| ---------- | ---------------------------- | ---------------------------------------------------- |
+| 画布引擎   | @xyflow/react (React Flow)   | DOM + 硬件加速，`transform: translate(x,y) scale(z)` |
+| UI 框架    | React 19 + TypeScript        | —                                                    |
+| 状态管理   | Zustand                      | 画布交互状态 + undo/redo                             |
+| 异步数据   | TanStack React Query         | 错误自动 toast，共享 queryClient                     |
+| 路由       | TanStack Router              | 文件路由，hash history                               |
+| 表单       | TanStack React Form          | —                                                    |
+| 样式       | Tailwind CSS v4              | `@tailwindcss/vite` 插件，无独立配置文件             |
+| 动画       | motion/react (Framer Motion) | 弹簧物理 + FLIP 过渡                                 |
+| 国际化     | Paraglide / Inlang           | en / zh 双语                                         |
+| Toast      | Sonner                       | 通过 queryClient 统一错误提示                        |
+| 构建工具   | Vite + Bun                   | —                                                    |
+| 桌面运行时 | Electrobun                   | TypeScript 全栈，~14MB，Bun 原生集成                 |
 
 ### 1.3 桌面运行时选型
 
-| 方案 | 优势 | 劣势 | 状态 |
-|------|------|------|------|
-| Electrobun（当前） | TS 全栈，体积小，启动快，与 Bun 生态原生集成 | 生态较年轻，部分能力仍在完善 | ✅ 已采用 |
-| Tauri v2 | 生态成熟、文件系统能力稳定 | 需 Rust toolchain，与 Bun 工具链不统一 | 备选 |
-| Electron | 最成熟生态 | 包体积大（~150MB），内存占用高 | 不考虑 |
+| 方案               | 优势                                         | 劣势                                   | 状态      |
+| ------------------ | -------------------------------------------- | -------------------------------------- | --------- |
+| Electrobun（当前） | TS 全栈，体积小，启动快，与 Bun 生态原生集成 | 生态较年轻，部分能力仍在完善           | ✅ 已采用 |
+| Tauri v2           | 生态成熟、文件系统能力稳定                   | 需 Rust toolchain，与 Bun 工具链不统一 | 备选      |
+| Electron           | 最成熟生态                                   | 包体积大（~150MB），内存占用高         | 不考虑    |
 
 ---
 
@@ -115,7 +115,6 @@ src/
       initialNodes.ts                      # 种子数据（首次启动时使用）
 ```
 
-
 ---
 
 ## 3. 节点类型系统
@@ -124,13 +123,13 @@ src/
 
 `canvasConstants.ts` 中定义了五种节点类型，直接传入 ReactFlow `nodeTypes` prop：
 
-| type | 组件 | 持久化方式 | 可聚焦 | 可 Resize |
-|------|------|-----------|--------|-----------|
-| `card` | `CardNode` | 独立 `.md` 文件（`noteId` + frontmatter） | ✅ | ✅ (150~800 × 150~900) |
-| `image` | `ImageNode` | 独立 `.md` 文件 + base64（MVP）/ `attachments/`（后续） | ✅ | ✅ (150~800 × 150~900) |
-| `folder` | `FolderNode` | manifest `data.children` 内嵌 | ✅ drill-down | ✅ (250~600 × 250~600) |
-| `group` | `GroupNode` | manifest `data.label` + `data.color` | ❌ | ✅ NodeResizer (min 300×200) |
-| `sticky` | `StickyNode` | manifest `data.content` + `data.color` 内嵌 | ❌（双击原地编辑） | ✅ (120~500 × 120~500) |
+| type     | 组件         | 持久化方式                                              | 可聚焦             | 可 Resize                    |
+| -------- | ------------ | ------------------------------------------------------- | ------------------ | ---------------------------- |
+| `card`   | `CardNode`   | 独立 `.md` 文件（`noteId` + frontmatter）               | ✅                 | ✅ (150~800 × 150~900)       |
+| `image`  | `ImageNode`  | 独立 `.md` 文件 + base64（MVP）/ `attachments/`（后续） | ✅                 | ✅ (150~800 × 150~900)       |
+| `folder` | `FolderNode` | manifest `data.children` 内嵌                           | ✅ drill-down      | ✅ (250~600 × 250~600)       |
+| `group`  | `GroupNode`  | manifest `data.label` + `data.color`                    | ❌                 | ✅ NodeResizer (min 300×200) |
+| `sticky` | `StickyNode` | manifest `data.content` + `data.color` 内嵌             | ❌（双击原地编辑） | ✅ (120~500 × 120~500)       |
 
 ### 3.2 TypeScript 类型定义
 
@@ -138,8 +137,8 @@ src/
 
 ```typescript
 // ─── ID 类型 ───
-type NoteID = string;   // 内容实体 ID，如 "note_a1b2c3d4"
-type NodeID = string;   // 画布实例 ID，如 "node_7f3a"
+type NoteID = string; // 内容实体 ID，如 "note_a1b2c3d4"
+type NodeID = string; // 画布实例 ID，如 "node_7f3a"
 type ViewID = string;
 
 // ─── 内容层：Markdown 文件 ───
@@ -149,14 +148,14 @@ interface NoteFrontmatter {
   displayHint?: 'note' | 'checklist' | 'image';
   color?: string;
   tags?: string[];
-  createdAt: string;    // ISO 8601
-  updatedAt: string;    // ISO 8601
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 interface NoteDocument {
   frontmatter: NoteFrontmatter;
-  body: string;         // Markdown 正文
-  file: string;         // workspace-relative path
+  body: string; // Markdown 正文
+  file: string; // workspace-relative path
 }
 
 // ─── 视图层：与 @xyflow/react 的 Node/Edge 类型对齐 ───
@@ -183,27 +182,27 @@ interface FolderNodeData {
 
 interface GroupNodeData {
   label?: string;
-  color?: string;       // 'blue' | 'green' | 'yellow' | 'pink' | 'orange'
+  color?: string; // 'blue' | 'green' | 'yellow' | 'pink' | 'orange'
   [key: string]: unknown;
 }
 
 interface StickyNodeData {
   content: string;
-  color?: string;       // hex，如 "#FEF08A"
+  color?: string; // hex，如 "#FEF08A"
   [key: string]: unknown;
 }
 
 interface ImageNodeData {
   imageUrl: string;
   title?: string;
-  color: string;        // hex，如 "#FFFFFF"
+  color: string; // hex，如 "#FFFFFF"
   [key: string]: unknown;
 }
 
-type CardNode   = Node<CardNodeData, 'card'>;
-type ImageNode  = Node<ImageNodeData, 'image'>;
+type CardNode = Node<CardNodeData, 'card'>;
+type ImageNode = Node<ImageNodeData, 'image'>;
 type FolderNode = Node<FolderNodeData, 'folder'>;
-type GroupNode  = Node<GroupNodeData, 'group'>;
+type GroupNode = Node<GroupNodeData, 'group'>;
 type StickyNode = Node<StickyNodeData, 'sticky'>;
 type CanvasNode = CardNode | ImageNode | FolderNode | GroupNode | StickyNode;
 
@@ -236,10 +235,10 @@ interface AppConfig {
 持久化到 frontmatter 时使用 `displayHint`（PRD 定义），运行时内存中使用 `data.type`。映射关系：
 
 | frontmatter `displayHint` | 运行时 `data.type` |
-|---------------------------|-------------------|
-| `note`（默认） | `text` |
-| `checklist` | `checklist` |
-| `image` | `image` |
+| ------------------------- | ------------------ |
+| `note`（默认）            | `text`             |
+| `checklist`               | `checklist`        |
+| `image`                   | `image`            |
 
 映射在 `src/bun/notes.ts` 的 `cardDataToNote` / `noteToCardData` 中处理。
 
@@ -249,11 +248,11 @@ interface AppConfig {
 
 ### 4.1 分层策略
 
-| 层 | 工具 | 职责 |
-|----|------|------|
-| 画布交互状态 | **Zustand** (`canvasStore.ts`) | `nodes`/`edges`、`focusedNode`/`focusedFolder`、`clipboard`、undo/redo 历史栈、节点 CRUD |
-| 异步/文件系统数据 | **TanStack React Query** | 加载、缓存、重试、错误 toast |
-| 局部 UI 状态 | `useState` / Hook 内部 | 右键菜单位置、拖拽 dropTarget、helper lines 等 |
+| 层                | 工具                           | 职责                                                                                     |
+| ----------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
+| 画布交互状态      | **Zustand** (`canvasStore.ts`) | `nodes`/`edges`、`focusedNode`/`focusedFolder`、`clipboard`、undo/redo 历史栈、节点 CRUD |
+| 异步/文件系统数据 | **TanStack React Query**       | 加载、缓存、重试、错误 toast                                                             |
+| 局部 UI 状态      | `useState` / Hook 内部         | 右键菜单位置、拖拽 dropTarget、helper lines 等                                           |
 
 ### 4.2 canvasStore 结构
 
@@ -291,10 +290,10 @@ CanvasState
 
 ### 5.2 语义缩放（两档）
 
-| 缩放范围 | 状态 | 渲染内容 |
-|----------|------|----------|
+| 缩放范围     | 状态        | 渲染内容               |
+| ------------ | ----------- | ---------------------- |
 | `zoom < 0.4` | `thumbnail` | 仅色块、标题、占位线条 |
-| `zoom ≥ 0.4` | `full` | 完整内容和交互控件 |
+| `zoom ≥ 0.4` | `full`      | 完整内容和交互控件     |
 
 各节点组件内通过 `useViewport()` 获取 `zoom` 值，`const isZoomedOut = zoom < 0.4` 条件渲染。
 
@@ -314,6 +313,7 @@ CanvasState
 ### 5.4 层级隔离（文件夹视图）
 
 进入 Folder drill-down 时：
+
 - 挂载全屏 `Backdrop`（半透明遮罩）与独立 drill-down 容器。
 - 背景 React Flow 保持冻结但不销毁，维持空间连续性和返回动画所需的原始坐标。
 - 子卡片从堆叠状态展开至自动排布位置（横向 strip / grid，按 `children` 数组顺序）。
@@ -322,11 +322,11 @@ CanvasState
 
 ## 6. 性能预算与降级策略
 
-| 规模 | 目标体验 | 策略 |
-|------|----------|------|
-| ≤ 500 节点 | 画布编辑 60fps | `onlyRenderVisibleElements` + 三档语义缩放 + 轻量节点 DOM |
+| 规模          | 目标体验                     | 策略                                                         |
+| ------------- | ---------------------------- | ------------------------------------------------------------ |
+| ≤ 500 节点    | 画布编辑 60fps               | `onlyRenderVisibleElements` + 三档语义缩放 + 轻量节点 DOM    |
 | 500–1000 节点 | 平移缩放流畅，编辑延迟可接受 | 低缩放仅 `thumbnail`/`summary` 态；富编辑器仅选中/聚焦时挂载 |
-| > 1000 节点 | 不承诺 MVP 全量流畅 | 后续引入虚拟化、SQLite 索引或 Canvas/WebGL 降级 |
+| > 1000 节点   | 不承诺 MVP 全量流畅          | 后续引入虚拟化、SQLite 索引或 Canvas/WebGL 降级              |
 
 **MVP 性能目标**：单画布 500 节点 + 1000 条边的日常编辑场景。
 
@@ -364,10 +364,10 @@ workspace/
 
 ```markdown
 ---
-id: "note_a1b2c3d4"
-title: "Prio before launch"
-displayHint: "checklist"
-color: "#EAF2B8"
+id: 'note_a1b2c3d4'
+title: 'Prio before launch'
+displayHint: 'checklist'
+color: '#EAF2B8'
 createdAt: 2026-04-01T10:00:00Z
 updatedAt: 2026-04-03T14:30:00Z
 ---
@@ -391,7 +391,11 @@ updatedAt: 2026-04-03T14:30:00Z
       "type": "card",
       "position": { "x": 900, "y": 100 },
       "style": { "width": 350, "height": 450 },
-      "data": { "noteId": "note_a1b2c3d4", "file": "content/prio-before-launch.md", "type": "checklist" }
+      "data": {
+        "noteId": "note_a1b2c3d4",
+        "file": "content/prio-before-launch.md",
+        "type": "checklist"
+      }
     },
     {
       "id": "node_s1",
@@ -416,14 +420,35 @@ updatedAt: 2026-04-03T14:30:00Z
         "title": "3 items",
         "subtitle": "The really great ideas",
         "children": [
-          { "id": "child_1", "type": "card", "data": { "type": "text", "content": "Floating notes idea", "color": "#A3E635" } },
-          { "id": "child_2", "type": "card", "data": { "type": "text", "content": "Drop in anything", "color": "#FFFFFF" } }
+          {
+            "id": "child_1",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "Floating notes idea",
+              "color": "#A3E635"
+            }
+          },
+          {
+            "id": "child_2",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "Drop in anything",
+              "color": "#FFFFFF"
+            }
+          }
         ]
       }
     }
   ],
   "edges": [
-    { "id": "edge_1", "source": "node_7f3a", "target": "node_s1", "type": "smoothstep" }
+    {
+      "id": "edge_1",
+      "source": "node_7f3a",
+      "target": "node_s1",
+      "type": "smoothstep"
+    }
   ]
 }
 ```
@@ -490,11 +515,11 @@ type CanvasRPC = {
 
 #### Debounce
 
-| 操作类型 | Debounce | 写入目标 | 实现状态 |
-|---|---|---|---|
+| 操作类型                                 | Debounce        | 写入目标                              | 实现状态                     |
+| ---------------------------------------- | --------------- | ------------------------------------- | ---------------------------- |
 | 布局变化（拖拽、resize、增删节点、连线） | 2500ms trailing | `.canvas.json`（通过 `saveManifest`） | ✅ `useCanvasPersistence.ts` |
-| 内容编辑（标题、正文、checklist） | 1500ms trailing | `content/*.md`（通过 `saveNote`） | 🔲 待实现 |
-| 窗口失焦 | 立即 flush | 所有 pending manifest | ✅ `window blur` 事件 |
+| 内容编辑（标题、正文、checklist）        | 1500ms trailing | `content/*.md`（通过 `saveNote`）     | 🔲 待实现                    |
+| 窗口失焦                                 | 立即 flush      | 所有 pending manifest                 | ✅ `window blur` 事件        |
 
 > 当前 `useCanvasPersistence` 仅处理 manifest 保存（2500ms debounce + blur flush）。`saveNote` 的独立 debounce 尚未实现，content 变更随 manifest 一起落盘。
 
@@ -506,7 +531,7 @@ type CanvasRPC = {
 export async function atomicWrite(filePath: string, data: string) {
   const tmp = `${filePath}.tmp`;
   await Bun.write(tmp, data);
-  const fs = await import("fs/promises");
+  const fs = await import('fs/promises');
   await fs.rename(tmp, filePath);
 }
 ```
@@ -517,14 +542,20 @@ export async function atomicWrite(filePath: string, data: string) {
 
 ```typescript
 const RUNTIME_NODE_KEYS = new Set([
-  'selected', 'dragging', 'resizing', 'measured', 'draggable',
-  'selectable', 'deletable', 'focusable',
-  'width', 'height', 'internals',
+  'selected',
+  'dragging',
+  'resizing',
+  'measured',
+  'draggable',
+  'selectable',
+  'deletable',
+  'focusable',
+  'width',
+  'height',
+  'internals',
 ]);
 
-const RUNTIME_DATA_KEYS = new Set([
-  'isHidden', 'isDropTarget',
-]);
+const RUNTIME_DATA_KEYS = new Set(['isHidden', 'isDropTarget']);
 ```
 
 Edge 剥离 `selected`。
@@ -553,6 +584,7 @@ Edge 剥离 `selected`。
 Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不生成独立 `.md` 文件。
 
 理由：
+
 - PRD §2.5.2 明确子卡片为轻量条目
 - MVP 阶段无需独立文件级别管理
 - 后续可迁移为目录驱动模型
@@ -595,6 +627,7 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 ### 8.4 生成文件
 
 以下文件为自动生成，不要手动编辑：
+
 - `src/mainview/routeTree.gen.ts`（TanStack Router 插件生成）
 - `src/paraglide/`（Paraglide 编译输出）
 
@@ -604,20 +637,20 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 > 产品层面的 edge case 处理策略。
 
-| 场景 | 处理策略 |
-|------|----------|
-| 文件被外部重命名/移动 | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest `file` 缓存 |
-| manifest 指向的 .md 不存在 | 加载时标记为"断链节点"，UI 显示占位卡片，不静默删除 |
-| `noteId` 零引用 | 不删除 `.md`；标记为 `unplaced`，纳入全局搜索 |
-| watcher 自触发循环 | 写盘前加入 `pendingWrites` 集合，watcher 检查后忽略 |
-| frontmatter round-trip 破坏格式 | 最小改写策略，保留未知字段，不重排 YAML 字段顺序 |
-| 附件同名冲突 | `{contentHash前8位}-{原始名}` 格式 |
-| 带 Edge 的卡片拖入 Folder | MVP 阻止并 toast 提示先断开连线 |
-| Edge 指向不存在的 node | 加载时静默过滤 + log 警告 |
-| Markdown / frontmatter 解析失败 | 卡片以只读错误态渲染，展示路径和错误摘要 |
-| 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照 |
-| manifest JSON 损坏 | 保留坏文件副本，尝试从备份恢复 |
-| displayHint 未知值 | 回退 `note` 渲染 + 诊断日志 |
+| 场景                             | 处理策略                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| 文件被外部重命名/移动            | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest `file` 缓存 |
+| manifest 指向的 .md 不存在       | 加载时标记为"断链节点"，UI 显示占位卡片，不静默删除                                   |
+| `noteId` 零引用                  | 不删除 `.md`；标记为 `unplaced`，纳入全局搜索                                         |
+| watcher 自触发循环               | 写盘前加入 `pendingWrites` 集合，watcher 检查后忽略                                   |
+| frontmatter round-trip 破坏格式  | 最小改写策略，保留未知字段，不重排 YAML 字段顺序                                      |
+| 附件同名冲突                     | `{contentHash前8位}-{原始名}` 格式                                                    |
+| 带 Edge 的卡片拖入 Folder        | MVP 阻止并 toast 提示先断开连线                                                       |
+| Edge 指向不存在的 node           | 加载时静默过滤 + log 警告                                                             |
+| Markdown / frontmatter 解析失败  | 卡片以只读错误态渲染，展示路径和错误摘要                                              |
+| 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照                             |
+| manifest JSON 损坏               | 保留坏文件副本，尝试从备份恢复                                                        |
+| displayHint 未知值               | 回退 `note` 渲染 + 诊断日志                                                           |
 
 ---
 

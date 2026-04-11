@@ -1,9 +1,11 @@
-import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useCallback, useEffect, useMemo } from 'react';
+
+import { useCanvasStore } from '@/store/canvasStore';
+
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
-import { useCallback, useEffect, useMemo } from 'react';
-import { useCanvasStore } from '@/store/canvasStore';
 
 export const FocusedView = ({ node, onClose }: any) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -34,33 +36,40 @@ export const FocusedView = ({ node, onClose }: any) => {
   // Prevent background scrolling
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = 'auto'; };
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
   }, []);
 
   return (
-    <motion.div 
-      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-center justify-center"
+    <motion.div
+      className='fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-md'
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ type: 'spring', damping: 30, stiffness: 300 }}
       onClick={onClose}
     >
-      <motion.button 
-        className="absolute top-8 left-8 p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md text-white transition-colors z-[60]"
-        onClick={onClose}
+      <motion.button
+        className='absolute top-8 left-8 z-60 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-colors hover:bg-white/20'
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
         whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
         whileTap={{ scale: 0.9 }}
-        transition={{ type: 'spring', damping: 20, stiffness: 300, delay: 0.15 }}
+        transition={{
+          type: 'spring',
+          damping: 20,
+          stiffness: 300,
+          delay: 0.15,
+        }}
+        onClick={onClose}
       >
         <ArrowLeft size={24} />
       </motion.button>
 
       <motion.div
-        className="absolute shadow-2xl overflow-hidden"
+        className='absolute overflow-hidden shadow-2xl'
         style={{
           top: targetY,
           left: targetX,
@@ -68,7 +77,6 @@ export const FocusedView = ({ node, onClose }: any) => {
           height: targetHeight,
           transformOrigin: 'center center',
         }}
-        onClick={e => e.stopPropagation()}
         initial={{
           x: flip.translateX,
           y: flip.translateY,
@@ -91,12 +99,21 @@ export const FocusedView = ({ node, onClose }: any) => {
           borderRadius: 24,
         }}
         transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
       >
-        <div className="h-full">
+        <div className='h-full'>
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
           ) : (
-            <CardContent data={node.data} isFocused={true} onChange={(newData: any) => updateNodeData(node.id, newData)} />
+            <CardContent
+              data={node.data}
+              isFocused={true}
+              onChange={(newData: any) => {
+                updateNodeData(node.id, newData);
+              }}
+            />
           )}
         </div>
       </motion.div>

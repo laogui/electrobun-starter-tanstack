@@ -1,23 +1,25 @@
-import { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  StickyNote,
-  Folder,
   ClipboardPaste,
-  ZoomIn,
   Copy,
-  Trash2,
-  Palette,
-  FolderInput,
-  Maximize2,
-  FolderOpen,
-  PenLine,
   FilePlus,
+  Folder,
+  FolderInput,
+  FolderOpen,
   Group,
-  NotebookPen,
   ImageIcon,
+  Maximize2,
+  NotebookPen,
+  Palette,
+  PenLine,
+  StickyNote,
+  Trash2,
+  ZoomIn,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useEffect, useRef } from 'react';
+
 import { cn } from '@/lib/utils';
+
 import * as m from '../../../paraglide/messages.js';
 
 type MenuItem = {
@@ -35,8 +37,13 @@ type ContextMenuState = {
   nodeId?: string;
 } | null;
 
-const getCanvasItems = (): MenuItem[] => [
-  { id: 'new-note', label: m.menu_new_note(), icon: StickyNote, shortcut: '⌘N' },
+const getCanvasItems = (): Array<MenuItem> => [
+  {
+    id: 'new-note',
+    label: m.menu_new_note(),
+    icon: StickyNote,
+    shortcut: '⌘N',
+  },
   { id: 'new-sticky', label: m.menu_new_sticky(), icon: NotebookPen },
   { id: 'new-image', label: m.menu_new_image(), icon: ImageIcon },
   { id: 'new-folder', label: m.menu_new_folder(), icon: Folder },
@@ -45,37 +52,82 @@ const getCanvasItems = (): MenuItem[] => [
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
 ];
 
-const getCardItems = (): MenuItem[] => [
-  { id: 'focus', label: m.menu_open_focused(), icon: Maximize2, shortcut: 'Enter' },
+const getCardItems = (): Array<MenuItem> => [
+  {
+    id: 'focus',
+    label: m.menu_open_focused(),
+    icon: Maximize2,
+    shortcut: 'Enter',
+  },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'move-to-folder', label: m.menu_move_to_folder(), icon: FolderInput },
-  { id: 'delete', label: m.menu_delete(), icon: Trash2, shortcut: '⌫', danger: true },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
 ];
 
-const getFolderItems = (): MenuItem[] => [
-  { id: 'open-folder', label: m.menu_open(), icon: FolderOpen, shortcut: 'Enter' },
+const getFolderItems = (): Array<MenuItem> => [
+  {
+    id: 'open-folder',
+    label: m.menu_open(),
+    icon: FolderOpen,
+    shortcut: 'Enter',
+  },
   { id: 'rename', label: m.menu_rename(), icon: PenLine },
   { id: 'new-child', label: m.menu_new_card_inside(), icon: FilePlus },
-  { id: 'delete', label: m.menu_delete(), icon: Trash2, shortcut: '⌫', danger: true },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
 ];
 
-const getStickyItems = (): MenuItem[] => [
+const getStickyItems = (): Array<MenuItem> => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'delete', label: m.menu_delete(), icon: Trash2, shortcut: '⌫', danger: true },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
 ];
 
-const getGroupItems = (): MenuItem[] => [
+const getGroupItems = (): Array<MenuItem> => [
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'delete', label: m.menu_delete(), icon: Trash2, shortcut: '⌫', danger: true },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
 ];
 
-const getImageItems = (): MenuItem[] => [
-  { id: 'focus', label: m.menu_open_focused(), icon: Maximize2, shortcut: 'Enter' },
+const getImageItems = (): Array<MenuItem> => [
+  {
+    id: 'focus',
+    label: m.menu_open_focused(),
+    icon: Maximize2,
+    shortcut: 'Enter',
+  },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'delete', label: m.menu_delete(), icon: Trash2, shortcut: '⌫', danger: true },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
 ];
 
 export type { ContextMenuState };
@@ -123,14 +175,16 @@ export function CanvasContextMenu({
               : getCanvasItems();
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
-  const y = menu ? Math.min(menu.y, window.innerHeight - items.length * 40 - 16) : 0;
+  const y = menu
+    ? Math.min(menu.y, window.innerHeight - items.length * 40 - 16)
+    : 0;
 
   return (
     <AnimatePresence>
-      {menu && (
+      {menu ? (
         <motion.div
           ref={ref}
-          className="fixed z-[100] min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl"
+          className='fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl'
           style={{ left: x, top: y }}
           initial={{ opacity: 0, scale: 0.95, y: -4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -144,20 +198,27 @@ export function CanvasContextMenu({
                 'flex w-full items-center gap-3 px-3 py-2 text-[13px] font-medium transition-colors',
                 item.danger
                   ? 'text-red-600 hover:bg-red-50'
-                  : 'text-gray-700 hover:bg-black/5',
+                  : 'text-gray-700 hover:bg-black/5'
               )}
               onClick={() => {
                 onAction(item.id, menu.nodeId);
                 onClose();
               }}
             >
-              <item.icon size={15} className={item.danger ? 'text-red-500' : 'text-gray-400'} />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.shortcut && <span className="text-[11px] text-gray-400">{item.shortcut}</span>}
+              <item.icon
+                size={15}
+                className={item.danger ? 'text-red-500' : 'text-gray-400'}
+              />
+              <span className='flex-1 text-left'>{item.label}</span>
+              {item.shortcut ? (
+                <span className='text-[11px] text-gray-400'>
+                  {item.shortcut}
+                </span>
+              ) : null}
             </button>
           ))}
         </motion.div>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 }

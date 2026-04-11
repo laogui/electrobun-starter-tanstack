@@ -1,10 +1,12 @@
-import { ThemeProvider } from "better-themes";
-import { RouterProvider } from "@tanstack/react-router";
-import ReactDOM from "react-dom/client";
-import { router } from "@/router";
-import "./index.css";
+import { RouterProvider } from '@tanstack/react-router';
+import { ThemeProvider } from 'better-themes';
+import ReactDOM from 'react-dom/client';
 
-const rootElement = document.querySelector("#root");
+import { router } from '@/router';
+
+import './index.css';
+
+const rootElement = document.querySelector('#root');
 
 if (rootElement == null) {
   throw new Error("Root element with id 'root' not found in index.html");
@@ -12,7 +14,7 @@ if (rootElement == null) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <ThemeProvider enableSystem attribute="class" defaultTheme="system">
+  <ThemeProvider enableSystem attribute='class' defaultTheme='system'>
     <RouterProvider router={router} />
-  </ThemeProvider>,
+  </ThemeProvider>
 );

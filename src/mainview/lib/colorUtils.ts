@@ -18,10 +18,18 @@ export const STICKY_COLORS = [
   '#E9D5FF',
 ] as const;
 
-export const GROUP_COLORS = ['blue', 'green', 'yellow', 'pink', 'orange'] as const;
+export const GROUP_COLORS = [
+  'blue',
+  'green',
+  'yellow',
+  'pink',
+  'orange',
+] as const;
 
 /** Convert a hex color to an inline background-color style for rendering. */
-export function colorToStyle(color: string | undefined): React.CSSProperties | undefined {
+export function colorToStyle(
+  color: string | undefined
+): React.CSSProperties | undefined {
   if (!color) return undefined;
   if (!color.startsWith('#')) return undefined;
   return { backgroundColor: color };
@@ -29,10 +37,10 @@ export function colorToStyle(color: string | undefined): React.CSSProperties | u
 
 /** Returns true if a hex color is "dark" (should use light text). */
 export function isColorDark(hex: string | undefined): boolean {
-  if (!hex || !hex.startsWith('#')) return false;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  if (!hex?.startsWith('#')) return false;
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance < 0.5;
 }

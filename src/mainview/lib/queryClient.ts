@@ -1,6 +1,7 @@
-import { QueryCache, QueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import * as m from "../../paraglide/messages.js";
+import { QueryCache, QueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+
+import * as m from '../../paraglide/messages.js';
 
 export const queryClient = new QueryClient({
   defaultOptions: {

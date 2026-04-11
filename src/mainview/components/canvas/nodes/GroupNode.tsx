@@ -1,11 +1,13 @@
-import { memo, useCallback, useRef, useState } from 'react';
-import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react';
+import { Handle, NodeResizer, Position, useReactFlow } from '@xyflow/react';
 import { motion } from 'motion/react';
+import { memo, useCallback, useRef, useState } from 'react';
+
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+
 import * as m from '../../../../paraglide/messages.js';
 
-const handleClassName = "conn-handle nodrag";
+const handleClassName = 'conn-handle nodrag';
 
 const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
@@ -14,13 +16,17 @@ const GroupNode = ({ id, data, selected }: any) => {
   const rf = useReactFlow();
 
   const handleBlur = useCallback(() => {
-    const text = labelRef.current?.innerText.trim() || m.default_group_label();
+    const text =
+      labelRef.current?.textContent.trim() || m.default_group_label();
     onUpdate(id, { label: text });
     setEditingLabel(false);
   }, [id, onUpdate]);
 
   const shouldResize = useCallback(
-    (_event: unknown, params: { x: number; y: number; width: number; height: number }) => {
+    (
+      _event: unknown,
+      params: { x: number; y: number; width: number; height: number }
+    ) => {
       const allNodes = rf.getNodes();
       const thisNode = allNodes.find((n) => n.id === id);
       const otherGroups = allNodes.filter(
@@ -28,7 +34,7 @@ const GroupNode = ({ id, data, selected }: any) => {
           n.type === 'group' &&
           n.id !== id &&
           n.parentId !== id &&
-          n.id !== thisNode?.parentId,
+          n.id !== thisNode?.parentId
       );
       const MARGIN = 4;
       for (const og of otherGroups) {
@@ -49,16 +55,16 @@ const GroupNode = ({ id, data, selected }: any) => {
       }
       return true;
     },
-    [rf, id],
+    [rf, id]
   );
 
   return (
     <motion.div
       className={cn(
-        `canvas-group group-${data.color || 'blue'} w-full h-full`,
+        `canvas-group group-${data.color || 'blue'} size-full`,
         selected && 'selected',
         data.active && 'ring-2 ring-blue-400 ring-offset-2',
-        data.isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100',
+        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
@@ -68,25 +74,45 @@ const GroupNode = ({ id, data, selected }: any) => {
         isVisible={selected}
         minWidth={300}
         minHeight={200}
-        lineClassName="!border-transparent"
-        handleClassName="!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2"
+        lineClassName='!border-transparent'
+        handleClassName='!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2'
         shouldResize={shouldResize}
       />
 
-      <Handle type="target" position={Position.Top} id="top" className={handleClassName} />
-      <Handle type="source" position={Position.Right} id="right" className={handleClassName} />
-      <Handle type="source" position={Position.Bottom} id="bottom" className={handleClassName} />
-      <Handle type="target" position={Position.Left} id="left" className={handleClassName} />
+      <Handle
+        type='target'
+        position={Position.Top}
+        id='top'
+        className={handleClassName}
+      />
+      <Handle
+        type='source'
+        position={Position.Right}
+        id='right'
+        className={handleClassName}
+      />
+      <Handle
+        type='source'
+        position={Position.Bottom}
+        id='bottom'
+        className={handleClassName}
+      />
+      <Handle
+        type='target'
+        position={Position.Left}
+        id='left'
+        className={handleClassName}
+      />
 
-      <div className="absolute top-0 left-0 px-3 pt-2 flex items-center gap-1.5">
+      <div className='absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2'>
         <div
           ref={labelRef}
-          contentEditable={editingLabel}
           suppressContentEditableWarning
+          contentEditable={editingLabel}
           className={cn(
-            'text-xs font-semibold tracking-wide outline-none nodrag nopan',
+            'nodrag nopan text-xs font-semibold tracking-wide outline-none',
             'text-gray-600',
-            editingLabel && 'ring-1 ring-blue-400/40 rounded px-0.5',
+            editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
           )}
           onDoubleClick={(e) => {
             e.stopPropagation();
@@ -97,7 +123,7 @@ const GroupNode = ({ id, data, selected }: any) => {
         >
           {data.label}
         </div>
-        <span className="text-gray-300 text-xs">⋮⋮</span>
+        <span className='text-xs text-gray-300'>⋮⋮</span>
       </div>
     </motion.div>
   );

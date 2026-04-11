@@ -1,31 +1,35 @@
-import { paraglideVitePlugin } from '@inlang/paraglide-js'
-import tailwindcss from "@tailwindcss/vite";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import viteReact from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import tailwindcss from '@tailwindcss/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
+import viteReact from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig(async () => {
-  const { devtools } = await import("@tanstack/devtools-vite");
+  const { devtools } = await import('@tanstack/devtools-vite');
 
   return {
-    plugins: [paraglideVitePlugin({ project: './project.inlang', outdir: './src/paraglide' }),
+    plugins: [
+      paraglideVitePlugin({
+        project: './project.inlang',
+        outdir: './src/paraglide',
+      }),
       devtools(),
       tsconfigPaths({
-        projects: ["../../tsconfig.json"],
+        projects: ['../../tsconfig.json'],
       }),
       tailwindcss(),
       tanstackRouter({
-        target: "react",
+        target: 'react',
         autoCodeSplitting: true,
-        routesDirectory: "./routes",
-        generatedRouteTree: "./routeTree.gen.ts",
+        routesDirectory: './routes',
+        generatedRouteTree: './routeTree.gen.ts',
       }),
       viteReact(),
     ],
-    root: "src/mainview",
+    root: 'src/mainview',
     build: {
-      outDir: "../../dist",
+      outDir: '../../dist',
       emptyOutDir: true,
     },
     server: {

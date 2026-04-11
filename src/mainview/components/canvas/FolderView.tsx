@@ -1,10 +1,13 @@
-import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
+import { motion } from 'motion/react';
+import type React from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+
+import { colorToStyle } from '@/lib/colorUtils';
+import { cn } from '@/lib/utils';
+
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
-import { cn } from '@/lib/utils';
-import { colorToStyle } from '@/lib/colorUtils';
-import React, { useEffect, useRef, useCallback } from 'react';
 
 const FolderChildContent = ({ child }: { child: any }) => {
   if (child.type === 'image') {
@@ -12,8 +15,11 @@ const FolderChildContent = ({ child }: { child: any }) => {
   }
   if (child.type === 'sticky') {
     return (
-      <div className="w-full h-full p-4 flex flex-col" style={colorToStyle(child.data.color)}>
-        <div className="flex-1 whitespace-pre-wrap break-words leading-relaxed text-sm">
+      <div
+        className='flex size-full flex-col p-4'
+        style={colorToStyle(child.data.color)}
+      >
+        <div className='flex-1 text-sm/relaxed wrap-break-word whitespace-pre-wrap'>
           {child.data.content}
         </div>
       </div>
@@ -31,7 +37,10 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   const minPadding = 64;
 
   const totalWidth = count * cardWidth + (count - 1) * gap;
-  const sidePadding = Math.max(minPadding, (window.innerWidth - totalWidth) / 2);
+  const sidePadding = Math.max(
+    minPadding,
+    (window.innerWidth - totalWidth) / 2
+  );
 
   const folderCenterX = folder.rect.left + folder.rect.width / 2;
   const folderCenterY = folder.rect.top + folder.rect.height / 2;
@@ -52,17 +61,29 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, hasDragged: false });
+  const dragState = useRef({
+    isDown: false,
+    startX: 0,
+    scrollLeft: 0,
+    hasDragged: false,
+  });
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = 'auto'; };
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const el = scrollRef.current;
     if (!el) return;
-    dragState.current = { isDown: true, startX: e.pageX, scrollLeft: el.scrollLeft, hasDragged: false };
+    dragState.current = {
+      isDown: true,
+      startX: e.pageX,
+      scrollLeft: el.scrollLeft,
+      hasDragged: false,
+    };
     el.style.cursor = 'grabbing';
     el.style.userSelect = 'none';
   }, []);
@@ -95,28 +116,28 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   }, []);
 
   return (
-    <motion.div 
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-md"
+    <motion.div
+      className='fixed inset-0 z-50 bg-black/50 backdrop-blur-md'
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: { duration: 0.25 } }}
       exit={{ opacity: 0, transition: { duration: 0.35, delay: count * 0.03 } }}
       onClick={onClose}
     >
-      <motion.button 
-        className="absolute top-8 left-8 p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md text-white transition-colors z-50"
-        onClick={onClose}
+      <motion.button
+        className='absolute top-8 left-8 z-50 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-colors hover:bg-white/20'
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
         whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
         whileTap={{ scale: 0.9 }}
         transition={{ type: 'spring', damping: 20, stiffness: 300, delay: 0.1 }}
+        onClick={onClose}
       >
         <ArrowLeft size={24} />
       </motion.button>
 
       <motion.h2
-        className="absolute top-10 left-0 right-0 text-center text-white/80 text-lg font-medium z-50 pointer-events-none"
+        className='pointer-events-none absolute inset-x-0 top-10 z-50 text-center text-lg font-medium text-white/80'
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
@@ -127,8 +148,10 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
 
       <div
         ref={scrollRef}
-        className="absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden folder-scroll-container cursor-grab"
-        onClick={(e) => e.stopPropagation()}
+        className='folder-scroll-container absolute inset-0 flex cursor-grab items-center overflow-x-auto overflow-y-hidden'
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
         onClickCapture={handleClickCapture}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -136,7 +159,7 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
         onMouseLeave={handleMouseUp}
       >
         <div
-          className="flex items-center"
+          className='flex items-center'
           style={{
             gap,
             paddingLeft: sidePadding,
@@ -147,18 +170,12 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
           {children.map((child: any, index: number) => (
             <motion.div
               key={child.id}
-              className="flex-shrink-0 shadow-2xl overflow-hidden cursor-pointer rounded-3xl"
+              className='shrink-0 cursor-pointer overflow-hidden rounded-3xl shadow-2xl'
               style={{ width: cardWidth, height: cardHeight }}
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                if (onCardClick) {
-                  onCardClick(child, rect);
-                }
-              }}
               initial={() => {
                 const radial = getRadialOffset(index);
-                const finalCardX = sidePadding + index * (cardWidth + gap) + cardWidth / 2;
+                const finalCardX =
+                  sidePadding + index * (cardWidth + gap) + cardWidth / 2;
                 return {
                   opacity: 0,
                   scale: 0.15,
@@ -175,7 +192,8 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
                 y: 0,
               }}
               exit={() => {
-                const finalCardX = sidePadding + index * (cardWidth + gap) + cardWidth / 2;
+                const finalCardX =
+                  sidePadding + index * (cardWidth + gap) + cardWidth / 2;
                 return {
                   opacity: 0,
                   scale: 0.3,
@@ -192,11 +210,18 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
               }}
               whileHover={{ y: -8, boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
               whileTap={{ scale: 0.97 }}
-              transition={{ 
-                type: 'spring', 
-                damping: 24, 
+              transition={{
+                type: 'spring',
+                damping: 24,
                 stiffness: 200,
-                delay: index * 0.05
+                delay: index * 0.05,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                if (onCardClick) {
+                  onCardClick(child, rect);
+                }
               }}
             >
               <FolderChildContent child={child} />

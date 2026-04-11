@@ -19,27 +19,27 @@ export function HelperLines({ horizontal, vertical }: HelperLinesProps) {
 
   return (
     <div style={canvasStyle}>
-      <svg width="100%" height="100%">
-        {vertical !== undefined && (
+      <svg width='100%' height='100%'>
+        {vertical === undefined ? null : (
           <line
             x1={vertical * zoom + x}
             y1={0}
             x2={vertical * zoom + x}
-            y2="100%"
-            stroke="#0096ff"
+            y2='100%'
+            stroke='#0096ff'
             strokeWidth={1}
-            strokeDasharray="6 3"
+            strokeDasharray='6 3'
           />
         )}
-        {horizontal !== undefined && (
+        {horizontal === undefined ? null : (
           <line
             x1={0}
             y1={horizontal * zoom + y}
-            x2="100%"
+            x2='100%'
             y2={horizontal * zoom + y}
-            stroke="#0096ff"
+            stroke='#0096ff'
             strokeWidth={1}
-            strokeDasharray="6 3"
+            strokeDasharray='6 3'
           />
         )}
       </svg>

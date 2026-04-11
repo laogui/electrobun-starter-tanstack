@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react';
-import { applyNodeChanges, type NodeChange, type NodePositionChange } from '@xyflow/react';
+import { applyNodeChanges } from '@xyflow/react';
+import type { NodeChange, NodePositionChange } from '@xyflow/react';
+import { useCallback, useState } from 'react';
+
 import { getHelperLines } from '@/lib/getHelperLines';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -9,14 +11,18 @@ export function useHelperLines() {
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
+    (changes: Array<NodeChange>) => {
       const positionChange = changes.find(
-        (c): c is NodePositionChange => c.type === 'position' && c.dragging === true
+        (c): c is NodePositionChange =>
+          c.type === 'position' && c.dragging === true
       );
 
       if (positionChange?.position) {
         setNodes((nds) => {
-          const { horizontal, vertical, snapPosition } = getHelperLines(positionChange, nds);
+          const { horizontal, vertical, snapPosition } = getHelperLines(
+            positionChange,
+            nds
+          );
           setHelperLineH(horizontal);
           setHelperLineV(vertical);
 

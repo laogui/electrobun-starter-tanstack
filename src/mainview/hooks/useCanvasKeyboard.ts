@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+
 import { useCanvasStore } from '@/store/canvasStore';
 
 export function useCanvasKeyboard() {
@@ -18,15 +19,25 @@ export function useCanvasKeyboard() {
     const isModal = () => focusedNode || focusedFolder;
     const isEditing = () => {
       const el = document.activeElement;
-      return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement)?.isContentEditable;
+      return (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el as HTMLElement)?.isContentEditable
+      );
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
 
       if (e.key === 'Escape') {
-        if (focusedNode) { setFocusedNode(null); return; }
-        if (focusedFolder) { setFocusedFolder(null); return; }
+        if (focusedNode) {
+          setFocusedNode(null);
+          return;
+        }
+        if (focusedFolder) {
+          setFocusedFolder(null);
+          return;
+        }
         return;
       }
 
@@ -44,7 +55,7 @@ export function useCanvasKeyboard() {
       if (isModal() || isEditing()) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const nodes = useCanvasStore.getState().nodes;
+        const { nodes } = useCanvasStore.getState();
         const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
         if (selectedIds.length > 0) deleteNodes(selectedIds);
         return;
@@ -74,7 +85,7 @@ export function useCanvasKeyboard() {
       }
 
       if (e.key === 'Enter') {
-        const nodes = useCanvasStore.getState().nodes;
+        const { nodes } = useCanvasStore.getState();
         const selected = nodes.filter((n) => n.selected);
         if (selected.length !== 1) return;
         const node = selected[0]!;
@@ -86,11 +97,24 @@ export function useCanvasKeyboard() {
         } else {
           setFocusedNode({ id: node.id, data: node.data, rect });
         }
-        return;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedNode, focusedFolder, setFocusedNode, setFocusedFolder, setNodes, deleteNodes, copySelected, pasteClipboard, setCreateMenuOpen, undo, redo]);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => {
+      globalThis.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    focusedNode,
+    focusedFolder,
+    setFocusedNode,
+    setFocusedFolder,
+    setNodes,
+    deleteNodes,
+    copySelected,
+    pasteClipboard,
+    setCreateMenuOpen,
+    undo,
+    redo,
+  ]);
 }

@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
 import type { ReactFlowInstance } from '@xyflow/react';
+import { useCallback } from 'react';
+
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface UseNodeCreationOptions {
@@ -13,7 +14,7 @@ export function useNodeCreation({ rfInstance }: UseNodeCreationOptions) {
     (type: 'card' | 'image' | 'folder' | 'group' | 'sticky') => {
       createNode(type, rfInstance.current);
     },
-    [createNode, rfInstance],
+    [createNode, rfInstance]
   );
 
   return { onCreateNode };

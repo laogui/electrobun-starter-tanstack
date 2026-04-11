@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useCanvasStore } from '@/store/canvasStore';
+
+import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
-import { rpcSaveManifest, isRpcAvailable } from '@/lib/rpc';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const LAYOUT_DEBOUNCE_MS = 2500;
 
@@ -15,7 +16,8 @@ export function useCanvasPersistence() {
     });
 
     const unsub = useCanvasStore.subscribe((state, prevState) => {
-      if (state.nodes === prevState.nodes && state.edges === prevState.edges) return;
+      if (state.nodes === prevState.nodes && state.edges === prevState.edges)
+        return;
       if (!isAvailable.current) return;
 
       if (pendingTimer.current) {
@@ -24,9 +26,11 @@ export function useCanvasPersistence() {
       pendingTimer.current = setTimeout(() => {
         const { nodes, edges } = useCanvasStore.getState();
         const sanitized = sanitizeForPersistence(nodes, edges);
-        rpcSaveManifest('default', sanitized.nodes, sanitized.edges).catch((err) => {
-          console.error('[persistence] Failed to save manifest:', err);
-        });
+        rpcSaveManifest('default', sanitized.nodes, sanitized.edges).catch(
+          (error) => {
+            console.error('[persistence] Failed to save manifest:', error);
+          }
+        );
       }, LAYOUT_DEBOUNCE_MS);
     });
 
@@ -38,9 +42,11 @@ export function useCanvasPersistence() {
       }
       const { nodes, edges } = useCanvasStore.getState();
       const sanitized = sanitizeForPersistence(nodes, edges);
-      rpcSaveManifest('default', sanitized.nodes, sanitized.edges).catch((err) => {
-        console.error('[persistence] Failed to flush manifest:', err);
-      });
+      rpcSaveManifest('default', sanitized.nodes, sanitized.edges).catch(
+        (error) => {
+          console.error('[persistence] Failed to flush manifest:', error);
+        }
+      );
     };
     window.addEventListener('blur', handleBlur);
 

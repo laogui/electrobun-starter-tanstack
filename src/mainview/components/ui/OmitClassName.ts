@@ -1,1 +1,1 @@
-export type OmitClassName<T> = Omit<T, "className">;
+export type OmitClassName<T> = Omit<T, 'className'>;

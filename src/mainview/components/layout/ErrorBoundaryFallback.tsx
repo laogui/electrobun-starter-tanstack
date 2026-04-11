@@ -1,6 +1,7 @@
-import type { ErrorComponentProps } from "@tanstack/react-router";
-import { ErrorComponent, useRouter } from "@tanstack/react-router";
-import * as m from "../../../paraglide/messages.js";
+import type { ErrorComponentProps } from '@tanstack/react-router';
+import { ErrorComponent, useRouter } from '@tanstack/react-router';
+
+import * as m from '../../../paraglide/messages.js';
 
 export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
@@ -10,10 +11,10 @@ export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className='flex min-h-screen items-center justify-center p-4'>
       <div>Error</div>
       <button
-        type="button"
+        type='button'
         onClick={() => {
           reset();
           void router.invalidate();

@@ -1,15 +1,15 @@
-import type { Node, Edge } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 
 export interface CanvasSnapshot {
-  nodes: Node[];
-  edges: Edge[];
+  nodes: Array<Node>;
+  edges: Array<Edge>;
 }
 
 const MAX_HISTORY = 50;
 
 export interface UndoRedoState {
-  past: CanvasSnapshot[];
-  future: CanvasSnapshot[];
+  past: Array<CanvasSnapshot>;
+  future: Array<CanvasSnapshot>;
 }
 
 export function createUndoRedoState(): UndoRedoState {
@@ -18,7 +18,7 @@ export function createUndoRedoState(): UndoRedoState {
 
 export function pushSnapshot(
   state: UndoRedoState,
-  snapshot: CanvasSnapshot,
+  snapshot: CanvasSnapshot
 ): UndoRedoState {
   const past = [...state.past, snapshot].slice(-MAX_HISTORY);
   return { past, future: [] };
@@ -26,10 +26,10 @@ export function pushSnapshot(
 
 export function undo(
   state: UndoRedoState,
-  current: CanvasSnapshot,
+  current: CanvasSnapshot
 ): { state: UndoRedoState; snapshot: CanvasSnapshot } | null {
   if (state.past.length === 0) return null;
-  const previous = state.past[state.past.length - 1]!;
+  const previous = state.past.at(-1)!;
   return {
     state: {
       past: state.past.slice(0, -1),
@@ -41,7 +41,7 @@ export function undo(
 
 export function redo(
   state: UndoRedoState,
-  current: CanvasSnapshot,
+  current: CanvasSnapshot
 ): { state: UndoRedoState; snapshot: CanvasSnapshot } | null {
   if (state.future.length === 0) return null;
   const next = state.future[0]!;

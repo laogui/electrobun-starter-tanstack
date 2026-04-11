@@ -20,14 +20,19 @@ const NODE_HEIGHT: Record<string, number> = {
 
 function getNodeDimensions(node: Node) {
   const style = node.style as Record<string, any> | undefined;
-  const w = (node.measured?.width ?? style?.width ?? NODE_WIDTH[node.type ?? ''] ?? 350);
-  const h = (node.measured?.height ?? style?.height ?? NODE_HEIGHT[node.type ?? ''] ?? 350);
+  const w =
+    node.measured?.width ?? style?.width ?? NODE_WIDTH[node.type ?? ''] ?? 350;
+  const h =
+    node.measured?.height ??
+    style?.height ??
+    NODE_HEIGHT[node.type ?? ''] ??
+    350;
   return { w, h };
 }
 
 export function getHelperLines(
   change: NodePositionChange,
-  nodes: Node[]
+  nodes: Array<Node>
 ): HelperLineResult {
   const result: HelperLineResult = {
     horizontal: undefined,
@@ -66,10 +71,26 @@ export function getHelperLines(
     // Vertical alignment checks (x-axis snapping)
     const vChecks = [
       { dist: Math.abs(dragLeft - nodeLeft), snapX: nodeLeft, line: nodeLeft },
-      { dist: Math.abs(dragRight - nodeRight), snapX: nodeRight - dragW, line: nodeRight },
-      { dist: Math.abs(dragCenterX - nodeCenterX), snapX: nodeCenterX - dragW / 2, line: nodeCenterX },
-      { dist: Math.abs(dragLeft - nodeRight), snapX: nodeRight, line: nodeRight },
-      { dist: Math.abs(dragRight - nodeLeft), snapX: nodeLeft - dragW, line: nodeLeft },
+      {
+        dist: Math.abs(dragRight - nodeRight),
+        snapX: nodeRight - dragW,
+        line: nodeRight,
+      },
+      {
+        dist: Math.abs(dragCenterX - nodeCenterX),
+        snapX: nodeCenterX - dragW / 2,
+        line: nodeCenterX,
+      },
+      {
+        dist: Math.abs(dragLeft - nodeRight),
+        snapX: nodeRight,
+        line: nodeRight,
+      },
+      {
+        dist: Math.abs(dragRight - nodeLeft),
+        snapX: nodeLeft - dragW,
+        line: nodeLeft,
+      },
     ];
 
     for (const { dist, snapX, line } of vChecks) {
@@ -83,10 +104,26 @@ export function getHelperLines(
     // Horizontal alignment checks (y-axis snapping)
     const hChecks = [
       { dist: Math.abs(dragTop - nodeTop), snapY: nodeTop, line: nodeTop },
-      { dist: Math.abs(dragBottom - nodeBottom), snapY: nodeBottom - dragH, line: nodeBottom },
-      { dist: Math.abs(dragCenterY - nodeCenterY), snapY: nodeCenterY - dragH / 2, line: nodeCenterY },
-      { dist: Math.abs(dragTop - nodeBottom), snapY: nodeBottom, line: nodeBottom },
-      { dist: Math.abs(dragBottom - nodeTop), snapY: nodeTop - dragH, line: nodeTop },
+      {
+        dist: Math.abs(dragBottom - nodeBottom),
+        snapY: nodeBottom - dragH,
+        line: nodeBottom,
+      },
+      {
+        dist: Math.abs(dragCenterY - nodeCenterY),
+        snapY: nodeCenterY - dragH / 2,
+        line: nodeCenterY,
+      },
+      {
+        dist: Math.abs(dragTop - nodeBottom),
+        snapY: nodeBottom,
+        line: nodeBottom,
+      },
+      {
+        dist: Math.abs(dragBottom - nodeTop),
+        snapY: nodeTop - dragH,
+        line: nodeTop,
+      },
     ];
 
     for (const { dist, snapY, line } of hChecks) {

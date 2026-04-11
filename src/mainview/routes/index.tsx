@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useTheme } from 'better-themes';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   ReactFlow,
@@ -10,24 +8,27 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import type { Node, Connection } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
+
+import '@xyflow/react/dist/style.css';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+
+import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+import { CreateMenu } from '@/components/canvas/CreateMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
-import { CreateMenu } from '@/components/canvas/CreateMenu';
 import { HelperLines } from '@/components/canvas/HelperLines';
-import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
-
-import { nodeTypes } from '@/lib/canvasConstants';
-import { useNodeDrag } from '@/hooks/useNodeDrag';
-import { useHelperLines } from '@/hooks/useHelperLines';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
-import { useContextMenu } from '@/hooks/useContextMenu';
-import { useNodeCreation } from '@/hooks/useNodeCreation';
-import { useCanvasStore } from '@/store/canvasStore';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
+import { useContextMenu } from '@/hooks/useContextMenu';
+import { useHelperLines } from '@/hooks/useHelperLines';
+import { useNodeCreation } from '@/hooks/useNodeCreation';
+import { useNodeDrag } from '@/hooks/useNodeDrag';
+import { nodeTypes } from '@/lib/canvasConstants';
 import { loadCanvas, rpcSaveManifest, isRpcAvailable } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
+import { useCanvasStore } from '@/store/canvasStore';
 
 export const Route = createFileRoute('/')({
   component: CanvasRoute,
@@ -47,7 +48,8 @@ function CanvasComponent() {
   const addConnection = useCanvasStore((s) => s.addConnection);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
 
-  const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } = useNodeDrag();
+  const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } =
+    useNodeDrag();
 
   const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
 
@@ -89,12 +91,12 @@ function CanvasComponent() {
 
   const onEdgesChange = useCallback(
     (changes: any) => applyEdgesChange(changes),
-    [applyEdgesChange],
+    [applyEdgesChange]
   );
 
   const onConnect = useCallback(
     (connection: Connection) => addConnection(connection),
-    [addConnection],
+    [addConnection]
   );
 
   const onNodeDoubleClick = useCallback(
@@ -108,7 +110,7 @@ function CanvasComponent() {
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
       }
     },
-    [setFocusedNode, setFocusedFolder],
+    [setFocusedNode, setFocusedFolder]
   );
 
   const nodesWithState = useMemo(() => {
@@ -122,14 +124,19 @@ function CanvasComponent() {
     }));
   }, [nodes, focusedNode, focusedFolder, dropTargetId]);
 
-  const isDarkTheme = theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+  const isDarkTheme =
+    theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
   const canvasBackground = isDarkTheme ? '#141414' : '#f5f5f4';
   const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.14)' : '#d6d3d1';
-  const miniMapBackground = isDarkTheme ? 'rgba(28, 28, 28, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+  const miniMapBackground = isDarkTheme
+    ? 'rgba(28, 28, 28, 0.92)'
+    : 'rgba(255, 255, 255, 0.92)';
   const miniMapBorder = isDarkTheme
     ? '1px solid rgba(255, 255, 255, 0.08)'
     : '1px solid rgba(0, 0, 0, 0.08)';
-  const miniMapMask = isDarkTheme ? 'rgba(20, 20, 20, 0.7)' : 'rgba(240, 239, 237, 0.7)';
+  const miniMapMask = isDarkTheme
+    ? 'rgba(20, 20, 20, 0.7)'
+    : 'rgba(240, 239, 237, 0.7)';
 
   return (
     <div className='h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
@@ -140,8 +147,9 @@ function CanvasComponent() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDoubleClick={onNodeDoubleClick}
-        defaultEdgeOptions={{ type: 'smoothstep', animated: false }}
+        defaultEdgeOptions={{ type: 'bezier', animated: false }}
         connectionMode={ConnectionMode.Loose}
+        connectionRadius={30}
         onPaneContextMenu={onPaneContextMenu}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDragStart={onNodeDragStart}
@@ -187,10 +195,19 @@ function CanvasComponent() {
             }}
           />
         )}
-        {focusedNode && <FocusedView node={focusedNode} onClose={() => setFocusedNode(null)} />}
+        {focusedNode && (
+          <FocusedView
+            node={focusedNode}
+            onClose={() => setFocusedNode(null)}
+          />
+        )}
       </AnimatePresence>
 
-      <CreateMenu onCreateNode={onCreateNode} open={createMenuOpen} setOpen={setCreateMenuOpen} />
+      <CreateMenu
+        onCreateNode={onCreateNode}
+        open={createMenuOpen}
+        setOpen={setCreateMenuOpen}
+      />
       <CanvasContextMenu
         menu={contextMenu}
         onClose={() => setContextMenu(null)}

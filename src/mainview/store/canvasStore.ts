@@ -1,14 +1,30 @@
-import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
-import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance } from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  NodeChange,
+  EdgeChange,
+  Connection,
+  ReactFlowInstance,
+} from '@xyflow/react';
 import { nanoid } from 'nanoid';
+import { create } from 'zustand';
+
 import { initialNodes } from '@/data/initialNodes';
-import { sortNodesByParent } from '@/lib/canvasUtils';
 import {
-  CARD_W, CARD_H, IMAGE_W, IMAGE_H, FOLDER_W, FOLDER_H, STICKY_W, STICKY_H,
-  GROUP_COLORS, CARD_COLORS, STICKY_COLORS,
+  CARD_W,
+  CARD_H,
+  IMAGE_W,
+  IMAGE_H,
+  FOLDER_W,
+  FOLDER_H,
+  STICKY_W,
+  STICKY_H,
+  GROUP_COLORS,
+  CARD_COLORS,
+  STICKY_COLORS,
 } from '@/lib/canvasConstants';
-import * as m from '../../paraglide/messages.js';
+import { sortNodesByParent } from '@/lib/canvasUtils';
 import {
   createUndoRedoState,
   pushSnapshot,
@@ -17,6 +33,8 @@ import {
   type UndoRedoState,
   type CanvasSnapshot,
 } from '@/lib/undoRedo';
+
+import * as m from '../../paraglide/messages.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,7 +79,7 @@ export interface CanvasState {
   // Actions – node CRUD
   createNode: (
     type: 'card' | 'image' | 'folder' | 'group' | 'sticky',
-    rfInstance: ReactFlowInstance<any, any> | null,
+    rfInstance: ReactFlowInstance<any, any> | null
   ) => void;
   deleteNodes: (ids: string[]) => void;
   changeNodeColor: (nodeId: string) => void;
@@ -100,8 +118,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   _undoRedo: createUndoRedoState(),
 
   // -- hydration ------------------------------------------------------------
-  hydrate: (nodes, edges) =>
-    set({ nodes, edges, _hydrated: true }),
+  hydrate: (nodes, edges) => set({ nodes, edges, _hydrated: true }),
 
   // -- core actions ---------------------------------------------------------
   setNodes: (updater) =>
@@ -123,14 +140,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addConnection: (connection) => {
     get().saveSnapshot();
     set((s) => ({
-      edges: addEdge({ ...connection, type: 'smoothstep' }, s.edges),
+      edges: addEdge({ ...connection, type: 'bezier' }, s.edges),
     }));
   },
 
   updateNodeData: (nodeId, updates) =>
     set((s) => ({
       nodes: s.nodes.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n,
+        n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
       ),
     })),
 
@@ -186,8 +203,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const zoom = viewport?.zoom ?? 1;
 
     const toFlow = (w: number, h: number) => ({
-      x: ((cx - (viewport?.x ?? 0)) / zoom) - w / 2,
-      y: ((cy - (viewport?.y ?? 0)) / zoom) - h / 2,
+      x: (cx - (viewport?.x ?? 0)) / zoom - w / 2,
+      y: (cy - (viewport?.y ?? 0)) / zoom - h / 2,
     });
 
     let newNode: Node;
@@ -195,29 +212,60 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     switch (type) {
       case 'group': {
         const pos = toFlow(500, 300);
-        const color = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-        newNode = { id, type: 'group', position: pos, style: { width: 500, height: 300 }, data: { label: m.default_new_group_label(), color } };
+        const color =
+          GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
+        newNode = {
+          id,
+          type: 'group',
+          position: pos,
+          style: { width: 500, height: 300 },
+          data: { label: m.default_new_group_label(), color },
+        };
         break;
       }
       case 'sticky': {
         const pos = toFlow(STICKY_W, STICKY_H);
-        const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
-        newNode = { id, type: 'sticky', position: pos, style: { width: STICKY_W, height: STICKY_H }, data: { content: '', color } };
+        const color =
+          STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+        newNode = {
+          id,
+          type: 'sticky',
+          position: pos,
+          style: { width: STICKY_W, height: STICKY_H },
+          data: { content: '', color },
+        };
         break;
       }
       case 'folder': {
         const pos = toFlow(FOLDER_W, FOLDER_H);
-        newNode = { id, type: 'folder', position: pos, data: { title: m.default_folder_title(), subtitle: '', children: [] } };
+        newNode = {
+          id,
+          type: 'folder',
+          position: pos,
+          data: { title: m.default_folder_title(), subtitle: '', children: [] },
+        };
         break;
       }
       case 'image': {
         const pos = toFlow(IMAGE_W, IMAGE_H);
-        newNode = { id, type: 'image', position: pos, style: { width: IMAGE_W, height: IMAGE_H }, data: { imageUrl: '', title: '', color: '#FFFFFF' } };
+        newNode = {
+          id,
+          type: 'image',
+          position: pos,
+          style: { width: IMAGE_W, height: IMAGE_H },
+          data: { imageUrl: '', title: '', color: '#FFFFFF' },
+        };
         break;
       }
       default: {
         const pos = toFlow(CARD_W, CARD_H);
-        newNode = { id, type: 'card', position: pos, style: { width: CARD_W, height: CARD_H }, data: { type: 'text', title: '', content: '', color: '#FFFFFF' } };
+        newNode = {
+          id,
+          type: 'card',
+          position: pos,
+          style: { width: CARD_W, height: CARD_H },
+          data: { type: 'text', title: '', content: '', color: '#FFFFFF' },
+        };
         break;
       }
     }
@@ -229,7 +277,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().saveSnapshot();
     const idSet = new Set(ids);
     set((s) => ({
-      edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+      edges: s.edges.filter(
+        (e) => !idSet.has(e.source) && !idSet.has(e.target)
+      ),
       nodes: s.nodes
         .filter((n) => !idSet.has(n.id))
         .map((n) => {
@@ -249,18 +299,44 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         if (n.id !== nodeId) return n;
         if (n.type === 'group') {
           const idx = GROUP_COLORS.indexOf((n.data as any).color ?? 'blue');
-          return { ...n, data: { ...n.data, color: GROUP_COLORS[(idx + 1) % GROUP_COLORS.length] } };
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              color: GROUP_COLORS[(idx + 1) % GROUP_COLORS.length],
+            },
+          };
         }
         if (n.type === 'sticky') {
-          const idx = STICKY_COLORS.indexOf((n.data as any).color ?? STICKY_COLORS[0]);
-          return { ...n, data: { ...n.data, color: STICKY_COLORS[(idx + 1) % STICKY_COLORS.length] } };
+          const idx = STICKY_COLORS.indexOf(
+            (n.data as any).color ?? STICKY_COLORS[0]
+          );
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              color: STICKY_COLORS[(idx + 1) % STICKY_COLORS.length],
+            },
+          };
         }
         if (n.type === 'image') {
           const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
-          return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              color: CARD_COLORS[(idx + 1) % CARD_COLORS.length],
+            },
+          };
         }
         const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
-        return { ...n, data: { ...n.data, color: CARD_COLORS[(idx + 1) % CARD_COLORS.length] } };
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            color: CARD_COLORS[(idx + 1) % CARD_COLORS.length],
+          },
+        };
       }),
     }));
   },
@@ -271,12 +347,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       nodes: s.nodes.map((n) => {
         if (n.id !== folderId) return n;
-        const children = [...((n.data as any).children || []), {
-          id: childId,
-          type: 'card' as const,
-          data: { type: 'text' as const, title: '', content: '', color: '#FFFFFF' },
-        }];
-        return { ...n, data: { ...n.data, children, title: `${children.length} items` } };
+        const children = [
+          ...((n.data as any).children || []),
+          {
+            id: childId,
+            type: 'card' as const,
+            data: {
+              type: 'text' as const,
+              title: '',
+              content: '',
+              color: '#FFFFFF',
+            },
+          },
+        ];
+        return {
+          ...n,
+          data: { ...n.data, children, title: `${children.length} items` },
+        };
       }),
     }));
   },

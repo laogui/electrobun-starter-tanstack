@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
@@ -57,11 +57,26 @@ body.resizing-nwse * {
   transition: border-color 0.15s;
 }
 
-.canvas-group.group-blue   { background: hsl(var(--group-blue));   border-color: hsl(var(--group-blue-border));   }
-.canvas-group.group-green  { background: hsl(var(--group-green));  border-color: hsl(var(--group-green-border));  }
-.canvas-group.group-yellow { background: hsl(var(--group-yellow)); border-color: hsl(var(--group-yellow-border)); }
-.canvas-group.group-pink   { background: hsl(var(--group-pink));   border-color: hsl(var(--group-pink-border));   }
-.canvas-group.group-orange { background: hsl(var(--group-orange)); border-color: hsl(var(--group-orange-border)); }
+.canvas-group.group-blue {
+  background: hsl(var(--group-blue));
+  border-color: hsl(var(--group-blue-border));
+}
+.canvas-group.group-green {
+  background: hsl(var(--group-green));
+  border-color: hsl(var(--group-green-border));
+}
+.canvas-group.group-yellow {
+  background: hsl(var(--group-yellow));
+  border-color: hsl(var(--group-yellow-border));
+}
+.canvas-group.group-pink {
+  background: hsl(var(--group-pink));
+  border-color: hsl(var(--group-pink-border));
+}
+.canvas-group.group-orange {
+  background: hsl(var(--group-orange));
+  border-color: hsl(var(--group-orange-border));
+}
 
 .canvas-group.selected {
   border-color: hsl(var(--connection-active));
@@ -72,7 +87,10 @@ body.resizing-nwse * {
 /* ── React Flow node overrides ── */
 
 /* Selected card/folder node styling */
-.react-flow__node.selected:not(.react-flow__node-group):not(.react-flow__node-sticky) > div {
+.react-flow__node.selected:not(.react-flow__node-group):not(
+    .react-flow__node-sticky
+  )
+  > div {
   outline: 2px solid #0096ff;
   outline-offset: 2px;
   border-radius: 24px;
@@ -100,18 +118,23 @@ body.resizing-nwse * {
   background: hsl(var(--connection-active));
   border: 2px solid #fff;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px hsl(var(--connection-active));
   cursor: crosshair;
   opacity: 0;
-  transition: opacity 0.15s, transform 0.1s;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
 }
 
-.react-flow__node:hover .react-flow__handle.conn-handle {
+.react-flow__node:hover .react-flow__handle.conn-handle,
+.react-flow__handle.conn-handle.connectingto,
+.react-flow__handle.conn-handle.connectingfrom {
   opacity: 1;
 }
 
 .react-flow__handle.conn-handle:hover {
-  transform: scale(1.4);
+  background: hsl(var(--connection-active));
+  box-shadow: 0 0 0 3px hsl(var(--connection-active) / 0.3);
 }
 
 /* ── Edge styling ── */

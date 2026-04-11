@@ -4,7 +4,13 @@ import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
 
-export { CARD_COLORS, STICKY_COLORS, GROUP_COLORS, colorToStyle, isColorDark } from './colorUtils';
+export {
+  CARD_COLORS,
+  STICKY_COLORS,
+  GROUP_COLORS,
+  colorToStyle,
+  isColorDark,
+} from './colorUtils';
 
 export const CARD_W = 350;
 export const CARD_H = 450;

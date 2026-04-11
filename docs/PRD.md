@@ -1,5 +1,8 @@
 # 产品需求文档 (PRD)：Spatial Canvas 自由画布知识库
 
+> **相关文档**
+> - [技术规范文档](./tech-spec.md) — 架构、技术栈、目录结构、状态管理、渲染动画、性能预算、数据持久化、RPC 协议、编码约定
+
 ## 1. 产品概述
 * **产品定位**：一款面向思考者、设计师和研究人员的视觉化个人知识库。
 * **核心痛点**：解决传统线性笔记（如备忘录、文档）带来的信息碎片化和认知负担。让用户像在白板上一样，通过空间位置、距离和组合来建立知识的关联。
@@ -156,17 +159,7 @@
 
 ---
 
-## 4. 技术实现方案 (Technical Approach)
-
-### 4.1 渲染引擎与动画技术
-
-1.  **渲染引擎**：使用 **@xyflow/react**（React Flow）作为画布引擎，DOM + 硬件加速方案。整个大画布通过 `transform: translate(x, y) scale(z)` 控制，内部节点绝对定位。当前 `selectionOnDrag` 默认关闭以避免与平移手势冲突；`onlyRenderVisibleElements` 按需启用以确保可见区裁剪。
-2.  **语义缩放与裁剪**：采用**三档语义缩放**——`zoom < 0.4` 为 `thumbnail` 态（仅显示色块、标题和占位线条）；`0.4 ≤ zoom < 0.8` 为 `summary` 态（显示标题 + 内容摘要，Checklist 仅显示前 2 条条目，不挂载可交互控件）；`zoom ≥ 0.8` 为 `full` 态（渲染完整内容和交互控件，Checklist 显示完整列表并支持勾选/添加）。中间档通过省略重型交互控件降低 DOM 复杂度，在 500 节点画布中保证平移缩放性能。
-3.  **平滑动画：FLIP 原则**：对于"文件夹展开"和"卡片聚焦"使用 **FLIP (First, Last, Invert, Play)** 动画技术，借助 `Framer Motion`（motion/react）处理弹簧物理动画和共享元素过渡。
-4.  **独立动画层（Animation Layer）**：React Flow 持有节点 transform 状态，不能直接承担所有共享元素过渡。进入聚焦或 Folder drill-down 时，需要先记录源节点的屏幕坐标（`BoundingClientRect + viewport transform`），把视觉副本临时挂到独立的 overlay animation layer 中执行动画，同时隐藏源节点；动画完成后再挂载目标视图并恢复 React Flow 节点。这一层负责解决 React Flow transform 与 FLIP 过渡的兼容问题。`BoundingClientRect` 的读取仅在进入/退出过渡时执行一次，不进入持续平移、缩放、拖拽的热路径。
-5.  **层级隔离（文件夹视图）**：进入文件夹层级时，挂载全屏 `Backdrop` 与独立 drill-down 容器，背景 React Flow 保持冻结但不销毁，以维持空间连续性和返回动画所需的原始坐标。
-
-### 4.2 技术栈
+## 4. 技术栈概览
 
 | 层级 | 技术选型 |
 |------|----------|
@@ -178,17 +171,9 @@
 | 桌面运行时 | Electrobun |
 | 国际化 | Paraglide / Inlang（en / zh） |
 
-### 4.3 性能预算与降级策略
+| 状态管理 | Zustand + TanStack React Query |
 
-| 规模 | 目标体验 | 策略 |
-|---|---|---|
-| `<= 500` 节点 | 画布编辑保持 60fps | `onlyRenderVisibleElements` + 三档语义缩放（`thumbnail` < 0.4 / `summary` 0.4–0.8 / `full` ≥ 0.8）+ 轻量节点 DOM（非选中态不挂载富编辑器；`summary` 档 Checklist 仅渲染前 2 条、不挂载交互控件） |
-| `500 - 1000` 节点 | 平移缩放保持流畅，编辑延迟可接受 | 低缩放时只渲染 `thumbnail` / `summary` 态；富编辑器仅在选中/聚焦时挂载；Helper Lines 可按需降级关闭 |
-| `> 1000` 节点 | 不承诺 MVP 全量流畅编辑 | 作为未来阶段引入更激进虚拟化、索引层或 Canvas/WebGL 降级的触发阈值 |
-
-**MVP 性能目标**：稳定支持单画布 `500` 个节点、`1000` 条边以内的日常编辑场景；超过阈值时优先保证导航和查看流畅，编辑器按需加载。
-
-**前提约束**：上述预算建立在“未聚焦节点保持展示型 DOM、富编辑器只在选中/聚焦时挂载、FLIP 只在模态进出时读取布局”的前提下。若未来改为节点内常驻富文本编辑器，需要重新压测并下调预算。
+> 渲染引擎、语义缩放、FLIP 动画、性能预算与降级策略等技术实现细节请参阅 [技术规范文档](./tech-spec.md)。
 
 ---
 
@@ -390,176 +375,12 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ### 5.7 TypeScript 类型定义
 
-```typescript
-// ─── ID 类型 ───
-type NoteID = string;   // 内容实体 ID，如 "note_a1b2c3d4"
-type NodeID = string;   // 画布实例 ID，如 "node_7f3a"
-type ViewID = string;
+> 完整的 TypeScript 类型定义（`NoteFrontmatter`、各节点 Data 接口、`CanvasViewManifest`、`WorkspaceConfig`、`AppConfig` 等）已迁移至 [技术规范文档 §3.2](./tech-spec.md#32-typescript-类型定义)。
 
-// ─── 内容层：Markdown 文件 ───
-interface NoteFrontmatter {
-  id: NoteID;
-  title?: string;
-  displayHint?: 'note' | 'checklist' | 'image';  // sticky 是独立节点类型，不使用 .md 文件
-  color?: string;
-  tags?: string[];
-  createdAt: string;    // ISO 8601
-  updatedAt: string;    // ISO 8601
-}
+### 5.8 读写流程与状态管理
 
-interface NoteDocument {
-  frontmatter: NoteFrontmatter;
-  body: string;         // Markdown 正文
-  file: string;         // workspace-relative path
-}
-
-// ─── 视图层：与 @xyflow/react 的 Node/Edge 类型对齐 ───
-import type { Node, Edge } from '@xyflow/react';
-
-// -- Node Data 类型（放在 node.data 内的业务字段）--
-interface CardNodeData {
-  noteId: NoteID;
-  file: string;         // workspace-relative path，冗余缓存
-  [key: string]: unknown;
-}
-
-interface FolderChildEntry {
-  id: string;
-  type: 'card';
-  data: Record<string, unknown>;
-}
-
-interface FolderNodeData {
-  label?: string;       // 用户自定义的 Folder 标签名，如 "Great Ideas"
-  subtitle?: string;
-  children: FolderChildEntry[];
-  [key: string]: unknown;
-  // 注意：封面上显示的 "3 items" 计数标题为运行时根据 children.length 派生，不持久化
-}
-
-interface GroupNodeData {
-  label?: string;
-  color?: string;       // 预设颜色：'blue' | 'green' | 'yellow' | 'pink' | 'orange'
-  [key: string]: unknown;
-}
-
-// -- Sticky 节点（内容内嵌在 manifest 中，不对应 .md 文件）--
-interface StickyNodeData {
-  content: string;      // 便签文本内容
-  color?: string;       // hex 颜色，如 "#FEF08A"
-  [key: string]: unknown;
-}
-
-// -- Node 类型（完全兼容 @xyflow/react）--
-type CardNode = Node<CardNodeData, 'card'>;
-type FolderNode = Node<FolderNodeData, 'folder'>;
-type GroupNode = Node<GroupNodeData, 'group'>;
-type StickyNode = Node<StickyNodeData, 'sticky'>;
-type CanvasNode = CardNode | FolderNode | GroupNode | StickyNode;
-
-// -- Edge 类型（直接使用 React Flow 原生 Edge）--
-type CanvasEdge = Edge;
-
-// -- Manifest & Config --
-interface CanvasViewManifest {
-  schema: 'spatial-canvas/v1';
-  viewId: ViewID;
-  viewport?: { x: number; y: number; zoom: number };
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
-}
-
-interface WorkspaceConfig {
-  schema: 'spatial-workspace/v1';
-  activeViewId: ViewID;
-  views: Array<{ id: ViewID; name: string; file: string }>;
-}
-
-interface AppConfig {
-  schema: 'spatial-app/v1';
-  recentWorkspaces: Array<{
-    path: string;
-    name: string;
-    lastOpenedAt: string;
-  }>;
-  activeWorkspace?: string;
-  preferences: {
-    theme: 'light' | 'dark' | 'system';
-    language: string;
-  };
-}
-```
-
-### 5.8 读写流程
-
-> **当前状态**：持久化层尚未实现，画布数据来自内存中的 `initialNodes` 硬编码种子数据。以下为设计目标流程，将在引入 Electrobun 文件系统 API 后实现。
-
-```
-启动时:
-  app-config.json → 获取 activeWorkspace
-  → workspace.json → 获取 activeViewId
-  → 加载对应 view manifest → 遍历 nodes
-  → 按 noteId 查找（优先）或 file 路径回退 → 读取 .md
-  → 解析 frontmatter → 渲染画布
-
-编辑内容时:
-  用户修改卡片内容 → 更新内存状态 → debounce 1500ms（trailing only）→ 提交到 per-workspace 串行写入队列 → 原子写回 .md 文件
-  （最小改写：只更新变化的 frontmatter 字段 + body，保留未知字段）
-
-拖拽/调整大小时:
-  用户拖拽卡片位置或调整大小 → 更新内存状态 → debounce 2500ms（trailing only）→ 提交到同一串行写入队列 → 原子写回 view manifest
-
-删除节点时:
-  删除 nodeId → 只移除当前 view 中的实例
-  → 若该 noteId 仍被其他 node 引用：保留 .md 文件
-  → 若该 noteId 引用计数为 0：保留 .md 文件并标记为 unplaced，可通过全局搜索重新放回画布
-
-永久删除内容时:
-  仅由显式 destructive action 触发
-  → 若 noteId 仍被多个 node / view 引用：先二次确认并移除所有实例
-  → 删除对应 .md 文件，并清理 manifest 中的剩余引用
-
-窗口失焦/应用即将关闭 / 切换 Workspace 时:
-  立即 flush 所有待写入内容，并 await 串行写入队列清空
-  避免内容与布局落盘顺序错乱，减少最近一次编辑丢失
-
-文件系统变化（⚠️ MVP 不实现，属于后续迭代）:
-  watcher 检测到 .md 变化
-  → 检查 pendingWrites:Set<filepath>，忽略自触发事件
-  → 重新解析 frontmatter → diff → 更新内存状态 → 重新渲染
-```
-
-**实现要求**：内容写入与 manifest 写入虽然保持独立 debounce，但最终必须汇入同一个 per-workspace 持久化队列；所有文件采用 `write-then-rename` 原子写，避免出现内容已落盘但 manifest 仍是旧快照的竞态窗口。
-
-#### 5.8.1 状态管理建议
-
-当前这个项目**不需要一开始就上重量级全局状态库**。更合适的分层是：
-
-- **画布本地交互状态**（`nodes`、`edges`、选中态、聚焦态、右键菜单等）：优先放在画布路由内，用 `useState` / `useReducer` 管理。
-- **跨组件但只在画布内共享的更新能力**：继续使用轻量 `Context`，避免把所有 UI 状态都抬到全局。
-- **异步 / 服务端 / 文件系统状态**：继续使用现有的 **TanStack React Query**，负责加载、缓存、重试和错误提示。
-
-如果后续因为以下需求而需要引入统一的客户端状态容器：
-
-- 撤销 / 重做历史栈
-- 画布持久化与 debounce flush
-- 多视图共享同一 workspace 状态
-- 搜索、选择、剪贴板等跨组件协同变复杂
-
-则**优先推荐 `Zustand`**，而不是 Redux 一类更重的方案。原因：
-
-1. **更贴合当前项目规模**：当前核心状态集中在单个画布页面，Redux 的模板代码和心智负担偏重。
-2. **TypeScript 成本低**：`Zustand` API 更轻，适合和 React Flow 的 `nodes` / `edges` 数据直接结合。
-3. **更容易扩展到持久化与撤销/重做**：后续可通过 middleware 或自定义历史栈承接 P1 / P2 的数据层需求。
-4. **不会和 React Query 职责冲突**：`Zustand` 管本地交互状态，React Query 管异步数据，边界清晰。
-
-因此建议的演进路线是：
-
-- **MVP 当前阶段**：保持 `useState` / `useReducer` + 轻量 `Context` + React Query。
-- **P1（撤销 / 重做）**：若画布状态开始分散，优先把画布交互状态收敛到 `useReducer` 或 `Zustand` store。
-- **P2（数据持久化）**：实现持久化时，再把 `nodes`、`edges`、历史栈、待 flush 队列迁移到 `Zustand` 会更顺手。
-
-一句话结论：**这个项目当前最适合“本地状态 + React Query”的分层；如果要补一个状态管理工具，首选 Zustand。**
+> 读写流程、debounce 策略、原子写入、RPC 协议等技术实现细节请参阅 [技术规范文档 §7](./tech-spec.md#7-数据持久化)。
+> 状态管理分层（Zustand + React Query）、canvasStore 结构、undo/redo 机制请参阅 [技术规范文档 §4](./tech-spec.md#4-状态管理)。
 
 ### 5.9 导入/导出 (Import / Export)
 * **导出**：
@@ -594,32 +415,9 @@ interface AppConfig {
 
 ### 5.11 Edge Cases & Guardrails
 
-| 场景 | 处理策略 |
-|---|---|
-| 文件被外部重命名/移动 | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest 中的 `file` 缓存 |
-| manifest 指向的 .md 不存在 | 加载时标记为 "断链节点"，UI 上显示占位卡片，不静默删除 |
-| `noteId` 不再被任何 node 引用 | 不删除 `.md`；标记为 `unplaced`，继续纳入全局搜索，可随时重新放回画布 |
-| watcher 自触发循环 | 写盘前将路径加入 `pendingWrites`，写入完成后延迟移除；watcher 收到事件时先检查该集合 |
-| frontmatter round-trip 破坏格式 | 最小改写策略，保留未知字段，不重排 YAML 字段顺序 |
-| 附件同名冲突 | 文件名使用 `{contentHash前8位}-{原始名}` 格式 |
-| 带 Edge 的卡片被拖入 Folder | MVP 阻止该操作并提示先断开连线；后续若要支持，需补边重写规则 |
-| Edge 指向不存在的 node | 加载时 validation，静默过滤无效 edge 并 log 警告 |
-| Markdown / frontmatter 解析失败 | 卡片以只读错误态渲染，展示原始文件路径和错误摘要；允许用户在外部编辑器修复后自动恢复 |
-| 窗口失焦 / 关闭时仍有 pending writes | 阻塞退出流程直至串行写入队列 drain 完成。drain 期间窗口显示简短的"正在保存…"提示（spinner），超过 3 秒仍未完成则强制关闭并保留最近一次有效快照，下次启动时提示恢复 |
-| manifest JSON 损坏 | 启动时保留坏文件副本并尝试从最近一次有效备份恢复；若恢复失败，则以空画布只读打开并提示用户手动修复 |
-| displayHint 未知值 | 回退为 `note` 渲染，记录诊断日志，不阻塞加载 |
-| 单个画布节点过多（>1000） | 未来可引入 SQLite 本地索引层，但初期全量加载足够 |
+> 完整的 edge case 处理策略表格（文件断链、watcher 循环、frontmatter 解析失败、manifest 损坏等）已迁移至 [技术规范文档 §9](./tech-spec.md#9-edge-cases--guardrails)。
 
-### 5.12 桌面运行时选型
-
-项目当前使用 **Electrobun** 作为桌面运行时。
-
-| 方案 | 优势 | 劣势 | 状态 |
-|---|---|---|---|
-| Electrobun（当前使用） | TypeScript 全栈，体积小（~14MB），启动快，与 Bun 生态原生集成 | 生态较年轻，部分桌面能力（如 `fs.watch`）仍在完善 | ✅ 已采用 |
-| Tauri v2 | 生态成熟、文件系统能力稳定、生产案例多 | 需引入 Rust toolchain，编译较慢，与当前 Bun 工具链不统一 | 备选 |
-| Electron | 最成熟生态，调试方便 | 包体积大（~150MB），内存占用高 | 不考虑 |
-| File System Access API | 无需打包桌面应用 | 浏览器兼容性受限，无 watcher，每次需授权 | 不考虑 |
+> 桌面运行时选型对比（Electrobun / Tauri / Electron）已迁移至 [技术规范文档 §1.3](./tech-spec.md#13-桌面运行时选型)。
 
 ---
 
@@ -643,48 +441,50 @@ interface AppConfig {
 
 ## 7. 迭代路线图 (Roadmap)
 
+> 各任务的涉及文件、实现要点和关键算法请参阅 [技术规范文档](./tech-spec.md)。
+
 ### 🔴 P0 — 核心交互完善
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
-|---|------|--------|----------|----------|----------|------|
-| 1 | **右键菜单 (Context Menu)** | 中 | `index.tsx`, `ContextMenu.tsx` | 三种上下文：画布空白处（新建卡片/Folder、粘贴、重置缩放）、卡片上（复制、移除、永久删除〔二次确认〕、改颜色、移入 Folder、聚焦）、Folder 上（打开、重命名、新建子卡片），drill-down 子卡片补 `Extract to Canvas` | — | ✅ 已完成 |
-| 2 | **键盘快捷键** | 低 | `index.tsx`, `useCanvasKeyboard.ts` | `Delete`/`Backspace` 删除、`Cmd+C/V` 复制粘贴、`Cmd+A` 全选、`Cmd+N` 新建。`focused`/`folder-drill-down` 模态中屏蔽画布级快捷键 | — | ✅ 已完成 |
-| 3 | **节点连线 (Edges)** | 中 | `CardNode.tsx`, `index.tsx` | 四向 Handle + `ConnectionMode.Loose` + `defaultEdgeOptions: { type: 'smoothstep' }` + 连线右键菜单 | ✅ `CanvasEdge` | ✅ 已完成 |
-| 4 | **选择模型重构** | 中 | `CardNode.tsx`, `FolderNode.tsx`, `index.tsx` | 单击→选中（描边高亮 + `selected`），`Shift+Click` 追加，双击/`Enter`→聚焦/drill-down。替代当前单击直接进入 FocusedView。多选支持批量拖拽和删除 | — | ❌ 待实现 |
-| 5 | **FolderNode Resize** | 低 | `FolderNode.tsx` | 复用 CardNode 的 `NodeResizeControl`，去掉硬编码 `w-[350px] h-[350px]`，改为 `style` 控制宽高 | ✅ `style: { width, height }` | ❌ 待实现 |
+| # | 任务 | 复杂度 | 状态 |
+|---|------|--------|------|
+| 1 | **右键菜单 (Context Menu)** — 画布/卡片/Folder 三种上下文 | 中 | ✅ 已完成 |
+| 2 | **键盘快捷键** — Delete/Cmd+C/V/A/N/Z、模态屏蔽 | 低 | ✅ 已完成 |
+| 3 | **节点连线 (Edges)** — 四向 Handle + smoothstep | 中 | ✅ 已完成 |
+| 4 | **选择模型重构** — 单击=选中，双击/Enter=聚焦 | 中 | ❌ 待实现 |
+| 5 | **FolderNode Resize** — NodeResizeControl | 低 | ✅ 已完成 |
 
 ### 🟡 P1 — 核心特性（差异化亮点）
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
-|---|------|--------|----------|----------|----------|------|
-| 6 | **Group 开放式分组** | 高 | `GroupNode.tsx`, `index.tsx`, `useNodeDrag.ts` | 三阶段拖拽（dragStart 解除 parentId + 坐标转换 → drag 检测交叉高亮 → dragStop 确认 drop）。预设颜色 5 种 | ✅ `GroupNode` + `parentId` | ✅ 已完成 |
-| 7 | **撤销/重做 (Undo/Redo)** | 中 | `canvasStore.ts`, `useCanvasKeyboard.ts` | nodes+edges 快照历史栈。覆盖增删、移动、resize、编辑、拖入 Folder、连线 | — | ✅ 已完成 |
-| 8 | **便签 (Sticky Note)** | 低 | `StickyNode.tsx`, `CreateMenu.tsx` | 独立 `sticky` 节点类型，6 种预设颜色，双击原地编辑，不进入 FocusedView | ✅ `StickyNodeData` | ✅ 已完成 |
-| 9 | **图片卡片** | 中 | `CardNode.tsx`, `FocusedView.tsx` | 拖拽/粘贴图片创建卡片。画布显示等比缩略图，聚焦显示原图。MVP 存 base64，后续迁移 `attachments/` | ✅ `displayHint: 'image'` | ❌ 待实现 |
+| # | 任务 | 复杂度 | 状态 |
+|---|------|--------|------|
+| 6 | **Group 开放式分组** — 三阶段拖拽 + 预设颜色 | 高 | ✅ 已完成 |
+| 7 | **撤销/重做 (Undo/Redo)** — 快照历史栈 | 中 | ✅ 已完成 |
+| 8 | **便签 (Sticky Note)** — 双击原地编辑，不进入聚焦 | 低 | ✅ 已完成 |
+| 9 | **图片卡片** — 拖拽/粘贴上传，缩略图/原图切换 | 中 | ✅ 已完成 |
 
 ### 🟢 P2 — 数据层与增强功能
 
-| # | 任务 | 复杂度 | 涉及文件 | 实现要点 | 数据结构 | 状态 |
-|---|------|--------|----------|----------|----------|------|
-| 10 | **数据持久化完善** | 高 | `src/bun/`, `useCanvasPersistence.ts` | manifest 读写 + debounce 2500ms + 窗口失焦 flush 已完成。待完善：内容拆分为独立 `.md` 文件 | ✅ 完整方案已设计 | ⚠️ 基础已完成，`.md` 拆分待实现 |
-| 11 | **全局搜索** | 中 | 新建 `SearchPanel.tsx`, `index.tsx` | `Cmd+F` 唤起搜索，实时匹配标题/正文/checklist。匹配高亮，未匹配降低透明度。点击结果 `fitView` 定位 | — | ❌ 待实现 |
-| 12 | **连线标签与动画** | 低 | `index.tsx` | `label` 渲染为可编辑文本（双击编辑），`animated: true` 显示流动虚线 | ✅ `label` / `animated` | ❌ 待实现 |
-| 13 | **Group 嵌套** | 中 | `GroupNode.tsx`, `index.tsx` | 多级 `parentId`，`isDescendant` 祖先检测防循环嵌套 | ✅ `parentId` 支持多级 | ❌ 待实现 |
-| 14 | **画布导出 PNG/JSON** | 低 | 新建 `export.ts` | PNG：`toObject()` + html2canvas。JSON：完整 manifest + 关联内容 | — | ❌ 待实现 |
+| # | 任务 | 复杂度 | 状态 |
+|---|------|--------|------|
+| 10 | **数据持久化** — 端到端链路（manifest + .md 拆分 + RPC + hydrate） | 高 | ✅ 已完成 |
+| 11 | **全局搜索** — Cmd+F，匹配高亮，fitView 定位 | 中 | ❌ 待实现 |
+| 12 | **连线标签与动画** — 可编辑 label + 流动虚线 | 低 | ❌ 待实现 |
+| 13 | **Group 嵌套** — 多级 parentId + 防循环 | 中 | ✅ 已完成 |
+| 14 | **画布导出 PNG/JSON** | 低 | ❌ 待实现 |
 
 ### ⚪ P3 — 后续迭代
 
-| # | 任务 | 复杂度 | 实现要点 | 数据结构 | 状态 |
-|---|------|--------|----------|----------|------|
-| 15 | **多画布视图切换** | 中 | 视图切换 UI（顶部 Tab 栏），新建/删除/重命名视图 | ✅ `workspace.json` + per-view manifest | ❌ 待实现 |
-| 16 | **多 workspace 管理** | 中 | 欢迎页、最近打开列表、workspace 创建/切换 | ✅ `AppConfig` | ❌ 待实现 |
-| 17 | **节点锁定** | 低 | 锁定后不可拖拽/编辑/删除，UI 显示锁定图标 | ✅ `locked` 字段 | ❌ 待实现 |
-| 18 | **框选 (Marquee Selection)** | 低 | 画布空白处左键拖拽框选，与中键平移互不冲突 | — | ❌ 待实现 |
-| 19 | **导入 JSON / .md** | 低 | 导入 JSON 恢复画布；拖拽 `.md` 创建笔记卡片 | — | ❌ 待实现 |
-| 20 | **移动端适配** | 高 | 触摸手势、响应式布局、触屏友好交互目标尺寸 | — | ❌ 待实现 |
-| 21 | **Group 拖拽推开** | 中 | 拖拽 group 时自动推开重叠的非子节点卡片 | — | ❌ 待实现 |
-| 22 | **`extent: "parent"` 约束** | 低 | 子节点限制在 group 边界内不可拖出 | ✅ 已在类型中定义 | ❌ 待实现 |
-| 23 | **Edge 颜色/样式** | 低 | smoothstep/bezier/straight + 自定义颜色 | ✅ `color` / `type` 字段 | ❌ 待实现 |
+| # | 任务 | 复杂度 | 状态 |
+|---|------|--------|------|
+| 15 | **多画布视图切换** | 中 | ❌ 待实现 |
+| 16 | **多 workspace 管理** | 中 | ❌ 待实现 |
+| 17 | **节点锁定** | 低 | ❌ 待实现 |
+| 18 | **框选 (Marquee Selection)** | 低 | ❌ 待实现 |
+| 19 | **导入 JSON / .md** | 低 | ❌ 待实现 |
+| 20 | **移动端适配** | 高 | ❌ 待实现 |
+| 21 | **Group 拖拽推开** | 中 | ✅ 已完成 |
+| 22 | **`extent: "parent"` 约束** | 低 | ❌ 待实现 |
+| 23 | **Edge 颜色/样式** | 低 | ❌ 待实现 |
 
 ### 🔮 远期
 
@@ -695,14 +495,3 @@ interface AppConfig {
 | 26 | **全局快捷键快速输入** | Quick Input from anywhere |
 | 27 | **AI 辅助** | Gemini 总结、生成、关联推荐 |
 | 28 | **商业化** | Free + Pro 订阅 |
-
-### 实现参考
-
-1. **拖入/拖出 Group 的三阶段处理**：
-   - `onNodeDragStart`：拖出时解除 `parentId`，将局部坐标转换为画布绝对坐标
-   - `onNodeDrag`：检测与 group 的交叉（`getIntersectingNodes`），高亮目标 group
-   - `onNodeDragStop`：确认 drop，设置 `parentId` + `extent`，将绝对坐标转换为 group 局部坐标
-
-2. **祖先检测防循环**：group 拖入另一个 group 时，必须检查目标不是自己的后代节点
-
-3. **连线模式**：使用 `ConnectionMode.Loose` + `defaultEdgeOptions={{ type: 'smoothstep' }}`

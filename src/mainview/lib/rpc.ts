@@ -22,7 +22,24 @@ async function initElectrobun() {
 
     const rpc = Electroview.defineRPC({
       maxRequestTime: 10000,
-      handlers: { requests: {}, messages: {} },
+      handlers: {
+        requests: {},
+        messages: {
+          settingsUpdated: ({
+            theme,
+            locale,
+          }: {
+            theme: string;
+            locale: string;
+          }) => {
+            window.dispatchEvent(
+              new CustomEvent('settings-updated', {
+                detail: { theme, locale },
+              })
+            );
+          },
+        } as any,
+      },
     });
 
     return new Electrobun.Electroview({ rpc });
@@ -80,6 +97,18 @@ export async function rpcDeleteNote(noteId: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) return { success: false };
   return eb.rpc.request.deleteNote({ noteId });
+}
+
+export async function rpcGetSettings() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.getSettings({});
+}
+
+export async function rpcOpenSettings() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return { success: false };
+  return eb.rpc.request.openSettings({});
 }
 
 export async function isRpcAvailable(): Promise<boolean> {

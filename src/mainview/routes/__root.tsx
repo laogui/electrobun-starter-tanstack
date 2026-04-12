@@ -5,11 +5,13 @@ import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import { Outlet, createRootRouteWithContext } from '@tanstack/react-router';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
+import { Settings } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
+import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
 
-import * as m from '../../paraglide/messages.js';
-import { getLocale, setLocale } from '../../paraglide/runtime.js';
+import { setLocale } from '../../paraglide/runtime.js';
 
 export interface RouterAppContext {
   queryClient: QueryClient;
@@ -20,36 +22,43 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootDocument() {
-  const { setTheme, theme } = useTheme();
+  const { setTheme } = useTheme();
+
+  // Pull persisted settings on mount
+  useEffect(() => {
+    void rpcGetSettings().then((s) => {
+      if (!s) return;
+      setTheme(s.theme);
+      void setLocale(s.locale as 'en' | 'zh');
+    });
+  }, [setTheme]);
+
+  // Listen for live pushes from the settings window
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { theme, locale } = (e as CustomEvent).detail;
+      setTheme(theme);
+      void setLocale(locale as 'en' | 'zh');
+    };
+    window.addEventListener('settings-updated', handler);
+    return () => window.removeEventListener('settings-updated', handler);
+  }, [setTheme]);
 
   return (
     <>
-      {/* Draggable titlebar — holds traffic lights (macOS) + nav controls */}
+      {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
       <div className='electrobun-webkit-app-region-drag fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-end gap-2 px-3 bg-transparent border-b border-black/5 dark:border-white/5 select-none'>
-        {/* Left side: macOS traffic lights sit here via hiddenInset padding */}
         <div className='flex-1' />
-        {/* Right side: interactive controls — must be no-drag */}
-        <select
-          value={theme}
-          className='electrobun-webkit-app-region-no-drag rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
-          onChange={(e) => {
-            setTheme(e.target.value);
+        <button
+          type='button'
+          className='electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200 transition-colors'
+          onClick={() => {
+            void rpcOpenSettings();
           }}
+          aria-label='Settings'
         >
-          <option value='system'>System</option>
-          <option value='light'>Light</option>
-          <option value='dark'>Dark</option>
-        </select>
-        <select
-          value={getLocale()}
-          className='electrobun-webkit-app-region-no-drag rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
-          onChange={(e) => {
-            void setLocale(e.target.value as 'en' | 'zh');
-          }}
-        >
-          <option value='en'>English</option>
-          <option value='zh'>中文</option>
-        </select>
+          <Settings size={16} />
+        </button>
       </div>
       <Outlet />
       <Toaster richColors />

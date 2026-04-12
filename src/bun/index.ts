@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { BrowserView, BrowserWindow, Updater } from 'electrobun/bun';
 
 import { loadManifest, saveManifest as writeManifest } from './manifest';
@@ -11,7 +13,7 @@ import {
   noteToCardData,
   saveNote as writeNote,
 } from './notes';
-import { initWorkspace, loadWorkspaceConfig } from './workspace';
+import { atomicWrite, initWorkspace, loadWorkspaceConfig } from './workspace';
 
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -89,20 +91,121 @@ type CanvasRPC = {
         params: { noteId: string };
         response: { success: boolean };
       };
+      openSettings: {
+        params: {};
+        response: { success: boolean };
+      };
+      getSettings: {
+        params: {};
+        response: { theme: string; locale: string };
+      };
     };
-    messages: Record<string, unknown>;
+    messages: {};
   };
   webview: {
-    requests: Record<string, unknown>;
-    messages: Record<string, unknown>;
+    requests: {};
+    messages: {
+      settingsUpdated: { theme: string; locale: string };
+    };
   };
 };
 
+type SettingsRPC = {
+  bun: {
+    requests: {
+      getSettings: {
+        params: {};
+        response: { theme: string; locale: string };
+      };
+      saveSettings: {
+        params: { theme: string; locale: string };
+        response: { success: boolean };
+      };
+    };
+    messages: {};
+  };
+  webview: {
+    requests: {};
+    messages: {};
+  };
+};
+
+interface AppSettings {
+  theme: string;
+  locale: string;
+}
+
+const DEFAULT_SETTINGS: AppSettings = { theme: 'system', locale: 'en' };
+
+// Cached in memory, backed by settings.json on disk
+let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
+let settingsFilePath = '';
+let settingsWindow: BrowserWindow | null = null;
+// Reference to main window RPC — set in main(), used by settings to push updates
+let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
+
+async function loadSettings(wsPath: string): Promise<AppSettings> {
+  settingsFilePath = join(wsPath, '.spatial', 'settings.json');
+  const file = Bun.file(settingsFilePath);
+  if (await file.exists()) {
+    try {
+      cachedSettings = { ...DEFAULT_SETTINGS, ...(await file.json()) };
+    } catch {
+      cachedSettings = { ...DEFAULT_SETTINGS };
+    }
+  }
+  return cachedSettings;
+}
+
+async function persistSettings(settings: AppSettings) {
+  cachedSettings = settings;
+  if (settingsFilePath) {
+    await atomicWrite(settingsFilePath, JSON.stringify(settings, null, 2));
+  }
+}
+
+function createSettingsWindow(): BrowserWindow {
+  const settingsRpc = BrowserView.defineRPC<SettingsRPC>({
+    maxRequestTime: 5000,
+    handlers: {
+      requests: {
+        getSettings: () => cachedSettings,
+        saveSettings: async ({ theme, locale }) => {
+          await persistSettings({ theme, locale });
+          // Push update to main window
+          mainRpc?.send?.settingsUpdated({ theme, locale });
+          return { success: true };
+        },
+      },
+      messages: {},
+    },
+  });
+
+  const win = new BrowserWindow({
+    title: 'Settings',
+    url: 'views://settingsview/index.html',
+    rpc: settingsRpc,
+    frame: {
+      width: 400,
+      height: 300,
+      x: 350,
+      y: 250,
+    },
+  });
+
+  win.on('close', () => {
+    settingsWindow = null;
+  });
+
+  return win;
+}
+
 async function main() {
   const wsPath = initWorkspace();
+  await loadSettings(wsPath);
   const url = await getMainViewUrl();
 
-  const rpc = BrowserView.defineRPC<CanvasRPC>({
+  const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: 5000,
     handlers: {
       requests: {
@@ -256,10 +359,21 @@ async function main() {
           const deleted = await deleteNoteFile(wsPath, filePath);
           return { success: deleted };
         },
+
+        openSettings: () => {
+          if (settingsWindow) {
+            settingsWindow.focus();
+            return { success: true };
+          }
+          settingsWindow = createSettingsWindow();
+          return { success: true };
+        },
+
+        getSettings: () => cachedSettings,
       },
       messages: {},
     },
-  });
+  }));
 
   return new BrowserWindow({
     title: 'React + Tailwind + Vite',

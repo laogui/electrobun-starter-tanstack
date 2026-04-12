@@ -25,7 +25,7 @@ function RootDocument() {
   return (
     <>
       {/* Draggable titlebar — holds traffic lights (macOS) + nav controls */}
-      <div className='electrobun-webkit-app-region-drag fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-end gap-2 px-3 bg-stone-50/80 backdrop-blur-sm dark:bg-[#141414]/80 border-b border-black/5 dark:border-white/5 select-none'>
+      <div className='electrobun-webkit-app-region-drag fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-end gap-2 px-3 bg-transparent border-b border-black/5 dark:border-white/5 select-none'>
         {/* Left side: macOS traffic lights sit here via hiddenInset padding */}
         <div className='flex-1' />
         {/* Right side: interactive controls — must be no-drag */}
@@ -51,10 +51,7 @@ function RootDocument() {
           <option value='zh'>中文</option>
         </select>
       </div>
-      {/* Main content — offset by titlebar height */}
-      <div className='pt-10'>
-        <Outlet />
-      </div>
+      <Outlet />
       <Toaster richColors />
 
       <TanStackDevtools

@@ -140,7 +140,7 @@ function CanvasComponent() {
     : 'rgba(240, 239, 237, 0.7)';
 
   return (
-    <div className='h-[calc(100vh-2.5rem)] w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
+    <div className='h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
       <ReactFlow
         nodes={nodesWithState}
         edges={edges}

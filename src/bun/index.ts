@@ -265,6 +265,7 @@ async function main() {
     title: 'React + Tailwind + Vite',
     url,
     rpc,
+    titleBarStyle: 'hiddenInset',
     frame: {
       width: 900,
       height: 700,

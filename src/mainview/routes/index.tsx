@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import {
   ReactFlow,
   Background,
+  Controls,
   MiniMap,
   ConnectionMode,
   ReactFlowProvider,
@@ -139,7 +140,7 @@ function CanvasComponent() {
     : 'rgba(240, 239, 237, 0.7)';
 
   return (
-    <div className='h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
+    <div className='h-[calc(100vh-2.5rem)] w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
       <ReactFlow
         nodes={nodesWithState}
         edges={edges}
@@ -169,6 +170,7 @@ function CanvasComponent() {
         fitView
       >
         <Background color={gridColor} gap={24} size={2} />
+        <Controls position='bottom-left' />
         <HelperLines horizontal={helperLineH} vertical={helperLineV} />
         <MiniMap
           position='bottom-right'

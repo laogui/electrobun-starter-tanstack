@@ -24,10 +24,14 @@ function RootDocument() {
 
   return (
     <>
-      <div className='fixed top-2 right-2 z-50 flex gap-2'>
+      {/* Draggable titlebar — holds traffic lights (macOS) + nav controls */}
+      <div className='electrobun-webkit-app-region-drag fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-end gap-2 px-3 bg-stone-50/80 backdrop-blur-sm dark:bg-[#141414]/80 border-b border-black/5 dark:border-white/5 select-none'>
+        {/* Left side: macOS traffic lights sit here via hiddenInset padding */}
+        <div className='flex-1' />
+        {/* Right side: interactive controls — must be no-drag */}
         <select
           value={theme}
-          className='rounded-sm border border-gray-300 bg-white px-2 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
+          className='electrobun-webkit-app-region-no-drag rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
           onChange={(e) => {
             setTheme(e.target.value);
           }}
@@ -38,7 +42,7 @@ function RootDocument() {
         </select>
         <select
           value={getLocale()}
-          className='rounded-sm border border-gray-300 bg-white px-2 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
+          className='electrobun-webkit-app-region-no-drag rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'
           onChange={(e) => {
             void setLocale(e.target.value as 'en' | 'zh');
           }}
@@ -47,7 +51,10 @@ function RootDocument() {
           <option value='zh'>中文</option>
         </select>
       </div>
-      <Outlet />
+      {/* Main content — offset by titlebar height */}
+      <div className='pt-10'>
+        <Outlet />
+      </div>
       <Toaster richColors />
 
       <TanStackDevtools

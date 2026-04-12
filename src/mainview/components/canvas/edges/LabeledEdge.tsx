@@ -1,0 +1,133 @@
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
+  getSmoothStepPath,
+  type EdgeProps,
+} from '@xyflow/react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+
+import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
+
+function LabeledEdgeComponent({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+  selected,
+}: EdgeProps) {
+  const label = (data?.label as string) ?? '';
+  const animated = (data?.animated as boolean) ?? false;
+  const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'smoothstep';
+  const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
+  const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
+  const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const isEditing = editingEdgeId === id;
+
+  const [draft, setDraft] = useState(label);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(label);
+      // Focus after render
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [isEditing, label]);
+
+  const commitLabel = useCallback(() => {
+    const trimmed = draft.trim();
+    updateEdgeData(id, { label: trimmed || undefined });
+    setEditingEdgeId(null);
+  }, [draft, id, updateEdgeData, setEditingEdgeId]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitLabel();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setEditingEdgeId(null);
+      }
+    },
+    [commitLabel, setEditingEdgeId]
+  );
+
+  const handleLabelDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingEdgeId(id);
+    },
+    [id, setEditingEdgeId]
+  );
+
+  const pathParams = {
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  };
+
+  const [edgePath, labelX, labelY] =
+    pathType === 'bezier'
+      ? getBezierPath(pathParams)
+      : getSmoothStepPath(pathParams);
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        className={cn(
+          'transition-[stroke-width] duration-150',
+          animated && 'react-flow__edge-animated-dash',
+          selected && 'stroke-blue-500!'
+        )}
+        style={{
+          strokeWidth: selected ? 2.5 : 1.5,
+          stroke: selected ? undefined : 'var(--xy-edge-stroke, #b1b1b7)',
+        }}
+      />
+      <EdgeLabelRenderer>
+        <div
+          className='pointer-events-auto absolute nodrag nopan'
+          style={{
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+          }}
+        >
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type='text'
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitLabel}
+              onKeyDown={handleKeyDown}
+              className='rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100'
+              style={{ minWidth: 60, maxWidth: 160 }}
+            />
+          ) : label ? (
+            <button
+              type='button'
+              className='cursor-default rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-stone-600 shadow-sm ring-1 ring-stone-200/60 backdrop-blur-sm transition-colors hover:bg-stone-100 dark:bg-stone-800/90 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700'
+              style={{ maxWidth: 140 }}
+              onDoubleClick={handleLabelDoubleClick}
+            >
+              <span className='block truncate'>{label}</span>
+            </button>
+          ) : null}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+export default memo(LabeledEdgeComponent);

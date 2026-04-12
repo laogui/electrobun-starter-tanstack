@@ -11,7 +11,10 @@ import {
   NotebookPen,
   Palette,
   PenLine,
+  Sparkles,
+  Spline,
   StickyNote,
+  Tag,
   Trash2,
   ZoomIn,
 } from 'lucide-react';
@@ -33,8 +36,9 @@ type MenuItem = {
 type ContextMenuState = {
   x: number;
   y: number;
-  target: 'canvas' | 'card' | 'image' | 'folder' | 'group' | 'sticky';
+  target: 'canvas' | 'card' | 'image' | 'folder' | 'group' | 'sticky' | 'edge';
   nodeId?: string;
+  edgeId?: string;
 } | null;
 
 const getCanvasItems = (): Array<MenuItem> => [
@@ -130,6 +134,26 @@ const getImageItems = (): Array<MenuItem> => [
   },
 ];
 
+const getEdgeItems = (): Array<MenuItem> => [
+  { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
+  {
+    id: 'toggle-edge-animated',
+    label: m.menu_toggle_animation(),
+    icon: Sparkles,
+  },
+  {
+    id: 'toggle-edge-path-type',
+    label: m.menu_toggle_path_type(),
+    icon: Spline,
+  },
+  {
+    id: 'delete-edge',
+    label: m.menu_delete_edge(),
+    icon: Trash2,
+    danger: true,
+  },
+];
+
 export type { ContextMenuState };
 
 export function CanvasContextMenu({
@@ -162,17 +186,19 @@ export function CanvasContextMenu({
   }, [menu, onClose]);
 
   const items =
-    menu?.target === 'folder'
-      ? getFolderItems()
-      : menu?.target === 'group'
-        ? getGroupItems()
-        : menu?.target === 'sticky'
-          ? getStickyItems()
-          : menu?.target === 'image'
-            ? getImageItems()
-            : menu?.target === 'card'
-              ? getCardItems()
-              : getCanvasItems();
+    menu?.target === 'edge'
+      ? getEdgeItems()
+      : menu?.target === 'folder'
+        ? getFolderItems()
+        : menu?.target === 'group'
+          ? getGroupItems()
+          : menu?.target === 'sticky'
+            ? getStickyItems()
+            : menu?.target === 'image'
+              ? getImageItems()
+              : menu?.target === 'card'
+                ? getCardItems()
+                : getCanvasItems();
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
   const y = menu
@@ -201,7 +227,7 @@ export function CanvasContextMenu({
                   : 'text-gray-700 hover:bg-black/5'
               )}
               onClick={() => {
-                onAction(item.id, menu.nodeId);
+                onAction(item.id, menu.nodeId ?? menu.edgeId);
                 onClose();
               }}
             >

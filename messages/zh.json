@@ -35,5 +35,9 @@
   "placeholder_no_image": "暂无图片",
   "default_group_label": "分组",
   "default_new_group_label": "新建分组",
-  "default_folder_title": "0 个项目"
+  "default_folder_title": "0 个项目",
+  "menu_edit_label": "编辑标签",
+  "menu_toggle_animation": "切换动画",
+  "menu_toggle_path_type": "切换直角 / 曲线",
+  "menu_delete_edge": "删除连线"
 }

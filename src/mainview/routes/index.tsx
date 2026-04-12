@@ -26,7 +26,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
-import { nodeTypes } from '@/lib/canvasConstants';
+import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import { loadCanvas, rpcSaveManifest, isRpcAvailable } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -59,6 +59,7 @@ function CanvasComponent() {
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onEdgeContextMenu,
     handleContextMenuAction,
   } = useContextMenu({ rfInstance });
 
@@ -148,11 +149,13 @@ function CanvasComponent() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDoubleClick={onNodeDoubleClick}
-        defaultEdgeOptions={{ type: 'bezier', animated: false }}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={{ type: 'labeledEdge' }}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
         onPaneContextMenu={onPaneContextMenu}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}

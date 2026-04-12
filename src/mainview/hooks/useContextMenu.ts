@@ -1,4 +1,4 @@
-import type { Node, ReactFlowInstance } from '@xyflow/react';
+import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { useCallback, useState } from 'react';
 
@@ -25,6 +25,9 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
+  const deleteEdge = useCanvasStore((s) => s.deleteEdge);
+  const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
@@ -54,6 +57,16 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
                 ? 'image'
                 : 'card',
       nodeId: node.id,
+    });
+  }, []);
+
+  const onEdgeContextMenu = useCallback((e: React.MouseEvent, edge: Edge) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      target: 'edge',
+      edgeId: edge.id,
     });
   }, []);
 
@@ -234,6 +247,41 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           if (nodeId) addFolderChild(nodeId);
           break;
         }
+        case 'edit-edge-label': {
+          // nodeId here is actually edgeId (passed through the generic slot)
+          if (nodeId) setEditingEdgeId(nodeId);
+          break;
+        }
+        case 'toggle-edge-animated': {
+          if (nodeId) {
+            const { edges } = useCanvasStore.getState();
+            const edge = edges.find((e) => e.id === nodeId);
+            if (edge) {
+              saveSnapshot();
+              const isAnimated = (edge.data as any)?.animated ?? false;
+              updateEdgeData(nodeId, { animated: !isAnimated });
+            }
+          }
+          break;
+        }
+        case 'toggle-edge-path-type': {
+          if (nodeId) {
+            const { edges } = useCanvasStore.getState();
+            const edge = edges.find((e) => e.id === nodeId);
+            if (edge) {
+              saveSnapshot();
+              const current = (edge.data as any)?.pathType ?? 'smoothstep';
+              updateEdgeData(nodeId, {
+                pathType: current === 'smoothstep' ? 'bezier' : 'smoothstep',
+              });
+            }
+          }
+          break;
+        }
+        case 'delete-edge': {
+          if (nodeId) deleteEdge(nodeId);
+          break;
+        }
         default: {
           break;
         }
@@ -246,6 +294,9 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       setFocusedNode,
       setFocusedFolder,
       deleteNodes,
+      deleteEdge,
+      updateEdgeData,
+      setEditingEdgeId,
       changeNodeColor,
       addFolderChild,
       pasteClipboard,
@@ -259,6 +310,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onEdgeContextMenu,
     handleContextMenuAction,
   };
 }

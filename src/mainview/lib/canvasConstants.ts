@@ -1,3 +1,4 @@
+import LabeledEdge from '@/components/canvas/edges/LabeledEdge';
 import CardNode from '@/components/canvas/nodes/CardNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
@@ -27,4 +28,8 @@ export const nodeTypes = {
   group: GroupNode,
   image: ImageNode,
   sticky: StickyNode,
+};
+
+export const edgeTypes = {
+  labeledEdge: LabeledEdge,
 };

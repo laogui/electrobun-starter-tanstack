@@ -156,4 +156,16 @@ body.resizing-nwse * {
   fill: none;
 }
 
+/* ── Animated dash flow for labeled edges ── */
+.react-flow__edge-animated-dash {
+  stroke-dasharray: 6 4;
+  animation: dash-flow 0.6s linear infinite;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
 @custom-variant dark (&:where(.dark, .dark *));

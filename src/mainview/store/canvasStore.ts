@@ -76,6 +76,12 @@ export interface CanvasState {
   copySelected: () => void;
   pasteClipboard: (offset?: number) => void;
 
+  // Actions – edge
+  editingEdgeId: string | null;
+  setEditingEdgeId: (id: string | null) => void;
+  updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
+  deleteEdge: (edgeId: string) => void;
+
   // Actions – node CRUD
   createNode: (
     type: 'card' | 'image' | 'folder' | 'group' | 'sticky',
@@ -115,6 +121,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   createMenuOpen: false,
   clipboard: [],
   nodeIdCounter: 100,
+  editingEdgeId: null,
   _undoRedo: createUndoRedoState(),
 
   // -- hydration ------------------------------------------------------------
@@ -140,7 +147,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addConnection: (connection) => {
     get().saveSnapshot();
     set((s) => ({
-      edges: addEdge({ ...connection, type: 'bezier' }, s.edges),
+      edges: addEdge({ ...connection, type: 'labeledEdge' }, s.edges),
+    }));
+  },
+
+  // -- edge actions -----------------------------------------------------------
+  setEditingEdgeId: (id) => set({ editingEdgeId: id }),
+
+  updateEdgeData: (edgeId, updates) =>
+    set((s) => ({
+      edges: s.edges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...e.data, ...updates } } : e
+      ),
+    })),
+
+  deleteEdge: (edgeId) => {
+    get().saveSnapshot();
+    set((s) => ({
+      edges: s.edges.filter((e) => e.id !== edgeId),
     }));
   },
 

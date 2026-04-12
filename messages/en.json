@@ -35,5 +35,9 @@
   "placeholder_no_image": "No image",
   "default_group_label": "Group",
   "default_new_group_label": "New Group",
-  "default_folder_title": "0 items"
+  "default_folder_title": "0 items",
+  "menu_edit_label": "Edit Label",
+  "menu_toggle_animation": "Toggle Animation",
+  "menu_toggle_path_type": "Toggle Straight / Curved",
+  "menu_delete_edge": "Delete Connection"
 }

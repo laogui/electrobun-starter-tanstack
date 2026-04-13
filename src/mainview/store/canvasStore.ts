@@ -1,4 +1,4 @@
-import { addEdge, applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
+import { addEdge, applyEdgeChanges } from '@xyflow/react';
 import type {
   Connection,
   Edge,
@@ -11,6 +11,7 @@ import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 
 import { initialNodes } from '@/data/initialNodes';
+import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import {
   CARD_COLORS,
   CARD_H,
@@ -68,7 +69,7 @@ export interface CanvasState {
   setEdges: (
     updater: Array<Edge> | ((prev: Array<Edge>) => Array<Edge>)
   ) => void;
-  applyNodesChange: (changes: Array<NodeChange>) => void;
+  applyNodesChange: (changes: Array<NodeChange<Node>>) => void;
   applyEdgesChange: (changes: Array<EdgeChange>) => void;
   addConnection: (connection: Connection) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
@@ -169,7 +170,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   applyNodesChange: (changes) => {
-    set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
+    set((s) => ({ nodes: applyCanvasNodeChanges(changes, s.nodes) }));
   },
 
   applyEdgesChange: (changes) => {

@@ -1,7 +1,7 @@
-import { applyNodeChanges } from '@xyflow/react';
-import type { NodeChange, NodePositionChange } from '@xyflow/react';
+import type { Node, NodeChange, NodePositionChange } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 
+import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import { getHelperLines } from '@/lib/getHelperLines';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -11,7 +11,7 @@ export function useHelperLines() {
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
   const onNodesChange = useCallback(
-    (changes: Array<NodeChange>) => {
+    (changes: Array<NodeChange<Node>>) => {
       const positionChange = changes.find(
         (c): c is NodePositionChange =>
           c.type === 'position' && c.dragging === true
@@ -33,12 +33,12 @@ export function useHelperLines() {
             positionChange.position!.y = snapPosition.y;
           }
 
-          return applyNodeChanges(changes, nds);
+          return applyCanvasNodeChanges(changes, nds);
         });
       } else {
         setHelperLineH(undefined);
         setHelperLineV(undefined);
-        setNodes((nds) => applyNodeChanges(changes, nds));
+        setNodes((nds) => applyCanvasNodeChanges(changes, nds));
       }
     },
     [setNodes]

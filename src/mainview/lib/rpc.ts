@@ -32,7 +32,7 @@ async function initElectrobun() {
             theme: string;
             locale: string;
           }) => {
-            window.dispatchEvent(
+            globalThis.dispatchEvent(
               new CustomEvent('settings-updated', {
                 detail: { theme, locale },
               })
@@ -109,6 +109,30 @@ export async function rpcOpenSettings() {
   const eb = await getElectrobun();
   if (!eb?.rpc) return { success: false };
   return eb.rpc.request.openSettings({});
+}
+
+export async function rpcListViews() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.listViews({});
+}
+
+export async function rpcCreateView(name: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.createView({ name });
+}
+
+export async function rpcDeleteView(viewId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.deleteView({ viewId });
+}
+
+export async function rpcRenameView(viewId: string, name: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.renameView({ viewId, name });
 }
 
 export async function isRpcAvailable(): Promise<boolean> {

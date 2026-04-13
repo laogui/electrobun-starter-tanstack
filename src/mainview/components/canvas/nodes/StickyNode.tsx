@@ -1,8 +1,8 @@
 import {
-  useViewport,
-  NodeResizeControl,
   Handle,
+  NodeResizeControl,
   Position,
+  useViewport,
 } from '@xyflow/react';
 import { memo, useCallback, useRef, useState } from 'react';
 
@@ -20,7 +20,7 @@ const StickyNode = ({ id, data }: any) => {
   const textRef = useRef<HTMLDivElement>(null);
 
   const handleBlur = useCallback(() => {
-    const text = textRef.current?.innerText ?? '';
+    const text = textRef.current?.textContent ?? '';
     if (text !== data.content) {
       onUpdate(id, { content: text });
     }
@@ -36,8 +36,8 @@ const StickyNode = ({ id, data }: any) => {
   return (
     <div
       className={cn(
-        'w-full h-full group/sticky',
-        data.isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        'group/sticky size-full',
+        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
     >
       <NodeResizeControl
@@ -46,12 +46,16 @@ const StickyNode = ({ id, data }: any) => {
         maxWidth={500}
         maxHeight={500}
         position='bottom-right'
-        className='!bg-transparent !border-none'
+        className='border-none! bg-transparent!'
         style={{ padding: 0 }}
-        onResizeStart={() => document.body.classList.add('resizing-nwse')}
-        onResizeEnd={() => document.body.classList.remove('resizing-nwse')}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        onResizeEnd={() => {
+          document.body.classList.remove('resizing-nwse');
+        }}
       >
-        <div className='absolute bottom-2 right-2 opacity-0 group-hover/sticky:opacity-100 transition-opacity cursor-nwse-resize'>
+        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/sticky:opacity-100'>
           <svg
             xmlns='http://www.w3.org/2000/svg'
             width='12'
@@ -96,29 +100,29 @@ const StickyNode = ({ id, data }: any) => {
 
       <div
         className={cn(
-          'w-full h-full rounded-xl shadow-sm border border-black/5 overflow-hidden cursor-grab',
+          'size-full cursor-grab overflow-hidden rounded-xl border border-black/5 shadow-sm',
           'transition-shadow duration-200 ease-out hover:shadow-lg'
         )}
         onDoubleClick={handleDoubleClick}
       >
         {isZoomedOut ? (
-          <div className='w-full h-full p-3' style={colorToStyle(data.color)}>
+          <div className='size-full p-3' style={colorToStyle(data.color)}>
             <div className='mt-1 space-y-2 opacity-30'>
-              <div className='h-2 bg-current rounded-full w-full' />
-              <div className='h-2 bg-current rounded-full w-4/6' />
+              <div className='h-2 w-full rounded-full bg-current' />
+              <div className='h-2 w-4/6 rounded-full bg-current' />
             </div>
           </div>
         ) : (
           <div
-            className='w-full h-full p-4 flex flex-col'
+            className='flex size-full flex-col p-4'
             style={colorToStyle(data.color)}
           >
             <div
               ref={textRef}
-              contentEditable={editing}
               suppressContentEditableWarning
+              contentEditable={editing}
               className={cn(
-                'flex-1 outline-none whitespace-pre-wrap break-words leading-relaxed text-sm',
+                'flex-1 text-sm/relaxed wrap-break-word whitespace-pre-wrap outline-none',
                 editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
               )}
               onBlur={handleBlur}

@@ -39,5 +39,7 @@
   "menu_edit_label": "编辑标签",
   "menu_toggle_animation": "切换动画",
   "menu_toggle_path_type": "切换直角 / 曲线",
-  "menu_delete_edge": "删除连线"
+  "menu_delete_edge": "删除连线",
+  "view_new_canvas": "新建画布",
+  "view_default_name": "默认画布"
 }

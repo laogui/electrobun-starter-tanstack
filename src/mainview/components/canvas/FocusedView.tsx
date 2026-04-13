@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { useCanvasStore } from '@/store/canvasStore';
 

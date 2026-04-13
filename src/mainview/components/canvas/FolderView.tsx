@@ -4,7 +4,6 @@ import type React from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
-import { cn } from '@/lib/utils';
 
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';

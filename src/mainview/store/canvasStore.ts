@@ -1,10 +1,10 @@
-import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
+import { addEdge, applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
 import type {
-  Node,
-  Edge,
-  NodeChange,
-  EdgeChange,
   Connection,
+  Edge,
+  EdgeChange,
+  Node,
+  NodeChange,
   ReactFlowInstance,
 } from '@xyflow/react';
 import { nanoid } from 'nanoid';
@@ -12,27 +12,25 @@ import { create } from 'zustand';
 
 import { initialNodes } from '@/data/initialNodes';
 import {
-  CARD_W,
-  CARD_H,
-  IMAGE_W,
-  IMAGE_H,
-  FOLDER_W,
-  FOLDER_H,
-  STICKY_W,
-  STICKY_H,
-  GROUP_COLORS,
   CARD_COLORS,
+  CARD_H,
+  CARD_W,
+  FOLDER_H,
+  FOLDER_W,
+  GROUP_COLORS,
+  IMAGE_H,
+  IMAGE_W,
   STICKY_COLORS,
+  STICKY_H,
+  STICKY_W,
 } from '@/lib/canvasConstants';
-import { sortNodesByParent } from '@/lib/canvasUtils';
 import {
   createUndoRedoState,
   pushSnapshot,
-  undo as undoSnapshot,
   redo as redoSnapshot,
-  type UndoRedoState,
-  type CanvasSnapshot,
+  undo as undoSnapshot,
 } from '@/lib/undoRedo';
+import type { UndoRedoState } from '@/lib/undoRedo';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -49,21 +47,29 @@ export interface FocusedItem {
 
 export interface CanvasState {
   // Core data
-  nodes: Node[];
-  edges: Edge[];
+  nodes: Array<Node>;
+  edges: Array<Edge>;
 
   // UI state
   focusedNode: FocusedItem | null;
   focusedFolder: FocusedItem | null;
   createMenuOpen: boolean;
-  clipboard: Node[];
+  clipboard: Array<Node>;
   nodeIdCounter: number;
 
+  // Multi-view
+  activeViewId: string;
+  views: Array<{ id: string; name: string }>;
+
   // Actions – core
-  setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
-  setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
-  applyNodesChange: (changes: NodeChange[]) => void;
-  applyEdgesChange: (changes: EdgeChange[]) => void;
+  setNodes: (
+    updater: Array<Node> | ((prev: Array<Node>) => Array<Node>)
+  ) => void;
+  setEdges: (
+    updater: Array<Edge> | ((prev: Array<Edge>) => Array<Edge>)
+  ) => void;
+  applyNodesChange: (changes: Array<NodeChange>) => void;
+  applyEdgesChange: (changes: Array<EdgeChange>) => void;
   addConnection: (connection: Connection) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
 
@@ -71,6 +77,11 @@ export interface CanvasState {
   setFocusedNode: (v: FocusedItem | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+
+  // Actions – multi-view
+  setActiveView: (viewId: string) => Promise<void>;
+  setViews: (views: Array<{ id: string; name: string }>) => void;
+  setActiveViewId: (viewId: string) => void;
 
   // Actions – clipboard
   copySelected: () => void;
@@ -87,13 +98,14 @@ export interface CanvasState {
     type: 'card' | 'image' | 'folder' | 'group' | 'sticky',
     rfInstance: ReactFlowInstance<any, any> | null
   ) => void;
-  deleteNodes: (ids: string[]) => void;
+  deleteNodes: (ids: Array<string>) => void;
   changeNodeColor: (nodeId: string) => void;
   addFolderChild: (folderId: string) => void;
 
   // Hydration
   _hydrated: boolean;
-  hydrate: (nodes: Node[], edges: Edge[]) => void;
+  hydrate: (nodes: Array<Node>, edges: Array<Edge>) => void;
+  reset: () => void;
 
   // Undo / Redo
   _undoRedo: UndoRedoState;
@@ -121,28 +133,48 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   createMenuOpen: false,
   clipboard: [],
   nodeIdCounter: 100,
+  activeViewId: 'default',
+  views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
   _undoRedo: createUndoRedoState(),
 
   // -- hydration ------------------------------------------------------------
-  hydrate: (nodes, edges) => set({ nodes, edges, _hydrated: true }),
+  hydrate: (nodes, edges) => {
+    set({ nodes, edges, _hydrated: true });
+  },
+
+  reset: () => {
+    set({
+      nodes: [],
+      edges: [],
+      _hydrated: false,
+      focusedNode: null,
+      focusedFolder: null,
+      clipboard: [],
+      _undoRedo: createUndoRedoState(),
+    });
+  },
 
   // -- core actions ---------------------------------------------------------
-  setNodes: (updater) =>
+  setNodes: (updater) => {
     set((s) => ({
       nodes: typeof updater === 'function' ? updater(s.nodes) : updater,
-    })),
+    }));
+  },
 
-  setEdges: (updater) =>
+  setEdges: (updater) => {
     set((s) => ({
       edges: typeof updater === 'function' ? updater(s.edges) : updater,
-    })),
+    }));
+  },
 
-  applyNodesChange: (changes) =>
-    set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) })),
+  applyNodesChange: (changes) => {
+    set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
+  },
 
-  applyEdgesChange: (changes) =>
-    set((s) => ({ edges: applyEdgeChanges(changes, s.edges) })),
+  applyEdgesChange: (changes) => {
+    set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
+  },
 
   addConnection: (connection) => {
     get().saveSnapshot();
@@ -152,14 +184,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // -- edge actions -----------------------------------------------------------
-  setEditingEdgeId: (id) => set({ editingEdgeId: id }),
+  setEditingEdgeId: (id) => {
+    set({ editingEdgeId: id });
+  },
 
-  updateEdgeData: (edgeId, updates) =>
+  updateEdgeData: (edgeId, updates) => {
     set((s) => ({
       edges: s.edges.map((e) =>
         e.id === edgeId ? { ...e, data: { ...e.data, ...updates } } : e
       ),
-    })),
+    }));
+  },
 
   deleteEdge: (edgeId) => {
     get().saveSnapshot();
@@ -168,23 +203,52 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }));
   },
 
-  updateNodeData: (nodeId, updates) =>
+  updateNodeData: (nodeId, updates) => {
     set((s) => ({
       nodes: s.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
       ),
-    })),
+    }));
+  },
 
   // -- UI actions -----------------------------------------------------------
-  setFocusedNode: (v) => set({ focusedNode: v }),
-  setFocusedFolder: (v) => set({ focusedFolder: v }),
-  setCreateMenuOpen: (v) =>
+  setFocusedNode: (v) => {
+    set({ focusedNode: v });
+  },
+  setFocusedFolder: (v) => {
+    set({ focusedFolder: v });
+  },
+  setCreateMenuOpen: (v) => {
     set((s) => ({
       createMenuOpen: typeof v === 'function' ? v(s.createMenuOpen) : v,
-    })),
+    }));
+  },
+
+  // -- multi-view actions ---------------------------------------------------
+  setViews: (views) => {
+    set({ views });
+  },
+  setActiveViewId: (viewId) => {
+    set({ activeViewId: viewId });
+  },
+
+  setActiveView: async (viewId) => {
+    const current = get().activeViewId;
+    if (viewId === current) return;
+
+    // Clear UI state for view switch
+    set({
+      activeViewId: viewId,
+      focusedNode: null,
+      focusedFolder: null,
+      clipboard: [],
+      _undoRedo: createUndoRedoState(),
+      _hydrated: false,
+    });
+  },
 
   // -- clipboard ------------------------------------------------------------
-  copySelected: () =>
+  copySelected: () => {
     set((s) => {
       const selected = s.nodes.filter((n) => n.selected);
       if (selected.length === 0) return s;
@@ -194,7 +258,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           return { ...n, data: cleanData };
         }),
       };
-    }),
+    });
+  },
 
   pasteClipboard: (offset = 30) => {
     const { clipboard } = get();

@@ -40,22 +40,24 @@ function RootDocument() {
       setTheme(theme);
       void setLocale(locale as 'en' | 'zh');
     };
-    window.addEventListener('settings-updated', handler);
-    return () => window.removeEventListener('settings-updated', handler);
+    globalThis.addEventListener('settings-updated', handler);
+    return () => {
+      globalThis.removeEventListener('settings-updated', handler);
+    };
   }, [setTheme]);
 
   return (
     <>
       {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
-      <div className='electrobun-webkit-app-region-drag fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-end gap-2 px-3 bg-transparent border-b border-black/5 dark:border-white/5 select-none'>
+      <div className='electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 items-center justify-end gap-2 border-b border-black/5 bg-transparent px-3 select-none dark:border-white/5'>
         <div className='flex-1' />
         <button
           type='button'
-          className='electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200 transition-colors'
+          className='electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200'
+          aria-label='Settings'
           onClick={() => {
             void rpcOpenSettings();
           }}
-          aria-label='Settings'
         >
           <Settings size={16} />
         </button>

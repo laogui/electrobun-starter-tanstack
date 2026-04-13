@@ -1,14 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
+import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import {
-  ReactFlow,
   Background,
+  ConnectionMode,
   Controls,
   MiniMap,
-  ConnectionMode,
+  ReactFlow,
   ReactFlowProvider,
-  type ReactFlowInstance,
 } from '@xyflow/react';
-import type { Node, Connection } from '@xyflow/react';
 import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 
@@ -20,6 +19,7 @@ import { CreateMenu } from '@/components/canvas/CreateMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
+import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -27,7 +27,7 @@ import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
-import { loadCanvas, rpcSaveManifest, isRpcAvailable } from '@/lib/rpc';
+import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -67,12 +67,13 @@ function CanvasComponent() {
 
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
+  const activeViewId = useCanvasStore((s) => s.activeViewId);
 
   useCanvasPersistence();
 
   useEffect(() => {
     if (hydrated) return;
-    loadCanvas('default')
+    loadCanvas(activeViewId)
       .then(async (data) => {
         if (data && data.nodes.length > 0) {
           hydrate(data.nodes, data.edges);
@@ -80,24 +81,28 @@ function CanvasComponent() {
           // First run: seed workspace with initialNodes
           const { nodes, edges } = useCanvasStore.getState();
           const sanitized = sanitizeForPersistence(nodes, edges);
-          await rpcSaveManifest('default', sanitized.nodes, sanitized.edges);
-          console.log('[persistence] Seeded default canvas from initialNodes');
+          await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
+          console.log('[persistence] Seeded canvas from initialNodes');
         }
       })
-      .catch((err) => {
-        console.error('[persistence] Failed to load canvas:', err);
+      .catch((error) => {
+        console.error('[persistence] Failed to load canvas:', error);
       });
-  }, [hydrate, hydrated]);
+  }, [hydrate, hydrated, activeViewId]);
 
   useCanvasKeyboard();
 
   const onEdgesChange = useCallback(
-    (changes: any) => applyEdgesChange(changes),
+    (changes: any) => {
+      applyEdgesChange(changes);
+    },
     [applyEdgesChange]
   );
 
   const onConnect = useCallback(
-    (connection: Connection) => addConnection(connection),
+    (connection: Connection) => {
+      addConnection(connection);
+    },
     [addConnection]
   );
 
@@ -141,18 +146,27 @@ function CanvasComponent() {
     : 'rgba(240, 239, 237, 0.7)';
 
   return (
-    <div className='h-screen w-screen overflow-hidden font-sans bg-stone-50 dark:bg-[#141414]'>
+    <div className='h-screen w-screen overflow-hidden bg-stone-50 font-sans dark:bg-[#141414]'>
       <ReactFlow
+        fitView
         nodes={nodesWithState}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeDoubleClick={onNodeDoubleClick}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ type: 'labeledEdge' }}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
+        nodeTypes={nodeTypes}
+        panOnScroll={true}
+        selectionOnDrag={false}
+        zoomOnPinch={true}
+        minZoom={0.1}
+        maxZoom={4}
+        proOptions={{ hideAttribution: true }}
+        style={{ backgroundColor: canvasBackground }}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeDoubleClick={onNodeDoubleClick}
         onPaneContextMenu={onPaneContextMenu}
         onNodeContextMenu={onNodeContextMenu}
         onEdgeContextMenu={onEdgeContextMenu}
@@ -162,20 +176,13 @@ function CanvasComponent() {
         onInit={(instance) => {
           rfInstance.current = instance;
         }}
-        nodeTypes={nodeTypes}
-        panOnScroll={true}
-        selectionOnDrag={false}
-        zoomOnPinch={true}
-        minZoom={0.1}
-        maxZoom={4}
-        proOptions={{ hideAttribution: true }}
-        style={{ backgroundColor: canvasBackground }}
-        fitView
       >
         <Background color={gridColor} gap={24} size={2} />
         <Controls position='bottom-left' />
         <HelperLines horizontal={helperLineH} vertical={helperLineV} />
         <MiniMap
+          pannable
+          zoomable
           position='bottom-right'
           nodeStrokeColor='#999'
           nodeColor='#ddd'
@@ -185,37 +192,42 @@ function CanvasComponent() {
             border: miniMapBorder,
             borderRadius: 8,
           }}
-          pannable
-          zoomable
         />
       </ReactFlow>
 
       <AnimatePresence>
-        {focusedFolder && (
+        {focusedFolder ? (
           <FolderView
             folder={focusedFolder}
-            onClose={() => setFocusedFolder(null)}
+            onClose={() => {
+              setFocusedFolder(null);
+            }}
             onCardClick={(child: any, rect: any) => {
               setFocusedNode({ id: child.id, data: child.data, rect });
             }}
           />
-        )}
-        {focusedNode && (
+        ) : null}
+        {focusedNode ? (
           <FocusedView
             node={focusedNode}
-            onClose={() => setFocusedNode(null)}
+            onClose={() => {
+              setFocusedNode(null);
+            }}
           />
-        )}
+        ) : null}
       </AnimatePresence>
 
+      <ViewSwitcher />
       <CreateMenu
-        onCreateNode={onCreateNode}
         open={createMenuOpen}
         setOpen={setCreateMenuOpen}
+        onCreateNode={onCreateNode}
       />
       <CanvasContextMenu
         menu={contextMenu}
-        onClose={() => setContextMenu(null)}
+        onClose={() => {
+          setContextMenu(null);
+        }}
         onAction={handleContextMenuAction}
       />
     </div>

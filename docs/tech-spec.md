@@ -66,7 +66,7 @@
 src/
   bun/                                     # Bun 主进程
     index.ts                               # 窗口创建 + RPC handler 定义
-    workspace.ts                           # workspace 初始化 + 读写 workspace.json
+    workspace.ts                           # workspace 初始化 + 读写 workspace.json + 画布视图 CRUD (addView/removeView/renameView)
     manifest.ts                            # canvas manifest 读写 + 原子写入
     notes.ts                               # .md 文件 CRUD + frontmatter 解析/序列化
   mainview/                                # React 渲染端
@@ -76,12 +76,12 @@ src/
     index.css                              # Tailwind 入口
     routes/
       __root.tsx                           # 全局 Shell：主题/语言切换、Sonner toaster、DevTools
-      index.tsx                            # 主画布页面：ReactFlow + FocusedView + FolderView + CreateMenu + ContextMenu
+      index.tsx                            # 主画布页面：ReactFlow + FocusedView + FolderView + ViewSwitcher + CreateMenu + ContextMenu
     store/
-      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD
+      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布
     hooks/
       useCanvasKeyboard.ts                 # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape
-      useCanvasPersistence.ts              # 自动保存：subscribe store → debounce 2500ms → RPC saveManifest
+      useCanvasPersistence.ts              # 自动保存：subscribe store → debounce 2500ms → RPC saveManifest（动态 viewId）
       useContextMenu.ts                    # 右键菜单状态管理 + action 分发
       useHelperLines.ts                    # 辅助对齐线（拖拽时的 snap-to 提示）
       useNodeCreation.ts                   # 节点创建入口（CreateMenu + ContextMenu 共用）
@@ -93,6 +93,7 @@ src/
         FocusedView.tsx                    # 聚焦模式：FLIP 动画 + overlay
         FolderView.tsx                     # Folder drill-down：展开子卡片 + 返回动画
         HelperLines.tsx                    # 对齐辅助线渲染
+        ViewSwitcher.tsx                   # 底部画布切换器：切换/新建/重命名/删除画布
         nodes/
           CardNode.tsx                     # 图文/Checklist 卡片节点
           FolderNode.tsx                   # 堆叠式文件夹节点
@@ -260,11 +261,13 @@ interface AppConfig {
 CanvasState
 ├── 核心数据: nodes, edges
 ├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter
+├── 多画布: activeViewId, views[]
 ├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData
 ├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen
+├── 多画布 actions: setActiveView, setViews, setActiveViewId
 ├── 剪贴板: copySelected, pasteClipboard
 ├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild
-├── Hydration: hydrate(nodes, edges), _hydrated
+├── Hydration: hydrate(nodes, edges), reset(), _hydrated
 └── Undo/Redo: saveSnapshot, undo, redo, canUndo, canRedo (_undoRedo: UndoRedoState)
 ```
 
@@ -275,6 +278,42 @@ CanvasState
 - **历史栈上限**：最多保留 **50** 步（`MAX_HISTORY = 50`）。
 - **生命周期**：仅存在于内存中，关闭应用后清空。
 - **与持久化的一致性**：撤销/重做仅回滚内存状态；下次 debounce 到期时以内存状态覆盖磁盘。
+
+### 4.4 多画布视图切换
+
+#### 状态模型
+
+- `activeViewId: string` — 当前激活的画布 ID（默认 `'default'`）
+- `views: Array<{ id: string; name: string }>` — 所有画布列表（启动时从 `workspace.json` 同步）
+
+#### 切换流程
+
+```
+setActiveView(viewId)
+  1. 若 viewId === 当前 activeViewId → 跳过
+  2. flushNow() — 立即保存当前画布的 pending saves（useCanvasPersistence 监听 activeViewId 变化自动触发）
+  3. 清空 UI 状态：focusedNode / focusedFolder / clipboard / undo-redo 历史栈
+  4. 设置 _hydrated = false → 触发 index.tsx 中的加载 useEffect
+  5. loadCanvas(viewId) → hydrate(newNodes, newEdges)
+```
+
+#### 持久化 hook 适配
+
+`useCanvasPersistence` 通过 `useRef` 跟踪 `activeViewId`，当检测到切换时：
+- 先用旧 viewId 调用 `flushNow` 保存未写入的变更
+- 更新 ref 为新 viewId
+- 重置 `skipHydrate` 标志，避免 hydrate 触发的 store 变更被误当作用户编辑
+
+#### UI 组件
+
+`ViewSwitcher.tsx` — 底部居中浮动面板：
+- **触发器**：显示当前画布名称 + 节点计数 + 画布数量
+- **弹出菜单**：列出所有画布，点击切换；支持行内重命名（双击或铅笔图标）、删除（至少保留 1 个）
+- **快捷创建**：`+` 按钮创建新空画布，自动切换到新画布
+
+#### 后端 workspace.ts
+
+新增函数：`addView(wsPath, name)` / `removeView(wsPath, viewId)` / `renameView(wsPath, viewId, name)` / `saveWorkspaceConfig(wsPath, config)`。`addView` 同时创建空的 `.canvas.json` manifest；`removeView` 同时删除 manifest 文件并确保至少保留一个画布。
 
 ---
 
@@ -501,6 +540,26 @@ type CanvasRPC = {
         params: { noteId: string };
         response: { success: boolean };
       };
+      // ── 多画布视图管理 ──
+      listViews: {
+        params: {};
+        response: {
+          views: Array<{ id: string; name: string; file: string }>;
+          activeViewId: string;
+        };
+      };
+      createView: {
+        params: { name: string };
+        response: { id: string; name: string; file: string };
+      };
+      deleteView: {
+        params: { viewId: string };
+        response: { success: boolean; activeViewId?: string };
+      };
+      renameView: {
+        params: { viewId: string; name: string };
+        response: { success: boolean };
+      };
     };
     messages: {};
   };
@@ -593,6 +652,7 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 - ❌ 文件系统 watcher（外部编辑同步）
 - ❌ 多 workspace 管理 / 欢迎页
+- ❌ 跨画布拖拽节点
 - ❌ frontmatter 无损 round-trip（MVP 接受规范化重写）
 - ❌ Folder children 迁移为 noteId 引用
 - ❌ 独立的 saveNote debounce（content 随 manifest 落盘）
@@ -651,6 +711,9 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 | 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照                             |
 | manifest JSON 损坏               | 保留坏文件副本，尝试从备份恢复                                                        |
 | displayHint 未知值               | 回退 `note` 渲染 + 诊断日志                                                           |
+| 切换画布时有未保存变更           | `setActiveView` 先 `flushNow` 旧画布，`useCanvasPersistence` 监听 `activeViewId` 变化自动 flush |
+| 删除当前激活的画布               | 自动切换到 `views[0]`，后端更新 `workspace.json` 的 `activeViewId`                       |
+| 删除最后一个画布                 | 后端拒绝（`removeView` 返回 `false`），至少保留一个画布                                  |
 
 ---
 

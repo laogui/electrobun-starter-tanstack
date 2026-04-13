@@ -1,9 +1,9 @@
 import {
+  Handle,
+  NodeResizeControl,
+  Position,
   useReactFlow,
   useViewport,
-  NodeResizeControl,
-  Handle,
-  Position,
 } from '@xyflow/react';
 import { Check } from 'lucide-react';
 import { memo, useCallback, useRef, useState } from 'react';
@@ -20,7 +20,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
     return (
       <div
         className={cn(
-          'h-full flex flex-col',
+          'flex h-full flex-col',
           isColorDark(data.color) && 'text-white'
         )}
         style={colorToStyle(data.color)}
@@ -35,8 +35,8 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             {data.title}
           </h2>
         </div>
-        <div className='flex-1 flex items-center justify-center p-6'>
-          <div className='relative w-full aspect-square max-w-[300px] rounded-full overflow-hidden'>
+        <div className='flex flex-1 items-center justify-center p-6'>
+          <div className='relative aspect-square w-full max-w-[300px] overflow-hidden rounded-full'>
             {/* Mock Pie Chart */}
             <div
               className='absolute inset-0 bg-[#555]'
@@ -44,29 +44,29 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
                 clipPath:
                   'polygon(50% 50%, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0)',
               }}
-            ></div>
+            />
             <div
               className='absolute inset-0 bg-[#888]'
               style={{ clipPath: 'polygon(50% 50%, 0 0, 0 50%)' }}
-            ></div>
+            />
             <div
               className='absolute inset-0 bg-[#BBB]'
               style={{ clipPath: 'polygon(50% 50%, 0 50%, 0 100%)' }}
-            ></div>
+            />
             <div
               className='absolute inset-0 bg-[#EEE]'
               style={{ clipPath: 'polygon(50% 50%, 50% 0, 100% 0)' }}
-            ></div>
+            />
           </div>
         </div>
-        <div className='p-6 flex flex-col items-end gap-2'>
+        <div className='flex flex-col items-end gap-2 p-6'>
           {data.pieData?.map((item: any, i: number) => (
             <div key={i} className='flex items-center gap-2'>
               <span className='text-sm font-medium'>{item.label}</span>
               <div
-                className='w-3 h-3 rounded-full'
+                className='size-3 rounded-full'
                 style={{ backgroundColor: item.color }}
-              ></div>
+              />
             </div>
           ))}
         </div>
@@ -78,38 +78,38 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
     return (
       <div
         className={cn(
-          'p-6 h-full flex flex-col',
+          'flex h-full flex-col p-6',
           isColorDark(data.color) && 'text-white'
         )}
         style={colorToStyle(data.color)}
       >
-        <div className='flex items-center gap-2 mb-4'>
-          {data.tag && (
+        <div className='mb-4 flex items-center gap-2'>
+          {data.tag ? (
             <span
-              className='px-2 py-1 text-xs font-semibold rounded-md'
+              className='rounded-md px-2 py-1 text-xs font-semibold'
               style={colorToStyle(data.tagColor)}
             >
               {data.tag}
             </span>
-          )}
+          ) : null}
         </div>
-        {data.title && (
+        {data.title ? (
           <h2
-            className={cn('font-bold mb-4', isFocused ? 'text-3xl' : 'text-xl')}
+            className={cn('mb-4 font-bold', isFocused ? 'text-3xl' : 'text-xl')}
           >
             {data.title}
           </h2>
-        )}
-        <div className='flex-1 overflow-y-auto space-y-1 custom-scrollbar'>
+        ) : null}
+        <div className='custom-scrollbar flex-1 space-y-1 overflow-y-auto'>
           {data.items?.map((item: any, i: number) =>
             item.isHeader ? (
-              <div key={i} className='font-semibold text-gray-800 mt-4 mb-2'>
+              <div key={i} className='mt-4 mb-2 font-semibold text-gray-800'>
                 {item.text}
               </div>
             ) : (
               <div
                 key={i}
-                className='flex items-start gap-3 py-1 group cursor-pointer'
+                className='group flex cursor-pointer items-start gap-3 py-1'
                 onClick={() => {
                   if (onChange) {
                     const newItems = data.items.map(
@@ -122,19 +122,21 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
               >
                 <div
                   className={cn(
-                    'mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors',
+                    'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
                     item.checked
-                      ? 'bg-black border-black'
+                      ? 'border-black bg-black'
                       : 'border-gray-400 group-hover:border-black'
                   )}
                 >
-                  {item.checked && <Check size={12} className='text-white' />}
+                  {item.checked ? (
+                    <Check size={12} className='text-white' />
+                  ) : null}
                 </div>
                 <span
                   className={cn(
-                    'text-sm leading-tight transition-colors',
+                    'text-sm/tight transition-colors',
                     item.checked
-                      ? 'line-through text-gray-400'
+                      ? 'text-gray-400 line-through'
                       : 'text-gray-800'
                   )}
                 >
@@ -144,12 +146,16 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             )
           )}
           {/* Add new item input */}
-          <div className='flex items-center gap-3 mt-2 opacity-50 focus-within:opacity-100 transition-opacity'>
-            <div className='w-4 h-4 rounded border border-gray-400 flex-shrink-0'></div>
+          <div className='mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100'>
+            <div className='size-4 shrink-0 rounded-sm border border-gray-400' />
             <input
               type='text'
               value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
+              placeholder='Add item...'
+              className='w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none'
+              onChange={(e) => {
+                setNewItem(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newItem.trim() && onChange) {
                   onChange({
@@ -162,8 +168,6 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
                   setNewItem('');
                 }
               }}
-              placeholder='Add item...'
-              className='bg-transparent border-none outline-none text-sm w-full placeholder-gray-500'
             />
           </div>
         </div>
@@ -176,19 +180,19 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
     return (
       <div
         className={cn(
-          'p-6 h-full flex flex-col',
+          'flex h-full flex-col p-6',
           isColorDark(data.color) && 'text-white'
         )}
         style={colorToStyle(data.color)}
       >
         <h2
-          className={cn('font-bold mb-4 text-xl', !data.title && 'opacity-40')}
+          className={cn('mb-4 text-xl font-bold', !data.title && 'opacity-40')}
         >
           {data.title || 'Untitled'}
         </h2>
         <div
           className={cn(
-            'whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar text-sm',
+            'custom-scrollbar flex-1 overflow-y-auto text-sm/relaxed whitespace-pre-wrap',
             !data.content && 'opacity-40'
           )}
         >
@@ -206,14 +210,14 @@ const EditableCardContent = ({ data, onChange }: any) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   const handleTitleBlur = useCallback(() => {
-    const text = titleRef.current?.innerText ?? '';
+    const text = titleRef.current?.textContent ?? '';
     if (text !== data.title && onChange) {
       onChange({ title: text });
     }
   }, [data.title, onChange]);
 
   const handleContentBlur = useCallback(() => {
-    const text = contentRef.current?.innerText ?? '';
+    const text = contentRef.current?.textContent ?? '';
     if (text !== data.content && onChange) {
       onChange({ content: text });
     }
@@ -222,7 +226,7 @@ const EditableCardContent = ({ data, onChange }: any) => {
   return (
     <div
       className={cn(
-        'p-6 h-full flex flex-col',
+        'flex h-full flex-col p-6',
         isColorDark(data.color) && 'text-white'
       )}
       style={colorToStyle(data.color)}
@@ -232,7 +236,7 @@ const EditableCardContent = ({ data, onChange }: any) => {
         contentEditable
         suppressContentEditableWarning
         data-placeholder='Untitled'
-        className='font-bold mb-4 text-4xl outline-none cursor-text empty:before:content-[attr(data-placeholder)] empty:before:opacity-40'
+        className='mb-4 cursor-text text-4xl font-bold outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]'
         onBlur={handleTitleBlur}
       >
         {data.title}
@@ -242,7 +246,7 @@ const EditableCardContent = ({ data, onChange }: any) => {
         contentEditable
         suppressContentEditableWarning
         data-placeholder='Write something...'
-        className='whitespace-pre-wrap leading-relaxed flex-1 overflow-y-auto custom-scrollbar text-lg outline-none cursor-text empty:before:content-[attr(data-placeholder)] empty:before:opacity-40'
+        className='custom-scrollbar flex-1 cursor-text overflow-y-auto text-lg/relaxed whitespace-pre-wrap outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]'
         onBlur={handleContentBlur}
       >
         {data.content}
@@ -259,8 +263,8 @@ const CardNode = ({ id, data }: any) => {
   return (
     <div
       className={cn(
-        'w-full h-full group/card',
-        data.isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        'group/card size-full',
+        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
     >
       <NodeResizeControl
@@ -269,12 +273,16 @@ const CardNode = ({ id, data }: any) => {
         maxWidth={800}
         maxHeight={900}
         position='bottom-right'
-        className='!bg-transparent !border-none'
+        className='border-none! bg-transparent!'
         style={{ padding: 0 }}
-        onResizeStart={() => document.body.classList.add('resizing-nwse')}
-        onResizeEnd={() => document.body.classList.remove('resizing-nwse')}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        onResizeEnd={() => {
+          document.body.classList.remove('resizing-nwse');
+        }}
       >
-        <div className='absolute bottom-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity cursor-nwse-resize'>
+        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/card:opacity-100'>
           <svg
             xmlns='http://www.w3.org/2000/svg'
             width='16'
@@ -325,39 +333,41 @@ const CardNode = ({ id, data }: any) => {
       {/* Visual wrapper with hover lift — keeps Handle positions stable */}
       <div
         className={cn(
-          'w-full h-full rounded-3xl shadow-sm border border-black/5 overflow-hidden cursor-pointer',
+          'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-sm',
           'transition-shadow duration-200 ease-out hover:shadow-lg'
         )}
       >
         {isZoomedOut ? (
           <div
             className={cn(
-              'w-full h-full p-6 flex flex-col',
+              'flex size-full flex-col p-6',
               isColorDark(data.color) && 'text-white'
             )}
             style={colorToStyle(data.color)}
           >
-            {data.tag && (
+            {data.tag ? (
               <div
-                className='w-12 h-4 rounded-md mb-4'
+                className='mb-4 h-4 w-12 rounded-md'
                 style={colorToStyle(data.tagColor)}
-              ></div>
-            )}
-            <h2 className='text-2xl font-bold leading-tight'>
+              />
+            ) : null}
+            <h2 className='text-2xl/tight font-bold'>
               {data.title || 'Untitled'}
             </h2>
             <div className='mt-6 space-y-3 opacity-30'>
-              <div className='h-3 bg-current rounded-full w-full'></div>
-              <div className='h-3 bg-current rounded-full w-5/6'></div>
-              <div className='h-3 bg-current rounded-full w-4/6'></div>
-              <div className='h-3 bg-current rounded-full w-full'></div>
-              <div className='h-3 bg-current rounded-full w-3/4'></div>
+              <div className='h-3 w-full rounded-full bg-current' />
+              <div className='h-3 w-5/6 rounded-full bg-current' />
+              <div className='h-3 w-4/6 rounded-full bg-current' />
+              <div className='h-3 w-full rounded-full bg-current' />
+              <div className='h-3 w-3/4 rounded-full bg-current' />
             </div>
           </div>
         ) : (
           <CardContent
             data={data}
-            onChange={(newData: any) => updateNodeData(id, newData)}
+            onChange={(newData: any) => {
+              updateNodeData(id, newData);
+            }}
           />
         )}
       </div>

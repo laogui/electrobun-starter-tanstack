@@ -4,7 +4,7 @@ This file gives Codebuff context about your project: goals, commands, convention
 
 ## What is this project?
 
-An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwind v4, Vite, and xyflow (React Flow). It features a spatial canvas UI with nodes (cards, folders, groups, images, stickies).
+An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwind v4, Vite, and xyflow (React Flow). It features a spatial canvas UI with nodes (cards, folders, groups, images, stickies) and supports multiple canvas views within a single workspace.
 
 ## Quickstart
 
@@ -26,7 +26,7 @@ An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwi
 - **`src/bun/`** — Electrobun main process (Bun runtime). Handles window creation, note/workspace persistence, and decides whether to load packaged view or Vite dev server.
 - **`src/mainview/`** — React renderer loaded into the desktop window.
   - `routes/` — TanStack Router file-based routes. `routeTree.gen.ts` is auto-generated (do not edit).
-  - `components/canvas/` — xyflow canvas: node types (Card, Folder, Group, Image, Sticky), context menu, create menu, focused/folder views.
+  - `components/canvas/` — xyflow canvas: node types (Card, Folder, Group, Image, Sticky), context menu, create menu, focused/folder views, ViewSwitcher (bottom panel for multi-canvas switching).
   - `components/ui/` — Shared UI primitives (shadcn/ui style via `components.json`).
   - `hooks/` — Custom hooks for canvas keyboard, persistence, context menu, helper lines, node creation, node drag.
   - `store/` — Zustand store (`canvasStore.ts`).
@@ -36,10 +36,11 @@ An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwi
 
 ### Data flow
 
-- Zustand store manages canvas state (nodes, edges, selections).
+- Zustand store manages canvas state (nodes, edges, selections, `activeViewId`, `views[]`).
 - TanStack Query handles async data via a shared query client (`queryClient.ts`) with Sonner toast error handling.
-- RPC (`lib/rpc.ts`) bridges renderer ↔ main process communication.
-- Persistence hooks sync canvas state to the main process.
+- RPC (`lib/rpc.ts`) bridges renderer ↔ main process communication (canvas CRUD + view management).
+- Persistence hooks sync canvas state to the main process, using dynamic `activeViewId` (not hardcoded).
+- Multi-canvas: each view has its own `.canvas.json` manifest; `content/*.md` files are shared across views via `noteId`.
 
 ## Key conventions
 

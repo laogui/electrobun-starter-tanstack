@@ -4,7 +4,7 @@ type SettingsRPC = {
   bun: {
     requests: {
       getSettings: {
-        params: {};
+        params: Record<string, unknown>;
         response: { theme: string; locale: string };
       };
       saveSettings: {
@@ -12,11 +12,11 @@ type SettingsRPC = {
         response: { success: boolean };
       };
     };
-    messages: {};
+    messages: Record<string, unknown>;
   };
   webview: {
-    requests: {};
-    messages: {};
+    requests: Record<string, unknown>;
+    messages: Record<string, unknown>;
   };
 };
 
@@ -36,20 +36,19 @@ function applyTheme(theme: string) {
     html.classList.remove('dark');
   } else {
     // system
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      html.classList.add('dark');
-    } else {
-      html.classList.remove('dark');
-    }
+    html.classList.toggle(
+      'dark',
+      globalThis.matchMedia('(prefers-color-scheme: dark)').matches
+    );
   }
 }
 
 function applyLocale(locale: string) {
-  const strings = localeStrings[locale] ?? localeStrings['en'];
+  const strings = localeStrings[locale] ?? localeStrings.en;
   if (!strings) return;
-  const titleEl = document.getElementById('settings-title');
-  const labelLanguage = document.getElementById('label-language');
-  const labelTheme = document.getElementById('label-theme');
+  const titleEl = document.querySelector('#settings-title');
+  const labelLanguage = document.querySelector('#label-language');
+  const labelTheme = document.querySelector('#label-theme');
   if (titleEl) titleEl.textContent = strings.title;
   if (labelLanguage) labelLanguage.textContent = strings.language;
   if (labelTheme) labelTheme.textContent = strings.theme;
@@ -68,12 +67,8 @@ const electrobun = new Electrobun.Electroview({ rpc });
 
 // Wire up UI after DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  const localeSelect = document.getElementById(
-    'locale-select'
-  ) as HTMLSelectElement;
-  const themeSelect = document.getElementById(
-    'theme-select'
-  ) as HTMLSelectElement;
+  const localeSelect = document.querySelector('#locale-select')!;
+  const themeSelect = document.querySelector('#theme-select')!;
 
   // Load initial settings from bun process
   electrobun
@@ -84,8 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
       applyTheme(settings.theme);
       applyLocale(settings.locale);
     })
-    .catch((err: unknown) => {
-      console.warn('[settings] Failed to load settings:', err);
+    .catch((error: unknown) => {
+      console.warn('[settings] Failed to load settings:', error);
     });
 
   function saveCurrentSettings() {
@@ -94,8 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
         theme: themeSelect.value,
         locale: localeSelect.value,
       })
-      .catch((err: unknown) => {
-        console.warn('[settings] Failed to save settings:', err);
+      .catch((error: unknown) => {
+        console.warn('[settings] Failed to save settings:', error);
       });
   }
 
@@ -110,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // React to system theme changes when in "system" mode
-  window
+  globalThis
     .matchMedia('(prefers-color-scheme: dark)')
     .addEventListener('change', () => {
       if (themeSelect.value === 'system') {

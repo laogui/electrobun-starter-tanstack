@@ -39,5 +39,7 @@
   "menu_edit_label": "Edit Label",
   "menu_toggle_animation": "Toggle Animation",
   "menu_toggle_path_type": "Toggle Straight / Curved",
-  "menu_delete_edge": "Delete Connection"
+  "menu_delete_edge": "Delete Connection",
+  "view_new_canvas": "New Canvas",
+  "view_default_name": "Default Canvas"
 }

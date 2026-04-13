@@ -1,8 +1,8 @@
 import {
-  useViewport,
-  NodeResizeControl,
   Handle,
+  NodeResizeControl,
   Position,
+  useViewport,
 } from '@xyflow/react';
 import { Folder } from 'lucide-react';
 import { memo } from 'react';
@@ -18,8 +18,8 @@ const FolderNode = ({ id, data }: any) => {
   return (
     <div
       className={cn(
-        'relative w-full h-full group/folder',
-        data.isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        'group/folder relative size-full',
+        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
     >
       <NodeResizeControl
@@ -28,12 +28,16 @@ const FolderNode = ({ id, data }: any) => {
         maxWidth={600}
         maxHeight={600}
         position='bottom-right'
-        className='!bg-transparent !border-none'
+        className='border-none! bg-transparent!'
         style={{ padding: 0 }}
-        onResizeStart={() => document.body.classList.add('resizing-nwse')}
-        onResizeEnd={() => document.body.classList.remove('resizing-nwse')}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        onResizeEnd={() => {
+          document.body.classList.remove('resizing-nwse');
+        }}
       >
-        <div className='absolute bottom-2 right-2 opacity-0 group-hover/folder:opacity-100 transition-opacity cursor-nwse-resize'>
+        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/folder:opacity-100'>
           <svg
             xmlns='http://www.w3.org/2000/svg'
             width='16'
@@ -91,7 +95,7 @@ const FolderNode = ({ id, data }: any) => {
         {/* Stack backgrounds */}
         <div
           className={cn(
-            'absolute inset-0 bg-white/40 rounded-3xl shadow-sm transition-transform duration-200 ease-out',
+            'absolute inset-0 rounded-3xl bg-white/40 shadow-sm transition-transform duration-200 ease-out',
             data.isDropTarget
               ? 'translate-y-2.5 scale-[0.88]'
               : 'translate-y-1.5 scale-90 group-hover/folder:translate-y-2'
@@ -99,7 +103,7 @@ const FolderNode = ({ id, data }: any) => {
         />
         <div
           className={cn(
-            'absolute inset-0 bg-white/70 rounded-3xl shadow-sm transition-transform duration-200 ease-out',
+            'absolute inset-0 rounded-3xl bg-white/70 shadow-sm transition-transform duration-200 ease-out',
             data.isDropTarget
               ? 'translate-y-1.5 scale-[0.93]'
               : 'translate-y-0.5 scale-95 group-hover/folder:translate-y-1'
@@ -109,15 +113,15 @@ const FolderNode = ({ id, data }: any) => {
         {/* Main folder cover */}
         <div
           className={cn(
-            'absolute inset-0 bg-white rounded-3xl shadow-md p-8 flex flex-col justify-center items-center text-center border transition-all duration-200 ease-out',
+            'absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-white p-8 text-center shadow-md transition-all duration-200 ease-out',
             data.isDropTarget
-              ? 'border-blue-400 border-2 shadow-lg shadow-blue-100 -translate-y-1'
+              ? '-translate-y-1 border-2 border-blue-400 shadow-lg shadow-blue-100'
               : 'border-gray-100 group-hover/folder:-translate-y-0.5'
           )}
         >
           <div
             className={cn(
-              'bg-gray-100 p-4 rounded-2xl mb-6 transition-transform duration-200 ease-out',
+              'mb-6 rounded-2xl bg-gray-100 p-4 transition-transform duration-200 ease-out',
               data.isDropTarget && 'scale-110 rotate-[5deg]'
             )}
           >
@@ -131,8 +135,8 @@ const FolderNode = ({ id, data }: any) => {
           >
             {data.title}
           </h3>
-          {!isZoomedOut && (
-            <p className='text-sm text-gray-500 mt-3'>{data.subtitle}</p>
+          {isZoomedOut ? null : (
+            <p className='mt-3 text-sm text-gray-500'>{data.subtitle}</p>
           )}
         </div>
       </div>

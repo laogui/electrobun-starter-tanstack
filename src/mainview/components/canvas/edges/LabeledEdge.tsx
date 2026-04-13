@@ -3,8 +3,8 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   getSmoothStepPath,
-  type EdgeProps,
 } from '@xyflow/react';
+import type { EdgeProps } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -98,7 +98,7 @@ function LabeledEdgeComponent({
       />
       <EdgeLabelRenderer>
         <div
-          className='pointer-events-auto absolute nodrag nopan'
+          className='nodrag nopan pointer-events-auto absolute'
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
           }}
@@ -108,11 +108,13 @@ function LabeledEdgeComponent({
               ref={inputRef}
               type='text'
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitLabel}
-              onKeyDown={handleKeyDown}
               className='rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100'
               style={{ minWidth: 60, maxWidth: 160 }}
+              onChange={(e) => {
+                setDraft(e.target.value);
+              }}
+              onBlur={commitLabel}
+              onKeyDown={handleKeyDown}
             />
           ) : label ? (
             <button

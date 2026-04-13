@@ -1,17 +1,15 @@
 import {
+  Handle,
+  NodeResizeControl,
+  Position,
   useReactFlow,
   useViewport,
-  NodeResizeControl,
-  Handle,
-  Position,
 } from '@xyflow/react';
 import { ImagePlus } from 'lucide-react';
 import { memo, useCallback, useRef } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
-
-import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = 'conn-handle nodrag';
 
@@ -33,7 +31,7 @@ export const ImageContent = ({
   if (!data.imageUrl) {
     return (
       <div
-        className='w-full h-full flex flex-col items-center justify-center gap-3'
+        className='flex size-full flex-col items-center justify-center gap-3'
         style={colorToStyle(data.color)}
       >
         <ImagePlus size={isFocused ? 64 : 40} className='text-gray-300' />
@@ -43,33 +41,30 @@ export const ImageContent = ({
   }
 
   return (
-    <div
-      className='w-full h-full flex flex-col'
-      style={colorToStyle(data.color)}
-    >
-      <div className='flex-1 min-h-0 overflow-hidden'>
+    <div className='flex size-full flex-col' style={colorToStyle(data.color)}>
+      <div className='min-h-0 flex-1 overflow-hidden'>
         <img
           src={data.imageUrl}
           alt={data.title ?? ''}
           className={cn(
-            'w-full h-full pointer-events-none',
+            'pointer-events-none size-full',
             isFocused ? 'object-contain' : 'object-cover'
           )}
           draggable={false}
         />
       </div>
-      {data.title && (
-        <div className='px-4 py-3 border-t border-black/5'>
+      {data.title ? (
+        <div className='border-t border-black/5 px-4 py-3'>
           <h3
             className={cn(
-              'font-semibold leading-tight truncate',
+              'truncate leading-tight font-semibold',
               isFocused ? 'text-xl' : 'text-sm'
             )}
           >
             {data.title}
           </h3>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -84,13 +79,13 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
     (file: File) => {
       if (!file.type.startsWith('image/')) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.addEventListener('load', (e) => {
         const imageUrl = e.target?.result as string;
         updateNodeData(id, {
           imageUrl,
           title: data.title || file.name.replace(/\.[^.]+$/, ''),
         });
-      };
+      });
       reader.readAsDataURL(file);
     },
     [id, data.title, updateNodeData]
@@ -111,7 +106,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
-      const items = e.clipboardData.items;
+      const { items } = e.clipboardData;
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
@@ -143,8 +138,8 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   return (
     <div
       className={cn(
-        'w-full h-full group/image',
-        data.isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        'group/image size-full',
+        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -156,12 +151,16 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         maxWidth={800}
         maxHeight={900}
         position='bottom-right'
-        className='!bg-transparent !border-none'
+        className='border-none! bg-transparent!'
         style={{ padding: 0 }}
-        onResizeStart={() => document.body.classList.add('resizing-nwse')}
-        onResizeEnd={() => document.body.classList.remove('resizing-nwse')}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        onResizeEnd={() => {
+          document.body.classList.remove('resizing-nwse');
+        }}
       >
-        <div className='absolute bottom-2 right-2 opacity-0 group-hover/image:opacity-100 transition-opacity cursor-nwse-resize'>
+        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/image:opacity-100'>
           <svg
             xmlns='http://www.w3.org/2000/svg'
             width='16'
@@ -219,20 +218,20 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       <div
         className={cn(
-          'w-full h-full rounded-3xl shadow-sm border border-black/5 overflow-hidden cursor-pointer',
+          'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-sm',
           'transition-shadow duration-200 ease-out hover:shadow-lg'
         )}
       >
         {isZoomedOut ? (
           <div
-            className='w-full h-full flex items-center justify-center'
+            className='flex size-full items-center justify-center'
             style={colorToStyle(data.color)}
           >
             {data.imageUrl ? (
               <img
                 src={data.imageUrl}
                 alt=''
-                className='w-full h-full object-cover pointer-events-none'
+                className='pointer-events-none size-full object-cover'
                 draggable={false}
               />
             ) : (
@@ -243,11 +242,11 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
           <ImageContent data={data} />
         ) : (
           <div
-            className='w-full h-full flex flex-col items-center justify-center gap-3'
+            className='flex size-full flex-col items-center justify-center gap-3'
             style={colorToStyle(data.color)}
           >
             <button
-              className='nodrag nopan flex flex-col items-center gap-3 p-6 rounded-2xl hover:bg-black/5 transition-colors cursor-pointer'
+              className='nodrag nopan flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-6 transition-colors hover:bg-black/5'
               onClick={openFilePicker}
             >
               <ImagePlus size={40} className='text-gray-300' />

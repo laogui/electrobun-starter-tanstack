@@ -13,7 +13,14 @@ import {
   noteToCardData,
   saveNote as writeNote,
 } from './notes';
-import { atomicWrite, initWorkspace, loadWorkspaceConfig } from './workspace';
+import {
+  addView,
+  atomicWrite,
+  initWorkspace,
+  loadWorkspaceConfig,
+  removeView,
+  renameView,
+} from './workspace';
 
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -98,6 +105,25 @@ type CanvasRPC = {
       getSettings: {
         params: {};
         response: { theme: string; locale: string };
+      };
+      listViews: {
+        params: {};
+        response: {
+          views: Array<{ id: string; name: string; file: string }>;
+          activeViewId: string;
+        };
+      };
+      createView: {
+        params: { name: string };
+        response: { id: string; name: string; file: string };
+      };
+      deleteView: {
+        params: { viewId: string };
+        response: { success: boolean; activeViewId?: string };
+      };
+      renameView: {
+        params: { viewId: string; name: string };
+        response: { success: boolean };
       };
     };
     messages: {};
@@ -370,6 +396,37 @@ async function main() {
         },
 
         getSettings: () => cachedSettings,
+
+        listViews: async () => {
+          const config = await loadWorkspaceConfig(wsPath);
+          return { views: config.views, activeViewId: config.activeViewId };
+        },
+
+        createView: async ({ name }) => {
+          const entry = await addView(wsPath, name);
+          // Write an empty manifest for the new view
+          await writeManifest(wsPath, entry.file, {
+            schema: 'spatial-canvas/v1',
+            viewId: entry.id,
+            nodes: [],
+            edges: [],
+          });
+          return entry;
+        },
+
+        deleteView: async ({ viewId }) => {
+          const success = await removeView(wsPath, viewId);
+          if (success) {
+            const config = await loadWorkspaceConfig(wsPath);
+            return { success: true, activeViewId: config.activeViewId };
+          }
+          return { success: false };
+        },
+
+        renameView: async ({ viewId, name }) => {
+          const success = await renameView(wsPath, viewId, name);
+          return { success };
+        },
       },
       messages: {},
     },

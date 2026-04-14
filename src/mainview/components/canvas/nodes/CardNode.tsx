@@ -100,7 +100,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             {data.title}
           </h2>
         ) : null}
-        <div className='custom-scrollbar flex-1 space-y-1 overflow-y-auto'>
+        <div className='flex-1 space-y-1 overflow-hidden'>
           {data.items?.map((item: any, i: number) =>
             item.isHeader ? (
               <div key={i} className='mt-4 mb-2 font-semibold text-gray-800'>
@@ -192,7 +192,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
         </h2>
         <div
           className={cn(
-            'custom-scrollbar flex-1 overflow-y-auto text-sm/relaxed whitespace-pre-wrap',
+            'flex-1 overflow-hidden text-sm/relaxed whitespace-pre-wrap',
             !data.content && 'opacity-40'
           )}
         >

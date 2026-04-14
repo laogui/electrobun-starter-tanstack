@@ -1,6 +1,6 @@
 import { useReactFlow } from '@xyflow/react';
 import type { Node, OnNodeDrag } from '@xyflow/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
 import { isDescendant, sortNodesByParent } from '@/lib/canvasUtils';
@@ -16,6 +16,11 @@ export function useNodeDrag() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const rf = useReactFlow();
+
+  /** Original positions of cards before they were pushed aside by a dragging group. */
+  const originalPositionsRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map()
+  );
 
   const findOverlappingFolder = useCallback(
     (draggedNode: Node, allNodes: Array<Node>) => {
@@ -115,11 +120,7 @@ export function useNodeDrag() {
         );
 
         const PADDING = 20;
-        const intersecting = rf
-          .getIntersectingNodes(node)
-          .filter((n) => isContentNode(n) && n.parentId !== node.id);
-
-        if (intersecting.length === 0) return;
+        const savedPositions = originalPositionsRef.current;
 
         const groupInternal = rf.getInternalNode(node.id);
         if (!groupInternal) return;
@@ -128,6 +129,14 @@ export function useNodeDrag() {
         const gy = groupInternal.internals.positionAbsolute.y;
         const gw = groupInternal.measured.width ?? 760;
         const gh = groupInternal.measured.height ?? 380;
+
+        // Check overlap between a rect and the dragging group
+        const overlapsGroup = (
+          rx: number,
+          ry: number,
+          rw: number,
+          rh: number
+        ) => rx < gx + gw && rx + rw > gx && ry < gy + gh && ry + rh > gy;
 
         const otherGroups = rf
           .getNodes()
@@ -157,20 +166,62 @@ export function useNodeDrag() {
 
         setNodes((nds) =>
           nds.map((n) => {
-            if (!intersecting.some((i) => i.id === n.id)) return n;
+            if (!isContentNode(n) || n.parentId === node.id) return n;
+
             const cardInternal = rf.getInternalNode(n.id);
             if (!cardInternal) return n;
 
-            const cx = cardInternal.internals.positionAbsolute.x;
-            const cy = cardInternal.internals.positionAbsolute.y;
             const cw = cardInternal.measured.width ?? 240;
             const ch = cardInternal.measured.height ?? 80;
 
-            const ddx = cx + cw / 2 - (gx + gw / 2);
-            const ddy = cy + ch / 2 - (gy + gh / 2);
+            // Use original position for overlap test to avoid flicker
+            const origPos = savedPositions.get(n.id);
+            let origAbsX: number;
+            let origAbsY: number;
 
-            let newAbsX = cx;
-            let newAbsY = cy;
+            if (origPos) {
+              // Card was previously pushed — test against its original position
+              if (n.parentId) {
+                const parentInternal = rf.getInternalNode(n.parentId);
+                if (parentInternal) {
+                  origAbsX =
+                    origPos.x + parentInternal.internals.positionAbsolute.x;
+                  origAbsY =
+                    origPos.y + parentInternal.internals.positionAbsolute.y;
+                } else {
+                  origAbsX = origPos.x;
+                  origAbsY = origPos.y;
+                }
+              } else {
+                origAbsX = origPos.x;
+                origAbsY = origPos.y;
+              }
+            } else {
+              origAbsX = cardInternal.internals.positionAbsolute.x;
+              origAbsY = cardInternal.internals.positionAbsolute.y;
+            }
+
+            const stillOverlaps = overlapsGroup(origAbsX, origAbsY, cw, ch);
+
+            if (!stillOverlaps) {
+              // Group moved away — restore to original position
+              if (origPos) {
+                savedPositions.delete(n.id);
+                return { ...n, position: { ...origPos } };
+              }
+              return n;
+            }
+
+            // Card's original position overlaps group — push it aside
+            if (!savedPositions.has(n.id)) {
+              savedPositions.set(n.id, { ...n.position });
+            }
+
+            const ddx = origAbsX + cw / 2 - (gx + gw / 2);
+            const ddy = origAbsY + ch / 2 - (gy + gh / 2);
+
+            let newAbsX = origAbsX;
+            let newAbsY = origAbsY;
 
             if (Math.abs(ddx / gw) > Math.abs(ddy / gh)) {
               newAbsX = ddx > 0 ? gx + gw + PADDING : gx - cw - PADDING;
@@ -201,6 +252,7 @@ export function useNodeDrag() {
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_, node) => {
       setDropTargetId(null);
+      originalPositionsRef.current.clear();
 
       if (isContentNode(node)) {
         setNodes((nds) => {

@@ -99,6 +99,21 @@ export async function rpcDeleteNote(noteId: string) {
   return eb.rpc.request.deleteNote({ noteId });
 }
 
+export async function rpcSaveAttachment(
+  dataUrl: string,
+  existingFile?: string
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.saveAttachment({ dataUrl, existingFile });
+}
+
+export async function rpcLoadAttachment(filePath: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) return null;
+  return eb.rpc.request.loadAttachment({ filePath });
+}
+
 export async function rpcGetSettings() {
   const eb = await getElectrobun();
   if (!eb?.rpc) return null;

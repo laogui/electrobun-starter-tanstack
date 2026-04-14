@@ -9,12 +9,14 @@ import { ImagePlus } from 'lucide-react';
 import { memo, useCallback, useRef } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
+import { rpcSaveAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 
 const handleClassName = 'conn-handle nodrag';
 
 export interface ImageData {
   imageUrl: string;
+  imageFile?: string;
   title?: string;
   color: string;
   isHidden?: boolean;
@@ -81,14 +83,25 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       const reader = new FileReader();
       reader.addEventListener('load', (e) => {
         const imageUrl = e.target?.result as string;
-        updateNodeData(id, {
-          imageUrl,
-          title: data.title || file.name.replace(/\.[^.]+$/, ''),
-        });
+        const title = data.title || file.name.replace(/\.[^.]+$/, '');
+
+        // Show image immediately with data URL
+        updateNodeData(id, { imageUrl, title });
+
+        // Save to local file in background
+        rpcSaveAttachment(imageUrl, (data as ImageData).imageFile)
+          .then((result) => {
+            if (result?.filePath) {
+              updateNodeData(id, { imageFile: result.filePath });
+            }
+          })
+          .catch((err) => {
+            console.error('[ImageNode] Failed to save attachment:', err);
+          });
       });
       reader.readAsDataURL(file);
     },
-    [id, data.title, updateNodeData]
+    [id, data, updateNodeData]
   );
 
   const handleDrop = useCallback(

@@ -98,6 +98,14 @@ type CanvasRPC = {
         params: { noteId: string };
         response: { success: boolean };
       };
+      saveAttachment: {
+        params: { dataUrl: string; existingFile?: string };
+        response: { filePath: string };
+      };
+      loadAttachment: {
+        params: { filePath: string };
+        response: { dataUrl: string } | null;
+      };
       openSettings: {
         params: {};
         response: { success: boolean };
@@ -247,7 +255,32 @@ async function main() {
 
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
-              // Only hydrate card nodes that have a noteId reference
+              // Hydrate image nodes: read attachment file → data URL
+              if (
+                node.type === 'image' &&
+                node.data.imageFile &&
+                !node.data.imageUrl
+              ) {
+                const fullPath = join(wsPath, node.data.imageFile as string);
+                const file = Bun.file(fullPath);
+                if (await file.exists()) {
+                  const buffer = await file.arrayBuffer();
+                  const mimeType = file.type || 'image/png';
+                  const base64 = Buffer.from(buffer).toString('base64');
+                  return {
+                    ...node,
+                    data: {
+                      ...node.data,
+                      imageUrl: `data:${mimeType};base64,${base64}`,
+                    },
+                  };
+                }
+                console.warn(
+                  `[persistence] Attachment not found: ${node.data.imageFile}`
+                );
+              }
+
+              // Hydrate card nodes that have a noteId reference
               if (node.type === 'card' && node.data.noteId) {
                 const filePath =
                   (node.data.file as string) ||
@@ -255,7 +288,6 @@ async function main() {
                 if (filePath) {
                   const doc = await loadNote(wsPath, filePath);
                   if (doc) {
-                    // Use the shared helper that handles checklist parsing
                     const hydrated = noteToCardData(doc);
                     return {
                       ...node,
@@ -267,7 +299,6 @@ async function main() {
                     };
                   }
                 }
-                // .md file missing → return node as-is (broken reference)
                 console.warn(
                   `[persistence] Note file not found for noteId=${node.data.noteId}`
                 );
@@ -291,9 +322,26 @@ async function main() {
           // Build note index so we can find existing .md files
           const noteIndex = await buildNoteIndex(wsPath);
 
-          // Process nodes: extract card content into .md files
+          // Process nodes: extract card content into .md files, strip image data
           const manifestNodes = await Promise.all(
             nodes.map(async (node) => {
+              // Image nodes: strip imageUrl (large base64), keep imageFile ref
+              if (node.type === 'image') {
+                const { imageUrl, ...restData } = node.data as Record<
+                  string,
+                  unknown
+                >;
+                return {
+                  id: node.id,
+                  type: node.type,
+                  position: node.position,
+                  ...(node.style ? { style: node.style } : {}),
+                  ...(node.parentId ? { parentId: node.parentId } : {}),
+                  ...(node.extent ? { extent: node.extent } : {}),
+                  data: restData,
+                };
+              }
+
               // Only extract content for card nodes
               if (node.type !== 'card') return node;
 
@@ -384,6 +432,47 @@ async function main() {
 
           const deleted = await deleteNoteFile(wsPath, filePath);
           return { success: deleted };
+        },
+
+        saveAttachment: async ({ dataUrl, existingFile }) => {
+          const match = dataUrl.match(/^data:(image\/([a-z+]+));base64,(.+)$/i);
+          if (!match) throw new Error('Invalid data URL');
+          const mimeSubtype = match[2]!;
+          const base64Data = match[3]!;
+
+          // Map MIME subtype to file extension
+          const extMap: Record<string, string> = {
+            jpeg: 'jpg',
+            png: 'png',
+            gif: 'gif',
+            webp: 'webp',
+            svg: 'svg',
+            'svg+xml': 'svg',
+            bmp: 'bmp',
+            tiff: 'tiff',
+          };
+          const ext = extMap[mimeSubtype.toLowerCase()] || 'png';
+
+          // If updating an existing file, overwrite it
+          const filePath =
+            existingFile ||
+            `attachments/img_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+          const fullPath = join(wsPath, filePath);
+          const buffer = Buffer.from(base64Data, 'base64');
+          await Bun.write(fullPath, new Uint8Array(buffer));
+
+          return { filePath };
+        },
+
+        loadAttachment: async ({ filePath }) => {
+          const fullPath = join(wsPath, filePath);
+          const file = Bun.file(fullPath);
+          if (!(await file.exists())) return null;
+
+          const buffer = await file.arrayBuffer();
+          const mimeType = file.type || 'image/png';
+          const base64 = Buffer.from(buffer).toString('base64');
+          return { dataUrl: `data:${mimeType};base64,${base64}` };
         },
 
         openSettings: () => {

@@ -178,6 +178,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   addConnection: (connection) => {
+    if (connection.source === connection.target) return;
     get().saveSnapshot();
     set((s) => ({
       edges: addEdge({ ...connection, type: 'labeledEdge' }, s.edges),
@@ -237,12 +238,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const current = get().activeViewId;
     if (viewId === current) return;
 
-    // Clear UI state for view switch
+    // Clear UI state for view switch (keep clipboard for cross-view paste)
     set({
       activeViewId: viewId,
       focusedNode: null,
       focusedFolder: null,
-      clipboard: [],
       _undoRedo: createUndoRedoState(),
       _hydrated: false,
     });

@@ -4,17 +4,24 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useCanvasStore } from '@/store/canvasStore';
 
 function resetStore() {
+  // Use the store's reset() to clear undo/redo too, then set remaining fields
+  useCanvasStore.getState().reset();
   useCanvasStore.setState({
-    nodes: [],
-    edges: [],
     clipboard: [],
-    focusedNode: null,
-    focusedFolder: null,
     createMenuOpen: false,
     nodeIdCounter: 100,
     editingEdgeId: null,
-    _hydrated: false,
   });
+}
+
+/** Minimal rect-like object for tests (DOMRect is not available in Node). */
+function fakeRect(
+  x = 0,
+  y = 0,
+  width = 100,
+  height = 100
+): DOMRect {
+  return { x, y, width, height, top: y, left: x, bottom: y + height, right: x + width, toJSON: () => ({}) } as DOMRect;
 }
 
 function makeNode(id: string, overrides?: Partial<Node>): Node {
@@ -235,7 +242,7 @@ describe('canvasStore — UI state', () => {
     const item = {
       id: 'node-1',
       data: {},
-      rect: new DOMRect(0, 0, 100, 100),
+      rect: fakeRect(0, 0, 100, 100),
     };
 
     useCanvasStore.getState().setFocusedNode(item);
@@ -278,7 +285,7 @@ describe('canvasStore — hydration', () => {
       nodes: [makeNode('a')],
       edges: [{ id: 'e1', source: 'a', target: 'b' }],
       _hydrated: true,
-      focusedNode: { id: 'a', data: {}, rect: new DOMRect() },
+      focusedNode: { id: 'a', data: {}, rect: fakeRect() },
     });
 
     useCanvasStore.getState().reset();

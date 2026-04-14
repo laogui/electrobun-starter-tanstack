@@ -12,7 +12,8 @@
 - `bun run lint` — runs ESLint with `--fix` and may modify files
 - `bun run format` — runs `oxfmt --write .` and may modify files
 - `bun run ci` — runs type-check, lint, and format concurrently
-- Tests: there is currently no `test` script and no committed test files. `vitest` is installed, so use `bunx vitest run` for all tests or `bunx vitest run src/path/to/file.test.tsx` for a single test file when tests are added.
+- `bun run test` — runs all Vitest unit tests once (`vitest run`)
+- `bun run test:watch` — runs Vitest in watch mode
 
 Use `package.json` as the source of truth for scripts: `README.md` still mentions `bun run build` and `bun run build:prod`, but those scripts are not present.
 

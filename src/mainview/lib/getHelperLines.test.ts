@@ -108,19 +108,19 @@ describe('getHelperLines', () => {
   });
 
   it('uses style dimensions when measured is absent', () => {
+    const nodeWidth = 200;
     const nodes = [
-      makeNode('a', 0, 0, 'card', { width: 200, height: 200 }),
-      makeNode('b', 200, 0, 'card', { width: 200, height: 200 }),
+      makeNode('a', 0, 0, 'card', { width: nodeWidth, height: 200 }),
+      makeNode('b', 200, 0, 'card', { width: nodeWidth, height: 200 }),
     ];
-    // Right edge of 'a' (0 + 200 = 200) aligns with left edge of 'b' (200)
+    // Drag 'a' to x=1. Its right edge (1 + 200 = 201) is 1px from 'b' left (200).
     const change = makeChange('a', 1, 0);
 
     const result = getHelperLines(change, nodes);
 
-    // Left-to-left alignment should snap (1 vs 200 distance is 199, too far).
-    // But right-of-a to left-of-b: (1 + 200 = 201) vs 200, distance = 1 — should snap
+    // Snap aligns right-of-a with left-of-b: snapX = bLeft - nodeWidth = 0
     expect(result.vertical).toBe(200);
-    expect(result.snapPosition.x).toBe(0); // snapX = nodeLeft - dragW = 200 - 200 = 0
+    expect(result.snapPosition.x).toBe(0);
   });
 
   it('picks the closest alignment among multiple candidates', () => {

@@ -175,7 +175,9 @@ export async function createNote(
         .replaceAll(/^-|-$/g, '')
         .slice(0, 50) || noteId
     : noteId;
-  const fileName = `${slug}.md`;
+  // Include noteId suffix to guarantee uniqueness across notes with the same title
+  const idSuffix = noteId.slice(-8);
+  const fileName = `${slug}-${idSuffix}.md`;
   const filePath = `content/${fileName}`;
   const now = new Date().toISOString();
   const frontmatter: NoteFrontmatter = {

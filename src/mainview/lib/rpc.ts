@@ -5,14 +5,18 @@
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
-const electrobunInstance: any = null;
 let initPromise: Promise<any> | null = null;
+/** True when we know for certain this is not an Electrobun environment. */
+let notElectrobun = false;
+const MAX_INIT_RETRIES = 3;
+let initRetries = 0;
 
 async function initElectrobun() {
   if ((globalThis as any).__electrobunWebviewId === undefined) {
     console.warn(
       '[persistence] Not running inside Electrobun — persistence disabled'
     );
+    notElectrobun = true;
     return null;
   }
   try {
@@ -50,8 +54,22 @@ async function initElectrobun() {
 }
 
 async function getElectrobun() {
+  // Permanently disabled when not in Electrobun environment
+  if (notElectrobun) return null;
+
   if (!initPromise) {
-    initPromise = initElectrobun();
+    initPromise = initElectrobun().then((instance) => {
+      if (
+        instance === null &&
+        !notElectrobun &&
+        initRetries < MAX_INIT_RETRIES
+      ) {
+        // Transient failure — allow retry on next call
+        initRetries += 1;
+        initPromise = null;
+      }
+      return instance;
+    });
   }
   return await initPromise;
 }

@@ -180,7 +180,8 @@ describe('notes', () => {
     );
     const savedPath = join(workspaceRoot, filePath);
 
-    expect(filePath).toBe('content/morning-plan.md');
+    // filename now includes noteId suffix to guarantee uniqueness
+    expect(filePath).toBe('content/morning-plan-note-3.md');
     expect(existsSync(savedPath)).toBe(true);
 
     const doc = await loadNote(workspaceRoot, filePath);

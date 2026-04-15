@@ -98,7 +98,11 @@ describe('manifest', () => {
       'views',
       'view-1.canvas.json'
     );
-    expect(renameMock).toHaveBeenCalledWith(`${savedPath}.tmp`, savedPath);
+    // tmp filename now includes a random suffix — only assert the final destination
+    expect(renameMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^.*view-1\.canvas\.json\.[0-9a-f]+\.tmp$/),
+      savedPath
+    );
     await expect(
       loadManifest(workspaceRoot, 'views/view-1.canvas.json')
     ).resolves.toEqual(manifest);

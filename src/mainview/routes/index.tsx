@@ -82,7 +82,8 @@ function CanvasComponent() {
           const { nodes, edges } = useCanvasStore.getState();
           const sanitized = sanitizeForPersistence(nodes, edges);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          console.log('[persistence] Seeded canvas from initialNodes');
+          // Mark hydration complete so persistence hook doesn't skip the first real edit
+          hydrate(nodes, edges);
         }
       })
       .catch((error) => {

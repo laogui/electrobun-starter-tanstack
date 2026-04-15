@@ -59,12 +59,12 @@ export async function loadWorkspaceConfig(
   return DEFAULT_CONFIG;
 }
 
-/** Atomic write: write to .tmp then rename */
+/** Atomic write: write to a unique .tmp then rename */
 export async function atomicWrite(
   filePath: string,
   data: string
 ): Promise<void> {
-  const tmp = `${filePath}.tmp`;
+  const tmp = `${filePath}.${crypto.randomUUID().slice(0, 8)}.tmp`;
   await Bun.write(tmp, data);
   await rename(tmp, filePath);
 }

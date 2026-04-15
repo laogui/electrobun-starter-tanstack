@@ -322,9 +322,34 @@ async function main() {
           // Build note index so we can find existing .md files
           const noteIndex = await buildNoteIndex(wsPath);
 
-          // Process nodes: extract card content into .md files, strip image data
+          // Phase 1: Serially pre-allocate file paths for new card notes
+          // to avoid concurrent createNote calls producing conflicting paths.
+          const nodePathMap = new Map<number, string>();
+          for (const [idx, node] of nodes.entries()) {
+            if (node.type !== 'card') continue;
+            const noteId =
+              (node.data.noteId as string) ||
+              `note_${crypto.randomUUID().slice(0, 8)}`;
+            // Attach noteId so phase 2 can read it back
+            node.data.noteId = noteId;
+            const existingFile = noteIndex.get(noteId);
+            if (!existingFile) {
+              const filePath = await createNote(
+                wsPath,
+                noteId,
+                String(node.data.title || ''),
+                String(node.data.type || 'note')
+              );
+              noteIndex.set(noteId, filePath);
+              nodePathMap.set(idx, filePath);
+            } else {
+              nodePathMap.set(idx, existingFile);
+            }
+          }
+
+          // Phase 2: Write content in parallel (paths are now unique)
           const manifestNodes = await Promise.all(
-            nodes.map(async (node) => {
+            nodes.map(async (node, idx) => {
               // Image nodes: strip imageUrl (large base64), keep imageFile ref
               if (node.type === 'image') {
                 const { imageUrl, ...restData } = node.data as Record<
@@ -345,18 +370,13 @@ async function main() {
               // Only extract content for card nodes
               if (node.type !== 'card') return node;
 
-              // Assign noteId if not present
-              const noteId =
-                (node.data.noteId as string) ||
-                `note_${crypto.randomUUID().slice(0, 8)}`;
+              const noteId = node.data.noteId as string;
+              const filePath = nodePathMap.get(idx)!;
 
               // Read existing frontmatter to preserve createdAt
-              const existingFile = noteIndex.get(noteId);
               let existingFm: Record<string, unknown> | undefined;
-              if (existingFile) {
-                const doc = await loadNote(wsPath, existingFile);
-                if (doc) existingFm = doc.frontmatter;
-              }
+              const doc = await loadNote(wsPath, filePath);
+              if (doc) existingFm = doc.frontmatter;
 
               // Convert node data to frontmatter + body
               const { frontmatter, body } = cardDataToNote(
@@ -365,22 +385,8 @@ async function main() {
                 existingFm
               );
 
-              // Write .md file (create or update)
-              let filePath: string;
-              if (existingFile) {
-                filePath = existingFile;
-                await writeNote(wsPath, filePath, frontmatter, body);
-              } else {
-                filePath = await createNote(
-                  wsPath,
-                  noteId,
-                  String(node.data.title || ''),
-                  String(frontmatter.displayHint)
-                );
-                // createNote writes frontmatter but with empty body; rewrite with actual body
-                await writeNote(wsPath, filePath, frontmatter, body);
-                noteIndex.set(noteId, filePath);
-              }
+              // Write .md file
+              await writeNote(wsPath, filePath, frontmatter, body);
 
               // Return manifest-only node: strip content fields, keep reference
               return {

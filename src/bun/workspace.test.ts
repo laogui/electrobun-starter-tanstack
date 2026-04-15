@@ -128,7 +128,11 @@ describe('workspace', () => {
     const targetPath = join(workspaceRoot, 'data.json');
     await atomicWrite(targetPath, '{"ok":true}');
 
-    expect(renameMock).toHaveBeenCalledWith(`${targetPath}.tmp`, targetPath);
+    // tmp filename now includes a random suffix — only assert the final destination
+    expect(renameMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^.*data\.json\.[0-9a-f]+\.tmp$/),
+      targetPath
+    );
     expect(readFileSync(targetPath, 'utf8')).toBe('{"ok":true}');
   });
 

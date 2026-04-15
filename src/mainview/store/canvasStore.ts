@@ -238,9 +238,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const current = get().activeViewId;
     if (viewId === current) return;
 
-    // Clear UI state for view switch (keep clipboard for cross-view paste)
+    // Clear canvas data AND UI state for view switch (keep clipboard for cross-view paste)
     set({
       activeViewId: viewId,
+      nodes: [],
+      edges: [],
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
@@ -263,15 +265,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   pasteClipboard: (offset = 30) => {
-    const { clipboard } = get();
+    const { clipboard, nodes: currentNodes } = get();
     if (clipboard.length === 0) return;
     get().saveSnapshot();
-    const newNodes = clipboard.map((n) => ({
-      ...n,
-      id: `paste-${nanoid(8)}`,
-      position: { x: n.position.x + offset, y: n.position.y + offset },
-      selected: true,
-    }));
+    const existingIds = new Set(currentNodes.map((n) => n.id));
+    const newNodes = clipboard.map((n) => {
+      // Strip parentId/extent if the parent doesn't exist in the current view
+      const keepParent = n.parentId != null && existingIds.has(n.parentId);
+      const { parentId, extent, ...rest } = n as any;
+      return {
+        ...rest,
+        ...(keepParent ? { parentId, extent } : {}),
+        id: `paste-${nanoid(8)}`,
+        position: { x: n.position.x + offset, y: n.position.y + offset },
+        selected: true,
+      };
+    });
     set((s) => ({
       nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), ...newNodes],
     }));

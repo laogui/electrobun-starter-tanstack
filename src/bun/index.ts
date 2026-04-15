@@ -27,11 +27,11 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 
-async function sleep(ms: number) {
+export async function sleep(ms: number) {
   return await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForDevServer(): Promise<boolean> {
+export async function waitForDevServer(): Promise<boolean> {
   for (let attempt = 0; attempt < DEV_SERVER_RETRY_COUNT; attempt += 1) {
     try {
       await fetch(DEV_SERVER_URL, { method: 'HEAD' });
@@ -45,7 +45,7 @@ async function waitForDevServer(): Promise<boolean> {
 }
 
 // Check if Vite dev server is running for HMR
-async function getMainViewUrl(): Promise<string> {
+export async function getMainViewUrl(): Promise<string> {
   const channel = await Updater.localInfo.channel();
   if (channel === 'dev') {
     const isDevServerReady = await waitForDevServer();
@@ -169,7 +169,7 @@ interface AppSettings {
   locale: string;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { theme: 'system', locale: 'en' };
+export const DEFAULT_SETTINGS: AppSettings = { theme: 'system', locale: 'en' };
 
 // Cached in memory, backed by settings.json on disk
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -178,7 +178,7 @@ let settingsWindow: BrowserWindow | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
 
-async function loadSettings(wsPath: string): Promise<AppSettings> {
+export async function loadSettings(wsPath: string): Promise<AppSettings> {
   settingsFilePath = join(wsPath, '.spatial', 'settings.json');
   const file = Bun.file(settingsFilePath);
   if (await file.exists()) {
@@ -191,7 +191,7 @@ async function loadSettings(wsPath: string): Promise<AppSettings> {
   return cachedSettings;
 }
 
-async function persistSettings(settings: AppSettings) {
+export async function persistSettings(settings: AppSettings) {
   cachedSettings = settings;
   if (settingsFilePath) {
     await atomicWrite(settingsFilePath, JSON.stringify(settings, null, 2));

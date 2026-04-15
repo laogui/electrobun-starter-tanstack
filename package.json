@@ -13,6 +13,7 @@
     "format": "oxfmt --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "ci": "concurrently \"bun run type-check\" \"bun run lint\" \"bun run format\"",
     "machine-translate": "inlang machine translate --project project.inlang",
     "check": "ultracite check",
@@ -61,7 +62,9 @@
     "@tanstack/react-query-devtools": "^5.91.3",
     "@tanstack/react-router-devtools": "^1.163.3",
     "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/bun": "latest",
     "@types/react": "19.2.13",
@@ -76,6 +79,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-react-you-might-not-need-an-effect": "^0.8.5",
+    "jsdom": "^26.1.0",
     "lefthook": "^2.1.5",
     "lint-staged": "^16.4.0",
     "oxfmt": "^0.44.0",
@@ -86,6 +90,7 @@
     "ultracite": "7.5.0",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
+    "@vitest/coverage-v8": "^4.0.18",
     "web-vitals": "^5.1.0"
   },
   "lint-staged": {

@@ -1,0 +1,199 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+
+const state = {
+  nodes: [
+    {
+      id: 'group-1',
+      type: 'group',
+      position: { x: 100, y: 100 },
+      data: { active: false },
+      style: { width: 500, height: 300 },
+    },
+    {
+      id: 'folder-1',
+      type: 'folder',
+      position: { x: 20, y: 20 },
+      data: { title: 'Folder', children: [] },
+      measured: { width: 350, height: 350 },
+      style: { width: 350, height: 350 },
+    },
+    {
+      id: 'card-1',
+      type: 'card',
+      parentId: 'group-1',
+      extent: 'parent' as const,
+      position: { x: 20, y: 30 },
+      data: {
+        title: 'Card',
+        color: '#fff',
+        isHidden: true,
+        isDropTarget: true,
+      },
+      style: { width: 350, height: 450 },
+    },
+  ],
+};
+
+const rfMock = {
+  getInternalNode: vi.fn((id: string) => {
+    if (id === 'card-1') {
+      return {
+        internals: { positionAbsolute: { x: 140, y: 160 } },
+        measured: { width: 350, height: 450 },
+      };
+    }
+    if (id === 'group-1') {
+      return {
+        internals: { positionAbsolute: { x: 100, y: 100 } },
+        measured: { width: 500, height: 300 },
+      };
+    }
+    if (id === 'folder-1') {
+      return {
+        internals: { positionAbsolute: { x: 20, y: 20 } },
+        measured: { width: 350, height: 350 },
+      };
+    }
+    return null;
+  }),
+  getIntersectingNodes: vi.fn(() => [state.nodes[0]]),
+  getNodes: vi.fn(() => state.nodes),
+};
+
+const saveSnapshotMock = vi.fn();
+const setNodesMock = vi.fn((updater: unknown) => {
+  state.nodes =
+    typeof updater === 'function'
+      ? (updater as (nodes: typeof state.nodes) => typeof state.nodes)(
+          state.nodes
+        )
+      : (updater as typeof state.nodes);
+});
+
+vi.mock('@xyflow/react', () => ({
+  useReactFlow: () => rfMock,
+}));
+
+vi.mock('@/store/canvasStore', () => ({
+  useCanvasStore: (selector: (state: Record<string, unknown>) => unknown) =>
+    selector({
+      setNodes: setNodesMock,
+      saveSnapshot: saveSnapshotMock,
+    }),
+}));
+
+import { useNodeDrag } from '@/hooks/useNodeDrag';
+
+const Harness = () => {
+  const {
+    dropTargetId,
+    activeGroupId,
+    onNodeDragStart,
+    onNodeDrag,
+    onNodeDragStop,
+  } = useNodeDrag();
+
+  return (
+    <div>
+      <button
+        type='button'
+        onClick={() => {
+          onNodeDragStart(
+            {} as never,
+            {
+              id: 'card-1',
+              type: 'card',
+              parentId: 'group-1',
+              position: { x: 20, y: 30 },
+              data: { title: 'Card', color: '#fff' },
+            } as never
+          );
+        }}
+      >
+        drag-start
+      </button>
+      <button
+        type='button'
+        onClick={() => {
+          onNodeDrag(
+            {} as never,
+            {
+              id: 'card-1',
+              type: 'card',
+              position: { x: 40, y: 60 },
+              data: { title: 'Card', color: '#fff' },
+              measured: { width: 350, height: 450 },
+              style: { width: 350, height: 450 },
+            } as never
+          );
+        }}
+      >
+        dragging
+      </button>
+      <button
+        type='button'
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'card-1',
+              type: 'card',
+              position: { x: 40, y: 60 },
+              data: { title: 'Card', color: '#fff' },
+              measured: { width: 350, height: 450 },
+              style: { width: 350, height: 450 },
+            } as never
+          );
+        }}
+      >
+        drag-stop
+      </button>
+      <output aria-label='drop-target'>{dropTargetId ?? 'none'}</output>
+      <output aria-label='active-group'>{activeGroupId ?? 'none'}</output>
+    </div>
+  );
+};
+
+describe('useNodeDrag', () => {
+  it('detaches parented nodes and saves snapshot on drag start', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-start' }));
+
+    expect(saveSnapshotMock).toHaveBeenCalled();
+    expect(state.nodes.find((node) => node.id === 'card-1')).toMatchObject({
+      parentId: undefined,
+      extent: undefined,
+      position: { x: 140, y: 160 },
+    });
+    expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+  });
+
+  it('tracks active targets while dragging and nests into folder on stop', () => {
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'dragging' }));
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('folder-1');
+    expect(setNodesMock).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'drag-stop' }));
+
+    expect(state.nodes.find((node) => node.id === 'card-1')).toBeUndefined();
+    expect(state.nodes.find((node) => node.id === 'folder-1')).toMatchObject({
+      data: {
+        title: '1 items',
+        children: [
+          {
+            id: 'card-1',
+            type: 'card',
+            data: { title: 'Card', color: '#fff' },
+          },
+        ],
+      },
+    });
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
+    expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+  });
+});

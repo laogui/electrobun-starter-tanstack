@@ -1,6 +1,21 @@
-import type { Node } from '@xyflow/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../paraglide/messages.js', () => ({
+  default_folder_title: () => 'New Folder',
+  default_new_group_label: () => 'New Group',
+}));
+
+import {
+  CARD_H,
+  CARD_W,
+  FOLDER_H,
+  FOLDER_W,
+  IMAGE_H,
+  IMAGE_W,
+  STICKY_H,
+  STICKY_W,
+} from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
 
 function resetStore() {
@@ -15,13 +30,18 @@ function resetStore() {
 }
 
 /** Minimal rect-like object for tests (DOMRect is not available in Node). */
-function fakeRect(
-  x = 0,
-  y = 0,
-  width = 100,
-  height = 100
-): DOMRect {
-  return { x, y, width, height, top: y, left: x, bottom: y + height, right: x + width, toJSON: () => ({}) } as DOMRect;
+function fakeRect(x = 0, y = 0, width = 100, height = 100): DOMRect {
+  return {
+    x,
+    y,
+    width,
+    height,
+    top: y,
+    left: x,
+    bottom: y + height,
+    right: x + width,
+    toJSON: () => ({}),
+  } as DOMRect;
 }
 
 function makeNode(id: string, overrides?: Partial<Node>): Node {
@@ -34,8 +54,26 @@ function makeNode(id: string, overrides?: Partial<Node>): Node {
   };
 }
 
+function createRfInstance(viewport: {
+  x: number;
+  y: number;
+  zoom: number;
+}): ReactFlowInstance<any, any> {
+  return {
+    getViewport: () => viewport,
+  } as ReactFlowInstance<any, any>;
+}
+
+beforeEach(() => {
+  vi.stubGlobal('window', {
+    innerWidth: 1280,
+    innerHeight: 720,
+  });
+});
+
 afterEach(() => {
   resetStore();
+  vi.unstubAllGlobals();
 });
 
 describe('canvasStore — node operations', () => {
@@ -104,10 +142,35 @@ describe('canvasStore — node operations', () => {
 });
 
 describe('canvasStore — edge operations', () => {
+  it('addConnection ignores self connections', () => {
+    const saveSnapshot = vi.spyOn(useCanvasStore.getState(), 'saveSnapshot');
+
+    useCanvasStore
+      .getState()
+      .addConnection({ source: 'a', target: 'a' } as Connection);
+
+    expect(useCanvasStore.getState().edges).toHaveLength(0);
+    expect(saveSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('addConnection adds a labeled edge and saves a snapshot', () => {
+    const saveSnapshot = vi.spyOn(useCanvasStore.getState(), 'saveSnapshot');
+
+    useCanvasStore
+      .getState()
+      .addConnection({ source: 'a', target: 'b' } as Connection);
+
+    const edge = useCanvasStore.getState().edges[0]!;
+    expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    expect(edge.source).toBe('a');
+    expect(edge.target).toBe('b');
+    expect(edge.type).toBe('labeledEdge');
+  });
+
   it('setEdges replaces the edge array', () => {
-    useCanvasStore.getState().setEdges([
-      { id: 'e1', source: 'a', target: 'b' },
-    ]);
+    useCanvasStore
+      .getState()
+      .setEdges([{ id: 'e1', source: 'a', target: 'b' }]);
 
     expect(useCanvasStore.getState().edges).toHaveLength(1);
   });
@@ -238,6 +301,41 @@ describe('canvasStore — undo/redo', () => {
 });
 
 describe('canvasStore — UI state', () => {
+  it('setFocusedFolder updates focused folder', () => {
+    const item = {
+      id: 'folder-1',
+      data: {},
+      rect: fakeRect(0, 0, 200, 200),
+    };
+
+    useCanvasStore.getState().setFocusedFolder(item);
+
+    expect(useCanvasStore.getState().focusedFolder).toBe(item);
+  });
+
+  it('setViews replaces the available views', () => {
+    const views = [
+      { id: 'default', name: 'Default Canvas' },
+      { id: 'focus', name: 'Focus Mode' },
+    ];
+
+    useCanvasStore.getState().setViews(views);
+
+    expect(useCanvasStore.getState().views).toEqual(views);
+  });
+
+  it('setActiveViewId updates the active view id directly', () => {
+    useCanvasStore.getState().setActiveViewId('focus');
+
+    expect(useCanvasStore.getState().activeViewId).toBe('focus');
+  });
+
+  it('setEditingEdgeId updates the editing edge id', () => {
+    useCanvasStore.getState().setEditingEdgeId('edge-1');
+
+    expect(useCanvasStore.getState().editingEdgeId).toBe('edge-1');
+  });
+
   it('setFocusedNode updates focused node', () => {
     const item = {
       id: 'node-1',
@@ -264,6 +362,50 @@ describe('canvasStore — UI state', () => {
 
     expect(id1).toBe('new-101');
     expect(id2).toBe('new-102');
+  });
+});
+
+describe('canvasStore — multi-view', () => {
+  it('setActiveView does nothing when switching to the current view', async () => {
+    const originalUndoRedo = useCanvasStore.getState()._undoRedo;
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      focusedNode: { id: 'node-1', data: {}, rect: fakeRect() },
+      focusedFolder: { id: 'folder-1', data: {}, rect: fakeRect() },
+      _hydrated: true,
+    });
+
+    await useCanvasStore.getState().setActiveView('default');
+    const state = useCanvasStore.getState();
+
+    expect(state.activeViewId).toBe('default');
+    expect(state.focusedNode?.id).toBe('node-1');
+    expect(state.focusedFolder?.id).toBe('folder-1');
+    expect(state._undoRedo).toBe(originalUndoRedo);
+    expect(state._hydrated).toBe(true);
+  });
+
+  it('setActiveView resets view-specific UI state when switching', async () => {
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      focusedNode: { id: 'node-1', data: {}, rect: fakeRect() },
+      focusedFolder: { id: 'folder-1', data: {}, rect: fakeRect() },
+      _hydrated: true,
+      _undoRedo: {
+        past: [{ nodes: [makeNode('a')], edges: [] }],
+        future: [{ nodes: [makeNode('b')], edges: [] }],
+      },
+    });
+
+    await useCanvasStore.getState().setActiveView('focus');
+    const state = useCanvasStore.getState();
+
+    expect(state.activeViewId).toBe('focus');
+    expect(state.focusedNode).toBeNull();
+    expect(state.focusedFolder).toBeNull();
+    expect(state._hydrated).toBe(false);
+    expect(state._undoRedo.past).toEqual([]);
+    expect(state._undoRedo.future).toEqual([]);
   });
 });
 
@@ -305,7 +447,10 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('a');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<string, unknown>;
+    const data = useCanvasStore.getState().nodes[0]!.data as Record<
+      string,
+      unknown
+    >;
 
     // #FFFFFF is the first CARD_COLOR, so the next should be #FDF2F8
     expect(data.color).toBe('#FDF2F8');
@@ -322,7 +467,10 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('s');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<string, unknown>;
+    const data = useCanvasStore.getState().nodes[0]!.data as Record<
+      string,
+      unknown
+    >;
 
     // #FEF08A is first STICKY_COLOR, next is #BBF7D0
     expect(data.color).toBe('#BBF7D0');
@@ -339,10 +487,120 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('g');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<string, unknown>;
+    const data = useCanvasStore.getState().nodes[0]!.data as Record<
+      string,
+      unknown
+    >;
 
     // 'blue' is first GROUP_COLOR, next is 'green'
     expect(data.color).toBe('green');
+  });
+});
+
+describe('canvasStore — createNode', () => {
+  it('creates a card node using the viewport center', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 1200,
+      innerHeight: 900,
+    });
+
+    useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 100, y: 50, zoom: 2 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.id).toBe('new-101');
+    expect(node.type).toBe('card');
+    expect(node.position).toEqual({
+      x: (600 - 100) / 2 - CARD_W / 2,
+      y: (450 - 50) / 2 - CARD_H / 2,
+    });
+    expect(node.style).toEqual({ width: CARD_W, height: CARD_H });
+  });
+
+  it('creates a folder node with localized default data', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 1000,
+      innerHeight: 800,
+    });
+
+    useCanvasStore
+      .getState()
+      .createNode('folder', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('folder');
+    expect(node.position).toEqual({
+      x: 500 - FOLDER_W / 2,
+      y: 400 - FOLDER_H / 2,
+    });
+    expect(node.data).toMatchObject({ subtitle: '', children: [] });
+  });
+
+  it('creates an image node with fixed initial color', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 900,
+      innerHeight: 700,
+    });
+
+    useCanvasStore
+      .getState()
+      .createNode('image', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('image');
+    expect(node.position).toEqual({
+      x: 450 - IMAGE_W / 2,
+      y: 350 - IMAGE_H / 2,
+    });
+    expect(node.style).toEqual({ width: IMAGE_W, height: IMAGE_H });
+    expect(node.data).toMatchObject({
+      imageUrl: '',
+      title: '',
+      color: '#FFFFFF',
+    });
+  });
+
+  it('creates a sticky node with a random palette color', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 800,
+      innerHeight: 600,
+    });
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    useCanvasStore
+      .getState()
+      .createNode('sticky', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('sticky');
+    expect(node.position).toEqual({
+      x: 400 - STICKY_W / 2,
+      y: 300 - STICKY_H / 2,
+    });
+    expect(node.style).toEqual({ width: STICKY_W, height: STICKY_H });
+    expect(node.data).toMatchObject({ content: '', color: '#FEF08A' });
+  });
+
+  it('creates a group node with a random color and localized label', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 1400,
+      innerHeight: 1000,
+    });
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    useCanvasStore
+      .getState()
+      .createNode('group', createRfInstance({ x: 50, y: 100, zoom: 2 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('group');
+    expect(node.position).toEqual({
+      x: (700 - 50) / 2 - 250,
+      y: (500 - 100) / 2 - 150,
+    });
+    expect(node.style).toEqual({ width: 500, height: 300 });
+    expect(node.data).toMatchObject({ color: 'blue' });
   });
 });
 
@@ -358,7 +616,10 @@ describe('canvasStore — addFolderChild', () => {
     });
 
     useCanvasStore.getState().addFolderChild('folder');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<string, unknown>;
+    const data = useCanvasStore.getState().nodes[0]!.data as Record<
+      string,
+      unknown
+    >;
     const children = data.children as Array<unknown>;
 
     expect(children).toHaveLength(1);

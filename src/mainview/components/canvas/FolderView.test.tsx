@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FolderView } from '@/components/canvas/FolderView';
+
 vi.mock('@/components/canvas/nodes/ImageNode', () => ({
   ImageContent: ({ data }: { data: { title?: string; imageUrl?: string } }) => (
     <div>
@@ -19,8 +21,6 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
   ),
 }));
 
-import { FolderView } from '@/components/canvas/FolderView';
-
 const rect = {
   x: 0,
   y: 0,
@@ -33,7 +33,7 @@ const rect = {
   toJSON: () => ({}),
 } as DOMRect;
 
-describe('FolderView', () => {
+describe('folderView', () => {
   afterEach(() => {
     document.body.style.overflow = '';
     vi.restoreAllMocks();

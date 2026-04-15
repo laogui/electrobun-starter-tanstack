@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CreateMenu } from '@/components/canvas/CreateMenu';
+
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_note: () => 'Note',
   menu_sticky: () => 'Sticky',
@@ -12,9 +14,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_file: () => 'File',
 }));
 
-import { CreateMenu } from '@/components/canvas/CreateMenu';
-
-describe('CreateMenu', () => {
+describe('createMenu', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -25,7 +25,7 @@ describe('CreateMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Note' }));
@@ -39,7 +39,7 @@ describe('CreateMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
     );
 
     expect(screen.getByRole('button', { name: 'File' })).toBeDisabled();
@@ -53,7 +53,7 @@ describe('CreateMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
     );
 
     fireEvent.mouseDown(document.body);

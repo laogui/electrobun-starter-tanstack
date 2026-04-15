@@ -17,7 +17,7 @@ vi.mock('electrobun/bun', () => ({
     defineRPC: (...args: Parameters<typeof defineRpcMock>) =>
       defineRpcMock(...args),
   },
-  BrowserWindow: function BrowserWindowMock(...args: unknown[]) {
+  BrowserWindow: function BrowserWindowMock(...args: Array<unknown>) {
     return browserWindowMock(...args);
   },
   Updater: {
@@ -109,12 +109,10 @@ const loadIndexModule = async () => {
 };
 
 const getCanvasHandlers = () =>
-  defineRpcMock.mock.calls[defineRpcMock.mock.calls.length - 1]?.[0].handlers
-    .requests;
+  defineRpcMock.mock.calls.at(-1)?.[0].handlers.requests;
 
 const getSettingsHandlers = () =>
-  defineRpcMock.mock.calls[defineRpcMock.mock.calls.length - 1]?.[0].handlers
-    .requests;
+  defineRpcMock.mock.calls.at(-1)?.[0].handlers.requests;
 
 beforeEach(() => {
   vi.resetModules();
@@ -123,7 +121,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   bunFileMock.mockReset();
   bunWriteMock.mockReset();
-  workspaceMocks.atomicWrite.mockResolvedValue(undefined);
+  workspaceMocks.atomicWrite.mockResolvedValue();
   workspaceMocks.loadWorkspaceConfig.mockResolvedValue({
     activeViewId: 'default',
     views: [
@@ -137,7 +135,7 @@ beforeEach(() => {
   });
   workspaceMocks.removeView.mockResolvedValue(true);
   workspaceMocks.renameView.mockResolvedValue(true);
-  manifestMocks.saveManifest.mockResolvedValue(undefined);
+  manifestMocks.saveManifest.mockResolvedValue();
   bunFileMock.mockReturnValue({
     exists: vi.fn().mockResolvedValue(false),
     json: vi.fn(),
@@ -174,7 +172,7 @@ describe('src/bun/index helpers', () => {
   });
 
   it('loadSettings merges stored settings with defaults and resets invalid JSON', async () => {
-    const { DEFAULT_SETTINGS, loadSettings } = await loadIndexModule();
+    const { loadSettings, DEFAULT_SETTINGS } = await loadIndexModule();
 
     bunFileMock.mockReturnValueOnce({
       exists: vi.fn().mockResolvedValue(true),

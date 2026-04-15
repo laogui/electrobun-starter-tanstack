@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_note: () => 'New note',
   menu_new_sticky: () => 'New sticky',
@@ -25,9 +27,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_delete_edge: () => 'Delete edge',
 }));
 
-import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
-
-describe('CanvasContextMenu', () => {
+describe('canvasContextMenu', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -45,7 +45,7 @@ describe('CanvasContextMenu', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Copy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /copy/i }));
 
     expect(onAction).toHaveBeenCalledWith('copy', 'node-1');
     expect(onClose).toHaveBeenCalledTimes(1);

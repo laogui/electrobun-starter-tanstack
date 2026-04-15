@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useHelperLines } from '@/hooks/useHelperLines';
+
 const setNodesMock = vi.fn();
 const applyCanvasNodeChangesMock = vi.fn();
 const getHelperLinesMock = vi.fn();
@@ -23,8 +25,6 @@ vi.mock('@/lib/getHelperLines', () => ({
   getHelperLines: (...args: Parameters<typeof getHelperLinesMock>) =>
     getHelperLinesMock(...args),
 }));
-
-import { useHelperLines } from '@/hooks/useHelperLines';
 
 const nodes = [
   { id: 'node-1', type: 'card', position: { x: 0, y: 0 }, data: {} },

@@ -19,11 +19,7 @@ function makeNode(
   };
 }
 
-function makeChange(
-  id: string,
-  x: number,
-  y: number
-): NodePositionChange {
+function makeChange(id: string, x: number, y: number): NodePositionChange {
   return { id, type: 'position', position: { x, y }, dragging: true };
 }
 
@@ -40,10 +36,7 @@ describe('getHelperLines', () => {
   });
 
   it('snaps left edge to left edge of another node within threshold', () => {
-    const nodes = [
-      makeNode('a', 100, 100),
-      makeNode('b', 300, 200),
-    ];
+    const nodes = [makeNode('a', 100, 100), makeNode('b', 300, 200)];
     // Drag node 'a' near left edge of node 'b'
     const change = makeChange('a', 302, 100);
 
@@ -54,10 +47,7 @@ describe('getHelperLines', () => {
   });
 
   it('snaps top edge to top edge of another node within threshold', () => {
-    const nodes = [
-      makeNode('a', 100, 100),
-      makeNode('b', 300, 200),
-    ];
+    const nodes = [makeNode('a', 100, 100), makeNode('b', 300, 200)];
     // Drag node 'a' near top edge of node 'b'
     const change = makeChange('a', 100, 203);
 
@@ -68,10 +58,7 @@ describe('getHelperLines', () => {
   });
 
   it('does not snap when outside the threshold', () => {
-    const nodes = [
-      makeNode('a', 100, 100),
-      makeNode('b', 300, 200),
-    ];
+    const nodes = [makeNode('a', 100, 100), makeNode('b', 300, 200)];
     // Move node 'a' far from any alignment
     const change = makeChange('a', 150, 150);
 

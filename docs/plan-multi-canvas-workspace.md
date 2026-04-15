@@ -8,13 +8,13 @@
 
 ### 当前硬编码
 
-| 位置 | 硬编码 | 影响 |
-|------|--------|------|
-| `src/mainview/routes/index.tsx` L75 | `loadCanvas('default')` | 只加载 default 画布 |
-| `src/mainview/hooks/useCanvasPersistence.ts` L22 | `rpcSaveManifest('default', ...)` | 只保存到 default 画布 |
-| `src/bun/index.ts` L204 | `initWorkspace()` 无参数，使用 `Utils.paths.userData` | 固定单一 workspace |
-| `src/bun/workspace.ts` L18-28 | `DEFAULT_CONFIG` 只含 `default` 视图 | 无多画布注册机制 |
-| `src/mainview/store/canvasStore.ts` | 无 `activeViewId` 概念 | store 不知道自己属于哪个画布 |
+| 位置                                             | 硬编码                                                | 影响                         |
+| ------------------------------------------------ | ----------------------------------------------------- | ---------------------------- |
+| `src/mainview/routes/index.tsx` L75              | `loadCanvas('default')`                               | 只加载 default 画布          |
+| `src/mainview/hooks/useCanvasPersistence.ts` L22 | `rpcSaveManifest('default', ...)`                     | 只保存到 default 画布        |
+| `src/bun/index.ts` L204                          | `initWorkspace()` 无参数，使用 `Utils.paths.userData` | 固定单一 workspace           |
+| `src/bun/workspace.ts` L18-28                    | `DEFAULT_CONFIG` 只含 `default` 视图                  | 无多画布注册机制             |
+| `src/mainview/store/canvasStore.ts`              | 无 `activeViewId` 概念                                | store 不知道自己属于哪个画布 |
 
 ### 已就绪的基础
 
@@ -53,9 +53,9 @@ Phase 2: 多 Workspace 管理（P3 #16）—— 依赖 Phase 1
 // canvasStore.ts 新增
 interface CanvasState {
   // ...existing...
-  activeViewId: string;                    // 当前画布 ID
+  activeViewId: string; // 当前画布 ID
   views: Array<{ id: string; name: string }>; // 画布列表（从 workspace.json 同步）
-  
+
   // 新 actions
   setActiveView: (viewId: string) => Promise<void>;
   createView: (name: string) => Promise<void>;
@@ -82,21 +82,38 @@ setActiveView(viewId)
 ```typescript
 // src/bun/index.ts 新增 RPC
 listViews: {
-  params: {};
-  response: { views: Array<{ id: string; name: string; file: string }> };
-};
+  params: {
+  }
+  response: {
+    views: Array<{ id: string; name: string; file: string }>;
+  }
+}
 createView: {
-  params: { name: string };
-  response: { viewId: string; file: string };
-};
+  params: {
+    name: string;
+  }
+  response: {
+    viewId: string;
+    file: string;
+  }
+}
 deleteView: {
-  params: { viewId: string };
-  response: { success: boolean };
-};
+  params: {
+    viewId: string;
+  }
+  response: {
+    success: boolean;
+  }
+}
 renameView: {
-  params: { viewId: string; name: string };
-  response: { success: boolean };
-};
+  params: {
+    viewId: string;
+    name: string;
+  }
+  response: {
+    success: boolean;
+  }
+}
 ```
 
 **实现位置**：`src/bun/workspace.ts` 新增：
@@ -122,7 +139,7 @@ export async function addView(wsPath: string, name: string) {
 export async function removeView(wsPath: string, viewId: string) {
   const config = await loadWorkspaceConfig(wsPath);
   if (config.views.length <= 1) return false; // 至少保留一个画布
-  config.views = config.views.filter(v => v.id !== viewId);
+  config.views = config.views.filter((v) => v.id !== viewId);
   if (config.activeViewId === viewId) {
     config.activeViewId = config.views[0].id;
   }
@@ -174,16 +191,16 @@ export function useCanvasPersistence() {
 
 ### 2.5 涉及文件清单
 
-| 文件 | 改动类型 |
-|------|----------|
-| `src/bun/workspace.ts` | 新增 `addView` / `removeView` / `renameView` / `saveWorkspaceConfig` |
-| `src/bun/index.ts` | RPC 新增 `listViews` / `createView` / `deleteView` / `renameView` |
-| `src/mainview/store/canvasStore.ts` | 新增 `activeViewId` / `views` / 切换 actions |
-| `src/mainview/hooks/useCanvasPersistence.ts` | 动态 viewId，切换时 flush |
-| `src/mainview/routes/index.tsx` | 从 store 读 `activeViewId`，挂载 ViewSwitcher |
-| `src/mainview/lib/rpc.ts` | 新增 `rpcListViews` / `rpcCreateView` / `rpcDeleteView` / `rpcRenameView` |
-| `src/mainview/components/canvas/ViewSwitcher.tsx` | **新建** — Tab 栏 UI |
-| `messages/en.json` / `messages/zh.json` | 新增 i18n key |
+| 文件                                              | 改动类型                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/bun/workspace.ts`                            | 新增 `addView` / `removeView` / `renameView` / `saveWorkspaceConfig`      |
+| `src/bun/index.ts`                                | RPC 新增 `listViews` / `createView` / `deleteView` / `renameView`         |
+| `src/mainview/store/canvasStore.ts`               | 新增 `activeViewId` / `views` / 切换 actions                              |
+| `src/mainview/hooks/useCanvasPersistence.ts`      | 动态 viewId，切换时 flush                                                 |
+| `src/mainview/routes/index.tsx`                   | 从 store 读 `activeViewId`，挂载 ViewSwitcher                             |
+| `src/mainview/lib/rpc.ts`                         | 新增 `rpcListViews` / `rpcCreateView` / `rpcDeleteView` / `rpcRenameView` |
+| `src/mainview/components/canvas/ViewSwitcher.tsx` | **新建** — Tab 栏 UI                                                      |
+| `messages/en.json` / `messages/zh.json`           | 新增 i18n key                                                             |
 
 ---
 
@@ -200,7 +217,7 @@ interface AppConfig {
   recentWorkspaces: Array<{
     path: string;
     name: string;
-    lastOpenedAt: string;  // ISO 8601
+    lastOpenedAt: string; // ISO 8601
   }>;
   activeWorkspace?: string;
   preferences: {
@@ -218,7 +235,7 @@ interface AppConfig {
 
 ```typescript
 // src/bun/index.ts 改造思路
-let currentWsPath: string;  // 可变
+let currentWsPath: string; // 可变
 let noteIndexCache: Map<string, string> | null = null; // 切换时清空
 
 async function switchWorkspace(newPath: string) {
@@ -287,15 +304,15 @@ browseForWorkspace: {
 
 ### 3.5 涉及文件清单
 
-| 文件 | 改动类型 |
-|------|----------|
-| `src/bun/appConfig.ts` | **新建** — app-config 读写 |
-| `src/bun/index.ts` | RPC 新增 workspace 管理；`wsPath` 改为可变 |
-| `src/bun/workspace.ts` | 当前 settings 逻辑可能迁移到 appConfig |
-| `src/mainview/store/canvasStore.ts` | 新增 `reset()` action |
-| `src/mainview/lib/rpc.ts` | 新增 workspace RPC 封装 + `workspaceChanged` message handler |
-| `src/mainview/components/canvas/WorkspaceSwitcher.tsx` | **新建** — Workspace 选择器 UI |
-| `src/mainview/routes/index.tsx` | 挂载 WorkspaceSwitcher |
+| 文件                                                   | 改动类型                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| `src/bun/appConfig.ts`                                 | **新建** — app-config 读写                                   |
+| `src/bun/index.ts`                                     | RPC 新增 workspace 管理；`wsPath` 改为可变                   |
+| `src/bun/workspace.ts`                                 | 当前 settings 逻辑可能迁移到 appConfig                       |
+| `src/mainview/store/canvasStore.ts`                    | 新增 `reset()` action                                        |
+| `src/mainview/lib/rpc.ts`                              | 新增 workspace RPC 封装 + `workspaceChanged` message handler |
+| `src/mainview/components/canvas/WorkspaceSwitcher.tsx` | **新建** — Workspace 选择器 UI                               |
+| `src/mainview/routes/index.tsx`                        | 挂载 WorkspaceSwitcher                                       |
 
 ---
 
@@ -322,13 +339,13 @@ Phase 2（多 Workspace）—— 依赖 Phase 1 完成
 
 ### 关键风险
 
-| 风险 | 缓解措施 |
-|------|----------|
-| 切换画布时丢失未保存数据 | `setActiveView` 开头强制 `flushNow` |
+| 风险                               | 缓解措施                                                          |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| 切换画布时丢失未保存数据           | `setActiveView` 开头强制 `flushNow`                               |
 | 多画布共享同一 noteId 的并发写冲突 | 当前 `saveManifest` 已串行化，且 card `.md` 写入通过同一 RPC 队列 |
-| workspace 路径包含特殊字符 | 所有路径使用 `path.join`，不拼接字符串 |
-| Electrobun 无原生文件夹选择对话框 | Phase 2 可先用手动输入路径，后续接入系统对话框 |
-| undo/redo 栈跨画布残留 | 切换画布时调用 `createUndoRedoState()` 清空 |
+| workspace 路径包含特殊字符         | 所有路径使用 `path.join`，不拼接字符串                            |
+| Electrobun 无原生文件夹选择对话框  | Phase 2 可先用手动输入路径，后续接入系统对话框                    |
+| undo/redo 栈跨画布残留             | 切换画布时调用 `createUndoRedoState()` 清空                       |
 
 ---
 

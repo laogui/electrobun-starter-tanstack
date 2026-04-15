@@ -14,10 +14,10 @@ function isDimensionChange(
  * Mirror those dimensions into node.style so persistence keeps the latest size.
  */
 export function applyCanvasNodeChanges(
-  changes: Array<NodeChange<Node>>,
+  changes: Array<NodeChange>,
   nodes: Array<Node>
 ): Array<Node> {
-  const updatedNodes = applyNodeChanges<Node>(changes, nodes);
+  const updatedNodes = applyNodeChanges(changes, nodes);
   const dimensionsById = new Map(
     changes
       .filter(isDimensionChange)

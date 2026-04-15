@@ -33,14 +33,18 @@ export function useCanvasPersistence() {
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const viewIdRef = useRef(activeViewId);
 
-  // Keep ref in sync and flush when view changes
+  // Keep ref in sync on view change.
+  // Do NOT flush here — the store has already been cleared to [] by setActiveView,
+  // so flushing would overwrite the old canvas with empty data.
+  // ViewSwitcher.handleSwitchView flushes BEFORE calling setActiveView.
   useEffect(() => {
     if (viewIdRef.current !== activeViewId) {
-      // Flush pending saves for the old view before switching
-      if (dirty.current && isAvailable.current) {
-        flushNow(pendingTimer, viewIdRef.current);
-        dirty.current = false;
+      // Cancel any pending debounce for the old view (data is already stale)
+      if (pendingTimer.current) {
+        clearTimeout(pendingTimer.current);
+        pendingTimer.current = null;
       }
+      dirty.current = false;
       viewIdRef.current = activeViewId;
       skipHydrate.current = true;
     }
@@ -65,6 +69,9 @@ export function useCanvasPersistence() {
     const unsub = useCanvasStore.subscribe((state, prevState) => {
       if (state.nodes === prevState?.nodes && state.edges === prevState.edges)
         return;
+
+      // Only persist once the canvas has been properly loaded
+      if (!state._hydrated) return;
 
       if (skipHydrate.current) {
         skipHydrate.current = false;

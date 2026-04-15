@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  createUndoRedoState,
-  pushSnapshot,
-  redo,
-  undo,
-} from '@/lib/undoRedo';
+import { createUndoRedoState, pushSnapshot, redo, undo } from '@/lib/undoRedo';
 import type { CanvasSnapshot, UndoRedoState } from '@/lib/undoRedo';
 
 function snap(label: string): CanvasSnapshot {

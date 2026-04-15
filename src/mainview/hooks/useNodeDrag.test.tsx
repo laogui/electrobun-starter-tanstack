@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useNodeDrag } from '@/hooks/useNodeDrag';
+
 const state = {
   nodes: [
     {
@@ -84,8 +86,6 @@ vi.mock('@/store/canvasStore', () => ({
       saveSnapshot: saveSnapshotMock,
     }),
 }));
-
-import { useNodeDrag } from '@/hooks/useNodeDrag';
 
 const Harness = () => {
   const {

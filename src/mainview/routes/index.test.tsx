@@ -3,6 +3,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useCanvasStore } from '@/store/canvasStore';
+
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
   loadCanvas: vi.fn(),
@@ -93,7 +95,7 @@ vi.mock('../../paraglide/messages.js', () => ({
 }));
 
 vi.mock('@xyflow/react', async () => {
-  const actual = await vi.importActual<object>('@xyflow/react');
+  const actual = await vi.importActual('@xyflow/react');
   return {
     ...actual,
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => (
@@ -204,8 +206,6 @@ vi.mock('@/components/canvas/HelperLines', () => ({
   HelperLines: () => <div>HelperLines</div>,
 }));
 
-import { useCanvasStore } from '@/store/canvasStore';
-
 const routeFactoryMock = vi.fn((options) => ({ options }));
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => routeFactoryMock,
@@ -294,7 +294,7 @@ describe('routes/index', () => {
       toJSON: () => ({}),
     } as DOMRect;
     const element = document.querySelector('[data-id="loaded-1"]');
-    vi.spyOn(element as Element, 'getBoundingClientRect').mockReturnValue(rect);
+    vi.spyOn(element!, 'getBoundingClientRect').mockReturnValue(rect);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open focused node' }));
 
@@ -323,7 +323,7 @@ describe('routes/index', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
-    fireEvent.click(screen.getByRole('button', { name: /New note/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new note/i }));
 
     await waitFor(() => {
       expect(useCanvasStore.getState().nodes.length).toBeGreaterThanOrEqual(2);

@@ -1,4 +1,4 @@
-import type { Node, NodeChange, NodePositionChange } from '@xyflow/react';
+import type { NodeChange, NodePositionChange } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
@@ -11,7 +11,7 @@ export function useHelperLines() {
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
   const onNodesChange = useCallback(
-    (changes: Array<NodeChange<Node>>) => {
+    (changes: Array<NodeChange>) => {
       const positionChange = changes.find(
         (c): c is NodePositionChange =>
           c.type === 'position' && c.dragging === true

@@ -89,14 +89,14 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         updateNodeData(id, { imageUrl, title });
 
         // Save to local file in background
-        rpcSaveAttachment(imageUrl, (data as ImageData).imageFile)
+        rpcSaveAttachment(imageUrl, data.imageFile)
           .then((result) => {
             if (result?.filePath) {
               updateNodeData(id, { imageFile: result.filePath });
             }
           })
-          .catch((err) => {
-            console.error('[ImageNode] Failed to save attachment:', err);
+          .catch((error) => {
+            console.error('[ImageNode] Failed to save attachment:', error);
           });
       });
       reader.readAsDataURL(file);

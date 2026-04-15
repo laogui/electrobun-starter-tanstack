@@ -107,15 +107,15 @@ type CanvasRPC = {
         response: { dataUrl: string } | null;
       };
       openSettings: {
-        params: {};
+        params: Record<string, unknown>;
         response: { success: boolean };
       };
       getSettings: {
-        params: {};
+        params: Record<string, unknown>;
         response: { theme: string; locale: string };
       };
       listViews: {
-        params: {};
+        params: Record<string, unknown>;
         response: {
           views: Array<{ id: string; name: string; file: string }>;
           activeViewId: string;
@@ -134,10 +134,10 @@ type CanvasRPC = {
         response: { success: boolean };
       };
     };
-    messages: {};
+    messages: Record<string, unknown>;
   };
   webview: {
-    requests: {};
+    requests: Record<string, unknown>;
     messages: {
       settingsUpdated: { theme: string; locale: string };
     };
@@ -148,7 +148,7 @@ type SettingsRPC = {
   bun: {
     requests: {
       getSettings: {
-        params: {};
+        params: Record<string, unknown>;
         response: { theme: string; locale: string };
       };
       saveSettings: {
@@ -156,11 +156,11 @@ type SettingsRPC = {
         response: { success: boolean };
       };
     };
-    messages: {};
+    messages: Record<string, unknown>;
   };
   webview: {
-    requests: {};
-    messages: {};
+    requests: Record<string, unknown>;
+    messages: Record<string, unknown>;
   };
 };
 
@@ -333,7 +333,9 @@ async function main() {
             // Attach noteId so phase 2 can read it back
             node.data.noteId = noteId;
             const existingFile = noteIndex.get(noteId);
-            if (!existingFile) {
+            if (existingFile) {
+              nodePathMap.set(idx, existingFile);
+            } else {
               const filePath = await createNote(
                 wsPath,
                 noteId,
@@ -342,8 +344,6 @@ async function main() {
               );
               noteIndex.set(noteId, filePath);
               nodePathMap.set(idx, filePath);
-            } else {
-              nodePathMap.set(idx, existingFile);
             }
           }
 
@@ -352,10 +352,7 @@ async function main() {
             nodes.map(async (node, idx) => {
               // Image nodes: strip imageUrl (large base64), keep imageFile ref
               if (node.type === 'image') {
-                const { imageUrl, ...restData } = node.data as Record<
-                  string,
-                  unknown
-                >;
+                const { imageUrl, ...restData } = node.data;
                 return {
                   id: node.id,
                   type: node.type,
@@ -441,7 +438,7 @@ async function main() {
         },
 
         saveAttachment: async ({ dataUrl, existingFile }) => {
-          const match = dataUrl.match(/^data:(image\/([a-z+]+));base64,(.+)$/i);
+          const match = /^data:(image\/([a-z+]+));base64,(.+)$/i.exec(dataUrl);
           if (!match) throw new Error('Invalid data URL');
           const mimeSubtype = match[2]!;
           const base64Data = match[3]!;

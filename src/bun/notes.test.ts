@@ -59,7 +59,7 @@ describe('notes', () => {
   });
 
   it('serializeChecklistItems and parseChecklistBody round-trip checklist content', async () => {
-    const { parseChecklistBody, serializeChecklistItems } =
+    const { serializeChecklistItems, parseChecklistBody } =
       await import('./notes');
     const markdown = serializeChecklistItems([
       { text: 'Header', isHeader: true },
@@ -80,7 +80,7 @@ describe('notes', () => {
 
     expect(displayHintToType('note')).toBe('text');
     expect(displayHintToType('checklist')).toBe('checklist');
-    expect(displayHintToType(undefined)).toBe('text');
+    expect(displayHintToType()).toBe('text');
   });
 
   it('cardDataToNote creates frontmatter/body for text cards', async () => {
@@ -170,7 +170,7 @@ describe('notes', () => {
   });
 
   it('createNote creates a slugged markdown file and loadNote reads it back', async () => {
-    const { createNote, loadNote } = await import('./notes');
+    const { loadNote, createNote } = await import('./notes');
 
     const filePath = await createNote(
       workspaceRoot,

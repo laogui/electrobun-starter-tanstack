@@ -1,8 +1,8 @@
 # 📋 智能审查报告
 
 | 🟠 P1 建议修复 | 🟢 P2 可选优化 | ⚪ P3 仅供参考 | 💬 讨论 |
-|:-------------:|:-------------:|:-------------:|:-------:|
-| 6 | 2 | 0 | 1 |
+| :------------: | :------------: | :------------: | :-----: |
+|       6        |       2        |       0        |    1    |
 
 ## 摘要
 
@@ -24,9 +24,10 @@
 
 📍 `src/bun/workspace.ts:L63-L69` · 🟠 待解决
 
-`<ksymbol name="atomicWrite" filename="workspace.ts" path="src/bun/workspace.ts" startline="63" type="function">atomicWrite</ksymbol>`` 使用固定的 `${filePath}.tmp` 作为临时文件名。只要同一路径在短时间内被并发写入，后一个写入会覆盖前一个临时文件，随后某个 `rename` 调用会因为临时文件已不存在而失败，或者最终文件内容与调用方预期不一致。
+`<ksymbol name="atomicWrite" filename="workspace.ts" path="src/bun/workspace.ts" startline="63" type="function">atomicWrite</ksymbol>`` 使用固定的 `${filePath}.tmp`作为临时文件名。只要同一路径在短时间内被并发写入，后一个写入会覆盖前一个临时文件，随后某个`rename` 调用会因为临时文件已不存在而失败，或者最终文件内容与调用方预期不一致。
 
 **证据**:
+
 ```typescript
 export async function atomicWrite(
   filePath: string,
@@ -53,6 +54,7 @@ export async function atomicWrite(
 `<ksymbol name="createNote" filename="notes.ts" path="src/bun/notes.ts" startline="165" type="function">createNote</ksymbol>` 直接把标题 slug 作为 markdown 文件名，没有做重名检查。两个不同 `noteId` 只要标题相同或 slug 后结果相同，就会落到同一个 `content/*.md` 文件，后写入的笔记会覆盖前一个。
 
 **证据**:
+
 ```typescript
 const slug = title
   ? title
@@ -81,6 +83,7 @@ await saveNote(wsPath, filePath, frontmatter, '');
 `<ksymbol name="main" filename="index.ts" path="src/bun/index.ts" startline="237" type="function">main</ksymbol>` 里的 `saveManifest` handler 用 `Promise.all` 并行处理所有节点。若同一次保存中包含多个“新建 card 且标题相同”的节点，它们会在同一个旧索引快照上同时判断“文件不存在”，随后并发创建同名 note 文件，最终结果取决于时序。
 
 **证据**:
+
 ```typescript
 const noteIndex = await buildNoteIndex(wsPath);
 
@@ -120,6 +123,7 @@ const manifestNodes = await Promise.all(
 `<ksymbol name="setActiveView" filename="canvasStore.ts" path="src/mainview/store/canvasStore.ts" startline="237" type="function">setActiveView</ksymbol>` 只切换了 `activeViewId` 和 `_hydrated`，但没有清空 `nodes/edges`。随后首页的加载 effect 在“新视图为空”的情况下，会把 store 中残留的旧视图节点作为 seed 保存到新视图，造成串视图污染。
 
 **证据**:
+
 ```typescript
 setActiveView: async (viewId) => {
   const current = get().activeViewId;
@@ -160,6 +164,7 @@ if (data && data.nodes.length > 0) {
 当前首屏在“没有已有持久化数据”的情况下只执行了 `rpcSaveManifest(...)`，并没有调用 `<ksymbol name="hydrate" filename="canvasStore.ts" path="src/mainview/store/canvasStore.ts" startline="143" type="function">hydrate</ksymbol>`。而 `<ksymbol name="useCanvasPersistence" filename="useCanvasPersistence.ts" path="src/mainview/hooks/useCanvasPersistence.ts" startline="28" type="function">useCanvasPersistence</ksymbol>` 默认会把第一次 `nodes/edges` 变化当作 hydration 变化跳过，导致首次真实用户编辑可能不被标记为 dirty。
 
 **证据**:
+
 ```typescript
 if (data && data.nodes.length > 0) {
   hydrate(data.nodes, data.edges);
@@ -194,6 +199,7 @@ dirty.current = true;
 `<ksymbol name="initElectrobun" filename="rpc.ts" path="src/mainview/lib/rpc.ts" startline="11" type="function">initElectrobun</ksymbol>` 一旦因为桥接未就绪或动态导入失败返回 `null`，其结果会被 `initPromise` 永久缓存。之后所有 RPC 调用都会继续拿到这个失败结果，不会重试，直到整个页面刷新。
 
 **证据**:
+
 ```typescript
 let initPromise: Promise<any> | null = null;
 
@@ -238,6 +244,7 @@ async function getElectrobun() {
 当前复制逻辑是“整节点浅拷贝”，只清理了 `data.isHidden/isDropTarget`，没有清理 `parentId`、`extent` 以及与父节点坐标体系绑定的相对位置。代码注释还明确提到 clipboard 会跨视图保留，因此这个缺口在实际使用中很容易触发。
 
 **证据**:
+
 ```typescript
 return {
   clipboard: selected.map((n) => {
@@ -271,6 +278,7 @@ const newNodes = clipboard.map((n) => ({
 当前 `<kfile name="queryClient.ts" path="src/mainview/lib/queryClient.ts">queryClient.ts</kfile>` 中的 `onError` 直接访问 `error.message`。如果某个 query 抛出的是字符串、普通对象，甚至 `null`，错误提示本身会变成 `Error: undefined`，更糟时会再次抛异常，掩盖真正问题。
 
 **证据**:
+
 ```typescript
 onError: (error, query) => {
   toast.error(`Error: ${error.message}`, {
@@ -281,7 +289,7 @@ onError: (error, query) => {
       },
     },
   });
-}
+};
 ```
 
 **建议**: 先对 `error` 做一次标准化，区分 `Error`、字符串和未知对象，再拼接 toast 文案，避免在错误处理器中再次出错。
@@ -310,32 +318,32 @@ onError: (error, query) => {
 
 ---
 
-*📝 本报告由 Code Review Skill 生成*
+_📝 本报告由 Code Review Skill 生成_
 
 ---
 
 ## 附录：状态指示器
 
-| 状态 | 指示器 | 展示方式 |
-|:-----|:-----:|---------|
-| P1 待解决 | 🟠 | 完整描述和建议 |
-| P2 待解决 | 🟢 | 完整描述和建议 |
-| P3 | ⚪ | 仅描述 |
-| 已解决 | ✅ | 仅标题 + 引用块说明修复内容 |
-| 已忽略 | ⏭️ | 仅标题 + 引用块说明原因 |
-| 已推迟 | 🕐 | 仅标题 + 引用块说明原因 |
+| 状态      | 指示器 | 展示方式                    |
+| :-------- | :----: | --------------------------- |
+| P1 待解决 |   🟠   | 完整描述和建议              |
+| P2 待解决 |   🟢   | 完整描述和建议              |
+| P3        |   ⚪   | 仅描述                      |
+| 已解决    |   ✅   | 仅标题 + 引用块说明修复内容 |
+| 已忽略    |   ⏭️   | 仅标题 + 引用块说明原因     |
+| 已推迟    |   🕐   | 仅标题 + 引用块说明原因     |
 
 ## 附录：Issue 分类
 
-| 分类 | 全称 | 说明 |
-|------|------|------|
-| DESIGN | Design & Architecture | 模块划分、抽象层次、扩展性 |
-| LOGIC | Business Logic | 流程完整性、状态流转、业务规则 |
-| COMPAT | Compatibility & Impact | 向后兼容、跨模块影响、迁移风险 |
-| EDGE | Edge Cases & Robustness | 异常路径、并发竞态、降级策略 |
-| SEC | Security Boundary | 权限模型、信任边界、数据隔离 |
-| API | Contract & Interface | 协议设计、版本策略、调用链路 |
-| MAINT | Maintainability | 可测试性、可观测性、认知复杂度 |
+| 分类   | 全称                    | 说明                           |
+| ------ | ----------------------- | ------------------------------ |
+| DESIGN | Design & Architecture   | 模块划分、抽象层次、扩展性     |
+| LOGIC  | Business Logic          | 流程完整性、状态流转、业务规则 |
+| COMPAT | Compatibility & Impact  | 向后兼容、跨模块影响、迁移风险 |
+| EDGE   | Edge Cases & Robustness | 异常路径、并发竞态、降级策略   |
+| SEC    | Security Boundary       | 权限模型、信任边界、数据隔离   |
+| API    | Contract & Interface    | 协议设计、版本策略、调用链路   |
+| MAINT  | Maintainability         | 可测试性、可观测性、认知复杂度 |
 
 ---
 

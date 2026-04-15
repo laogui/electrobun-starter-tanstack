@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FocusedView } from '@/components/canvas/FocusedView';
+
 const updateNodeDataMock = vi.fn();
 
 vi.mock('@/store/canvasStore', () => ({
@@ -43,8 +45,6 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
   ),
 }));
 
-import { FocusedView } from '@/components/canvas/FocusedView';
-
 const rect = {
   x: 10,
   y: 20,
@@ -57,7 +57,7 @@ const rect = {
   toJSON: () => ({}),
 } as DOMRect;
 
-describe('FocusedView', () => {
+describe('focusedView', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
     document.body.style.overflow = '';

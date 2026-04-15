@@ -18,9 +18,7 @@ export function useNodeDrag() {
   const rf = useReactFlow();
 
   /** Original positions of cards before they were pushed aside by a dragging group. */
-  const originalPositionsRef = useRef<Map<string, { x: number; y: number }>>(
-    new Map()
-  );
+  const originalPositionsRef = useRef(new Map());
 
   const findOverlappingFolder = useCallback(
     (draggedNode: Node, allNodes: Array<Node>) => {

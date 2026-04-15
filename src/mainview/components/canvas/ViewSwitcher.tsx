@@ -12,7 +12,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   isRpcAvailable,
-  loadCanvas,
   rpcCreateView,
   rpcDeleteView,
   rpcListViews,
@@ -35,7 +34,6 @@ export function ViewSwitcher() {
   const views = useCanvasStore((s) => s.views);
   const setViews = useCanvasStore((s) => s.setViews);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
-  const hydrate = useCanvasStore((s) => s.hydrate);
 
   // Load views list on mount
   useEffect(() => {
@@ -85,29 +83,17 @@ export function ViewSwitcher() {
       }
 
       // Flush current canvas before switching
-      const rpcAvailable = await isRpcAvailable();
-      if (rpcAvailable) {
+      if (await isRpcAvailable()) {
         const { nodes, edges } = useCanvasStore.getState();
         const sanitized = sanitizeForPersistence(nodes, edges);
         await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
       }
 
-      await setActiveView(viewId);
-
-      // Load the new canvas
-      const data = (await loadCanvas(viewId)) as {
-        nodes: import('@xyflow/react').Node[];
-        edges: import('@xyflow/react').Edge[];
-      } | null;
-      if (data !== null && data.nodes.length > 0) {
-        hydrate(data.nodes, data.edges);
-      } else {
-        hydrate([], []);
-      }
-
+      // Clear store & set new view ID; index.tsx's effect will load + hydrate
+      setActiveView(viewId);
       setOpen(false);
     },
-    [activeViewId, setActiveView, hydrate]
+    [activeViewId, setActiveView]
   );
 
   const handleCreate = useCallback(async () => {
@@ -130,7 +116,7 @@ export function ViewSwitcher() {
         success: boolean;
         activeViewId?: string;
       } | null;
-      if (result === null || !result.success) return;
+      if (!result?.success) return;
 
       const newViews = views.filter((v) => v.id !== viewId);
       setViews(newViews);

@@ -3,6 +3,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useNodeCreation } from '@/hooks/useNodeCreation';
+
 const createNodeMock = vi.fn();
 
 vi.mock('@/store/canvasStore', () => ({
@@ -10,8 +12,6 @@ vi.mock('@/store/canvasStore', () => ({
     selector: (state: { createNode: typeof createNodeMock }) => unknown
   ) => selector({ createNode: createNodeMock }),
 }));
-
-import { useNodeCreation } from '@/hooks/useNodeCreation';
 
 const Harness = ({
   current,

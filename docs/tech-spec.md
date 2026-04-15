@@ -300,6 +300,7 @@ setActiveView(viewId)
 #### 持久化 hook 适配
 
 `useCanvasPersistence` 通过 `useRef` 跟踪 `activeViewId`，当检测到切换时：
+
 - 先用旧 viewId 调用 `flushNow` 保存未写入的变更
 - 更新 ref 为新 viewId
 - 重置 `skipHydrate` 标志，避免 hydrate 触发的 store 变更被误当作用户编辑
@@ -307,6 +308,7 @@ setActiveView(viewId)
 #### UI 组件
 
 `ViewSwitcher.tsx` — 底部居中浮动面板：
+
 - **触发器**：显示当前画布名称 + 节点计数 + 画布数量
 - **弹出菜单**：列出所有画布，点击切换；支持行内重命名（双击或铅笔图标）、删除（至少保留 1 个）
 - **快捷创建**：`+` 按钮创建新空画布，自动切换到新画布
@@ -697,23 +699,23 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 > 产品层面的 edge case 处理策略。
 
-| 场景                             | 处理策略                                                                              |
-| -------------------------------- | ------------------------------------------------------------------------------------- |
-| 文件被外部重命名/移动            | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest `file` 缓存 |
-| manifest 指向的 .md 不存在       | 加载时标记为"断链节点"，UI 显示占位卡片，不静默删除                                   |
-| `noteId` 零引用                  | 不删除 `.md`；标记为 `unplaced`，纳入全局搜索                                         |
-| watcher 自触发循环               | 写盘前加入 `pendingWrites` 集合，watcher 检查后忽略                                   |
-| frontmatter round-trip 破坏格式  | 最小改写策略，保留未知字段，不重排 YAML 字段顺序                                      |
-| 附件同名冲突                     | `{contentHash前8位}-{原始名}` 格式                                                    |
-| 带 Edge 的卡片拖入 Folder        | MVP 阻止并 toast 提示先断开连线                                                       |
-| Edge 指向不存在的 node           | 加载时静默过滤 + log 警告                                                             |
-| Markdown / frontmatter 解析失败  | 卡片以只读错误态渲染，展示路径和错误摘要                                              |
-| 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照                             |
-| manifest JSON 损坏               | 保留坏文件副本，尝试从备份恢复                                                        |
-| displayHint 未知值               | 回退 `note` 渲染 + 诊断日志                                                           |
+| 场景                             | 处理策略                                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 文件被外部重命名/移动            | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest `file` 缓存           |
+| manifest 指向的 .md 不存在       | 加载时标记为"断链节点"，UI 显示占位卡片，不静默删除                                             |
+| `noteId` 零引用                  | 不删除 `.md`；标记为 `unplaced`，纳入全局搜索                                                   |
+| watcher 自触发循环               | 写盘前加入 `pendingWrites` 集合，watcher 检查后忽略                                             |
+| frontmatter round-trip 破坏格式  | 最小改写策略，保留未知字段，不重排 YAML 字段顺序                                                |
+| 附件同名冲突                     | `{contentHash前8位}-{原始名}` 格式                                                              |
+| 带 Edge 的卡片拖入 Folder        | MVP 阻止并 toast 提示先断开连线                                                                 |
+| Edge 指向不存在的 node           | 加载时静默过滤 + log 警告                                                                       |
+| Markdown / frontmatter 解析失败  | 卡片以只读错误态渲染，展示路径和错误摘要                                                        |
+| 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照                                       |
+| manifest JSON 损坏               | 保留坏文件副本，尝试从备份恢复                                                                  |
+| displayHint 未知值               | 回退 `note` 渲染 + 诊断日志                                                                     |
 | 切换画布时有未保存变更           | `setActiveView` 先 `flushNow` 旧画布，`useCanvasPersistence` 监听 `activeViewId` 变化自动 flush |
-| 删除当前激活的画布               | 自动切换到 `views[0]`，后端更新 `workspace.json` 的 `activeViewId`                       |
-| 删除最后一个画布                 | 后端拒绝（`removeView` 返回 `false`），至少保留一个画布                                  |
+| 删除当前激活的画布               | 自动切换到 `views[0]`，后端更新 `workspace.json` 的 `activeViewId`                              |
+| 删除最后一个画布                 | 后端拒绝（`removeView` 返回 `false`），至少保留一个画布                                         |
 
 ---
 

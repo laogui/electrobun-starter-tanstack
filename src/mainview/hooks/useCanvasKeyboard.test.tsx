@@ -18,7 +18,7 @@ const TestComponent = () => {
 
 const dispatchKeyboard = (eventInit: KeyboardEventInit) => {
   const event = new KeyboardEvent('keydown', { bubbles: true, ...eventInit });
-  window.dispatchEvent(event);
+  globalThis.dispatchEvent(event);
   return event;
 };
 
@@ -155,7 +155,7 @@ describe('useCanvasKeyboard', () => {
   });
 
   it('cleans up the keydown listener on unmount', () => {
-    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const view = render(<TestComponent />);
 
     view.unmount();

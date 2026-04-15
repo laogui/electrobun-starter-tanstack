@@ -69,7 +69,7 @@ export interface CanvasState {
   setEdges: (
     updater: Array<Edge> | ((prev: Array<Edge>) => Array<Edge>)
   ) => void;
-  applyNodesChange: (changes: Array<NodeChange<Node>>) => void;
+  applyNodesChange: (changes: Array<NodeChange>) => void;
   applyEdgesChange: (changes: Array<EdgeChange>) => void;
   addConnection: (connection: Connection) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
@@ -80,7 +80,7 @@ export interface CanvasState {
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
 
   // Actions – multi-view
-  setActiveView: (viewId: string) => Promise<void>;
+  setActiveView: (viewId: string) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
   setActiveViewId: (viewId: string) => void;
 
@@ -234,7 +234,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ activeViewId: viewId });
   },
 
-  setActiveView: async (viewId) => {
+  setActiveView: (viewId) => {
     const current = get().activeViewId;
     if (viewId === current) return;
 

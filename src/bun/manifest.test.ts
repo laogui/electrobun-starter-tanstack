@@ -100,7 +100,7 @@ describe('manifest', () => {
     );
     // tmp filename now includes a random suffix — only assert the final destination
     expect(renameMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^.*view-1\.canvas\.json\.[0-9a-f]+\.tmp$/),
+      expect.stringMatching(/^.*view-1\.canvas\.json\.[\da-f]+\.tmp$/),
       savedPath
     );
     await expect(

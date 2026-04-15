@@ -3,6 +3,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
+import { useCanvasStore } from '@/store/canvasStore';
+
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
   loadCanvas: vi.fn(),
@@ -27,9 +30,6 @@ vi.mock('../../../paraglide/messages.js', () => ({
   view_new_canvas: () => 'New Canvas',
 }));
 
-import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
-import { useCanvasStore } from '@/store/canvasStore';
-
 const resetStore = () => {
   useCanvasStore.getState().reset();
   useCanvasStore.setState({
@@ -52,7 +52,7 @@ const resetStore = () => {
   });
 };
 
-describe('ViewSwitcher', () => {
+describe('viewSwitcher', () => {
   beforeEach(() => {
     resetStore();
     rpcMocks.rpcListViews.mockReset();
@@ -123,9 +123,9 @@ describe('ViewSwitcher', () => {
         ],
         [{ id: 'edge-1', source: 'node-1', target: 'node-2' }]
       );
-      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('focus');
+      // ViewSwitcher no longer loads the new canvas; index.tsx's effect handles that
       expect(useCanvasStore.getState().activeViewId).toBe('focus');
-      expect(useCanvasStore.getState().nodes[0]?.id).toBe('hydrated-1');
+      expect(useCanvasStore.getState()._hydrated).toBe(false);
     });
   });
 

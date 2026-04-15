@@ -104,9 +104,7 @@ describe('sanitizeForPersistence', () => {
       { ...createNode({ id: 'a' }), selected: true } as Node,
       { ...createNode({ id: 'b' }), dragging: true } as Node,
     ];
-    const edges = [
-      { ...createEdge({ id: 'e1' }), selected: true } as Edge,
-    ];
+    const edges = [{ ...createEdge({ id: 'e1' }), selected: true } as Edge];
 
     const result = sanitizeForPersistence(nodes, edges);
 

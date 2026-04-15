@@ -35,7 +35,7 @@ const electrobunViewModule = {
 
 vi.mock('electrobun/view', () => electrobunViewModule);
 
-const loadModule = async () => import('@/lib/rpc');
+const loadModule = async () => await import('@/lib/rpc');
 
 beforeEach(() => {
   for (const fn of Object.values(request)) {
@@ -49,7 +49,7 @@ beforeEach(() => {
 
 describe('rpc', () => {
   it('returns null-like fallbacks when not running inside Electrobun', async () => {
-    vi.stubGlobal('__electrobunWebviewId', undefined);
+    vi.stubGlobal('__electrobunWebviewId');
     const rpc = await loadModule();
 
     await expect(rpc.loadCanvas('default')).resolves.toBeNull();

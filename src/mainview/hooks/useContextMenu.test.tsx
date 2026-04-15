@@ -3,6 +3,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useContextMenu } from '@/hooks/useContextMenu';
+
 const storeState = {
   nodes: [
     {
@@ -102,8 +104,6 @@ vi.mock('@/store/canvasStore', () => ({
     }
   ),
 }));
-
-import { useContextMenu } from '@/hooks/useContextMenu';
 
 const viewport = { x: 10, y: 20, zoom: 2 };
 const zoomTo = vi.fn();

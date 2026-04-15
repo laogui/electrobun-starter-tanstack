@@ -1,11 +1,6 @@
 import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../paraglide/messages.js', () => ({
-  default_folder_title: () => 'New Folder',
-  default_new_group_label: () => 'New Group',
-}));
-
 import {
   CARD_H,
   CARD_W,
@@ -17,6 +12,11 @@ import {
   STICKY_W,
 } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
+
+vi.mock('../../paraglide/messages.js', () => ({
+  default_folder_title: () => 'New Folder',
+  default_new_group_label: () => 'New Group',
+}));
 
 function resetStore() {
   // Use the store's reset() to clear undo/redo too, then set remaining fields
@@ -136,8 +136,8 @@ describe('canvasStore — node operations', () => {
     useCanvasStore.getState().updateNodeData('a', { title: 'Updated' });
     const node = useCanvasStore.getState().nodes[0]!;
 
-    expect((node.data as Record<string, unknown>).title).toBe('Updated');
-    expect((node.data as Record<string, unknown>).content).toBe('');
+    expect(node.data.title).toBe('Updated');
+    expect(node.data.content).toBe('');
   });
 });
 
@@ -197,7 +197,7 @@ describe('canvasStore — edge operations', () => {
     useCanvasStore.getState().updateEdgeData('e1', { label: 'new' });
     const edge = useCanvasStore.getState().edges[0]!;
 
-    expect((edge.data as Record<string, unknown>).label).toBe('new');
+    expect(edge.data!.label).toBe('new');
   });
 });
 
@@ -447,10 +447,7 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('a');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<
-      string,
-      unknown
-    >;
+    const { data } = useCanvasStore.getState().nodes[0]!;
 
     // #FFFFFF is the first CARD_COLOR, so the next should be #FDF2F8
     expect(data.color).toBe('#FDF2F8');
@@ -467,10 +464,7 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('s');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<
-      string,
-      unknown
-    >;
+    const { data } = useCanvasStore.getState().nodes[0]!;
 
     // #FEF08A is first STICKY_COLOR, next is #BBF7D0
     expect(data.color).toBe('#BBF7D0');
@@ -487,10 +481,7 @@ describe('canvasStore — changeNodeColor', () => {
     });
 
     useCanvasStore.getState().changeNodeColor('g');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<
-      string,
-      unknown
-    >;
+    const { data } = useCanvasStore.getState().nodes[0]!;
 
     // 'blue' is first GROUP_COLOR, next is 'green'
     expect(data.color).toBe('green');
@@ -616,10 +607,7 @@ describe('canvasStore — addFolderChild', () => {
     });
 
     useCanvasStore.getState().addFolderChild('folder');
-    const data = useCanvasStore.getState().nodes[0]!.data as Record<
-      string,
-      unknown
-    >;
+    const { data } = useCanvasStore.getState().nodes[0]!;
     const children = data.children as Array<unknown>;
 
     expect(children).toHaveLength(1);

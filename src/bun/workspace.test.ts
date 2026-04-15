@@ -130,7 +130,7 @@ describe('workspace', () => {
 
     // tmp filename now includes a random suffix — only assert the final destination
     expect(renameMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^.*data\.json\.[0-9a-f]+\.tmp$/),
+      expect.stringMatching(/^.*data\.json\.[\da-f]+\.tmp$/),
       targetPath
     );
     expect(readFileSync(targetPath, 'utf8')).toBe('{"ok":true}');
@@ -153,7 +153,7 @@ describe('workspace', () => {
   });
 
   it('addView appends a new view and makes it active', async () => {
-    const { addView, initWorkspace } = await import('./workspace');
+    const { initWorkspace, addView } = await import('./workspace');
     initWorkspace(workspaceRoot);
     mkdirSync(join(workspaceRoot, '.spatial'), { recursive: true });
 

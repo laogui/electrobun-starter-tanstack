@@ -2,8 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-if (typeof window !== 'undefined') {
-  Object.defineProperty(window, 'matchMedia', {
+if (globalThis.window !== undefined) {
+  Object.defineProperty(globalThis, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
       matches: false,
@@ -33,12 +33,12 @@ if (typeof window !== 'undefined') {
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
 
-  if (!window.URL.createObjectURL) {
-    window.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+  if (!globalThis.URL.createObjectURL) {
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
   }
 
-  if (!window.URL.revokeObjectURL) {
-    window.URL.revokeObjectURL = vi.fn();
+  if (!globalThis.URL.revokeObjectURL) {
+    globalThis.URL.revokeObjectURL = vi.fn();
   }
 
   if (!HTMLElement.prototype.scrollIntoView) {
@@ -47,7 +47,7 @@ if (typeof window !== 'undefined') {
 }
 
 afterEach(() => {
-  if (typeof window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     cleanup();
   }
   vi.restoreAllMocks();

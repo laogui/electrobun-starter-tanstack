@@ -15,7 +15,6 @@ import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
-import { CreateMenu } from '@/components/canvas/CreateMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
@@ -225,11 +224,10 @@ function CanvasComponent() {
         ) : null}
       </AnimatePresence>
 
-      <ViewSwitcher />
-      <CreateMenu
+      <ViewSwitcher
+        createMenuOpen={createMenuOpen}
         onCreateNode={onCreateNode}
-        open={createMenuOpen}
-        setOpen={setCreateMenuOpen}
+        setCreateMenuOpen={setCreateMenuOpen}
       />
       <CanvasContextMenu
         menu={contextMenu}

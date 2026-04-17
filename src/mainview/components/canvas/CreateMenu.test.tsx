@@ -28,7 +28,7 @@ describe('createMenu', () => {
       <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Note' }));
 
     expect(onCreateNode).toHaveBeenCalledWith('card');
     expect(setOpen).toHaveBeenCalledWith(false);
@@ -42,8 +42,8 @@ describe('createMenu', () => {
       <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
-    expect(screen.getByRole('button', { name: 'File' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'File' }));
+    expect(screen.getByRole('menuitem', { name: 'File' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
 
     expect(onCreateNode).not.toHaveBeenCalled();
   });

@@ -1,3 +1,4 @@
+import { Menu } from '@base-ui/react/menu';
 import {
   File,
   Folder,
@@ -7,8 +8,7 @@ import {
   Plus,
   StickyNote,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 
 import * as m from '../../../paraglide/messages.js';
 
@@ -32,26 +32,6 @@ export function CreateMenu({
   open: boolean;
   setOpen: (v: boolean) => void;
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const handleClick = (e: MouseEvent) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as HTMLElement)
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-    };
-  }, [open, setOpen]);
-
   const handleSelect = (id: string) => {
     switch (id) {
       case 'note': {
@@ -75,57 +55,55 @@ export function CreateMenu({
         break;
       }
     }
-    setOpen(false);
   };
 
   const menuItems = getMenuItems();
 
   return (
-    <div
-      className="fixed right-6 bottom-6 z-40 flex flex-col items-end gap-3"
-      ref={menuRef}
-    >
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="mb-1 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md"
-            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+    <div className="fixed right-6 bottom-6 z-40">
+      <Menu.Root onOpenChange={setOpen} open={open}>
+        <Menu.Trigger className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
+          <motion.span
+            animate={{ rotate: open ? 45 : 0 }}
+            className="flex items-center justify-center"
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
           >
-            {menuItems.map((item, index) => (
-              <button
-                className={`flex w-full items-center gap-3 px-4 py-3 font-medium text-sm transition-colors ${
-                  item.enabled
-                    ? 'text-gray-800 hover:bg-black/5'
-                    : 'cursor-not-allowed text-gray-400'
-                }${index < menuItems.length - 1 ? 'border-gray-100 border-b' : ''}`}
-                disabled={!item.enabled}
-                key={item.id}
-                onClick={() => item.enabled && handleSelect(item.id)}
-                type="button"
-              >
-                <item.icon size={18} />
-                {item.label}
-              </button>
-            ))}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+            <Plus size={24} strokeWidth={2.5} />
+          </motion.span>
+        </Menu.Trigger>
 
-      <motion.button
-        animate={{ rotate: open ? 45 : 0 }}
-        className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl"
-        onClick={() => {
-          setOpen(!open);
-        }}
-        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-        whileHover={{ scale: 1.1, boxShadow: '0 8px 30px rgba(0,0,0,0.25)' }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <Plus size={24} strokeWidth={2.5} />
-      </motion.button>
+        <Menu.Portal>
+          <Menu.Positioner
+            align="end"
+            className="z-50 outline-hidden"
+            side="top"
+            sideOffset={12}
+          >
+            <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0">
+              {menuItems.map((item, index) => {
+                const isLast = index === menuItems.length - 1;
+                return (
+                  <Menu.Item
+                    aria-label={item.label}
+                    className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
+                      item.enabled
+                        ? 'text-gray-800 data-highlighted:bg-black/5'
+                        : 'cursor-not-allowed text-gray-400'
+                    } ${isLast ? '' : 'border-gray-100 border-b'}`}
+                    closeOnClick
+                    disabled={!item.enabled}
+                    key={item.id}
+                    onClick={() => handleSelect(item.id)}
+                  >
+                    <item.icon size={18} />
+                    {item.label}
+                  </Menu.Item>
+                );
+              })}
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div>
   );
 }

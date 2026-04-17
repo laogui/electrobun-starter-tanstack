@@ -14,6 +14,28 @@ function createNode(id: string, parentId?: string): Node {
 }
 
 describe('sortNodesByParent', () => {
+  it('preserves top-level node order so repeated sorting does not flip z-order', () => {
+    const nodes = [
+      createNode('note-1'),
+      createNode('group-1'),
+      createNode('note-2'),
+    ];
+
+    const once = sortNodesByParent(nodes);
+    const twice = sortNodesByParent(once);
+
+    expect(once.map((node) => node.id)).toEqual([
+      'note-1',
+      'group-1',
+      'note-2',
+    ]);
+    expect(twice.map((node) => node.id)).toEqual([
+      'note-1',
+      'group-1',
+      'note-2',
+    ]);
+  });
+
   it('places parent nodes before their descendants', () => {
     const nodes = [
       createNode('child', 'parent'),

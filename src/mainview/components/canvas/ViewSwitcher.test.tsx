@@ -108,7 +108,7 @@ describe('viewSwitcher', () => {
     });
 
     fireEvent.click(screen.getByText('Default Canvas'));
-    fireEvent.click(screen.getByRole('button', { name: 'Focus Mode' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Focus Mode' }));
 
     await waitFor(() => {
       expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith(

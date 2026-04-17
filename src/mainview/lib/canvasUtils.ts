@@ -3,26 +3,36 @@ import type { Node } from '@xyflow/react';
 /** Sort nodes so parents always appear before children (React Flow requirement) */
 export function sortNodesByParent(nodes: Node[]): Node[] {
   const sorted: Node[] = [];
-  const remaining = [...nodes];
+  const remaining: Node[] = [];
   const placed = new Set<string>();
 
-  // First pass: place all nodes without parentId
-  for (let i = remaining.length - 1; i >= 0; i--) {
-    if (!remaining[i]?.parentId) {
-      placed.add(remaining[i]?.id);
-      sorted.push(remaining[i]!);
-      remaining.splice(i, 1);
+  // First pass: place top-level nodes without changing their z-order.
+  for (const node of nodes) {
+    if (node.parentId) {
+      remaining.push(node);
+    } else {
+      placed.add(node.id);
+      sorted.push(node);
     }
   }
 
   // Iteratively place nodes whose parent is already placed
-  let safety = remaining.length + 1;
-  while (remaining.length > 0 && safety-- > 0) {
-    for (let i = remaining.length - 1; i >= 0; i--) {
-      if (placed.has(remaining[i]?.parentId!)) {
-        placed.add(remaining[i]?.id);
-        sorted.push(remaining[i]!);
+  let placedNode = true;
+  while (remaining.length > 0 && placedNode) {
+    placedNode = false;
+    for (let i = 0; i < remaining.length; ) {
+      const node = remaining[i];
+      if (!node) {
+        i += 1;
+        continue;
+      }
+      if (placed.has(node.parentId ?? '')) {
+        placed.add(node.id);
+        sorted.push(node);
         remaining.splice(i, 1);
+        placedNode = true;
+      } else {
+        i += 1;
       }
     }
   }

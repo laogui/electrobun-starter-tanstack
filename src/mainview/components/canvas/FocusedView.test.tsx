@@ -34,10 +34,10 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
         card:{data.title ?? 'untitled'}:{data.content ?? ''}
       </div>
       <button
-        type='button'
         onClick={() => {
           onChange?.({ title: 'Updated Title' });
         }}
+        type="button"
       >
         mutate card
       </button>
@@ -120,9 +120,8 @@ describe('focusedView', () => {
 
     fireEvent.click(screen.getByRole('button'));
     fireEvent.click(
-      screen
-        .getByText('image:Cover:https://example.com/img.png')
-        .closest('div')!.parentElement!.parentElement!
+      screen.getByText('image:Cover:https://example.com/img.png').closest('div')
+        ?.parentElement?.parentElement!
     );
 
     expect(onClose).toHaveBeenCalled();

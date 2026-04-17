@@ -67,11 +67,14 @@ export function useCanvasPersistence() {
     });
 
     const unsub = useCanvasStore.subscribe((state, prevState) => {
-      if (state.nodes === prevState?.nodes && state.edges === prevState.edges)
+      if (state.nodes === prevState?.nodes && state.edges === prevState.edges) {
         return;
+      }
 
       // Only persist once the canvas has been properly loaded
-      if (!state._hydrated) return;
+      if (!state._hydrated) {
+        return;
+      }
 
       if (skipHydrate.current) {
         skipHydrate.current = false;
@@ -95,7 +98,9 @@ export function useCanvasPersistence() {
     });
 
     const handleFlush = () => {
-      if (!isAvailable.current || !dirty.current) return;
+      if (!(isAvailable.current && dirty.current)) {
+        return;
+      }
       flushNow(pendingTimer, viewIdRef.current);
       dirty.current = false;
     };

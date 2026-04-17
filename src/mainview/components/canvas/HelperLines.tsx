@@ -1,14 +1,16 @@
 import { useViewport } from '@xyflow/react';
 
-type HelperLinesProps = {
+interface HelperLinesProps {
   horizontal?: number;
   vertical?: number;
-};
+}
 
 export function HelperLines({ horizontal, vertical }: HelperLinesProps) {
   const { x, y, zoom } = useViewport();
 
-  if (horizontal === undefined && vertical === undefined) return null;
+  if (horizontal === undefined && vertical === undefined) {
+    return null;
+  }
 
   const canvasStyle = {
     position: 'absolute' as const,
@@ -19,27 +21,28 @@ export function HelperLines({ horizontal, vertical }: HelperLinesProps) {
 
   return (
     <div style={canvasStyle}>
-      <svg width='100%' height='100%'>
+      <svg height="100%" width="100%">
+        <title>Helper alignment lines</title>
         {vertical === undefined ? null : (
           <line
-            x1={vertical * zoom + x}
-            y1={0}
-            x2={vertical * zoom + x}
-            y2='100%'
-            stroke='#0096ff'
+            stroke="#0096ff"
+            strokeDasharray="6 3"
             strokeWidth={1}
-            strokeDasharray='6 3'
+            x1={vertical * zoom + x}
+            x2={vertical * zoom + x}
+            y1={0}
+            y2="100%"
           />
         )}
         {horizontal === undefined ? null : (
           <line
-            x1={0}
-            y1={horizontal * zoom + y}
-            x2='100%'
-            y2={horizontal * zoom + y}
-            stroke='#0096ff'
+            stroke="#0096ff"
+            strokeDasharray="6 3"
             strokeWidth={1}
-            strokeDasharray='6 3'
+            x1={0}
+            x2="100%"
+            y1={horizontal * zoom + y}
+            y2={horizontal * zoom + y}
           />
         )}
       </svg>

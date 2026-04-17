@@ -7,10 +7,10 @@ import StickyNode from '@/components/canvas/nodes/StickyNode';
 
 export {
   CARD_COLORS,
-  STICKY_COLORS,
-  GROUP_COLORS,
   colorToStyle,
+  GROUP_COLORS,
   isColorDark,
+  STICKY_COLORS,
 } from './colorUtils';
 
 export const CARD_W = 350;

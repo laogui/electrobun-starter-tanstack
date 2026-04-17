@@ -25,13 +25,13 @@ import { cn } from '@/lib/utils';
 
 import * as m from '../../../paraglide/messages.js';
 
-type MenuItem = {
+interface MenuItem {
+  danger?: boolean;
+  icon: React.ElementType;
   id: string;
   label: string;
-  icon: React.ElementType;
   shortcut?: string;
-  danger?: boolean;
-};
+}
 
 type ContextMenuState = {
   x: number;
@@ -41,7 +41,7 @@ type ContextMenuState = {
   edgeId?: string;
 } | null;
 
-const getCanvasItems = (): Array<MenuItem> => [
+const getCanvasItems = (): MenuItem[] => [
   {
     id: 'new-note',
     label: m.menu_new_note(),
@@ -56,7 +56,7 @@ const getCanvasItems = (): Array<MenuItem> => [
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
 ];
 
-const getCardItems = (): Array<MenuItem> => [
+const getCardItems = (): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -75,7 +75,7 @@ const getCardItems = (): Array<MenuItem> => [
   },
 ];
 
-const getFolderItems = (): Array<MenuItem> => [
+const getFolderItems = (): MenuItem[] => [
   {
     id: 'open-folder',
     label: m.menu_open(),
@@ -93,7 +93,7 @@ const getFolderItems = (): Array<MenuItem> => [
   },
 ];
 
-const getStickyItems = (): Array<MenuItem> => [
+const getStickyItems = (): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   {
@@ -105,7 +105,7 @@ const getStickyItems = (): Array<MenuItem> => [
   },
 ];
 
-const getGroupItems = (): Array<MenuItem> => [
+const getGroupItems = (): MenuItem[] => [
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   {
     id: 'delete',
@@ -116,7 +116,7 @@ const getGroupItems = (): Array<MenuItem> => [
   },
 ];
 
-const getImageItems = (): Array<MenuItem> => [
+const getImageItems = (): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -134,7 +134,7 @@ const getImageItems = (): Array<MenuItem> => [
   },
 ];
 
-const getEdgeItems = (): Array<MenuItem> => [
+const getEdgeItems = (): MenuItem[] => [
   { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
   {
     id: 'toggle-edge-animated',
@@ -168,14 +168,18 @@ export function CanvasContextMenu({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!menu) return;
+    if (!menu) {
+      return;
+    }
     const handleClick = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
         onClose();
       }
     };
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+      }
     };
     document.addEventListener('pointerdown', handleClick, true);
     document.addEventListener('keydown', handleKey);
@@ -209,35 +213,36 @@ export function CanvasContextMenu({
     <AnimatePresence>
       {menu ? (
         <motion.div
-          ref={ref}
-          className='fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl'
-          style={{ left: x, top: y }}
-          initial={{ opacity: 0, scale: 0.95, y: -4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl"
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
+          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+          ref={ref}
+          style={{ left: x, top: y }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
         >
           {items.map((item) => (
             <button
-              key={item.id}
               className={cn(
-                'flex w-full items-center gap-3 px-3 py-2 text-[13px] font-medium transition-colors',
+                'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
                 item.danger
                   ? 'text-red-600 hover:bg-red-50'
                   : 'text-gray-700 hover:bg-black/5'
               )}
+              key={item.id}
               onClick={() => {
                 onAction(item.id, menu.nodeId ?? menu.edgeId);
                 onClose();
               }}
+              type="button"
             >
               <item.icon
-                size={15}
                 className={item.danger ? 'text-red-500' : 'text-gray-400'}
+                size={15}
               />
-              <span className='flex-1 text-left'>{item.label}</span>
+              <span className="flex-1 text-left">{item.label}</span>
               {item.shortcut ? (
-                <span className='text-[11px] text-gray-400'>
+                <span className="text-[11px] text-gray-400">
                   {item.shortcut}
                 </span>
               ) : null}

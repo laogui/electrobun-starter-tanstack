@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/store/canvasStore';
 
+const NEW_NOTE_RE = /new note/i;
+
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
   loadCanvas: vi.fn(),
@@ -99,7 +101,7 @@ vi.mock('@xyflow/react', async () => {
   return {
     ...actual,
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => (
-      <div data-testid='rf-provider'>{children}</div>
+      <div data-testid="rf-provider">{children}</div>
     ),
     ReactFlow: ({
       nodes,
@@ -127,7 +129,6 @@ vi.mock('@xyflow/react', async () => {
       return (
         <div>
           <button
-            type='button'
             onClick={() => {
               onPaneContextMenu?.({
                 preventDefault: () => {},
@@ -135,21 +136,24 @@ vi.mock('@xyflow/react', async () => {
                 clientY: 240,
               } as MouseEvent);
             }}
+            type="button"
           >
             Open canvas menu
           </button>
           <button
-            type='button'
             onClick={() => {
               const node = nodes[0];
-              if (!node) return;
+              if (!node) {
+                return;
+              }
               onNodeDoubleClick?.({} as MouseEvent, node);
             }}
+            type="button"
           >
             Open focused node
           </button>
           {nodes.map((node) => (
-            <div key={node.id} data-id={node.id}>
+            <div data-id={node.id} key={node.id}>
               {String(node.data.title ?? node.id)}
             </div>
           ))}
@@ -323,7 +327,7 @@ describe('routes/index', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
-    fireEvent.click(screen.getByRole('button', { name: /new note/i }));
+    fireEvent.click(screen.getByRole('button', { name: NEW_NOTE_RE }));
 
     await waitFor(() => {
       expect(useCanvasStore.getState().nodes.length).toBeGreaterThanOrEqual(2);

@@ -30,14 +30,20 @@ export const GROUP_COLORS = [
 export function colorToStyle(
   color: string | undefined
 ): React.CSSProperties | undefined {
-  if (!color) return undefined;
-  if (!color.startsWith('#')) return undefined;
+  if (!color) {
+    return;
+  }
+  if (!color.startsWith('#')) {
+    return;
+  }
   return { backgroundColor: color };
 }
 
 /** Returns true if a hex color is "dark" (should use light text). */
 export function isColorDark(hex: string | undefined): boolean {
-  if (!hex?.startsWith('#')) return false;
+  if (!hex?.startsWith('#')) {
+    return false;
+  }
   const r = Number.parseInt(hex.slice(1, 3), 16);
   const g = Number.parseInt(hex.slice(3, 5), 16);
   const b = Number.parseInt(hex.slice(5, 7), 16);

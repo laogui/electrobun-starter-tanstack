@@ -13,14 +13,15 @@ import { rpcSaveAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 
 const handleClassName = 'conn-handle nodrag';
+const FILE_EXT_RE = /\.[^.]+$/;
 
 export interface ImageData {
-  imageUrl: string;
-  imageFile?: string;
-  title?: string;
   color: string;
-  isHidden?: boolean;
+  imageFile?: string;
+  imageUrl: string;
   isDropTarget?: boolean;
+  isHidden?: boolean;
+  title?: string;
 }
 
 export const ImageContent = ({
@@ -33,33 +34,33 @@ export const ImageContent = ({
   if (!data.imageUrl) {
     return (
       <div
-        className='flex size-full flex-col items-center justify-center gap-3'
+        className="flex size-full flex-col items-center justify-center gap-3"
         style={colorToStyle(data.color)}
       >
-        <ImagePlus size={isFocused ? 64 : 40} className='text-gray-300' />
-        <span className='text-sm text-gray-400'>No image</span>
+        <ImagePlus className="text-gray-300" size={isFocused ? 64 : 40} />
+        <span className="text-gray-400 text-sm">No image</span>
       </div>
     );
   }
 
   return (
-    <div className='flex size-full flex-col' style={colorToStyle(data.color)}>
-      <div className='min-h-0 flex-1 overflow-hidden'>
+    <div className="flex size-full flex-col" style={colorToStyle(data.color)}>
+      <div className="min-h-0 flex-1 overflow-hidden">
         <img
-          src={data.imageUrl}
           alt={data.title ?? ''}
           className={cn(
             'pointer-events-none size-full',
             isFocused ? 'object-contain' : 'object-cover'
           )}
           draggable={false}
+          src={data.imageUrl}
         />
       </div>
       {data.title ? (
-        <div className='border-t border-black/5 px-4 py-3'>
+        <div className="border-black/5 border-t px-4 py-3">
           <h3
             className={cn(
-              'truncate leading-tight font-semibold',
+              'truncate font-semibold leading-tight',
               isFocused ? 'text-xl' : 'text-sm'
             )}
           >
@@ -79,11 +80,13 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
   const handleFile = useCallback(
     (file: File) => {
-      if (!file.type.startsWith('image/')) return;
+      if (!file.type.startsWith('image/')) {
+        return;
+      }
       const reader = new FileReader();
       reader.addEventListener('load', (e) => {
         const imageUrl = e.target?.result as string;
-        const title = data.title || file.name.replace(/\.[^.]+$/, '');
+        const title = data.title || file.name.replace(FILE_EXT_RE, '');
 
         // Show image immediately with data URL
         updateNodeData(id, { imageUrl, title });
@@ -108,7 +111,9 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      if (file) {
+        handleFile(file);
+      }
     },
     [handleFile]
   );
@@ -137,7 +142,9 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) handleFile(file);
+      if (file) {
+        handleFile(file);
+      }
       e.target.value = '';
     },
     [handleFile]
@@ -154,42 +161,43 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         'group/image size-full',
         data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
-      onDrop={handleDrop}
       onDragOver={handleDragOver}
+      onDrop={handleDrop}
       onPaste={handlePaste}
     >
       <NodeResizeControl
-        minWidth={150}
-        minHeight={150}
-        maxWidth={800}
+        className="border-none! bg-transparent!"
         maxHeight={900}
-        position='bottom-right'
-        className='border-none! bg-transparent!'
-        style={{ padding: 0 }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-        }}
+        maxWidth={800}
+        minHeight={150}
+        minWidth={150}
         onResizeEnd={() => {
           document.body.classList.remove('resizing-nwse');
         }}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        position="bottom-right"
+        style={{ padding: 0 }}
       >
-        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/image:opacity-100'>
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/image:opacity-100">
           <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='16'
-            height='16'
-            viewBox='0 0 16 16'
+            height="16"
+            viewBox="0 0 16 16"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <g fill='none' fillRule='evenodd'>
+            <title>Resize</title>
+            <g fill="none" fillRule="evenodd">
               <path
-                fill='#1B2536'
-                fillOpacity='0.5'
-                d='M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z'
+                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
+                fill="#1B2536"
+                fillOpacity="0.5"
               />
               <path
-                fill='#FFF'
-                fillOpacity='0.7'
-                d='M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z'
+                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
+                fill="#FFF"
+                fillOpacity="0.7"
               />
             </g>
           </svg>
@@ -197,36 +205,36 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       </NodeResizeControl>
 
       <Handle
-        type='target'
+        className={handleClassName}
+        id="top"
         position={Position.Top}
-        id='top'
-        className={handleClassName}
+        type="target"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="right"
         position={Position.Right}
-        id='right'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="bottom"
         position={Position.Bottom}
-        id='bottom'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='target'
-        position={Position.Left}
-        id='left'
         className={handleClassName}
+        id="left"
+        position={Position.Left}
+        type="target"
       />
 
       <input
-        ref={fileInputRef}
-        type='file'
-        accept='image/*'
-        className='hidden'
+        accept="image/*"
+        className="hidden"
         onChange={handleFileInput}
+        ref={fileInputRef}
+        type="file"
       />
 
       <div
@@ -237,35 +245,36 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       >
         {isZoomedOut ? (
           <div
-            className='flex size-full items-center justify-center'
+            className="flex size-full items-center justify-center"
             style={colorToStyle(data.color)}
           >
             {data.imageUrl ? (
               <img
-                src={data.imageUrl}
-                alt=''
-                className='pointer-events-none size-full object-cover'
+                alt=""
+                className="pointer-events-none size-full object-cover"
                 draggable={false}
+                src={data.imageUrl}
               />
             ) : (
-              <ImagePlus size={32} className='text-gray-300' />
+              <ImagePlus className="text-gray-300" size={32} />
             )}
           </div>
         ) : data.imageUrl ? (
           <ImageContent data={data} />
         ) : (
           <div
-            className='flex size-full flex-col items-center justify-center gap-3'
+            className="flex size-full flex-col items-center justify-center gap-3"
             style={colorToStyle(data.color)}
           >
             <button
-              className='nodrag nopan flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-6 transition-colors hover:bg-black/5'
+              className="nodrag nopan flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-6 transition-colors hover:bg-black/5"
               onClick={openFilePicker}
+              type="button"
             >
-              <ImagePlus size={40} className='text-gray-300' />
-              <span className='text-sm text-gray-400'>Click to add image</span>
+              <ImagePlus className="text-gray-300" size={40} />
+              <span className="text-gray-400 text-sm">Click to add image</span>
             </button>
-            <span className='text-xs text-gray-300'>
+            <span className="text-gray-300 text-xs">
               or drag &amp; drop / paste
             </span>
           </div>

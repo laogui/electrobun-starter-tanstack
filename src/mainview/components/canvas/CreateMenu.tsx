@@ -35,7 +35,9 @@ export function CreateMenu({
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const handleClick = (e: MouseEvent) => {
       if (
         menuRef.current &&
@@ -48,7 +50,7 @@ export function CreateMenu({
     return () => {
       document.removeEventListener('mousedown', handleClick);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   const handleSelect = (id: string) => {
     switch (id) {
@@ -69,10 +71,7 @@ export function CreateMenu({
         break;
       }
       case 'group': {
-        {
-          onCreateNode('group');
-          // No default
-        }
+        onCreateNode('group');
         break;
       }
     }
@@ -83,30 +82,29 @@ export function CreateMenu({
 
   return (
     <div
+      className="fixed right-6 bottom-6 z-40 flex flex-col items-end gap-3"
       ref={menuRef}
-      className='fixed right-6 bottom-6 z-40 flex flex-col items-end gap-3'
     >
       <AnimatePresence>
         {open ? (
           <motion.div
-            className='mb-1 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md'
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="mb-1 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md"
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
             transition={{ type: 'spring', damping: 22, stiffness: 300 }}
           >
             {menuItems.map((item, index) => (
               <button
-                key={item.id}
-                className={`flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`flex w-full items-center gap-3 px-4 py-3 font-medium text-sm transition-colors ${
                   item.enabled
                     ? 'text-gray-800 hover:bg-black/5'
                     : 'cursor-not-allowed text-gray-400'
-                }${
-                  index < menuItems.length - 1 ? 'border-b border-gray-100' : ''
-                }`}
+                }${index < menuItems.length - 1 ? 'border-gray-100 border-b' : ''}`}
                 disabled={!item.enabled}
+                key={item.id}
                 onClick={() => item.enabled && handleSelect(item.id)}
+                type="button"
               >
                 <item.icon size={18} />
                 {item.label}
@@ -117,14 +115,14 @@ export function CreateMenu({
       </AnimatePresence>
 
       <motion.button
-        className='flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl'
         animate={{ rotate: open ? 45 : 0 }}
-        whileHover={{ scale: 1.1, boxShadow: '0 8px 30px rgba(0,0,0,0.25)' }}
-        whileTap={{ scale: 0.9 }}
-        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl"
         onClick={() => {
           setOpen(!open);
         }}
+        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        whileHover={{ scale: 1.1, boxShadow: '0 8px 30px rgba(0,0,0,0.25)' }}
+        whileTap={{ scale: 0.9 }}
       >
         <Plus size={24} strokeWidth={2.5} />
       </motion.button>

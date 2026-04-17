@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 
-export const initialNodes: Array<Node> = [
+export const initialNodes: Node[] = [
   {
     id: '1',
     position: { x: 100, y: 100 },

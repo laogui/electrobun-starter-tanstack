@@ -27,6 +27,9 @@ export default defineConfig(async () => {
       }),
       viteReact(),
     ],
+    resolve: {
+      dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+    },
     root: 'src/mainview',
     build: {
       outDir: '../../dist',

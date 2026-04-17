@@ -1,9 +1,8 @@
 import { join } from 'node:path';
 
 import { BrowserView, BrowserWindow, Updater } from 'electrobun/bun';
-
-import { loadManifest, saveManifest as writeManifest } from './manifest';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
+import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
   buildNoteIndex,
   cardDataToNote,
@@ -24,6 +23,7 @@ import {
 
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+const DATA_URL_RE = /^data:(image\/([a-z+]+));base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 
@@ -62,22 +62,22 @@ export async function getMainViewUrl(): Promise<string> {
   return 'views://mainview/index.html';
 }
 
-type CanvasRPC = {
+interface CanvasRPC {
   bun: {
     requests: {
       loadCanvas: {
         params: { viewId: string };
         response: {
-          nodes: Array<ManifestNode>;
-          edges: Array<ManifestEdge>;
+          nodes: ManifestNode[];
+          edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
         } | null;
       };
       saveManifest: {
         params: {
           viewId: string;
-          nodes: Array<ManifestNode>;
-          edges: Array<ManifestEdge>;
+          nodes: ManifestNode[];
+          edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
         };
         response: { success: boolean };
@@ -142,9 +142,9 @@ type CanvasRPC = {
       settingsUpdated: { theme: string; locale: string };
     };
   };
-};
+}
 
-type SettingsRPC = {
+interface SettingsRPC {
   bun: {
     requests: {
       getSettings: {
@@ -162,11 +162,11 @@ type SettingsRPC = {
     requests: Record<string, unknown>;
     messages: Record<string, unknown>;
   };
-};
+}
 
 interface AppSettings {
-  theme: string;
   locale: string;
+  theme: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = { theme: 'system', locale: 'en' };
@@ -246,10 +246,14 @@ async function main() {
         loadCanvas: async ({ viewId }) => {
           const config = await loadWorkspaceConfig(wsPath);
           const viewEntry = config.views.find((v) => v.id === viewId);
-          if (!viewEntry) return null;
+          if (!viewEntry) {
+            return null;
+          }
 
           const manifest = await loadManifest(wsPath, viewEntry.file);
-          if (!manifest) return null;
+          if (!manifest) {
+            return null;
+          }
 
           const noteIndex = await buildNoteIndex(wsPath);
 
@@ -317,7 +321,9 @@ async function main() {
         saveManifest: async ({ viewId, nodes, edges, viewport }) => {
           const config = await loadWorkspaceConfig(wsPath);
           const viewEntry = config.views.find((v) => v.id === viewId);
-          if (!viewEntry) return { success: false };
+          if (!viewEntry) {
+            return { success: false };
+          }
 
           // Build note index so we can find existing .md files
           const noteIndex = await buildNoteIndex(wsPath);
@@ -326,7 +332,9 @@ async function main() {
           // to avoid concurrent createNote calls producing conflicting paths.
           const nodePathMap = new Map<number, string>();
           for (const [idx, node] of nodes.entries()) {
-            if (node.type !== 'card') continue;
+            if (node.type !== 'card') {
+              continue;
+            }
             const noteId =
               (node.data.noteId as string) ||
               `note_${crypto.randomUUID().slice(0, 8)}`;
@@ -365,7 +373,9 @@ async function main() {
               }
 
               // Only extract content for card nodes
-              if (node.type !== 'card') return node;
+              if (node.type !== 'card') {
+                return node;
+              }
 
               const noteId = node.data.noteId as string;
               const filePath = nodePathMap.get(idx)!;
@@ -373,7 +383,9 @@ async function main() {
               // Read existing frontmatter to preserve createdAt
               let existingFm: Record<string, unknown> | undefined;
               const doc = await loadNote(wsPath, filePath);
-              if (doc) existingFm = doc.frontmatter;
+              if (doc) {
+                existingFm = doc.frontmatter;
+              }
 
               // Convert node data to frontmatter + body
               const { frontmatter, body } = cardDataToNote(
@@ -416,7 +428,9 @@ async function main() {
         saveNote: async ({ noteId, frontmatter, body }) => {
           const noteIndex = await buildNoteIndex(wsPath);
           const filePath = noteIndex.get(noteId);
-          if (!filePath) return { success: false };
+          if (!filePath) {
+            return { success: false };
+          }
 
           frontmatter.updatedAt = new Date().toISOString();
           await writeNote(wsPath, filePath, frontmatter, body);
@@ -431,15 +445,19 @@ async function main() {
         deleteNote: async ({ noteId }) => {
           const noteIndex = await buildNoteIndex(wsPath);
           const filePath = noteIndex.get(noteId);
-          if (!filePath) return { success: false };
+          if (!filePath) {
+            return { success: false };
+          }
 
           const deleted = await deleteNoteFile(wsPath, filePath);
           return { success: deleted };
         },
 
         saveAttachment: async ({ dataUrl, existingFile }) => {
-          const match = /^data:(image\/([a-z+]+));base64,(.+)$/i.exec(dataUrl);
-          if (!match) throw new Error('Invalid data URL');
+          const match = DATA_URL_RE.exec(dataUrl);
+          if (!match) {
+            throw new Error('Invalid data URL');
+          }
           const mimeSubtype = match[2]!;
           const base64Data = match[3]!;
 
@@ -470,7 +488,9 @@ async function main() {
         loadAttachment: async ({ filePath }) => {
           const fullPath = join(wsPath, filePath);
           const file = Bun.file(fullPath);
-          if (!(await file.exists())) return null;
+          if (!(await file.exists())) {
+            return null;
+          }
 
           const buffer = await file.arrayBuffer();
           const mimeType = file.type || 'image/png';
@@ -538,4 +558,6 @@ async function main() {
   });
 }
 
-void main();
+main().catch((err) => {
+  console.error(err);
+});

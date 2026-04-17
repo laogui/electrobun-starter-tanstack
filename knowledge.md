@@ -14,7 +14,7 @@ An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwi
 - **Build (canary):** `bun run build:canary`
 - **Type-check:** `bun run type-check` (uses `tsgo --noEmit`)
 - **Lint:** `bun run lint` (ESLint with `--fix`, modifies files)
-- **Format:** `bun run format` (oxfmt, modifies files)
+- **Format:** `bun run format` (biome, modifies files)
 - **All checks:** `bun run ci` (type-check + lint + format concurrently)
 - **Test:** `bun run test` (vitest, single run)
 - **Test (watch):** `bun run test:watch`
@@ -47,7 +47,7 @@ An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwi
 - **Package manager:** `bun` for everything (including ultracite/lefthook).
 - **Import alias:** `@/*` → `src/mainview/*`
 - **Styling:** Tailwind v4 via `@tailwindcss/vite` plugin (no standalone tailwind config file).
-- **Formatting/linting:** Ultracite (oxlint + oxfmt). Pre-commit hook via Lefthook runs `bunx ultracite fix`.
+- **Formatting/linting:** Ultracite (biome). Pre-commit hook via Lefthook runs `bunx ultracite fix`.
 - **TypeScript:** Strict mode, `verbatimModuleSyntax`, `noUncheckedIndexedAccess`. Use `tsgo` for type-checking.
 - **React:** Function components only, React 19+ (use ref as prop, no forwardRef).
 - **State:** Zustand for local state, TanStack Query for server/async state.

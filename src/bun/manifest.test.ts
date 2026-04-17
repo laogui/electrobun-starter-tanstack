@@ -5,6 +5,8 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const VIEW1_TMP_RE = /^.*view-1\.canvas\.json\.[\da-f]+\.tmp$/;
+
 vi.mock('electrobun/bun', () => ({
   Utils: {
     paths: {
@@ -100,7 +102,7 @@ describe('manifest', () => {
     );
     // tmp filename now includes a random suffix — only assert the final destination
     expect(renameMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^.*view-1\.canvas\.json\.[\da-f]+\.tmp$/),
+      expect.stringMatching(VIEW1_TMP_RE),
       savedPath
     );
     await expect(

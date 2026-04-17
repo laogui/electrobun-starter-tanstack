@@ -1,15 +1,15 @@
 import type { Edge, Node } from '@xyflow/react';
 
 export interface CanvasSnapshot {
-  nodes: Array<Node>;
-  edges: Array<Edge>;
+  edges: Edge[];
+  nodes: Node[];
 }
 
 const MAX_HISTORY = 50;
 
 export interface UndoRedoState {
-  past: Array<CanvasSnapshot>;
-  future: Array<CanvasSnapshot>;
+  future: CanvasSnapshot[];
+  past: CanvasSnapshot[];
 }
 
 export function createUndoRedoState(): UndoRedoState {
@@ -28,7 +28,9 @@ export function undo(
   state: UndoRedoState,
   current: CanvasSnapshot
 ): { state: UndoRedoState; snapshot: CanvasSnapshot } | null {
-  if (state.past.length === 0) return null;
+  if (state.past.length === 0) {
+    return null;
+  }
   const previous = state.past.at(-1)!;
   return {
     state: {
@@ -43,7 +45,9 @@ export function redo(
   state: UndoRedoState,
   current: CanvasSnapshot
 ): { state: UndoRedoState; snapshot: CanvasSnapshot } | null {
-  if (state.future.length === 0) return null;
+  if (state.future.length === 0) {
+    return null;
+  }
   const next = state.future[0]!;
   return {
     state: {

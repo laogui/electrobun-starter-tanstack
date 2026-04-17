@@ -9,14 +9,14 @@ export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
   }
 
   return (
-    <div className='flex min-h-screen items-center justify-center p-4'>
+    <div className="flex min-h-screen items-center justify-center p-4">
       <div>Error</div>
       <button
-        type='button'
         onClick={() => {
           reset();
-          void router.invalidate();
+          router.invalidate();
         }}
+        type="button"
       >
         Reset
       </button>

@@ -59,8 +59,9 @@ describe('notes', () => {
   });
 
   it('serializeChecklistItems and parseChecklistBody round-trip checklist content', async () => {
-    const { serializeChecklistItems, parseChecklistBody } =
-      await import('./notes');
+    const { serializeChecklistItems, parseChecklistBody } = await import(
+      './notes'
+    );
     const markdown = serializeChecklistItems([
       { text: 'Header', isHeader: true },
       { text: 'Done', checked: true },

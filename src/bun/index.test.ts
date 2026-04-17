@@ -17,7 +17,7 @@ vi.mock('electrobun/bun', () => ({
     defineRPC: (...args: Parameters<typeof defineRpcMock>) =>
       defineRpcMock(...args),
   },
-  BrowserWindow: function BrowserWindowMock(...args: Array<unknown>) {
+  BrowserWindow(...args: unknown[]) {
     return browserWindowMock(...args);
   },
   Updater: {
@@ -288,7 +288,9 @@ describe('src/bun/index helpers', () => {
     workspaceMocks.renameView.mockResolvedValueOnce(false);
     await expect(
       canvasHandlers.renameView({ viewId: 'missing', name: 'Nope' })
-    ).resolves.toEqual({ success: false });
+    ).resolves.toEqual({
+      success: false,
+    });
   });
 
   it('openSettings focuses an existing window and otherwise creates a new settings window', async () => {
@@ -321,7 +323,9 @@ describe('src/bun/index helpers', () => {
 
     await expect(
       settingsHandlers.saveSettings({ theme: 'dark', locale: 'zh' })
-    ).resolves.toEqual({ success: true });
+    ).resolves.toEqual({
+      success: true,
+    });
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
       '/workspace-settings/.spatial/settings.json',
       JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)

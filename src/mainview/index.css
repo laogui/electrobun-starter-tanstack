@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
@@ -52,8 +52,8 @@ body.resizing-nwse * {
 
 /* ── Group styles ── */
 .canvas-group {
-  border-radius: 6px;
   border: 1.5px dashed transparent;
+  border-radius: 6px;
   transition: border-color 0.15s;
 }
 
@@ -80,17 +80,17 @@ body.resizing-nwse * {
 
 .canvas-group.selected {
   border-color: hsl(var(--connection-active));
-  border-width: 2px;
   border-style: dashed;
+  border-width: 2px;
 }
 
 /* ── React Flow node overrides ── */
 
 /* Selected card/folder node styling */
 .react-flow__node.selected:not(.react-flow__node-group):not(
-    .react-flow__node-sticky
-  )
-  > div {
+  .react-flow__node-sticky
+)
+> div {
   outline: 2px solid #0096ff;
   outline-offset: 2px;
   border-radius: 24px;
@@ -105,20 +105,20 @@ body.resizing-nwse * {
 
 /* Remove default React Flow node border on groups */
 .react-flow__node-group {
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
   padding: 0 !important;
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Connection handles ── */
 .react-flow__handle.conn-handle {
   width: 10px;
   height: 10px;
+  cursor: crosshair;
   background: hsl(var(--connection-active));
   border: 2px solid #fff;
   border-radius: 50%;
-  cursor: crosshair;
   opacity: 0;
   transition:
     opacity 0.15s,
@@ -139,9 +139,9 @@ body.resizing-nwse * {
 
 /* ── Edge styling ── */
 .react-flow__edge-path {
+  fill: none;
   stroke: hsl(var(--connection));
   stroke-width: 1.5;
-  fill: none;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
@@ -151,9 +151,9 @@ body.resizing-nwse * {
 
 /* Connection line while dragging */
 .react-flow__connection-path {
+  fill: none;
   stroke: hsl(var(--connection-active));
   stroke-width: 1.5;
-  fill: none;
 }
 
 /* ── Animated dash flow for labeled edges ── */

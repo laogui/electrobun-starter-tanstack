@@ -39,7 +39,9 @@ const GroupNode = ({ id, data, selected }: any) => {
       const MARGIN = 4;
       for (const og of otherGroups) {
         const internal = rf.getInternalNode(og.id);
-        if (!internal) continue;
+        if (!internal) {
+          continue;
+        }
         const ox = internal.internals.positionAbsolute.x;
         const oy = internal.internals.positionAbsolute.y;
         const ow = internal.measured.width ?? 400;
@@ -60,6 +62,7 @@ const GroupNode = ({ id, data, selected }: any) => {
 
   return (
     <motion.div
+      animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
       className={cn(
         `canvas-group group-${data.color || 'blue'} size-full`,
         selected && 'selected',
@@ -67,63 +70,62 @@ const GroupNode = ({ id, data, selected }: any) => {
         data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
       initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
       transition={{ duration: 0.2 }}
     >
       <NodeResizer
+        handleClassName="!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2"
         isVisible={selected}
-        minWidth={300}
+        lineClassName="!border-transparent"
         minHeight={200}
-        lineClassName='!border-transparent'
-        handleClassName='!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2'
+        minWidth={300}
         shouldResize={shouldResize}
       />
 
       <Handle
-        type='target'
+        className={handleClassName}
+        id="top"
         position={Position.Top}
-        id='top'
-        className={handleClassName}
+        type="target"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="right"
         position={Position.Right}
-        id='right'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="bottom"
         position={Position.Bottom}
-        id='bottom'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='target'
-        position={Position.Left}
-        id='left'
         className={handleClassName}
+        id="left"
+        position={Position.Left}
+        type="target"
       />
 
-      <div className='absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2'>
+      <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
         <div
-          ref={labelRef}
-          suppressContentEditableWarning
-          contentEditable={editingLabel}
           className={cn(
-            'nodrag nopan text-xs font-semibold tracking-wide outline-none',
+            'nodrag nopan font-semibold text-xs tracking-wide outline-none',
             'text-gray-600',
             editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
           )}
+          contentEditable={editingLabel}
+          onBlur={handleBlur}
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditingLabel(true);
             setTimeout(() => labelRef.current?.focus(), 10);
           }}
-          onBlur={handleBlur}
+          ref={labelRef}
+          suppressContentEditableWarning
         >
           {data.label}
         </div>
-        <span className='text-xs text-gray-300'>⋮⋮</span>
+        <span className="text-gray-300 text-xs">⋮⋮</span>
       </div>
     </motion.div>
   );

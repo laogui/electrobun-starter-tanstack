@@ -10,7 +10,7 @@
 - `bun run build:canary` — build the renderer and package with Electrobun's canary env
 - `bun run type-check` — runs `tsgo --noEmit`
 - `bun run lint` — runs ESLint with `--fix` and may modify files
-- `bun run format` — runs `oxfmt --write .` and may modify files
+- `bun run format` — runs `biome format --write .` and may modify files
 - `bun run ci` — runs type-check, lint, and format concurrently
 - `bun run test` — runs all Vitest unit tests once (`vitest run`)
 - `bun run test:watch` — runs Vitest in watch mode
@@ -31,17 +31,18 @@ Use `package.json` as the source of truth for scripts: `README.md` still mention
 - Imports use the TS path alias `@/* -> src/mainview/*`. `components.json` also defines the shadcn/ui aliases, so shared UI primitives live under `@/components/ui`.
 - Styling is Tailwind v4 via `@tailwindcss/vite`; there is no separate Tailwind config file in the repo right now.
 
+
 # Ultracite Code Standards
 
 This project uses **Ultracite**, a zero-config preset that enforces strict code quality standards through automated formatting and linting.
 
 ## Quick Reference
 
-- **Format code**: `bunx ultracite fix`
-- **Check for issues**: `bunx ultracite check`
-- **Diagnose setup**: `bunx ultracite doctor`
+- **Format code**: `bun x ultracite fix`
+- **Check for issues**: `bun x ultracite check`
+- **Diagnose setup**: `bun x ultracite doctor`
 
-Oxlint + Oxfmt (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
+Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
 
 ---
 
@@ -121,17 +122,14 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 ### Framework-Specific Guidance
 
 **Next.js:**
-
 - Use Next.js `<Image>` component for images
 - Use `next/head` or App Router metadata API for head elements
 - Use Server Components for async data fetching instead of async Client Components
 
 **React 19+:**
-
 - Use ref as a prop instead of `React.forwardRef`
 
 **Solid/Svelte/Vue/Qwik:**
-
 - Use `class` and `for` attributes (not `className` or `htmlFor`)
 
 ---
@@ -143,11 +141,11 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 - Don't use `.only` or `.skip` in committed code
 - Keep test suites reasonably flat - avoid excessive `describe` nesting
 
-## When Oxlint + Oxfmt Can't Help
+## When Biome Can't Help
 
-Oxlint + Oxfmt's linter will catch most issues automatically. Focus your attention on:
+Biome's linter will catch most issues automatically. Focus your attention on:
 
-1. **Business logic correctness** - Oxlint + Oxfmt can't validate your algorithms
+1. **Business logic correctness** - Biome can't validate your algorithms
 2. **Meaningful naming** - Use descriptive names for functions, variables, and types
 3. **Architecture decisions** - Component structure, data flow, and API design
 4. **Edge cases** - Handle boundary conditions and error states
@@ -156,4 +154,5 @@ Oxlint + Oxfmt's linter will catch most issues automatically. Focus your attenti
 
 ---
 
-Most formatting and common issues are automatically fixed by Oxlint + Oxfmt. Run `bunx ultracite fix` before committing to ensure compliance.
+Most formatting and common issues are automatically fixed by Biome. Run `bun x ultracite fix` before committing to ensure compliance.
+

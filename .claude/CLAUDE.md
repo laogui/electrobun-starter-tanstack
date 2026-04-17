@@ -1,88 +1,36 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Development commands
 
-## Project Overview
+- `bun install`
+- `bun run dev` — start Electrobun in watch mode without Vite HMR
+- `bun run dev:hmr` — recommended local workflow; runs the Vite dev server and Electrobun together
+- `bun run hmr` — renderer-only Vite dev server on `http://localhost:5173`
+- `bun run start` — build the renderer with Vite, then launch `electrobun dev`
+- `bun run build:canary` — build the renderer and package with Electrobun's canary env
+- `bun run type-check` — runs `tsgo --noEmit`
+- `bun run lint` — runs ESLint with `--fix` and may modify files
+- `bun run format` — runs `biome format --write .` and may modify files
+- `bun run ci` — runs type-check, lint, and format concurrently
+- `bun run test` — runs all Vitest unit tests once (`vitest run`)
+- `bun run test:watch` — runs Vitest in watch mode
 
-**Spatial** — a desktop visual canvas/whiteboard app built with **Electrobun** (Bun-based Electron alternative). Features an infinite canvas with draggable, resizable card and folder nodes, similar to a spatial note-taking tool.
-
-## Development Commands
-
-All commands use `bun` (not npm/yarn/pnpm). Source of truth is `package.json` scripts:
-
-```
-bun run dev          # Electrobun in watch mode (no Vite HMR)
-bun run dev:hmr      # Recommended: Vite dev server + Electrobun together
-bun run hmr          # Renderer-only Vite dev server on :5173
-bun run start        # vite build + electrobun dev
-bun run build:canary # Build renderer and package with canary env
-bun run type-check   # tsgo --noEmit
-bun run lint         # eslint --fix
-bun run format       # oxfmt --write .
-bun run ci           # type-check + lint + format concurrently
-```
-
-For tests (none exist yet, but vitest is installed):
-
-```
-bunx vitest run              # all tests
-bunx vitest run src/...      # single test file
-```
-
-**Important:** `README.md` may reference `bun run build` / `bun run build:prod` — those scripts don't exist. Use `package.json` as the source of truth.
+Use `package.json` as the source of truth for scripts: `README.md` still mentions `bun run build` and `bun run build:prod`, but those scripts are not present.
 
 ## Architecture
 
-### Two-Process Model
+- The app is split into two runtime sides:
+  - `src/bun/` is the Electrobun main process.
+  - `src/mainview/` is the React renderer loaded into the desktop window.
+- `src/bun/index.ts` decides whether to load the packaged view (`views://mainview/index.html`) or the Vite dev server. In the `dev` channel it polls `http://localhost:5173`; if that server is up, HMR is enabled automatically.
+- `vite.config.ts` sets the Vite root to `src/mainview` and emits the renderer build into `dist/`. `electrobun.config.ts` then copies `dist/index.html` and `dist/assets` into `views/mainview/` for Electrobun packaging. `watchIgnore: ["dist/**"]` avoids rebuild loops while using HMR.
+- The renderer is a TanStack Router app. Routes are file-based under `src/mainview/routes/`, and `@tanstack/router-plugin` generates `src/mainview/routeTree.gen.ts`. Treat `routeTree.gen.ts` as generated output, not a hand-edited source file.
+- `src/mainview/main.tsx` mounts `RouterProvider`, and `src/mainview/router.tsx` creates the router, injects the shared React Query client into router context, and switches to `createHashHistory()` outside `http:`/`https:` so routing works inside the packaged desktop app.
+- `src/mainview/routes/__root.tsx` is the global shell: it renders the route outlet, wires up the Sonner toaster, and mounts TanStack Devtools for Router, Query, and Form state.
+- `src/mainview/lib/queryClient.ts` centralizes React Query behavior. Query failures surface as Sonner toasts with a built-in retry action, so network/data errors are expected to be handled through that shared client instead of per-screen ad hoc notifications.
+- Imports use the TS path alias `@/* -> src/mainview/*`. `components.json` also defines the shadcn/ui aliases, so shared UI primitives live under `@/components/ui`.
+- Styling is Tailwind v4 via `@tailwindcss/vite`; there is no separate Tailwind config file in the repo right now.
 
-- **`src/bun/`** — Electrobun main process. `src/bun/index.ts` creates the BrowserWindow and decides whether to load from Vite dev server (for HMR) or packaged views.
-- **`src/mainview/`** — React renderer. Entire UI lives here.
-
-### Renderer Stack
-
-| Layer      | Technology                                                                |
-| ---------- | ------------------------------------------------------------------------- |
-| UI         | React 19 + TypeScript                                                     |
-| Routing    | TanStack Router (file-based, `src/mainview/routes/`)                      |
-| State      | TanStack React Query (shared client in `src/mainview/lib/queryClient.ts`) |
-| Forms      | TanStack React Form                                                       |
-| Canvas     | @xyflow/react (React Flow)                                                |
-| Styling    | Tailwind CSS v4                                                           |
-| i18n       | Paraglide / Inlang (en/zh)                                                |
-| Animations | motion/react                                                              |
-| Toasts     | Sonner                                                                    |
-
-### Key Entry Points
-
-- **`src/mainview/main.tsx`** — mounts `ThemeProvider` + `RouterProvider`
-- **`src/mainview/router.tsx`** — creates TanStack Router, injects QueryClient into router context, uses `createHashHistory()` for packaged app
-- **`src/mainview/routes/__root.tsx`** — global shell with theme/language selectors, Sonner toaster, DevTools
-- **`src/mainview/routes/index.tsx`** — main canvas page (React Flow with custom card/folder nodes)
-
-### Directory Structure
-
-```
-src/
-  bun/                              # Main process
-  mainview/
-    routes/                         # File-based routes (TanStack Router)
-      __root.tsx                    # Root layout
-      index.tsx                     # Canvas page
-    components/
-      canvas/                       # Canvas UI (CreateMenu, FocusedView, FolderView, HelperLines, nodes/)
-      ui/                           # Reusable primitives (Button, Tabs, Toaster)
-      layout/                       # Layout helpers (ErrorBoundary, Loader)
-    lib/                            # Utilities (queryClient, cn helper, getHelperLines)
-    data/                           # Seed data (initialNodes)
-```
-
-### Important Conventions
-
-- **Path alias:** `@/*` maps to `src/mainview/*` (defined in tsconfig.json)
-- **Generated files:** `src/mainview/routeTree.gen.ts` is auto-generated by `@tanstack/router-plugin`. Do not hand-edit.
-- **React Query errors** automatically surface as Sonner toasts with retry action — handle data errors through the shared `queryClient` in `src/mainview/lib/queryClient.ts`.
-- **shadcn/ui** primitives live under `@/components/ui` (see `components.json`)
-- **i18n:** messages go in `messages/{en,zh}.json`; run `bun run machine-translate` after adding new keys; generated output is in `src/paraglide/`
 
 # Ultracite Code Standards
 
@@ -90,11 +38,11 @@ This project uses **Ultracite**, a zero-config preset that enforces strict code 
 
 ## Quick Reference
 
-- **Format code**: `bunx ultracite fix`
-- **Check for issues**: `bunx ultracite check`
-- **Diagnose setup**: `bunx ultracite doctor`
+- **Format code**: `bun x ultracite fix`
+- **Check for issues**: `bun x ultracite check`
+- **Diagnose setup**: `bun x ultracite doctor`
 
-Oxlint + Oxfmt (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
+Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
 
 ---
 
@@ -174,17 +122,14 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 ### Framework-Specific Guidance
 
 **Next.js:**
-
 - Use Next.js `<Image>` component for images
 - Use `next/head` or App Router metadata API for head elements
 - Use Server Components for async data fetching instead of async Client Components
 
 **React 19+:**
-
 - Use ref as a prop instead of `React.forwardRef`
 
 **Solid/Svelte/Vue/Qwik:**
-
 - Use `class` and `for` attributes (not `className` or `htmlFor`)
 
 ---
@@ -196,11 +141,11 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 - Don't use `.only` or `.skip` in committed code
 - Keep test suites reasonably flat - avoid excessive `describe` nesting
 
-## When Oxlint + Oxfmt Can't Help
+## When Biome Can't Help
 
-Oxlint + Oxfmt's linter will catch most issues automatically. Focus your attention on:
+Biome's linter will catch most issues automatically. Focus your attention on:
 
-1. **Business logic correctness** - Oxlint + Oxfmt can't validate your algorithms
+1. **Business logic correctness** - Biome can't validate your algorithms
 2. **Meaningful naming** - Use descriptive names for functions, variables, and types
 3. **Architecture decisions** - Component structure, data flow, and API design
 4. **Edge cases** - Handle boundary conditions and error states
@@ -209,4 +154,5 @@ Oxlint + Oxfmt's linter will catch most issues automatically. Focus your attenti
 
 ---
 
-Most formatting and common issues are automatically fixed by Oxlint + Oxfmt. Run `bunx ultracite fix` before committing to ensure compliance.
+Most formatting and common issues are automatically fixed by Biome. Run `bun x ultracite fix` before committing to ensure compliance.
+

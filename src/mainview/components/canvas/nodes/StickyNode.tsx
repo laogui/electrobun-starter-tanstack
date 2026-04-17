@@ -41,32 +41,33 @@ const StickyNode = ({ id, data }: any) => {
       )}
     >
       <NodeResizeControl
-        minWidth={120}
-        minHeight={120}
-        maxWidth={500}
+        className="border-none! bg-transparent!"
         maxHeight={500}
-        position='bottom-right'
-        className='border-none! bg-transparent!'
-        style={{ padding: 0 }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-        }}
+        maxWidth={500}
+        minHeight={120}
+        minWidth={120}
         onResizeEnd={() => {
           document.body.classList.remove('resizing-nwse');
         }}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        position="bottom-right"
+        style={{ padding: 0 }}
       >
-        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/sticky:opacity-100'>
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/sticky:opacity-100">
           <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='12'
-            height='12'
-            viewBox='0 0 16 16'
+            height="12"
+            viewBox="0 0 16 16"
+            width="12"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <g fill='none' fillRule='evenodd'>
+            <title>Resize</title>
+            <g fill="none" fillRule="evenodd">
               <path
-                fill='#1B2536'
-                fillOpacity='0.3'
-                d='M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z'
+                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
+                fill="#1B2536"
+                fillOpacity="0.3"
               />
             </g>
           </svg>
@@ -74,28 +75,28 @@ const StickyNode = ({ id, data }: any) => {
       </NodeResizeControl>
 
       <Handle
-        type='target'
+        className={handleClassName}
+        id="top"
         position={Position.Top}
-        id='top'
-        className={handleClassName}
+        type="target"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="right"
         position={Position.Right}
-        id='right'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="bottom"
         position={Position.Bottom}
-        id='bottom'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='target'
-        position={Position.Left}
-        id='left'
         className={handleClassName}
+        id="left"
+        position={Position.Left}
+        type="target"
       />
 
       <div
@@ -106,26 +107,26 @@ const StickyNode = ({ id, data }: any) => {
         onDoubleClick={handleDoubleClick}
       >
         {isZoomedOut ? (
-          <div className='size-full p-3' style={colorToStyle(data.color)}>
-            <div className='mt-1 space-y-2 opacity-30'>
-              <div className='h-2 w-full rounded-full bg-current' />
-              <div className='h-2 w-4/6 rounded-full bg-current' />
+          <div className="size-full p-3" style={colorToStyle(data.color)}>
+            <div className="mt-1 space-y-2 opacity-30">
+              <div className="h-2 w-full rounded-full bg-current" />
+              <div className="h-2 w-4/6 rounded-full bg-current" />
             </div>
           </div>
         ) : (
           <div
-            className='flex size-full flex-col p-4'
+            className="flex size-full flex-col p-4"
             style={colorToStyle(data.color)}
           >
             <div
-              ref={textRef}
-              suppressContentEditableWarning
-              contentEditable={editing}
               className={cn(
-                'flex-1 text-sm/relaxed wrap-break-word whitespace-pre-wrap outline-none',
+                'wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed outline-none',
                 editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
               )}
+              contentEditable={editing}
               onBlur={handleBlur}
+              ref={textRef}
+              suppressContentEditableWarning
             >
               {data.content}
             </div>

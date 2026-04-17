@@ -2,7 +2,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools';
 import { formDevtoolsPlugin } from '@tanstack/react-form-devtools';
 import type { QueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
-import { Outlet, createRootRouteWithContext } from '@tanstack/react-router';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
 import { Settings } from 'lucide-react';
@@ -26,10 +26,12 @@ function RootDocument() {
 
   // Pull persisted settings on mount
   useEffect(() => {
-    void rpcGetSettings().then((s) => {
-      if (!s) return;
+    rpcGetSettings().then((s) => {
+      if (!s) {
+        return;
+      }
       setTheme(s.theme);
-      void setLocale(s.locale as 'en' | 'zh');
+      setLocale(s.locale as 'en' | 'zh');
     });
   }, [setTheme]);
 
@@ -38,7 +40,7 @@ function RootDocument() {
     const handler = (e: Event) => {
       const { theme, locale } = (e as CustomEvent).detail;
       setTheme(theme);
-      void setLocale(locale as 'en' | 'zh');
+      setLocale(locale as 'en' | 'zh');
     };
     globalThis.addEventListener('settings-updated', handler);
     return () => {
@@ -49,15 +51,15 @@ function RootDocument() {
   return (
     <>
       {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
-      <div className='electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 items-center justify-end gap-2 border-b border-black/5 bg-transparent px-3 select-none dark:border-white/5'>
-        <div className='flex-1' />
+      <div className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center justify-end gap-2 border-black/5 border-b bg-transparent px-3 dark:border-white/5">
+        <div className="flex-1" />
         <button
-          type='button'
-          className='electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200'
-          aria-label='Settings'
+          aria-label="Settings"
+          className="electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200"
           onClick={() => {
-            void rpcOpenSettings();
+            rpcOpenSettings();
           }}
+          type="button"
         >
           <Settings size={16} />
         </button>

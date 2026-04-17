@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
+const COPY_RE = /copy/i;
+
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_note: () => 'New note',
   menu_new_sticky: () => 'New sticky',
@@ -45,7 +47,7 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /copy/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY_RE }));
 
     expect(onAction).toHaveBeenCalledWith('copy', 'node-1');
     expect(onClose).toHaveBeenCalledTimes(1);

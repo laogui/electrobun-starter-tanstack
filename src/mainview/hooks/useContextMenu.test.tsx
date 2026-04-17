@@ -126,7 +126,6 @@ const Harness = () => {
   return (
     <div>
       <button
-        type='button'
         onClick={() => {
           onPaneContextMenu({
             preventDefault: vi.fn(),
@@ -134,11 +133,11 @@ const Harness = () => {
             clientY: 180,
           } as unknown as MouseEvent);
         }}
+        type="button"
       >
         pane
       </button>
       <button
-        type='button'
         onClick={() => {
           onNodeContextMenu(
             {
@@ -154,11 +153,11 @@ const Harness = () => {
             } as never
           );
         }}
+        type="button"
       >
         node
       </button>
       <button
-        type='button'
         onClick={() => {
           onEdgeContextMenu(
             {
@@ -169,114 +168,115 @@ const Harness = () => {
             { id: 'edge-1', source: 'card-1', target: 'folder-1' } as never
           );
         }}
+        type="button"
       >
         edge
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('new-note');
         }}
+        type="button"
       >
         new-note
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('paste');
         }}
+        type="button"
       >
         paste
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('reset-zoom');
         }}
+        type="button"
       >
         reset-zoom
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('copy', 'card-1');
         }}
+        type="button"
       >
         copy
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('delete', 'card-1');
         }}
+        type="button"
       >
         delete
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('change-color', 'card-1');
         }}
+        type="button"
       >
         color
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('new-child', 'folder-1');
         }}
+        type="button"
       >
         child
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('edit-edge-label', 'edge-1');
         }}
+        type="button"
       >
         edit-edge
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('toggle-edge-animated', 'edge-1');
         }}
+        type="button"
       >
         toggle-animated
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('toggle-edge-path-type', 'edge-1');
         }}
+        type="button"
       >
         toggle-path
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('delete-edge', 'edge-1');
         }}
+        type="button"
       >
         delete-edge
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('focus', 'card-1');
         }}
+        type="button"
       >
         focus
       </button>
       <button
-        type='button'
         onClick={() => {
           handleContextMenuAction('open-folder', 'folder-1');
         }}
+        type="button"
       >
         open-folder
       </button>
-      <output aria-label='context-menu-state'>
+      <output aria-label="context-menu-state">
         {contextMenu ? JSON.stringify(contextMenu) : 'null'}
       </output>
     </div>

@@ -11,7 +11,7 @@ export function useHelperLines() {
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
   const onNodesChange = useCallback(
-    (changes: Array<NodeChange>) => {
+    (changes: NodeChange[]) => {
       const positionChange = changes.find(
         (c): c is NodePositionChange =>
           c.type === 'position' && c.dragging === true

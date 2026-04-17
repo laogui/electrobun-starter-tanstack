@@ -25,7 +25,7 @@ describe('createMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Note' }));
@@ -39,7 +39,7 @@ describe('createMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
     expect(screen.getByRole('button', { name: 'File' })).toBeDisabled();
@@ -53,7 +53,7 @@ describe('createMenu', () => {
     const setOpen = vi.fn();
 
     render(
-      <CreateMenu open={true} setOpen={setOpen} onCreateNode={onCreateNode} />
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
     fireEvent.mouseDown(document.body);

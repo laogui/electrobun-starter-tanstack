@@ -74,18 +74,18 @@
 
 ### 3.1 新增运行时依赖
 
-| 包 | 用途 | 预估大小（gz） |
-|---|---|---|
-| `@tiptap/react` + `@tiptap/core` + `@tiptap/pm` | ProseMirror + React 胶水 | ~35KB |
-| `@tiptap/starter-kit` | 常用节点/marks 打包 | ~25KB |
-| `@tiptap/extension-task-list` + `@tiptap/extension-task-item` | GFM 任务列表 | ~5KB |
-| `@tiptap/extension-link` | 链接 | ~2KB |
-| `@tiptap/extension-image` | `![]()` 图片 | ~2KB |
-| `@tiptap/extension-placeholder` | 空状态提示 | ~1KB |
-| `tiptap-markdown` | markdown ↔ PM doc 序列化 | ~15KB（内含 markdown-it） |
-| `markdown-it` | 预览层渲染器 | ~20KB |
-| `markdown-it-task-lists` | 任务列表支持 | ~1KB |
-| `dompurify` | `dangerouslySetInnerHTML` sanitize | ~20KB |
+| 包                                                            | 用途                               | 预估大小（gz）            |
+| ------------------------------------------------------------- | ---------------------------------- | ------------------------- |
+| `@tiptap/react` + `@tiptap/core` + `@tiptap/pm`               | ProseMirror + React 胶水           | ~35KB                     |
+| `@tiptap/starter-kit`                                         | 常用节点/marks 打包                | ~25KB                     |
+| `@tiptap/extension-task-list` + `@tiptap/extension-task-item` | GFM 任务列表                       | ~5KB                      |
+| `@tiptap/extension-link`                                      | 链接                               | ~2KB                      |
+| `@tiptap/extension-image`                                     | `![]()` 图片                       | ~2KB                      |
+| `@tiptap/extension-placeholder`                               | 空状态提示                         | ~1KB                      |
+| `tiptap-markdown`                                             | markdown ↔ PM doc 序列化           | ~15KB（内含 markdown-it） |
+| `markdown-it`                                                 | 预览层渲染器                       | ~20KB                     |
+| `markdown-it-task-lists`                                      | 任务列表支持                       | ~1KB                      |
+| `dompurify`                                                   | `dangerouslySetInnerHTML` sanitize | ~20KB                     |
 
 合计增量 ~130KB gz。FocusedView 的 tiptap 部分用动态 `import()` 懒加载，卡片首屏只包含 markdown-it + DOMPurify（~40KB gz）。
 
@@ -127,10 +127,10 @@ createdAt: 2026-04-16T10:00:00.000Z
 updatedAt: 2026-04-16T10:05:00.000Z
 
 # —— 新增字段 ——
-previewHtml: "<h3>Project Kickoff</h3><p>We need to align...</p>"
-previewExcerpt: "We need to align on scope and timeline before the demo."
-previewBlocks: 27      # 正文总 block 数，用来显示 "+N more" 类 UI（可选）
-previewVersion: 1      # 预览生成器版本，用于未来升级时强制重算
+previewHtml: '<h3>Project Kickoff</h3><p>We need to align...</p>'
+previewExcerpt: 'We need to align on scope and timeline before the demo.'
+previewBlocks: 27 # 正文总 block 数，用来显示 "+N more" 类 UI（可选）
+previewVersion: 1 # 预览生成器版本，用于未来升级时强制重算
 ---
 ```
 
@@ -214,7 +214,7 @@ import MarkdownIt from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
 
 export const md = new MarkdownIt({
-  html: false,        // 禁止原始 HTML，交给 sanitize 兜底
+  html: false, // 禁止原始 HTML，交给 sanitize 兜底
   linkify: true,
   breaks: false,
   typographer: false,
@@ -234,18 +234,17 @@ export function renderMarkdownToHtml(src: string): string {
 - **块截断**：按 markdown-it token stream 找到 block open/close 边界，累计到第 `MAX_PREVIEW_BLOCKS`（默认 30）个 top-level block 停止
 - **重 block 替换**：遇到 `table` / `fence`（代码块）/ `html_block` / 未知自定义 block 时，不原样渲染，换成简短 badge `<span class="note-badge">Table</span>`
 - **图片处理**：仅保留前 1 张图，其余 `<img>` 去除并加 `<span class="note-badge">+N images</span>`
-- **链接**：保留但禁止 target=_blank（在卡片态不允许离开 app）
+- **链接**：保留但禁止 target=\_blank（在卡片态不允许离开 app）
 - **sanitize**：最后一步喂给 DOMPurify（§5.4）
-
 
 API 草案：
 
 ```ts
 export interface PreviewArtifacts {
-  html: string;        // 截断后的 HTML（已 sanitize）
-  excerpt: string;     // 纯文本摘要
-  blocks: number;      // 正文总 block 数
-  version: number;     // 生成器版本号
+  html: string; // 截断后的 HTML（已 sanitize）
+  excerpt: string; // 纯文本摘要
+  blocks: number; // 正文总 block 数
+  version: number; // 生成器版本号
 }
 
 export function buildPreview(markdown: string): PreviewArtifacts;
@@ -264,19 +263,36 @@ export function buildPreview(markdown: string): PreviewArtifacts;
 import DOMPurify from 'dompurify';
 
 const ALLOWED_TAGS = [
-  'h1','h2','h3','h4','h5','h6',
-  'p','br','hr','blockquote',
-  'ul','ol','li',
-  'strong','em','s','code','pre',
-  'a','img','span','div',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'br',
+  'hr',
+  'blockquote',
+  'ul',
+  'ol',
+  'li',
+  'strong',
+  'em',
+  's',
+  'code',
+  'pre',
+  'a',
+  'img',
+  'span',
+  'div',
 ];
-const ALLOWED_ATTR = ['href','src','alt','title','class'];
+const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'class'];
 
 export function sanitizeHtml(dirty: string): string {
   return DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
-    FORBID_ATTR: ['style','onclick','onload','onerror'],
+    FORBID_ATTR: ['style', 'onclick', 'onload', 'onerror'],
     KEEP_CONTENT: true,
   });
 }
@@ -296,7 +312,9 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 
 export const buildExtensions = (placeholder?: string) => [
-  StarterKit.configure({ codeBlock: { HTMLAttributes: { class: 'prose-code' } } }),
+  StarterKit.configure({
+    codeBlock: { HTMLAttributes: { class: 'prose-code' } },
+  }),
   TaskList,
   TaskItem.configure({ nested: true }),
   Link.configure({ openOnClick: false, autolink: true }),
@@ -340,11 +358,13 @@ const TiptapEditor = lazy(() => import('@/components/editor/TiptapEditor'));
 ```tsx
 export const NotePreview = memo(({ html, excerpt, fallback }: Props) => {
   if (!html) {
-    return <div className="opacity-40">{excerpt || fallback || 'Empty note'}</div>;
+    return (
+      <div className='opacity-40'>{excerpt || fallback || 'Empty note'}</div>
+    );
   }
   return (
     <div
-      className="note-preview prose prose-sm max-w-none overflow-hidden"
+      className='note-preview prose prose-sm max-w-none overflow-hidden'
       // html 已由 bun 端 sanitize。前端再过一次以防磁盘被手动篡改。
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -363,7 +383,7 @@ export const NotePreview = memo(({ html, excerpt, fallback }: Props) => {
 现状（text card 卡片态分支，lines 178-203）：
 
 ```tsx
-<div className="... whitespace-pre-wrap">{data.content || 'Empty note'}</div>
+<div className='... whitespace-pre-wrap'>{data.content || 'Empty note'}</div>
 ```
 
 改为：
@@ -372,11 +392,12 @@ export const NotePreview = memo(({ html, excerpt, fallback }: Props) => {
 <NotePreview
   html={data.previewHtml}
   excerpt={data.previewExcerpt}
-  fallback={data.content}   // 向后兼容：旧数据还没有 previewHtml 时退化为纯文本
+  fallback={data.content} // 向后兼容：旧数据还没有 previewHtml 时退化为纯文本
 />
 ```
 
 **注意**：
+
 - 卡片态**不再**调用 `CardContent` 的 text 分支做文本渲染——直接使用 `NotePreview`
 - `isZoomedOut` 骨架分支保留不变（它早就不吃正文）
 - checklist / image 分支不变
@@ -420,6 +441,7 @@ export const NotePreview = memo(({ html, excerpt, fallback }: Props) => {
 - 结果：每次 focused view 编辑触发 store 变更 → manifest 脏 → 2.5s 后批量刷盘
 
 问题：
+
 1. focused view 高频编辑会连带刷整个 manifest，浪费
 2. note body 和 manifest 耦合，note preview 也依赖 manifest 路径生成
 3. saveNote 没被用，意味着 bun 侧 preview 生成**只能在 saveManifest 里做**
@@ -446,6 +468,7 @@ onSuccess 回 renderer：
 ```
 
 manifest 侧：
+
 - `saveManifest` 的 handler **不再**每次都重写 note 正文（这是个独立优化，可放 Phase 2）
 - 短期内容可以：当 `node.data.content` 存在时仍写 note；但让 `saveNote` 路径**覆盖**式刷 preview
 - 或者：让 `saveManifest` 只在"新建 note（没有 file）"时才 createNote，其他情况跳过 note body 写入
@@ -459,6 +482,7 @@ preview 在 **bun 侧的 `saveNote` handler** 中生成。原因：
 - 未来如果做后台索引 / 批量重算，逻辑集中在 bun 层更顺
 
 renderer 侧 `lib/markdown/preview.ts` 主要用于：
+
 - 测试
 - 未来某些客户端即时 refresh 场景（可选）
 
@@ -478,7 +502,7 @@ saveNote: async ({ noteId, frontmatter, body }) => {
   frontmatter.previewVersion = preview.version;
 
   await writeNote(wsPath, filePath, frontmatter, body);
-  return { success: true, preview };  // 回传 preview，让 renderer 同步更新 data
+  return { success: true, preview }; // 回传 preview，让 renderer 同步更新 data
 };
 ```
 
@@ -504,6 +528,7 @@ response: {
 ### 7.6 与 manifest 保存的协调
 
 focused view 打开期间：
+
 - 用户编辑 → `updateNodeData` 改 store 里的 `content`
 - store 变化触发两条链路：
   1. `useNoteSaver`（800ms）→ saveNote → preview 回填
@@ -538,7 +563,7 @@ manifest 保存本身不再重写 note body（让 saveNote 成为唯一 body 写
 .note-preview img {
   max-width: 100%;
   height: auto;
-  loading: lazy;           /* HTML 属性，通过 DOMPurify 保留 */
+  loading: lazy; /* HTML 属性，通过 DOMPurify 保留 */
 }
 
 /* resize 进行时降级动画 / 过渡，减少视觉抖动 */
@@ -587,6 +612,7 @@ body.resizing-nwse .note-preview {
 ### 9.2 当前阶段（Phase 1）保持不变
 
 理由：
+
 - 现在只有 text / checklist，body 本身就不大
 - 预加载 preview 和 body 同时发生，没有显著浪费
 - 真正要改"按需加载全文"是 Phase 3 的事（见 `note-data-model-analysis.md` §12）
@@ -597,7 +623,8 @@ body.resizing-nwse .note-preview {
 
 ```ts
 if (frontmatter.previewHtml) data.previewHtml = frontmatter.previewHtml;
-if (frontmatter.previewExcerpt) data.previewExcerpt = frontmatter.previewExcerpt;
+if (frontmatter.previewExcerpt)
+  data.previewExcerpt = frontmatter.previewExcerpt;
 ```
 
 这样初次加载卡片就能直接拿到 preview，不用再算。
@@ -630,11 +657,11 @@ Tailwind v4 的启用方式（在 `index.css`）：
 
 ### 10.2 三种尺寸约定
 
-| 场景 | class | 字号 |
-|---|---|---|
-| 预览（卡片） | `prose prose-sm` | 14px |
-| 焦点编辑 | `prose prose-lg` | 18px |
-| 缩略骨架（zoom<0.4） | 不用 prose | 24px title |
+| 场景                 | class            | 字号       |
+| -------------------- | ---------------- | ---------- |
+| 预览（卡片）         | `prose prose-sm` | 14px       |
+| 焦点编辑             | `prose prose-lg` | 18px       |
+| 缩略骨架（zoom<0.4） | 不用 prose       | 24px title |
 
 ### 10.3 暗色卡片
 
@@ -653,28 +680,28 @@ Tailwind v4 的启用方式（在 `index.css`）：
 
 ### 11.1 首屏（100 张卡片）目标
 
-| 指标 | 目标 |
-|---|---|
-| `loadCanvas` → first paint | < 300ms |
-| preview HTML 总大小 | < 500KB（每张平均 ~5KB） |
-| 初始 JS bundle（不含 tiptap） | +40KB gz |
-| 内存常驻 | +8MB（100 张 × 平均 80KB DOM） |
+| 指标                          | 目标                           |
+| ----------------------------- | ------------------------------ |
+| `loadCanvas` → first paint    | < 300ms                        |
+| preview HTML 总大小           | < 500KB（每张平均 ~5KB）       |
+| 初始 JS bundle（不含 tiptap） | +40KB gz                       |
+| 内存常驻                      | +8MB（100 张 × 平均 80KB DOM） |
 
 ### 11.2 编辑态目标
 
-| 指标 | 目标 |
-|---|---|
+| 指标                              | 目标                               |
+| --------------------------------- | ---------------------------------- |
 | 打开 focused view 到 editor ready | < 150ms（tiptap 代码分片首次加载） |
-| 按键 latency | < 16ms（一帧） |
-| debounced save 往返 | < 50ms（本地文件） |
+| 按键 latency                      | < 16ms（一帧）                     |
+| debounced save 往返               | < 50ms（本地文件）                 |
 
 ### 11.3 resize 目标
 
-| 指标 | 目标 |
-|---|---|
-| 拖动 resize 时 FPS | ≥ 55 |
-| resize 过程中 React 渲染次数 | 0 |
-| resize 过程中 preview 重算次数 | 0 |
+| 指标                           | 目标 |
+| ------------------------------ | ---- |
+| 拖动 resize 时 FPS             | ≥ 55 |
+| resize 过程中 React 渲染次数   | 0    |
+| resize 过程中 preview 重算次数 | 0    |
 
 验证方式：React DevTools Profiler 录一段 resize → 确认 `NotePreview` commit count = 0；Chrome Performance 面板确认 main thread long task < 50ms。
 
@@ -688,8 +715,8 @@ Tailwind v4 的启用方式（在 `index.css`）：
 
 ```ts
 export const FLAGS = {
-  tiptapEditor: true,       // 可切回 contentEditable 回退
-  markdownPreview: true,    // 可切回纯文本渲染
+  tiptapEditor: true, // 可切回 contentEditable 回退
+  markdownPreview: true, // 可切回纯文本渲染
 };
 ```
 
@@ -704,6 +731,7 @@ export const FLAGS = {
 ### 12.3 回退策略
 
 如果 tiptap 出现严重 bug：
+
 1. 把 FLAGS.tiptapEditor 设为 false，FocusedView 回到 `EditableCardContent`
 2. 已经被 tiptap 编辑过的 note 仍能在 contentEditable 下打开（因为 body 仍是 markdown 字符串）
 3. preview 层独立于 editor，不受影响
@@ -809,14 +837,14 @@ export const FLAGS = {
 
 ### 15.1 主要风险
 
-| 风险 | 影响 | 缓解 |
-|---|---|---|
-| `tiptap-markdown` 往返丢结构 | 用户编辑后保存，再打开内容变样 | §13.4 往返测试 + fixture 覆盖；边界情况用 FLAGS 关闭该 note |
-| preview HTML 被磁盘手动篡改注入脚本 | XSS | 前端再 sanitize 一次；CSP 禁 inline script |
-| 老 note 没有 preview 导致卡片空 | UX 降级 | fallback 到 `excerpt` / `content` 纯文本；Phase 3 批量补齐 |
-| bun 与 renderer 的 preview 生成不一致 | 保存后首次渲染和重启后不一致 | 放 `src/shared/`，单一来源；fixture 双端对比测试 |
-| tiptap 首次加载 > 150ms | 打开 focused view 卡顿 | 打包分析；必要时进一步裁扩展；预加载（鼠标悬停卡片时 `import()` 预取） |
-| `dompurify` 在 bun 环境的兼容 | saveNote 路径报错 | 用 `isomorphic-dompurify` 或白名单 scanner；保留纯文本 fallback |
+| 风险                                  | 影响                           | 缓解                                                                   |
+| ------------------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| `tiptap-markdown` 往返丢结构          | 用户编辑后保存，再打开内容变样 | §13.4 往返测试 + fixture 覆盖；边界情况用 FLAGS 关闭该 note            |
+| preview HTML 被磁盘手动篡改注入脚本   | XSS                            | 前端再 sanitize 一次；CSP 禁 inline script                             |
+| 老 note 没有 preview 导致卡片空       | UX 降级                        | fallback 到 `excerpt` / `content` 纯文本；Phase 3 批量补齐             |
+| bun 与 renderer 的 preview 生成不一致 | 保存后首次渲染和重启后不一致   | 放 `src/shared/`，单一来源；fixture 双端对比测试                       |
+| tiptap 首次加载 > 150ms               | 打开 focused view 卡顿         | 打包分析；必要时进一步裁扩展；预加载（鼠标悬停卡片时 `import()` 预取） |
+| `dompurify` 在 bun 环境的兼容         | saveNote 路径报错              | 用 `isomorphic-dompurify` 或白名单 scanner；保留纯文本 fallback        |
 
 ### 15.2 回滚
 

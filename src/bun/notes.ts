@@ -4,30 +4,32 @@ import { join } from 'node:path';
 import { atomicWrite } from './workspace';
 
 export interface NoteFrontmatter {
-  id: string;
-  title?: string;
-  displayHint?: string;
   color?: string;
-  tags?: Array<string>;
+  createdAt?: string;
+  displayHint?: string;
+  id: string;
   tag?: string;
   tagColor?: string;
-  createdAt?: string;
+  tags?: string[];
+  title?: string;
   updatedAt?: string;
   [key: string]: unknown;
 }
 
 export interface NoteDocument {
-  frontmatter: NoteFrontmatter;
   body: string;
   file: string; // workspace-relative path
+  frontmatter: NoteFrontmatter;
 }
+
+const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
 // Simple YAML frontmatter parser
 function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
   body: string;
 } {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(content);
+  const match = FRONTMATTER_RE.exec(content);
   if (!match) {
     return { frontmatter: {}, body: content };
   }
@@ -37,9 +39,13 @@ function parseFrontmatter(content: string): {
 
   for (const line of yamlStr.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
     const colonIdx = trimmed.indexOf(':');
-    if (colonIdx === -1) continue;
+    if (colonIdx === -1) {
+      continue;
+    }
     const key = trimmed.slice(0, colonIdx).trim();
     let value: unknown = trimmed.slice(colonIdx + 1).trim();
 
@@ -75,9 +81,11 @@ function parseFrontmatter(content: string): {
 
 // Simple frontmatter serializer
 function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
-  const lines: Array<string> = [];
+  const lines: string[] = [];
   for (const [key, value] of Object.entries(frontmatter)) {
-    if (value === undefined || value === null) continue;
+    if (value === undefined || value === null) {
+      continue;
+    }
     if (Array.isArray(value)) {
       lines.push(`${key}: ${JSON.stringify(value)}`);
     } else if (
@@ -98,9 +106,11 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
 }
 
 /** Recursively list all files under a directory (returns relative paths). */
-function listFilesRecursive(dir: string, prefix = ''): Array<string> {
-  const results: Array<string> = [];
-  if (!existsSync(dir)) return results;
+function listFilesRecursive(dir: string, prefix = ''): string[] {
+  const results: string[] = [];
+  if (!existsSync(dir)) {
+    return results;
+  }
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
@@ -120,7 +130,9 @@ export async function buildNoteIndex(
   const index = new Map<string, string>();
 
   for (const relPath of listFilesRecursive(contentDir)) {
-    if (!relPath.endsWith('.md')) continue;
+    if (!relPath.endsWith('.md')) {
+      continue;
+    }
     const fullPath = join(contentDir, relPath);
     const file = Bun.file(fullPath);
     const text = await file.text();
@@ -139,7 +151,9 @@ export async function loadNote(
 ): Promise<NoteDocument | null> {
   const fullPath = join(wsPath, filePath);
   const file = Bun.file(fullPath);
-  if (!(await file.exists())) return null;
+  if (!(await file.exists())) {
+    return null;
+  }
   const text = await file.text();
   const { frontmatter, body } = parseFrontmatter(text);
   return {
@@ -198,7 +212,9 @@ export async function deleteNoteFile(
 ): Promise<boolean> {
   const fullPath = join(wsPath, filePath);
   const file = Bun.file(fullPath);
-  if (!(await file.exists())) return false;
+  if (!(await file.exists())) {
+    return false;
+  }
   const { unlinkSync } = await import('node:fs');
   unlinkSync(fullPath);
   return true;
@@ -214,7 +230,9 @@ export function serializeChecklistItems(
 ): string {
   return items
     .map((item) => {
-      if (item.isHeader) return `## ${item.text ?? ''}`;
+      if (item.isHeader) {
+        return `## ${item.text ?? ''}`;
+      }
       return item.checked
         ? `- [x] ${item.text ?? ''}`
         : `- [ ] ${item.text ?? ''}`;
@@ -230,7 +248,9 @@ export function parseChecklistBody(
     [];
   for (const line of body.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     if (trimmed.startsWith('## ')) {
       items.push({ text: trimmed.slice(3), checked: false, isHeader: true });
     } else if (trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ')) {
@@ -248,13 +268,17 @@ export function parseChecklistBody(
 
 /** Map renderer data.type to displayHint for frontmatter. */
 function typeToDisplayHint(type: string | undefined): string {
-  if (type === 'text') return 'note';
+  if (type === 'text') {
+    return 'note';
+  }
   return type || 'note';
 }
 
 /** Map frontmatter displayHint back to renderer data.type. */
 export function displayHintToType(hint: string | undefined): string {
-  if (hint === 'note') return 'text';
+  if (hint === 'note') {
+    return 'text';
+  }
   return hint || 'text';
 }
 
@@ -278,9 +302,15 @@ export function cardDataToNote(
   };
 
   // Optional fields
-  if (data.tag) frontmatter.tag = data.tag;
-  if (data.tagColor) frontmatter.tagColor = data.tagColor;
-  if (data.pieData) frontmatter.pieData = data.pieData;
+  if (data.tag) {
+    frontmatter.tag = data.tag;
+  }
+  if (data.tagColor) {
+    frontmatter.tagColor = data.tagColor;
+  }
+  if (data.pieData) {
+    frontmatter.pieData = data.pieData;
+  }
 
   // Body
   let body = '';

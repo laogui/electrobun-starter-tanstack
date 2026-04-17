@@ -72,7 +72,9 @@ function CanvasComponent() {
   useCanvasPersistence();
 
   useEffect(() => {
-    if (hydrated) return;
+    if (hydrated) {
+      return;
+    }
     loadCanvas(activeViewId)
       .then(async (data) => {
         if (data && data.nodes.length > 0) {
@@ -111,7 +113,9 @@ function CanvasComponent() {
     (_: any, node: Node) => {
       const el = document.querySelector(`[data-id="${node.id}"]`);
       const rect = el?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect) {
+        return;
+      }
       if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (node.type === 'card' || node.type === 'image') {
@@ -121,16 +125,19 @@ function CanvasComponent() {
     [setFocusedNode, setFocusedFolder]
   );
 
-  const nodesWithState = useMemo(() => {
-    return nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        isHidden: focusedNode?.id === node.id || focusedFolder?.id === node.id,
-        isDropTarget: dropTargetId === node.id,
-      },
-    }));
-  }, [nodes, focusedNode, focusedFolder, dropTargetId]);
+  const nodesWithState = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          isHidden:
+            focusedNode?.id === node.id || focusedFolder?.id === node.id,
+          isDropTarget: dropTargetId === node.id,
+        },
+      })),
+    [nodes, focusedNode, focusedFolder, dropTargetId]
+  );
 
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
@@ -147,52 +154,52 @@ function CanvasComponent() {
     : 'rgba(240, 239, 237, 0.7)';
 
   return (
-    <div className='h-screen w-screen overflow-hidden bg-stone-50 font-sans dark:bg-[#141414]'>
+    <div className="h-screen w-screen overflow-hidden bg-stone-50 font-sans dark:bg-[#141414]">
       <ReactFlow
-        fitView
-        nodes={nodesWithState}
-        edges={edges}
-        edgeTypes={edgeTypes}
-        defaultEdgeOptions={{ type: 'labeledEdge' }}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
-        nodeTypes={nodeTypes}
-        panOnScroll={true}
-        selectionOnDrag={false}
-        zoomOnPinch={true}
-        minZoom={0.1}
+        defaultEdgeOptions={{ type: 'labeledEdge' }}
+        edges={edges}
+        edgeTypes={edgeTypes}
+        fitView
         maxZoom={4}
-        proOptions={{ hideAttribution: true }}
-        style={{ backgroundColor: canvasBackground }}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        minZoom={0.1}
+        nodes={nodesWithState}
+        nodeTypes={nodeTypes}
         onConnect={onConnect}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onPaneContextMenu={onPaneContextMenu}
-        onNodeContextMenu={onNodeContextMenu}
         onEdgeContextMenu={onEdgeContextMenu}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
+        onEdgesChange={onEdgesChange}
         onInit={(instance) => {
           rfInstance.current = instance;
         }}
+        onNodeContextMenu={onNodeContextMenu}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onNodeDrag={onNodeDrag}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
+        onNodesChange={onNodesChange}
+        onPaneContextMenu={onPaneContextMenu}
+        panOnScroll={true}
+        proOptions={{ hideAttribution: true }}
+        selectionOnDrag={false}
+        style={{ backgroundColor: canvasBackground }}
+        zoomOnPinch={true}
       >
         <Background color={gridColor} gap={24} size={2} />
-        <Controls position='bottom-left' />
+        <Controls position="bottom-left" />
         <HelperLines horizontal={helperLineH} vertical={helperLineV} />
         <MiniMap
-          pannable
-          zoomable
-          position='bottom-right'
-          nodeStrokeColor='#999'
-          nodeColor='#ddd'
           maskColor={miniMapMask}
+          nodeColor="#ddd"
+          nodeStrokeColor="#999"
+          pannable
+          position="bottom-right"
           style={{
             backgroundColor: miniMapBackground,
             border: miniMapBorder,
             borderRadius: 8,
           }}
+          zoomable
         />
       </ReactFlow>
 
@@ -200,11 +207,11 @@ function CanvasComponent() {
         {focusedFolder ? (
           <FolderView
             folder={focusedFolder}
-            onClose={() => {
-              setFocusedFolder(null);
-            }}
             onCardClick={(child: any, rect: any) => {
               setFocusedNode({ id: child.id, data: child.data, rect });
+            }}
+            onClose={() => {
+              setFocusedFolder(null);
             }}
           />
         ) : null}
@@ -220,16 +227,16 @@ function CanvasComponent() {
 
       <ViewSwitcher />
       <CreateMenu
+        onCreateNode={onCreateNode}
         open={createMenuOpen}
         setOpen={setCreateMenuOpen}
-        onCreateNode={onCreateNode}
       />
       <CanvasContextMenu
         menu={contextMenu}
+        onAction={handleContextMenuAction}
         onClose={() => {
           setContextMenu(null);
         }}
-        onAction={handleContextMenuAction}
       />
     </div>
   );

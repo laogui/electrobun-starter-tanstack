@@ -13,6 +13,8 @@ import {
 } from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
 
+const PASTE_ID_RE = /^paste-/;
+
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
@@ -126,8 +128,8 @@ describe('canvasStore — node operations', () => {
     const remaining = useCanvasStore.getState().nodes;
 
     expect(remaining).toHaveLength(1);
-    expect(remaining[0]!.id).toBe('child');
-    expect(remaining[0]!.parentId).toBeUndefined();
+    expect(remaining[0]?.id).toBe('child');
+    expect(remaining[0]?.parentId).toBeUndefined();
   });
 
   it('updateNodeData merges data into an existing node', () => {
@@ -186,7 +188,7 @@ describe('canvasStore — edge operations', () => {
     useCanvasStore.getState().deleteEdge('e1');
 
     expect(useCanvasStore.getState().edges).toHaveLength(1);
-    expect(useCanvasStore.getState().edges[0]!.id).toBe('e2');
+    expect(useCanvasStore.getState().edges[0]?.id).toBe('e2');
   });
 
   it('updateEdgeData merges data into an existing edge', () => {
@@ -197,7 +199,7 @@ describe('canvasStore — edge operations', () => {
     useCanvasStore.getState().updateEdgeData('e1', { label: 'new' });
     const edge = useCanvasStore.getState().edges[0]!;
 
-    expect(edge.data!.label).toBe('new');
+    expect(edge.data?.label).toBe('new');
   });
 });
 
@@ -213,7 +215,7 @@ describe('canvasStore — clipboard', () => {
     useCanvasStore.getState().copySelected();
 
     expect(useCanvasStore.getState().clipboard).toHaveLength(1);
-    expect(useCanvasStore.getState().clipboard[0]!.id).toBe('a');
+    expect(useCanvasStore.getState().clipboard[0]?.id).toBe('a');
   });
 
   it('copySelected does nothing when no nodes are selected', () => {
@@ -238,7 +240,7 @@ describe('canvasStore — clipboard', () => {
     expect(state.nodes).toHaveLength(2);
     const pasted = state.nodes[1]!;
     expect(pasted.id).not.toBe('copied');
-    expect(pasted.id).toMatch(/^paste-/);
+    expect(pasted.id).toMatch(PASTE_ID_RE);
     expect(pasted.position.x).toBe(40); // 10 + 30 offset
     expect(pasted.position.y).toBe(50); // 20 + 30 offset
     expect(pasted.selected).toBe(true);
@@ -608,7 +610,7 @@ describe('canvasStore — addFolderChild', () => {
 
     useCanvasStore.getState().addFolderChild('folder');
     const { data } = useCanvasStore.getState().nodes[0]!;
-    const children = data.children as Array<unknown>;
+    const children = data.children as unknown[];
 
     expect(children).toHaveLength(1);
     expect(data.title).toBe('1 items');

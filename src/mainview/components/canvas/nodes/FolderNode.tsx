@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 const handleClassName = 'conn-handle nodrag';
 
-const FolderNode = ({ id, data }: any) => {
+const FolderNode = ({ data }: any) => {
   const { zoom } = useViewport();
   const isZoomedOut = zoom < 0.4;
 
@@ -23,37 +23,38 @@ const FolderNode = ({ id, data }: any) => {
       )}
     >
       <NodeResizeControl
-        minWidth={250}
-        minHeight={250}
-        maxWidth={600}
+        className="border-none! bg-transparent!"
         maxHeight={600}
-        position='bottom-right'
-        className='border-none! bg-transparent!'
-        style={{ padding: 0 }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-        }}
+        maxWidth={600}
+        minHeight={250}
+        minWidth={250}
         onResizeEnd={() => {
           document.body.classList.remove('resizing-nwse');
         }}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        position="bottom-right"
+        style={{ padding: 0 }}
       >
-        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/folder:opacity-100'>
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/folder:opacity-100">
           <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='16'
-            height='16'
-            viewBox='0 0 16 16'
+            height="16"
+            viewBox="0 0 16 16"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <g fill='none' fillRule='evenodd'>
+            <title>Resize</title>
+            <g fill="none" fillRule="evenodd">
               <path
-                fill='#1B2536'
-                fillOpacity='0.5'
-                d='M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z'
+                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
+                fill="#1B2536"
+                fillOpacity="0.5"
               />
               <path
-                fill='#FFF'
-                fillOpacity='0.7'
-                d='M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z'
+                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
+                fill="#FFF"
+                fillOpacity="0.7"
               />
             </g>
           </svg>
@@ -61,28 +62,28 @@ const FolderNode = ({ id, data }: any) => {
       </NodeResizeControl>
 
       <Handle
-        type='target'
+        className={handleClassName}
+        id="top"
         position={Position.Top}
-        id='top'
-        className={handleClassName}
+        type="target"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="right"
         position={Position.Right}
-        id='right'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="bottom"
         position={Position.Bottom}
-        id='bottom'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='target'
-        position={Position.Left}
-        id='left'
         className={handleClassName}
+        id="left"
+        position={Position.Left}
+        type="target"
       />
 
       {/* Visual content wrapper — transforms here don't affect Handle positions */}
@@ -115,17 +116,17 @@ const FolderNode = ({ id, data }: any) => {
           className={cn(
             'absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-white p-8 text-center shadow-md transition-all duration-200 ease-out',
             data.isDropTarget
-              ? '-translate-y-1 border-2 border-blue-400 shadow-lg shadow-blue-100'
+              ? '-translate-y-1 border-2 border-blue-400 shadow-blue-100 shadow-lg'
               : 'border-gray-100 group-hover/folder:-translate-y-0.5'
           )}
         >
           <div
             className={cn(
               'mb-6 rounded-2xl bg-gray-100 p-4 transition-transform duration-200 ease-out',
-              data.isDropTarget && 'scale-110 rotate-[5deg]'
+              data.isDropTarget && 'rotate-[5deg] scale-110'
             )}
           >
-            <Folder size={40} className='text-gray-400' />
+            <Folder className="text-gray-400" size={40} />
           </div>
           <h3
             className={cn(
@@ -136,7 +137,7 @@ const FolderNode = ({ id, data }: any) => {
             {data.title}
           </h3>
           {isZoomedOut ? null : (
-            <p className='mt-3 text-sm text-gray-500'>{data.subtitle}</p>
+            <p className="mt-3 text-gray-500 text-sm">{data.subtitle}</p>
           )}
         </div>
       </div>

@@ -3,32 +3,32 @@ import { join } from 'node:path';
 import { atomicWrite } from './workspace';
 
 export interface ManifestNode {
+  data: Record<string, unknown>;
+  extent?: string;
   id: string;
-  type: string;
+  parentId?: string;
   position: { x: number; y: number };
   style?: Record<string, unknown>;
-  parentId?: string;
-  extent?: string;
-  data: Record<string, unknown>;
+  type: string;
 }
 
 export interface ManifestEdge {
+  animated?: boolean;
   id: string;
+  label?: string;
   source: string;
-  target: string;
   sourceHandle?: string;
+  target: string;
   targetHandle?: string;
   type?: string;
-  label?: string;
-  animated?: boolean;
 }
 
 export interface CanvasManifest {
+  edges: ManifestEdge[];
+  nodes: ManifestNode[];
   schema: 'spatial-canvas/v1';
   viewId: string;
   viewport?: { x: number; y: number; zoom: number };
-  nodes: Array<ManifestNode>;
-  edges: Array<ManifestEdge>;
 }
 
 /** Load a canvas manifest from disk. Returns null if file doesn't exist. */

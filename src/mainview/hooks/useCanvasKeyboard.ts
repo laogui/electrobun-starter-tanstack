@@ -42,7 +42,9 @@ export function useCanvasKeyboard() {
       }
 
       if (mod && e.key === 'z') {
-        if (isEditing()) return;
+        if (isEditing()) {
+          return;
+        }
         e.preventDefault();
         if (e.shiftKey) {
           redo();
@@ -52,12 +54,16 @@ export function useCanvasKeyboard() {
         return;
       }
 
-      if (isModal() || isEditing()) return;
+      if (isModal() || isEditing()) {
+        return;
+      }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { nodes } = useCanvasStore.getState();
         const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
-        if (selectedIds.length > 0) deleteNodes(selectedIds);
+        if (selectedIds.length > 0) {
+          deleteNodes(selectedIds);
+        }
         return;
       }
 
@@ -87,11 +93,15 @@ export function useCanvasKeyboard() {
       if (e.key === 'Enter') {
         const { nodes } = useCanvasStore.getState();
         const selected = nodes.filter((n) => n.selected);
-        if (selected.length !== 1) return;
+        if (selected.length !== 1) {
+          return;
+        }
         const node = selected[0]!;
         const el = document.querySelector(`[data-id="${node.id}"]`);
         const rect = el?.getBoundingClientRect();
-        if (!rect) return;
+        if (!rect) {
+          return;
+        }
         if (node.type === 'folder') {
           setFocusedFolder({ id: node.id, data: node.data, rect });
         } else {

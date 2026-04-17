@@ -45,7 +45,7 @@ function sanitizeEdge(edge: Edge): Record<string, unknown> {
 }
 
 /** Sanitize nodes and edges arrays for persistence. */
-export function sanitizeForPersistence(nodes: Array<Node>, edges: Array<Edge>) {
+export function sanitizeForPersistence(nodes: Node[], edges: Edge[]) {
   return {
     nodes: nodes.map(sanitizeNode),
     edges: edges.map(sanitizeEdge),

@@ -25,7 +25,7 @@ async function initElectrobun() {
     const { Electroview } = mod;
 
     const rpc = Electroview.defineRPC({
-      maxRequestTime: 10000,
+      maxRequestTime: 10_000,
       handlers: {
         requests: {},
         messages: {
@@ -55,7 +55,9 @@ async function initElectrobun() {
 
 async function getElectrobun() {
   // Permanently disabled when not in Electrobun environment
-  if (notElectrobun) return null;
+  if (notElectrobun) {
+    return null;
+  }
 
   if (!initPromise) {
     initPromise = initElectrobun().then((instance) => {
@@ -76,18 +78,22 @@ async function getElectrobun() {
 
 export async function loadCanvas(viewId: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.loadCanvas({ viewId });
 }
 
 export async function rpcSaveManifest(
   viewId: string,
-  nodes: Array<any>,
-  edges: Array<any>,
+  nodes: any[],
+  edges: any[],
   viewport?: any
 ) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return { success: false };
+  if (!eb?.rpc) {
+    return { success: false };
+  }
   return eb.rpc.request.saveManifest({ viewId, nodes, edges, viewport });
 }
 
@@ -97,7 +103,9 @@ export async function rpcSaveNote(
   body: string
 ) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return { success: false };
+  if (!eb?.rpc) {
+    return { success: false };
+  }
   return eb.rpc.request.saveNote({ noteId, frontmatter, body });
 }
 
@@ -107,13 +115,17 @@ export async function rpcCreateNote(
   displayHint: string
 ) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.createNote({ id, title, displayHint });
 }
 
 export async function rpcDeleteNote(noteId: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return { success: false };
+  if (!eb?.rpc) {
+    return { success: false };
+  }
   return eb.rpc.request.deleteNote({ noteId });
 }
 
@@ -122,49 +134,65 @@ export async function rpcSaveAttachment(
   existingFile?: string
 ) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.saveAttachment({ dataUrl, existingFile });
 }
 
 export async function rpcLoadAttachment(filePath: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.loadAttachment({ filePath });
 }
 
 export async function rpcGetSettings() {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.getSettings({});
 }
 
 export async function rpcOpenSettings() {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return { success: false };
+  if (!eb?.rpc) {
+    return { success: false };
+  }
   return eb.rpc.request.openSettings({});
 }
 
 export async function rpcListViews() {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.listViews({});
 }
 
 export async function rpcCreateView(name: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.createView({ name });
 }
 
 export async function rpcDeleteView(viewId: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.deleteView({ viewId });
 }
 
 export async function rpcRenameView(viewId: string, name: string) {
   const eb = await getElectrobun();
-  if (!eb?.rpc) return null;
+  if (!eb?.rpc) {
+    return null;
+  }
   return eb.rpc.request.renameView({ viewId, name });
 }
 

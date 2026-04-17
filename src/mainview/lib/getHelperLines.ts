@@ -1,10 +1,10 @@
 import type { Node, NodePositionChange } from '@xyflow/react';
 
-type HelperLineResult = {
+interface HelperLineResult {
   horizontal: number | undefined;
-  vertical: number | undefined;
   snapPosition: Partial<{ x: number; y: number }>;
-};
+  vertical: number | undefined;
+}
 
 const SNAP_THRESHOLD = 5;
 
@@ -32,7 +32,7 @@ function getNodeDimensions(node: Node) {
 
 export function getHelperLines(
   change: NodePositionChange,
-  nodes: Array<Node>
+  nodes: Node[]
 ): HelperLineResult {
   const result: HelperLineResult = {
     horizontal: undefined,
@@ -41,7 +41,9 @@ export function getHelperLines(
   };
 
   const draggingNode = nodes.find((n) => n.id === change.id);
-  if (!draggingNode || !change.position) return result;
+  if (!(draggingNode && change.position)) {
+    return result;
+  }
 
   const dragPos = change.position;
   const { w: dragW, h: dragH } = getNodeDimensions(draggingNode);
@@ -58,7 +60,9 @@ export function getHelperLines(
   let minDistY = SNAP_THRESHOLD;
 
   for (const node of nodes) {
-    if (node.id === change.id) continue;
+    if (node.id === change.id) {
+      continue;
+    }
 
     const { w: nodeW, h: nodeH } = getNodeDimensions(node);
     const nodeLeft = node.position.x;

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-
-import { createUndoRedoState, pushSnapshot, redo, undo } from '@/lib/undoRedo';
 import type { CanvasSnapshot, UndoRedoState } from '@/lib/undoRedo';
+import { createUndoRedoState, pushSnapshot, redo, undo } from '@/lib/undoRedo';
 
 function snap(label: string): CanvasSnapshot {
   return {
@@ -25,7 +24,7 @@ describe('pushSnapshot', () => {
     state = pushSnapshot(state, snap('s1'));
 
     expect(state.past).toHaveLength(1);
-    expect(state.past[0]!.nodes[0]!.id).toBe('s1');
+    expect(state.past[0]?.nodes[0]?.id).toBe('s1');
     expect(state.future).toEqual([]);
   });
 
@@ -48,7 +47,7 @@ describe('pushSnapshot', () => {
 
     expect(state.past).toHaveLength(50);
     // The oldest entries should have been removed
-    expect(state.past[0]!.nodes[0]!.id).toBe('s10');
+    expect(state.past[0]?.nodes[0]?.id).toBe('s10');
   });
 });
 
@@ -68,10 +67,10 @@ describe('undo', () => {
     const current = snap('current');
     const result = undo(state, current)!;
 
-    expect(result.snapshot.nodes[0]!.id).toBe('s2');
+    expect(result.snapshot.nodes[0]?.id).toBe('s2');
     expect(result.state.past).toHaveLength(1);
     expect(result.state.future).toHaveLength(1);
-    expect(result.state.future[0]!.nodes[0]!.id).toBe('current');
+    expect(result.state.future[0]?.nodes[0]?.id).toBe('current');
   });
 });
 
@@ -91,11 +90,11 @@ describe('redo', () => {
     const current = snap('current');
     const result = redo(state, current)!;
 
-    expect(result.snapshot.nodes[0]!.id).toBe('s3');
+    expect(result.snapshot.nodes[0]?.id).toBe('s3');
     expect(result.state.past).toHaveLength(2);
-    expect(result.state.past[1]!.nodes[0]!.id).toBe('current');
+    expect(result.state.past[1]?.nodes[0]?.id).toBe('current');
     expect(result.state.future).toHaveLength(1);
-    expect(result.state.future[0]!.nodes[0]!.id).toBe('s4');
+    expect(result.state.future[0]?.nodes[0]?.id).toBe('s4');
   });
 
   it('supports full undo-redo cycle', () => {
@@ -106,10 +105,10 @@ describe('redo', () => {
 
     // undo once
     const undoResult = undo(state, current)!;
-    expect(undoResult.snapshot.nodes[0]!.id).toBe('s2');
+    expect(undoResult.snapshot.nodes[0]?.id).toBe('s2');
 
     // redo back
     const redoResult = redo(undoResult.state, undoResult.snapshot)!;
-    expect(redoResult.snapshot.nodes[0]!.id).toBe('s3');
+    expect(redoResult.snapshot.nodes[0]?.id).toBe('s3');
   });
 });

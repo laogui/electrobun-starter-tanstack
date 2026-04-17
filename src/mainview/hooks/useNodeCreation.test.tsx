@@ -25,10 +25,10 @@ const Harness = ({
 
   return (
     <button
-      type='button'
       onClick={() => {
         onCreateNode(type);
       }}
+      type="button"
     >
       create
     </button>
@@ -41,14 +41,14 @@ describe('useNodeCreation', () => {
       getViewport: () => ({ x: 10, y: 20, zoom: 1.5 }),
     };
 
-    render(<Harness current={instance} type='card' />);
+    render(<Harness current={instance} type="card" />);
     screen.getByRole('button', { name: 'create' }).click();
 
     expect(createNodeMock).toHaveBeenCalledWith('card', instance);
   });
 
   it('stays stable when rfInstance.current is null', () => {
-    render(<Harness current={null} type='folder' />);
+    render(<Harness current={null} type="folder" />);
     screen.getByRole('button', { name: 'create' }).click();
 
     expect(createNodeMock).toHaveBeenCalledWith('folder', null);

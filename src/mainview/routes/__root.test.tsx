@@ -56,7 +56,7 @@ vi.mock('@/components/ui/Toaster', () => ({
 }));
 
 vi.mock('lucide-react', () => ({
-  Settings: () => <svg aria-hidden='true' />,
+  Settings: () => <svg aria-hidden="true" />,
 }));
 
 const loadRootDocument = async () => {

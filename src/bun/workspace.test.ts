@@ -11,6 +11,8 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const DATA_TMP_RE = /^.*data\.json\.[\da-f]+\.tmp$/;
+
 vi.mock('electrobun/bun', () => ({
   Utils: {
     paths: {
@@ -130,7 +132,7 @@ describe('workspace', () => {
 
     // tmp filename now includes a random suffix — only assert the final destination
     expect(renameMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^.*data\.json\.[\da-f]+\.tmp$/),
+      expect.stringMatching(DATA_TMP_RE),
       targetPath
     );
     expect(readFileSync(targetPath, 'utf8')).toBe('{"ok":true}');

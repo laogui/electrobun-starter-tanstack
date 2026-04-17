@@ -18,7 +18,7 @@ function createNode(overrides?: Partial<Node>): Node {
 describe('applyCanvasNodeChanges', () => {
   it('copies resized dimensions into node style for persistence', () => {
     const nodes = [createNode()];
-    const changes: Array<NodeChange> = [
+    const changes: NodeChange[] = [
       {
         id: 'note-1',
         type: 'dimensions',
@@ -40,7 +40,7 @@ describe('applyCanvasNodeChanges', () => {
 
   it('keeps the latest size after runtime fields are sanitized away', () => {
     const nodes = [createNode()];
-    const changes: Array<NodeChange> = [
+    const changes: NodeChange[] = [
       {
         id: 'note-1',
         type: 'dimensions',

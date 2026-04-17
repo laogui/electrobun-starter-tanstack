@@ -1,5 +1,5 @@
-import { useReactFlow } from '@xyflow/react';
 import type { Node, OnNodeDrag } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef, useState } from 'react';
 
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
@@ -21,8 +21,10 @@ export function useNodeDrag() {
   const originalPositionsRef = useRef(new Map());
 
   const findOverlappingFolder = useCallback(
-    (draggedNode: Node, allNodes: Array<Node>) => {
-      if (!isContentNode(draggedNode)) return null;
+    (draggedNode: Node, allNodes: Node[]) => {
+      if (!isContentNode(draggedNode)) {
+        return null;
+      }
       const nodeW =
         (draggedNode.measured?.width ?? (draggedNode.style?.width as number)) ||
         CARD_W;
@@ -54,17 +56,21 @@ export function useNodeDrag() {
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_, node) => {
       saveSnapshot();
-      if ((!isContentNode(node) && node.type !== 'group') || !node.parentId)
+      if ((!isContentNode(node) && node.type !== 'group') || !node.parentId) {
         return;
+      }
       const abs =
         rf.getInternalNode(node.id)?.internals.positionAbsolute ??
         node.position;
       setNodes((nds) =>
         sortNodesByParent(
           nds.map((n) => {
-            if (n.type === 'group')
+            if (n.type === 'group') {
               return { ...n, data: { ...n.data, active: false } };
-            if (n.id !== node.id) return n;
+            }
+            if (n.id !== node.id) {
+              return n;
+            }
             return {
               ...n,
               parentId: undefined,
@@ -121,7 +127,9 @@ export function useNodeDrag() {
         const savedPositions = originalPositionsRef.current;
 
         const groupInternal = rf.getInternalNode(node.id);
-        if (!groupInternal) return;
+        if (!groupInternal) {
+          return;
+        }
 
         const gx = groupInternal.internals.positionAbsolute.x;
         const gy = groupInternal.internals.positionAbsolute.y;
@@ -141,7 +149,9 @@ export function useNodeDrag() {
           .filter((n) => n.type === 'group' && n.id !== node.id)
           .map((n) => {
             const internal = rf.getInternalNode(n.id);
-            if (!internal) return null;
+            if (!internal) {
+              return null;
+            }
             return {
               x: internal.internals.positionAbsolute.x,
               y: internal.internals.positionAbsolute.y,
@@ -164,10 +174,14 @@ export function useNodeDrag() {
 
         setNodes((nds) =>
           nds.map((n) => {
-            if (!isContentNode(n) || n.parentId === node.id) return n;
+            if (!isContentNode(n) || n.parentId === node.id) {
+              return n;
+            }
 
             const cardInternal = rf.getInternalNode(n.id);
-            if (!cardInternal) return n;
+            if (!cardInternal) {
+              return n;
+            }
 
             const cw = cardInternal.measured.width ?? 240;
             const ch = cardInternal.measured.height ?? 80;
@@ -257,7 +271,9 @@ export function useNodeDrag() {
           const folder = findOverlappingFolder(node, nds);
           if (folder) {
             const cardNode = nds.find((n) => n.id === node.id);
-            if (!cardNode) return nds;
+            if (!cardNode) {
+              return nds;
+            }
             const {
               isHidden: _,
               isDropTarget: __,
@@ -271,7 +287,9 @@ export function useNodeDrag() {
             return nds
               .filter((n) => n.id !== node.id)
               .map((n) => {
-                if (n.id !== folder.id) return n;
+                if (n.id !== folder.id) {
+                  return n;
+                }
                 const d = n.data as any;
                 const children = [...(d.children || []), childEntry];
                 return {
@@ -291,8 +309,9 @@ export function useNodeDrag() {
 
           const updated = nds.map((n) => {
             if (n.id !== node.id) {
-              if (n.type === 'group')
+              if (n.type === 'group') {
                 return { ...n, data: { ...n.data, active: false } };
+              }
               return n;
             }
             const abs =
@@ -335,8 +354,9 @@ export function useNodeDrag() {
 
           const updated = nds.map((n) => {
             if (n.id !== node.id) {
-              if (n.type === 'group')
+              if (n.type === 'group') {
                 return { ...n, data: { ...n.data, active: false } };
+              }
               return n;
             }
             const abs =

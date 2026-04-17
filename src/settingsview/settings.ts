@@ -1,6 +1,6 @@
 import Electrobun, { Electroview } from 'electrobun/view';
 
-type SettingsRPC = {
+interface SettingsRPC {
   bun: {
     requests: {
       getSettings: {
@@ -18,7 +18,7 @@ type SettingsRPC = {
     requests: Record<string, unknown>;
     messages: Record<string, unknown>;
   };
-};
+}
 
 const localeStrings: Record<
   string,
@@ -45,13 +45,21 @@ function applyTheme(theme: string) {
 
 function applyLocale(locale: string) {
   const strings = localeStrings[locale] ?? localeStrings.en;
-  if (!strings) return;
+  if (!strings) {
+    return;
+  }
   const titleEl = document.querySelector('#settings-title');
   const labelLanguage = document.querySelector('#label-language');
   const labelTheme = document.querySelector('#label-theme');
-  if (titleEl) titleEl.textContent = strings.title;
-  if (labelLanguage) labelLanguage.textContent = strings.language;
-  if (labelTheme) labelTheme.textContent = strings.theme;
+  if (titleEl) {
+    titleEl.textContent = strings.title;
+  }
+  if (labelLanguage) {
+    labelLanguage.textContent = strings.language;
+  }
+  if (labelTheme) {
+    labelTheme.textContent = strings.theme;
+  }
   document.documentElement.lang = locale;
 }
 
@@ -71,8 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const themeSelect = document.querySelector('#theme-select')!;
 
   // Load initial settings from bun process
-  electrobun
-    .rpc!.request.getSettings({})
+  electrobun.rpc?.request
+    .getSettings({})
     .then((settings) => {
       themeSelect.value = settings.theme;
       localeSelect.value = settings.locale;
@@ -84,8 +92,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
   function saveCurrentSettings() {
-    electrobun
-      .rpc!.request.saveSettings({
+    electrobun.rpc?.request
+      .saveSettings({
         theme: themeSelect.value,
         locale: localeSelect.value,
       })

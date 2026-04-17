@@ -25,46 +25,46 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
         )}
         style={colorToStyle(data.color)}
       >
-        <div className='p-6'>
+        <div className="p-6">
           <h2
             className={cn(
-              'font-bold whitespace-pre-wrap',
+              'whitespace-pre-wrap font-bold',
               isFocused ? 'text-4xl' : 'text-xl'
             )}
           >
             {data.title}
           </h2>
         </div>
-        <div className='flex flex-1 items-center justify-center p-6'>
-          <div className='relative aspect-square w-full max-w-[300px] overflow-hidden rounded-full'>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="relative aspect-square w-full max-w-[300px] overflow-hidden rounded-full">
             {/* Mock Pie Chart */}
             <div
-              className='absolute inset-0 bg-[#555]'
+              className="absolute inset-0 bg-[#555]"
               style={{
                 clipPath:
                   'polygon(50% 50%, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0)',
               }}
             />
             <div
-              className='absolute inset-0 bg-[#888]'
+              className="absolute inset-0 bg-[#888]"
               style={{ clipPath: 'polygon(50% 50%, 0 0, 0 50%)' }}
             />
             <div
-              className='absolute inset-0 bg-[#BBB]'
+              className="absolute inset-0 bg-[#BBB]"
               style={{ clipPath: 'polygon(50% 50%, 0 50%, 0 100%)' }}
             />
             <div
-              className='absolute inset-0 bg-[#EEE]'
+              className="absolute inset-0 bg-[#EEE]"
               style={{ clipPath: 'polygon(50% 50%, 50% 0, 100% 0)' }}
             />
           </div>
         </div>
-        <div className='flex flex-col items-end gap-2 p-6'>
+        <div className="flex flex-col items-end gap-2 p-6">
           {data.pieData?.map((item: any, i: number) => (
-            <div key={i} className='flex items-center gap-2'>
-              <span className='text-sm font-medium'>{item.label}</span>
+            <div className="flex items-center gap-2" key={i}>
+              <span className="font-medium text-sm">{item.label}</span>
               <div
-                className='size-3 rounded-full'
+                className="size-3 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
             </div>
@@ -83,10 +83,10 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
         )}
         style={colorToStyle(data.color)}
       >
-        <div className='mb-4 flex items-center gap-2'>
+        <div className="mb-4 flex items-center gap-2">
           {data.tag ? (
             <span
-              className='rounded-md px-2 py-1 text-xs font-semibold'
+              className="rounded-md px-2 py-1 font-semibold text-xs"
               style={colorToStyle(data.tagColor)}
             >
               {data.tag}
@@ -100,16 +100,16 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             {data.title}
           </h2>
         ) : null}
-        <div className='flex-1 space-y-1 overflow-hidden'>
+        <div className="flex-1 space-y-1 overflow-hidden">
           {data.items?.map((item: any, i: number) =>
             item.isHeader ? (
-              <div key={i} className='mt-4 mb-2 font-semibold text-gray-800'>
+              <div className="mt-4 mb-2 font-semibold text-gray-800" key={i}>
                 {item.text}
               </div>
             ) : (
               <div
+                className="group flex cursor-pointer items-start gap-3 py-1"
                 key={i}
-                className='group flex cursor-pointer items-start gap-3 py-1'
                 onClick={() => {
                   if (onChange) {
                     const newItems = data.items.map(
@@ -129,7 +129,7 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
                   )}
                 >
                   {item.checked ? (
-                    <Check size={12} className='text-white' />
+                    <Check className="text-white" size={12} />
                   ) : null}
                 </div>
                 <span
@@ -146,13 +146,10 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
             )
           )}
           {/* Add new item input */}
-          <div className='mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100'>
-            <div className='size-4 shrink-0 rounded-sm border border-gray-400' />
+          <div className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100">
+            <div className="size-4 shrink-0 rounded-sm border border-gray-400" />
             <input
-              type='text'
-              value={newItem}
-              placeholder='Add item...'
-              className='w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none'
+              className="w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none"
               onChange={(e) => {
                 setNewItem(e.target.value);
               }}
@@ -168,6 +165,9 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
                   setNewItem('');
                 }
               }}
+              placeholder="Add item..."
+              type="text"
+              value={newItem}
             />
           </div>
         </div>
@@ -186,13 +186,13 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
         style={colorToStyle(data.color)}
       >
         <h2
-          className={cn('mb-4 text-xl font-bold', !data.title && 'opacity-40')}
+          className={cn('mb-4 font-bold text-xl', !data.title && 'opacity-40')}
         >
           {data.title || 'Untitled'}
         </h2>
         <div
           className={cn(
-            'flex-1 overflow-hidden text-sm/relaxed whitespace-pre-wrap',
+            'flex-1 overflow-hidden whitespace-pre-wrap text-sm/relaxed',
             !data.content && 'opacity-40'
           )}
         >
@@ -232,22 +232,22 @@ const EditableCardContent = ({ data, onChange }: any) => {
       style={colorToStyle(data.color)}
     >
       <div
-        ref={titleRef}
+        className="mb-4 cursor-text font-bold text-4xl outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
         contentEditable
-        suppressContentEditableWarning
-        data-placeholder='Untitled'
-        className='mb-4 cursor-text text-4xl font-bold outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]'
+        data-placeholder="Untitled"
         onBlur={handleTitleBlur}
+        ref={titleRef}
+        suppressContentEditableWarning
       >
         {data.title}
       </div>
       <div
-        ref={contentRef}
+        className="custom-scrollbar flex-1 cursor-text overflow-y-auto whitespace-pre-wrap text-lg/relaxed outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
         contentEditable
-        suppressContentEditableWarning
-        data-placeholder='Write something...'
-        className='custom-scrollbar flex-1 cursor-text overflow-y-auto text-lg/relaxed whitespace-pre-wrap outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]'
+        data-placeholder="Write something..."
         onBlur={handleContentBlur}
+        ref={contentRef}
+        suppressContentEditableWarning
       >
         {data.content}
       </div>
@@ -268,37 +268,38 @@ const CardNode = ({ id, data }: any) => {
       )}
     >
       <NodeResizeControl
-        minWidth={250}
-        minHeight={300}
-        maxWidth={800}
+        className="border-none! bg-transparent!"
         maxHeight={900}
-        position='bottom-right'
-        className='border-none! bg-transparent!'
-        style={{ padding: 0 }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-        }}
+        maxWidth={800}
+        minHeight={300}
+        minWidth={250}
         onResizeEnd={() => {
           document.body.classList.remove('resizing-nwse');
         }}
+        onResizeStart={() => {
+          document.body.classList.add('resizing-nwse');
+        }}
+        position="bottom-right"
+        style={{ padding: 0 }}
       >
-        <div className='absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/card:opacity-100'>
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/card:opacity-100">
           <svg
-            xmlns='http://www.w3.org/2000/svg'
-            width='16'
-            height='16'
-            viewBox='0 0 16 16'
+            height="16"
+            viewBox="0 0 16 16"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <g fill='none' fillRule='evenodd'>
+            <title>Resize</title>
+            <g fill="none" fillRule="evenodd">
               <path
-                fill='#1B2536'
-                fillOpacity='0.5'
-                d='M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z'
+                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
+                fill="#1B2536"
+                fillOpacity="0.5"
               />
               <path
-                fill='#FFF'
-                fillOpacity='0.7'
-                d='M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z'
+                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
+                fill="#FFF"
+                fillOpacity="0.7"
               />
             </g>
           </svg>
@@ -306,28 +307,28 @@ const CardNode = ({ id, data }: any) => {
       </NodeResizeControl>
 
       <Handle
-        type='target'
+        className={handleClassName}
+        id="top"
         position={Position.Top}
-        id='top'
-        className={handleClassName}
+        type="target"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="right"
         position={Position.Right}
-        id='right'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='source'
+        className={handleClassName}
+        id="bottom"
         position={Position.Bottom}
-        id='bottom'
-        className={handleClassName}
+        type="source"
       />
       <Handle
-        type='target'
-        position={Position.Left}
-        id='left'
         className={handleClassName}
+        id="left"
+        position={Position.Left}
+        type="target"
       />
 
       {/* Visual wrapper with hover lift — keeps Handle positions stable */}
@@ -347,19 +348,19 @@ const CardNode = ({ id, data }: any) => {
           >
             {data.tag ? (
               <div
-                className='mb-4 h-4 w-12 rounded-md'
+                className="mb-4 h-4 w-12 rounded-md"
                 style={colorToStyle(data.tagColor)}
               />
             ) : null}
-            <h2 className='text-2xl/tight font-bold'>
+            <h2 className="font-bold text-2xl/tight">
               {data.title || 'Untitled'}
             </h2>
-            <div className='mt-6 space-y-3 opacity-30'>
-              <div className='h-3 w-full rounded-full bg-current' />
-              <div className='h-3 w-5/6 rounded-full bg-current' />
-              <div className='h-3 w-4/6 rounded-full bg-current' />
-              <div className='h-3 w-full rounded-full bg-current' />
-              <div className='h-3 w-3/4 rounded-full bg-current' />
+            <div className="mt-6 space-y-3 opacity-30">
+              <div className="h-3 w-full rounded-full bg-current" />
+              <div className="h-3 w-5/6 rounded-full bg-current" />
+              <div className="h-3 w-4/6 rounded-full bg-current" />
+              <div className="h-3 w-full rounded-full bg-current" />
+              <div className="h-3 w-3/4 rounded-full bg-current" />
             </div>
           </div>
         ) : (

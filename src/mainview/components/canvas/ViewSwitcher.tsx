@@ -37,9 +37,11 @@ export function ViewSwitcher() {
 
   // Load views list on mount
   useEffect(() => {
-    void (async () => {
+    (async () => {
       const data = await rpcListViews();
-      if (data === null) return;
+      if (data === null) {
+        return;
+      }
       setViews(
         (data.views as Array<{ id: string; name: string }>).map((v) => ({
           id: v.id,
@@ -51,7 +53,9 @@ export function ViewSwitcher() {
 
   // Close on outside click
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const handleClick = (e: MouseEvent) => {
       if (
         menuRef.current &&
@@ -102,7 +106,9 @@ export function ViewSwitcher() {
       id: string;
       name: string;
     } | null;
-    if (result === null) return;
+    if (result === null) {
+      return;
+    }
 
     const newViews = [...views, { id: result.id, name: result.name }];
     setViews(newViews);
@@ -111,12 +117,16 @@ export function ViewSwitcher() {
 
   const handleDelete = useCallback(
     async (viewId: string) => {
-      if (views.length <= 1) return;
+      if (views.length <= 1) {
+        return;
+      }
       const result = (await rpcDeleteView(viewId)) as {
         success: boolean;
         activeViewId?: string;
       } | null;
-      if (!result?.success) return;
+      if (!result?.success) {
+        return;
+      }
 
       const newViews = views.filter((v) => v.id !== viewId);
       setViews(newViews);
@@ -131,7 +141,9 @@ export function ViewSwitcher() {
   const handleRenameStart = useCallback(
     (viewId: string) => {
       const view = views.find((v) => v.id === viewId);
-      if (!view) return;
+      if (!view) {
+        return;
+      }
       setEditingId(viewId);
       setEditingName(view.name);
     },
@@ -161,59 +173,63 @@ export function ViewSwitcher() {
 
   return (
     <div
+      className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3"
       ref={menuRef}
-      className='fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3'
     >
       <AnimatePresence>
         {open ? (
           <motion.div
-            className='mb-1 min-w-[260px] overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90'
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="mb-1 min-w-[260px] overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90"
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
             transition={{ type: 'spring', damping: 22, stiffness: 300 }}
           >
             {views.map((view, index) => (
               <div
-                key={view.id}
                 className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
                   view.id === activeViewId
                     ? 'font-semibold text-gray-900 dark:text-white'
                     : 'text-gray-600 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/5'
                 }${
                   index < views.length - 1
-                    ? 'border-b border-gray-100 dark:border-neutral-700'
+                    ? 'border-gray-100 border-b dark:border-neutral-700'
                     : ''
                 }`}
+                key={view.id}
               >
                 {editingId === view.id ? (
-                  <div className='flex flex-1 items-center gap-2'>
+                  <div className="flex flex-1 items-center gap-2">
                     <input
-                      ref={inputRef}
-                      type='text'
-                      className='flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white'
-                      value={editingName}
+                      className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
                       onChange={(e) => {
                         setEditingName(e.target.value);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRenameConfirm();
-                        if (e.key === 'Escape') handleRenameCancel();
+                        if (e.key === 'Enter') {
+                          handleRenameConfirm();
+                        }
+                        if (e.key === 'Escape') {
+                          handleRenameCancel();
+                        }
                       }}
+                      ref={inputRef}
+                      type="text"
+                      value={editingName}
                     />
                     <button
-                      type='button'
-                      className='rounded-sm p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'
-                      aria-label='Confirm rename'
+                      aria-label="Confirm rename"
+                      className="rounded-sm p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
                       onClick={handleRenameConfirm}
+                      type="button"
                     >
                       <Check size={14} />
                     </button>
                     <button
-                      type='button'
-                      className='rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600'
-                      aria-label='Cancel rename'
+                      aria-label="Cancel rename"
+                      className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
                       onClick={handleRenameCancel}
+                      type="button"
                     >
                       <X size={14} />
                     </button>
@@ -221,36 +237,36 @@ export function ViewSwitcher() {
                 ) : (
                   <>
                     <button
-                      type='button'
-                      className='flex flex-1 items-center gap-3 text-left'
+                      className="flex flex-1 items-center gap-3 text-left"
                       onClick={async () => {
                         await handleSwitchView(view.id);
                       }}
+                      type="button"
                     >
-                      <Layers size={16} className='shrink-0 opacity-50' />
-                      <span className='truncate'>{view.name}</span>
+                      <Layers className="shrink-0 opacity-50" size={16} />
+                      <span className="truncate">{view.name}</span>
                     </button>
-                    <div className='flex items-center gap-1'>
+                    <div className="flex items-center gap-1">
                       <button
-                        type='button'
-                        className='rounded-sm p-1 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/5 hover:text-gray-600 dark:hover:bg-white/10 dark:hover:text-gray-200 [div:hover>&]:opacity-100'
                         aria-label={`Rename ${view.name}`}
+                        className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-gray-200 [div:hover>&]:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRenameStart(view.id);
                         }}
+                        type="button"
                       >
                         <Pencil size={13} />
                       </button>
                       {views.length > 1 ? (
                         <button
-                          type='button'
-                          className='rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 [div:hover>&]:opacity-100'
                           aria-label={`Delete ${view.name}`}
+                          className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 [div:hover>&]:opacity-100"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDelete(view.id);
                           }}
+                          type="button"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -262,13 +278,13 @@ export function ViewSwitcher() {
             ))}
 
             {/* New canvas button */}
-            <div className='border-t border-gray-100 dark:border-neutral-700'>
+            <div className="border-gray-100 border-t dark:border-neutral-700">
               <button
-                type='button'
-                className='flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-500 transition-colors hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5'
+                className="flex w-full items-center gap-3 px-4 py-3 text-gray-500 text-sm transition-colors hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5"
                 onClick={handleCreate}
+                type="button"
               >
-                <Plus size={16} className='opacity-50' />
+                <Plus className="opacity-50" size={16} />
                 {m.view_new_canvas()}
               </button>
             </div>
@@ -277,36 +293,36 @@ export function ViewSwitcher() {
       </AnimatePresence>
 
       {/* Bottom bar trigger */}
-      <div className='flex items-center gap-2'>
-        <div className='rounded-xl bg-white/80 px-3 py-1.5 text-xs text-gray-400 shadow-sm backdrop-blur-md dark:bg-neutral-800/80 dark:text-gray-500'>
+      <div className="flex items-center gap-2">
+        <div className="rounded-xl bg-white/80 px-3 py-1.5 text-gray-400 text-xs shadow-sm backdrop-blur-md dark:bg-neutral-800/80 dark:text-gray-500">
           {String(nodeCount).padStart(2, '0')}/
           {views.length > 1 ? `${String(views.length)} views` : '1 view'}
         </div>
         <motion.button
-          className='flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80'
-          whileTap={{ scale: 0.95 }}
+          className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
           onClick={() => {
             setOpen(!open);
           }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Layers size={16} className='text-gray-500 dark:text-gray-400' />
-          <span className='max-w-[120px] truncate text-gray-700 dark:text-gray-200'>
+          <Layers className="text-gray-500 dark:text-gray-400" size={16} />
+          <span className="max-w-[120px] truncate text-gray-700 dark:text-gray-200">
             {activeView?.name ?? 'Canvas'}
           </span>
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
           >
-            <ChevronUp size={14} className='text-gray-400' />
+            <ChevronUp className="text-gray-400" size={14} />
           </motion.span>
         </motion.button>
         <motion.button
-          className='flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80'
-          whileTap={{ scale: 0.9 }}
           aria-label={m.view_new_canvas()}
+          className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
           onClick={handleCreate}
+          whileTap={{ scale: 0.9 }}
         >
-          <Plus size={16} className='text-gray-500 dark:text-gray-400' />
+          <Plus className="text-gray-500 dark:text-gray-400" size={16} />
         </motion.button>
       </div>
     </div>

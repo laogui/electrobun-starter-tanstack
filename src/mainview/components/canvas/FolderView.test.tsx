@@ -69,8 +69,8 @@ describe('folderView', () => {
             ],
           },
         }}
-        onClose={onClose}
         onCardClick={onCardClick}
+        onClose={onClose}
       />
     );
 
@@ -102,8 +102,8 @@ describe('folderView', () => {
             children: [],
           },
         }}
-        onClose={onClose}
         onCardClick={vi.fn()}
+        onClose={onClose}
       />
     );
 

@@ -37,7 +37,6 @@ const Harness = () => {
   return (
     <div>
       <button
-        type='button'
         onClick={() => {
           onNodesChange([
             {
@@ -48,11 +47,11 @@ const Harness = () => {
             },
           ] as never);
         }}
+        type="button"
       >
         dragging-change
       </button>
       <button
-        type='button'
         onClick={() => {
           onNodesChange([
             {
@@ -63,11 +62,12 @@ const Harness = () => {
             },
           ] as never);
         }}
+        type="button"
       >
         stop-drag
       </button>
-      <output aria-label='helper-h'>{helperLineH ?? 'none'}</output>
-      <output aria-label='helper-v'>{helperLineV ?? 'none'}</output>
+      <output aria-label="helper-h">{helperLineH ?? 'none'}</output>
+      <output aria-label="helper-v">{helperLineV ?? 'none'}</output>
     </div>
   );
 };

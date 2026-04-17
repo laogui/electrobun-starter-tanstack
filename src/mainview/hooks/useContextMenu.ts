@@ -21,7 +21,7 @@ interface UseContextMenuOptions {
 
 export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const setNodes = useCanvasStore((s) => s.setNodes);
-  const setEdges = useCanvasStore((s) => s.setEdges);
+  const _setEdges = useCanvasStore((s) => s.setEdges);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
@@ -198,16 +198,19 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           if (nodeId) {
             const el = document.querySelector(`[data-id="${nodeId}"]`);
             const rect = el?.getBoundingClientRect();
-            if (!rect) return;
+            if (!rect) {
+              return;
+            }
             const { nodes } = useCanvasStore.getState();
             const node = nodes.find((n) => n.id === nodeId);
-            if (node)
+            if (node) {
               setFocusedNode({
                 id: nodeId,
                 type: node.type,
                 data: node.data,
                 rect,
               });
+            }
           }
           break;
         }
@@ -215,10 +218,14 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           if (nodeId) {
             const el = document.querySelector(`[data-id="${nodeId}"]`);
             const rect = el?.getBoundingClientRect();
-            if (!rect) return;
+            if (!rect) {
+              return;
+            }
             const { nodes } = useCanvasStore.getState();
             const node = nodes.find((n) => n.id === nodeId);
-            if (node) setFocusedFolder({ id: nodeId, data: node.data, rect });
+            if (node) {
+              setFocusedFolder({ id: nodeId, data: node.data, rect });
+            }
           }
           break;
         }
@@ -236,20 +243,28 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           break;
         }
         case 'delete': {
-          if (nodeId) deleteNodes([nodeId]);
+          if (nodeId) {
+            deleteNodes([nodeId]);
+          }
           break;
         }
         case 'change-color': {
-          if (nodeId) changeNodeColor(nodeId);
+          if (nodeId) {
+            changeNodeColor(nodeId);
+          }
           break;
         }
         case 'new-child': {
-          if (nodeId) addFolderChild(nodeId);
+          if (nodeId) {
+            addFolderChild(nodeId);
+          }
           break;
         }
         case 'edit-edge-label': {
           // nodeId here is actually edgeId (passed through the generic slot)
-          if (nodeId) setEditingEdgeId(nodeId);
+          if (nodeId) {
+            setEditingEdgeId(nodeId);
+          }
           break;
         }
         case 'toggle-edge-animated': {
@@ -279,7 +294,9 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           break;
         }
         case 'delete-edge': {
-          if (nodeId) deleteEdge(nodeId);
+          if (nodeId) {
+            deleteEdge(nodeId);
+          }
           break;
         }
         default: {

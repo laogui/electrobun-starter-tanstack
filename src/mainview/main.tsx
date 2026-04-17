@@ -14,7 +14,7 @@ if (rootElement == null) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <ThemeProvider enableSystem attribute='class' defaultTheme='system'>
+  <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     <RouterProvider router={router} />
   </ThemeProvider>
 );

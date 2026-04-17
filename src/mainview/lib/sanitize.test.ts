@@ -55,7 +55,7 @@ describe('sanitizeForPersistence', () => {
     });
 
     const result = sanitizeForPersistence([node], []);
-    const data = result.nodes[0]!.data as Record<string, unknown>;
+    const data = result.nodes[0]?.data as Record<string, unknown>;
 
     expect(data).not.toHaveProperty('isHidden');
     expect(data).not.toHaveProperty('isDropTarget');

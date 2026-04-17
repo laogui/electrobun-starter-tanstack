@@ -1,5 +1,5 @@
-import { applyNodeChanges } from '@xyflow/react';
 import type { Node, NodeChange, NodeDimensionChange } from '@xyflow/react';
+import { applyNodeChanges } from '@xyflow/react';
 
 function isDimensionChange(
   change: NodeChange
@@ -14,9 +14,9 @@ function isDimensionChange(
  * Mirror those dimensions into node.style so persistence keeps the latest size.
  */
 export function applyCanvasNodeChanges(
-  changes: Array<NodeChange>,
-  nodes: Array<Node>
-): Array<Node> {
+  changes: NodeChange[],
+  nodes: Node[]
+): Node[] {
   const updatedNodes = applyNodeChanges(changes, nodes);
   const dimensionsById = new Map(
     changes

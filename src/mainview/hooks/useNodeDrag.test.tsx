@@ -99,7 +99,6 @@ const Harness = () => {
   return (
     <div>
       <button
-        type='button'
         onClick={() => {
           onNodeDragStart(
             {} as never,
@@ -112,11 +111,11 @@ const Harness = () => {
             } as never
           );
         }}
+        type="button"
       >
         drag-start
       </button>
       <button
-        type='button'
         onClick={() => {
           onNodeDrag(
             {} as never,
@@ -130,11 +129,11 @@ const Harness = () => {
             } as never
           );
         }}
+        type="button"
       >
         dragging
       </button>
       <button
-        type='button'
         onClick={() => {
           onNodeDragStop(
             {} as never,
@@ -148,11 +147,12 @@ const Harness = () => {
             } as never
           );
         }}
+        type="button"
       >
         drag-stop
       </button>
-      <output aria-label='drop-target'>{dropTargetId ?? 'none'}</output>
-      <output aria-label='active-group'>{activeGroupId ?? 'none'}</output>
+      <output aria-label="drop-target">{dropTargetId ?? 'none'}</output>
+      <output aria-label="active-group">{activeGroupId ?? 'none'}</output>
     </div>
   );
 };

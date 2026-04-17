@@ -1,10 +1,10 @@
+import type { EdgeProps } from '@xyflow/react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
   getSmoothStepPath,
 } from '@xyflow/react';
-import type { EdgeProps } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -84,13 +84,13 @@ function LabeledEdgeComponent({
   return (
     <>
       <BaseEdge
-        id={id}
-        path={edgePath}
         className={cn(
           'transition-[stroke-width] duration-150',
           animated && 'react-flow__edge-animated-dash',
           selected && 'stroke-blue-500!'
         )}
+        id={id}
+        path={edgePath}
         style={{
           strokeWidth: selected ? 2.5 : 1.5,
           stroke: selected ? undefined : 'var(--xy-edge-stroke, #b1b1b7)',
@@ -98,32 +98,32 @@ function LabeledEdgeComponent({
       />
       <EdgeLabelRenderer>
         <div
-          className='nodrag nopan pointer-events-auto absolute'
+          className="nodrag nopan pointer-events-auto absolute"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
           }}
         >
           {isEditing ? (
             <input
-              ref={inputRef}
-              type='text'
-              value={draft}
-              className='rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100'
-              style={{ minWidth: 60, maxWidth: 160 }}
+              className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+              onBlur={commitLabel}
               onChange={(e) => {
                 setDraft(e.target.value);
               }}
-              onBlur={commitLabel}
               onKeyDown={handleKeyDown}
+              ref={inputRef}
+              style={{ minWidth: 60, maxWidth: 160 }}
+              type="text"
+              value={draft}
             />
           ) : label ? (
             <button
-              type='button'
-              className='cursor-default rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-stone-600 shadow-sm ring-1 ring-stone-200/60 backdrop-blur-sm transition-colors hover:bg-stone-100 dark:bg-stone-800/90 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700'
-              style={{ maxWidth: 140 }}
+              className="cursor-default rounded-full bg-white/90 px-2 py-0.5 font-medium text-stone-600 text-xs shadow-sm ring-1 ring-stone-200/60 backdrop-blur-sm transition-colors hover:bg-stone-100 dark:bg-stone-800/90 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700"
               onDoubleClick={handleLabelDoubleClick}
+              style={{ maxWidth: 140 }}
+              type="button"
             >
-              <span className='block truncate'>{label}</span>
+              <span className="block truncate">{label}</span>
             </button>
           ) : null}
         </div>

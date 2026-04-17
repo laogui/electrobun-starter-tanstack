@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasStore } from '@/store/canvasStore';
 
+const PASTE_ID_RE = /^paste-/;
+
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
@@ -82,7 +84,7 @@ describe('useCanvasKeyboard', () => {
 
     dispatchKeyboard({ key: 'v', metaKey: true, cancelable: true });
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
-    expect(useCanvasStore.getState().nodes[1]?.id).toMatch(/^paste-/);
+    expect(useCanvasStore.getState().nodes[1]?.id).toMatch(PASTE_ID_RE);
   });
 
   it('calls undo and redo with the correct shortcuts', () => {

@@ -10,8 +10,8 @@ export function getDefaultWorkspacePath(): string {
 }
 
 export interface WorkspaceConfig {
-  schema: 'spatial-workspace/v1';
   activeViewId: string;
+  schema: 'spatial-workspace/v1';
   views: Array<{ id: string; name: string; file: string }>;
 }
 
@@ -99,11 +99,13 @@ export async function removeView(
   viewId: string
 ): Promise<boolean> {
   const config = await loadWorkspaceConfig(wsPath);
-  if (config.views.length <= 1) return false;
+  if (config.views.length <= 1) {
+    return false;
+  }
   const viewEntry = config.views.find((v) => v.id === viewId);
   config.views = config.views.filter((v) => v.id !== viewId);
   if (config.activeViewId === viewId) {
-    config.activeViewId = config.views[0]!.id;
+    config.activeViewId = config.views[0]?.id;
   }
   await saveWorkspaceConfig(wsPath, config);
   // Delete the manifest file
@@ -111,7 +113,9 @@ export async function removeView(
     const filePath = join(wsPath, '.spatial', viewEntry.file);
     try {
       const { unlinkSync } = await import('node:fs');
-      if (existsSync(filePath)) unlinkSync(filePath);
+      if (existsSync(filePath)) {
+        unlinkSync(filePath);
+      }
     } catch {
       // ignore
     }
@@ -127,7 +131,9 @@ export async function renameView(
 ): Promise<boolean> {
   const config = await loadWorkspaceConfig(wsPath);
   const view = config.views.find((v) => v.id === viewId);
-  if (!view) return false;
+  if (!view) {
+    return false;
+  }
   view.name = name;
   await saveWorkspaceConfig(wsPath, config);
   return true;

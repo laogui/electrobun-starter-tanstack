@@ -8,7 +8,9 @@ import {
 import { Check } from 'lucide-react';
 import { memo, useCallback, useRef, useState } from 'react';
 
+import { NotePreview } from '@/components/preview/NotePreview';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 
 const handleClassName = 'conn-handle nodrag';
@@ -190,14 +192,12 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
         >
           {data.title || 'Untitled'}
         </h2>
-        <div
-          className={cn(
-            'flex-1 overflow-hidden whitespace-pre-wrap text-sm/relaxed',
-            !data.content && 'opacity-40'
-          )}
-        >
-          {data.content || 'Empty note'}
-        </div>
+        <NotePreview
+          className={cn(isColorDark(data.color) && 'prose-invert text-white')}
+          excerpt={data.previewExcerpt}
+          fallback={data.content}
+          html={data.previewHtml}
+        />
       </div>
     );
   }
@@ -217,9 +217,17 @@ const EditableCardContent = ({ data, onChange }: any) => {
   }, [data.title, onChange]);
 
   const handleContentBlur = useCallback(() => {
-    const text = contentRef.current?.textContent ?? '';
+    const text = contentRef.current
+      ? editableElementToText(contentRef.current)
+      : '';
     if (text !== data.content && onChange) {
-      onChange({ content: text });
+      onChange({
+        content: text,
+        previewBlocks: undefined,
+        previewExcerpt: undefined,
+        previewHtml: undefined,
+        previewVersion: undefined,
+      });
     }
   }, [data.content, onChange]);
 

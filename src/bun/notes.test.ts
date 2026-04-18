@@ -104,6 +104,10 @@ describe('notes', () => {
       tag: 'work',
       tagColor: 'blue',
     });
+    expect(result.frontmatter).not.toHaveProperty('previewHtml');
+    expect(result.frontmatter).not.toHaveProperty('previewExcerpt');
+    expect(result.frontmatter).not.toHaveProperty('previewBlocks');
+    expect(result.frontmatter).not.toHaveProperty('previewVersion');
     expect(result.body).toBe('hello');
   });
 
@@ -170,6 +174,29 @@ describe('notes', () => {
     });
   });
 
+  it('noteToCardData normalizes preview numeric fields', async () => {
+    const { noteToCardData } = await import('./notes');
+
+    const data = noteToCardData({
+      file: 'content/note.md',
+      frontmatter: {
+        id: 'note-1',
+        title: 'Text note',
+        displayHint: 'note',
+        previewBlocks: '4' as unknown as number,
+        previewHtml: '<p>Preview</p>',
+        previewVersion: '1' as unknown as number,
+      },
+      body: 'Plain body',
+    });
+
+    expect(data).toMatchObject({
+      previewBlocks: 4,
+      previewHtml: '<p>Preview</p>',
+      previewVersion: 1,
+    });
+  });
+
   it('createNote creates a slugged markdown file and loadNote reads it back', async () => {
     const { loadNote, createNote } = await import('./notes');
 
@@ -211,6 +238,26 @@ describe('notes', () => {
     expect(saved).toContain('id: custom');
     expect(saved).toContain('title: Custom');
     expect(saved).toContain('---\nBody');
+  });
+
+  it('loadNote parses preview numeric frontmatter fields', async () => {
+    const { loadNote } = await import('./notes');
+    writeFileSync(
+      join(workspaceRoot, 'content', 'preview.md'),
+      [
+        '---',
+        'id: preview',
+        'previewBlocks: 2',
+        'previewVersion: 1',
+        '---',
+        'Body',
+      ].join('\n')
+    );
+
+    const doc = await loadNote(workspaceRoot, 'content/preview.md');
+
+    expect(doc?.frontmatter.previewBlocks).toBe(2);
+    expect(doc?.frontmatter.previewVersion).toBe(1);
   });
 
   it('buildNoteIndex discovers note ids from markdown files', async () => {

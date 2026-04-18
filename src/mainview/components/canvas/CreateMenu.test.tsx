@@ -32,7 +32,7 @@ describe('createMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Note' }));
 
     expect(onCreateNode).toHaveBeenCalledWith('card');
-    expect(setOpen).toHaveBeenCalledWith(false);
+    expect(setOpen).toHaveBeenCalledWith(false, expect.any(Object));
   });
 
   it('creates checklist cards from the menu', () => {
@@ -56,7 +56,10 @@ describe('createMenu', () => {
       <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
-    expect(screen.getByRole('menuitem', { name: 'File' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'File' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
     fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
 
     expect(onCreateNode).not.toHaveBeenCalled();
@@ -72,6 +75,6 @@ describe('createMenu', () => {
 
     fireEvent.mouseDown(document.body);
 
-    expect(setOpen).toHaveBeenCalledWith(false);
+    expect(setOpen).toHaveBeenCalledWith(false, expect.any(Object));
   });
 });

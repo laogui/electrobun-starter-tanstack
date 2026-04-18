@@ -28,6 +28,13 @@ vi.mock('@/lib/rpc', () => ({
 
 vi.mock('../../../paraglide/messages.js', () => ({
   view_new_canvas: () => 'New Canvas',
+  menu_note: () => 'Note',
+  menu_checklist: () => 'Checklist',
+  menu_sticky: () => 'Sticky',
+  menu_image: () => 'Image',
+  menu_folder: () => 'Folder',
+  menu_group: () => 'Group',
+  menu_file: () => 'File',
 }));
 
 const resetStore = () => {
@@ -51,6 +58,15 @@ const resetStore = () => {
     editingEdgeId: null,
   });
 };
+
+const renderViewSwitcher = () =>
+  render(
+    <ViewSwitcher
+      createMenuOpen={false}
+      onCreateNode={vi.fn()}
+      setCreateMenuOpen={vi.fn()}
+    />
+  );
 
 describe('viewSwitcher', () => {
   beforeEach(() => {
@@ -100,7 +116,7 @@ describe('viewSwitcher', () => {
   });
 
   it('loads views on mount and switches view with manifest flush', async () => {
-    render(<ViewSwitcher />);
+    renderViewSwitcher();
 
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalledTimes(1);
@@ -130,12 +146,13 @@ describe('viewSwitcher', () => {
   });
 
   it('creates a new view and switches to it', async () => {
-    render(<ViewSwitcher />);
+    renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Canvas' }));
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New Canvas' }));
 
     await waitFor(() => {
       expect(rpcMocks.rpcCreateView).toHaveBeenCalledWith('Canvas 3');
@@ -147,7 +164,7 @@ describe('viewSwitcher', () => {
   });
 
   it('renames a view from the menu', async () => {
-    render(<ViewSwitcher />);
+    renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
     });
@@ -168,7 +185,7 @@ describe('viewSwitcher', () => {
   });
 
   it('deletes a non-active view from the menu', async () => {
-    render(<ViewSwitcher />);
+    renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
     });

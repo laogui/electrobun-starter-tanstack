@@ -7,19 +7,22 @@ const defineRpcMock = vi.fn(() => ({
 }));
 const browserWindowFocusMock = vi.fn();
 const browserWindowOnMock = vi.fn();
-const browserWindowMock = vi.fn(() => ({
-  on: browserWindowOnMock,
-  focus: browserWindowFocusMock,
-}));
+const browserWindowMock = vi.fn();
+
+function BrowserWindowMock(...args: unknown[]) {
+  browserWindowMock(...args);
+  return {
+    on: browserWindowOnMock,
+    focus: browserWindowFocusMock,
+  };
+}
 
 vi.mock('electrobun/bun', () => ({
   BrowserView: {
     defineRPC: (...args: Parameters<typeof defineRpcMock>) =>
       defineRpcMock(...args),
   },
-  BrowserWindow(...args: unknown[]) {
-    return browserWindowMock(...args);
-  },
+  BrowserWindow: BrowserWindowMock,
   Updater: {
     localInfo: {
       channel: localInfoChannelMock,
@@ -40,6 +43,10 @@ const noteMocks = {
   loadNote: vi.fn(),
   noteToCardData: vi.fn(),
   saveNote: vi.fn(),
+};
+
+const previewMocks = {
+  writeNoteWithPreview: vi.fn(),
 };
 
 const workspaceMocks = {
@@ -73,6 +80,12 @@ vi.mock('./notes', () => ({
     noteMocks.noteToCardData(...args),
   saveNote: (...args: Parameters<typeof noteMocks.saveNote>) =>
     noteMocks.saveNote(...args),
+}));
+
+vi.mock('./preview', () => ({
+  writeNoteWithPreview: (
+    ...args: Parameters<typeof previewMocks.writeNoteWithPreview>
+  ) => previewMocks.writeNoteWithPreview(...args),
 }));
 
 vi.mock('./workspace', () => ({
@@ -136,6 +149,12 @@ beforeEach(() => {
   workspaceMocks.removeView.mockResolvedValue(true);
   workspaceMocks.renameView.mockResolvedValue(true);
   manifestMocks.saveManifest.mockResolvedValue();
+  previewMocks.writeNoteWithPreview.mockResolvedValue({
+    html: '<p>Body</p>',
+    excerpt: 'Body',
+    blocks: 1,
+    version: 1,
+  });
   bunFileMock.mockReturnValue({
     exists: vi.fn().mockResolvedValue(false),
     json: vi.fn(),
@@ -334,6 +353,112 @@ describe('src/bun/index helpers', () => {
       theme: 'dark',
       locale: 'zh',
     });
+  });
+
+  it('saveManifest writes card notes through preview generation', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([['note-1', 'content/note-1.md']])
+    );
+    noteMocks.loadNote.mockResolvedValueOnce({
+      file: 'content/note-1.md',
+      frontmatter: {
+        id: 'note-1',
+        previewHtml: '<p>Old</p>',
+      },
+      body: 'Old',
+    });
+    noteMocks.cardDataToNote.mockReturnValueOnce({
+      frontmatter: {
+        id: 'note-1',
+        displayHint: 'note',
+        title: 'Note',
+      },
+      body: '# Note',
+    });
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'card-1',
+            type: 'card',
+            position: { x: 10, y: 20 },
+            data: {
+              noteId: 'note-1',
+              title: 'Note',
+              type: 'text',
+              content: '# Note',
+              previewHtml: '<p>Stale</p>',
+            },
+          },
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      })
+    ).resolves.toEqual({ success: true });
+
+    expect(previewMocks.writeNoteWithPreview).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/note-1.md',
+      {
+        id: 'note-1',
+        displayHint: 'note',
+        title: 'Note',
+      },
+      '# Note'
+    );
+    expect(manifestMocks.saveManifest).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'views/default.canvas.json',
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            data: {
+              file: 'content/note-1.md',
+              noteId: 'note-1',
+              type: 'text',
+            },
+          }),
+        ],
+      })
+    );
+  });
+
+  it('saveNote returns generated preview metadata', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    const preview = {
+      html: '<p>Updated</p>',
+      excerpt: 'Updated',
+      blocks: 1,
+      version: 1,
+    };
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([['note-1', 'content/note-1.md']])
+    );
+    previewMocks.writeNoteWithPreview.mockResolvedValueOnce(preview);
+
+    await expect(
+      canvasHandlers.saveNote({
+        noteId: 'note-1',
+        frontmatter: { id: 'note-1', title: 'Note' },
+        body: 'Updated',
+      })
+    ).resolves.toEqual({ success: true, preview });
+
+    expect(previewMocks.writeNoteWithPreview).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/note-1.md',
+      expect.objectContaining({
+        id: 'note-1',
+        title: 'Note',
+        updatedAt: expect.any(String),
+      }),
+      'Updated'
+    );
   });
 
   it('saveAttachment maps image extensions and rejects invalid data urls', async () => {

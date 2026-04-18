@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
@@ -32,6 +33,77 @@
 body.resizing-nwse,
 body.resizing-nwse * {
   cursor: nwse-resize !important;
+}
+
+.note-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
+  line-clamp: 12;
+}
+
+.note-preview :where(h1, h2, h3, h4, h5, h6) {
+  margin-block: 0 0.45rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.note-preview :where(p, ul, ol, blockquote) {
+  margin-block: 0 0.6rem;
+}
+
+.note-preview :where(ul, ol) {
+  padding-left: 1.2rem;
+}
+
+.note-preview :where(li) {
+  margin-block: 0.15rem;
+}
+
+.note-preview :where(a) {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-preview :where(img) {
+  width: auto;
+  max-height: 8rem;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.note-preview :where(.note-checkbox) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin: 0 0.4rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -0.1rem;
+  pointer-events: none;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.75;
+}
+
+.note-preview :where(.note-checkbox-checked) {
+  opacity: 0.95;
+}
+
+.note-preview :where(.note-badge) {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.3;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  opacity: 0.65;
 }
 
 /* ── Design tokens ── */

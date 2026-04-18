@@ -8,6 +8,10 @@ export interface NoteFrontmatter {
   createdAt?: string;
   displayHint?: string;
   id: string;
+  previewBlocks?: number;
+  previewExcerpt?: string;
+  previewHtml?: string;
+  previewVersion?: number;
   tag?: string;
   tagColor?: string;
   tags?: string[];
@@ -23,6 +27,7 @@ export interface NoteDocument {
 }
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
+const NUMERIC_FRONTMATTER_KEYS = new Set(['previewBlocks', 'previewVersion']);
 
 // Simple YAML frontmatter parser
 function parseFrontmatter(content: string): {
@@ -70,6 +75,16 @@ function parseFrontmatter(content: string): {
           value = JSON.parse(value as string);
         } catch {
           // keep as string
+        }
+      }
+      if (
+        NUMERIC_FRONTMATTER_KEYS.has(key) &&
+        typeof value === 'string' &&
+        value.trim() !== ''
+      ) {
+        const numberValue = Number(value);
+        if (Number.isFinite(numberValue)) {
+          value = numberValue;
         }
       }
     }
@@ -275,11 +290,31 @@ function typeToDisplayHint(type: string | undefined): string {
 }
 
 /** Map frontmatter displayHint back to renderer data.type. */
-export function displayHintToType(hint: string | undefined): string {
+export function displayHintToType(hint?: string): string {
   if (hint === 'note') {
     return 'text';
   }
   return hint || 'text';
+}
+
+function normalizeOptionalNumber(
+  data: Record<string, unknown>,
+  key: string
+): void {
+  const value = data[key];
+  if (value === undefined || typeof value === 'number') {
+    return;
+  }
+  if (typeof value !== 'string') {
+    delete data[key];
+    return;
+  }
+  const numberValue = Number(value);
+  if (Number.isFinite(numberValue)) {
+    data[key] = numberValue;
+  } else {
+    delete data[key];
+  }
 }
 
 /**
@@ -344,6 +379,8 @@ export function noteToCardData(doc: NoteDocument): Record<string, unknown> {
     type,
     file,
   };
+  normalizeOptionalNumber(data, 'previewBlocks');
+  normalizeOptionalNumber(data, 'previewVersion');
 
   if (type === 'checklist') {
     data.items = parseChecklistBody(body);

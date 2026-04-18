@@ -10,8 +10,8 @@ import {
   deleteNoteFile,
   loadNote,
   noteToCardData,
-  saveNote as writeNote,
 } from './notes';
+import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import {
   addView,
   atomicWrite,
@@ -88,7 +88,7 @@ interface CanvasRPC {
           frontmatter: Record<string, unknown>;
           body: string;
         };
-        response: { success: boolean };
+        response: { preview?: PreviewArtifacts; success: boolean };
       };
       createNote: {
         params: { id: string; title: string; displayHint: string };
@@ -394,8 +394,8 @@ async function main() {
                 existingFm
               );
 
-              // Write .md file
-              await writeNote(wsPath, filePath, frontmatter, body);
+              // Write .md file and keep markdown preview metadata in sync.
+              await writeNoteWithPreview(wsPath, filePath, frontmatter, body);
 
               // Return manifest-only node: strip content fields, keep reference
               return {
@@ -432,9 +432,16 @@ async function main() {
             return { success: false };
           }
 
-          frontmatter.updatedAt = new Date().toISOString();
-          await writeNote(wsPath, filePath, frontmatter, body);
-          return { success: true };
+          const preview = await writeNoteWithPreview(
+            wsPath,
+            filePath,
+            {
+              ...frontmatter,
+              updatedAt: new Date().toISOString(),
+            },
+            body
+          );
+          return { success: true, preview };
         },
 
         createNote: async ({ id, title, displayHint }) => {

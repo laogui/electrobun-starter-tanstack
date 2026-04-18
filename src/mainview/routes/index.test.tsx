@@ -322,9 +322,8 @@ describe('routes/index', () => {
       expect(rpcMocks.loadCanvas).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Canvas' }));
     fireEvent.click(screen.getAllByRole('button').at(-1)!);
-    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Note' }));
 
     await waitFor(() => {
       expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('card');

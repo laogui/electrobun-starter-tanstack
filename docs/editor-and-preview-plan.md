@@ -20,15 +20,32 @@
 - 卡片预览态以**预生成的静态 HTML**渲染正文，渲染成本接近 `innerHTML` 本身
 - 卡片 resize 不触发任何 markdown 解析或 React 子树重建，仅由 CSS 裁剪
 - `.md` 文件保持人类可读，frontmatter 仅扩展、不破坏现有结构
-- 保持 checklist card 当前的结构化 `data.items` 交互（不在预览层退化为 markdown 渲染）
+- checklist 作为**独立卡片类型**保留，卡片态支持直接 toggle，不走 tiptap / previewHtml
+- 补齐 checklist 卡片的创建入口（CreateMenu + 右键菜单）
 
 ### 1.2 非目标
 
 - 不引入 ProseMirror JSON 作为 canonical 存储（见 `note-data-model-analysis.md` §9）
 - 不做 slash command / mention / AI inline 扩展（单独议题，后续再加）
 - 不改动 checklist card 的卡片交互（勾选仍是结构化 items）
+- 不把 tiptap 内的 task list 与 checklist card 合并——它们是两个独立概念（见 §1.3）
 - 不做 tiered preview（路线 C）。仅在路线 B 真成为瓶颈时再评估
 - 不引入协同编辑 / Yjs
+
+### 1.3 Checklist card vs Tiptap task list（定稿）
+
+项目中存在两种"任务列表"，**刻意保持为不同概念**：
+
+| | Checklist card | Tiptap task list |
+|---|---|---|
+| 类型 | 独立卡片类型 `type: 'checklist'` | text card 正文内的 GFM `- [ ]` |
+| 存储 | `data.items[]` 结构化数组 | markdown body（与段落、标题等混排） |
+| 磁盘 | `displayHint: checklist` + GFM body | `displayHint: note` + markdown body |
+| 卡片态交互 | **可直接 toggle**（点击勾选） | **只读渲染**（checkbox disabled） |
+| focused 态 | 结构化 items 编辑 | tiptap TaskList 扩展，可交互 |
+| 创建方式 | CreateMenu「Checklist」/ 右键菜单 | 在 text card focused 下输入 `- [ ]` |
+
+**核心原则**：checklist card 是"整张卡片就是一个待办列表"，tiptap task list 是"文档中嵌入的任务项"。前者强调卡片级快速交互，后者强调混合内容编辑。
 
 ---
 
@@ -86,7 +103,7 @@
 | `markdown-it`                                                 | 预览层渲染器                       | ~20KB                     |
 | `markdown-it-task-lists`                                      | 任务列表支持                       | ~1KB                      |
 | `dompurify`                                                   | `dangerouslySetInnerHTML` sanitize | ~20KB                     |
-
+5r
 合计增量 ~130KB gz。FocusedView 的 tiptap 部分用动态 `import()` 懒加载，卡片首屏只包含 markdown-it + DOMPurify（~40KB gz）。
 
 ### 3.2 不引入的东西
@@ -180,6 +197,28 @@ data.previewExcerpt?: string
 - checklist card：body 仍是 GFM checkbox markdown
 
 checklist 保持当前的结构化 `data.items` 交互，不走 tiptap 也不走预览 HTML 渲染。
+
+### 4.6 checklist card 创建入口（当前缺失）
+
+当前代码中用户**无法新建** checklist 卡片——CreateMenu 只有 note/sticky/image/folder/group，`canvasStore.createNode` 没有 checklist 分支。需要补齐：
+
+- `CreateMenu` 加 `{ id: 'checklist', label: m.menu_checklist(), icon: ListChecks }`
+- `canvasStore.createNode` 加 `'checklist'` 分支：
+  ```ts
+  case 'checklist': {
+    const pos = toFlow(CARD_W, CARD_H);
+    newNode = {
+      id,
+      type: 'card',
+      position: pos,
+      style: { width: CARD_W, height: CARD_H },
+      data: { type: 'checklist', title: '', items: [], color: '#FFFFFF' },
+    };
+    break;
+  }
+  ```
+- 右键菜单加 `new-checklist` action
+- `useNodeCreation` 的 `onCreateNode` 类型签名扩展为支持 `'checklist'`
 
 ---
 
@@ -792,6 +831,18 @@ export const FLAGS = {
 
 ## 14. 任务拆解（分阶段）
 
+### Phase 0 — Checklist 创建入口（前置，半天）
+
+不依赖 tiptap / preview 任何改动，纯粹补齐遗漏的入口。
+
+1. 添加 i18n key `menu_checklist`
+2. `CreateMenu` 加 checklist 选项
+3. `canvasStore.createNode` 加 `'checklist'` 分支
+4. `useNodeCreation` 类型签名扩展
+5. 右键菜单加 `new-checklist` action
+6. 运行 `bun run test` + `bun run type-check`
+7. 手工验证：新建 checklist → 卡片渲染 → toggle 勾选 → 保存落盘正确
+
 ### Phase 1 — 预览层（独立完成，不阻塞编辑器）
 
 约 1～2 天。完成后立即带来"卡片态渲染 markdown"的能力，即使不上 tiptap 也有效果。
@@ -863,4 +914,4 @@ export const FLAGS = {
 1. `src/shared/` 是否能被 bun 和 renderer 同时 import？需要检查 `electrobun.config.ts` 与 Vite 配置。若不行，采用复制 + lint 检查。
 2. `@tailwindcss/typography` 在 Tailwind v4 下的启用方式（`@plugin` 语法）是否已在项目中成立。
 3. 是否允许 focused view 内显示图片（markdown `![]()`）——目前 text card 没有图片概念，引入后涉及附件路径解析。Phase 1 可暂不支持，TiptapEditor 的 Image 扩展先禁用。
-4. 是否需要在 preview 渲染 task list checkbox——本文档建议**只渲染不可交互**（checkbox disabled）。交互性仍由 checklist card（结构化 items）承担。
+4. ~~是否需要在 preview 渲染 task list checkbox~~ **已定稿**：preview 中的 task list checkbox 渲染为只读 disabled 状态，卡片态不可交互。仅在 focused view 下通过 tiptap TaskList 扩展交互。Checklist card 是独立类型，不受此限制（见 §1.3）。

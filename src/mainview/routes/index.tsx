@@ -157,9 +157,10 @@ function CanvasComponent() {
       <ReactFlow
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
-        defaultEdgeOptions={{ type: 'labeledEdge' }}
+        defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
         edges={edges}
         edgeTypes={edgeTypes}
+        elevateEdgesOnSelect
         fitView
         maxZoom={4}
         minZoom={0.1}

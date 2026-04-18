@@ -530,6 +530,32 @@ describe('canvasStore — createNode', () => {
     expect(node.data).toMatchObject({ subtitle: '', children: [] });
   });
 
+  it('creates a checklist card node using the card dimensions', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 1200,
+      innerHeight: 900,
+    });
+
+    useCanvasStore
+      .getState()
+      .createNode('checklist', createRfInstance({ x: 100, y: 50, zoom: 2 }));
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.id).toBe('new-101');
+    expect(node.type).toBe('card');
+    expect(node.position).toEqual({
+      x: (600 - 100) / 2 - CARD_W / 2,
+      y: (450 - 50) / 2 - CARD_H / 2,
+    });
+    expect(node.style).toEqual({ width: CARD_W, height: CARD_H });
+    expect(node.data).toEqual({
+      type: 'checklist',
+      title: '',
+      items: [],
+      color: '#FFFFFF',
+    });
+  });
+
   it('creates an image node with fixed initial color', () => {
     vi.stubGlobal('window', {
       innerWidth: 900,

@@ -70,7 +70,7 @@ export interface CanvasState {
 
   // Actions – node CRUD
   createNode: (
-    type: 'card' | 'image' | 'folder' | 'group' | 'sticky',
+    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky',
     rfInstance: ReactFlowInstance<any, any> | null
   ) => void;
   deleteEdge: (edgeId: string) => void;
@@ -356,6 +356,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           position: pos,
           style: { width: IMAGE_W, height: IMAGE_H },
           data: { imageUrl: '', title: '', color: '#FFFFFF' },
+        };
+        break;
+      }
+      case 'checklist': {
+        const pos = toFlow(CARD_W, CARD_H);
+        newNode = {
+          id,
+          type: 'card',
+          position: pos,
+          style: { width: CARD_W, height: CARD_H },
+          data: { type: 'checklist', title: '', items: [], color: '#FFFFFF' },
         };
         break;
       }

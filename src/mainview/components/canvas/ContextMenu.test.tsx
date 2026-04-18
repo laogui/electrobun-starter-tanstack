@@ -9,6 +9,7 @@ const COPY_RE = /copy/i;
 
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_note: () => 'New note',
+  menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',
   menu_new_image: () => 'New image',
   menu_new_folder: () => 'New folder',

@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import {
+  CARD_H,
+  CARD_W,
   GROUP_COLORS,
   IMAGE_H,
   IMAGE_W,
@@ -123,6 +125,29 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
                 title: m.default_folder_title(),
                 subtitle: '',
                 children: [],
+              },
+            },
+          ]);
+          break;
+        }
+        case 'new-checklist': {
+          saveSnapshot();
+          const pos = contextMenu
+            ? screenToFlow(contextMenu.x, contextMenu.y)
+            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
+          const id = nextNodeId();
+          setNodes((nds) => [
+            ...nds,
+            {
+              id,
+              type: 'card' as const,
+              position: pos,
+              style: { width: CARD_W, height: CARD_H },
+              data: {
+                type: 'checklist' as const,
+                title: '',
+                items: [],
+                color: '#FFFFFF',
               },
             },
           ]);

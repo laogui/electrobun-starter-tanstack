@@ -182,6 +182,14 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          handleContextMenuAction('new-checklist');
+        }}
+        type="button"
+      >
+        new-checklist
+      </button>
+      <button
+        onClick={() => {
           handleContextMenuAction('paste');
         }}
         type="button"
@@ -316,6 +324,18 @@ describe('useContextMenu', () => {
       position: {
         x: (210 - viewport.x) / viewport.zoom,
         y: (180 - viewport.y) / viewport.zoom,
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'new-checklist' }));
+    expect(storeState.nodes.at(-1)).toMatchObject({
+      id: 'new-102',
+      type: 'card',
+      data: {
+        type: 'checklist',
+        title: '',
+        items: [],
+        color: '#FFFFFF',
       },
     });
 

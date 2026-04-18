@@ -7,6 +7,7 @@ import {
   Group,
   ImageIcon,
   Layers,
+  ListChecks,
   NotebookPen,
   Pencil,
   Plus,
@@ -32,6 +33,12 @@ import * as m from '../../../paraglide/messages.js';
 
 const getCreateMenuItems = () => [
   { id: 'note', label: m.menu_note(), icon: StickyNote, enabled: true },
+  {
+    id: 'checklist',
+    label: m.menu_checklist(),
+    icon: ListChecks,
+    enabled: true,
+  },
   { id: 'sticky', label: m.menu_sticky(), icon: NotebookPen, enabled: true },
   { id: 'image', label: m.menu_image(), icon: ImageIcon, enabled: true },
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
@@ -45,7 +52,7 @@ export function ViewSwitcher({
   setCreateMenuOpen,
 }: {
   onCreateNode: (
-    type: 'card' | 'image' | 'folder' | 'group' | 'sticky'
+    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
   ) => void;
   createMenuOpen: boolean;
   setCreateMenuOpen: (v: boolean) => void;
@@ -254,9 +261,15 @@ export function ViewSwitcher({
                       onClick={() => {
                         const map: Record<
                           string,
-                          'card' | 'image' | 'folder' | 'group' | 'sticky'
+                          | 'card'
+                          | 'checklist'
+                          | 'image'
+                          | 'folder'
+                          | 'group'
+                          | 'sticky'
                         > = {
                           note: 'card',
+                          checklist: 'checklist',
                           sticky: 'sticky',
                           image: 'image',
                           folder: 'folder',

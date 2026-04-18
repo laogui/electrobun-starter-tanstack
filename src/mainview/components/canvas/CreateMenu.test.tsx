@@ -7,6 +7,7 @@ import { CreateMenu } from '@/components/canvas/CreateMenu';
 
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_note: () => 'Note',
+  menu_checklist: () => 'Checklist',
   menu_sticky: () => 'Sticky',
   menu_image: () => 'Image',
   menu_folder: () => 'Folder',
@@ -32,6 +33,19 @@ describe('createMenu', () => {
 
     expect(onCreateNode).toHaveBeenCalledWith('card');
     expect(setOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('creates checklist cards from the menu', () => {
+    const onCreateNode = vi.fn();
+    const setOpen = vi.fn();
+
+    render(
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Checklist' }));
+
+    expect(onCreateNode).toHaveBeenCalledWith('checklist');
   });
 
   it('does not allow disabled menu items to trigger creation', () => {

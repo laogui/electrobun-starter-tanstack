@@ -2,7 +2,7 @@ import type { Node } from '@xyflow/react';
 
 export const initialNodes: Node[] = [
   {
-    id: '1',
+    id: 'node-init0001',
     position: { x: 100, y: 100 },
     data: {
       type: 'image',
@@ -19,7 +19,7 @@ export const initialNodes: Node[] = [
     style: { height: 450, width: 350 },
   },
   {
-    id: '2',
+    id: 'node-init0002',
     position: { x: 500, y: 100 },
     data: {
       type: 'text',
@@ -32,7 +32,7 @@ export const initialNodes: Node[] = [
     style: { height: 450, width: 350 },
   },
   {
-    id: '3',
+    id: 'node-init0003',
     position: { x: 900, y: 100 },
     data: {
       type: 'checklist',
@@ -58,14 +58,14 @@ export const initialNodes: Node[] = [
     style: { height: 450, width: 350 },
   },
   {
-    id: '4',
+    id: 'node-init0004',
     position: { x: 900, y: 600 },
     data: {
       title: '3 items',
       subtitle: 'The really great ideas to implement',
       children: [
         {
-          id: '4-1',
+          id: 'child-init0001',
           type: 'card',
           data: {
             type: 'text',
@@ -75,7 +75,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '4-2',
+          id: 'child-init0002',
           type: 'card',
           data: {
             type: 'text',
@@ -85,7 +85,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '4-3',
+          id: 'child-init0003',
           type: 'card',
           data: {
             type: 'text',
@@ -100,27 +100,7 @@ export const initialNodes: Node[] = [
     style: { height: 350, width: 350 },
   },
   {
-    id: 's1',
-    position: { x: 500, y: 600 },
-    data: {
-      content: 'Remember to review the onboarding flow before next sprint!',
-      color: '#FEF08A',
-    },
-    type: 'sticky',
-    style: { height: 200, width: 200 },
-  },
-  {
-    id: 's2',
-    position: { x: 730, y: 600 },
-    data: {
-      content: 'Ask design team about new color palette 🎨',
-      color: '#BBF7D0',
-    },
-    type: 'sticky',
-    style: { height: 200, width: 200 },
-  },
-  {
-    id: 'g1',
+    id: 'node-init0007',
     position: { x: 100, y: 600 },
     data: {
       label: 'Design Research',
@@ -130,7 +110,31 @@ export const initialNodes: Node[] = [
     style: { height: 400, width: 800 },
   },
   {
-    id: '5',
+    id: 'node-init0005',
+    position: { x: 380, y: 20 },
+    parentId: 'node-init0007',
+    extent: 'parent',
+    data: {
+      content: 'Remember to review the onboarding flow before next sprint!',
+      color: '#FEF08A',
+    },
+    type: 'sticky',
+    style: { height: 200, width: 200 },
+  },
+  {
+    id: 'node-init0006',
+    position: { x: 600, y: 20 },
+    parentId: 'node-init0007',
+    extent: 'parent',
+    data: {
+      content: 'Ask design team about new color palette 🎨',
+      color: '#BBF7D0',
+    },
+    type: 'sticky',
+    style: { height: 200, width: 200 },
+  },
+  {
+    id: 'node-init0008',
     position: { x: 1300, y: 100 },
     data: {
       type: 'checklist',
@@ -156,14 +160,14 @@ export const initialNodes: Node[] = [
     style: { height: 450, width: 350 },
   },
   {
-    id: '6',
+    id: 'node-init0009',
     position: { x: 1300, y: 600 },
     data: {
       title: '5 items',
       subtitle: 'The critical bug reports to fix asap',
       children: [
         {
-          id: '6-1',
+          id: 'child-init0004',
           type: 'card',
           data: {
             type: 'text',
@@ -172,7 +176,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '6-2',
+          id: 'child-init0005',
           type: 'card',
           data: {
             type: 'text',
@@ -181,7 +185,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '6-3',
+          id: 'child-init0006',
           type: 'card',
           data: {
             type: 'text',
@@ -190,7 +194,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '6-4',
+          id: 'child-init0007',
           type: 'card',
           data: {
             type: 'text',
@@ -199,7 +203,7 @@ export const initialNodes: Node[] = [
           },
         },
         {
-          id: '6-5',
+          id: 'child-init0008',
           type: 'card',
           data: {
             type: 'text',
@@ -213,7 +217,7 @@ export const initialNodes: Node[] = [
     style: { height: 350, width: 350 },
   },
   {
-    id: 'img1',
+    id: 'node-init0010',
     position: { x: 100, y: 1100 },
     data: {
       imageUrl: '',

@@ -10,8 +10,6 @@ import { addEdge, applyEdgeChanges } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { create } from 'zustand';
-
-import { initialNodes } from '@/data/initialNodes';
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import {
   CARD_COLORS,
@@ -211,7 +209,7 @@ export interface CanvasState {
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- initial state --------------------------------------------------------
-  nodes: initialNodes,
+  nodes: [],
   edges: [],
   _hydrated: false,
   focusedNode: null,

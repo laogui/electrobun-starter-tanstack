@@ -13,12 +13,13 @@ import { AnimatePresence } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
+import { Loader } from '@/components/layout/Loader';
+import { initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -80,11 +81,9 @@ function CanvasComponent() {
           hydrate(data.nodes, data.edges);
         } else if (await isRpcAvailable()) {
           // First run: seed workspace with initialNodes
-          const { nodes, edges } = useCanvasStore.getState();
-          const sanitized = sanitizeForPersistence(nodes, edges);
+          const sanitized = sanitizeForPersistence(initialNodes, []);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          // Mark hydration complete so persistence hook doesn't skip the first real edit
-          hydrate(nodes, edges);
+          hydrate(initialNodes, []);
         }
       })
       .catch((error) => {
@@ -151,6 +150,14 @@ function CanvasComponent() {
   const miniMapMask = isDarkTheme
     ? 'rgba(20, 20, 20, 0.7)'
     : 'rgba(240, 239, 237, 0.7)';
+
+  if (!hydrated) {
+    return (
+      <div className="h-screen w-screen bg-stone-50 dark:bg-[#141414]">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-stone-50 font-sans dark:bg-[#141414]">

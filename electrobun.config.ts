@@ -24,9 +24,11 @@ export default {
       bundleCEF: false,
     },
     linux: {
+      icon: 'icon.iconset/icon_256x256.png',
       bundleCEF: false,
     },
     win: {
+      icon: 'icon.iconset/icon_256x256.png',
       bundleCEF: false,
     },
   },

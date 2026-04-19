@@ -3,7 +3,6 @@ import {
   Copy,
   FilePlus,
   Folder,
-  FolderInput,
   FolderOpen,
   Group,
   ImageIcon,
@@ -71,7 +70,6 @@ const getCardItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'move-to-folder', label: m.menu_move_to_folder(), icon: FolderInput },
   {
     id: 'delete',
     label: m.menu_delete(),

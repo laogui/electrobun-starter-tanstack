@@ -41,7 +41,7 @@ const StickyNode = ({ id, data }: any) => {
       )}
     >
       <NodeResizeControl
-        className="border-none! bg-transparent!"
+        className="z-10 border-none! bg-transparent!"
         maxHeight={500}
         maxWidth={500}
         minHeight={120}
@@ -101,7 +101,7 @@ const StickyNode = ({ id, data }: any) => {
 
       <div
         className={cn(
-          'size-full cursor-grab overflow-hidden rounded-xl border border-black/5 shadow-sm',
+          'relative size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-sm',
           'transition-shadow duration-200 ease-out hover:shadow-lg'
         )}
         onDoubleClick={handleDoubleClick}
@@ -132,6 +132,14 @@ const StickyNode = ({ id, data }: any) => {
             </div>
           </div>
         )}
+        {/* Folded corner */}
+        <div
+          className="pointer-events-none absolute top-0 right-0 size-5"
+          style={{
+            background:
+              'linear-gradient(225deg, transparent 50%, rgba(0,0,0,0.06) 50%)',
+          }}
+        />
       </div>
     </div>
   );

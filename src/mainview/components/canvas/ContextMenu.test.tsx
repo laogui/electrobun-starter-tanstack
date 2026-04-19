@@ -19,7 +19,6 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_open_focused: () => 'Open focused',
   menu_copy: () => 'Copy',
   menu_change_color: () => 'Change color',
-  menu_move_to_folder: () => 'Move to folder',
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',

@@ -11,12 +11,12 @@ export function getDefaultWorkspacePath(): string {
 
 export interface WorkspaceConfig {
   activeViewId: string;
-  schema: 'spatial-workspace/v1';
+  schema: 'ghostboard-workspace/v1';
   views: Array<{ id: string; name: string; file: string }>;
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
-  schema: 'spatial-workspace/v1',
+  schema: 'ghostboard-workspace/v1',
   activeViewId: 'default',
   views: [
     {
@@ -32,8 +32,8 @@ export function initWorkspace(workspacePath?: string): string {
   const wsPath = workspacePath ?? getDefaultWorkspacePath();
   const dirs = [
     wsPath,
-    join(wsPath, '.spatial'),
-    join(wsPath, '.spatial', 'views'),
+    join(wsPath, '.ghostboard'),
+    join(wsPath, '.ghostboard', 'views'),
     join(wsPath, 'content'),
     join(wsPath, 'attachments'),
   ];
@@ -49,7 +49,7 @@ export function initWorkspace(workspacePath?: string): string {
 export async function loadWorkspaceConfig(
   wsPath: string
 ): Promise<WorkspaceConfig> {
-  const configPath = join(wsPath, '.spatial', 'workspace.json');
+  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
   const file = Bun.file(configPath);
   if (await file.exists()) {
     return await file.json();
@@ -74,7 +74,7 @@ export async function saveWorkspaceConfig(
   wsPath: string,
   config: WorkspaceConfig
 ): Promise<void> {
-  const configPath = join(wsPath, '.spatial', 'workspace.json');
+  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
   await atomicWrite(configPath, JSON.stringify(config, null, 2));
 }
 
@@ -105,12 +105,16 @@ export async function removeView(
   const viewEntry = config.views.find((v) => v.id === viewId);
   config.views = config.views.filter((v) => v.id !== viewId);
   if (config.activeViewId === viewId) {
-    config.activeViewId = config.views[0]?.id;
+    const nextView = config.views[0];
+    if (!nextView) {
+      return false;
+    }
+    config.activeViewId = nextView.id;
   }
   await saveWorkspaceConfig(wsPath, config);
   // Delete the manifest file
   if (viewEntry) {
-    const filePath = join(wsPath, '.spatial', viewEntry.file);
+    const filePath = join(wsPath, '.ghostboard', viewEntry.file);
     try {
       const { unlinkSync } = await import('node:fs');
       if (existsSync(filePath)) {

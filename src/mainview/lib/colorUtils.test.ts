@@ -8,7 +8,7 @@ describe('colorToStyle', () => {
   });
 
   it('returns undefined for undefined input', () => {
-    expect(colorToStyle()).toBeUndefined();
+    expect(colorToStyle(undefined)).toBeUndefined();
   });
 
   it('returns undefined for an empty string', () => {
@@ -31,7 +31,7 @@ describe('isColorDark', () => {
   });
 
   it('returns false for undefined', () => {
-    expect(isColorDark()).toBe(false);
+    expect(isColorDark(undefined)).toBe(false);
   });
 
   it('returns false for non-hex strings', () => {

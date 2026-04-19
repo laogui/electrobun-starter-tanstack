@@ -71,8 +71,8 @@ describe('workspace', () => {
     const result = initWorkspace(workspaceRoot);
 
     expect(result).toBe(workspaceRoot);
-    expect(existsSync(join(workspaceRoot, '.spatial'))).toBe(true);
-    expect(existsSync(join(workspaceRoot, '.spatial', 'views'))).toBe(true);
+    expect(existsSync(join(workspaceRoot, '.ghostboard'))).toBe(true);
+    expect(existsSync(join(workspaceRoot, '.ghostboard', 'views'))).toBe(true);
     expect(existsSync(join(workspaceRoot, 'content'))).toBe(true);
     expect(existsSync(join(workspaceRoot, 'attachments'))).toBe(true);
   });
@@ -88,11 +88,11 @@ describe('workspace', () => {
 
     const config = await loadWorkspaceConfig(workspaceRoot);
     const persisted = JSON.parse(
-      readFileSync(join(workspaceRoot, '.spatial', 'workspace.json'), 'utf8')
+      readFileSync(join(workspaceRoot, '.ghostboard', 'workspace.json'), 'utf8')
     );
 
     expect(config).toEqual({
-      schema: 'spatial-workspace/v1',
+      schema: 'ghostboard-workspace/v1',
       activeViewId: 'default',
       views: [
         {
@@ -108,9 +108,9 @@ describe('workspace', () => {
   it('loadWorkspaceConfig reads an existing config file', async () => {
     const { initWorkspace, loadWorkspaceConfig } = await import('./workspace');
     initWorkspace(workspaceRoot);
-    const configPath = join(workspaceRoot, '.spatial', 'workspace.json');
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
     const existing = {
-      schema: 'spatial-workspace/v1',
+      schema: 'ghostboard-workspace/v1',
       activeViewId: 'focus',
       views: [{ id: 'focus', name: 'Focus', file: 'views/focus.canvas.json' }],
     };
@@ -143,27 +143,27 @@ describe('workspace', () => {
     initWorkspace(workspaceRoot);
 
     await saveWorkspaceConfig(workspaceRoot, {
-      schema: 'spatial-workspace/v1',
+      schema: 'ghostboard-workspace/v1',
       activeViewId: 'focus',
       views: [{ id: 'focus', name: 'Focus', file: 'views/focus.canvas.json' }],
     });
 
     const saved = JSON.parse(
-      readFileSync(join(workspaceRoot, '.spatial', 'workspace.json'), 'utf8')
-    );
+      readFileSync(join(workspaceRoot, '.ghostboard', 'workspace.json'), 'utf8')
+    ) as { activeViewId: string };
     expect(saved.activeViewId).toBe('focus');
   });
 
   it('addView appends a new view and makes it active', async () => {
     const { initWorkspace, addView } = await import('./workspace');
     initWorkspace(workspaceRoot);
-    mkdirSync(join(workspaceRoot, '.spatial'), { recursive: true });
+    mkdirSync(join(workspaceRoot, '.ghostboard'), { recursive: true });
 
-    const configPath = join(workspaceRoot, '.spatial', 'workspace.json');
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
     writeFileSync(
       configPath,
       JSON.stringify({
-        schema: 'spatial-workspace/v1',
+        schema: 'ghostboard-workspace/v1',
         activeViewId: 'default',
         views: [
           {
@@ -179,10 +179,15 @@ describe('workspace', () => {
       exists: async () => existsSync(filePath),
       json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
     }));
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('12345678-abcd');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '12345678-abcd-0000-0000-000000000000'
+    );
 
     const entry = await addView(workspaceRoot, 'Inbox');
-    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      activeViewId: string;
+      views: unknown[];
+    };
 
     expect(entry).toEqual({
       id: 'view_12345678',
@@ -197,11 +202,11 @@ describe('workspace', () => {
     const { initWorkspace, removeView } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
-    const configPath = join(workspaceRoot, '.spatial', 'workspace.json');
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
     writeFileSync(
       configPath,
       JSON.stringify({
-        schema: 'spatial-workspace/v1',
+        schema: 'ghostboard-workspace/v1',
         activeViewId: 'default',
         views: [
           {
@@ -225,11 +230,11 @@ describe('workspace', () => {
     const { initWorkspace, removeView } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
-    const configPath = join(workspaceRoot, '.spatial', 'workspace.json');
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
     writeFileSync(
       configPath,
       JSON.stringify({
-        schema: 'spatial-workspace/v1',
+        schema: 'ghostboard-workspace/v1',
         activeViewId: 'view-2',
         views: [
           {
@@ -243,7 +248,7 @@ describe('workspace', () => {
     );
     const manifestPath = join(
       workspaceRoot,
-      '.spatial',
+      '.ghostboard',
       'views',
       'view-2.canvas.json'
     );
@@ -255,7 +260,10 @@ describe('workspace', () => {
     }));
 
     await expect(removeView(workspaceRoot, 'view-2')).resolves.toBe(true);
-    const saved = JSON.parse(readFileSync(configPath, 'utf8'));
+    const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      activeViewId: string;
+      views: unknown[];
+    };
 
     expect(saved.activeViewId).toBe('default');
     expect(saved.views).toHaveLength(1);
@@ -266,11 +274,11 @@ describe('workspace', () => {
     const { initWorkspace, renameView } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
-    const configPath = join(workspaceRoot, '.spatial', 'workspace.json');
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
     writeFileSync(
       configPath,
       JSON.stringify({
-        schema: 'spatial-workspace/v1',
+        schema: 'ghostboard-workspace/v1',
         activeViewId: 'default',
         views: [
           {
@@ -294,7 +302,9 @@ describe('workspace', () => {
       false
     );
 
-    const saved = JSON.parse(readFileSync(configPath, 'utf8'));
-    expect(saved.views[0].name).toBe('Renamed');
+    const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      views: { name: string }[];
+    };
+    expect(saved.views[0]?.name).toBe('Renamed');
   });
 });

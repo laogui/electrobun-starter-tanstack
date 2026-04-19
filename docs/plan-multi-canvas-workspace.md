@@ -35,7 +35,7 @@ Phase 1: 多画布视图切换（P2 #15）
     └── 1D. 持久化：useCanvasPersistence 改为动态 viewId
 
 Phase 2: 多 Workspace 管理（P3 #16）—— 依赖 Phase 1
-    ├── 2A. 应用级配置：~/.spatial-canvas/app-config.json
+    ├── 2A. 应用级配置：~/.ghostboard/app-config.json
     ├── 2B. 主进程：switchWorkspace / createWorkspace RPC
     ├── 2C. UI：欢迎页 / Workspace 选择器
     └── 2D. 窗口重建：切换 workspace 时重建 RPC + 重新 hydrate
@@ -128,7 +128,7 @@ export async function addView(wsPath: string, name: string) {
   await saveWorkspaceConfig(wsPath, config);
   // 写入空 manifest
   await saveManifest(wsPath, file, {
-    schema: 'spatial-canvas/v1',
+    schema: 'ghostboard-canvas/v1',
     viewId: id,
     nodes: [],
     edges: [],
@@ -208,12 +208,12 @@ export function useCanvasPersistence() {
 
 ### 3.1 应用级配置
 
-**位置**：`~/.spatial-canvas/app-config.json`（用户目录，跨 workspace）
+**位置**：`~/.ghostboard/app-config.json`（用户目录，跨 workspace）
 
 ```typescript
 // src/bun/appConfig.ts — 新建
 interface AppConfig {
-  schema: 'spatial-app/v1';
+  schema: 'ghostboard-app/v1';
   recentWorkspaces: Array<{
     path: string;
     name: string;

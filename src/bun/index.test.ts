@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+interface RpcHandlerMap {
+  [key: string]: (payload: never) => Promise<unknown> | unknown;
+}
 const localInfoChannelMock = vi.fn();
 const settingsUpdatedMock = vi.fn();
-const defineRpcMock = vi.fn(() => ({
+const defineRpcMock = vi.fn<
+  (config: {
+    handlers: {
+      requests: RpcHandlerMap;
+      messages?: RpcHandlerMap;
+    };
+    maxRequestTime?: number;
+  }) => { send: { settingsUpdated: typeof settingsUpdatedMock } }
+>(() => ({
   send: { settingsUpdated: settingsUpdatedMock },
 }));
 const browserWindowFocusMock = vi.fn();
@@ -121,11 +132,44 @@ const loadIndexModule = async () => {
   return mod;
 };
 
-const getCanvasHandlers = () =>
-  defineRpcMock.mock.calls.at(-1)?.[0].handlers.requests;
+// Loose handler signature: tests invoke handlers dynamically with varied
+// payloads. Explicit keys (no index signature) avoid `noUncheckedIndexedAccess`.
+type AnyHandler = (payload?: unknown) => unknown | Promise<unknown>;
+interface CanvasHandlers {
+  createNote: AnyHandler;
+  createView: AnyHandler;
+  deleteNote: AnyHandler;
+  deleteView: AnyHandler;
+  getSettings: AnyHandler;
+  listViews: AnyHandler;
+  loadAttachment: AnyHandler;
+  loadCanvas: AnyHandler;
+  openSettings: AnyHandler;
+  renameView: AnyHandler;
+  saveAttachment: AnyHandler;
+  saveManifest: AnyHandler;
+  saveNote: AnyHandler;
+}
+interface SettingsHandlers {
+  getSettings: AnyHandler;
+  saveSettings: AnyHandler;
+}
 
-const getSettingsHandlers = () =>
-  defineRpcMock.mock.calls.at(-1)?.[0].handlers.requests;
+const getCanvasHandlers = (): CanvasHandlers => {
+  const call = defineRpcMock.mock.calls.at(-1);
+  if (!call) {
+    throw new Error('defineRPC was not called');
+  }
+  return call[0].handlers.requests as unknown as CanvasHandlers;
+};
+
+const getSettingsHandlers = (): SettingsHandlers => {
+  const call = defineRpcMock.mock.calls.at(-1);
+  if (!call) {
+    throw new Error('defineRPC was not called');
+  }
+  return call[0].handlers.requests as unknown as SettingsHandlers;
+};
 
 beforeEach(() => {
   vi.resetModules();
@@ -134,7 +178,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   bunFileMock.mockReset();
   bunWriteMock.mockReset();
-  workspaceMocks.atomicWrite.mockResolvedValue();
+  workspaceMocks.atomicWrite.mockResolvedValue(undefined);
   workspaceMocks.loadWorkspaceConfig.mockResolvedValue({
     activeViewId: 'default',
     views: [
@@ -148,7 +192,7 @@ beforeEach(() => {
   });
   workspaceMocks.removeView.mockResolvedValue(true);
   workspaceMocks.renameView.mockResolvedValue(true);
-  manifestMocks.saveManifest.mockResolvedValue();
+  manifestMocks.saveManifest.mockResolvedValue(undefined);
   previewMocks.writeNoteWithPreview.mockResolvedValue({
     html: '<p>Body</p>',
     excerpt: 'Body',
@@ -222,7 +266,7 @@ describe('src/bun/index helpers', () => {
     await persistSettings({ theme: 'dark', locale: 'zh' });
 
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
-      '/workspace-c/.spatial/settings.json',
+      '/workspace-c/.ghostboard/settings.json',
       JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
     );
   });
@@ -261,7 +305,7 @@ describe('src/bun/index helpers', () => {
       '/tmp/workspace',
       'views/view-2.canvas.json',
       {
-        schema: 'spatial-canvas/v1',
+        schema: 'ghostboard-canvas/v1',
         viewId: 'view-2',
         nodes: [],
         edges: [],
@@ -346,7 +390,7 @@ describe('src/bun/index helpers', () => {
       success: true,
     });
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
-      '/workspace-settings/.spatial/settings.json',
+      '/workspace-settings/.ghostboard/settings.json',
       JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
     );
     expect(settingsUpdatedMock).toHaveBeenCalledWith({
@@ -464,7 +508,9 @@ describe('src/bun/index helpers', () => {
   it('saveAttachment maps image extensions and rejects invalid data urls', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('12345678-abcd');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '12345678-abcd-0000-0000-000000000000'
+    );
 
     await expect(
       canvasHandlers.saveAttachment({

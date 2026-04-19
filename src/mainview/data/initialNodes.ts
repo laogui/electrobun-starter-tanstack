@@ -23,9 +23,9 @@ export const initialNodes: Node[] = [
     position: { x: 500, y: 100 },
     data: {
       type: 'text',
-      title: 'Who Spatial is for',
+      title: 'Who GhostBoard is for',
       content:
-        "1. The Designer\nProduct designers, graphic designers, UX designers, brand designers, creative directors. They need to collect visual references, build moodboards, and organize project materials. They're currently cobbling together Figma, Pinterest, Milanote, and mymind — and none of it feels right. They're also the most opinionated about aesthetics and interaction quality, which is partly why they're drawn to Spatial in the first place.\n\n2. The Thinker\nProduct managers, researchers, writers, strategists, consultants. They're dealing with complex problems and oceans of information. They often feel overwhelmed by the sheer volume of data they need to process. Spatial helps them map out relationships and see the big picture.\n\n3. The Academics\nUniversity students, PhD researchers, MBA students, architecture students. They're reading dense academic journals, writing papers, and studying for exams. They use Spatial to visually organize their research and connect concepts.",
+        "1. The Designer\nProduct designers, graphic designers, UX designers, brand designers, creative directors. They need to collect visual references, build moodboards, and organize project materials. They're currently cobbling together Figma, Pinterest, Milanote, and mymind — and none of it feels right. They're also the most opinionated about aesthetics and interaction quality, which is partly why they're drawn to GhostBoard in the first place.\n\n2. The Thinker\nProduct managers, researchers, writers, strategists, consultants. They're dealing with complex problems and oceans of information. They often feel overwhelmed by the sheer volume of data they need to process. GhostBoard helps them map out relationships and see the big picture.\n\n3. The Academics\nUniversity students, PhD researchers, MBA students, architecture students. They're reading dense academic journals, writing papers, and studying for exams. They use GhostBoard to visually organize their research and connect concepts.",
       color: '#FFFFFF',
     },
     type: 'card',

@@ -26,7 +26,7 @@ export interface ManifestEdge {
 export interface CanvasManifest {
   edges: ManifestEdge[];
   nodes: ManifestNode[];
-  schema: 'spatial-canvas/v1';
+  schema: 'ghostboard-canvas/v1';
   viewId: string;
   viewport?: { x: number; y: number; zoom: number };
 }
@@ -36,7 +36,7 @@ export async function loadManifest(
   wsPath: string,
   viewFile: string
 ): Promise<CanvasManifest | null> {
-  const filePath = join(wsPath, '.spatial', viewFile);
+  const filePath = join(wsPath, '.ghostboard', viewFile);
   const file = Bun.file(filePath);
   if (!(await file.exists())) {
     return null;
@@ -50,6 +50,6 @@ export async function saveManifest(
   viewFile: string,
   manifest: CanvasManifest
 ): Promise<void> {
-  const filePath = join(wsPath, '.spatial', viewFile);
+  const filePath = join(wsPath, '.ghostboard', viewFile);
   await atomicWrite(filePath, JSON.stringify(manifest, null, 2));
 }

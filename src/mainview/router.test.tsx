@@ -2,6 +2,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 const createHashHistoryMock = vi.fn(() => ({ type: 'hash-history' }));
@@ -39,8 +40,16 @@ describe('router', () => {
     vi.stubGlobal('location', { protocol: 'http:' });
     vi.resetModules();
 
-    const module = await import('./router');
-    const Wrap = module.router.Wrap!;
+    const module = (await import('./router')) as unknown as {
+      router: {
+        Wrap: React.ComponentType<{ children: React.ReactNode }>;
+        defaultPendingComponent: React.ComponentType;
+        defaultNotFoundComponent: React.ComponentType;
+        defaultErrorComponent: React.ComponentType;
+        history?: unknown;
+      };
+    };
+    const Wrap = module.router.Wrap;
 
     render(
       <Wrap>
@@ -58,9 +67,15 @@ describe('router', () => {
     vi.stubGlobal('location', { protocol: 'http:' });
     vi.resetModules();
 
-    const module = await import('./router');
-    const Pending = module.router.defaultPendingComponent!;
-    const NotFound = module.router.defaultNotFoundComponent!;
+    const module = (await import('./router')) as unknown as {
+      router: {
+        defaultPendingComponent: React.ComponentType;
+        defaultNotFoundComponent: React.ComponentType;
+        defaultErrorComponent: React.ComponentType;
+      };
+    };
+    const Pending = module.router.defaultPendingComponent;
+    const NotFound = module.router.defaultNotFoundComponent;
 
     render(
       <>

@@ -12,11 +12,11 @@ interface SettingsRPC {
         response: { success: boolean };
       };
     };
-    messages: Record<string, unknown>;
+    messages: Record<never, unknown>;
   };
   webview: {
-    requests: Record<string, unknown>;
-    messages: Record<string, unknown>;
+    requests: Record<string, { params: unknown; response: unknown }>;
+    messages: Record<never, unknown>;
   };
 }
 
@@ -75,8 +75,10 @@ const electrobun = new Electrobun.Electroview({ rpc });
 
 // Wire up UI after DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  const localeSelect = document.querySelector('#locale-select')!;
-  const themeSelect = document.querySelector('#theme-select')!;
+  const localeSelect =
+    document.querySelector<HTMLSelectElement>('#locale-select')!;
+  const themeSelect =
+    document.querySelector<HTMLSelectElement>('#theme-select')!;
 
   // Load initial settings from bun process
   electrobun.rpc?.request

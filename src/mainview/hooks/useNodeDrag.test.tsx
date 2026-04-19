@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 
@@ -112,7 +112,8 @@ const Harness = () => {
               parentId: 'group-1',
               position: { x: 20, y: 30 },
               data: { title: 'Card', color: '#fff' },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -130,7 +131,8 @@ const Harness = () => {
               data: { title: 'Card', color: '#fff' },
               measured: { width: 350, height: 450 },
               style: { width: 350, height: 450 },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -148,7 +150,8 @@ const Harness = () => {
               data: { title: 'Card', color: '#fff' },
               measured: { width: 350, height: 450 },
               style: { width: 350, height: 450 },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -164,7 +167,8 @@ const Harness = () => {
               type: 'group',
               position: { x: 300, y: 300 },
               data: { active: false },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -182,7 +186,8 @@ const Harness = () => {
               data: { title: 'Folder', children: [] },
               measured: { width: 350, height: 350 },
               style: { width: 350, height: 350 },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -199,7 +204,8 @@ const Harness = () => {
               parentId: 'group-1',
               position: { x: 20, y: 20 },
               data: { title: 'Folder', children: [] },
-            } as never
+            } as never,
+            [] as never
           );
         }}
         type="button"
@@ -296,7 +302,7 @@ describe('useNodeDrag – group and folder interactions', () => {
 
   it('group cannot be dropped into another group', () => {
     rfMock.getIntersectingNodes.mockReturnValue([
-      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } },
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } } as never,
     ]);
 
     render(<Harness />);
@@ -309,7 +315,7 @@ describe('useNodeDrag – group and folder interactions', () => {
 
   it('folder can be dropped into a group', () => {
     rfMock.getIntersectingNodes.mockReturnValue([
-      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } },
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } } as never,
     ]);
 
     render(<Harness />);

@@ -174,20 +174,21 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
             perspective: 1200,
           }}
         >
-          {children.map((child: any, index: number) => (
-            <motion.div
-              animate={{
-                opacity: 1,
-                scale: 1,
-                rotate: 0,
-                x: 0,
-                y: 0,
-              }}
-              className="shrink-0 cursor-pointer overflow-hidden rounded-3xl shadow-2xl"
-              exit={() => {
-                const finalCardX =
-                  sidePadding + index * (cardWidth + gap) + cardWidth / 2;
-                return {
+          {children.map((child: any, index: number) => {
+            const finalCardX =
+              sidePadding + index * (cardWidth + gap) + cardWidth / 2;
+            const radial = getRadialOffset(index);
+            return (
+              <motion.div
+                animate={{
+                  opacity: 1,
+                  scale: 1,
+                  rotate: 0,
+                  x: 0,
+                  y: 0,
+                }}
+                className="shrink-0 cursor-pointer overflow-hidden rounded-3xl shadow-2xl"
+                exit={{
                   opacity: 0,
                   scale: 0.3,
                   rotate: 0,
@@ -199,41 +200,39 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
                     stiffness: 350,
                     delay: (count - 1 - index) * 0.03,
                   },
-                };
-              }}
-              initial={() => {
-                const radial = getRadialOffset(index);
-                const finalCardX =
-                  sidePadding + index * (cardWidth + gap) + cardWidth / 2;
-                return {
+                }}
+                initial={{
                   opacity: 0,
                   scale: 0.15,
                   rotate: radial.rotate,
                   x: folderCenterX - finalCardX + radial.x,
                   y: folderCenterY - cardsCenterY + radial.y,
-                };
-              }}
-              key={child.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                if (onCardClick) {
-                  onCardClick(child, rect);
-                }
-              }}
-              style={{ width: cardWidth, height: cardHeight }}
-              transition={{
-                type: 'spring',
-                damping: 24,
-                stiffness: 200,
-                delay: index * 0.05,
-              }}
-              whileHover={{ y: -8, boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
-              whileTap={{ scale: 0.97 }}
-            >
-              <FolderChildContent child={child} />
-            </motion.div>
-          ))}
+                }}
+                key={child.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (onCardClick) {
+                    onCardClick(child, rect);
+                  }
+                }}
+                style={{ width: cardWidth, height: cardHeight }}
+                transition={{
+                  type: 'spring',
+                  damping: 24,
+                  stiffness: 200,
+                  delay: index * 0.05,
+                }}
+                whileHover={{
+                  y: -8,
+                  boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+                }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <FolderChildContent child={child} />
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </motion.div>

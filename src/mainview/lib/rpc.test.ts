@@ -49,7 +49,7 @@ beforeEach(() => {
 
 describe('rpc', () => {
   it('returns null-like fallbacks when not running inside Electrobun', async () => {
-    vi.stubGlobal('__electrobunWebviewId');
+    vi.stubGlobal('__electrobunWebviewId', undefined);
     const rpc = await loadModule();
 
     await expect(rpc.loadCanvas('default')).resolves.toBeNull();

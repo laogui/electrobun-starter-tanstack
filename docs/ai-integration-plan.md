@@ -71,7 +71,7 @@ v1 中把 `summarizeNodes()`、`generateCanvasFromPrompt()`、`clusterNodes()` �
 
 ### 2.4 API Key 不能放进 workspace settings
 
-当前设置文件位于 workspace 的 `.spatial/settings.json`。
+当前设置文件位于 workspace 的 `.ghostboard/settings.json`。
 
 如果直接把 API key 存进去，会有明显风险：
 
@@ -425,7 +425,7 @@ type AINodeContext = {
 
 ### 9.3 安全建议
 
-明确避免把 API key 写进 `.spatial/settings.json`。
+明确避免把 API key 写进 `.ghostboard/settings.json`。
 
 如果短期内没有 Keychain 集成，至少也应该：
 

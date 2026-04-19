@@ -20,7 +20,7 @@ const Harness = ({
   current: { getViewport: () => { x: number; y: number; zoom: number } } | null;
   type: 'card' | 'folder';
 }) => {
-  const rfInstance = { current };
+  const rfInstance = { current } as never;
   const { onCreateNode } = useNodeCreation({ rfInstance });
 
   return (

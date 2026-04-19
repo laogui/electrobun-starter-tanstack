@@ -43,7 +43,7 @@ describe('manifest', () => {
 
   beforeEach(async () => {
     workspaceRoot = await mkdtemp(join(tmpdir(), 'manifest-test-'));
-    mkdirSync(join(workspaceRoot, '.spatial', 'views'), { recursive: true });
+    mkdirSync(join(workspaceRoot, '.ghostboard', 'views'), { recursive: true });
     renameMock.mockReset();
     renameMock.mockImplementation(async (from: string, to: string) => {
       const data = await readFile(from, 'utf8');
@@ -64,12 +64,12 @@ describe('manifest', () => {
     const { loadManifest } = await import('./manifest');
     const manifestPath = join(
       workspaceRoot,
-      '.spatial',
+      '.ghostboard',
       'views',
       'default.canvas.json'
     );
     const manifest = {
-      schema: 'spatial-canvas/v1',
+      schema: 'ghostboard-canvas/v1',
       viewId: 'default',
       viewport: { x: 1, y: 2, zoom: 3 },
       nodes: [{ id: 'n1', type: 'card', position: { x: 0, y: 0 }, data: {} }],
@@ -85,7 +85,7 @@ describe('manifest', () => {
   it('saveManifest persists a manifest through atomicWrite', async () => {
     const { loadManifest, saveManifest } = await import('./manifest');
     const manifest = {
-      schema: 'spatial-canvas/v1' as const,
+      schema: 'ghostboard-canvas/v1' as const,
       viewId: 'view-1',
       viewport: { x: 10, y: 20, zoom: 1.5 },
       nodes: [{ id: 'n1', type: 'card', position: { x: 10, y: 10 }, data: {} }],
@@ -96,7 +96,7 @@ describe('manifest', () => {
 
     const savedPath = join(
       workspaceRoot,
-      '.spatial',
+      '.ghostboard',
       'views',
       'view-1.canvas.json'
     );
@@ -114,7 +114,7 @@ describe('manifest', () => {
     const { loadManifest } = await import('./manifest');
     const manifestPath = join(
       workspaceRoot,
-      '.spatial',
+      '.ghostboard',
       'views',
       'broken.canvas.json'
     );

@@ -134,10 +134,10 @@ interface CanvasRPC {
         response: { success: boolean };
       };
     };
-    messages: Record<string, unknown>;
+    messages: Record<never, unknown>;
   };
   webview: {
-    requests: Record<string, unknown>;
+    requests: Record<string, { params: unknown; response: unknown }>;
     messages: {
       settingsUpdated: { theme: string; locale: string };
     };
@@ -156,11 +156,11 @@ interface SettingsRPC {
         response: { success: boolean };
       };
     };
-    messages: Record<string, unknown>;
+    messages: Record<never, unknown>;
   };
   webview: {
-    requests: Record<string, unknown>;
-    messages: Record<string, unknown>;
+    requests: Record<string, { params: unknown; response: unknown }>;
+    messages: Record<never, unknown>;
   };
 }
 
@@ -179,7 +179,7 @@ let settingsWindow: BrowserWindow | null = null;
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
 
 export async function loadSettings(wsPath: string): Promise<AppSettings> {
-  settingsFilePath = join(wsPath, '.spatial', 'settings.json');
+  settingsFilePath = join(wsPath, '.ghostboard', 'settings.json');
   const file = Bun.file(settingsFilePath);
   if (await file.exists()) {
     try {
@@ -415,7 +415,7 @@ async function main() {
           );
 
           const manifest: CanvasManifest = {
-            schema: 'spatial-canvas/v1',
+            schema: 'ghostboard-canvas/v1',
             viewId,
             viewport,
             nodes: manifestNodes,
@@ -525,7 +525,7 @@ async function main() {
           const entry = await addView(wsPath, name);
           // Write an empty manifest for the new view
           await writeManifest(wsPath, entry.file, {
-            schema: 'spatial-canvas/v1',
+            schema: 'ghostboard-canvas/v1',
             viewId: entry.id,
             nodes: [],
             edges: [],

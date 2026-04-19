@@ -1,4 +1,4 @@
-# Spatial Canvas 市场趋势分析与增长策略报告
+# GhostBoard 市场趋势分析与增长策略报告
 
 > 趋势研究员 + 增长黑客 联合分析  
 > 分析日期：2026年4月18日
@@ -37,7 +37,7 @@
 6. **可扩展性**：可用脚本、插件、外部工具处理
 7. **速度**：本地文件读写远快于云端同步
 
-**Spatial Canvas 的机会**：
+**GhostBoard 的机会**：
 这是极少数**同时满足**本地优先 + 空间画布 + Markdown 开放格式的三者交集。
 
 ### 1.3 竞争格局深度分析
@@ -55,7 +55,7 @@
    Obsidian Canvas       |          Notion, Mem
    (Markdown笔记)         |          (全能工作空间)
                          |
-   Spatial Canvas        |          Milanote, Muse
+   GhostBoard            |          Milanote, Muse
    【你的位置】            |          (创意灵感板)
                          ↓
                     本地/买断制
@@ -63,7 +63,7 @@
 
 #### 主要竞品深度对比
 
-| 维度 | Obsidian Canvas | Heptabase | Scrintal | Milanote | Muse | **Spatial Canvas** |
+| 维度 | Obsidian Canvas | Heptabase | Scrintal | Milanote | Muse | **GhostBoard** |
 |------|-----------------|-----------|----------|----------|------|-------------------|
 | **定位** | Markdown笔记+画布插件 | 研究者视觉知识库 | 学习者思维空间 | 创意项目管理 | 创意收集板 | **本地空间思考工作台** |
 | **存储模式** | 本地Markdown | 云端数据库 | 云端数据库 | 云端 | 本地/云 | **本地Markdown+manifest** |
@@ -135,7 +135,7 @@
 - **策略**：
   - 在Obsidian论坛、Discord、Reddit r/ObsidianMD发布
   - 制作"从Obsidian Canvas迁移"指南
-  - 提供Obsidian插件预览（显示Spatial Canvas画布）
+  - 提供Obsidian插件预览（显示 GhostBoard 画布）
 - **验证指标**：Obsidian社区提及量，迁移用户数
 - **投入**：中
 
@@ -155,7 +155,7 @@
 - **策略**：
   - 导出PNG时自动添加 subtle 品牌水印
   - 提供Twitter/X/小红书尺寸预设
-  - 在图片角落加入"Made with Spatial Canvas"+二维码
+  - 在图片角落加入"Made with GhostBoard"+二维码
 - **验证指标**：带水印图片的社交媒体曝光量
 - **投入**：低
 
@@ -266,7 +266,7 @@
 **优势**：
 1. **技术架构清晰** → Local-first、文件即数据源、noteId/nodeId分离都是正确决策
 2. **交互设计细致** → 状态机、动画规范、两步打开模型体现深度思考
-3. **数据模型合理** → content/ + .spatial/ + attachments/ 三层结构清晰
+3. **数据模型合理** → content/ + .ghostboard/ + attachments/ 三层结构清晰
 
 **需要加强的部分**：
 
@@ -330,7 +330,7 @@
 ### 4.1 产品定位最终建议
 
 **一句话定位**：
-> **Spatial Canvas 是一个本地优先的空间笔记工具，帮助独立研究者和写作者把 Markdown 知识库组织成可缩放、可复用的思考地图。**
+> **GhostBoard 是一个本地优先的空间笔记工具，帮助独立研究者和写作者把 Markdown 知识库组织成可缩放、可复用的思考地图。**
 
 **三句话卖点**：
 1. **你的数据，你的文件** —— 所有内容保存在本地Markdown和附件中，画布只是组织层

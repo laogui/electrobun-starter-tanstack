@@ -1,5 +1,6 @@
 import type { Node, NodeChange, NodeDimensionChange } from '@xyflow/react';
 import { applyNodeChanges } from '@xyflow/react';
+import type { CSSProperties } from 'react';
 
 function isDimensionChange(
   change: NodeChange
@@ -34,8 +35,9 @@ export function applyCanvasNodeChanges(
       return node;
     }
 
-    const currentWidth = Number(node.style?.width);
-    const currentHeight = Number(node.style?.height);
+    const style = (node as Node & { style?: CSSProperties }).style;
+    const currentWidth = Number(style?.width);
+    const currentHeight = Number(style?.height);
     if (
       currentWidth === dimensions.width &&
       currentHeight === dimensions.height
@@ -46,10 +48,10 @@ export function applyCanvasNodeChanges(
     return {
       ...node,
       style: {
-        ...node.style,
+        ...style,
         width: dimensions.width,
         height: dimensions.height,
       },
-    };
+    } as Node;
   });
 }

@@ -1,6 +1,6 @@
-# 技术规范文档 (Tech Spec)：Spatial Canvas
+# 技术规范文档 (Tech Spec)：GhostBoard
 
-> 本文档描述 Spatial Canvas 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
+> 本文档描述 GhostBoard 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
 > 产品需求与交互设计请参阅 [PRD](./PRD.md)。
 
 ---
@@ -21,7 +21,7 @@
 │                               │         │     │         │                            │
 │  useCanvasPersistence         │         │     │    文件系统 (原子写入)                  │
 │    └─ debounce 2500ms ─────── ▼         │     │    workspace/                         │
-│                        electrobun/view  │────▶│    ├── .spatial/views/*.canvas.json   │
+│                        electrobun/view  │────▶│    ├── .ghostboard/views/*.canvas.json│
 │                           RPC client    │◀────│    ├── content/*.md                   │
 │                                         │     │    └── attachments/                   │
 │  hydrate ◀──────────── 启动时加载         │     │                                      │
@@ -210,7 +210,7 @@ type CanvasNode = CardNode | ImageNode | FolderNode | GroupNode | StickyNode;
 type CanvasEdge = Edge;
 
 interface CanvasViewManifest {
-  schema: 'spatial-canvas/v1';
+  schema: 'ghostboard-canvas/v1';
   viewId: ViewID;
   viewport?: { x: number; y: number; zoom: number };
   nodes: CanvasNode[];
@@ -218,13 +218,13 @@ interface CanvasViewManifest {
 }
 
 interface WorkspaceConfig {
-  schema: 'spatial-workspace/v1';
+  schema: 'ghostboard-workspace/v1';
   activeViewId: ViewID;
   views: Array<{ id: ViewID; name: string; file: string }>;
 }
 
 interface AppConfig {
-  schema: 'spatial-app/v1';
+  schema: 'ghostboard-app/v1';
   recentWorkspaces: Array<{ path: string; name: string; lastOpenedAt: string }>;
   activeWorkspace?: string;
   preferences: { theme: 'light' | 'dark' | 'system'; language: string };
@@ -383,12 +383,12 @@ setActiveView(viewId)
 
 ```
 workspace/
-├── .spatial/
+├── .ghostboard/
 │   ├── workspace.json              # activeViewId + views 列表
 │   └── views/
 │       └── default.canvas.json     # 画布 manifest（节点/边/viewport）
 ├── content/
-│   ├── who-spatial-is-for.md       # 笔记文件（frontmatter + markdown body）
+│   ├── who-ghostboard-is-for.md    # 笔记文件（frontmatter + markdown body）
 │   ├── prio-before-launch.md
 │   └── alpha-feedback.md
 └── attachments/
@@ -423,7 +423,7 @@ updatedAt: 2026-04-03T14:30:00Z
 
 ```json
 {
-  "schema": "spatial-canvas/v1",
+  "schema": "ghostboard-canvas/v1",
   "viewId": "default",
   "viewport": { "x": 0, "y": 0, "zoom": 1 },
   "nodes": [
@@ -625,8 +625,8 @@ Edge 剥离 `selected`。
 
 ```
 1. Bun 主进程启动 → initWorkspace() 确保目录结构存在
-2. 读取 workspace/.spatial/workspace.json → activeViewId
-3. 读取 .spatial/views/{activeViewId}.canvas.json → manifest
+2. 读取 workspace/.ghostboard/workspace.json → activeViewId
+3. 读取 .ghostboard/views/{activeViewId}.canvas.json → manifest
 4. 遍历 manifest.nodes：
    - type=card 且有 noteId → 读取 content/{file}.md → 解析 frontmatter
      → noteToCardData() 将 frontmatter + body 合并到 node.data

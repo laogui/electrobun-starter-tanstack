@@ -1,4 +1,4 @@
-# 产品需求文档 (PRD)：Spatial Canvas 自由画布知识库
+# 产品需求文档 (PRD)：GhostBoard 自由画布知识库
 
 > **相关文档**
 >
@@ -104,7 +104,7 @@
   - **新建画布**：通过切换器右侧的 `+` 按钮或弹出菜单底部的 `New Canvas` 创建空画布，自动命名为 `Canvas N` 并切换过去。
   - **重命名**：在弹出菜单中点击铅笔图标进入行内编辑模式，`Enter` 确认、`Escape` 取消。
   - **删除画布**：在弹出菜单中点击删除图标。至少保留一个画布，删除最后一个时操作被拒绝。删除当前画布时自动切换到列表中的第一个画布。
-  - **数据隔离**：每个画布对应独立的 `.spatial/views/{viewId}.canvas.json` manifest 文件。`content/*.md` 笔记文件在所有画布间共享（通过 `noteId` 引用）。
+  - **数据隔离**：每个画布对应独立的 `.ghostboard/views/{viewId}.canvas.json` manifest 文件。`content/*.md` 笔记文件在所有画布间共享（通过 `noteId` 引用）。
 - **限制（当前版本）**：
   - 不支持跨画布拖拽节点。
   - 不支持画布间的 noteId 引用关系可视化。
@@ -209,7 +209,7 @@
 
 ### 5.1 核心原则
 
-1. **文件即数据源（File as Source of Truth）**—— 每张 **Card 类型**卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。Sticky（便签）的内容直接内嵌在 manifest `data.content` 中，不生成独立 `.md` 文件；Folder `children` 中的子卡片在 MVP 阶段同样内嵌在 manifest 中（参见 §5.10 Folder 模型决策）。**⚠️ MVP 降级定位**：Folder 子卡片属于"草稿 / 闪念暂存"性质，其内容**仅在 Spatial Canvas 内可见**，无法通过 Obsidian、Typora 等外部编辑器打开或编辑，也不具备独立 `noteId`，不可被其他画布复用。UI 上需在 Folder drill-down 视图中标注"仅画布内可见"提示。用户若需将子卡片提升为正式笔记，应通过 `Extract to Canvas` 操作（Extract 时自动创建 `.md` 并分配 `noteId`）。后续迭代将把 Folder children 迁移为 `noteId` 引用 + 独立 `.md` 文件模型。
+1. **文件即数据源（File as Source of Truth）**—— 每张 **Card 类型**卡片对应磁盘上一个 `.md` 文件，画布布局用独立的 manifest 文件管理。Sticky（便签）的内容直接内嵌在 manifest `data.content` 中，不生成独立 `.md` 文件；Folder `children` 中的子卡片在 MVP 阶段同样内嵌在 manifest 中（参见 §5.10 Folder 模型决策）。**⚠️ MVP 降级定位**：Folder 子卡片属于"草稿 / 闪念暂存"性质，其内容**仅在 GhostBoard 内可见**，无法通过 Obsidian、Typora 等外部编辑器打开或编辑，也不具备独立 `noteId`，不可被其他画布复用。UI 上需在 Folder drill-down 视图中标注"仅画布内可见"提示。用户若需将子卡片提升为正式笔记，应通过 `Extract to Canvas` 操作（Extract 时自动创建 `.md` 并分配 `noteId`）。后续迭代将把 Folder children 迁移为 `noteId` 引用 + 独立 `.md` 文件模型。
 2. **内容与布局解耦** —— 内容级属性（标题、标签、创建时间）存 frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
 4. **删除实例不等于删除内容** —— 删除 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留为可搜索的 `unplaced note`，直到用户显式执行永久删除。
@@ -219,13 +219,13 @@
 应用本身的全局配置独立于任何 workspace，存放在用户目录下：
 
 ```
-~/.spatial-canvas/
+~/.ghostboard/
 └── app-config.json
 ```
 
 ```json
 {
-  "schema": "spatial-app/v1",
+  "schema": "ghostboard-app/v1",
   "recentWorkspaces": [
     {
       "path": "/Users/me/Documents/work-notes",
@@ -248,22 +248,22 @@
 
 **启动流程**：
 
-1. 读取 `~/.spatial-canvas/app-config.json`
+1. 读取 `~/.ghostboard/app-config.json`
 2. 若有 `activeWorkspace` → 直接打开该 workspace
 3. 若无（首次启动）→ 显示欢迎页，引导用户创建或选择 workspace 目录
-4. 进入 workspace 后 → 读取 `.spatial/workspace.json` → 加载画布
+4. 进入 workspace 后 → 读取 `.ghostboard/workspace.json` → 加载画布
 
 ### 5.3 Workspace 文件系统结构
 
 ```
 workspace/
-├── .spatial/                           # 应用元数据（不是用户内容）
+├── .ghostboard/                        # 应用元数据（不是用户内容）
 │   ├── workspace.json                  # 全局设置、活跃视图
 │   └── views/                          # 每个画布一个 manifest
 │       ├── default.canvas.json
 │       └── roadmap.canvas.json
 ├── content/                            # 统一内容树
-│   ├── who-spatial-is-for.md
+│   ├── who-ghostboard-is-for.md
 │   ├── prio-before-launch.md
 │   ├── alpha-feedback.md
 │   └── great-ideas/                    # 后续迁移目标：文件夹即目录（MVP 阶段 Folder children 内嵌在 manifest 中）
@@ -327,11 +327,11 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ### 5.5 Workspace 配置
 
-`.spatial/workspace.json`：
+`.ghostboard/workspace.json`：
 
 ```json
 {
-  "schema": "spatial-workspace/v1",
+  "schema": "ghostboard-workspace/v1",
   "activeViewId": "default",
   "views": [
     {
@@ -346,11 +346,11 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ### 5.6 Canvas View Manifest
 
-`.spatial/views/default.canvas.json`（与 @xyflow/react 原生 Node/Edge JSON 完全一致）：
+`.ghostboard/views/default.canvas.json`（与 @xyflow/react 原生 Node/Edge JSON 完全一致）：
 
 ```json
 {
-  "schema": "spatial-canvas/v1",
+  "schema": "ghostboard-canvas/v1",
   "viewId": "default",
   "viewport": { "x": 0, "y": 0, "zoom": 1 },
   "nodes": [
@@ -430,7 +430,7 @@ updatedAt: 2026-03-31T14:30:00Z
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
 - Folder 的 `data.children` 存放被收纳的子卡片；封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生。
 - Folder `children` 在 drill-down 中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
-- **⚠️ MVP 限制**：Folder 子卡片内嵌在 manifest 中，无独立 `.md` 文件和 `noteId`，仅在 Spatial Canvas 内可见，外部编辑器无法访问。后续迭代将迁移为 `noteId` 引用模型。
+- **⚠️ MVP 限制**：Folder 子卡片内嵌在 manifest 中，无独立 `.md` 文件和 `noteId`，仅在 GhostBoard 内可见，外部编辑器无法访问。后续迭代将迁移为 `noteId` 引用模型。
 
 ### 5.7 TypeScript 类型定义
 

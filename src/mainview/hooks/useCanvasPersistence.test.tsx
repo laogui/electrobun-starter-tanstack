@@ -32,7 +32,6 @@ const resetStore = () => {
     activeViewId: 'default',
     clipboard: [],
     createMenuOpen: false,
-    nodeIdCounter: 100,
     editingEdgeId: null,
     _hydrated: true,
   });

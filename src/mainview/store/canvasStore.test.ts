@@ -26,7 +26,6 @@ function resetStore() {
   useCanvasStore.setState({
     clipboard: [],
     createMenuOpen: false,
-    nodeIdCounter: 100,
     editingEdgeId: null,
   });
 }
@@ -140,6 +139,27 @@ describe('canvasStore — node operations', () => {
 
     expect(node.data.title).toBe('Updated');
     expect(node.data.content).toBe('');
+  });
+
+  it('hydrate sets nodes and marks store as hydrated', () => {
+    useCanvasStore
+      .getState()
+      .hydrate(
+        [makeNode('new-101'), makeNode('new-250'), makeNode('other-5')],
+        []
+      );
+
+    expect(useCanvasStore.getState()._hydrated).toBe(true);
+    expect(useCanvasStore.getState().nodes).toHaveLength(3);
+  });
+
+  it('nextNodeId returns a unique nanoid-based id each call', () => {
+    const id1 = useCanvasStore.getState().nextNodeId();
+    const id2 = useCanvasStore.getState().nextNodeId();
+
+    expect(id1).toMatch(/^node-/);
+    expect(id2).toMatch(/^node-/);
+    expect(id1).not.toBe(id2);
   });
 });
 
@@ -358,12 +378,13 @@ describe('canvasStore — UI state', () => {
     expect(useCanvasStore.getState().createMenuOpen).toBe(true);
   });
 
-  it('nextNodeId returns incrementing ids', () => {
+  it('nextNodeId returns unique node- prefixed ids', () => {
     const id1 = useCanvasStore.getState().nextNodeId();
     const id2 = useCanvasStore.getState().nextNodeId();
 
-    expect(id1).toBe('new-101');
-    expect(id2).toBe('new-102');
+    expect(id1).toMatch(/^node-/);
+    expect(id2).toMatch(/^node-/);
+    expect(id1).not.toBe(id2);
   });
 });
 
@@ -502,7 +523,7 @@ describe('canvasStore — createNode', () => {
       .createNode('card', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
-    expect(node.id).toBe('new-101');
+    expect(node.id).toMatch(/^node-/);
     expect(node.type).toBe('card');
     expect(node.position).toEqual({
       x: (600 - 100) / 2 - CARD_W / 2,
@@ -541,7 +562,7 @@ describe('canvasStore — createNode', () => {
       .createNode('checklist', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
-    expect(node.id).toBe('new-101');
+    expect(node.id).toMatch(/^node-/);
     expect(node.type).toBe('card');
     expect(node.position).toEqual({
       x: (600 - 100) / 2 - CARD_W / 2,
@@ -620,6 +641,27 @@ describe('canvasStore — createNode', () => {
     });
     expect(node.style).toEqual({ width: 500, height: 300 });
     expect(node.data).toMatchObject({ color: 'blue' });
+  });
+
+  it('animates the viewport to the new node via setCenter', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 1200,
+      innerHeight: 900,
+    });
+    const setCenter = vi.fn();
+    const rf = {
+      getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+      setCenter,
+    } as unknown as ReactFlowInstance<any, any>;
+
+    useCanvasStore.getState().createNode('card', rf);
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(setCenter).toHaveBeenCalledWith(
+      node.position.x + CARD_W / 2,
+      node.position.y + CARD_H / 2,
+      { duration: 240, zoom: 1 }
+    );
   });
 });
 

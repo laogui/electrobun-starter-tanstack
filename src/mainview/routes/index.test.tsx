@@ -228,7 +228,6 @@ const resetStore = () => {
     edges: [],
     clipboard: [],
     createMenuOpen: false,
-    nodeIdCounter: 100,
     editingEdgeId: null,
   });
 };

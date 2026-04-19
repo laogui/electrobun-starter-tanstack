@@ -54,7 +54,6 @@ const resetStore = () => {
     edges: [{ id: 'edge-1', source: 'node-1', target: 'node-2' }],
     clipboard: [],
     createMenuOpen: false,
-    nodeIdCounter: 100,
     editingEdgeId: null,
   });
 };

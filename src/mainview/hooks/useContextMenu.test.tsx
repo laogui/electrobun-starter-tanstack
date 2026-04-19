@@ -29,7 +29,6 @@ const storeState = {
     },
   ],
   clipboard: [],
-  nextId: 100,
   focusedNode: null as null | Record<string, unknown>,
   focusedFolder: null as null | Record<string, unknown>,
   editingEdgeId: null as null | string,
@@ -73,11 +72,46 @@ const storeActions = {
   changeNodeColor: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
-  nextNodeId: vi.fn(() => {
-    storeState.nextId += 1;
-    return `new-${storeState.nextId}`;
-  }),
+  nextNodeId: vi.fn(() => `node-${Math.random().toString(36).slice(2, 10)}`),
   saveSnapshot: vi.fn(),
+  createNode: vi.fn(
+    (
+      type: string,
+      _rf: unknown,
+      options?: {
+        anchor?: { x: number; y: number };
+        anchorCenter?: { x: number; y: number };
+      }
+    ) => {
+      storeActions.saveSnapshot();
+      const id = storeActions.nextNodeId();
+      const center = options?.anchorCenter ?? { x: 0, y: 0 };
+      const position = options?.anchor ?? { x: center.x, y: center.y };
+      const dataByType: Record<string, Record<string, unknown>> = {
+        card: { type: 'text', title: '', content: '', color: '#FFFFFF' },
+        checklist: {
+          type: 'checklist',
+          title: '',
+          items: [],
+          color: '#FFFFFF',
+        },
+        folder: { title: 'New Folder', subtitle: '', children: [] },
+        group: { label: 'New Group', color: 'blue' },
+        image: { imageUrl: '', title: '', color: '#FFFFFF' },
+        sticky: { content: '', color: '#FEF08A' },
+      };
+      const resolvedType = type === 'checklist' ? 'card' : type;
+      storeState.nodes = [
+        ...storeState.nodes,
+        {
+          id,
+          type: resolvedType,
+          position,
+          data: dataByType[type] ?? {},
+        } as (typeof storeState.nodes)[number],
+      ];
+    }
+  ),
 };
 
 vi.mock('../../paraglide/messages.js', () => ({
@@ -318,18 +352,24 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'new-note' }));
 
     expect(storeActions.saveSnapshot).toHaveBeenCalled();
+    expect(storeActions.createNode).toHaveBeenCalledWith(
+      'card',
+      expect.anything(),
+      {
+        anchorCenter: {
+          x: (210 - viewport.x) / viewport.zoom,
+          y: (180 - viewport.y) / viewport.zoom,
+        },
+      }
+    );
     expect(storeState.nodes.at(-1)).toMatchObject({
-      id: 'new-101',
+      id: expect.stringMatching(/^node-/),
       type: 'card',
-      position: {
-        x: (210 - viewport.x) / viewport.zoom,
-        y: (180 - viewport.y) / viewport.zoom,
-      },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'new-checklist' }));
     expect(storeState.nodes.at(-1)).toMatchObject({
-      id: 'new-102',
+      id: expect.stringMatching(/^node-/),
       type: 'card',
       data: {
         type: 'checklist',

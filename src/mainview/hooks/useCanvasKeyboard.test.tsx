@@ -29,7 +29,6 @@ const resetStore = () => {
   useCanvasStore.setState({
     clipboard: [],
     createMenuOpen: false,
-    nodeIdCounter: 100,
     editingEdgeId: null,
   });
 };

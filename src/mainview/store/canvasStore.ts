@@ -8,6 +8,7 @@ import type {
 } from '@xyflow/react';
 import { addEdge, applyEdgeChanges } from '@xyflow/react';
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 import { create } from 'zustand';
 
 import { initialNodes } from '@/data/initialNodes';
@@ -25,6 +26,9 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasConstants';
+import { sortNodesByParent } from '@/lib/canvasUtils';
+import { buildAbsoluteRects, type Size } from '@/lib/collision';
+import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -44,6 +48,92 @@ export interface FocusedItem {
   id: string;
   rect: DOMRect;
   type?: string;
+}
+
+export interface CreateNodeOptions {
+  /** Top-left anchor in flow coords. Takes precedence over `anchorCenter`. */
+  anchor?: { x: number; y: number };
+  /** Desired center of the new node in flow coords. */
+  anchorCenter?: { x: number; y: number };
+}
+
+interface NodeSpec {
+  base: Omit<Node, 'id' | 'position'>;
+  size: Size;
+}
+
+function buildNewNodeSpec(
+  type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
+): NodeSpec {
+  switch (type) {
+    case 'group': {
+      const color =
+        GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
+      return {
+        size: { width: 500, height: 300 },
+        base: {
+          type: 'group',
+          style: { width: 500, height: 300 },
+          data: { label: m.default_new_group_label(), color },
+        },
+      };
+    }
+    case 'sticky': {
+      const color =
+        STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+      return {
+        size: { width: STICKY_W, height: STICKY_H },
+        base: {
+          type: 'sticky',
+          style: { width: STICKY_W, height: STICKY_H },
+          data: { content: '', color },
+        },
+      };
+    }
+    case 'folder': {
+      return {
+        size: { width: FOLDER_W, height: FOLDER_H },
+        base: {
+          type: 'folder',
+          data: {
+            title: m.default_folder_title(),
+            subtitle: '',
+            children: [],
+          },
+        },
+      };
+    }
+    case 'image': {
+      return {
+        size: { width: IMAGE_W, height: IMAGE_H },
+        base: {
+          type: 'image',
+          style: { width: IMAGE_W, height: IMAGE_H },
+          data: { imageUrl: '', title: '', color: '#FFFFFF' },
+        },
+      };
+    }
+    case 'checklist': {
+      return {
+        size: { width: CARD_W, height: CARD_H },
+        base: {
+          type: 'card',
+          style: { width: CARD_W, height: CARD_H },
+          data: { type: 'checklist', title: '', items: [], color: '#FFFFFF' },
+        },
+      };
+    }
+    default: {
+      return {
+        size: { width: CARD_W, height: CARD_H },
+        base: {
+          type: 'card',
+          style: { width: CARD_W, height: CARD_H },
+          data: { type: 'text', title: '', content: '', color: '#FFFFFF' },
+        },
+      };
+    }
+  }
 }
 
 export interface CanvasState {
@@ -71,7 +161,8 @@ export interface CanvasState {
   // Actions – node CRUD
   createNode: (
     type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky',
-    rfInstance: ReactFlowInstance<any, any> | null
+    rfInstance: ReactFlowInstance<any, any> | null,
+    options?: CreateNodeOptions
   ) => void;
   deleteEdge: (edgeId: string) => void;
   deleteNodes: (ids: string[]) => void;
@@ -87,7 +178,6 @@ export interface CanvasState {
 
   // Helpers
   nextNodeId: () => string;
-  nodeIdCounter: number;
   // Core data
   nodes: Node[];
   pasteClipboard: (offset?: number) => void;
@@ -128,7 +218,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   focusedFolder: null,
   createMenuOpen: false,
   clipboard: [],
-  nodeIdCounter: 100,
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
@@ -136,7 +225,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- hydration ------------------------------------------------------------
   hydrate: (nodes, edges) => {
-    set({ nodes, edges, _hydrated: true });
+    set({
+      nodes,
+      edges,
+      _hydrated: true,
+    });
   },
 
   reset: () => {
@@ -290,100 +383,65 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // -- node CRUD ------------------------------------------------------------
-  nextNodeId: () => {
-    const counter = get().nodeIdCounter + 1;
-    set({ nodeIdCounter: counter });
-    return `new-${counter}`;
-  },
+  nextNodeId: () => `node-${nanoid(8)}`,
 
-  createNode: (type, rfInstance) => {
-    get().saveSnapshot();
-    const id = get().nextNodeId();
+  createNode: (type, rfInstance, options) => {
+    const spec = buildNewNodeSpec(type);
+
     const viewport = rfInstance?.getViewport();
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
     const zoom = viewport?.zoom ?? 1;
+    const viewportCenter = {
+      x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
+      y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
+    };
+    const center = options?.anchorCenter ?? viewportCenter;
+    const anchor = options?.anchor ?? {
+      x: center.x - spec.size.width / 2,
+      y: center.y - spec.size.height / 2,
+    };
 
-    const toFlow = (w: number, h: number) => ({
-      x: (cx - (viewport?.x ?? 0)) / zoom - w / 2,
-      y: (cy - (viewport?.y ?? 0)) / zoom - h / 2,
+    const { nodes } = get();
+    const specType = spec.base.type ?? 'card';
+    const { placement, parentId, canPlace } = resolveNodePlacement({
+      anchor,
+      nodes,
+      newType: specType,
+      size: spec.size,
     });
 
-    let newNode: Node;
+    if (!canPlace) {
+      toast.error(m.toast_no_placement_slot());
+      return;
+    }
 
-    switch (type) {
-      case 'group': {
-        const pos = toFlow(500, 300);
-        const color =
-          GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-        newNode = {
-          id,
-          type: 'group',
-          position: pos,
-          style: { width: 500, height: 300 },
-          data: { label: m.default_new_group_label(), color },
+    let position = placement;
+    if (parentId) {
+      const parentRect = buildAbsoluteRects(nodes).get(parentId);
+      if (parentRect) {
+        position = {
+          x: placement.x - parentRect.left,
+          y: placement.y - parentRect.top,
         };
-        break;
-      }
-      case 'sticky': {
-        const pos = toFlow(STICKY_W, STICKY_H);
-        const color =
-          STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
-        newNode = {
-          id,
-          type: 'sticky',
-          position: pos,
-          style: { width: STICKY_W, height: STICKY_H },
-          data: { content: '', color },
-        };
-        break;
-      }
-      case 'folder': {
-        const pos = toFlow(FOLDER_W, FOLDER_H);
-        newNode = {
-          id,
-          type: 'folder',
-          position: pos,
-          data: { title: m.default_folder_title(), subtitle: '', children: [] },
-        };
-        break;
-      }
-      case 'image': {
-        const pos = toFlow(IMAGE_W, IMAGE_H);
-        newNode = {
-          id,
-          type: 'image',
-          position: pos,
-          style: { width: IMAGE_W, height: IMAGE_H },
-          data: { imageUrl: '', title: '', color: '#FFFFFF' },
-        };
-        break;
-      }
-      case 'checklist': {
-        const pos = toFlow(CARD_W, CARD_H);
-        newNode = {
-          id,
-          type: 'card',
-          position: pos,
-          style: { width: CARD_W, height: CARD_H },
-          data: { type: 'checklist', title: '', items: [], color: '#FFFFFF' },
-        };
-        break;
-      }
-      default: {
-        const pos = toFlow(CARD_W, CARD_H);
-        newNode = {
-          id,
-          type: 'card',
-          position: pos,
-          style: { width: CARD_W, height: CARD_H },
-          data: { type: 'text', title: '', content: '', color: '#FFFFFF' },
-        };
-        break;
       }
     }
 
-    set((s) => ({ nodes: [...s.nodes, newNode] }));
+    get().saveSnapshot();
+    const id = get().nextNodeId();
+    const newNode: Node = {
+      ...spec.base,
+      id,
+      position,
+      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
+    };
+    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
+
+    if (typeof rfInstance?.setCenter === 'function') {
+      rfInstance.setCenter(
+        placement.x + spec.size.width / 2,
+        placement.y + spec.size.height / 2,
+        { duration: 240, zoom }
+      );
+    }
   },
 
   deleteNodes: (ids) => {
@@ -488,7 +546,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- undo / redo ----------------------------------------------------------
   saveSnapshot: () => {
     const { nodes, edges, _undoRedo } = get();
-    set({ _undoRedo: pushSnapshot(_undoRedo, { nodes, edges }) });
+    set({
+      _undoRedo: pushSnapshot(_undoRedo, { nodes, edges }),
+    });
   },
 
   undo: () => {

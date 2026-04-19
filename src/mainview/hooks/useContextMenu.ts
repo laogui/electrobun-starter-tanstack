@@ -3,27 +3,29 @@ import { nanoid } from 'nanoid';
 import { useCallback, useState } from 'react';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
-import {
-  CARD_H,
-  CARD_W,
-  GROUP_COLORS,
-  IMAGE_H,
-  IMAGE_W,
-  STICKY_COLORS,
-  STICKY_H,
-  STICKY_W,
-} from '@/lib/canvasConstants';
 import { useCanvasStore } from '@/store/canvasStore';
-
-import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
+type NewNodeType =
+  | 'card'
+  | 'checklist'
+  | 'folder'
+  | 'group'
+  | 'image'
+  | 'sticky';
+const NEW_NODE_ACTIONS: Record<string, NewNodeType> = {
+  'new-note': 'card',
+  'new-folder': 'folder',
+  'new-checklist': 'checklist',
+  'new-sticky': 'sticky',
+  'new-group': 'group',
+  'new-image': 'image',
+};
+
 export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
-  const setNodes = useCanvasStore((s) => s.setNodes);
-  const _setEdges = useCanvasStore((s) => s.setEdges);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
@@ -33,7 +35,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
-  const nextNodeId = useCanvasStore((s) => s.nextNodeId);
+  const createNode = useCanvasStore((s) => s.createNode);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -84,133 +86,16 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         };
       };
 
+      const newType = NEW_NODE_ACTIONS[action];
+      if (newType) {
+        const anchorCenter = contextMenu
+          ? screenToFlow(contextMenu.x, contextMenu.y)
+          : undefined;
+        createNode(newType, rfInstance.current, { anchorCenter });
+        return;
+      }
+
       switch (action) {
-        case 'new-note': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'card' as const,
-              position: pos,
-              style: { width: 350, height: 450 },
-              data: {
-                type: 'text' as const,
-                title: '',
-                content: '',
-                color: '#FFFFFF',
-              },
-            },
-          ]);
-          break;
-        }
-        case 'new-folder': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'folder' as const,
-              position: pos,
-              style: { width: 350, height: 350 },
-              data: {
-                title: m.default_folder_title(),
-                subtitle: '',
-                children: [],
-              },
-            },
-          ]);
-          break;
-        }
-        case 'new-checklist': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'card' as const,
-              position: pos,
-              style: { width: CARD_W, height: CARD_H },
-              data: {
-                type: 'checklist' as const,
-                title: '',
-                items: [],
-                color: '#FFFFFF',
-              },
-            },
-          ]);
-          break;
-        }
-        case 'new-sticky': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          const color =
-            STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'sticky' as const,
-              position: pos,
-              style: { width: STICKY_W, height: STICKY_H },
-              data: { content: '', color },
-            },
-          ]);
-          break;
-        }
-        case 'new-group': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          const color =
-            GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'group' as const,
-              position: pos,
-              style: { width: 500, height: 300 },
-              data: { label: m.default_new_group_label(), color },
-            },
-          ]);
-          break;
-        }
-        case 'new-image': {
-          saveSnapshot();
-          const pos = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
-            : screenToFlow(window.innerWidth / 2, window.innerHeight / 2);
-          const id = nextNodeId();
-          setNodes((nds) => [
-            ...nds,
-            {
-              id,
-              type: 'image' as const,
-              position: pos,
-              style: { width: IMAGE_W, height: IMAGE_H },
-              data: { imageUrl: '', title: '', color: '#FFFFFF' },
-            },
-          ]);
-          break;
-        }
         case 'paste': {
           pasteClipboard();
           break;
@@ -332,7 +217,6 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
     [
       contextMenu,
       rfInstance,
-      setNodes,
       setFocusedNode,
       setFocusedFolder,
       deleteNodes,
@@ -342,8 +226,8 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       changeNodeColor,
       addFolderChild,
       pasteClipboard,
-      nextNodeId,
       saveSnapshot,
+      createNode,
     ]
   );
 

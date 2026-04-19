@@ -43,5 +43,6 @@
   "menu_toggle_path_type": "切换直角 / 曲线",
   "menu_delete_edge": "删除连线",
   "view_new_canvas": "新建画布",
-  "view_default_name": "默认画布"
+  "view_default_name": "默认画布",
+  "toast_no_placement_slot": "附近没有可放置新节点的空位"
 }

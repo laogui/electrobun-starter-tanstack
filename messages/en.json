@@ -43,5 +43,6 @@
   "menu_toggle_path_type": "Toggle Straight / Curved",
   "menu_delete_edge": "Delete Connection",
   "view_new_canvas": "New Canvas",
-  "view_default_name": "Default Canvas"
+  "view_default_name": "Default Canvas",
+  "toast_no_placement_slot": "No space available to place the new node"
 }

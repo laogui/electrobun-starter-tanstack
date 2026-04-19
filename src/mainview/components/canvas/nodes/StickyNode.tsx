@@ -101,7 +101,7 @@ const StickyNode = ({ id, data }: any) => {
 
       <div
         className={cn(
-          'relative size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-sm',
+          'relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-sm',
           'transition-shadow duration-200 ease-out hover:shadow-lg'
         )}
         onDoubleClick={handleDoubleClick}
@@ -132,14 +132,35 @@ const StickyNode = ({ id, data }: any) => {
             </div>
           </div>
         )}
-        {/* Folded corner */}
-        <div
-          className="pointer-events-none absolute top-0 right-0 size-5"
-          style={{
-            background:
-              'linear-gradient(225deg, transparent 50%, rgba(0,0,0,0.06) 50%)',
-          }}
-        />
+        {/* Folded corner — dog-ear effect */}
+        <div className="pointer-events-none absolute top-0 right-0 size-6">
+          {/* 1. Gray background revealed behind the fold */}
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: 0.3,
+              background: 'linear-gradient(225deg, #ddd 50%, transparent 50%)',
+            }}
+          />
+          {/* 2. Folded-back paper flap (bottom-left triangle) */}
+          <div
+            className="absolute bottom-0 left-0"
+            style={{
+              width: '100%',
+              height: '100%',
+              background:
+                'linear-gradient(45deg, rgba(0,0,0,0.07) 50%, transparent 50%)',
+            }}
+          />
+          {/* 3. Fold crease shadow line */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(225deg, transparent 46%, rgba(0,0,0,0.15) 50%, transparent 54%)',
+            }}
+          />
+        </div>
       </div>
     </div>
   );

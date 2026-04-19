@@ -175,6 +175,11 @@ body.resizing-nwse * {
   border-radius: 12px;
 }
 
+/* Ensure handles sit above card/folder content */
+.react-flow__handle.conn-handle {
+  z-index: 20;
+}
+
 /* Remove default React Flow node border on groups */
 .react-flow__node-group {
   padding: 0 !important;

@@ -363,20 +363,46 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
     get().saveSnapshot();
     const existingIds = new Set(currentNodes.map((n) => n.id));
+    const clipboardIds = new Set(clipboard.map((n) => n.id));
+
+    // Build old-id → new-id mapping for all clipboard nodes upfront,
+    // so children can reference the correct new parent id.
+    const idMap = new Map<string, string>(
+      clipboard.map((n) => [n.id, `paste-${nanoid(8)}`])
+    );
+
     const newNodes = clipboard.map((n) => {
-      // Strip parentId/extent if the parent doesn't exist in the current view
-      const keepParent = n.parentId != null && existingIds.has(n.parentId);
+      const newId = idMap.get(n.id)!;
       const { parentId, extent, ...rest } = n as any;
+
+      // Remap parentId when the parent was also copied (clipboard-internal link).
+      // Fall back to keeping the original parent when it exists in the current view
+      // (cross-view paste onto an already-present group).
+      // Drop the relationship entirely when neither condition holds.
+      const remappedParentId =
+        parentId != null
+          ? clipboardIds.has(parentId)
+            ? idMap.get(parentId)
+            : existingIds.has(parentId)
+              ? parentId
+              : null
+          : null;
+
       return {
         ...rest,
-        ...(keepParent ? { parentId, extent } : {}),
-        id: `paste-${nanoid(8)}`,
+        ...(remappedParentId != null
+          ? { parentId: remappedParentId, extent }
+          : {}),
+        id: newId,
         position: { x: n.position.x + offset, y: n.position.y + offset },
         selected: true,
       };
     });
     set((s) => ({
-      nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), ...newNodes],
+      nodes: sortNodesByParent([
+        ...s.nodes.map((n) => ({ ...n, selected: false })),
+        ...newNodes,
+      ]),
     }));
   },
 

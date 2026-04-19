@@ -1,5 +1,48 @@
 import type { Node } from '@xyflow/react';
 
+/** Node types that can be placed inside a Group. */
+export const GROUP_CHILD_TYPES = new Set(['card', 'image', 'sticky', 'folder']);
+
+/** Node types that can be absorbed into a Folder's children array. */
+export const FOLDER_CHILD_TYPES = new Set(['card', 'image', 'sticky']);
+
+/** Returns true when the child node type can be parented to the parent node. */
+export function canBeChildOf(parent: Node, child: Node): boolean {
+  if (parent.type === 'group') {
+    return GROUP_CHILD_TYPES.has(child.type ?? '');
+  }
+  return false;
+}
+
+/** Returns true when a node can be absorbed into a folder's children array. */
+export function canAbsorbIntoFolder(child: Node): boolean {
+  return FOLDER_CHILD_TYPES.has(child.type ?? '');
+}
+
+/** Strip invalid parent relationships (e.g. group-in-group from legacy data). */
+export function normalizeCanvasParenting(nodes: Node[]): Node[] {
+  const byId = new Map<string, Node>();
+  for (const n of nodes) {
+    byId.set(n.id, n);
+  }
+  return nodes.map((n) => {
+    if (!n.parentId) {
+      return n;
+    }
+    // Groups must always be top-level
+    if (n.type === 'group') {
+      const { parentId, extent, ...rest } = n as any;
+      return rest as Node;
+    }
+    const parent = byId.get(n.parentId);
+    if (!(parent && canBeChildOf(parent, n))) {
+      const { parentId, extent, ...rest } = n as any;
+      return rest as Node;
+    }
+    return n;
+  });
+}
+
 /** Sort nodes so parents always appear before children (React Flow requirement) */
 export function sortNodesByParent(nodes: Node[]): Node[] {
   const sorted: Node[] = [];

@@ -1,6 +1,8 @@
 import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const NODE_ID_REGEX = /^node-/;
+
 import {
   CARD_H,
   CARD_W,
@@ -157,8 +159,8 @@ describe('canvasStore — node operations', () => {
     const id1 = useCanvasStore.getState().nextNodeId();
     const id2 = useCanvasStore.getState().nextNodeId();
 
-    expect(id1).toMatch(/^node-/);
-    expect(id2).toMatch(/^node-/);
+    expect(id1).toMatch(NODE_ID_REGEX);
+    expect(id2).toMatch(NODE_ID_REGEX);
     expect(id1).not.toBe(id2);
   });
 });
@@ -382,8 +384,8 @@ describe('canvasStore — UI state', () => {
     const id1 = useCanvasStore.getState().nextNodeId();
     const id2 = useCanvasStore.getState().nextNodeId();
 
-    expect(id1).toMatch(/^node-/);
-    expect(id2).toMatch(/^node-/);
+    expect(id1).toMatch(NODE_ID_REGEX);
+    expect(id2).toMatch(NODE_ID_REGEX);
     expect(id1).not.toBe(id2);
   });
 });
@@ -443,6 +445,26 @@ describe('canvasStore — hydration', () => {
     expect(state._hydrated).toBe(true);
     expect(state.nodes).toEqual(nodes);
     expect(state.edges).toEqual(edges);
+  });
+
+  it('hydrate normalizes invalid parent relationships', () => {
+    // A group-in-group should have its parentId stripped
+    const groupChild = makeNode('g2', {
+      type: 'group',
+      parentId: 'g1',
+      data: { label: 'Child Group', color: 'blue' },
+    });
+    const groupParent = makeNode('g1', {
+      type: 'group',
+      data: { label: 'Parent Group', color: 'green' },
+    });
+
+    useCanvasStore.getState().hydrate([groupParent, groupChild], []);
+    const state = useCanvasStore.getState();
+
+    expect(state._hydrated).toBe(true);
+    const g2 = state.nodes.find((n) => n.id === 'g2');
+    expect(g2?.parentId).toBeUndefined();
   });
 
   it('reset clears all state', () => {
@@ -523,7 +545,7 @@ describe('canvasStore — createNode', () => {
       .createNode('card', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
-    expect(node.id).toMatch(/^node-/);
+    expect(node.id).toMatch(NODE_ID_REGEX);
     expect(node.type).toBe('card');
     expect(node.position).toEqual({
       x: (600 - 100) / 2 - CARD_W / 2,
@@ -562,7 +584,7 @@ describe('canvasStore — createNode', () => {
       .createNode('checklist', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
-    expect(node.id).toMatch(/^node-/);
+    expect(node.id).toMatch(NODE_ID_REGEX);
     expect(node.type).toBe('card');
     expect(node.position).toEqual({
       x: (600 - 100) / 2 - CARD_W / 2,

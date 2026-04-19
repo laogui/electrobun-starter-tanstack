@@ -79,6 +79,10 @@ vi.mock('@xyflow/react', () => ({
   useReactFlow: () => rfMock,
 }));
 
+vi.mock('@/lib/collision', () => ({
+  applyRepulsion: ({ nodes }: { nodes: unknown[] }) => nodes,
+}));
+
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
@@ -151,6 +155,57 @@ const Harness = () => {
       >
         drag-stop
       </button>
+      <button
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'group-2',
+              type: 'group',
+              position: { x: 300, y: 300 },
+              data: { active: false },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        drag-stop-group
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'folder-1',
+              type: 'folder',
+              position: { x: 20, y: 20 },
+              data: { title: 'Folder', children: [] },
+              measured: { width: 350, height: 350 },
+              style: { width: 350, height: 350 },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        drag-stop-folder
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStart(
+            {} as never,
+            {
+              id: 'folder-1',
+              type: 'folder',
+              parentId: 'group-1',
+              position: { x: 20, y: 20 },
+              data: { title: 'Folder', children: [] },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        drag-start-folder
+      </button>
       <output aria-label="drop-target">{dropTargetId ?? 'none'}</output>
       <output aria-label="active-group">{activeGroupId ?? 'none'}</output>
     </div>
@@ -195,5 +250,88 @@ describe('useNodeDrag', () => {
     });
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
     expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+  });
+});
+
+const initialNodes = () => [
+  {
+    id: 'group-1',
+    type: 'group',
+    position: { x: 100, y: 100 },
+    data: { active: false },
+    style: { width: 500, height: 300 },
+  },
+  {
+    id: 'group-2',
+    type: 'group',
+    position: { x: 700, y: 100 },
+    data: { active: false },
+    style: { width: 500, height: 300 },
+  },
+  {
+    id: 'folder-1',
+    type: 'folder',
+    position: { x: 20, y: 20 },
+    data: { title: 'Folder', children: [] },
+    measured: { width: 350, height: 350 },
+    style: { width: 350, height: 350 },
+  },
+];
+
+describe('useNodeDrag – group and folder interactions', () => {
+  beforeEach(() => {
+    state.nodes = initialNodes() as typeof state.nodes;
+    vi.clearAllMocks();
+    rfMock.getInternalNode.mockImplementation((id: string) => {
+      const node = state.nodes.find((n) => n.id === id);
+      if (!node) {
+        return null;
+      }
+      return {
+        internals: { positionAbsolute: { ...node.position } },
+        measured: { width: 500, height: 300 },
+      };
+    });
+  });
+
+  it('group cannot be dropped into another group', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } },
+    ]);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-stop-group' }));
+
+    const group2 = state.nodes.find((n) => n.id === 'group-2');
+    expect(group2).toBeDefined();
+    expect(group2?.parentId).toBeUndefined();
+  });
+
+  it('folder can be dropped into a group', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } },
+    ]);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-stop-folder' }));
+
+    const folder = state.nodes.find((n) => n.id === 'folder-1');
+    expect(folder).toBeDefined();
+    expect(folder?.parentId).toBe('group-1');
+  });
+
+  it('folder detaches from group on drag start', () => {
+    state.nodes = state.nodes.map((n) =>
+      n.id === 'folder-1'
+        ? { ...n, parentId: 'group-1', extent: 'parent' as const }
+        : n
+    ) as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-start-folder' }));
+
+    const folder = state.nodes.find((n) => n.id === 'folder-1');
+    expect(folder).toBeDefined();
+    expect(folder?.parentId).toBeUndefined();
   });
 });

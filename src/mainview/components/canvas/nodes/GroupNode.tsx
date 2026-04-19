@@ -1,4 +1,4 @@
-import { Handle, NodeResizer, Position, useReactFlow } from '@xyflow/react';
+import { Handle, NodeResizer, Position } from '@xyflow/react';
 import { motion } from 'motion/react';
 import { memo, useCallback, useRef, useState } from 'react';
 
@@ -13,7 +13,6 @@ const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
   const onUpdate = useCanvasStore((s) => s.updateNodeData);
-  const rf = useReactFlow();
 
   const handleBlur = useCallback(() => {
     const text =
@@ -21,44 +20,6 @@ const GroupNode = ({ id, data, selected }: any) => {
     onUpdate(id, { label: text });
     setEditingLabel(false);
   }, [id, onUpdate]);
-
-  const shouldResize = useCallback(
-    (
-      _event: unknown,
-      params: { x: number; y: number; width: number; height: number }
-    ) => {
-      const allNodes = rf.getNodes();
-      const thisNode = allNodes.find((n) => n.id === id);
-      const otherGroups = allNodes.filter(
-        (n) =>
-          n.type === 'group' &&
-          n.id !== id &&
-          n.parentId !== id &&
-          n.id !== thisNode?.parentId
-      );
-      const MARGIN = 4;
-      for (const og of otherGroups) {
-        const internal = rf.getInternalNode(og.id);
-        if (!internal) {
-          continue;
-        }
-        const ox = internal.internals.positionAbsolute.x;
-        const oy = internal.internals.positionAbsolute.y;
-        const ow = internal.measured.width ?? 400;
-        const oh = internal.measured.height ?? 300;
-        if (
-          params.x < ox + ow + MARGIN &&
-          params.x + params.width > ox - MARGIN &&
-          params.y < oy + oh + MARGIN &&
-          params.y + params.height > oy - MARGIN
-        ) {
-          return false;
-        }
-      }
-      return true;
-    },
-    [rf, id]
-  );
 
   return (
     <motion.div
@@ -78,7 +39,6 @@ const GroupNode = ({ id, data, selected }: any) => {
         lineClassName="!border-transparent"
         minHeight={200}
         minWidth={300}
-        shouldResize={shouldResize}
       />
 
       <Handle

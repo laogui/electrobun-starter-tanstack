@@ -3,10 +3,15 @@ import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef, useState } from 'react';
 
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
-import { isDescendant, sortNodesByParent } from '@/lib/canvasUtils';
+import {
+  canAbsorbIntoFolder,
+  GROUP_CHILD_TYPES,
+  sortNodesByParent,
+} from '@/lib/canvasUtils';
+import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
 import { useCanvasStore } from '@/store/canvasStore';
 
-/** Node types that can be placed inside a Group or Folder (i.e. content nodes). */
+/** Node types that can be placed inside a Group or absorbed into a Folder. */
 const CONTENT_TYPES = new Set(['card', 'image', 'sticky']);
 const isContentNode = (node: Node) => CONTENT_TYPES.has(node.type ?? '');
 
@@ -17,12 +22,13 @@ export function useNodeDrag() {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const rf = useReactFlow();
 
-  /** Original positions of cards before they were pushed aside by a dragging group. */
-  const originalPositionsRef = useRef(new Map());
+  /** Original positions of nodes before they were pushed aside. */
+  const pushedOriginsRef = useRef<Map<string, StoredOrigin>>(new Map());
 
+  /** Find the folder whose bounds contain the dragged node's center. */
   const findOverlappingFolder = useCallback(
     (draggedNode: Node, allNodes: Node[]) => {
-      if (!isContentNode(draggedNode)) {
+      if (!canAbsorbIntoFolder(draggedNode)) {
         return null;
       }
       const nodeW =
@@ -56,7 +62,8 @@ export function useNodeDrag() {
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_, node) => {
       saveSnapshot();
-      if ((!isContentNode(node) && node.type !== 'group') || !node.parentId) {
+      // Detach from parent group if the node is a group child type
+      if (!(node.parentId && GROUP_CHILD_TYPES.has(node.type ?? ''))) {
         return;
       }
       const abs =
@@ -87,176 +94,93 @@ export function useNodeDrag() {
 
   const onNodeDrag: OnNodeDrag = useCallback(
     (_, node) => {
+      // --- Determine drop target ---
+      let targetGroupId: string | null = null;
+      let targetFolderId: string | null = null;
+
+      // Content nodes (card/image/sticky) can go into groups or folders
       if (isContentNode(node)) {
         const group = rf
           .getIntersectingNodes(node)
           .find((n) => n.type === 'group');
-        setActiveGroupId(group?.id ?? null);
+        targetGroupId = group?.id ?? null;
         setNodes((nds) => {
           const folder = findOverlappingFolder(node, nds);
-          setDropTargetId(folder?.id || null);
+          targetFolderId = folder?.id || null;
+          setDropTargetId(targetFolderId);
           return nds.map((n) =>
             n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === group?.id } }
+              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
               : n
           );
         });
-        return;
       }
-
-      if (node.type === 'group') {
-        const currentNodes = rf.getNodes();
-        const targetGroup = rf
+      // Folders can go into groups but NOT into other folders
+      else if (node.type === 'folder') {
+        const group = rf
           .getIntersectingNodes(node)
-          .find(
-            (n) =>
-              n.type === 'group' &&
-              n.id !== node.id &&
-              !isDescendant(currentNodes, node.id, n.id)
-          );
-        setActiveGroupId(targetGroup?.id ?? null);
+          .find((n) => n.type === 'group');
+        targetGroupId = group?.id ?? null;
+        setDropTargetId(null);
         setNodes((nds) =>
           nds.map((n) =>
             n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === targetGroup?.id } }
+              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
               : n
           )
         );
-
-        const PADDING = 20;
-        const savedPositions = originalPositionsRef.current;
-
-        const groupInternal = rf.getInternalNode(node.id);
-        if (!groupInternal) {
-          return;
-        }
-
-        const gx = groupInternal.internals.positionAbsolute.x;
-        const gy = groupInternal.internals.positionAbsolute.y;
-        const gw = groupInternal.measured.width ?? 760;
-        const gh = groupInternal.measured.height ?? 380;
-
-        // Check overlap between a rect and the dragging group
-        const overlapsGroup = (
-          rx: number,
-          ry: number,
-          rw: number,
-          rh: number
-        ) => rx < gx + gw && rx + rw > gx && ry < gy + gh && ry + rh > gy;
-
-        const otherGroups = rf
-          .getNodes()
-          .filter((n) => n.type === 'group' && n.id !== node.id)
-          .map((n) => {
-            const internal = rf.getInternalNode(n.id);
-            if (!internal) {
-              return null;
-            }
-            return {
-              x: internal.internals.positionAbsolute.x,
-              y: internal.internals.positionAbsolute.y,
-              w: internal.measured.width ?? 760,
-              h: internal.measured.height ?? 380,
-            };
-          })
-          .filter(Boolean);
-
-        const overlapsAnyGroup = (
-          rx: number,
-          ry: number,
-          rw: number,
-          rh: number
-        ) =>
-          otherGroups.some(
-            (g) =>
-              rx < g.x + g.w && rx + rw > g.x && ry < g.y + g.h && ry + rh > g.y
-          );
-
+      }
+      // Groups cannot go into anything
+      else if (node.type === 'group') {
+        setDropTargetId(null);
         setNodes((nds) =>
-          nds.map((n) => {
-            if (!isContentNode(n) || n.parentId === node.id) {
-              return n;
-            }
-
-            const cardInternal = rf.getInternalNode(n.id);
-            if (!cardInternal) {
-              return n;
-            }
-
-            const cw = cardInternal.measured.width ?? 240;
-            const ch = cardInternal.measured.height ?? 80;
-
-            // Use original position for overlap test to avoid flicker
-            const origPos = savedPositions.get(n.id);
-            let origAbsX: number;
-            let origAbsY: number;
-
-            if (origPos) {
-              // Card was previously pushed — test against its original position
-              if (n.parentId) {
-                const parentInternal = rf.getInternalNode(n.parentId);
-                if (parentInternal) {
-                  origAbsX =
-                    origPos.x + parentInternal.internals.positionAbsolute.x;
-                  origAbsY =
-                    origPos.y + parentInternal.internals.positionAbsolute.y;
-                } else {
-                  origAbsX = origPos.x;
-                  origAbsY = origPos.y;
-                }
-              } else {
-                origAbsX = origPos.x;
-                origAbsY = origPos.y;
-              }
-            } else {
-              origAbsX = cardInternal.internals.positionAbsolute.x;
-              origAbsY = cardInternal.internals.positionAbsolute.y;
-            }
-
-            const stillOverlaps = overlapsGroup(origAbsX, origAbsY, cw, ch);
-
-            if (!stillOverlaps) {
-              // Group moved away — restore to original position
-              if (origPos) {
-                savedPositions.delete(n.id);
-                return { ...n, position: { ...origPos } };
-              }
-              return n;
-            }
-
-            // Card's original position overlaps group — push it aside
-            if (!savedPositions.has(n.id)) {
-              savedPositions.set(n.id, { ...n.position });
-            }
-
-            const ddx = origAbsX + cw / 2 - (gx + gw / 2);
-            const ddy = origAbsY + ch / 2 - (gy + gh / 2);
-
-            let newAbsX = origAbsX;
-            let newAbsY = origAbsY;
-
-            if (Math.abs(ddx / gw) > Math.abs(ddy / gh)) {
-              newAbsX = ddx > 0 ? gx + gw + PADDING : gx - cw - PADDING;
-            } else {
-              newAbsY = ddy > 0 ? gy + gh + PADDING : gy - ch - PADDING;
-            }
-
-            if (overlapsAnyGroup(newAbsX, newAbsY, cw, ch)) {
-              return n;
-            }
-
-            if (n.parentId) {
-              const parentInternal = rf.getInternalNode(n.parentId);
-              if (parentInternal) {
-                newAbsX -= parentInternal.internals.positionAbsolute.x;
-                newAbsY -= parentInternal.internals.positionAbsolute.y;
-              }
-            }
-
-            return { ...n, position: { x: newAbsX, y: newAbsY } };
-          })
+          nds.map((n) =>
+            n.type === 'group'
+              ? { ...n, data: { ...n.data, active: false } }
+              : n
+          )
         );
       }
+
+      setActiveGroupId(targetGroupId);
+
+      // --- Repulsion: push all overlapping nodes away ---
+      // Exempt all potential drop-target containers so the dragged node can
+      // approach and enter them without pushing them away.
+      setNodes((nds) => {
+        const exemptIds = new Set<string>();
+
+        // Content nodes can enter any group or folder
+        if (isContentNode(node)) {
+          for (const n of nds) {
+            if (n.type === 'group' || n.type === 'folder') {
+              exemptIds.add(n.id);
+            }
+          }
+        }
+        // Folders can enter any group
+        else if (node.type === 'folder') {
+          for (const n of nds) {
+            if (n.type === 'group') {
+              exemptIds.add(n.id);
+            }
+          }
+        }
+        // Groups can't enter anything — no exemptions
+
+        // Node's own parent (if any) should not be pushed
+        if (node.parentId) {
+          exemptIds.add(node.parentId);
+        }
+
+        return applyRepulsion({
+          nodes: nds,
+          activeNodeId: node.id,
+          pushedOrigins: pushedOriginsRef.current,
+          exemptIds,
+          gap: 20,
+        });
+      });
     },
     [rf, setNodes, findOverlappingFolder]
   );
@@ -264,10 +188,11 @@ export function useNodeDrag() {
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_, node) => {
       setDropTargetId(null);
-      originalPositionsRef.current.clear();
+      pushedOriginsRef.current.clear();
 
       if (isContentNode(node)) {
         setNodes((nds) => {
+          // Check folder drop first
           const folder = findOverlappingFolder(node, nds);
           if (folder) {
             const cardNode = nds.find((n) => n.id === node.id);
@@ -303,6 +228,7 @@ export function useNodeDrag() {
               });
           }
 
+          // Check group drop
           const targetGroup = rf
             .getIntersectingNodes(node)
             .find((n) => n.type === 'group');
@@ -341,16 +267,12 @@ export function useNodeDrag() {
         return;
       }
 
-      if (node.type === 'group') {
+      // Folder can be dropped into a group
+      if (node.type === 'folder') {
         setNodes((nds) => {
           const targetGroup = rf
             .getIntersectingNodes(node)
-            .find(
-              (n) =>
-                n.type === 'group' &&
-                n.id !== node.id &&
-                !isDescendant(nds, node.id, n.id)
-            );
+            .find((n) => n.type === 'group');
 
           const updated = nds.map((n) => {
             if (n.id !== node.id) {
@@ -369,6 +291,7 @@ export function useNodeDrag() {
               return {
                 ...n,
                 parentId: targetGroup.id,
+                extent: 'parent' as const,
                 position: { x: abs.x - groupAbs.x, y: abs.y - groupAbs.y },
               };
             }
@@ -381,6 +304,19 @@ export function useNodeDrag() {
           });
           return sortNodesByParent(updated);
         });
+        setActiveGroupId(null);
+        return;
+      }
+
+      // Groups stay top-level — no nesting into other groups or folders
+      if (node.type === 'group') {
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.type === 'group'
+              ? { ...n, data: { ...n.data, active: false } }
+              : n
+          )
+        );
         setActiveGroupId(null);
       }
     },

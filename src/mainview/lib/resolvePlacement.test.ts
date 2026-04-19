@@ -54,17 +54,27 @@ describe('resolveNodePlacement — group adoption', () => {
     expect(result.placement).toEqual(anchor);
   });
 
-  it('does not adopt folders or groups into groups', () => {
+  it('adopts folders into groups but not groups into groups', () => {
     const nodes: Node[] = [group('g', 0, 0, 1200, 800)];
-    const result = resolveNodePlacement({
+    // Folder can now be a child of a group
+    const folderResult = resolveNodePlacement({
       anchor: { x: 100, y: 100 },
       nodes,
       newType: 'folder',
       size: SIZE,
     });
-    // The folder can't be a child; it should be placed around the group.
-    expect(result.parentId).toBeNull();
-    expect(result.canPlace).toBe(true);
+    expect(folderResult.parentId).toBe('g');
+    expect(folderResult.canPlace).toBe(true);
+
+    // Group still cannot be a child of a group
+    const groupResult = resolveNodePlacement({
+      anchor: { x: 100, y: 100 },
+      nodes,
+      newType: 'group',
+      size: SIZE,
+    });
+    expect(groupResult.parentId).toBeNull();
+    expect(groupResult.canPlace).toBe(true);
   });
 });
 

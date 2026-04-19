@@ -26,7 +26,7 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasConstants';
-import { sortNodesByParent } from '@/lib/canvasUtils';
+import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, type Size } from '@/lib/collision';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import type { UndoRedoState } from '@/lib/undoRedo';
@@ -226,7 +226,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- hydration ------------------------------------------------------------
   hydrate: (nodes, edges) => {
     set({
-      nodes,
+      nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
       edges,
       _hydrated: true,
     });

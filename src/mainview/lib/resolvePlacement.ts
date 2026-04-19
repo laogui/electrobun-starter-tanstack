@@ -18,7 +18,7 @@ import {
 export const GROUP_PADDING = 20;
 
 /** Node types that may be adopted by a group as a child. */
-const GROUP_CHILD_TYPES = new Set(['card', 'image', 'sticky']);
+const GROUP_CHILD_TYPES = new Set(['card', 'image', 'sticky', 'folder']);
 
 export interface PlacementResult {
   /** True when a non-overlapping slot was found for the new node. */

@@ -278,6 +278,167 @@ export function findNearestFreePositionWithinBounds(
   return null;
 }
 
+/** Compute shortest-escape directions sorted by penetration depth (smallest first). */
+export function getEscapeDirections(moving: Rect, blocker: Rect): Direction[] {
+  const pen: Record<Direction, number> = {
+    left: Math.abs(moving.right - blocker.left),
+    right: Math.abs(blocker.right - moving.left),
+    up: Math.abs(moving.bottom - blocker.top),
+    down: Math.abs(blocker.bottom - moving.top),
+  };
+  return (['right', 'down', 'left', 'up'] as Direction[]).sort(
+    (a, b) => pen[a] - pen[b]
+  );
+}
+
+export interface StoredOrigin {
+  parentId?: string;
+  position: Point;
+}
+
+/**
+ * Pure repulsion engine. Given the already-updated nodes (with the active node
+ * at its new position/size), push every overlapping non-exempt node to the
+ * nearest free slot.
+ */
+export function applyRepulsion(params: {
+  activeNodeId: string;
+  exemptIds: Set<string>;
+  gap?: number;
+  nodes: Node[];
+  pushedOrigins: Map<string, StoredOrigin>;
+}): Node[] {
+  const { activeNodeId, exemptIds, gap = 20, nodes, pushedOrigins } = params;
+  const rects = buildAbsoluteRects(nodes);
+  const activeRect = rects.get(activeNodeId);
+  if (!activeRect) {
+    return nodes;
+  }
+
+  const activeNode = nodes.find((n) => n.id === activeNodeId);
+  const inflatedActive = inflateRect(activeRect, gap);
+
+  const result = nodes.map((n) => {
+    if (n.id === activeNodeId) {
+      return n;
+    }
+    // Skip children of the active node (they move with it)
+    if (n.parentId === activeNodeId) {
+      return n;
+    }
+    // Skip exempt nodes (drop target, parent of active, etc.)
+    if (exemptIds.has(n.id)) {
+      return n;
+    }
+    // Skip children whose parent is the active node's parent (sibling inside same group)
+    // but only if the active node is also inside that group
+    if (
+      n.parentId &&
+      activeNode?.parentId &&
+      n.parentId === activeNode.parentId
+    ) {
+      // Both are siblings — still apply repulsion between siblings
+    }
+
+    // Use stored original position for overlap test to avoid cascading drift
+    const orig = pushedOrigins.get(n.id);
+    const nSize = getNodeSize(n);
+    let origAbsX: number;
+    let origAbsY: number;
+    if (orig) {
+      if (orig.parentId) {
+        const parentNode = nodes.find((p) => p.id === orig.parentId);
+        if (parentNode) {
+          const parentAbs = rects.get(parentNode.id);
+          origAbsX = orig.position.x + (parentAbs?.left ?? 0);
+          origAbsY = orig.position.y + (parentAbs?.top ?? 0);
+        } else {
+          origAbsX = orig.position.x;
+          origAbsY = orig.position.y;
+        }
+      } else {
+        origAbsX = orig.position.x;
+        origAbsY = orig.position.y;
+      }
+    } else {
+      const nRect = rects.get(n.id);
+      if (!nRect) {
+        return n;
+      }
+      origAbsX = nRect.left;
+      origAbsY = nRect.top;
+    }
+
+    const origRect: Rect = {
+      left: origAbsX,
+      top: origAbsY,
+      right: origAbsX + nSize.width,
+      bottom: origAbsY + nSize.height,
+    };
+
+    if (!rectsIntersect(origRect, inflatedActive)) {
+      // No longer overlapping — restore if previously pushed
+      if (orig) {
+        pushedOrigins.delete(n.id);
+        return { ...n, position: { ...orig.position } };
+      }
+      return n;
+    }
+
+    // Store original position once
+    if (!pushedOrigins.has(n.id)) {
+      pushedOrigins.set(n.id, {
+        position: { ...n.position },
+        parentId: n.parentId,
+      });
+    }
+
+    const directions = getEscapeDirections(origRect, activeRect);
+
+    // Build obstacle rects: all other nodes except the one being pushed and the active node
+    const obstacles = nodes
+      .filter(
+        (o) =>
+          o.id !== n.id &&
+          o.id !== activeNodeId &&
+          // Don't treat parent group as obstacle for its own children
+          o.id !== n.parentId
+      )
+      .map((o) => rects.get(o.id))
+      .filter((r): r is Rect => r !== undefined)
+      .map((r) => inflateRect(r, 2));
+
+    const found = findNearestFreePositionAroundBounds({
+      desired: { x: origAbsX, y: origAbsY },
+      size: nSize,
+      bounds: inflatedActive,
+      directions,
+      gap: 0,
+      nodeRects: [],
+      obstacles,
+    });
+
+    if (!found) {
+      return n;
+    }
+
+    // Convert absolute position back to local coords if node has a parent
+    let localX = found.x;
+    let localY = found.y;
+    if (n.parentId) {
+      const parentAbs = rects.get(n.parentId);
+      if (parentAbs) {
+        localX -= parentAbs.left;
+        localY -= parentAbs.top;
+      }
+    }
+
+    return { ...n, position: { x: localX, y: localY } };
+  });
+
+  return result;
+}
+
 export function findNearestFreePositionAroundBounds(params: {
   bounds: Rect;
   desired: Point;

@@ -6,13 +6,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { useHelperLines } from '@/hooks/useHelperLines';
 
 const setNodesMock = vi.fn();
+const saveSnapshotMock = vi.fn();
 const applyCanvasNodeChangesMock = vi.fn();
 const getHelperLinesMock = vi.fn();
+const applyRepulsionMock = vi.fn();
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
-    selector: (state: { setNodes: typeof setNodesMock }) => unknown
-  ) => selector({ setNodes: setNodesMock }),
+    selector: (state: {
+      setNodes: typeof setNodesMock;
+      saveSnapshot: typeof saveSnapshotMock;
+    }) => unknown
+  ) => selector({ setNodes: setNodesMock, saveSnapshot: saveSnapshotMock }),
+}));
+
+vi.mock('@/lib/collision', () => ({
+  applyRepulsion: (...args: Parameters<typeof applyRepulsionMock>) =>
+    applyRepulsionMock(...args),
 }));
 
 vi.mock('@/lib/applyCanvasNodeChanges', () => ({
@@ -65,6 +75,21 @@ const Harness = () => {
         type="button"
       >
         stop-drag
+      </button>
+      <button
+        onClick={() => {
+          onNodesChange([
+            {
+              id: 'node-1',
+              type: 'dimensions',
+              dimensions: { width: 400, height: 500 },
+              resizing: true,
+            },
+          ] as never);
+        }}
+        type="button"
+      >
+        resize
       </button>
       <output aria-label="helper-h">{helperLineH ?? 'none'}</output>
       <output aria-label="helper-v">{helperLineV ?? 'none'}</output>
@@ -137,5 +162,25 @@ describe('useHelperLines', () => {
     );
     expect(screen.getByLabelText('helper-h')).toHaveTextContent('none');
     expect(screen.getByLabelText('helper-v')).toHaveTextContent('none');
+  });
+
+  it('applies repulsion when a node is being resized', () => {
+    applyCanvasNodeChangesMock.mockImplementation((_changes, nds) => nds);
+    applyRepulsionMock.mockImplementation(({ nodes }) => nodes);
+    setNodesMock.mockImplementation(
+      (updater: (value: typeof nodes) => unknown) => {
+        updater(nodes);
+      }
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'resize' }));
+
+    expect(saveSnapshotMock).toHaveBeenCalled();
+    expect(applyRepulsionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeNodeId: 'node-1',
+      })
+    );
   });
 });

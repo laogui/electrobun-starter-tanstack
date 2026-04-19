@@ -136,6 +136,8 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 
 ## Testing
 
+- All new or modified logic must include corresponding unit tests. Place test files next to the source file using the `*.test.ts` / `*.test.tsx` naming convention.
+- Run `bun run test` after changes to ensure all tests pass before considering the task complete.
 - Write assertions inside `it()` or `test()` blocks
 - Avoid done callbacks in async tests - use async/await instead
 - Don't use `.only` or `.skip` in committed code

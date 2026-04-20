@@ -59,6 +59,12 @@ const rfMock = {
         measured: { width: 350, height: 350 },
       };
     }
+    if (id === 'sticky-1') {
+      return {
+        internals: { positionAbsolute: { x: 180, y: 210 } },
+        measured: { width: 280, height: 280 },
+      };
+    }
     return null;
   }),
   getIntersectingNodes: vi.fn(() => [state.nodes[0]]),
@@ -174,6 +180,62 @@ const Harness = () => {
         type="button"
       >
         drag-stop-group
+      </button>
+      <button
+        onClick={() => {
+          onNodeDrag(
+            {} as never,
+            {
+              id: 'group-1',
+              type: 'group',
+              position: { x: 110, y: 110 },
+              data: { active: false },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        dragging-group
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'card-1',
+              type: 'card',
+              parentId: 'group-1',
+              position: { x: 80, y: 90 },
+              data: { title: 'Card', color: '#fff' },
+              measured: { width: 350, height: 450 },
+              style: { width: 350, height: 450 },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        drag-stop-card-to-group
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'sticky-1',
+              type: 'sticky',
+              position: { x: 180, y: 210 },
+              data: { content: 'Sticky', color: '#FEF08A' },
+              measured: { width: 280, height: 280 },
+              style: { width: 280, height: 280 },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        drag-stop-missing-content
       </button>
       <button
         onClick={() => {
@@ -318,6 +380,14 @@ const initialNodes = () => [
     measured: { width: 350, height: 350 },
     style: { width: 350, height: 350 },
   },
+  {
+    id: 'card-1',
+    type: 'card',
+    position: { x: 80, y: 90 },
+    data: { title: 'Card', color: '#fff' },
+    measured: { width: 350, height: 450 },
+    style: { width: 350, height: 450 },
+  },
 ];
 
 describe('useNodeDrag – group and folder interactions', () => {
@@ -400,6 +470,78 @@ describe('useNodeDrag – group and folder interactions', () => {
     expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
       position: { x: 100, y: 100 },
       data: { active: false },
+    });
+  });
+
+  it('clears active groups while dragging a group node', () => {
+    state.nodes = state.nodes.map((node) =>
+      node.type === 'group' ? { ...node, data: { active: true } } : node
+    ) as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'dragging-group' }));
+
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
+    expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+    expect(state.nodes.filter((node) => node.type === 'group')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'group-1', data: { active: false } }),
+        expect.objectContaining({ id: 'group-2', data: { active: false } }),
+      ])
+    );
+  });
+
+  it('drops a content node into a group when no folder overlaps', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } } as never,
+    ]);
+    state.nodes = state.nodes.map((node) =>
+      node.id === 'folder-1'
+        ? { ...node, position: { x: 1000, y: 1000 } }
+        : node
+    ) as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'drag-stop-card-to-group' })
+    );
+
+    expect(state.nodes.find((node) => node.id === 'card-1')).toMatchObject({
+      parentId: 'group-1',
+      extent: 'parent',
+      position: { x: -20, y: -10 },
+    });
+    expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      data: { active: false },
+    });
+  });
+
+  it('keeps nodes unchanged when folder drop target content is missing', () => {
+    state.nodes = [
+      {
+        id: 'group-1',
+        type: 'group',
+        position: { x: 100, y: 100 },
+        data: { active: false },
+        style: { width: 500, height: 300 },
+      },
+      {
+        id: 'folder-1',
+        type: 'folder',
+        position: { x: 20, y: 20 },
+        data: { title: 'Folder', children: [] },
+        measured: { width: 600, height: 600 },
+        style: { width: 600, height: 600 },
+      },
+    ] as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'drag-stop-missing-content' })
+    );
+
+    expect(state.nodes.find((node) => node.id === 'folder-1')).toMatchObject({
+      data: { title: 'Folder', children: [] },
     });
   });
 });

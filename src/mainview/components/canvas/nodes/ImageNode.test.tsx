@@ -103,12 +103,20 @@ describe('ImageNode', () => {
 
   it('renders add-image actions and zoomed-out image preview', () => {
     const { rerender } = render(
-      <ImageNode data={{ color: '#fff', imageUrl: '' }} id="image-1" />
+      <ImageNode
+        data={{ color: '#fff', imageUrl: '', isHidden: true }}
+        id="image-1"
+      />
     );
 
     expect(
       screen.getByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
     ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole('button', { name: 'Click to add image' })
+        .closest('.opacity-0')
+    ).not.toBeNull();
 
     useViewportMock.mockReturnValue({ zoom: 0.2 });
     rerender(
@@ -135,7 +143,13 @@ describe('ImageNode', () => {
     const input = document.querySelector(
       'input[type="file"]'
     ) as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, 'click');
     const file = new File(['image'], 'sample.png', { type: 'image/png' });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
+    );
+    expect(clickSpy).toHaveBeenCalledTimes(1);
 
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -155,6 +169,8 @@ describe('ImageNode', () => {
         imageFile: '/saved/file.png',
       });
     });
+
+    expect(input.value).toBe('');
   });
 
   it('ignores non-image drops and handles image paste uploads', async () => {
@@ -193,6 +209,104 @@ describe('ImageNode', () => {
         imageUrl: 'data:image/png;base64,mock',
         title: 'Keep',
       });
+    });
+  });
+
+  it('ignores paste items without files and reports attachment save failures', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    rpcSaveAttachmentMock.mockRejectedValueOnce(new Error('save failed'));
+
+    render(
+      <ImageNode
+        data={{
+          color: '#fff',
+          imageFile: '/old/file.png',
+          imageUrl: '',
+          title: '',
+        }}
+        id="image-4"
+      />
+    );
+
+    const root = screen
+      .getByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
+      .closest('[class~="group/image"]') as HTMLElement;
+
+    const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+    root.dispatchEvent(dragOver);
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    fireEvent.paste(root, {
+      clipboardData: {
+        items: [
+          {
+            type: 'image/png',
+            getAsFile: () => null,
+          },
+          {
+            type: 'text/plain',
+            getAsFile: () => null,
+          },
+        ],
+      },
+    });
+    expect(updateNodeDataMock).not.toHaveBeenCalled();
+
+    fireEvent.drop(root, {
+      dataTransfer: {
+        files: [new File(['image'], 'failing.png', { type: 'image/png' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(updateNodeDataMock).toHaveBeenCalledWith('image-4', {
+        imageUrl: 'data:image/png;base64,mock',
+        title: 'failing',
+      });
+    });
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[ImageNode] Failed to save attachment:',
+        expect.any(Error)
+      );
+    });
+  });
+
+  it('does not update imageFile when attachment save returns no file path', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce({});
+
+    render(
+      <ImageNode
+        data={{
+          color: '#fff',
+          imageFile: '/old/file.png',
+          imageUrl: '',
+          title: 'Saved',
+        }}
+        id="image-5"
+      />
+    );
+
+    const root = screen
+      .getByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
+      .closest('[class~="group/image"]') as HTMLElement;
+
+    fireEvent.drop(root, {
+      dataTransfer: {
+        files: [new File(['image'], 'fresh.png', { type: 'image/png' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(updateNodeDataMock).toHaveBeenCalledWith('image-5', {
+        imageUrl: 'data:image/png;base64,mock',
+        title: 'Saved',
+      });
+    });
+
+    expect(updateNodeDataMock).not.toHaveBeenCalledWith('image-5', {
+      imageFile: expect.anything(),
     });
   });
 });

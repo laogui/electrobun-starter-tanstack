@@ -21,6 +21,24 @@ const storeState = {
       position: { x: 30, y: 40 },
       data: { title: 'Folder 1', subtitle: '', children: [] },
     },
+    {
+      id: 'group-1',
+      type: 'group',
+      position: { x: 50, y: 60 },
+      data: { label: 'Group 1', color: 'blue' },
+    },
+    {
+      id: 'sticky-1',
+      type: 'sticky',
+      position: { x: 70, y: 80 },
+      data: { content: 'Sticky', color: '#FEF08A' },
+    },
+    {
+      id: 'image-1',
+      type: 'image',
+      position: { x: 90, y: 100 },
+      data: { imageUrl: '', title: 'Image', color: '#FFFFFF' },
+    },
   ],
   edges: [
     {
@@ -195,6 +213,66 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 91,
+              clientY: 71,
+            } as never,
+            {
+              id: 'group-1',
+              type: 'group',
+              position: { x: 0, y: 0 },
+              data: { label: 'Group 1', color: 'blue' },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-group
+      </button>
+      <button
+        onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 92,
+              clientY: 72,
+            } as never,
+            {
+              id: 'sticky-1',
+              type: 'sticky',
+              position: { x: 0, y: 0 },
+              data: { content: 'Sticky', color: '#FEF08A' },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-sticky
+      </button>
+      <button
+        onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 93,
+              clientY: 73,
+            } as never,
+            {
+              id: 'image-1',
+              type: 'image',
+              position: { x: 0, y: 0 },
+              data: { imageUrl: '', title: 'Image', color: '#FFFFFF' },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-image
+      </button>
+      <button
+        onClick={() => {
           onEdgeContextMenu(
             {
               preventDefault: vi.fn(),
@@ -218,11 +296,51 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          handleContextMenuAction('new-note');
+        }}
+        type="button"
+      >
+        new-note-no-menu
+      </button>
+      <button
+        onClick={() => {
           handleContextMenuAction('new-checklist');
         }}
         type="button"
       >
         new-checklist
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('new-sticky');
+        }}
+        type="button"
+      >
+        new-sticky
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('new-group');
+        }}
+        type="button"
+      >
+        new-group
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('new-image');
+        }}
+        type="button"
+      >
+        new-image
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('new-folder');
+        }}
+        type="button"
+      >
+        new-folder
       </button>
       <button
         onClick={() => {
@@ -247,6 +365,14 @@ const Harness = () => {
         type="button"
       >
         copy
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('copy');
+        }}
+        type="button"
+      >
+        copy-missing
       </button>
       <button
         onClick={() => {
@@ -341,6 +467,21 @@ describe('useContextMenu', () => {
       '{"x":90,"y":70,"target":"folder","nodeId":"folder-1"}'
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'node-group' }));
+    expect(output).toHaveTextContent(
+      '{"x":91,"y":71,"target":"group","nodeId":"group-1"}'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'node-sticky' }));
+    expect(output).toHaveTextContent(
+      '{"x":92,"y":72,"target":"sticky","nodeId":"sticky-1"}'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'node-image' }));
+    expect(output).toHaveTextContent(
+      '{"x":93,"y":73,"target":"image","nodeId":"image-1"}'
+    );
+
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));
     expect(output).toHaveTextContent(
       '{"x":120,"y":160,"target":"edge","edgeId":"edge-1"}'
@@ -349,6 +490,15 @@ describe('useContextMenu', () => {
 
   it('creates a new note and dispatches node and edge actions', () => {
     render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'new-note-no-menu' }));
+
+    expect(storeActions.saveSnapshot).toHaveBeenCalled();
+    expect(storeActions.createNode).toHaveBeenCalledWith(
+      'card',
+      expect.anything(),
+      { anchorCenter: undefined }
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'pane' }));
     fireEvent.click(screen.getByRole('button', { name: 'new-note' }));
@@ -441,6 +591,7 @@ describe('useContextMenu', () => {
 
     act(() => {
       screen.getByRole('button', { name: 'copy' }).click();
+      screen.getByRole('button', { name: 'copy-missing' }).click();
       screen.getByRole('button', { name: 'focus' }).click();
       screen.getByRole('button', { name: 'open-folder' }).click();
     });
@@ -449,6 +600,8 @@ describe('useContextMenu', () => {
       id: 'copied-id',
       data: { title: 'Card 1', content: '', color: '#FFFFFF' },
     });
+    expect(storeState.clipboard[0]).not.toHaveProperty('isHidden');
+    expect(storeState.clipboard[0]).not.toHaveProperty('isDropTarget');
     expect(storeActions.setFocusedNode).toHaveBeenCalledWith({
       id: 'card-1',
       type: 'card',

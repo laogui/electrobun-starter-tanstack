@@ -58,12 +58,20 @@ const resetStore = () => {
   });
 };
 
-const renderViewSwitcher = () =>
+const renderViewSwitcher = ({
+  createMenuOpen = false,
+  onCreateNode = vi.fn(),
+  setCreateMenuOpen = vi.fn(),
+}: {
+  createMenuOpen?: boolean;
+  onCreateNode?: ReturnType<typeof vi.fn>;
+  setCreateMenuOpen?: ReturnType<typeof vi.fn>;
+} = {}) =>
   render(
     <ViewSwitcher
-      createMenuOpen={false}
-      onCreateNode={vi.fn()}
-      setCreateMenuOpen={vi.fn()}
+      createMenuOpen={createMenuOpen}
+      onCreateNode={onCreateNode}
+      setCreateMenuOpen={setCreateMenuOpen}
     />
   );
 
@@ -262,5 +270,136 @@ describe('viewSwitcher', () => {
     });
 
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+  });
+
+  it('cancels rename when confirm is attempted with an empty name', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    const input = screen.getByDisplayValue('Focus Mode');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rename' }));
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Focus Mode')).toBeNull();
+    });
+    expect(rpcMocks.rpcRenameView).not.toHaveBeenCalled();
+  });
+
+  it('clears rename state when the menu closes', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    expect(screen.getByDisplayValue('Focus Mode')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText('Default Canvas')[0]!);
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Focus Mode')).toBeNull();
+    });
+  });
+
+  it('does not delete the only remaining view', async () => {
+    rpcMocks.rpcListViews.mockResolvedValueOnce({
+      views: [{ id: 'default', name: 'Default Canvas' }],
+      activeViewId: 'default',
+    });
+
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+
+    expect(
+      screen.queryByRole('button', { name: 'Delete Default Canvas' })
+    ).toBeNull();
+    expect(rpcMocks.rpcDeleteView).not.toHaveBeenCalled();
+  });
+
+  it('creates supported nodes from the create menu and ignores disabled items', async () => {
+    const onCreateNode = vi.fn();
+    renderViewSwitcher({ createMenuOpen: true, onCreateNode });
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Image' }));
+    expect(onCreateNode).toHaveBeenCalledWith('image');
+
+    const fileItem = screen.getByRole('menuitem', { name: 'File' });
+    expect(fileItem).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(fileItem);
+    expect(onCreateNode).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the menu without saving when switching to the active view', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Default Canvas' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menuitem', { name: 'Focus Mode' })).toBeNull();
+    });
+    expect(rpcMocks.isRpcAvailable).not.toHaveBeenCalled();
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+  });
+
+  it('cancels rename from the inline cancel button', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    expect(screen.getByDisplayValue('Focus Mode')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel rename' }));
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Focus Mode')).toBeNull();
+    });
+    expect(rpcMocks.rpcRenameView).not.toHaveBeenCalled();
+  });
+
+  it('confirms rename when pressing enter in the input', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    const input = screen.getByDisplayValue('Focus Mode');
+    fireEvent.change(input, { target: { value: 'Keyboard Rename' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcRenameView).toHaveBeenCalledWith(
+        'focus',
+        'Keyboard Rename'
+      );
+    });
   });
 });

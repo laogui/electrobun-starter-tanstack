@@ -9,7 +9,6 @@ const invalidateMock = vi.fn();
 const ErrorComponentMock = vi.fn(({ error }: { error: Error }) => (
   <div>dev:{error.message}</div>
 ));
-
 vi.mock('@tanstack/react-router', () => ({
   ErrorComponent: (props: { error: Error }) => ErrorComponentMock(props),
   useRouter: () => ({ invalidate: invalidateMock }),
@@ -38,5 +37,17 @@ describe('ErrorBoundaryFallback', () => {
 
     expect(screen.getByText('dev:Oops')).toBeInTheDocument();
     expect(ErrorComponentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invoke reset handlers while rendering router errors', () => {
+    const resetMock = vi.fn();
+
+    render(
+      <ErrorBoundaryFallback error={new Error('Still dev')} reset={resetMock} />
+    );
+
+    expect(screen.getByText('dev:Still dev')).toBeInTheDocument();
+    expect(resetMock).not.toHaveBeenCalled();
+    expect(invalidateMock).not.toHaveBeenCalled();
   });
 });

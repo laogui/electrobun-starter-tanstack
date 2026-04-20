@@ -137,13 +137,11 @@ describe('__root route', () => {
     const RootDocument = await loadRootDocument();
     render(<RootDocument />);
 
-    const titlebar = screen.getByRole('button', {
-      name: 'Settings',
-    }).parentElement;
+    const titlebar = screen.getByTestId('app-titlebar');
 
-    expect(titlebar).not.toBeNull();
-    expect(titlebar?.className).toContain('backdrop-blur-md');
-    expect(titlebar?.className).toContain('bg-stone-50/55');
+    expect(titlebar.className).toContain('backdrop-blur-md');
+    expect(titlebar.className).toContain('bg-stone-50/55');
+    expect(titlebar.className).toContain('dark:bg-[#141414]/45');
   });
 
   it('removes the event listener on unmount', async () => {

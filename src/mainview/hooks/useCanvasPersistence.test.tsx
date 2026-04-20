@@ -164,6 +164,53 @@ describe('useCanvasPersistence', () => {
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 
+  it('does not persist when rpc never becomes available', async () => {
+    rpcMocks.isRpcAvailable.mockResolvedValue(false);
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 30, y: 30 }, data: {} },
+      ]);
+
+    vi.advanceTimersByTime(3000);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+  });
+
+  it('flushes on visibilitychange and reports save failures', async () => {
+    rpcMocks.rpcSaveManifest.mockRejectedValueOnce(new Error('save failed'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 30, y: 30 }, data: {} },
+      ]);
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 60, y: 60 }, data: {} },
+      ]);
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
   it('flushes pending changes during unmount', async () => {
     const view = render(<TestComponent />);
     await vi.runAllTicks();

@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { useContextMenu } from '@/hooks/useContextMenu';
 
+const NODE_ID_RE = /^node-/;
+
 const storeState = {
   nodes: [
     {
@@ -363,13 +365,13 @@ describe('useContextMenu', () => {
       }
     );
     expect(storeState.nodes.at(-1)).toMatchObject({
-      id: expect.stringMatching(/^node-/),
+      id: expect.stringMatching(NODE_ID_RE),
       type: 'card',
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'new-checklist' }));
     expect(storeState.nodes.at(-1)).toMatchObject({
-      id: expect.stringMatching(/^node-/),
+      id: expect.stringMatching(NODE_ID_RE),
       type: 'card',
       data: {
         type: 'checklist',
@@ -465,7 +467,20 @@ describe('useContextMenu', () => {
 
     vi.spyOn(document, 'querySelector').mockReturnValue(null);
     screen.getByRole('button', { name: 'focus' }).click();
+    screen.getByRole('button', { name: 'open-folder' }).click();
 
     expect(storeActions.setFocusedNode).not.toHaveBeenCalled();
+    expect(storeActions.setFocusedFolder).not.toHaveBeenCalled();
+  });
+
+  it('ignores unknown actions and edge toggles without matching edges', () => {
+    render(<Harness />);
+
+    storeState.edges = [];
+    fireEvent.click(screen.getByRole('button', { name: 'toggle-animated' }));
+    fireEvent.click(screen.getByRole('button', { name: 'toggle-path' }));
+
+    expect(storeActions.updateEdgeData).not.toHaveBeenCalled();
+    expect(storeActions.saveSnapshot).not.toHaveBeenCalled();
   });
 });

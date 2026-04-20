@@ -117,6 +117,18 @@ describe('__root route', () => {
     });
   });
 
+  it('renders shared shell elements', async () => {
+    const RootDocument = await loadRootDocument();
+    render(<RootDocument />);
+
+    expect(screen.getByText('Outlet content')).toBeInTheDocument();
+    expect(screen.getByText('Toaster')).toBeInTheDocument();
+    expect(screen.getByText('Devtools')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Settings' })
+    ).toBeInTheDocument();
+  });
+
   it('removes the event listener on unmount', async () => {
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const RootDocument = await loadRootDocument();

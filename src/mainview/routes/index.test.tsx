@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const NEW_NOTE_RE = /new note/i;
+const FOCUSED_RE = /Focused/;
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -332,5 +333,72 @@ describe('routes/index', () => {
     await waitFor(() => {
       expect(useCanvasStore.getState().nodes.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it('seeds initial nodes when load returns empty data and rpc is available', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalled();
+      expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('keeps loading state when load fails and does not focus without rect', async () => {
+    rpcMocks.loadCanvas.mockRejectedValueOnce(new Error('failed load'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalled();
+      expect(screen.queryByText(FOCUSED_RE)).toBeNull();
+    });
+
+    errorSpy.mockRestore();
+  });
+
+  it('does not seed initial nodes when rpc is unavailable', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+    rpcMocks.isRpcAvailable.mockResolvedValueOnce(false);
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+    });
+
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toEqual([]);
+    expect(screen.queryByText('Loaded Card')).toBeNull();
+  });
+
+  it('does not open focused node when the selected element has no rect', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    vi.spyOn(document, 'querySelector').mockReturnValue(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Open focused node' }));
+
+    expect(screen.queryByText('Focused loaded-1')).toBeNull();
   });
 });

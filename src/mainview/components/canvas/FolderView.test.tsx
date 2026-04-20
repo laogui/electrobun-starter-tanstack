@@ -112,4 +112,49 @@ describe('folderView', () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('renders many children and forwards image child clicks too', () => {
+    const onCardClick = vi.fn();
+
+    render(
+      <FolderView
+        folder={{
+          rect,
+          data: {
+            title: 'Large Folder',
+            subtitle: 'Busy',
+            children: [
+              ...Array.from({ length: 5 }, (_, index) => ({
+                id: `card-${index}`,
+                type: 'card',
+                data: {
+                  title: `Card ${index}`,
+                  content: `Body ${index}`,
+                  color: '#fff',
+                },
+              })),
+              {
+                id: 'image-1',
+                type: 'image',
+                data: {
+                  title: 'Poster',
+                  imageUrl: 'poster.png',
+                  color: '#fff',
+                },
+              },
+            ],
+          },
+        }}
+        onCardClick={onCardClick}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('card-child:Card 4:Body 4')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('image-child:Poster:poster.png'));
+    expect(onCardClick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'image-1', type: 'image' }),
+      expect.objectContaining({ width: expect.any(Number) })
+    );
+  });
 });

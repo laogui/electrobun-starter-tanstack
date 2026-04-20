@@ -196,6 +196,25 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onNodeDrag(
+            {} as never,
+            {
+              id: 'folder-1',
+              type: 'folder',
+              position: { x: 40, y: 60 },
+              data: { title: 'Folder', children: [] },
+              measured: { width: 350, height: 350 },
+              style: { width: 350, height: 350 },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        dragging-folder
+      </button>
+      <button
+        onClick={() => {
           onNodeDragStart(
             {} as never,
             {
@@ -211,6 +230,23 @@ const Harness = () => {
         type="button"
       >
         drag-start-folder
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStart(
+            {} as never,
+            {
+              id: 'group-1',
+              type: 'group',
+              position: { x: 100, y: 100 },
+              data: { active: false },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        drag-start-group
       </button>
       <output aria-label="drop-target">{dropTargetId ?? 'none'}</output>
       <output aria-label="active-group">{activeGroupId ?? 'none'}</output>
@@ -339,5 +375,31 @@ describe('useNodeDrag – group and folder interactions', () => {
     const folder = state.nodes.find((n) => n.id === 'folder-1');
     expect(folder).toBeDefined();
     expect(folder?.parentId).toBeUndefined();
+  });
+
+  it('tracks a group as active while dragging a folder', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } } as never,
+    ]);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'dragging-folder' }));
+
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
+    expect(screen.getByLabelText('active-group')).toHaveTextContent('group-1');
+    expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      data: { active: true },
+    });
+  });
+
+  it('keeps top-level group unchanged on drag start', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-start-group' }));
+
+    expect(saveSnapshotMock).toHaveBeenCalled();
+    expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      position: { x: 100, y: 100 },
+      data: { active: false },
+    });
   });
 });

@@ -156,7 +156,9 @@ describe('viewSwitcher', () => {
     await waitFor(() => {
       expect(rpcMocks.rpcCreateView).toHaveBeenCalledWith('Canvas 3');
       expect(
-        useCanvasStore.getState().views.some((view) => view.id === 'view-2')
+        useCanvasStore
+          .getState()
+          .views.some((view: { id: string }) => view.id === 'view-2')
       ).toBe(true);
       expect(useCanvasStore.getState().activeViewId).toBe('view-2');
     });
@@ -177,8 +179,11 @@ describe('viewSwitcher', () => {
     await waitFor(() => {
       expect(rpcMocks.rpcRenameView).toHaveBeenCalledWith('focus', 'Deep Work');
       expect(
-        useCanvasStore.getState().views.find((view) => view.id === 'focus')
-          ?.name
+        useCanvasStore
+          .getState()
+          .views.find(
+            (view: { id: string; name: string }) => view.id === 'focus'
+          )?.name
       ).toBe('Deep Work');
     });
   });
@@ -198,5 +203,64 @@ describe('viewSwitcher', () => {
         { id: 'default', name: 'Default Canvas' },
       ]);
     });
+  });
+
+  it('keeps state unchanged when create rpc calls return null', async () => {
+    rpcMocks.rpcCreateView.mockResolvedValueOnce(null);
+
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New Canvas' }));
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().views).toEqual([
+        { id: 'default', name: 'Default Canvas' },
+        { id: 'focus', name: 'Focus Mode' },
+      ]);
+    });
+  });
+
+  it('keeps state unchanged when delete rpc calls return null', async () => {
+    rpcMocks.rpcDeleteView.mockResolvedValueOnce(null);
+
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Focus Mode' }));
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().views).toEqual([
+        { id: 'default', name: 'Default Canvas' },
+        { id: 'focus', name: 'Focus Mode' },
+      ]);
+    });
+  });
+
+  it('skips manifest flush when rpc is unavailable during a view switch', async () => {
+    rpcMocks.isRpcAvailable.mockResolvedValueOnce(false);
+
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Focus Mode' }));
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeViewId).toBe('focus');
+    });
+
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 });

@@ -183,4 +183,61 @@ describe('useHelperLines', () => {
       })
     );
   });
+
+  it('clears resize tracking when resizing ends', () => {
+    applyCanvasNodeChangesMock.mockImplementation((changes) => changes);
+    setNodesMock.mockImplementation(
+      (updater: (value: typeof nodes) => unknown) => {
+        updater(nodes);
+      }
+    );
+
+    const EndHarness = () => {
+      const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
+      return (
+        <div>
+          <button
+            onClick={() => {
+              onNodesChange([
+                {
+                  id: 'node-1',
+                  type: 'dimensions',
+                  dimensions: { width: 400, height: 500 },
+                  resizing: true,
+                },
+              ] as never);
+            }}
+            type="button"
+          >
+            start-resize
+          </button>
+          <button
+            onClick={() => {
+              onNodesChange([
+                {
+                  id: 'node-1',
+                  type: 'dimensions',
+                  dimensions: { width: 410, height: 510 },
+                  resizing: false,
+                },
+              ] as never);
+            }}
+            type="button"
+          >
+            end-resize
+          </button>
+          <output aria-label="helper-h">{helperLineH ?? 'none'}</output>
+          <output aria-label="helper-v">{helperLineV ?? 'none'}</output>
+        </div>
+      );
+    };
+
+    render(<EndHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'start-resize' }));
+    fireEvent.click(screen.getByRole('button', { name: 'end-resize' }));
+
+    expect(screen.getByLabelText('helper-h')).toHaveTextContent('none');
+    expect(screen.getByLabelText('helper-v')).toHaveTextContent('none');
+    expect(applyRepulsionMock).toHaveBeenCalledTimes(1);
+  });
 });

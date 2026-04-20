@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
@@ -153,6 +153,90 @@ describe('useCanvasKeyboard', () => {
     dispatchKeyboard({ key: 'Delete' });
 
     expect(deleteNodes).not.toHaveBeenCalled();
+  });
+
+  it('selects all nodes and toggles the create menu from shortcuts', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: false,
+        },
+        {
+          id: 'node-2',
+          type: 'folder',
+          position: { x: 10, y: 10 },
+          data: {},
+          selected: false,
+        },
+      ],
+      createMenuOpen: false,
+    });
+
+    render(<TestComponent />);
+
+    dispatchKeyboard({ key: 'a', metaKey: true, cancelable: true });
+    expect(useCanvasStore.getState().nodes.every((node) => node.selected)).toBe(
+      true
+    );
+
+    dispatchKeyboard({ key: 'n', metaKey: true, cancelable: true });
+    expect(useCanvasStore.getState().createMenuOpen).toBe(true);
+  });
+
+  it('handles escape and enter for focused cards and folders', () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 100,
+      toJSON: () => ({}),
+    } as DOMRect;
+
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: { title: 'Folder' },
+          selected: true,
+        },
+      ],
+      focusedNode: { id: 'focused-card', data: {}, rect },
+    });
+
+    const element = document.createElement('div');
+    vi.spyOn(document, 'querySelector').mockReturnValue(element);
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(rect);
+
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'Escape' });
+    });
+    expect(useCanvasStore.getState().focusedNode).toBeNull();
+
+    act(() => {
+      dispatchKeyboard({ key: 'Enter' });
+    });
+    expect(useCanvasStore.getState().focusedFolder).toEqual({
+      id: 'folder-1',
+      data: { title: 'Folder' },
+      rect,
+    });
+
+    act(() => {
+      dispatchKeyboard({ key: 'Escape' });
+    });
+    expect(useCanvasStore.getState().focusedFolder).toBeNull();
   });
 
   it('cleans up the keydown listener on unmount', () => {

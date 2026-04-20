@@ -22,9 +22,13 @@ vi.mock('@/lib/rpc', () => ({
   rpcOpenSettings: rpcMocks.rpcOpenSettings,
 }));
 
-vi.mock('../../../src/paraglide/runtime.js', () => ({
-  setLocale: setLocaleMock,
-}));
+vi.mock(
+  '../../paraglide/runtime.js',
+  () => ({
+    setLocale: setLocaleMock,
+  }),
+  { virtual: true }
+);
 
 vi.mock('@tanstack/react-router', () => ({
   Outlet: () => <div>Outlet content</div>,
@@ -127,6 +131,19 @@ describe('__root route', () => {
     expect(
       screen.getByRole('button', { name: 'Settings' })
     ).toBeInTheDocument();
+  });
+
+  it('renders the titlebar with a blur treatment', async () => {
+    const RootDocument = await loadRootDocument();
+    render(<RootDocument />);
+
+    const titlebar = screen.getByRole('button', {
+      name: 'Settings',
+    }).parentElement;
+
+    expect(titlebar).not.toBeNull();
+    expect(titlebar?.className).toContain('backdrop-blur-md');
+    expect(titlebar?.className).toContain('bg-stone-50/55');
   });
 
   it('removes the event listener on unmount', async () => {

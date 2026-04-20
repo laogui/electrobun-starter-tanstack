@@ -51,7 +51,7 @@ function RootDocument() {
   return (
     <>
       {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
-      <div className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center justify-end gap-2 border-black/5 border-b bg-transparent px-3 dark:border-white/5">
+      <div className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center justify-end gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45">
         <div className="flex-1" />
         <button
           aria-label="Settings"

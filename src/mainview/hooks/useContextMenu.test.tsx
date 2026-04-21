@@ -597,7 +597,7 @@ describe('useContextMenu', () => {
     });
 
     expect(storeState.clipboard[0]).toMatchObject({
-      id: 'copied-id',
+      id: 'card-1',
       data: { title: 'Card 1', content: '', color: '#FFFFFF' },
     });
     expect(storeState.clipboard[0]).not.toHaveProperty('isHidden');

@@ -149,6 +149,13 @@ export function useNodeDrag() {
       // approach and enter them without pushing them away.
       setNodes((nds) => {
         const exemptIds = new Set<string>();
+        // Collect all selected (dragging) node IDs
+        const draggingIds = new Set(
+          nds.filter((n) => n.selected).map((n) => n.id)
+        );
+        if (!draggingIds.has(node.id)) {
+          draggingIds.add(node.id);
+        }
 
         // Content nodes can enter any group or folder
         if (isContentNode(node)) {
@@ -168,14 +175,18 @@ export function useNodeDrag() {
         }
         // Groups can't enter anything — no exemptions
 
-        // Node's own parent (if any) should not be pushed
-        if (node.parentId) {
-          exemptIds.add(node.parentId);
+        // Parents of any dragging node should not be pushed
+        for (const id of draggingIds) {
+          const dragging = nds.find((n) => n.id === id);
+          if (dragging?.parentId) {
+            exemptIds.add(dragging.parentId);
+          }
         }
 
         return applyRepulsion({
           nodes: nds,
           activeNodeId: node.id,
+          activeNodeIds: draggingIds,
           pushedOrigins: pushedOriginsRef.current,
           exemptIds,
           gap: 20,

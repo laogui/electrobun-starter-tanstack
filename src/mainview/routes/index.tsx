@@ -7,12 +7,13 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
 } from '@xyflow/react';
 import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
@@ -96,35 +97,6 @@ function CanvasComponent() {
   }, [hydrate, hydrated, activeViewId]);
 
   useCanvasKeyboard();
-
-  const [spacePressed, setSpacePressed] = useState(false);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !e.repeat) {
-        const el = document.activeElement;
-        const isEditing =
-          el instanceof HTMLInputElement ||
-          el instanceof HTMLTextAreaElement ||
-          (el as HTMLElement)?.isContentEditable;
-        if (!isEditing) {
-          e.preventDefault();
-          setSpacePressed(true);
-        }
-      }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        setSpacePressed(false);
-      }
-    };
-    globalThis.addEventListener('keydown', onKeyDown);
-    globalThis.addEventListener('keyup', onKeyUp);
-    return () => {
-      globalThis.removeEventListener('keydown', onKeyDown);
-      globalThis.removeEventListener('keyup', onKeyUp);
-    };
-  }, []);
 
   const onEdgesChange = useCallback(
     (changes: any) => {
@@ -219,10 +191,11 @@ function CanvasComponent() {
         onNodeDragStop={onNodeDragStop}
         onNodesChange={onNodesChange}
         onPaneContextMenu={onPaneContextMenu}
-        panOnDrag={spacePressed}
+        panOnDrag={false}
         panOnScroll={true}
         proOptions={{ hideAttribution: true }}
-        selectionOnDrag={!spacePressed}
+        selectionMode={SelectionMode.Partial}
+        selectionOnDrag={true}
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >

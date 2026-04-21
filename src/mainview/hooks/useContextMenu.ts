@@ -1,5 +1,4 @@
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
-import { nanoid } from 'nanoid';
 import { useCallback, useState } from 'react';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
@@ -142,11 +141,19 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         case 'copy': {
           if (nodeId) {
             const { nodes } = useCanvasStore.getState();
-            const node = nodes.find((n) => n.id === nodeId);
-            if (node) {
-              const { isHidden, isDropTarget, ...cleanData } = node.data as any;
+            const selected = nodes.filter((n) => n.selected);
+            // If the right-clicked node is part of a multi-selection, copy all selected
+            const targetNodes =
+              selected.length > 1 && selected.some((n) => n.id === nodeId)
+                ? selected
+                : nodes.filter((n) => n.id === nodeId);
+            if (targetNodes.length > 0) {
               useCanvasStore.setState({
-                clipboard: [{ ...node, id: nanoid(), data: cleanData }],
+                clipboard: targetNodes.map((n) => {
+                  const { isHidden, isDropTarget, ...cleanData } =
+                    n.data as any;
+                  return { ...n, data: cleanData };
+                }),
               });
             }
           }
@@ -154,7 +161,13 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         }
         case 'delete': {
           if (nodeId) {
-            deleteNodes([nodeId]);
+            const { nodes } = useCanvasStore.getState();
+            const selected = nodes.filter((n) => n.selected);
+            const ids =
+              selected.length > 1 && selected.some((n) => n.id === nodeId)
+                ? selected.map((n) => n.id)
+                : [nodeId];
+            deleteNodes(ids);
           }
           break;
         }

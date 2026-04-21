@@ -21,6 +21,42 @@ vi.mock('@/components/canvas/nodes/ImageNode', () => ({
   ),
 }));
 
+vi.mock('@/components/editor/TiptapEditor', () => ({
+  default: ({
+    markdown,
+    onMarkdownChange,
+    onTitleChange,
+    title,
+  }: {
+    markdown?: string;
+    onMarkdownChange: (value: string) => void;
+    onTitleChange: (value: string) => void;
+    title?: string;
+  }) => (
+    <div>
+      <div>
+        editor:{title ?? 'untitled'}:{markdown ?? ''}
+      </div>
+      <button
+        onClick={() => {
+          onTitleChange('Updated Title');
+        }}
+        type="button"
+      >
+        mutate title
+      </button>
+      <button
+        onClick={() => {
+          onMarkdownChange('Updated body');
+        }}
+        type="button"
+      >
+        mutate body
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('@/components/canvas/nodes/CardNode', () => ({
   CardContent: ({
     data,
@@ -65,7 +101,7 @@ describe('focusedView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders text cards and propagates edits to store', () => {
+  it('renders text cards with TiptapEditor and propagates edits to store', async () => {
     const onClose = vi.fn();
 
     render(
@@ -85,13 +121,23 @@ describe('focusedView', () => {
       />
     );
 
-    expect(screen.getByText('card:Alpha:Body')).toBeInTheDocument();
+    expect(await screen.findByText('editor:Alpha:Body')).toBeInTheDocument();
     expect(document.body.style.overflow).toBe('hidden');
 
-    fireEvent.click(screen.getByRole('button', { name: 'mutate card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'mutate title' }));
 
     expect(updateNodeDataMock).toHaveBeenCalledWith('card-1', {
       title: 'Updated Title',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'mutate body' }));
+
+    expect(updateNodeDataMock).toHaveBeenCalledWith('card-1', {
+      content: 'Updated body',
+      previewBlocks: undefined,
+      previewExcerpt: undefined,
+      previewHtml: undefined,
+      previewVersion: undefined,
     });
   });
 

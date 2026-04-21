@@ -1,11 +1,36 @@
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { FLAGS } from '@/lib/flags';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
+
+const TiptapEditor = lazy(() => import('@/components/editor/TiptapEditor'));
+
+const FocusedSkeleton = ({ color }: { color?: unknown }) => {
+  const colorValue = typeof color === 'string' ? color : '#FFFFFF';
+  return (
+    <div
+      className="flex h-full flex-col gap-6 p-8"
+      style={colorToStyle(colorValue)}
+    >
+      <div
+        className={`h-11 w-2/3 animate-pulse rounded-md ${
+          isColorDark(colorValue) ? 'bg-white/20' : 'bg-black/10'
+        }`}
+      />
+      <div
+        className={`h-full animate-pulse rounded-lg ${
+          isColorDark(colorValue) ? 'bg-white/10' : 'bg-black/5'
+        }`}
+      />
+    </div>
+  );
+};
 
 export const FocusedView = ({ node, onClose }: any) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -106,6 +131,31 @@ export const FocusedView = ({ node, onClose }: any) => {
         <div className="h-full">
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
+          ) : (node.data.type === 'text' || node.data.type == null) &&
+            FLAGS.tiptapEditor ? (
+            <Suspense fallback={<FocusedSkeleton color={node.data.color} />}>
+              <TiptapEditor
+                color={node.data.color}
+                data={node.data}
+                key={node.id}
+                markdown={node.data.content}
+                nodeId={node.id}
+                noteId={node.data.noteId}
+                onMarkdownChange={(markdown) => {
+                  updateNodeData(node.id, {
+                    content: markdown,
+                    previewBlocks: undefined,
+                    previewExcerpt: undefined,
+                    previewHtml: undefined,
+                    previewVersion: undefined,
+                  });
+                }}
+                onTitleChange={(title) => {
+                  updateNodeData(node.id, { title });
+                }}
+                title={node.data.title}
+              />
+            </Suspense>
           ) : (
             <CardContent
               data={node.data}

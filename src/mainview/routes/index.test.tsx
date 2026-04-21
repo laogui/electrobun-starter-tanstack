@@ -64,7 +64,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_card_inside: () => 'New child',
   menu_edit_label: () => 'Edit label',
   menu_toggle_animation: () => 'Toggle animation',
-  menu_toggle_path_type: () => 'Toggle path type',
+  menu_toggle_straight: () => 'Toggle Straight',
+  menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
 }));
 vi.mock('../../paraglide/messages.js', () => ({
@@ -95,7 +96,8 @@ vi.mock('../../paraglide/messages.js', () => ({
   menu_new_card_inside: () => 'New child',
   menu_edit_label: () => 'Edit label',
   menu_toggle_animation: () => 'Toggle animation',
-  menu_toggle_path_type: () => 'Toggle path type',
+  menu_toggle_straight: () => 'Toggle Straight',
+  menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
 }));
 
@@ -366,7 +368,7 @@ describe('routes/index', () => {
     errorSpy.mockRestore();
   });
 
-  it('does not seed initial nodes when rpc is unavailable', async () => {
+  it('hydrates initial nodes in-memory when rpc is unavailable (browser/dev fallback)', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(false);
     const module = await import('./index');
@@ -377,10 +379,10 @@ describe('routes/index', () => {
 
     await waitFor(() => {
       expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
     });
 
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
-    expect(useCanvasStore.getState().nodes).toEqual([]);
     expect(screen.queryByText('Loaded Card')).toBeNull();
   });
 

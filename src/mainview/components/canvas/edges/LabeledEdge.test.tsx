@@ -135,6 +135,10 @@ describe('LabeledEdge', () => {
       />
     );
 
+    expect(screen.getByTestId('base-edge')).toHaveAttribute(
+      'data-path',
+      'bezier-path'
+    );
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
     expect(setEditingEdgeIdMock).toHaveBeenCalledWith(null);
     expect(updateEdgeDataMock).not.toHaveBeenCalled();

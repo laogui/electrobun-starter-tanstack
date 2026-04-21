@@ -195,7 +195,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
             const edge = edges.find((e) => e.id === nodeId);
             if (edge) {
               saveSnapshot();
-              const current = (edge.data as any)?.pathType ?? 'smoothstep';
+              const current = (edge.data as any)?.pathType ?? 'bezier';
               updateEdgeData(nodeId, {
                 pathType: current === 'smoothstep' ? 'bezier' : 'smoothstep',
               });

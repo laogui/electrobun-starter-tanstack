@@ -1,4 +1,4 @@
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 
 export const initialNodes: Node[] = [
   {
@@ -228,3 +228,5 @@ export const initialNodes: Node[] = [
     style: { height: 350, width: 350 },
   },
 ];
+
+export const initialEdges: Edge[] = [];

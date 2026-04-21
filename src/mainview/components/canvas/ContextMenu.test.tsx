@@ -6,6 +6,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
 const COPY_RE = /copy/i;
+const edgeStoreState = {
+  edges: [
+    {
+      id: 'edge-1',
+      source: 'node-1',
+      target: 'node-2',
+      data: { pathType: 'bezier' },
+    },
+  ],
+};
+
+vi.mock('@/store/canvasStore', () => ({
+  useCanvasStore: (selector: (state: typeof edgeStoreState) => unknown) =>
+    selector(edgeStoreState),
+}));
 
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_note: () => 'New note',
@@ -25,7 +40,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_card_inside: () => 'New child',
   menu_edit_label: () => 'Edit label',
   menu_toggle_animation: () => 'Toggle animation',
-  menu_toggle_path_type: () => 'Toggle path type',
+  menu_toggle_straight: () => 'Toggle Straight',
+  menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
 }));
 
@@ -85,5 +101,39 @@ describe('canvasContextMenu', () => {
     fireEvent.pointerDown(document.body);
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the edge toggle label for the current path type', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'edge', edgeId: 'edge-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Toggle Straight' })
+    ).toBeInTheDocument();
+
+    edgeStoreState.edges[0] = {
+      ...edgeStoreState.edges[0],
+      data: { pathType: 'smoothstep' },
+    };
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'edge', edgeId: 'edge-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Toggle Curved' })
+    ).toBeInTheDocument();
   });
 });

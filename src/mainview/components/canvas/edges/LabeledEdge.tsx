@@ -23,7 +23,7 @@ function LabeledEdgeComponent({
 }: EdgeProps) {
   const label = (data?.label as string) ?? '';
   const animated = (data?.animated as boolean) ?? false;
-  const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'smoothstep';
+  const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'bezier';
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
@@ -101,6 +101,7 @@ function LabeledEdgeComponent({
           className="nodrag nopan pointer-events-auto absolute"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            zIndex: 1,
           }}
         >
           {isEditing ? (
@@ -118,7 +119,7 @@ function LabeledEdgeComponent({
             />
           ) : label ? (
             <button
-              className="cursor-default rounded-full bg-white/90 px-2 py-0.5 font-medium text-stone-600 text-xs shadow-sm ring-1 ring-stone-200/60 backdrop-blur-sm transition-colors hover:bg-stone-100 dark:bg-stone-800/90 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700"
+              className="cursor-default rounded-full bg-white px-2 py-0.5 font-medium text-stone-600 text-xs shadow-sm ring-1 ring-stone-200/60 transition-colors hover:bg-stone-100 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700"
               onDoubleClick={handleLabelDoubleClick}
               style={{ maxWidth: 140 }}
               type="button"

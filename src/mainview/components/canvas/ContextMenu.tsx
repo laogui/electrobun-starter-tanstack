@@ -22,6 +22,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
 
@@ -138,7 +139,9 @@ const getImageItems = (): MenuItem[] => [
   },
 ];
 
-const getEdgeItems = (): MenuItem[] => [
+type EdgePathType = 'smoothstep' | 'bezier';
+
+const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
   { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
   {
     id: 'toggle-edge-animated',
@@ -147,7 +150,8 @@ const getEdgeItems = (): MenuItem[] => [
   },
   {
     id: 'toggle-edge-path-type',
-    label: m.menu_toggle_path_type(),
+    label:
+      pathType === 'bezier' ? m.menu_toggle_straight() : m.menu_toggle_curved(),
     icon: Spline,
   },
   {
@@ -170,6 +174,16 @@ export function CanvasContextMenu({
   onAction: (action: string, nodeId?: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const edgePathType = useCanvasStore((state) => {
+    if (menu?.target !== 'edge' || !menu.edgeId) {
+      return 'bezier';
+    }
+
+    const edge = state.edges.find((item) => item.id === menu.edgeId);
+    const pathType = (edge?.data as { pathType?: unknown } | undefined)
+      ?.pathType;
+    return pathType === 'smoothstep' ? 'smoothstep' : 'bezier';
+  });
 
   useEffect(() => {
     if (!menu) {
@@ -195,7 +209,7 @@ export function CanvasContextMenu({
 
   const items =
     menu?.target === 'edge'
-      ? getEdgeItems()
+      ? getEdgeItems(edgePathType)
       : menu?.target === 'folder'
         ? getFolderItems()
         : menu?.target === 'group'

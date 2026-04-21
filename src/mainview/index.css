@@ -163,15 +163,15 @@ body.resizing-nwse * {
   .react-flow__node-sticky
 )
 > div {
-  outline: 2px solid #0096ff;
-  outline-offset: 2px;
+  outline: 2px solid #ffffff;
+  outline-offset: 0px;
   border-radius: 24px;
 }
 
 /* Selected sticky node styling */
 .react-flow__node-sticky.selected > div {
-  outline: 2px solid #0096ff;
-  outline-offset: 2px;
+  outline: 2px solid #ffffff;
+  outline-offset: 0px;
   border-radius: 12px;
 }
 

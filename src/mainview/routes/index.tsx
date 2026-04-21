@@ -12,14 +12,14 @@ import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
-import { initialNodes } from '@/data/initialNodes';
+import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -80,10 +80,14 @@ function CanvasComponent() {
         if (data && data.nodes.length > 0) {
           hydrate(data.nodes, data.edges);
         } else if (await isRpcAvailable()) {
-          // First run: seed workspace with initialNodes
-          const sanitized = sanitizeForPersistence(initialNodes, []);
+          // First run: seed workspace with initialNodes + initialEdges
+          const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          hydrate(initialNodes, []);
+          hydrate(initialNodes, initialEdges);
+        } else {
+          // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
+          // the initial data so the canvas is usable for debugging without persistence.
+          hydrate(initialNodes, initialEdges);
         }
       })
       .catch((error) => {
@@ -92,6 +96,35 @@ function CanvasComponent() {
   }, [hydrate, hydrated, activeViewId]);
 
   useCanvasKeyboard();
+
+  const [spacePressed, setSpacePressed] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        const el = document.activeElement;
+        const isEditing =
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLTextAreaElement ||
+          (el as HTMLElement)?.isContentEditable;
+        if (!isEditing) {
+          e.preventDefault();
+          setSpacePressed(true);
+        }
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setSpacePressed(false);
+      }
+    };
+    globalThis.addEventListener('keydown', onKeyDown);
+    globalThis.addEventListener('keyup', onKeyUp);
+    return () => {
+      globalThis.removeEventListener('keydown', onKeyDown);
+      globalThis.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
 
   const onEdgesChange = useCallback(
     (changes: any) => {
@@ -139,8 +172,8 @@ function CanvasComponent() {
 
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
-  const canvasBackground = isDarkTheme ? '#141414' : '#f5f5f4';
-  const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.14)' : '#d6d3d1';
+  const canvasBackground = isDarkTheme ? '#141414' : '#D7D9D8';
+  const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.14)' : '#8f9491';
   const miniMapBackground = isDarkTheme
     ? 'rgba(28, 28, 28, 0.92)'
     : 'rgba(255, 255, 255, 0.92)';
@@ -153,14 +186,14 @@ function CanvasComponent() {
 
   if (!hydrated) {
     return (
-      <div className="h-screen w-screen bg-stone-50 dark:bg-[#141414]">
+      <div className="h-screen w-screen bg-[#D7D9D8] dark:bg-[#141414]">
         <Loader />
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-stone-50 font-sans dark:bg-[#141414]">
+    <div className="h-screen w-screen overflow-hidden bg-[#D7D9D8] font-sans dark:bg-[#141414]">
       <ReactFlow
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
@@ -186,9 +219,10 @@ function CanvasComponent() {
         onNodeDragStop={onNodeDragStop}
         onNodesChange={onNodesChange}
         onPaneContextMenu={onPaneContextMenu}
+        panOnDrag={spacePressed}
         panOnScroll={true}
         proOptions={{ hideAttribution: true }}
-        selectionOnDrag={false}
+        selectionOnDrag={!spacePressed}
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >

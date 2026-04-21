@@ -269,7 +269,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
     get().saveSnapshot();
     set((s) => ({
-      edges: addEdge({ ...connection, type: 'labeledEdge' }, s.edges),
+      edges: addEdge(
+        {
+          ...connection,
+          type: 'labeledEdge',
+          data: { ...(connection.data ?? {}), pathType: 'bezier' },
+        },
+        s.edges
+      ),
     }));
   },
 

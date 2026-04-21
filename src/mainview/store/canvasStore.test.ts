@@ -189,6 +189,7 @@ describe('canvasStore — edge operations', () => {
     expect(edge.source).toBe('a');
     expect(edge.target).toBe('b');
     expect(edge.type).toBe('labeledEdge');
+    expect(edge.data).toMatchObject({ pathType: 'bezier' });
   });
 
   it('setEdges replaces the edge array', () => {

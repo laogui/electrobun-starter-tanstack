@@ -42,6 +42,8 @@
   "menu_toggle_straight": "Toggle Straight",
   "menu_toggle_curved": "Toggle Curved",
   "menu_delete_edge": "Delete Connection",
+  "menu_remove_arrow": "Remove Arrow",
+  "menu_add_arrow": "Add Arrow",
   "view_new_canvas": "New Canvas",
   "view_default_name": "Default Canvas",
   "toast_no_placement_slot": "No space available to place the new node"

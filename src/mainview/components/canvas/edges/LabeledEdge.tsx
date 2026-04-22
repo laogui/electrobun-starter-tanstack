@@ -20,6 +20,8 @@ function LabeledEdgeComponent({
   targetPosition,
   data,
   selected,
+  markerEnd,
+  markerStart,
 }: EdgeProps) {
   const label = (data?.label as string) ?? '';
   const animated = (data?.animated as boolean) ?? false;
@@ -90,6 +92,8 @@ function LabeledEdgeComponent({
           selected && 'stroke-blue-500!'
         )}
         id={id}
+        markerEnd={markerEnd}
+        markerStart={markerStart}
         path={edgePath}
         style={{
           strokeWidth: selected ? 2.5 : 1.5,

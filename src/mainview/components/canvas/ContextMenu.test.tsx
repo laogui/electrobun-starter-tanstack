@@ -43,6 +43,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_toggle_straight: () => 'Toggle Straight',
   menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
+  menu_remove_arrow: () => 'Remove Arrow',
+  menu_add_arrow: () => 'Add Arrow',
 }));
 
 describe('canvasContextMenu', () => {
@@ -134,6 +136,46 @@ describe('canvasContextMenu', () => {
 
     expect(
       screen.getByRole('button', { name: 'Toggle Curved' })
+    ).toBeInTheDocument();
+  });
+
+  it('shows arrow toggle label based on edge markerEnd', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    edgeStoreState.edges[0] = {
+      ...edgeStoreState.edges[0],
+      data: { pathType: 'bezier' },
+      markerEnd: undefined,
+    };
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'edge', edgeId: 'edge-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Add Arrow' })
+    ).toBeInTheDocument();
+
+    edgeStoreState.edges[0] = {
+      ...edgeStoreState.edges[0],
+      markerEnd: { type: 'arrowclosed' } as never,
+    };
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'edge', edgeId: 'edge-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Remove Arrow' })
     ).toBeInTheDocument();
   });
 });

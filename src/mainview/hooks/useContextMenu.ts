@@ -30,6 +30,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const deleteEdge = useCanvasStore((s) => s.deleteEdge);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const toggleEdgeArrow = useCanvasStore((s) => s.toggleEdgeArrow);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
@@ -222,6 +223,12 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           }
           break;
         }
+        case 'toggle-edge-arrow': {
+          if (nodeId) {
+            toggleEdgeArrow(nodeId);
+          }
+          break;
+        }
         default: {
           break;
         }
@@ -235,6 +242,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       deleteNodes,
       deleteEdge,
       updateEdgeData,
+      toggleEdgeArrow,
       setEditingEdgeId,
       changeNodeColor,
       addFolderChild,

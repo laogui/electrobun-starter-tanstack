@@ -6,7 +6,7 @@ import type {
   NodeChange,
   ReactFlowInstance,
 } from '@xyflow/react';
-import { addEdge, applyEdgeChanges } from '@xyflow/react';
+import { addEdge, applyEdgeChanges, MarkerType } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { create } from 'zustand';
@@ -197,6 +197,7 @@ export interface CanvasState {
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
+  toggleEdgeArrow: (edgeId: string) => void;
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
@@ -273,6 +274,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         {
           ...connection,
           type: 'labeledEdge',
+          markerEnd: { type: MarkerType.ArrowClosed },
           data: { ...(connection.data ?? {}), pathType: 'bezier' },
         },
         s.edges
@@ -289,6 +291,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       edges: s.edges.map((e) =>
         e.id === edgeId ? { ...e, data: { ...e.data, ...updates } } : e
+      ),
+    }));
+  },
+
+  toggleEdgeArrow: (edgeId) => {
+    get().saveSnapshot();
+    set((s) => ({
+      edges: s.edges.map((e) =>
+        e.id === edgeId
+          ? {
+              ...e,
+              markerEnd: e.markerEnd
+                ? undefined
+                : { type: MarkerType.ArrowClosed },
+            }
+          : e
       ),
     }));
   },

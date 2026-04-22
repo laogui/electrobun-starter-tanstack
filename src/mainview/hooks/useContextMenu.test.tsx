@@ -86,6 +86,7 @@ const storeActions = {
   deleteNodes: vi.fn(),
   deleteEdge: vi.fn(),
   updateEdgeData: vi.fn(),
+  toggleEdgeArrow: vi.fn(),
   setEditingEdgeId: vi.fn((id: string) => {
     storeState.editingEdgeId = id;
   }),
@@ -432,6 +433,14 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          handleContextMenuAction('toggle-edge-arrow', 'edge-1');
+        }}
+        type="button"
+      >
+        toggle-arrow
+      </button>
+      <button
+        onClick={() => {
           handleContextMenuAction('focus', 'card-1');
         }}
         type="button"
@@ -540,6 +549,7 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'toggle-animated' }));
     fireEvent.click(screen.getByRole('button', { name: 'toggle-path' }));
     fireEvent.click(screen.getByRole('button', { name: 'delete-edge' }));
+    fireEvent.click(screen.getByRole('button', { name: 'toggle-arrow' }));
 
     expect(storeActions.pasteClipboard).toHaveBeenCalled();
     expect(zoomTo).toHaveBeenCalledWith(1, { duration: 300 });
@@ -554,6 +564,7 @@ describe('useContextMenu', () => {
       pathType: 'bezier',
     });
     expect(storeActions.deleteEdge).toHaveBeenCalledWith('edge-1');
+    expect(storeActions.toggleEdgeArrow).toHaveBeenCalledWith('edge-1');
   });
 
   it('copies nodes and focuses/open folders when rect is available', () => {

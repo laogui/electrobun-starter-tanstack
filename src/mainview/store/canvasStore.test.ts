@@ -190,6 +190,7 @@ describe('canvasStore — edge operations', () => {
     expect(edge.target).toBe('b');
     expect(edge.type).toBe('labeledEdge');
     expect(edge.data).toMatchObject({ pathType: 'bezier' });
+    expect(edge.markerEnd).toMatchObject({ type: 'arrowclosed' });
   });
 
   it('setEdges replaces the edge array', () => {
@@ -223,6 +224,20 @@ describe('canvasStore — edge operations', () => {
     const edge = useCanvasStore.getState().edges[0]!;
 
     expect(edge.data?.label).toBe('new');
+  });
+
+  it('toggleEdgeArrow adds markerEnd when absent and removes when present', () => {
+    useCanvasStore.setState({
+      edges: [{ id: 'e1', source: 'a', target: 'b' }],
+    });
+
+    useCanvasStore.getState().toggleEdgeArrow('e1');
+    expect(useCanvasStore.getState().edges[0]?.markerEnd).toMatchObject({
+      type: 'arrowclosed',
+    });
+
+    useCanvasStore.getState().toggleEdgeArrow('e1');
+    expect(useCanvasStore.getState().edges[0]?.markerEnd).toBeUndefined();
   });
 });
 

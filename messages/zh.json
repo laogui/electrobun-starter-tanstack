@@ -42,6 +42,8 @@
   "menu_toggle_straight": "切换为直角",
   "menu_toggle_curved": "切换为曲线",
   "menu_delete_edge": "删除连线",
+  "menu_remove_arrow": "取消箭头",
+  "menu_add_arrow": "添加箭头",
   "view_new_canvas": "新建画布",
   "view_default_name": "默认画布",
   "toast_no_placement_slot": "附近没有可放置新节点的空位"

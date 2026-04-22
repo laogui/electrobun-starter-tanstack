@@ -8,6 +8,7 @@ import {
   ImageIcon,
   ListChecks,
   Maximize2,
+  MoveRight,
   NotebookPen,
   Palette,
   PenLine,
@@ -141,7 +142,10 @@ const getImageItems = (): MenuItem[] => [
 
 type EdgePathType = 'smoothstep' | 'bezier';
 
-const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
+const getEdgeItems = (
+  pathType: EdgePathType,
+  hasArrow: boolean
+): MenuItem[] => [
   { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
   {
     id: 'toggle-edge-animated',
@@ -153,6 +157,11 @@ const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
     label:
       pathType === 'bezier' ? m.menu_toggle_straight() : m.menu_toggle_curved(),
     icon: Spline,
+  },
+  {
+    id: 'toggle-edge-arrow',
+    label: hasArrow ? m.menu_remove_arrow() : m.menu_add_arrow(),
+    icon: MoveRight,
   },
   {
     id: 'delete-edge',
@@ -185,6 +194,14 @@ export function CanvasContextMenu({
     return pathType === 'smoothstep' ? 'smoothstep' : 'bezier';
   });
 
+  const edgeHasArrow = useCanvasStore((state) => {
+    if (menu?.target !== 'edge' || !menu.edgeId) {
+      return false;
+    }
+    const edge = state.edges.find((item) => item.id === menu.edgeId);
+    return !!edge?.markerEnd;
+  });
+
   useEffect(() => {
     if (!menu) {
       return;
@@ -209,7 +226,7 @@ export function CanvasContextMenu({
 
   const items =
     menu?.target === 'edge'
-      ? getEdgeItems(edgePathType)
+      ? getEdgeItems(edgePathType, edgeHasArrow)
       : menu?.target === 'folder'
         ? getFolderItems()
         : menu?.target === 'group'

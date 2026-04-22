@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import { Position } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import LabeledEdge from './LabeledEdge';
@@ -15,22 +16,26 @@ const useCanvasStoreMock = vi.fn((selector) =>
   })
 );
 
-vi.mock('@xyflow/react', () => ({
-  BaseEdge: ({ className, path, style }: Record<string, unknown>) => (
-    <div
-      data-path={path}
-      data-testid="base-edge"
-      style={style as React.CSSProperties}
-    >
-      {String(className)}
-    </div>
-  ),
-  EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  getBezierPath: () => ['bezier-path', 10, 20],
-  getSmoothStepPath: () => ['smooth-path', 30, 40],
-}));
+vi.mock('@xyflow/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@xyflow/react')>();
+  return {
+    ...actual,
+    BaseEdge: ({ className, path, style }: Record<string, unknown>) => (
+      <div
+        data-path={path}
+        data-testid="base-edge"
+        style={style as React.CSSProperties}
+      >
+        {String(className)}
+      </div>
+    ),
+    EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    getBezierPath: () => ['bezier-path', 10, 20],
+    getSmoothStepPath: () => ['smooth-path', 30, 40],
+  };
+});
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (selector: (state: unknown) => unknown) =>
@@ -52,10 +57,12 @@ describe('LabeledEdge', () => {
         data={{ animated: true, label: 'Edge label', pathType: 'smoothstep' }}
         id="edge-1"
         selected={true}
-        sourcePosition="right"
+        source="node-1"
+        sourcePosition={Position.Right}
         sourceX={0}
         sourceY={0}
-        targetPosition="left"
+        target="node-2"
+        targetPosition={Position.Left}
         targetX={100}
         targetY={100}
       />
@@ -83,10 +90,12 @@ describe('LabeledEdge', () => {
         data={{ label: ' Current ', pathType: 'bezier' }}
         id="edge-2"
         selected={false}
-        sourcePosition="right"
+        source="node-1"
+        sourcePosition={Position.Right}
         sourceX={0}
         sourceY={0}
-        targetPosition="left"
+        target="node-2"
+        targetPosition={Position.Left}
         targetX={100}
         targetY={100}
       />
@@ -126,10 +135,12 @@ describe('LabeledEdge', () => {
         data={{ label: 'Draft' }}
         id="edge-3"
         selected={false}
-        sourcePosition="right"
+        source="node-1"
+        sourcePosition={Position.Right}
         sourceX={0}
         sourceY={0}
-        targetPosition="left"
+        target="node-2"
+        targetPosition={Position.Left}
         targetX={100}
         targetY={100}
       />

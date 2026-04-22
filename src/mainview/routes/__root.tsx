@@ -50,6 +50,32 @@ function RootDocument() {
 
   return (
     <>
+      {/* Custom SVG marker definitions for edge arrows */}
+      <svg
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          width: 0,
+          height: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <defs>
+          {/* Compact arrow that sits flush against the node edge */}
+          <marker
+            id="compact-arrow"
+            markerHeight="12"
+            markerWidth="12"
+            orient="auto"
+            refX="-5"
+            refY="6"
+            viewBox="0 0 12 12"
+          >
+            <path d="M0,0 L0,12 L9,6 Z" fill="currentColor" />
+          </marker>
+        </defs>
+      </svg>
+
       {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
       <div
         className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center justify-end gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"

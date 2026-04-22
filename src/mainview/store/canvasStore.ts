@@ -271,9 +271,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       edges: addEdge(
         {
-          ...connection,
+          id: `edge-${nanoid(8)}`,
+          source: connection.source,
+          target: connection.target,
+          sourceHandle: connection.sourceHandle,
+          targetHandle: connection.targetHandle,
           type: 'labeledEdge',
-          data: { ...(connection.data ?? {}), pathType: 'bezier' },
+          data: { pathType: 'bezier' },
+          markerEnd: 'compact-arrow',
         },
         s.edges
       ),

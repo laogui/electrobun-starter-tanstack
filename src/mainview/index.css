@@ -275,13 +275,26 @@ body.resizing-nwse * {
 /* ── Edge styling ── */
 .react-flow__edge-path {
   fill: none;
-  stroke: hsl(var(--connection));
+  stroke: var(--xy-edge-stroke, #b1b1b7);
   stroke-width: 1.5;
 }
 
+/* Arrowhead marker styling - uses the same color as the edge */
+.react-flow__marker-arrowhead polyline,
+#compact-arrow path {
+  fill: var(--xy-edge-stroke, #b1b1b7);
+  stroke: var(--xy-edge-stroke, #b1b1b7);
+}
+
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: hsl(var(--connection-active));
+  stroke: var(--xy-edge-selected, #1a7f74);
   stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__marker-arrowhead polyline,
+.react-flow__edge.selected #compact-arrow path {
+  fill: var(--xy-edge-selected, #1a7f74);
+  stroke: var(--xy-edge-selected, #1a7f74);
 }
 
 /* Connection line while dragging */

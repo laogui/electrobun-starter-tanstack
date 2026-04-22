@@ -64,8 +64,10 @@ const renderViewSwitcher = ({
   setCreateMenuOpen = vi.fn(),
 }: {
   createMenuOpen?: boolean;
-  onCreateNode?: ReturnType<typeof vi.fn>;
-  setCreateMenuOpen?: ReturnType<typeof vi.fn>;
+  onCreateNode?: (
+    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
+  ) => void;
+  setCreateMenuOpen?: (v: boolean) => void;
 } = {}) =>
   render(
     <ViewSwitcher

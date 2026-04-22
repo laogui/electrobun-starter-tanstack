@@ -22,13 +22,9 @@ vi.mock('@/lib/rpc', () => ({
   rpcOpenSettings: rpcMocks.rpcOpenSettings,
 }));
 
-vi.mock(
-  '../../paraglide/runtime.js',
-  () => ({
-    setLocale: setLocaleMock,
-  }),
-  { virtual: true }
-);
+vi.mock('../../paraglide/runtime.js', () => ({
+  setLocale: setLocaleMock,
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Outlet: () => <div>Outlet content</div>,

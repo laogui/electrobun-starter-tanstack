@@ -120,7 +120,9 @@ describe('canvasContextMenu', () => {
     ).toBeInTheDocument();
 
     edgeStoreState.edges[0] = {
-      ...edgeStoreState.edges[0],
+      id: 'edge-1',
+      source: 'node-1',
+      target: 'node-2',
       data: { pathType: 'smoothstep' },
     };
 

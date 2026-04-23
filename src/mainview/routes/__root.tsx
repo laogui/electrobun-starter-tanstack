@@ -61,17 +61,42 @@ function RootDocument() {
         }}
       >
         <defs>
-          {/* Compact arrow that sits flush against the node edge */}
+          {/* Open chevron arrow — tip aligns exactly with the node edge */}
           <marker
             id="compact-arrow"
-            markerHeight="12"
-            markerWidth="12"
-            orient="auto"
-            refX="-5"
-            refY="6"
-            viewBox="0 0 12 12"
+            markerHeight="8"
+            markerWidth="8"
+            orient="auto-start-reverse"
+            refX="7"
+            refY="4"
+            viewBox="0 0 8 8"
           >
-            <path d="M0,0 L0,12 L9,6 Z" fill="currentColor" />
+            <path
+              d="M1,1 L7,4 L1,7"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.5"
+            />
+          </marker>
+          <marker
+            id="compact-arrow-active"
+            markerHeight="8"
+            markerWidth="8"
+            orient="auto-start-reverse"
+            refX="7"
+            refY="4"
+            viewBox="0 0 8 8"
+          >
+            <path
+              d="M1,1 L7,4 L1,7"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.5"
+            />
           </marker>
         </defs>
       </svg>

@@ -22,6 +22,10 @@ const interactionMocks = vi.hoisted(() => ({
   onCreateNode: vi.fn(),
 }));
 
+const reactFlowMocks = vi.hoisted(() => ({
+  props: vi.fn(),
+}));
+
 vi.mock('@/lib/rpc', () => ({
   isRpcAvailable: rpcMocks.isRpcAvailable,
   loadCanvas: rpcMocks.loadCanvas,
@@ -109,6 +113,7 @@ vi.mock('@xyflow/react', async () => {
       <div data-testid="rf-provider">{children}</div>
     ),
     ReactFlow: ({
+      connectionLineComponent,
       nodes,
       onInit,
       onPaneContextMenu,
@@ -116,6 +121,7 @@ vi.mock('@xyflow/react', async () => {
       children,
     }: {
       children: React.ReactNode;
+      connectionLineComponent?: React.ComponentType;
       nodes: Array<{
         id: string;
         type?: string;
@@ -130,6 +136,7 @@ vi.mock('@xyflow/react', async () => {
         node: { id: string; type?: string; data: Record<string, unknown> }
       ) => void;
     }) => {
+      reactFlowMocks.props({ connectionLineComponent });
       onInit?.({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }) });
       return (
         <div>
@@ -244,6 +251,7 @@ describe('routes/index', () => {
     rpcMocks.rpcListViews.mockReset();
     rpcMocks.rpcRenameView.mockReset();
     interactionMocks.onCreateNode.mockReset();
+    reactFlowMocks.props.mockReset();
 
     rpcMocks.loadCanvas.mockResolvedValue({
       nodes: [
@@ -402,5 +410,21 @@ describe('routes/index', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open focused node' }));
 
     expect(screen.queryByText('Focused loaded-1')).toBeNull();
+  });
+
+  it('registers the custom connection preview line', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(reactFlowMocks.props).toHaveBeenCalled();
+    });
+
+    expect(
+      reactFlowMocks.props.mock.calls.at(-1)?.[0]?.connectionLineComponent
+    ).toBeTypeOf('function');
   });
 });

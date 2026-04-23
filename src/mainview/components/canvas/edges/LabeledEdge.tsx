@@ -18,12 +18,16 @@ function LabeledEdgeComponent({
   targetY,
   sourcePosition,
   targetPosition,
+  markerStart,
+  markerEnd,
   data,
   selected,
 }: EdgeProps) {
   const label = (data?.label as string) ?? '';
   const animated = (data?.animated as boolean) ?? false;
   const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'bezier';
+  const reverseVisualDirection =
+    (data?.reverseVisualDirection as boolean) ?? false;
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
@@ -67,14 +71,23 @@ function LabeledEdgeComponent({
     [id, setEditingEdgeId]
   );
 
-  const pathParams = {
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-  };
+  const pathParams = reverseVisualDirection
+    ? {
+        sourceX: targetX,
+        sourceY: targetY,
+        targetX: sourceX,
+        targetY: sourceY,
+        sourcePosition: targetPosition,
+        targetPosition: sourcePosition,
+      }
+    : {
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        sourcePosition,
+        targetPosition,
+      };
 
   const [edgePath, labelX, labelY] =
     pathType === 'bezier'
@@ -90,6 +103,8 @@ function LabeledEdgeComponent({
           selected && 'stroke-blue-500!'
         )}
         id={id}
+        markerEnd={markerEnd}
+        markerStart={markerStart}
         path={edgePath}
         style={{
           strokeWidth: selected ? 2.5 : 1.5,

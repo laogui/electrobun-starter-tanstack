@@ -55,6 +55,10 @@ export interface CreateNodeOptions {
   anchorCenter?: { x: number; y: number };
 }
 
+export interface AddConnectionOptions {
+  reverseVisualDirection?: boolean;
+}
+
 interface NodeSpec {
   base: Omit<Node, 'id' | 'position'>;
   size: Size;
@@ -143,7 +147,10 @@ export interface CanvasState {
 
   // Multi-view
   activeViewId: string;
-  addConnection: (connection: Connection) => void;
+  addConnection: (
+    connection: Connection,
+    options?: AddConnectionOptions
+  ) => void;
   addFolderChild: (folderId: string) => void;
   applyEdgesChange: (changes: EdgeChange[]) => void;
   applyNodesChange: (changes: NodeChange[]) => void;
@@ -263,7 +270,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
   },
 
-  addConnection: (connection) => {
+  addConnection: (connection, options) => {
     if (connection.source === connection.target) {
       return;
     }
@@ -277,7 +284,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           sourceHandle: connection.sourceHandle,
           targetHandle: connection.targetHandle,
           type: 'labeledEdge',
-          data: { pathType: 'bezier' },
+          data: {
+            pathType: 'bezier',
+            reverseVisualDirection: options?.reverseVisualDirection ?? false,
+          },
           markerEnd: 'compact-arrow',
         },
         s.edges

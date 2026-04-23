@@ -286,6 +286,11 @@ body.resizing-nwse * {
   stroke: var(--xy-edge-stroke, #b1b1b7);
 }
 
+#compact-arrow-active path {
+  fill: hsl(var(--connection-active));
+  stroke: hsl(var(--connection-active));
+}
+
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--xy-edge-selected, #1a7f74);
   stroke-width: 2;

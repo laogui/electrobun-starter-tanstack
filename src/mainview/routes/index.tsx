@@ -15,6 +15,7 @@ import { AnimatePresence } from 'motion/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
@@ -30,6 +31,10 @@ import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
+import {
+  type ConnectionStartState,
+  shouldReverseEdgeDirection,
+} from '@/lib/shouldReverseEdgeDirection';
 import { useCanvasStore } from '@/store/canvasStore';
 
 export const Route = createFileRoute('/')({
@@ -37,6 +42,10 @@ export const Route = createFileRoute('/')({
 });
 
 function CanvasComponent() {
+  const connectionStartRef = useRef<ConnectionStartState>({
+    handleId: null,
+    nodeId: null,
+  });
   const { theme, systemTheme } = useTheme();
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -107,10 +116,35 @@ function CanvasComponent() {
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      addConnection(connection);
+      addConnection(connection, {
+        reverseVisualDirection: shouldReverseEdgeDirection(
+          connectionStartRef.current,
+          connection
+        ),
+      });
     },
     [addConnection]
   );
+
+  const onConnectStart = useCallback(
+    (
+      _event: MouseEvent | TouchEvent,
+      params: { handleId?: string | null; nodeId: string | null }
+    ) => {
+      connectionStartRef.current = {
+        handleId: params.handleId ?? null,
+        nodeId: params.nodeId,
+      };
+    },
+    []
+  );
+
+  const onConnectEnd = useCallback(() => {
+    connectionStartRef.current = {
+      handleId: null,
+      nodeId: null,
+    };
+  }, []);
 
   const onNodeDoubleClick = useCallback(
     (_: any, node: Node) => {
@@ -167,6 +201,7 @@ function CanvasComponent() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#D7D9D8] font-sans dark:bg-[#141414]">
       <ReactFlow
+        connectionLineComponent={ConnectionPreviewLine}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
         defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
@@ -179,6 +214,8 @@ function CanvasComponent() {
         nodes={nodesWithState}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        onConnectStart={onConnectStart}
         onEdgeContextMenu={onEdgeContextMenu}
         onEdgesChange={onEdgesChange}
         onInit={(instance) => {

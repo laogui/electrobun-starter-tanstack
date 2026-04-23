@@ -6,6 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import LabeledEdge from './LabeledEdge';
 
+const getBezierPathMock = vi.hoisted(() =>
+  vi.fn(() => ['bezier-path', 10, 20])
+);
+const getSmoothStepPathMock = vi.hoisted(() =>
+  vi.fn(() => ['smooth-path', 30, 40])
+);
 const updateEdgeDataMock = vi.fn();
 const setEditingEdgeIdMock = vi.fn();
 const useCanvasStoreMock = vi.fn((selector) =>
@@ -20,8 +26,16 @@ vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
   return {
     ...actual,
-    BaseEdge: ({ className, path, style }: Record<string, unknown>) => (
+    BaseEdge: ({
+      className,
+      markerEnd,
+      markerStart,
+      path,
+      style,
+    }: Record<string, unknown>) => (
       <div
+        data-marker-end={markerEnd}
+        data-marker-start={markerStart}
         data-path={path}
         data-testid="base-edge"
         style={style as React.CSSProperties}
@@ -32,8 +46,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => (
       <div>{children}</div>
     ),
-    getBezierPath: () => ['bezier-path', 10, 20],
-    getSmoothStepPath: () => ['smooth-path', 30, 40],
+    getBezierPath: getBezierPathMock,
+    getSmoothStepPath: getSmoothStepPathMock,
   };
 });
 
@@ -47,6 +61,8 @@ describe('LabeledEdge', () => {
     updateEdgeDataMock.mockReset();
     setEditingEdgeIdMock.mockReset();
     useCanvasStoreMock.mockClear();
+    getBezierPathMock.mockClear();
+    getSmoothStepPathMock.mockClear();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -56,6 +72,7 @@ describe('LabeledEdge', () => {
       <LabeledEdge
         data={{ animated: true, label: 'Edge label', pathType: 'smoothstep' }}
         id="edge-1"
+        markerEnd="url(#compact-arrow)"
         selected={true}
         source="node-1"
         sourcePosition={Position.Right}
@@ -71,6 +88,10 @@ describe('LabeledEdge', () => {
     expect(screen.getByTestId('base-edge')).toHaveAttribute(
       'data-path',
       'smooth-path'
+    );
+    expect(screen.getByTestId('base-edge')).toHaveAttribute(
+      'data-marker-end',
+      'url(#compact-arrow)'
     );
     fireEvent.doubleClick(screen.getByRole('button', { name: 'Edge label' }));
     expect(setEditingEdgeIdMock).toHaveBeenCalledWith('edge-1');
@@ -153,5 +174,32 @@ describe('LabeledEdge', () => {
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
     expect(setEditingEdgeIdMock).toHaveBeenCalledWith(null);
     expect(updateEdgeDataMock).not.toHaveBeenCalled();
+  });
+
+  it('reverses the rendered path when the edge direction was dragged backwards', () => {
+    render(
+      <LabeledEdge
+        data={{ pathType: 'bezier', reverseVisualDirection: true }}
+        id="edge-4"
+        selected={false}
+        source="node-1"
+        sourcePosition={Position.Right}
+        sourceX={10}
+        sourceY={20}
+        target="node-2"
+        targetPosition={Position.Left}
+        targetX={100}
+        targetY={200}
+      />
+    );
+
+    expect(getBezierPathMock).toHaveBeenCalledWith({
+      sourcePosition: Position.Left,
+      sourceX: 100,
+      sourceY: 200,
+      targetPosition: Position.Right,
+      targetX: 10,
+      targetY: 20,
+    });
   });
 });

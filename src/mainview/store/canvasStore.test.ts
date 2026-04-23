@@ -189,7 +189,25 @@ describe('canvasStore — edge operations', () => {
     expect(edge.source).toBe('a');
     expect(edge.target).toBe('b');
     expect(edge.type).toBe('labeledEdge');
-    expect(edge.data).toMatchObject({ pathType: 'bezier' });
+    expect(edge.data).toMatchObject({
+      pathType: 'bezier',
+      reverseVisualDirection: false,
+    });
+  });
+
+  it('addConnection stores reversed visual direction when requested', () => {
+    useCanvasStore
+      .getState()
+      .addConnection({ source: 'b', target: 'a' } as Connection, {
+        reverseVisualDirection: true,
+      });
+
+    const edge = useCanvasStore.getState().edges[0]!;
+
+    expect(edge.data).toMatchObject({
+      pathType: 'bezier',
+      reverseVisualDirection: true,
+    });
   });
 
   it('setEdges replaces the edge array', () => {

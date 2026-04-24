@@ -343,7 +343,7 @@ const CardNode = ({ id, data }: any) => {
       <div
         className={cn(
           'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-sm',
-          'transition-shadow duration-200 ease-out hover:shadow-lg'
+          'transition-[box-shadow,transform] duration-200 ease-out hover:scale-[1.015] hover:shadow-lg'
         )}
       >
         {isZoomedOut ? (

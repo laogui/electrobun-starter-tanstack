@@ -90,7 +90,7 @@ const FolderNode = ({ data }: any) => {
       <div
         className={cn(
           'absolute inset-0 cursor-pointer transition-all duration-200 ease-out',
-          data.isDropTarget ? 'scale-105' : ''
+          data.isDropTarget ? 'scale-105' : 'hover:scale-[1.015]'
         )}
       >
         {/* Stack backgrounds */}

@@ -102,7 +102,7 @@ const StickyNode = ({ id, data }: any) => {
       <div
         className={cn(
           'relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-sm',
-          'transition-shadow duration-200 ease-out hover:shadow-lg'
+          'transition-[box-shadow,transform] duration-200 ease-out hover:scale-[1.015] hover:shadow-lg'
         )}
         onDoubleClick={handleDoubleClick}
       >

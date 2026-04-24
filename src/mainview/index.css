@@ -36,10 +36,16 @@ body.resizing-nwse * {
 }
 
 .note-preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 12;
-  line-clamp: 12;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 1.5rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 1.5rem),
+    transparent 100%
+  );
 }
 
 .note-preview :where(h1, h2, h3, h4, h5, h6) {

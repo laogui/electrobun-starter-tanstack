@@ -99,7 +99,7 @@ const FolderNode = ({ data }: any) => {
             'absolute inset-0 rounded-3xl bg-white/40 shadow-sm transition-transform duration-200 ease-out',
             data.isDropTarget
               ? 'translate-y-2.5 scale-[0.88]'
-              : 'translate-y-1.5 scale-90 group-hover/folder:translate-y-2'
+              : 'translate-y-1.5 scale-90'
           )}
         />
         <div
@@ -107,7 +107,7 @@ const FolderNode = ({ data }: any) => {
             'absolute inset-0 rounded-3xl bg-white/70 shadow-sm transition-transform duration-200 ease-out',
             data.isDropTarget
               ? 'translate-y-1.5 scale-[0.93]'
-              : 'translate-y-0.5 scale-95 group-hover/folder:translate-y-1'
+              : 'translate-y-0.5 scale-95'
           )}
         />
 
@@ -117,7 +117,7 @@ const FolderNode = ({ data }: any) => {
             'absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-white p-8 text-center shadow-md transition-all duration-200 ease-out',
             data.isDropTarget
               ? '-translate-y-1 border-2 border-blue-400 shadow-blue-100 shadow-lg'
-              : 'border-gray-100 group-hover/folder:-translate-y-0.5'
+              : 'border-gray-100'
           )}
         >
           <div

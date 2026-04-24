@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import {
-  Background,
   ConnectionMode,
   Controls,
   MiniMap,
@@ -36,6 +35,37 @@ import {
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
 import { useCanvasStore } from '@/store/canvasStore';
+
+// ─── 画布颜色 ────────────────────────────────────────────────────────────────
+// 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
+
+/** 画布主背景色 */
+const CANVAS_BG_LIGHT = '#EFF3F4';
+const CANVAS_BG_DARK = '#141414';
+
+/** 背景网格点颜色 */
+const GRID_COLOR_LIGHT = '#D8DCDF';
+const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
+
+/** 小地图背景色 */
+const MINIMAP_BG_LIGHT = 'rgba(255, 255, 255, 0.92)';
+const MINIMAP_BG_DARK = 'rgba(28, 28, 28, 0.92)';
+
+/** 小地图边框 */
+const MINIMAP_BORDER_LIGHT = '1px solid rgba(0, 0, 0, 0.08)';
+const MINIMAP_BORDER_DARK = '1px solid rgba(255, 255, 255, 0.08)';
+
+/** 小地图遮罩（视口外区域的蒙层） */
+const MINIMAP_MASK_LIGHT = 'rgba(240, 239, 237, 0.7)';
+const MINIMAP_MASK_DARK = 'rgba(20, 20, 20, 0.7)';
+
+/** 小地图节点填充色 */
+const MINIMAP_NODE_COLOR = '#ddd';
+
+/** 小地图节点描边色 */
+const MINIMAP_NODE_STROKE_COLOR = '#999';
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const Route = createFileRoute('/')({
   component: CanvasRoute,
@@ -178,28 +208,24 @@ function CanvasComponent() {
 
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
-  const canvasBackground = isDarkTheme ? '#141414' : '#D7D9D8';
-  const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.14)' : '#8f9491';
-  const miniMapBackground = isDarkTheme
-    ? 'rgba(28, 28, 28, 0.92)'
-    : 'rgba(255, 255, 255, 0.92)';
+  const canvasBackground = isDarkTheme ? CANVAS_BG_DARK : CANVAS_BG_LIGHT;
+  const _gridColor = isDarkTheme ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
+  const miniMapBackground = isDarkTheme ? MINIMAP_BG_DARK : MINIMAP_BG_LIGHT;
   const miniMapBorder = isDarkTheme
-    ? '1px solid rgba(255, 255, 255, 0.08)'
-    : '1px solid rgba(0, 0, 0, 0.08)';
-  const miniMapMask = isDarkTheme
-    ? 'rgba(20, 20, 20, 0.7)'
-    : 'rgba(240, 239, 237, 0.7)';
+    ? MINIMAP_BORDER_DARK
+    : MINIMAP_BORDER_LIGHT;
+  const miniMapMask = isDarkTheme ? MINIMAP_MASK_DARK : MINIMAP_MASK_LIGHT;
 
   if (!hydrated) {
     return (
-      <div className="h-screen w-screen bg-[#D7D9D8] dark:bg-[#141414]">
+      <div className="h-screen w-screen bg-[#EFF3F4] dark:bg-[#141414]">
         <Loader />
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#D7D9D8] font-sans dark:bg-[#141414]">
+    <div className="h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]">
       <ReactFlow
         connectionLineComponent={ConnectionPreviewLine}
         connectionMode={ConnectionMode.Loose}
@@ -236,13 +262,13 @@ function CanvasComponent() {
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >
-        <Background color={gridColor} gap={24} size={2} />
+        {/* <Background color={gridColor} gap={24} size={2} /> */}
         <Controls position="bottom-left" />
         <HelperLines horizontal={helperLineH} vertical={helperLineV} />
         <MiniMap
           maskColor={miniMapMask}
-          nodeColor="#ddd"
-          nodeStrokeColor="#999"
+          nodeColor={MINIMAP_NODE_COLOR}
+          nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
           pannable
           position="bottom-right"
           style={{

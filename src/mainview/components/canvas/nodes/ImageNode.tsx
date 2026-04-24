@@ -208,7 +208,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         className={handleClassName}
         id="top"
         position={Position.Top}
-        type="target"
+        type="source"
       />
       <Handle
         className={handleClassName}
@@ -226,7 +226,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         className={handleClassName}
         id="left"
         position={Position.Left}
-        type="target"
+        type="source"
       />
 
       <input

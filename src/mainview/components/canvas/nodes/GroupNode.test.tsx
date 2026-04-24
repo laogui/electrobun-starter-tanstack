@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import GroupNode from './GroupNode';
 
 const updateNodeDataMock = vi.fn();
+const updateNodeInternalsMock = vi.fn();
 
 vi.mock('motion/react', () => ({
   motion: {
@@ -20,6 +21,7 @@ vi.mock('@xyflow/react', () => ({
   NodeResizer: ({ isVisible }: { isVisible: boolean }) => (
     <div data-testid="node-resizer">{isVisible ? 'visible' : 'hidden'}</div>
   ),
+  useUpdateNodeInternals: () => updateNodeInternalsMock,
   Position: {
     Top: 'top',
     Right: 'right',
@@ -37,11 +39,12 @@ vi.mock('@/store/canvasStore', () => ({
 describe('GroupNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
+    updateNodeInternalsMock.mockReset();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  it('renders label, selected state, and active ring state', () => {
+  it('renders label, selected state, and refreshes node internals on mount', async () => {
     const { container } = render(
       <GroupNode
         data={{ active: true, color: 'green', label: 'Planning' }}
@@ -54,6 +57,9 @@ describe('GroupNode', () => {
     expect(screen.getByTestId('node-resizer')).toHaveTextContent('visible');
     expect(container.querySelector('.selected')).not.toBeNull();
     expect(container.querySelector('.ring-2')).not.toBeNull();
+    await waitFor(() => {
+      expect(updateNodeInternalsMock).toHaveBeenCalledWith('group-1');
+    });
   });
 
   it('updates label on blur and falls back to default label when cleared', () => {

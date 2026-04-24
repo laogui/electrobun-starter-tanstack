@@ -65,7 +65,7 @@ const FolderNode = ({ data }: any) => {
         className={handleClassName}
         id="top"
         position={Position.Top}
-        type="target"
+        type="source"
       />
       <Handle
         className={handleClassName}
@@ -83,7 +83,7 @@ const FolderNode = ({ data }: any) => {
         className={handleClassName}
         id="left"
         position={Position.Left}
-        type="target"
+        type="source"
       />
 
       {/* Visual content wrapper — transforms here don't affect Handle positions */}

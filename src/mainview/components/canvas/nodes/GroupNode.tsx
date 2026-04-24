@@ -1,6 +1,11 @@
-import { Handle, NodeResizer, Position } from '@xyflow/react';
+import {
+  Handle,
+  NodeResizer,
+  Position,
+  useUpdateNodeInternals,
+} from '@xyflow/react';
 import { motion } from 'motion/react';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -13,6 +18,17 @@ const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
   const onUpdate = useCanvasStore((s) => s.updateNodeData);
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  useEffect(() => {
+    const frameId = globalThis.requestAnimationFrame(() => {
+      updateNodeInternals(id);
+    });
+
+    return () => {
+      globalThis.cancelAnimationFrame(frameId);
+    };
+  }, [id, updateNodeInternals]);
 
   const handleBlur = useCallback(() => {
     const text =

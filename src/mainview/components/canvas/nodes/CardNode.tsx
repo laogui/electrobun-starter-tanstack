@@ -318,7 +318,7 @@ const CardNode = ({ id, data }: any) => {
         className={handleClassName}
         id="top"
         position={Position.Top}
-        type="target"
+        type="source"
       />
       <Handle
         className={handleClassName}
@@ -336,7 +336,7 @@ const CardNode = ({ id, data }: any) => {
         className={handleClassName}
         id="left"
         position={Position.Left}
-        type="target"
+        type="source"
       />
 
       {/* Visual wrapper with hover lift — keeps Handle positions stable */}

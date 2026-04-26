@@ -44,5 +44,9 @@
   "menu_delete_edge": "删除连线",
   "view_new_canvas": "新建画布",
   "view_default_name": "默认画布",
-  "toast_no_placement_slot": "附近没有可放置新节点的空位"
+  "toast_no_placement_slot": "附近没有可放置新节点的空位",
+  "toast_node_deleted": "卡片已删除",
+  "toast_nodes_deleted": "已删除 {count} 张卡片",
+  "toast_edge_deleted": "连线已删除",
+  "toast_undo": "撤销"
 }

@@ -134,9 +134,7 @@ const StickyNode = ({ id, data }: any) => {
             </div>
           </div>
         )}
-        {/* Folded corner — dog-ear effect */}
         <div className="pointer-events-none absolute top-0 right-0 size-6">
-          {/* 1. Gray background revealed behind the fold */}
           <div
             className="absolute inset-0"
             style={{
@@ -144,7 +142,6 @@ const StickyNode = ({ id, data }: any) => {
               background: 'linear-gradient(225deg, #ddd 50%, transparent 50%)',
             }}
           />
-          {/* 2. Folded-back paper flap (bottom-left triangle) */}
           <div
             className="absolute bottom-0 left-0"
             style={{
@@ -154,7 +151,6 @@ const StickyNode = ({ id, data }: any) => {
                 'linear-gradient(45deg, rgba(0,0,0,0.07) 50%, transparent 50%)',
             }}
           />
-          {/* 3. Fold crease shadow line */}
           <div
             className="absolute inset-0"
             style={{

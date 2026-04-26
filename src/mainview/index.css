@@ -2,6 +2,22 @@
 @plugin "@tailwindcss/typography";
 
 @layer utilities {
+  /* Layered, soft card shadow — gives a sense of depth on the canvas */
+  .shadow-card {
+    box-shadow:
+      0 1px 1px rgba(15, 23, 42, 0.04),
+      0 2px 4px -1px rgba(15, 23, 42, 0.06),
+      0 8px 16px -6px rgba(15, 23, 42, 0.1),
+      0 20px 32px -12px rgba(15, 23, 42, 0.12);
+  }
+  .shadow-card-hover {
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.06),
+      0 4px 8px -2px rgba(15, 23, 42, 0.08),
+      0 16px 28px -8px rgba(15, 23, 42, 0.14),
+      0 32px 56px -16px rgba(15, 23, 42, 0.2);
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -267,7 +283,13 @@ body.resizing-nwse * {
     box-shadow 0.15s;
 }
 
+/* Selected nodes show handles at low opacity to hint connectivity */
+.react-flow__node.selected .react-flow__handle.conn-handle {
+  opacity: 0.45;
+}
+
 .react-flow__node:hover .react-flow__handle.conn-handle,
+.react-flow__node.selected:hover .react-flow__handle.conn-handle,
 .react-flow__handle.conn-handle.connectingto,
 .react-flow__handle.conn-handle.connectingfrom {
   opacity: 1;

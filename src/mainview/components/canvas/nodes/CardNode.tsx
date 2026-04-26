@@ -2,7 +2,6 @@ import {
   Handle,
   NodeResizeControl,
   Position,
-  useReactFlow,
   useViewport,
 } from '@xyflow/react';
 import { Check } from 'lucide-react';
@@ -12,6 +11,7 @@ import { NotePreview } from '@/components/preview/NotePreview';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
@@ -265,7 +265,8 @@ const EditableCardContent = ({ data, onChange }: any) => {
 
 const CardNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
-  const { updateNodeData } = useReactFlow();
+  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = zoom < 0.4;
 
   return (
@@ -286,6 +287,7 @@ const CardNode = ({ id, data }: any) => {
         }}
         onResizeStart={() => {
           document.body.classList.add('resizing-nwse');
+          saveSnapshot();
         }}
         position="bottom-right"
         style={{ padding: 0 }}
@@ -342,8 +344,8 @@ const CardNode = ({ id, data }: any) => {
       {/* Visual wrapper with hover lift — keeps Handle positions stable */}
       <div
         className={cn(
-          'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-sm',
-          'transition-[box-shadow,transform] duration-200 ease-out hover:scale-[1.015] hover:shadow-lg'
+          'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card',
+          'transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-card-hover'
         )}
       >
         {isZoomedOut ? (
@@ -375,7 +377,7 @@ const CardNode = ({ id, data }: any) => {
           <CardContent
             data={data}
             onChange={(newData: any) => {
-              updateNodeData(id, newData);
+              commitNodeData(id, newData);
             }}
           />
         )}

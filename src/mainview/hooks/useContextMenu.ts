@@ -1,8 +1,11 @@
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
@@ -29,6 +32,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const deleteEdge = useCanvasStore((s) => s.deleteEdge);
+  const undo = useCanvasStore((s) => s.undo);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
@@ -168,6 +172,12 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
                 ? selected.map((n) => n.id)
                 : [nodeId];
             deleteNodes(ids);
+            toast(
+              ids.length > 1
+                ? m.toast_nodes_deleted({ count: ids.length })
+                : m.toast_node_deleted(),
+              { action: { label: m.toast_undo(), onClick: () => undo() } }
+            );
           }
           break;
         }
@@ -219,6 +229,9 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
         case 'delete-edge': {
           if (nodeId) {
             deleteEdge(nodeId);
+            toast(m.toast_edge_deleted(), {
+              action: { label: m.toast_undo(), onClick: () => undo() },
+            });
           }
           break;
         }
@@ -234,6 +247,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       setFocusedFolder,
       deleteNodes,
       deleteEdge,
+      undo,
       updateEdgeData,
       setEditingEdgeId,
       changeNodeColor,

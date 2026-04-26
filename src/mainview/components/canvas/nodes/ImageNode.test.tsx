@@ -57,8 +57,24 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-  useReactFlow: () => ({ updateNodeData: updateNodeDataMock }),
   useViewport: () => useViewportMock(),
+}));
+
+const saveSnapshotMock = vi.fn();
+
+vi.mock('@/store/canvasStore', () => ({
+  useCanvasStore: (
+    selector: (state: {
+      commitNodeData: typeof updateNodeDataMock;
+      updateNodeData: typeof updateNodeDataMock;
+      saveSnapshot: typeof saveSnapshotMock;
+    }) => unknown
+  ) =>
+    selector({
+      commitNodeData: updateNodeDataMock,
+      updateNodeData: updateNodeDataMock,
+      saveSnapshot: saveSnapshotMock,
+    }),
 }));
 
 vi.mock('@/lib/rpc', () => ({

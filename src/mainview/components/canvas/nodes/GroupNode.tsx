@@ -17,7 +17,8 @@ const handleClassName = 'conn-handle nodrag';
 const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
-  const onUpdate = useCanvasStore((s) => s.updateNodeData);
+  const onUpdate = useCanvasStore((s) => s.commitNodeData);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeInternals = useUpdateNodeInternals();
 
   useEffect(() => {
@@ -33,9 +34,11 @@ const GroupNode = ({ id, data, selected }: any) => {
   const handleBlur = useCallback(() => {
     const text =
       labelRef.current?.textContent.trim() || m.default_group_label();
-    onUpdate(id, { label: text });
+    if (text !== data.label) {
+      onUpdate(id, { label: text });
+    }
     setEditingLabel(false);
-  }, [id, onUpdate]);
+  }, [id, data.label, onUpdate]);
 
   return (
     <motion.div
@@ -55,6 +58,7 @@ const GroupNode = ({ id, data, selected }: any) => {
         lineClassName="!border-transparent"
         minHeight={200}
         minWidth={300}
+        onResizeStart={() => saveSnapshot()}
       />
 
       <Handle

@@ -34,6 +34,7 @@ const FocusedSkeleton = ({ color }: { color?: unknown }) => {
 
 export const FocusedView = ({ node, onClose }: any) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   // Target dimensions (final size)
   const targetWidth = Math.min(800, window.innerWidth * 0.8);
   const targetHeight = Math.min(900, window.innerHeight * 0.85);
@@ -161,7 +162,7 @@ export const FocusedView = ({ node, onClose }: any) => {
               data={node.data}
               isFocused={true}
               onChange={(newData: any) => {
-                updateNodeData(node.id, newData);
+                commitNodeData(node.id, newData);
               }}
             />
           )}

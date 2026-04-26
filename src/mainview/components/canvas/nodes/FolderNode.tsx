@@ -8,11 +8,13 @@ import { Folder } from 'lucide-react';
 import { memo } from 'react';
 
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
 const FolderNode = ({ data }: any) => {
   const { zoom } = useViewport();
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = zoom < 0.4;
 
   return (
@@ -33,6 +35,7 @@ const FolderNode = ({ data }: any) => {
         }}
         onResizeStart={() => {
           document.body.classList.add('resizing-nwse');
+          saveSnapshot();
         }}
         position="bottom-right"
         style={{ padding: 0 }}

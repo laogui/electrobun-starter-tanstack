@@ -14,7 +14,8 @@ const handleClassName = 'conn-handle nodrag';
 
 const StickyNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
-  const onUpdate = useCanvasStore((s) => s.updateNodeData);
+  const onUpdate = useCanvasStore((s) => s.commitNodeData);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = zoom < 0.4;
   const [editing, setEditing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
@@ -51,6 +52,7 @@ const StickyNode = ({ id, data }: any) => {
         }}
         onResizeStart={() => {
           document.body.classList.add('resizing-nwse');
+          saveSnapshot();
         }}
         position="bottom-right"
         style={{ padding: 0 }}
@@ -101,8 +103,8 @@ const StickyNode = ({ id, data }: any) => {
 
       <div
         className={cn(
-          'relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-sm',
-          'transition-[box-shadow,transform] duration-200 ease-out hover:scale-[1.015] hover:shadow-lg'
+          'relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card',
+          'transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-card-hover'
         )}
         onDoubleClick={handleDoubleClick}
       >

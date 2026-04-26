@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../paraglide/messages.js';
 
 export function useCanvasKeyboard() {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
@@ -63,6 +66,12 @@ export function useCanvasKeyboard() {
         const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
         if (selectedIds.length > 0) {
           deleteNodes(selectedIds);
+          toast(
+            selectedIds.length > 1
+              ? m.toast_nodes_deleted({ count: selectedIds.length })
+              : m.toast_node_deleted(),
+            { action: { label: m.toast_undo(), onClick: () => undo() } }
+          );
         }
         return;
       }

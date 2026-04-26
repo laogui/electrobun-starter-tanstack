@@ -207,6 +207,10 @@ export interface CanvasState {
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
+  /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
+  commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
+  /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
+  commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   views: Array<{ id: string; name: string }>;
 }
 
@@ -321,6 +325,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
       ),
     }));
+  },
+
+  commitNodeData: (nodeId, updates) => {
+    get().saveSnapshot();
+    get().updateNodeData(nodeId, updates);
+  },
+
+  commitEdgeData: (edgeId, updates) => {
+    get().saveSnapshot();
+    get().updateEdgeData(edgeId, updates);
   },
 
   // -- UI actions -----------------------------------------------------------

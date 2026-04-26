@@ -73,7 +73,7 @@ export function CreateMenu({
   return (
     <div className="fixed right-6 bottom-6 z-40">
       <Menu.Root onOpenChange={setOpen} open={open}>
-        <Menu.Trigger className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
+        <Menu.Trigger className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl ring-1 ring-white/10 transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)] dark:bg-neutral-100 dark:text-black dark:ring-black/10 dark:hover:shadow-[0_8px_30px_rgba(0,0,0,0.6)]">
           <motion.span
             animate={{ rotate: open ? 45 : 0 }}
             className="flex items-center justify-center"
@@ -90,7 +90,7 @@ export function CreateMenu({
             side="top"
             sideOffset={12}
           >
-            <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0">
+            <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
               {menuItems.map((item, index) => {
                 const isLast = index === menuItems.length - 1;
                 return (
@@ -98,9 +98,9 @@ export function CreateMenu({
                     aria-label={item.label}
                     className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
                       item.enabled
-                        ? 'text-gray-800 data-highlighted:bg-black/5'
-                        : 'cursor-not-allowed text-gray-400'
-                    } ${isLast ? '' : 'border-gray-100 border-b'}`}
+                        ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/5'
+                        : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
+                    } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
                     closeOnClick
                     disabled={!item.enabled}
                     key={item.id}

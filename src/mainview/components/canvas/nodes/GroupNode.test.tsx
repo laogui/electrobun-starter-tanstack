@@ -30,10 +30,19 @@ vi.mock('@xyflow/react', () => ({
   },
 }));
 
+const saveSnapshotMock = vi.fn();
+
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
-    selector: (state: { updateNodeData: typeof updateNodeDataMock }) => unknown
-  ) => selector({ updateNodeData: updateNodeDataMock }),
+    selector: (state: {
+      commitNodeData: typeof updateNodeDataMock;
+      saveSnapshot: typeof saveSnapshotMock;
+    }) => unknown
+  ) =>
+    selector({
+      commitNodeData: updateNodeDataMock,
+      saveSnapshot: saveSnapshotMock,
+    }),
 }));
 
 describe('GroupNode', () => {

@@ -2,7 +2,6 @@ import {
   Handle,
   NodeResizeControl,
   Position,
-  useReactFlow,
   useViewport,
 } from '@xyflow/react';
 import { ImagePlus } from 'lucide-react';
@@ -11,6 +10,7 @@ import { memo, useCallback, useRef } from 'react';
 import { colorToStyle } from '@/lib/colorUtils';
 import { rpcSaveAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 const FILE_EXT_RE = /\.[^.]+$/;
@@ -74,7 +74,9 @@ export const ImageContent = ({
 
 const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const { zoom } = useViewport();
-  const { updateNodeData } = useReactFlow();
+  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = zoom < 0.4;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,10 +90,10 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         const imageUrl = e.target?.result as string;
         const title = data.title || file.name.replace(FILE_EXT_RE, '');
 
-        // Show image immediately with data URL
-        updateNodeData(id, { imageUrl, title });
+        // Show image immediately with data URL — snapshot for undo
+        commitNodeData(id, { imageUrl, title });
 
-        // Save to local file in background
+        // Save to local file in background (side-effect, no extra snapshot)
         rpcSaveAttachment(imageUrl, data.imageFile)
           .then((result) => {
             if (result?.filePath) {
@@ -104,7 +106,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       });
       reader.readAsDataURL(file);
     },
-    [id, data, updateNodeData]
+    [id, data, commitNodeData, updateNodeData]
   );
 
   const handleDrop = useCallback(
@@ -176,6 +178,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         }}
         onResizeStart={() => {
           document.body.classList.add('resizing-nwse');
+          saveSnapshot();
         }}
         position="bottom-right"
         style={{ padding: 0 }}

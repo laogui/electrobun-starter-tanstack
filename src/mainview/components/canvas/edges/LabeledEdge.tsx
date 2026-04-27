@@ -30,7 +30,7 @@ function LabeledEdgeComponent({
     (data?.reverseVisualDirection as boolean) ?? false;
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
-  const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const commitEdgeData = useCanvasStore((s) => s.commitEdgeData);
   const isEditing = editingEdgeId === id;
 
   const [draft, setDraft] = useState(label);
@@ -46,9 +46,12 @@ function LabeledEdgeComponent({
 
   const commitLabel = useCallback(() => {
     const trimmed = draft.trim();
-    updateEdgeData(id, { label: trimmed || undefined });
+    const next = trimmed || undefined;
+    if (next !== label) {
+      commitEdgeData(id, { label: next });
+    }
     setEditingEdgeId(null);
-  }, [draft, id, updateEdgeData, setEditingEdgeId]);
+  }, [draft, id, label, commitEdgeData, setEditingEdgeId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

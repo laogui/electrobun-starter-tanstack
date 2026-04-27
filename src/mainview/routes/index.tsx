@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import {
+  Background,
+  BackgroundVariant,
   ConnectionMode,
   Controls,
   MiniMap,
@@ -209,7 +211,7 @@ function CanvasComponent() {
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
   const canvasBackground = isDarkTheme ? CANVAS_BG_DARK : CANVAS_BG_LIGHT;
-  const _gridColor = isDarkTheme ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
+  const gridColor = isDarkTheme ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
   const miniMapBackground = isDarkTheme ? MINIMAP_BG_DARK : MINIMAP_BG_LIGHT;
   const miniMapBorder = isDarkTheme
     ? MINIMAP_BORDER_DARK
@@ -262,7 +264,12 @@ function CanvasComponent() {
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >
-        {/* <Background color={gridColor} gap={24} size={2} /> */}
+        <Background
+          color={gridColor}
+          gap={24}
+          size={1.5}
+          variant={BackgroundVariant.Dots}
+        />
         <Controls position="bottom-left" />
         <HelperLines horizontal={helperLineH} vertical={helperLineV} />
         <MiniMap

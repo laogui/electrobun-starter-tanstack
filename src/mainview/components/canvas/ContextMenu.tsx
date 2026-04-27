@@ -232,7 +232,7 @@ export function CanvasContextMenu({
       {menu ? (
         <motion.div
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl"
+          className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
           initial={{ opacity: 0, scale: 0.95, y: -4 }}
           ref={ref}
@@ -244,8 +244,8 @@ export function CanvasContextMenu({
               className={cn(
                 'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
                 item.danger
-                  ? 'text-red-600 hover:bg-red-50'
-                  : 'text-gray-700 hover:bg-black/5'
+                  ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
+                  : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
               )}
               key={item.id}
               onClick={() => {
@@ -255,12 +255,16 @@ export function CanvasContextMenu({
               type="button"
             >
               <item.icon
-                className={item.danger ? 'text-red-500' : 'text-gray-400'}
+                className={
+                  item.danger
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-gray-400 dark:text-gray-500'
+                }
                 size={15}
               />
               <span className="flex-1 text-left">{item.label}</span>
               {item.shortcut ? (
-                <span className="text-[11px] text-gray-400">
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">
                   {item.shortcut}
                 </span>
               ) : null}

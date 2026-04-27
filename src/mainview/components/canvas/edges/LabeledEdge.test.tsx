@@ -19,6 +19,7 @@ const useCanvasStoreMock = vi.fn((selector) =>
     editingEdgeId: null,
     setEditingEdgeId: setEditingEdgeIdMock,
     updateEdgeData: updateEdgeDataMock,
+    commitEdgeData: updateEdgeDataMock,
   })
 );
 
@@ -103,6 +104,7 @@ describe('LabeledEdge', () => {
         editingEdgeId: 'edge-2',
         setEditingEdgeId: setEditingEdgeIdMock,
         updateEdgeData: updateEdgeDataMock,
+        commitEdgeData: updateEdgeDataMock,
       })
     );
 

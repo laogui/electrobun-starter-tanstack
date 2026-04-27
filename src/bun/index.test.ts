@@ -19,6 +19,7 @@ const defineRpcMock = vi.fn<
 const browserWindowFocusMock = vi.fn();
 const browserWindowOnMock = vi.fn();
 const browserWindowMock = vi.fn();
+const setApplicationMenuMock = vi.fn();
 
 function BrowserWindowMock(...args: unknown[]) {
   browserWindowMock(...args);
@@ -29,6 +30,9 @@ function BrowserWindowMock(...args: unknown[]) {
 }
 
 vi.mock('electrobun/bun', () => ({
+  ApplicationMenu: {
+    setApplicationMenu: setApplicationMenuMock,
+  },
   BrowserView: {
     defineRPC: (...args: Parameters<typeof defineRpcMock>) =>
       defineRpcMock(...args),

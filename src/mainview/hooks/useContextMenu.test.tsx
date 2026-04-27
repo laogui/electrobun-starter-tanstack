@@ -137,6 +137,11 @@ const storeActions = {
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
+  toast_node_deleted: () => 'Card deleted',
+  toast_nodes_deleted: ({ count }: { count: number }) =>
+    `${count} cards deleted`,
+  toast_edge_deleted: () => 'Connection deleted',
+  toast_undo: () => 'Undo',
 }));
 
 vi.mock('nanoid', () => ({

@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 
-import { BrowserView, BrowserWindow, Updater } from 'electrobun/bun';
+import {
+  ApplicationMenu,
+  BrowserView,
+  BrowserWindow,
+  Updater,
+} from 'electrobun/bun';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
@@ -235,6 +240,25 @@ function createSettingsWindow(): BrowserWindow {
 }
 
 async function main() {
+  ApplicationMenu.setApplicationMenu([
+    {
+      label: 'GhostBoard',
+      submenu: [{ role: 'about' }, { type: 'divider' }, { role: 'quit' }],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'divider' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+  ]);
+
   const wsPath = initWorkspace();
   await loadSettings(wsPath);
   const url = await getMainViewUrl();

@@ -93,7 +93,7 @@ const FolderNode = ({ data }: any) => {
       <div
         className={cn(
           'absolute inset-0 cursor-pointer transition-all duration-200 ease-out',
-          data.isDropTarget ? 'scale-105' : 'hover:scale-[1.015]'
+          data.isDropTarget && 'scale-105'
         )}
       >
         {/* Stack backgrounds */}
@@ -117,7 +117,7 @@ const FolderNode = ({ data }: any) => {
         {/* Main folder cover */}
         <div
           className={cn(
-            'absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-white p-8 text-center shadow-md transition-all duration-200 ease-out',
+            'node-visual absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-white p-8 text-center shadow-md transition-all duration-200 ease-out',
             data.isDropTarget
               ? '-translate-y-1 border-2 border-blue-400 shadow-blue-100 shadow-lg'
               : 'border-gray-100'

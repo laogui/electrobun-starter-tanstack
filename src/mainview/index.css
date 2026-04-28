@@ -12,10 +12,10 @@
   }
   .shadow-card-hover {
     box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.06),
-      0 4px 8px -2px rgba(15, 23, 42, 0.08),
-      0 16px 28px -8px rgba(15, 23, 42, 0.14),
-      0 32px 56px -16px rgba(15, 23, 42, 0.2);
+      0 2px 4px rgba(15, 23, 42, 0.08),
+      0 8px 16px -4px rgba(15, 23, 42, 0.12),
+      0 24px 40px -12px rgba(15, 23, 42, 0.2),
+      0 48px 80px -24px rgba(15, 23, 42, 0.28);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -129,8 +129,8 @@ body.resizing-nwse * {
 }
 
 .tiptap-editor {
-  scrollbar-width: thin;
   scrollbar-color: gray transparent;
+  scrollbar-width: thin;
 }
 
 .tiptap-editor .ProseMirror {
@@ -243,21 +243,21 @@ body.resizing-nwse * {
 
 /* ── React Flow node overrides ── */
 
-/* Selected card/folder node styling */
-.react-flow__node.selected:not(.react-flow__node-group):not(
-  .react-flow__node-sticky
-)
-> div {
+/* Selected card/folder node styling — outline on the visual card itself
+   so border + card share the same element, radius, and stacking context */
+.react-flow__node.selected:not(.react-flow__node-group) .node-visual {
   outline: 2px solid #ffffff;
   outline-offset: 0px;
-  border-radius: 24px;
 }
 
-/* Selected sticky node styling */
-.react-flow__node-sticky.selected > div {
-  outline: 2px solid #ffffff;
-  outline-offset: 0px;
-  border-radius: 12px;
+/* Promote each node to its own compositing layer to avoid hover-shadow
+   repaints flickering text on neighboring cards. Applied to the wrapper,
+   not the inner visual, so the outline stays on the same layer as the card. */
+.react-flow__node {
+  isolation: isolate;
+}
+.react-flow__node:hover {
+  will-change: box-shadow;
 }
 
 /* Ensure handles sit above card/folder content */

@@ -344,8 +344,8 @@ const CardNode = ({ id, data }: any) => {
       {/* Visual wrapper with hover lift — keeps Handle positions stable */}
       <div
         className={cn(
-          'size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card',
-          'transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.015] hover:shadow-card-hover'
+          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card',
+          'transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
         {isZoomedOut ? (

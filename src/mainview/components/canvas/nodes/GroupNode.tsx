@@ -65,7 +65,7 @@ const GroupNode = ({ id, data, selected }: any) => {
         className={handleClassName}
         id="top"
         position={Position.Top}
-        type="target"
+        type="source"
       />
       <Handle
         className={handleClassName}
@@ -83,7 +83,7 @@ const GroupNode = ({ id, data, selected }: any) => {
         className={handleClassName}
         id="left"
         position={Position.Left}
-        type="target"
+        type="source"
       />
 
       <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">

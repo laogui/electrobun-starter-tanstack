@@ -250,14 +250,20 @@ body.resizing-nwse * {
   outline-offset: 0px;
 }
 
-/* Promote each node to its own compositing layer to avoid hover-shadow
-   repaints flickering text on neighboring cards. Applied to the wrapper,
+/* Promote each node to its own compositing layer to avoid repaints
+   flickering text on neighboring cards. Applied to the wrapper,
    not the inner visual, so the outline stays on the same layer as the card. */
 .react-flow__node {
   isolation: isolate;
 }
-.react-flow__node:hover {
-  will-change: box-shadow;
+
+/* Pin text to grayscale antialiasing so opacity transitions on sibling
+   elements (handles, resize icon) don't cause WebKit to switch between
+   subpixel and grayscale rendering — which reads as a blur/sharpen flicker. */
+.react-flow__node .node-visual,
+.react-flow__node .node-visual * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Ensure handles sit above card/folder content */
@@ -282,10 +288,6 @@ body.resizing-nwse * {
   border: 2px solid #fff;
   border-radius: 50%;
   opacity: 0;
-  transition:
-    opacity 0.15s,
-    background 0.15s,
-    box-shadow 0.15s;
 }
 
 /* Selected nodes show handles at low opacity to hint connectivity */

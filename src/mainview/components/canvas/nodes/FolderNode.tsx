@@ -40,7 +40,7 @@ const FolderNode = ({ data }: any) => {
         position="bottom-right"
         style={{ padding: 0 }}
       >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/folder:opacity-100">
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/folder:opacity-100">
           <svg
             height="16"
             viewBox="0 0 16 16"

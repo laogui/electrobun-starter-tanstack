@@ -12,6 +12,32 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
+type CaretPositionFromPoint = (
+  x: number,
+  y: number
+) => { offsetNode: Node; offset: number } | null;
+
+const caretRangeFromPoint = (x: number, y: number): Range | null => {
+  if (typeof document.caretRangeFromPoint === 'function') {
+    return document.caretRangeFromPoint(x, y);
+  }
+  const caretPositionFromPoint = (
+    document as Document & {
+      caretPositionFromPoint?: CaretPositionFromPoint;
+    }
+  ).caretPositionFromPoint;
+  if (typeof caretPositionFromPoint === 'function') {
+    const position = caretPositionFromPoint(x, y);
+    if (position) {
+      const range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+      return range;
+    }
+  }
+  return null;
+};
+
 const StickyNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
@@ -28,11 +54,38 @@ const StickyNode = ({ id, data }: any) => {
     setEditing(false);
   }, [id, data.content, onUpdate]);
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditing(true);
-    setTimeout(() => textRef.current?.focus(), 10);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      textRef.current?.blur();
+    }
   }, []);
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (editing) {
+        return;
+      }
+      e.stopPropagation();
+      const { clientX, clientY } = e;
+      setEditing(true);
+      setTimeout(() => {
+        const el = textRef.current;
+        if (!el) {
+          return;
+        }
+        el.focus();
+        const range = caretRangeFromPoint(clientX, clientY);
+        if (range) {
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      }, 10);
+    },
+    [editing]
+  );
 
   return (
     <div
@@ -57,7 +110,7 @@ const StickyNode = ({ id, data }: any) => {
         position="bottom-right"
         style={{ padding: 0 }}
       >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 transition-opacity group-hover/sticky:opacity-100">
+        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/sticky:opacity-100">
           <svg
             height="12"
             viewBox="0 0 16 16"
@@ -103,10 +156,9 @@ const StickyNode = ({ id, data }: any) => {
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card',
-          'transition-shadow duration-200 ease-out hover:shadow-card-hover'
+          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card'
         )}
-        onDoubleClick={handleDoubleClick}
+        onClick={handleClick}
       >
         {isZoomedOut ? (
           <div className="size-full p-3" style={colorToStyle(data.color)}>
@@ -127,6 +179,7 @@ const StickyNode = ({ id, data }: any) => {
               )}
               contentEditable={editing}
               onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
               ref={textRef}
               suppressContentEditableWarning
             >

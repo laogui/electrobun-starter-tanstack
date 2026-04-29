@@ -72,13 +72,37 @@ describe('StickyNode', () => {
     );
 
     const content = screen.getByText('Remember this');
-    fireEvent.doubleClick(content.parentElement?.parentElement!);
+    fireEvent.click(content.parentElement?.parentElement!);
     content.textContent = 'Updated note';
     fireEvent.blur(content);
 
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-1', {
       content: 'Updated note',
     });
+  });
+
+  it('exits editing mode when Escape is pressed', () => {
+    vi.useFakeTimers();
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Original' }}
+        id="sticky-esc"
+      />
+    );
+
+    const content = screen.getByText('Original');
+    fireEvent.click(content.parentElement?.parentElement!);
+    vi.advanceTimersByTime(20);
+    expect(content.getAttribute('contenteditable')).toBe('true');
+
+    content.textContent = 'Edited';
+    fireEvent.keyDown(content, { key: 'Escape' });
+
+    expect(content.getAttribute('contenteditable')).toBe('false');
+    expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-esc', {
+      content: 'Edited',
+    });
+    vi.useRealTimers();
   });
 
   it('renders zoomed-out placeholder lines and hidden state support', () => {

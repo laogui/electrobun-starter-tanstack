@@ -1,14 +1,26 @@
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import type React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 
+import { CanvasContextMenu, type ContextMenuState } from './ContextMenu';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
 
-const FolderChildContent = ({ child }: { child: any }) => {
+interface FolderChild {
+  data: any;
+  id: string;
+  type: string;
+}
+
+interface ActiveChildMenu {
+  menu: NonNullable<ContextMenuState>;
+  rect: DOMRect;
+}
+
+const FolderChildContent = ({ child }: { child: FolderChild }) => {
   if (child.type === 'image') {
     return <ImageContent data={child.data} />;
   }
@@ -27,7 +39,12 @@ const FolderChildContent = ({ child }: { child: any }) => {
   return <CardContent data={child.data} />;
 };
 
-export const FolderView = ({ folder, onClose, onCardClick }: any) => {
+export const FolderView = ({
+  folder,
+  onClose,
+  onCardClick,
+  onMoveChildOut,
+}: any) => {
   const children = folder.data.children || [];
   const count = children.length;
   const cardWidth = 350;
@@ -60,6 +77,7 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [childMenu, setChildMenu] = useState<ActiveChildMenu | null>(null);
   const dragState = useRef({
     isDown: false,
     startX: 0,
@@ -75,6 +93,9 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) {
+      return;
+    }
     const el = scrollRef.current;
     if (!el) {
       return;
@@ -121,6 +142,21 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
       dragState.current.hasDragged = false;
     }
   }, []);
+
+  const handleChildMenuAction = useCallback(
+    (action: string, childId?: string) => {
+      if (action !== 'move-out' || !childId || !childMenu) {
+        return;
+      }
+      const child = children.find((item: FolderChild) => item.id === childId);
+      if (!child) {
+        return;
+      }
+      onMoveChildOut?.(child, childMenu.rect);
+      setChildMenu(null);
+    },
+    [childMenu, children, onMoveChildOut]
+  );
 
   return (
     <motion.div
@@ -216,6 +252,19 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
                     onCardClick(child, rect);
                   }
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setChildMenu({
+                    menu: {
+                      x: e.clientX,
+                      y: e.clientY,
+                      target: 'folder-child',
+                      nodeId: child.id,
+                    },
+                    rect: e.currentTarget.getBoundingClientRect(),
+                  });
+                }}
                 style={{ width: cardWidth, height: cardHeight }}
                 transition={{
                   type: 'spring',
@@ -235,6 +284,13 @@ export const FolderView = ({ folder, onClose, onCardClick }: any) => {
           })}
         </div>
       </div>
+      <CanvasContextMenu
+        menu={childMenu?.menu ?? null}
+        onAction={handleChildMenuAction}
+        onClose={() => {
+          setChildMenu(null);
+        }}
+      />
     </motion.div>
   );
 };

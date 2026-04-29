@@ -70,6 +70,12 @@ interface NodeSpec {
   size: Size;
 }
 
+interface FolderChildEntry {
+  data: Record<string, unknown>;
+  id: string;
+  type?: string;
+}
+
 function buildNewNodeSpec(
   type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
 ): NodeSpec {
@@ -190,6 +196,11 @@ export interface CanvasState {
   // UI state
   focusedNode: FocusedItem | null;
   hydrate: (nodes: Node[], edges: Edge[]) => void;
+  moveFolderChildToCanvas: (
+    folderId: string,
+    childId: string,
+    options?: CreateNodeOptions
+  ) => void;
 
   // Helpers
   nextNodeId: () => string;
@@ -626,6 +637,72 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         };
       }),
     }));
+  },
+
+  moveFolderChildToCanvas: (folderId, childId, options) => {
+    const { nodes } = get();
+    const folder = nodes.find((node) => node.id === folderId);
+    const children = ((folder?.data as any)?.children ??
+      []) as FolderChildEntry[];
+    const child = children.find((item) => item.id === childId);
+    if (!(folder && child)) {
+      return;
+    }
+
+    const isImage = child.type === 'image';
+    const spec = buildNewNodeSpec(isImage ? 'image' : 'card');
+    const anchor =
+      options?.anchor ??
+      (options?.anchorCenter
+        ? {
+            x: options.anchorCenter.x - spec.size.width / 2,
+            y: options.anchorCenter.y - spec.size.height / 2,
+          }
+        : {
+            x: folder.position.x + (FOLDER_W - spec.size.width) / 2,
+            y: folder.position.y + FOLDER_H + 32,
+          });
+
+    get().saveSnapshot();
+    set((s) => {
+      const remainingChildren = children.filter((item) => item.id !== childId);
+      const nextFolderData = {
+        ...folder.data,
+        children: remainingChildren,
+        title: `${remainingChildren.length} items`,
+      };
+      const existingIds = new Set(s.nodes.map((node) => node.id));
+      const restoredNodeId = existingIds.has(child.id)
+        ? `node-${nanoid(8)}`
+        : child.id;
+      const restoredNode: Node = {
+        ...spec.base,
+        id: restoredNodeId,
+        type: isImage ? 'image' : 'card',
+        data: child.data,
+        position: anchor,
+        selected: true,
+      };
+
+      return {
+        focusedFolder:
+          s.focusedFolder?.id === folderId
+            ? {
+                ...s.focusedFolder,
+                data: nextFolderData,
+              }
+            : s.focusedFolder,
+        nodes: sortNodesByParent([
+          ...s.nodes.map((node) => {
+            if (node.id === folderId) {
+              return { ...node, data: nextFolderData, selected: false };
+            }
+            return { ...node, selected: false };
+          }),
+          restoredNode,
+        ]),
+      };
+    });
   },
 
   // -- undo / redo ----------------------------------------------------------

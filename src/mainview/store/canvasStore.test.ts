@@ -725,3 +725,106 @@ describe('canvasStore — addFolderChild', () => {
     expect(data.title).toBe('1 items');
   });
 });
+
+describe('canvasStore — moveFolderChildToCanvas', () => {
+  it('removes a folder child and restores it as a selected canvas node', () => {
+    useCanvasStore.setState({
+      focusedFolder: {
+        id: 'folder',
+        data: {
+          title: '2 items',
+          subtitle: '',
+          children: [
+            {
+              id: 'child-card',
+              type: 'card',
+              data: { title: 'Child Card', content: 'Body', color: '#FFFFFF' },
+            },
+            {
+              id: 'child-image',
+              type: 'image',
+              data: { title: 'Child Image', imageUrl: '', color: '#FFFFFF' },
+            },
+          ],
+        },
+        rect: fakeRect(),
+      },
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: '2 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-card',
+                type: 'card',
+                data: {
+                  title: 'Child Card',
+                  content: 'Body',
+                  color: '#FFFFFF',
+                },
+              },
+              {
+                id: 'child-image',
+                type: 'image',
+                data: {
+                  title: 'Child Image',
+                  imageUrl: '',
+                  color: '#FFFFFF',
+                },
+              },
+            ],
+          },
+        }),
+        makeNode('other', { selected: true }),
+      ],
+    });
+
+    useCanvasStore.getState().moveFolderChildToCanvas('folder', 'child-card', {
+      anchorCenter: { x: 500, y: 400 },
+    });
+
+    const state = useCanvasStore.getState();
+    const folder = state.nodes.find((node) => node.id === 'folder');
+    const restored = state.nodes.find((node) => node.id === 'child-card');
+
+    expect(folder?.data.title).toBe('1 items');
+    expect(folder?.data.children).toEqual([
+      expect.objectContaining({ id: 'child-image' }),
+    ]);
+    expect(restored).toMatchObject({
+      id: 'child-card',
+      type: 'card',
+      data: { title: 'Child Card', content: 'Body', color: '#FFFFFF' },
+      position: { x: 500 - CARD_W / 2, y: 400 - CARD_H / 2 },
+      selected: true,
+    });
+    expect(state.nodes.find((node) => node.id === 'other')?.selected).toBe(
+      false
+    );
+    expect(state.focusedFolder?.data).toMatchObject({
+      title: '1 items',
+      children: [expect.objectContaining({ id: 'child-image' })],
+    });
+    expect(state.canUndo()).toBe(true);
+  });
+
+  it('does nothing when the folder child is missing', () => {
+    const nodes = [
+      makeNode('folder', {
+        type: 'folder',
+        data: { title: '0 items', subtitle: '', children: [] },
+      }),
+    ];
+    useCanvasStore.setState({ nodes });
+
+    useCanvasStore
+      .getState()
+      .moveFolderChildToCanvas('folder', 'missing-child');
+
+    expect(useCanvasStore.getState().nodes).toBe(nodes);
+    expect(useCanvasStore.getState().canUndo()).toBe(false);
+  });
+});

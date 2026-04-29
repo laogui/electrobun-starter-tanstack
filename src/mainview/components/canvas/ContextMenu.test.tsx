@@ -38,6 +38,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
   menu_new_card_inside: () => 'New child',
+  menu_move_out: () => 'Move Out',
   menu_edit_label: () => 'Edit label',
   menu_toggle_animation: () => 'Toggle animation',
   menu_toggle_straight: () => 'Toggle Straight',
@@ -137,5 +138,28 @@ describe('canvasContextMenu', () => {
     expect(
       screen.getByRole('button', { name: 'Toggle Curved' })
     ).toBeInTheDocument();
+  });
+
+  it('renders the folder child move-out action', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'folder-child',
+          nodeId: 'child-1',
+        }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move Out' }));
+
+    expect(onAction).toHaveBeenCalledWith('move-out', 'child-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

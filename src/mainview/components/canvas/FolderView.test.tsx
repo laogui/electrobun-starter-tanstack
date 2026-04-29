@@ -21,6 +21,15 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
   ),
 }));
 
+vi.mock('@/store/canvasStore', () => ({
+  useCanvasStore: (selector: (state: { edges: unknown[] }) => unknown) =>
+    selector({ edges: [] }),
+}));
+
+vi.mock('../../../paraglide/messages.js', () => ({
+  menu_move_out: () => 'Move Out',
+}));
+
 const rect = {
   x: 0,
   y: 0,
@@ -111,6 +120,41 @@ describe('folderView', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('opens a child context menu and moves a child out', () => {
+    const onMoveChildOut = vi.fn();
+
+    render(
+      <FolderView
+        folder={{
+          id: 'folder-1',
+          rect,
+          data: {
+            title: 'Folder Title',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-card',
+                type: 'card',
+                data: { title: 'Child Card', content: 'Body', color: '#fff' },
+              },
+            ],
+          },
+        }}
+        onCardClick={vi.fn()}
+        onClose={vi.fn()}
+        onMoveChildOut={onMoveChildOut}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByText('card-child:Child Card:Body'));
+    fireEvent.click(screen.getByRole('button', { name: 'Move Out' }));
+
+    expect(onMoveChildOut).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'child-card' }),
+      expect.objectContaining({ width: expect.any(Number) })
+    );
   });
 
   it('renders many children and forwards image child clicks too', () => {

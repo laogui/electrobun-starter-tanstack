@@ -116,6 +116,9 @@ function CanvasComponent() {
     (s) => s.setPendingSearchTarget
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
+  const moveFolderChildToCanvas = useCanvasStore(
+    (s) => s.moveFolderChildToCanvas
+  );
 
   useCanvasPersistence();
 
@@ -264,6 +267,23 @@ function CanvasComponent() {
     [setFocusedFolder]
   );
 
+  const onMoveFolderChildOut = useCallback(
+    (child: { id: string }, rect: DOMRect) => {
+      if (!focusedFolder) {
+        return;
+      }
+      const viewport = rfInstance.current?.getViewport();
+      const zoom = viewport?.zoom ?? 1;
+      moveFolderChildToCanvas(focusedFolder.id, child.id, {
+        anchorCenter: {
+          x: (rect.left + rect.width / 2 - (viewport?.x ?? 0)) / zoom,
+          y: (rect.top + rect.height / 2 - (viewport?.y ?? 0)) / zoom,
+        },
+      });
+    },
+    [focusedFolder, moveFolderChildToCanvas]
+  );
+
   const nodesWithState = useMemo(
     () =>
       nodes.map((node) => ({
@@ -368,6 +388,7 @@ function CanvasComponent() {
             onClose={() => {
               setFocusedFolder(null);
             }}
+            onMoveChildOut={onMoveFolderChildOut}
           />
         ) : null}
         {focusedNode ? (

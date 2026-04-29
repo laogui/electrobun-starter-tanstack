@@ -7,6 +7,7 @@ import {
   Group,
   ImageIcon,
   ListChecks,
+  LogOut,
   Maximize2,
   NotebookPen,
   Palette,
@@ -37,7 +38,15 @@ interface MenuItem {
 type ContextMenuState = {
   x: number;
   y: number;
-  target: 'canvas' | 'card' | 'image' | 'folder' | 'group' | 'sticky' | 'edge';
+  target:
+    | 'canvas'
+    | 'card'
+    | 'folder-child'
+    | 'image'
+    | 'folder'
+    | 'group'
+    | 'sticky'
+    | 'edge';
   nodeId?: string;
   edgeId?: string;
 } | null;
@@ -78,6 +87,10 @@ const getCardItems = (): MenuItem[] => [
     shortcut: '⌫',
     danger: true,
   },
+];
+
+const getFolderChildItems = (): MenuItem[] => [
+  { id: 'move-out', label: m.menu_move_out(), icon: LogOut },
 ];
 
 const getFolderItems = (): MenuItem[] => [
@@ -214,20 +227,23 @@ export function CanvasContextMenu({
     };
   }, [menu, onClose]);
 
-  const items =
-    menu?.target === 'edge'
+  const items = menu
+    ? menu.target === 'edge'
       ? getEdgeItems(edgePathType)
-      : menu?.target === 'folder'
-        ? getFolderItems()
-        : menu?.target === 'group'
-          ? getGroupItems()
-          : menu?.target === 'sticky'
-            ? getStickyItems()
-            : menu?.target === 'image'
-              ? getImageItems()
-              : menu?.target === 'card'
-                ? getCardItems()
-                : getCanvasItems();
+      : menu.target === 'folder-child'
+        ? getFolderChildItems()
+        : menu.target === 'folder'
+          ? getFolderItems()
+          : menu.target === 'group'
+            ? getGroupItems()
+            : menu.target === 'sticky'
+              ? getStickyItems()
+              : menu.target === 'image'
+                ? getImageItems()
+                : menu.target === 'card'
+                  ? getCardItems()
+                  : getCanvasItems()
+    : [];
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
   const y = menu
@@ -242,6 +258,15 @@ export function CanvasContextMenu({
           className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
           initial={{ opacity: 0, scale: 0.95, y: -4 }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           ref={ref}
           style={{ left: x, top: y }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}

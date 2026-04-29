@@ -17,6 +17,8 @@ import {
   noteToCardData,
 } from './notes';
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
+import type { SearchResult } from './search';
+import { searchWorkspace } from './search';
 import {
   addView,
   atomicWrite,
@@ -138,8 +140,18 @@ interface CanvasRPC {
         params: { viewId: string; name: string };
         response: { success: boolean };
       };
+      searchCanvas: {
+        params: {
+          query: string;
+          viewId?: string;
+          limit?: number;
+        };
+        response: SearchResult[];
+      };
     };
-    messages: Record<never, unknown>;
+    messages: {
+      openSearch: Record<never, unknown>;
+    };
   };
   webview: {
     requests: Record<string, { params: unknown; response: unknown }>;
@@ -257,7 +269,24 @@ async function main() {
         { role: 'selectAll' },
       ],
     },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Search…',
+          action: 'openSearch',
+          accelerator: 'CmdOrCtrl+K',
+        },
+      ],
+    },
   ]);
+
+  ApplicationMenu.on('application-menu-clicked', (event: unknown) => {
+    const e = event as { data?: { action?: string } };
+    if (e.data?.action === 'openSearch') {
+      mainRpc?.send?.openSearch({});
+    }
+  });
 
   const wsPath = initWorkspace();
   await loadSettings(wsPath);
@@ -570,6 +599,9 @@ async function main() {
           const success = await renameView(wsPath, viewId, name);
           return { success };
         },
+
+        searchCanvas: async ({ query, viewId, limit }) =>
+          await searchWorkspace(wsPath, { query, viewId, limit }),
       },
       messages: {},
     },

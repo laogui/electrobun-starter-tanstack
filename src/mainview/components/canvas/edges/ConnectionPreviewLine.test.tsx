@@ -51,6 +51,7 @@ describe('ConnectionPreviewLine', () => {
   it('renders a preview path with the active arrow marker', () => {
     const { container } = render(
       <svg>
+        <title>Connection preview line test</title>
         <ConnectionPreviewLine {...createProps()} />
       </svg>
     );
@@ -71,6 +72,7 @@ describe('ConnectionPreviewLine', () => {
   it('uses the hovered handle position when a target handle is available', () => {
     render(
       <svg>
+        <title>Connection preview line with target handle test</title>
         <ConnectionPreviewLine
           {...createProps()}
           toHandle={

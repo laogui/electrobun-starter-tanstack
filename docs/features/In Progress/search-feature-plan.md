@@ -32,10 +32,12 @@ Card 节点的正文不会长期完整保存在 manifest 中。保存 manifest �
 | Folder | manifest | title、subtitle | node |
 | Group | manifest | label | node |
 | Image 节点 | manifest + attachment | title | node |
-| Edge 连接 | manifest | data.label | source/target 中点或 source node |
+| Edge 连接 | manifest | label（顶层）/ data.label | source/target 中点或 source node |
 | View | workspace.json | name | view |
 
 MVP 可以先实现 node 和 view 搜索。Edge 搜索可以作为第二步，因为 edge 的定位和选中交互需要额外定义。
+
+注意：当前 `ManifestEdge.label` 是顶层字段（见 `src/bun/manifest.ts`），不是 `data.label`。前端 React Flow 也可能在 `edge.data.label` 上挂自定义文本。Edge 搜索实现时要同时兼容这两处，避免漏匹配。
 
 ---
 
@@ -213,7 +215,8 @@ export interface SearchResult {
 1. 规范化 query：
    - `trim()`
    - 空字符串直接返回 `[]`
-   - 默认大小写不敏感
+   - 默认大小写不敏感：用 `query.toLowerCase()` 后 `String.indexOf` 比较即可。
+   - CJK 友好说明：`toLowerCase()` 对中文是 no-op，`indexOf` 按 codepoint 比较，中文搜索天然能用。**不要**做 word boundary 检测或英文词干提取，否则中文短语会匹配失败。MVP 不做拼音/分词。
 2. 读取 workspace config：
    - 获取所有 views
    - 如果传入 `viewId`，只搜索该 view
@@ -230,9 +233,17 @@ export interface SearchResult {
    - card manifest 中仍存在的 `data.title` / `data.tag`
    - view name
 6. 扫描 `content/**/*.md`：
-   - 复用或导出现有 frontmatter/body 解析能力，避免重复 parser。
+   - 复用现有 frontmatter/body 解析能力。当前 `src/bun/notes.ts` 中的 `parseFrontmatter` 和 `listFilesRecursive` 是模块私有的；实施时优先把 `searchNotes` 写在 `notes.ts` 内部直接复用，不必扩大 API 表面。如果搜索逻辑放在新文件 `src/bun/search.ts`，再把这两个函数 `export` 出来。
    - 用 frontmatter `id` 找回所有引用该 note 的 node。
    - 对 title、tag、tags、createdAt、body 做匹配。
+   - body 匹配前先做 Markdown 清洗，避免命中代码块/链接 URL 等噪声：
+     - 去除 ``` 围栏代码块和行内 `` ` `` 代码。
+     - 图片 `![alt](url)` 直接整段替换为空。
+     - 链接 `[text](url)` 只保留 `text`。
+     - 行首 `#` 标题符、`- [x]` / `- [ ]` 任务前缀去掉。
+     - **保守处理强调符号**：只剥成对的 `**bold**` / `*italic*` / `~~del~~` 标记（用类似 `\*\*([^*]+)\*\*` → `$1` 的形式），不要无差别 `replaceAll(/[*_~]/g, '')`，否则正文里的 `foo_bar` 会被破坏成 `foobar` 造成漏命中。
+     - 多空白合并为单空格。
+     - 命中位置在**清洗后**文本上计算，excerpt 也从清洗后文本切片返回，前端直接渲染该字符串即可。
 7. 生成 excerpt：
    - title/tag 命中：返回命中字段自身或 body 前段。
    - body 命中：返回命中位置前后固定字符，例如前后各 48 字符。

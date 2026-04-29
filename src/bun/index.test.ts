@@ -32,6 +32,7 @@ function BrowserWindowMock(...args: unknown[]) {
 vi.mock('electrobun/bun', () => ({
   ApplicationMenu: {
     setApplicationMenu: setApplicationMenuMock,
+    on: vi.fn(),
   },
   BrowserView: {
     defineRPC: (...args: Parameters<typeof defineRpcMock>) =>

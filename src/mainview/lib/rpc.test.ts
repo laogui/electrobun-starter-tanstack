@@ -14,6 +14,7 @@ const request = {
   createView: vi.fn(),
   deleteView: vi.fn(),
   renameView: vi.fn(),
+  searchCanvas: vi.fn(),
 };
 
 const defineRPC = vi.fn(() => ({ request }));
@@ -75,6 +76,7 @@ describe('rpc', () => {
     await expect(rpc.rpcCreateView('Inbox')).resolves.toBeNull();
     await expect(rpc.rpcDeleteView('view-1')).resolves.toBeNull();
     await expect(rpc.rpcRenameView('view-1', 'Inbox')).resolves.toBeNull();
+    await expect(rpc.rpcSearchCanvas('hello')).resolves.toBeNull();
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
   });
 
@@ -114,6 +116,7 @@ describe('rpc', () => {
     await rpc.rpcCreateView('Inbox');
     await rpc.rpcDeleteView('view-1');
     await rpc.rpcRenameView('view-1', 'Renamed');
+    await rpc.rpcSearchCanvas('foo', { viewId: 'v1', limit: 20 });
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -146,6 +149,11 @@ describe('rpc', () => {
     expect(request.renameView).toHaveBeenCalledWith({
       viewId: 'view-1',
       name: 'Renamed',
+    });
+    expect(request.searchCanvas).toHaveBeenCalledWith({
+      query: 'foo',
+      viewId: 'v1',
+      limit: 20,
     });
   });
 

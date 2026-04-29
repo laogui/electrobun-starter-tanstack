@@ -1,9 +1,9 @@
 import type { Connection } from '@xyflow/react';
 
-export type ConnectionStartState = {
+export interface ConnectionStartState {
   handleId: string | null;
   nodeId: string | null;
-};
+}
 
 export const shouldReverseEdgeDirection = (
   connectionStart: ConnectionStartState,

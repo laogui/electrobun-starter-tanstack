@@ -1,11 +1,11 @@
 import { Position } from '@xyflow/react';
 
-type ConnectionPreviewTargetPositionParams = {
+interface ConnectionPreviewTargetPositionParams {
   fromX: number;
   fromY: number;
   toX: number;
   toY: number;
-};
+}
 
 export const getConnectionPreviewTargetPosition = ({
   fromX,

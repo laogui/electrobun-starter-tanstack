@@ -42,6 +42,9 @@ async function initElectrobun() {
               })
             );
           },
+          openSearch: () => {
+            globalThis.dispatchEvent(new CustomEvent('open-search'));
+          },
         } as any,
       },
     });
@@ -194,6 +197,21 @@ export async function rpcRenameView(viewId: string, name: string) {
     return null;
   }
   return eb.rpc.request.renameView({ viewId, name });
+}
+
+export async function rpcSearchCanvas(
+  query: string,
+  options?: { viewId?: string; limit?: number }
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.searchCanvas({
+    query,
+    viewId: options?.viewId,
+    limit: options?.limit,
+  });
 }
 
 export async function isRpcAvailable(): Promise<boolean> {

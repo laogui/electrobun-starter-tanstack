@@ -30,7 +30,7 @@ const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const NUMERIC_FRONTMATTER_KEYS = new Set(['previewBlocks', 'previewVersion']);
 
 // Simple YAML frontmatter parser
-function parseFrontmatter(content: string): {
+export function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
   body: string;
 } {
@@ -121,7 +121,7 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
 }
 
 /** Recursively list all files under a directory (returns relative paths). */
-function listFilesRecursive(dir: string, prefix = ''): string[] {
+export function listFilesRecursive(dir: string, prefix = ''): string[] {
   const results: string[] = [];
   if (!existsSync(dir)) {
     return results;

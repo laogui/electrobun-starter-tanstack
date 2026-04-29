@@ -17,6 +17,8 @@ export function useCanvasKeyboard() {
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
   const undo = useCanvasStore((s) => s.undo);
   const redo = useCanvasStore((s) => s.redo);
+  const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
+  const searchOpen = useCanvasStore((s) => s.searchOpen);
 
   useEffect(() => {
     const isModal = () => focusedNode || focusedFolder;
@@ -32,7 +34,18 @@ export function useCanvasKeyboard() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
 
+      // Cmd/Ctrl+K: toggle search dialog (works even while editing/inside modals)
+      if (mod && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+        return;
+      }
+
       if (e.key === 'Escape') {
+        if (searchOpen) {
+          // Let Dialog handle escape itself; do nothing here.
+          return;
+        }
         if (focusedNode) {
           setFocusedNode(null);
           return;
@@ -120,8 +133,15 @@ export function useCanvasKeyboard() {
     };
 
     globalThis.addEventListener('keydown', handleKeyDown);
+
+    const handleOpenSearch = () => {
+      setSearchOpen(true);
+    };
+    globalThis.addEventListener('open-search', handleOpenSearch);
+
     return () => {
       globalThis.removeEventListener('keydown', handleKeyDown);
+      globalThis.removeEventListener('open-search', handleOpenSearch);
     };
   }, [
     focusedNode,
@@ -133,6 +153,8 @@ export function useCanvasKeyboard() {
     copySelected,
     pasteClipboard,
     setCreateMenuOpen,
+    setSearchOpen,
+    searchOpen,
     undo,
     redo,
   ]);

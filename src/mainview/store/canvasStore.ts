@@ -48,6 +48,12 @@ export interface FocusedItem {
   type?: string;
 }
 
+export interface PendingSearchTarget {
+  edgeId?: string;
+  nodeId?: string;
+  viewId: string;
+}
+
 export interface CreateNodeOptions {
   /** Top-left anchor in flow coords. Takes precedence over `anchorCenter`. */
   anchor?: { x: number; y: number };
@@ -158,6 +164,10 @@ export interface CanvasState {
   canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
   clipboard: Node[];
+  /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
+  commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
+  /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
+  commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
 
   // Actions – clipboard
   copySelected: () => void;
@@ -186,9 +196,13 @@ export interface CanvasState {
   // Core data
   nodes: Node[];
   pasteClipboard: (offset?: number) => void;
+  pendingSearchTarget: PendingSearchTarget | null;
   redo: () => void;
   reset: () => void;
   saveSnapshot: () => void;
+
+  // Search
+  searchOpen: boolean;
 
   // Actions – multi-view
   setActiveView: (viewId: string) => void;
@@ -203,14 +217,13 @@ export interface CanvasState {
 
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
+  setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
+  setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
+
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
-  /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
-  commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
-  /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
-  commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   views: Array<{ id: string; name: string }>;
 }
 
@@ -231,6 +244,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
   _undoRedo: createUndoRedoState(),
+  searchOpen: false,
+  pendingSearchTarget: null,
 
   // -- hydration ------------------------------------------------------------
   hydrate: (nodes, edges) => {
@@ -348,6 +363,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       createMenuOpen: typeof v === 'function' ? v(s.createMenuOpen) : v,
     }));
+  },
+
+  setSearchOpen: (v) => {
+    set((s) => ({
+      searchOpen: typeof v === 'function' ? v(s.searchOpen) : v,
+    }));
+  },
+
+  setPendingSearchTarget: (target) => {
+    set({ pendingSearchTarget: target });
   },
 
   // -- multi-view actions ---------------------------------------------------

@@ -22,6 +22,7 @@ import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
+import { SearchDialog } from '@/components/search/SearchDialog';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -110,8 +111,62 @@ function CanvasComponent() {
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
+  const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
+  const setPendingSearchTarget = useCanvasStore(
+    (s) => s.setPendingSearchTarget
+  );
+  const setNodes = useCanvasStore((s) => s.setNodes);
 
   useCanvasPersistence();
+
+  // Cross-view search target: locate node after hydration completes.
+  useEffect(() => {
+    if (!(hydrated && pendingSearchTarget)) {
+      return;
+    }
+    if (pendingSearchTarget.viewId !== activeViewId) {
+      return;
+    }
+    const targetId = pendingSearchTarget.nodeId ?? pendingSearchTarget.edgeId;
+    if (!targetId) {
+      setPendingSearchTarget(null);
+      return;
+    }
+    if (pendingSearchTarget.nodeId) {
+      const nodeId = pendingSearchTarget.nodeId;
+      setNodes((prev) =>
+        prev.map((n) => ({ ...n, selected: n.id === nodeId }))
+      );
+      const inst = rfInstance.current;
+      const target = inst
+        ?.getNodes?.()
+        ?.find((n: { id: string }) => n.id === nodeId) as
+        | {
+            position?: { x: number; y: number };
+            measured?: { width?: number; height?: number };
+            width?: number;
+            height?: number;
+          }
+        | undefined;
+      if (inst && target?.position) {
+        const w = target.measured?.width ?? target.width ?? 240;
+        const h = target.measured?.height ?? target.height ?? 160;
+        const viewport = inst.getViewport?.();
+        const zoom = viewport?.zoom ?? 1;
+        inst.setCenter?.(target.position.x + w / 2, target.position.y + h / 2, {
+          zoom,
+          duration: 240,
+        });
+      }
+    }
+    setPendingSearchTarget(null);
+  }, [
+    hydrated,
+    pendingSearchTarget,
+    activeViewId,
+    setPendingSearchTarget,
+    setNodes,
+  ]);
 
   useEffect(() => {
     if (hydrated) {
@@ -321,6 +376,7 @@ function CanvasComponent() {
           setContextMenu(null);
         }}
       />
+      <SearchDialog rfInstance={rfInstance} />
     </div>
   );
 }

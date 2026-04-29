@@ -157,10 +157,14 @@ export function useNodeDrag() {
           draggingIds.add(node.id);
         }
 
-        // Content nodes can enter any group or folder
+        // Content nodes can enter any group; only those absorbable by folders
+        // (e.g. card/image but not sticky) are exempt from folder repulsion.
         if (isContentNode(node)) {
+          const canEnterFolder = canAbsorbIntoFolder(node);
           for (const n of nds) {
-            if (n.type === 'group' || n.type === 'folder') {
+            if (n.type === 'group') {
+              exemptIds.add(n.id);
+            } else if (n.type === 'folder' && canEnterFolder) {
               exemptIds.add(n.id);
             }
           }

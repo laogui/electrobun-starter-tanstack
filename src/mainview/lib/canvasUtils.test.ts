@@ -140,16 +140,16 @@ describe('canBeChildOf', () => {
 });
 
 describe('canAbsorbIntoFolder', () => {
-  it('returns true for card, image, sticky', () => {
-    for (const type of ['card', 'image', 'sticky']) {
+  it('returns true for card, image', () => {
+    for (const type of ['card', 'image']) {
       const node = createNode('n1') as Node;
       node.type = type;
       expect(canAbsorbIntoFolder(node)).toBe(true);
     }
   });
 
-  it('returns false for folder, group', () => {
-    for (const type of ['folder', 'group']) {
+  it('returns false for sticky, folder, group', () => {
+    for (const type of ['sticky', 'folder', 'group']) {
       const node = createNode('n1') as Node;
       node.type = type;
       expect(canAbsorbIntoFolder(node)).toBe(false);

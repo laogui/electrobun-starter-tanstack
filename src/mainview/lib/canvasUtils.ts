@@ -4,7 +4,7 @@ import type { Node } from '@xyflow/react';
 export const GROUP_CHILD_TYPES = new Set(['card', 'image', 'sticky', 'folder']);
 
 /** Node types that can be absorbed into a Folder's children array. */
-export const FOLDER_CHILD_TYPES = new Set(['card', 'image', 'sticky']);
+export const FOLDER_CHILD_TYPES = new Set(['card', 'image']);
 
 /** Returns true when the child node type can be parented to the parent node. */
 export function canBeChildOf(parent: Node, child: Node): boolean {

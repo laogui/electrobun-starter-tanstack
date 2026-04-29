@@ -249,6 +249,21 @@ function CanvasComponent() {
     [setFocusedNode, setFocusedFolder]
   );
 
+  const onNodeClick = useCallback(
+    (_: any, node: Node) => {
+      if (node.type !== 'folder') {
+        return;
+      }
+      const el = document.querySelector(`[data-id="${node.id}"]`);
+      const rect = el?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setFocusedFolder({ id: node.id, data: node.data, rect });
+    },
+    [setFocusedFolder]
+  );
+
   const nodesWithState = useMemo(
     () =>
       nodes.map((node) => ({
@@ -304,6 +319,7 @@ function CanvasComponent() {
         onInit={(instance) => {
           rfInstance.current = instance;
         }}
+        onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeDrag={onNodeDrag}

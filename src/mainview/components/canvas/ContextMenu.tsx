@@ -190,6 +190,13 @@ export function CanvasContextMenu({
       return;
     }
     const handleClick = (e: PointerEvent) => {
+      // Ignore right/middle clicks — let the contextmenu event reposition the
+      // menu instead of closing-then-reopening (which races with React updates
+      // and makes the first right-click appear unresponsive).
+      const button = e.button ?? 0;
+      if (button !== 0) {
+        return;
+      }
       if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
         onClose();
       }

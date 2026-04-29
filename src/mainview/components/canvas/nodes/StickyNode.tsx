@@ -7,6 +7,7 @@ import {
 import { memo, useCallback, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
+import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -47,7 +48,7 @@ const StickyNode = ({ id, data }: any) => {
   const textRef = useRef<HTMLDivElement>(null);
 
   const handleBlur = useCallback(() => {
-    const text = textRef.current?.textContent ?? '';
+    const text = textRef.current ? editableElementToText(textRef.current) : '';
     if (text !== data.content) {
       onUpdate(id, { content: text });
     }

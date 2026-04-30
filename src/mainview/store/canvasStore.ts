@@ -150,12 +150,26 @@ function buildNewNodeSpec(
   }
 }
 
+export type LayoutMode = 'canvas' | 'document';
+
+/**
+ * Sidebar section in document mode.
+ * - "all": every card / image (top-level + inside folders)
+ * - "inbox": only cards / images at the canvas root
+ * - "archive": currently empty placeholder
+ * - "folder:<id>": filter to a single folder's children
+ */
+export type DocumentSection = 'all' | 'inbox' | 'archive' | `folder:${string}`;
+
 export interface CanvasState {
   // Hydration
   _hydrated: boolean;
 
   // Undo / Redo
   _undoRedo: UndoRedoState;
+
+  // Folder-child mutations exposed for document mode
+  absorbCardIntoFolder: (cardId: string, folderId: string) => void;
 
   // Multi-view
   activeViewId: string;
@@ -172,6 +186,11 @@ export interface CanvasState {
   clipboard: Node[];
   /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
   commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
+  commitFolderChildData: (
+    folderId: string,
+    childId: string,
+    updates: Record<string, unknown>
+  ) => void;
   /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
   commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
 
@@ -186,7 +205,9 @@ export interface CanvasState {
     options?: CreateNodeOptions
   ) => void;
   deleteEdge: (edgeId: string) => void;
+  deleteFolderChild: (folderId: string, childId: string) => void;
   deleteNodes: (ids: string[]) => void;
+  documentSection: DocumentSection;
   edges: Edge[];
 
   // Actions – edge
@@ -196,6 +217,9 @@ export interface CanvasState {
   // UI state
   focusedNode: FocusedItem | null;
   hydrate: (nodes: Node[], edges: Edge[]) => void;
+
+  // Layout mode (canvas vs document)
+  layoutMode: LayoutMode;
   moveFolderChildToCanvas: (
     folderId: string,
     childId: string,
@@ -214,26 +238,35 @@ export interface CanvasState {
 
   // Search
   searchOpen: boolean;
+  selectedDocumentId: string | null;
 
   // Actions – multi-view
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setDocumentSection: (section: DocumentSection) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
   // Actions – UI
   setFocusedNode: (v: FocusedItem | null) => void;
+  setLayoutMode: (mode: LayoutMode) => void;
 
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setSelectedDocumentId: (id: string | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
 
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
+  updateFolderChildData: (
+    folderId: string,
+    childId: string,
+    updates: Record<string, unknown>
+  ) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
   views: Array<{ id: string; name: string }>;
 }
@@ -257,6 +290,113 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
   pendingSearchTarget: null,
+  layoutMode: 'canvas',
+  selectedDocumentId: null,
+  documentSection: 'all',
+
+  setLayoutMode: (mode) => {
+    set({ layoutMode: mode });
+  },
+  setSelectedDocumentId: (id) => {
+    set({ selectedDocumentId: id });
+  },
+  setDocumentSection: (section) => {
+    set({ documentSection: section });
+  },
+
+  absorbCardIntoFolder: (cardId, folderId) => {
+    const { nodes } = get();
+    const card = nodes.find((n) => n.id === cardId);
+    const folder = nodes.find((n) => n.id === folderId);
+    if (!(card && folder) || folder.type !== 'folder') {
+      return;
+    }
+    if (card.type !== 'card' && card.type !== 'image') {
+      return;
+    }
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes
+        .filter((n) => n.id !== cardId)
+        .map((n) => {
+          if (n.id !== folderId) {
+            return n;
+          }
+          const existing = ((n.data as any).children ?? []) as Array<{
+            data: Record<string, unknown>;
+            id: string;
+            type?: string;
+          }>;
+          const children = [
+            ...existing,
+            {
+              id: card.id,
+              type: card.type as 'card' | 'image',
+              data: card.data as Record<string, unknown>,
+            },
+          ];
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              children,
+              title: `${children.length} items`,
+            },
+          };
+        }),
+      edges: s.edges.filter((e) => e.source !== cardId && e.target !== cardId),
+    }));
+  },
+
+  deleteFolderChild: (folderId, childId) => {
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((n) => {
+        if (n.id !== folderId) {
+          return n;
+        }
+        const existing = ((n.data as any).children ?? []) as Array<{
+          id: string;
+        }>;
+        const children = existing.filter((c) => c.id !== childId);
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            children,
+            title: `${children.length} items`,
+          },
+        };
+      }),
+    }));
+  },
+
+  updateFolderChildData: (folderId, childId, updates) => {
+    set((s) => ({
+      nodes: s.nodes.map((n) => {
+        if (n.id !== folderId) {
+          return n;
+        }
+        const existing = ((n.data as any).children ?? []) as Array<{
+          data: Record<string, unknown>;
+          id: string;
+          type?: string;
+        }>;
+        const children = existing.map((c) =>
+          c.id === childId ? { ...c, data: { ...c.data, ...updates } } : c
+        );
+        return {
+          ...n,
+          data: { ...n.data, children },
+        };
+      }),
+    }));
+  },
+
+  commitFolderChildData: (folderId, childId, updates) => {
+    get().saveSnapshot();
+    get().updateFolderChildData(folderId, childId, updates);
+  },
 
   // -- hydration ------------------------------------------------------------
   hydrate: (nodes, edges) => {

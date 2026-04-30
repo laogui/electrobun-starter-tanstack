@@ -111,3 +111,91 @@ export function isDescendant(
   }
   return false;
 }
+
+// ---------------------------------------------------------------------------
+// Document mode tree
+// ---------------------------------------------------------------------------
+
+export interface DocumentTreeNode {
+  /** Folder children: { folderId, childId }; top-level cards/folders/images: top-level node id. */
+  childId?: string;
+  children?: DocumentTreeNode[];
+  data: Record<string, unknown>;
+  folderId?: string;
+  /** Composite id used as React key + selection token; "node:<id>" or "child:<folderId>:<childId>". */
+  id: string;
+  kind: 'folder' | 'card' | 'image';
+}
+
+const DOC_TREE_TYPES = new Set(['folder', 'card', 'image']);
+
+/**
+ * Project React Flow nodes into a tree suitable for the document-mode sidebar.
+ * - Folders become expandable branches; their children come from `data.children`.
+ * - Top-level cards / images / folders are root entries.
+ * - Stickies, groups, and edges are intentionally omitted.
+ * - Cards parented to a Group still appear at the root (groups are ignored in document mode).
+ */
+export function nodesToDocumentTree(nodes: Node[]): DocumentTreeNode[] {
+  const roots: DocumentTreeNode[] = [];
+  for (const node of nodes) {
+    if (!DOC_TREE_TYPES.has(node.type ?? '')) {
+      continue;
+    }
+    if (node.type === 'folder') {
+      const rawChildren = ((node.data as any)?.children ?? []) as Array<{
+        data: Record<string, unknown>;
+        id: string;
+        type?: string;
+      }>;
+      const children = rawChildren.map<DocumentTreeNode>((c) => ({
+        id: `child:${node.id}:${c.id}`,
+        kind: c.type === 'image' ? 'image' : 'card',
+        data: c.data,
+        folderId: node.id,
+        childId: c.id,
+      }));
+      roots.push({
+        id: `node:${node.id}`,
+        kind: 'folder',
+        data: node.data as Record<string, unknown>,
+        children,
+      });
+      continue;
+    }
+    roots.push({
+      id: `node:${node.id}`,
+      kind: node.type === 'image' ? 'image' : 'card',
+      data: node.data as Record<string, unknown>,
+    });
+  }
+  return roots;
+}
+
+/** Resolve a sidebar selection token back into the underlying node / folder-child reference. */
+export function resolveDocumentSelection(
+  token: string | null
+):
+  | { kind: 'node'; nodeId: string }
+  | { kind: 'child'; folderId: string; childId: string }
+  | null {
+  if (!token) {
+    return null;
+  }
+  if (token.startsWith('node:')) {
+    return { kind: 'node', nodeId: token.slice(5) };
+  }
+  if (token.startsWith('child:')) {
+    const rest = token.slice(6);
+    const sep = rest.indexOf(':');
+    if (sep < 0) {
+      return null;
+    }
+    return {
+      kind: 'child',
+      folderId: rest.slice(0, sep),
+      childId: rest.slice(sep + 1),
+    };
+  }
+  return null;
+}

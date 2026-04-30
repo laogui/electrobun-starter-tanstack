@@ -5,11 +5,69 @@ import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
-import { Settings } from 'lucide-react';
+import { FileText, LayoutGrid, Settings } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useEffect } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
+import type { LayoutMode } from '@/store/canvasStore';
+import { useCanvasStore } from '@/store/canvasStore';
+
+const LAYOUT_OPTIONS: Array<{
+  icon: typeof LayoutGrid;
+  label: string;
+  mode: LayoutMode;
+}> = [
+  { mode: 'canvas', label: 'Canvas', icon: LayoutGrid },
+  { mode: 'document', label: 'Document', icon: FileText },
+];
+
+function LayoutSwitcher() {
+  const layoutMode = useCanvasStore((s) => s.layoutMode);
+  const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
+  return (
+    <div
+      aria-label="Switch layout"
+      className="electrobun-webkit-app-region-no-drag flex items-center gap-1 rounded-full bg-black/5 p-0.5 dark:bg-white/5"
+      role="tablist"
+    >
+      {LAYOUT_OPTIONS.map((opt) => {
+        const Icon = opt.icon;
+        const active = layoutMode === opt.mode;
+        return (
+          <motion.button
+            aria-selected={active}
+            className={`relative flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-[11px] transition-colors ${
+              active
+                ? 'text-gray-900 dark:text-white'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+            key={opt.mode}
+            onClick={() => {
+              setLayoutMode(opt.mode);
+            }}
+            role="tab"
+            type="button"
+            whileTap={{ scale: 0.94 }}
+          >
+            {active ? (
+              <motion.span
+                className="absolute inset-0 rounded-full bg-white shadow-sm dark:bg-neutral-700"
+                layoutId="layout-switcher-pill"
+                transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              />
+            ) : null}
+            <span className="relative flex items-center gap-1">
+              <Icon size={12} />
+              {opt.label}
+            </span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
 
 import { setLocale } from '../../paraglide/runtime.js';
 
@@ -101,22 +159,25 @@ function RootDocument() {
         </defs>
       </svg>
 
-      {/* Draggable titlebar — holds traffic lights (macOS) + settings icon */}
+      {/* Draggable titlebar — traffic lights (macOS) + layout switcher + settings */}
       <div
-        className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center justify-end gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"
+        className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"
         data-testid="app-titlebar"
       >
         <div className="flex-1" />
-        <button
-          aria-label="Settings"
-          className="electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200"
-          onClick={() => {
-            rpcOpenSettings();
-          }}
-          type="button"
-        >
-          <Settings size={16} />
-        </button>
+        <LayoutSwitcher />
+        <div className="flex flex-1 justify-end">
+          <button
+            aria-label="Settings"
+            className="electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200"
+            onClick={() => {
+              rpcOpenSettings();
+            }}
+            type="button"
+          >
+            <Settings size={16} />
+          </button>
+        </div>
       </div>
       <Outlet />
       <Toaster richColors />

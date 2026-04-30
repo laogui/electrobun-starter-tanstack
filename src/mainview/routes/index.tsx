@@ -21,6 +21,7 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
+import { DocumentView } from '@/components/document/DocumentView';
 import { Loader } from '@/components/layout/Loader';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
@@ -73,6 +74,46 @@ const MINIMAP_NODE_STROKE_COLOR = '#999';
 export const Route = createFileRoute('/')({
   component: CanvasRoute,
 });
+
+const LAYOUT_MODE_STORAGE_KEY = 'ghostboard.layoutMode';
+
+function loadLayoutModeFromStorage(viewId: string): 'canvas' | 'document' {
+  try {
+    const raw = localStorage.getItem(`${LAYOUT_MODE_STORAGE_KEY}.${viewId}`);
+    return raw === 'document' ? 'document' : 'canvas';
+  } catch {
+    return 'canvas';
+  }
+}
+
+function persistLayoutMode(viewId: string, mode: 'canvas' | 'document') {
+  try {
+    localStorage.setItem(`${LAYOUT_MODE_STORAGE_KEY}.${viewId}`, mode);
+  } catch {
+    // Ignore storage failures (private mode etc.)
+  }
+}
+
+function useLayoutModePersistence() {
+  const layoutMode = useCanvasStore((s) => s.layoutMode);
+  const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
+  const activeViewId = useCanvasStore((s) => s.activeViewId);
+
+  // Keep latest mode/setter accessible from the load effect without retriggering it.
+  const latest = useRef({ layoutMode, setLayoutMode });
+  latest.current = { layoutMode, setLayoutMode };
+
+  useEffect(() => {
+    const stored = loadLayoutModeFromStorage(activeViewId);
+    if (stored !== latest.current.layoutMode) {
+      latest.current.setLayoutMode(stored);
+    }
+  }, [activeViewId]);
+
+  useEffect(() => {
+    persistLayoutMode(activeViewId, layoutMode);
+  }, [activeViewId, layoutMode]);
+}
 
 function CanvasComponent() {
   const connectionStartRef = useRef<ConnectionStartState>({
@@ -419,9 +460,18 @@ function CanvasComponent() {
 }
 
 function CanvasRoute() {
+  useLayoutModePersistence();
+  const layoutMode = useCanvasStore((s) => s.layoutMode);
+
   return (
-    <ReactFlowProvider>
-      <CanvasComponent />
-    </ReactFlowProvider>
+    <>
+      {layoutMode === 'document' ? (
+        <DocumentView />
+      ) : (
+        <ReactFlowProvider>
+          <CanvasComponent />
+        </ReactFlowProvider>
+      )}
+    </>
   );
 }

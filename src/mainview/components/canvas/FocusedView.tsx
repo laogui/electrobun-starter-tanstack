@@ -35,13 +35,26 @@ const FocusedSkeleton = ({ color }: { color?: unknown }) => {
 export const FocusedView = ({ node, onClose }: any) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
-  // Target dimensions (final size)
-  const targetWidth = Math.min(800, window.innerWidth * 0.8);
-  const targetHeight = Math.min(900, window.innerHeight * 0.85);
 
-  // Target center position
+  const isText =
+    node.type !== 'image' &&
+    (node.data.type === 'text' || node.data.type == null) &&
+    FLAGS.tiptapEditor;
+
+  // Notes go fullscreen; other content keeps the original centered modal size.
+  const targetWidth = isText
+    ? window.innerWidth
+    : Math.min(800, window.innerWidth * 0.8);
+  const targetHeight = isText
+    ? window.innerHeight
+    : Math.min(900, window.innerHeight * 0.85);
+
+  // Target position
   const targetX = (window.innerWidth - targetWidth) / 2;
   const targetY = (window.innerHeight - targetHeight) / 2;
+
+  const targetBorderRadius = isText ? 0 : 32;
+  const initialBorderRadius = isText ? 0 : 24;
 
   // Compute scale and translate for FLIP animation
   const flip = useMemo(() => {
@@ -78,7 +91,7 @@ export const FocusedView = ({ node, onClose }: any) => {
     >
       <motion.button
         animate={{ opacity: 1, x: 0 }}
-        className="absolute top-8 left-8 z-60 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-colors hover:bg-white/20"
+        className="absolute top-8 left-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
         exit={{ opacity: 0, x: -20 }}
         initial={{ opacity: 0, x: -20 }}
         onClick={onClose}
@@ -100,7 +113,7 @@ export const FocusedView = ({ node, onClose }: any) => {
           y: 0,
           scaleX: 1,
           scaleY: 1,
-          borderRadius: 32,
+          borderRadius: targetBorderRadius,
         }}
         className="absolute overflow-hidden shadow-2xl"
         exit={{
@@ -108,14 +121,14 @@ export const FocusedView = ({ node, onClose }: any) => {
           y: flip.translateY,
           scaleX: flip.scaleX,
           scaleY: flip.scaleY,
-          borderRadius: 24,
+          borderRadius: initialBorderRadius,
         }}
         initial={{
           x: flip.translateX,
           y: flip.translateY,
           scaleX: flip.scaleX,
           scaleY: flip.scaleY,
-          borderRadius: 24,
+          borderRadius: initialBorderRadius,
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -132,8 +145,7 @@ export const FocusedView = ({ node, onClose }: any) => {
         <div className="h-full">
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
-          ) : (node.data.type === 'text' || node.data.type == null) &&
-            FLAGS.tiptapEditor ? (
+          ) : isText ? (
             <Suspense fallback={<FocusedSkeleton color={node.data.color} />}>
               <TiptapEditor
                 color={node.data.color}

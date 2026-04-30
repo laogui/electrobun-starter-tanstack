@@ -134,7 +134,7 @@ export function DocumentEditor() {
   };
 
   return (
-    <div className="mx-auto h-full w-full max-w-3xl">
+    <div className="h-full w-full">
       <Suspense fallback={<EditorSkeleton />}>
         <TiptapEditor
           color={(doc.data as { color?: unknown }).color ?? '#FFFFFF'}

@@ -103,34 +103,36 @@ export default function TiptapEditor({
   return (
     <div
       className={cn(
-        'flex h-full flex-col p-8',
+        'flex h-full w-full flex-col',
         isDark ? 'text-white' : 'text-gray-900'
       )}
       style={colorToStyle(colorValue)}
     >
-      <input
-        aria-label="Note title"
-        className={cn(
-          'mb-6 w-full border-none bg-transparent font-bold text-4xl tracking-normal outline-none placeholder:opacity-40',
-          isDark ? 'placeholder:text-white' : 'placeholder:text-gray-600'
-        )}
-        onBlur={handleTitleBlur}
-        onChange={handleTitleChange}
-        placeholder="Untitled"
-        value={titleValue}
-      />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {editor ? (
-          <EditorContent
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl px-8 py-12 sm:px-12">
+          <input
+            aria-label="Note title"
             className={cn(
-              'tiptap-editor prose prose-lg h-full max-w-none overflow-y-auto',
-              isDark && 'prose-invert'
+              'mb-6 w-full border-none bg-transparent font-bold text-4xl tracking-normal outline-none placeholder:opacity-40',
+              isDark ? 'placeholder:text-white' : 'placeholder:text-gray-600'
             )}
-            editor={editor}
+            onBlur={handleTitleBlur}
+            onChange={handleTitleChange}
+            placeholder="Untitled"
+            value={titleValue}
           />
-        ) : (
-          <div className="h-full animate-pulse rounded-lg bg-black/5" />
-        )}
+          {editor ? (
+            <EditorContent
+              className={cn(
+                'tiptap-editor prose prose-lg max-w-none',
+                isDark && 'prose-invert'
+              )}
+              editor={editor}
+            />
+          ) : (
+            <div className="h-64 animate-pulse rounded-lg bg-black/5" />
+          )}
+        </div>
       </div>
     </div>
   );

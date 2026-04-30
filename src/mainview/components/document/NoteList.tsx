@@ -188,7 +188,7 @@ export function NoteList() {
   }, [addFolderChild, createNode, folderId]);
 
   return (
-    <section className="flex h-full flex-col border-black/5 border-r bg-white dark:border-white/5 dark:bg-neutral-900">
+    <section className="flex h-full min-h-0 flex-col border-black/5 border-r bg-white dark:border-white/5 dark:bg-neutral-900">
       <header className="flex h-11 shrink-0 items-center justify-between border-black/5 border-b px-3 dark:border-white/5">
         <h2 className="truncate font-medium text-[13px] text-gray-800 dark:text-gray-200">
           {sectionTitle}
@@ -218,7 +218,7 @@ export function NoteList() {
           </button>
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto">
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
         {entries.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-8 text-center text-gray-400 dark:text-gray-500">
             <FileText size={28} strokeWidth={1.4} />

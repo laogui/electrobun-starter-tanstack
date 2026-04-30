@@ -184,7 +184,7 @@ export function DocumentView() {
   }
 
   return (
-    <div className="grid h-screen w-screen grid-cols-[220px_320px_1fr] overflow-hidden bg-[#F7F7F5] pt-10 font-sans dark:bg-[#141414]">
+    <div className="grid h-screen w-screen grid-cols-[220px_320px_1fr] grid-rows-[minmax(0,1fr)] overflow-hidden bg-[#F7F7F5] pt-10 font-sans dark:bg-[#141414]">
       <LeftRail />
       <NoteList />
       <main className="flex h-full min-w-0 flex-col overflow-hidden bg-white dark:bg-neutral-900">

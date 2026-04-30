@@ -108,7 +108,7 @@ export default function TiptapEditor({
       )}
       style={colorToStyle(colorValue)}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-8 py-12 sm:px-12">
           <input
             aria-label="Note title"

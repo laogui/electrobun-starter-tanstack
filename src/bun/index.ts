@@ -379,6 +379,72 @@ async function main() {
                   `[persistence] Note file not found for noteId=${node.data.noteId}`
                 );
               }
+
+              // Hydrate folder card-children from their individual .md files.
+              // Legacy children (without a noteId) get one stamped here; the
+              // next saveManifest pass will create the backing file.
+              if (node.type === 'folder') {
+                const rawChildren = (node.data.children ?? []) as Array<{
+                  data?: Record<string, unknown>;
+                  id: string;
+                  noteId?: string;
+                  type?: string;
+                }>;
+                const hydratedChildren = await Promise.all(
+                  rawChildren.map(async (child) => {
+                    if (child.type !== 'card') {
+                      return child;
+                    }
+                    const childData = (child.data ?? {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    const existingNoteId =
+                      child.noteId ?? (childData.noteId as string | undefined);
+                    if (!existingNoteId) {
+                      const newNoteId = `note_${crypto.randomUUID().slice(0, 8)}`;
+                      return {
+                        ...child,
+                        noteId: newNoteId,
+                        data: { ...childData, noteId: newNoteId },
+                      };
+                    }
+                    const filePath =
+                      (childData.file as string | undefined) ??
+                      noteIndex.get(existingNoteId);
+                    if (filePath) {
+                      const doc = await loadNote(wsPath, filePath);
+                      if (doc) {
+                        const hydrated = noteToCardData(doc);
+                        return {
+                          ...child,
+                          noteId: existingNoteId,
+                          data: {
+                            ...childData,
+                            ...hydrated,
+                            noteId: existingNoteId,
+                          },
+                        };
+                      }
+                      console.warn(
+                        `[persistence] Missing note file for folder-child noteId=${existingNoteId}`
+                      );
+                    }
+                    return {
+                      ...child,
+                      noteId: existingNoteId,
+                      data: { ...childData, noteId: existingNoteId },
+                    };
+                  })
+                );
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    children: hydratedChildren,
+                  },
+                };
+              }
               return node;
             })
           );
@@ -401,29 +467,70 @@ async function main() {
           const noteIndex = await buildNoteIndex(wsPath);
 
           // Phase 1: Serially pre-allocate file paths for new card notes
-          // to avoid concurrent createNote calls producing conflicting paths.
+          // (both top-level cards AND folder card-children) to avoid
+          // concurrent createNote calls producing conflicting paths.
           const nodePathMap = new Map<number, string>();
+          const folderChildPathMap = new Map<number, Map<number, string>>();
           for (const [idx, node] of nodes.entries()) {
-            if (node.type !== 'card') {
+            if (node.type === 'card') {
+              const noteId =
+                (node.data.noteId as string) ||
+                `note_${crypto.randomUUID().slice(0, 8)}`;
+              // Attach noteId so phase 2 can read it back
+              node.data.noteId = noteId;
+              const existingFile = noteIndex.get(noteId);
+              if (existingFile) {
+                nodePathMap.set(idx, existingFile);
+              } else {
+                const filePath = await createNote(
+                  wsPath,
+                  noteId,
+                  String(node.data.title || ''),
+                  String(node.data.type || 'note')
+                );
+                noteIndex.set(noteId, filePath);
+                nodePathMap.set(idx, filePath);
+              }
               continue;
             }
-            const noteId =
-              (node.data.noteId as string) ||
-              `note_${crypto.randomUUID().slice(0, 8)}`;
-            // Attach noteId so phase 2 can read it back
-            node.data.noteId = noteId;
-            const existingFile = noteIndex.get(noteId);
-            if (existingFile) {
-              nodePathMap.set(idx, existingFile);
-            } else {
-              const filePath = await createNote(
-                wsPath,
-                noteId,
-                String(node.data.title || ''),
-                String(node.data.type || 'note')
-              );
-              noteIndex.set(noteId, filePath);
-              nodePathMap.set(idx, filePath);
+            if (node.type === 'folder') {
+              const children = (node.data.children ?? []) as Array<{
+                data?: Record<string, unknown>;
+                id: string;
+                noteId?: string;
+                type?: string;
+              }>;
+              const childMap = new Map<number, string>();
+              for (const [cidx, child] of children.entries()) {
+                if (child.type !== 'card') {
+                  continue;
+                }
+                const childData = (child.data ?? {}) as Record<string, unknown>;
+                const noteId =
+                  child.noteId ||
+                  (childData.noteId as string) ||
+                  `note_${crypto.randomUUID().slice(0, 8)}`;
+                // Stamp noteId so phase 2 can read it back from both places
+                child.noteId = noteId;
+                childData.noteId = noteId;
+                child.data = childData;
+                const existingFile = noteIndex.get(noteId);
+                if (existingFile) {
+                  childMap.set(cidx, existingFile);
+                } else {
+                  const filePath = await createNote(
+                    wsPath,
+                    noteId,
+                    String(childData.title || ''),
+                    String(childData.type || 'note')
+                  );
+                  noteIndex.set(noteId, filePath);
+                  childMap.set(cidx, filePath);
+                }
+              }
+              if (childMap.size > 0) {
+                folderChildPathMap.set(idx, childMap);
+              }
             }
           }
 
@@ -441,6 +548,81 @@ async function main() {
                   ...(node.parentId ? { parentId: node.parentId } : {}),
                   ...(node.extent ? { extent: node.extent } : {}),
                   data: restData,
+                };
+              }
+
+              // Folder nodes: write each card-child's .md file and serialize
+              // children as thin references (mirrors top-level card flow).
+              if (node.type === 'folder') {
+                const rawChildren = (node.data.children ?? []) as Array<{
+                  data?: Record<string, unknown>;
+                  id: string;
+                  noteId?: string;
+                  type?: string;
+                }>;
+                const childPathMap = folderChildPathMap.get(idx);
+                const serializedChildren = await Promise.all(
+                  rawChildren.map(async (child, cidx) => {
+                    if (child.type === 'image') {
+                      const childData = (child.data ?? {}) as Record<
+                        string,
+                        unknown
+                      >;
+                      const { imageUrl, ...rest } = childData;
+                      return { ...child, data: rest };
+                    }
+                    if (child.type !== 'card') {
+                      return child;
+                    }
+                    const filePath = childPathMap?.get(cidx);
+                    const noteId = child.noteId as string | undefined;
+                    if (!(filePath && noteId)) {
+                      return child;
+                    }
+                    const childData = (child.data ?? {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    // Read existing frontmatter to preserve createdAt
+                    let existingFm: Record<string, unknown> | undefined;
+                    const existingDoc = await loadNote(wsPath, filePath);
+                    if (existingDoc) {
+                      existingFm = existingDoc.frontmatter;
+                    }
+                    const { frontmatter, body } = cardDataToNote(
+                      noteId,
+                      childData,
+                      existingFm
+                    );
+                    await writeNoteWithPreview(
+                      wsPath,
+                      filePath,
+                      frontmatter,
+                      body
+                    );
+                    return {
+                      id: child.id,
+                      noteId,
+                      type: 'card' as const,
+                      data: {
+                        noteId,
+                        file: filePath,
+                        type: childData.type,
+                      },
+                    };
+                  })
+                );
+                return {
+                  id: node.id,
+                  type: node.type,
+                  position: node.position,
+                  ...(node.style ? { style: node.style } : {}),
+                  ...(node.parentId ? { parentId: node.parentId } : {}),
+                  ...(node.extent ? { extent: node.extent } : {}),
+                  data: {
+                    ...node.data,
+                    children: serializedChildren,
+                  },
                 };
               }
 

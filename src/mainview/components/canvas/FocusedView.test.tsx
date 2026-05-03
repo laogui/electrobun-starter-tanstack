@@ -5,12 +5,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FocusedView } from '@/components/canvas/FocusedView';
 
+const commitFolderChildDataMock = vi.fn();
+const commitNodeDataMock = vi.fn();
+const updateFolderChildDataMock = vi.fn();
 const updateNodeDataMock = vi.fn();
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
-    selector: (state: { updateNodeData: typeof updateNodeDataMock }) => unknown
-  ) => selector({ updateNodeData: updateNodeDataMock }),
+    selector: (state: {
+      commitFolderChildData: typeof commitFolderChildDataMock;
+      commitNodeData: typeof commitNodeDataMock;
+      updateFolderChildData: typeof updateFolderChildDataMock;
+      updateNodeData: typeof updateNodeDataMock;
+    }) => unknown
+  ) =>
+    selector({
+      commitFolderChildData: commitFolderChildDataMock,
+      commitNodeData: commitNodeDataMock,
+      updateFolderChildData: updateFolderChildDataMock,
+      updateNodeData: updateNodeDataMock,
+    }),
 }));
 
 vi.mock('@/components/canvas/nodes/ImageNode', () => ({
@@ -25,11 +39,13 @@ vi.mock('@/components/editor/TiptapEditor', () => ({
   default: ({
     markdown,
     onMarkdownChange,
+    onPreviewUpdate,
     onTitleChange,
     title,
   }: {
     markdown?: string;
     onMarkdownChange: (value: string) => void;
+    onPreviewUpdate?: (value: Record<string, unknown>) => void;
     onTitleChange: (value: string) => void;
     title?: string;
   }) => (
@@ -52,6 +68,14 @@ vi.mock('@/components/editor/TiptapEditor', () => ({
         type="button"
       >
         mutate body
+      </button>
+      <button
+        onClick={() => {
+          onPreviewUpdate?.({ previewHtml: '<p>Updated</p>' });
+        }}
+        type="button"
+      >
+        mutate preview
       </button>
     </div>
   ),
@@ -95,6 +119,9 @@ const rect = {
 
 describe('focusedView', () => {
   afterEach(() => {
+    commitFolderChildDataMock.mockReset();
+    commitNodeDataMock.mockReset();
+    updateFolderChildDataMock.mockReset();
     updateNodeDataMock.mockReset();
     document.body.style.overflow = '';
     vi.restoreAllMocks();
@@ -139,6 +166,58 @@ describe('focusedView', () => {
       previewHtml: undefined,
       previewVersion: undefined,
     });
+  });
+
+  it('routes folder-child text edits back into the owning folder data', async () => {
+    render(
+      <FocusedView
+        node={{
+          id: 'child-1',
+          folderId: 'folder-1',
+          type: 'card',
+          data: {
+            title: 'Child',
+            content: 'Body',
+            noteId: 'note-child',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText('editor:Child:Body')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'mutate title' }));
+
+    expect(updateFolderChildDataMock).toHaveBeenCalledWith(
+      'folder-1',
+      'child-1',
+      { title: 'Updated Title' }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'mutate body' }));
+
+    expect(updateFolderChildDataMock).toHaveBeenCalledWith(
+      'folder-1',
+      'child-1',
+      {
+        content: 'Updated body',
+        previewBlocks: undefined,
+        previewExcerpt: undefined,
+        previewHtml: undefined,
+        previewVersion: undefined,
+      }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'mutate preview' }));
+
+    expect(updateFolderChildDataMock).toHaveBeenCalledWith(
+      'folder-1',
+      'child-1',
+      { previewHtml: '<p>Updated</p>' }
+    );
+    expect(updateNodeDataMock).not.toHaveBeenCalled();
   });
 
   it('renders image nodes and closes from overlay/back button', () => {

@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
-import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { FLAGS } from '@/lib/flags';
@@ -35,6 +35,33 @@ const FocusedSkeleton = ({ color }: { color?: unknown }) => {
 export const FocusedView = ({ node, onClose }: any) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
+  const updateFolderChildData = useCanvasStore((s) => s.updateFolderChildData);
+  const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
+  const folderId =
+    typeof node.folderId === 'string' ? node.folderId : undefined;
+  const isFolderChild = Boolean(folderId);
+
+  const updateFocusedData = useCallback(
+    (updates: Record<string, unknown>) => {
+      if (folderId) {
+        updateFolderChildData(folderId, node.id, updates);
+        return;
+      }
+      updateNodeData(node.id, updates);
+    },
+    [folderId, node.id, updateFolderChildData, updateNodeData]
+  );
+
+  const commitFocusedData = useCallback(
+    (updates: Record<string, unknown>) => {
+      if (folderId) {
+        commitFolderChildData(folderId, node.id, updates);
+        return;
+      }
+      commitNodeData(node.id, updates);
+    },
+    [commitFolderChildData, commitNodeData, folderId, node.id]
+  );
 
   const isText =
     node.type !== 'image' &&
@@ -155,7 +182,7 @@ export const FocusedView = ({ node, onClose }: any) => {
                 nodeId={node.id}
                 noteId={node.data.noteId}
                 onMarkdownChange={(markdown) => {
-                  updateNodeData(node.id, {
+                  updateFocusedData({
                     content: markdown,
                     previewBlocks: undefined,
                     previewExcerpt: undefined,
@@ -163,8 +190,9 @@ export const FocusedView = ({ node, onClose }: any) => {
                     previewVersion: undefined,
                   });
                 }}
+                onPreviewUpdate={isFolderChild ? updateFocusedData : undefined}
                 onTitleChange={(title) => {
-                  updateNodeData(node.id, { title });
+                  updateFocusedData({ title });
                 }}
                 title={node.data.title}
               />
@@ -174,7 +202,7 @@ export const FocusedView = ({ node, onClose }: any) => {
               data={node.data}
               isFocused={true}
               onChange={(newData: any) => {
-                commitNodeData(node.id, newData);
+                commitFocusedData(newData);
               }}
             />
           )}

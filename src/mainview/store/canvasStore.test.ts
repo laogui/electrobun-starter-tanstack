@@ -2,6 +2,7 @@ import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NODE_ID_REGEX = /^node-/;
+const NOTE_ID_REGEX = /^note_/;
 
 import {
   CARD_H,
@@ -16,6 +17,14 @@ import {
 import { useCanvasStore } from '@/store/canvasStore';
 
 const PASTE_ID_RE = /^paste-/;
+
+const { rpcDeleteNoteMock } = vi.hoisted(() => ({
+  rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
+}));
+
+vi.mock('@/lib/rpc', () => ({
+  rpcDeleteNote: rpcDeleteNoteMock,
+}));
 
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
@@ -77,6 +86,7 @@ beforeEach(() => {
 afterEach(() => {
   resetStore();
   vi.unstubAllGlobals();
+  rpcDeleteNoteMock.mockClear();
 });
 
 describe('canvasStore — node operations', () => {
@@ -707,7 +717,7 @@ describe('canvasStore — createNode', () => {
 });
 
 describe('canvasStore — addFolderChild', () => {
-  it('adds a child card to the folder data', () => {
+  it('adds a child card to the folder data with a noteId on both the entry and data', () => {
     useCanvasStore.setState({
       nodes: [
         makeNode('folder', {
@@ -719,15 +729,288 @@ describe('canvasStore — addFolderChild', () => {
 
     useCanvasStore.getState().addFolderChild('folder');
     const { data } = useCanvasStore.getState().nodes[0]!;
-    const children = data.children as unknown[];
+    const children = data.children as Array<{
+      data: { noteId?: string };
+      id: string;
+      noteId?: string;
+    }>;
 
     expect(children).toHaveLength(1);
     expect(data.title).toBe('1 items');
+    expect(children[0]!.noteId).toMatch(NOTE_ID_REGEX);
+    expect(children[0]!.data.noteId).toBe(children[0]!.noteId);
+  });
+});
+
+describe('canvasStore — updateFolderChildData', () => {
+  it('updates both the stored folder node and the open folder snapshot', () => {
+    const children = [
+      {
+        id: 'child-1',
+        noteId: 'note_child',
+        type: 'card',
+        data: {
+          type: 'text',
+          title: 'Before',
+          content: 'Body',
+          color: '#FFFFFF',
+          noteId: 'note_child',
+        },
+      },
+    ];
+    useCanvasStore.setState({
+      focusedFolder: {
+        id: 'folder',
+        data: { title: '1 items', subtitle: '', children },
+        rect: fakeRect(),
+      },
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '1 items', subtitle: '', children },
+        }),
+      ],
+    });
+
+    useCanvasStore
+      .getState()
+      .updateFolderChildData('folder', 'child-1', { title: 'After' });
+
+    const state = useCanvasStore.getState();
+    const folder = state.nodes.find((node) => node.id === 'folder');
+
+    expect(folder?.data.children).toEqual([
+      expect.objectContaining({
+        id: 'child-1',
+        data: expect.objectContaining({ title: 'After' }),
+      }),
+    ]);
+    expect(state.focusedFolder?.data.children).toEqual([
+      expect.objectContaining({
+        id: 'child-1',
+        data: expect.objectContaining({ title: 'After' }),
+      }),
+    ]);
+  });
+});
+
+describe('canvasStore — absorbCardIntoFolder', () => {
+  it('preserves an existing card noteId on the folder child entry', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('card-1', {
+          type: 'card',
+          data: {
+            type: 'text',
+            title: 'Hi',
+            content: 'body',
+            color: '#FFFFFF',
+            noteId: 'note_existing',
+          },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '0 items', subtitle: '', children: [] },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().absorbCardIntoFolder('card-1', 'folder');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+    const children = folder.data.children as Array<{
+      data: { noteId?: string };
+      id: string;
+      noteId?: string;
+    }>;
+
+    expect(children).toHaveLength(1);
+    expect(children[0]!.noteId).toBe('note_existing');
+    expect(children[0]!.data.noteId).toBe('note_existing');
+  });
+
+  it('synthesizes a noteId when the absorbed card has none', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('card-1', {
+          type: 'card',
+          data: {
+            type: 'text',
+            title: 'Fresh',
+            content: '',
+            color: '#FFFFFF',
+          },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '0 items', subtitle: '', children: [] },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().absorbCardIntoFolder('card-1', 'folder');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+    const children = folder.data.children as Array<{
+      data: { noteId?: string };
+      id: string;
+      noteId?: string;
+    }>;
+
+    expect(children[0]!.noteId).toMatch(NOTE_ID_REGEX);
+    expect(children[0]!.data.noteId).toBe(children[0]!.noteId);
+  });
+
+  it('does not attach a noteId when absorbing an image card', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('img-1', {
+          type: 'image',
+          data: {
+            title: 'Pic',
+            imageUrl: '',
+            color: '#FFFFFF',
+          },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '0 items', subtitle: '', children: [] },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().absorbCardIntoFolder('img-1', 'folder');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+    const children = folder.data.children as Array<{
+      data: { noteId?: string };
+      id: string;
+      noteId?: string;
+      type?: string;
+    }>;
+
+    expect(children[0]!.noteId).toBeUndefined();
+    expect(children[0]!.data.noteId).toBeUndefined();
+    expect(children[0]!.type).toBe('image');
+  });
+});
+
+describe('canvasStore — deleteFolderChild', () => {
+  beforeEach(() => {
+    rpcDeleteNoteMock.mockClear();
+    rpcDeleteNoteMock.mockResolvedValue({ success: true });
+  });
+
+  it('removes the child and fires rpcDeleteNote with its noteId', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-1',
+                noteId: 'note_child1',
+                type: 'card',
+                data: {
+                  type: 'text',
+                  title: '',
+                  content: '',
+                  color: '#FFFFFF',
+                  noteId: 'note_child1',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().deleteFolderChild('folder', 'child-1');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+
+    expect(folder.data.children as unknown[]).toHaveLength(0);
+    expect(rpcDeleteNoteMock).toHaveBeenCalledTimes(1);
+    expect(rpcDeleteNoteMock).toHaveBeenCalledWith('note_child1');
+  });
+
+  it('does not call rpcDeleteNote for image children', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-img',
+                type: 'image',
+                data: { title: '', imageUrl: '', color: '#FFFFFF' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().deleteFolderChild('folder', 'child-img');
+
+    expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('canvasStore — deleteNodes (folder children notes)', () => {
+  beforeEach(() => {
+    rpcDeleteNoteMock.mockClear();
+    rpcDeleteNoteMock.mockResolvedValue({ success: true });
+  });
+
+  it('fires rpcDeleteNote for each card child noteId when deleting a folder', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '2 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-1',
+                noteId: 'note_a',
+                type: 'card',
+                data: { type: 'text', noteId: 'note_a' },
+              },
+              {
+                id: 'child-2',
+                noteId: 'note_b',
+                type: 'card',
+                data: { type: 'text', noteId: 'note_b' },
+              },
+            ],
+          },
+        }),
+      ],
+      edges: [],
+    });
+
+    useCanvasStore.getState().deleteNodes(['folder']);
+
+    expect(rpcDeleteNoteMock).toHaveBeenCalledTimes(2);
+    expect(rpcDeleteNoteMock).toHaveBeenCalledWith('note_a');
+    expect(rpcDeleteNoteMock).toHaveBeenCalledWith('note_b');
   });
 });
 
 describe('canvasStore — moveFolderChildToCanvas', () => {
-  it('removes a folder child and restores it as a selected canvas node', () => {
+  it('removes a folder child and restores it as a selected canvas node, preserving noteId', () => {
     useCanvasStore.setState({
       focusedFolder: {
         id: 'folder',
@@ -737,8 +1020,14 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
           children: [
             {
               id: 'child-card',
+              noteId: 'note_child_card',
               type: 'card',
-              data: { title: 'Child Card', content: 'Body', color: '#FFFFFF' },
+              data: {
+                title: 'Child Card',
+                content: 'Body',
+                color: '#FFFFFF',
+                noteId: 'note_child_card',
+              },
             },
             {
               id: 'child-image',
@@ -759,11 +1048,13 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
             children: [
               {
                 id: 'child-card',
+                noteId: 'note_child_card',
                 type: 'card',
                 data: {
                   title: 'Child Card',
                   content: 'Body',
                   color: '#FFFFFF',
+                  noteId: 'note_child_card',
                 },
               },
               {
@@ -797,7 +1088,12 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
     expect(restored).toMatchObject({
       id: 'child-card',
       type: 'card',
-      data: { title: 'Child Card', content: 'Body', color: '#FFFFFF' },
+      data: {
+        title: 'Child Card',
+        content: 'Body',
+        color: '#FFFFFF',
+        noteId: 'note_child_card',
+      },
       position: { x: 500 - CARD_W / 2, y: 400 - CARD_H / 2 },
       selected: true,
     });

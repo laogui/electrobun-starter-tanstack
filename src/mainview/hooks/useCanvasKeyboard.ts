@@ -135,7 +135,12 @@ export function useCanvasKeyboard() {
         if (node.type === 'folder') {
           setFocusedFolder({ id: node.id, data: node.data, rect });
         } else {
-          setFocusedNode({ id: node.id, data: node.data, rect });
+          setFocusedNode({
+            id: node.id,
+            type: node.type,
+            data: node.data,
+            rect,
+          });
         }
       }
     };

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const NOTE_ID_RE = /^note_/;
+
 interface RpcHandlerMap {
   [key: string]: (payload: never) => Promise<unknown> | unknown;
 }
@@ -568,5 +570,222 @@ describe('src/bun/index helpers', () => {
     await expect(
       canvasHandlers.loadAttachment({ filePath: 'attachments/existing.png' })
     ).resolves.toEqual({ dataUrl: 'data:image/png;base64,AQID' });
+  });
+
+  it('saveManifest writes folder card-children as independent notes and reduces them to references', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+    noteMocks.createNote.mockResolvedValueOnce('content/folder-child.md');
+    noteMocks.loadNote.mockResolvedValueOnce(null);
+    noteMocks.cardDataToNote.mockReturnValueOnce({
+      frontmatter: { id: 'whatever', title: 'Child', displayHint: 'note' },
+      body: 'Body',
+    });
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'folder-1',
+            type: 'folder',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '1 items',
+              children: [
+                {
+                  id: 'child-1',
+                  type: 'card',
+                  data: {
+                    type: 'text',
+                    title: 'Child',
+                    content: 'Body',
+                    color: '#FFFFFF',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: true });
+
+    expect(noteMocks.createNote).toHaveBeenCalledTimes(1);
+    expect(previewMocks.writeNoteWithPreview).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/folder-child.md',
+      expect.objectContaining({ title: 'Child' }),
+      'Body'
+    );
+
+    const manifestCall = manifestMocks.saveManifest.mock.calls.at(-1);
+    expect(manifestCall).toBeDefined();
+    const savedManifest = manifestCall?.[2];
+    const savedFolder = savedManifest.nodes[0];
+    expect(savedFolder.type).toBe('folder');
+    const savedChildren = savedFolder.data.children;
+    expect(savedChildren).toHaveLength(1);
+    expect(savedChildren[0]).toMatchObject({
+      id: 'child-1',
+      type: 'card',
+      noteId: expect.stringMatching(NOTE_ID_RE),
+      data: {
+        file: 'content/folder-child.md',
+        noteId: expect.stringMatching(NOTE_ID_RE),
+        type: 'text',
+      },
+    });
+  });
+
+  it('saveManifest reuses an existing note file for folder children with a noteId', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([['note_existing', 'content/existing.md']])
+    );
+    noteMocks.loadNote.mockResolvedValueOnce({
+      file: 'content/existing.md',
+      frontmatter: { id: 'note_existing', createdAt: '2024-01-01' },
+      body: 'Old',
+    });
+    noteMocks.cardDataToNote.mockReturnValueOnce({
+      frontmatter: { id: 'note_existing', title: 'Child' },
+      body: 'Body',
+    });
+
+    await canvasHandlers.saveManifest({
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: '1 items',
+            children: [
+              {
+                id: 'child-1',
+                noteId: 'note_existing',
+                type: 'card',
+                data: {
+                  type: 'text',
+                  title: 'Child',
+                  content: 'Body',
+                  color: '#FFFFFF',
+                  noteId: 'note_existing',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    // No new file should be created when the noteId already has a file.
+    expect(noteMocks.createNote).not.toHaveBeenCalled();
+    expect(previewMocks.writeNoteWithPreview).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/existing.md',
+      expect.objectContaining({ id: 'note_existing' }),
+      'Body'
+    );
+  });
+
+  it('loadCanvas stamps a noteId onto legacy folder children that lack one', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: '1 items',
+            children: [
+              {
+                id: 'child-legacy',
+                type: 'card',
+                data: {
+                  type: 'text',
+                  title: 'Legacy',
+                  content: 'inline body',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+
+    const result = await canvasHandlers.loadCanvas({ viewId: 'default' });
+    const folder = (result as { nodes: Record<string, any>[] }).nodes[0];
+    expect(folder).toBeDefined();
+    const child = folder?.data.children[0];
+    expect(child.noteId).toMatch(NOTE_ID_RE);
+    expect(child.data.noteId).toBe(child.noteId);
+    expect(child.data.content).toBe('inline body');
+  });
+
+  it('loadCanvas hydrates folder card children from their note files', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: '1 items',
+            children: [
+              {
+                id: 'child-1',
+                noteId: 'note_abc',
+                type: 'card',
+                data: {
+                  noteId: 'note_abc',
+                  file: 'content/note_abc.md',
+                  type: 'text',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([['note_abc', 'content/note_abc.md']])
+    );
+    noteMocks.loadNote.mockResolvedValueOnce({
+      file: 'content/note_abc.md',
+      frontmatter: { id: 'note_abc', title: 'Hydrated' },
+      body: 'hydrated body',
+    });
+    noteMocks.noteToCardData.mockReturnValueOnce({
+      type: 'text',
+      title: 'Hydrated',
+      content: 'hydrated body',
+      file: 'content/note_abc.md',
+    });
+
+    const result = await canvasHandlers.loadCanvas({ viewId: 'default' });
+    const folder = (result as { nodes: Record<string, any>[] }).nodes[0];
+    expect(folder).toBeDefined();
+    const child = folder?.data.children[0];
+    expect(noteMocks.noteToCardData).toHaveBeenCalled();
+    expect(child.data.title).toBe('Hydrated');
+    expect(child.data.content).toBe('hydrated body');
+    expect(child.data.noteId).toBe('note_abc');
   });
 });

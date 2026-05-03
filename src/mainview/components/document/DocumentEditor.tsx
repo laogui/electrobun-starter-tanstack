@@ -135,6 +135,17 @@ export function DocumentEditor() {
     }
   };
 
+  // Folder children save preview metadata via updateFolderChildData instead
+  // of updateNodeData — the childId doesn't match any top-level node id.
+  const folderId = doc.folderId;
+  const childId = doc.childId;
+  const previewRouter =
+    doc.isFolderChild && folderId && childId
+      ? (updates: Record<string, unknown>) => {
+          updateFolderChildData(folderId, childId, updates);
+        }
+      : undefined;
+
   return (
     <div className="h-full w-full">
       <Suspense fallback={<EditorSkeleton />}>
@@ -144,14 +155,9 @@ export function DocumentEditor() {
           key={doc.key}
           markdown={(doc.data as { content?: unknown }).content}
           nodeId={doc.nodeId ?? doc.childId ?? doc.key}
-          noteId={
-            doc.isFolderChild
-              ? undefined
-              : ((doc.data as { noteId?: unknown }).noteId as
-                  | string
-                  | undefined)
-          }
+          noteId={(doc.data as { noteId?: unknown }).noteId}
           onMarkdownChange={onMarkdownChange}
+          onPreviewUpdate={previewRouter}
           onTitleChange={onTitleChange}
           title={(doc.data as { title?: unknown }).title}
         />

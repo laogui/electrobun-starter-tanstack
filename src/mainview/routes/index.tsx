@@ -500,7 +500,13 @@ function CanvasComponent() {
           <FolderView
             folder={focusedFolder}
             onCardClick={(child: any, rect: any) => {
-              setFocusedNode({ id: child.id, data: child.data, rect });
+              setFocusedNode({
+                id: child.id,
+                folderId: focusedFolder.id,
+                type: child.type,
+                data: child.data,
+                rect,
+              });
             }}
             onClose={() => {
               setFocusedFolder(null);

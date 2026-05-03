@@ -27,6 +27,7 @@ import {
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, type Size } from '@/lib/collision';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
+import { rpcDeleteNote } from '@/lib/rpc';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -43,6 +44,8 @@ import * as m from '../../paraglide/messages.js';
 
 export interface FocusedItem {
   data: Record<string, unknown>;
+  /** Owning folder id when this item is an embedded folder child. */
+  folderId?: string;
   id: string;
   rect: DOMRect;
   type?: string;
@@ -331,6 +334,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (card.type !== 'card' && card.type !== 'image') {
       return;
     }
+    // Preserve / synthesize noteId for card children so they map 1:1 to .md files
+    // (images continue to use the imageFile attachment pattern).
+    const isImage = card.type === 'image';
+    const cardData = card.data as Record<string, unknown>;
+    const existingNoteId = cardData.noteId as string | undefined;
+    const childNoteId = isImage
+      ? undefined
+      : (existingNoteId ?? `note_${nanoid(8)}`);
+    const childData: Record<string, unknown> = isImage
+      ? cardData
+      : { ...cardData, noteId: childNoteId };
     get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes
@@ -342,14 +356,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           const existing = ((n.data as any).children ?? []) as Array<{
             data: Record<string, unknown>;
             id: string;
+            noteId?: string;
             type?: string;
           }>;
           const children = [
             ...existing,
             {
               id: card.id,
+              ...(childNoteId ? { noteId: childNoteId } : {}),
               type: card.type as 'card' | 'image',
-              data: card.data as Record<string, unknown>,
+              data: childData,
             },
           ];
           return {
@@ -366,6 +382,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   deleteFolderChild: (folderId, childId) => {
+    const folder = get().nodes.find((n) => n.id === folderId);
+    const existingChildren = ((folder?.data as any)?.children ?? []) as Array<{
+      id: string;
+      noteId?: string;
+      type?: string;
+    }>;
+    const removed = existingChildren.find((c) => c.id === childId);
     get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes.map((n) => {
@@ -386,11 +409,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         };
       }),
     }));
+    // Fire-and-forget .md cleanup. Images keep their attachment pattern, so we
+    // only delete notes for card children that actually had a noteId.
+    if (removed?.noteId && removed.type !== 'image') {
+      rpcDeleteNote(removed.noteId).catch((error) => {
+        console.error(
+          '[canvasStore] Failed to delete folder child note:',
+          error
+        );
+      });
+    }
   },
 
   updateFolderChildData: (folderId, childId, updates) => {
-    set((s) => ({
-      nodes: s.nodes.map((n) => {
+    set((s) => {
+      let focusedFolder = s.focusedFolder;
+      const nodes = s.nodes.map((n) => {
         if (n.id !== folderId) {
           return n;
         }
@@ -402,12 +436,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         const children = existing.map((c) =>
           c.id === childId ? { ...c, data: { ...c.data, ...updates } } : c
         );
+        if (focusedFolder?.id === folderId) {
+          focusedFolder = {
+            ...focusedFolder,
+            data: { ...focusedFolder.data, children },
+          };
+        }
         return {
           ...n,
           data: { ...n.data, children },
         };
-      }),
-    }));
+      });
+      return { focusedFolder, nodes };
+    });
   },
 
   commitFolderChildData: (folderId, childId, updates) => {
@@ -698,8 +739,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   deleteNodes: (ids) => {
-    get().saveSnapshot();
     const idSet = new Set(ids);
+    // Collect noteIds of folder card-children so their .md files can be deleted
+    // alongside the folder (images keep their attachment pattern).
+    const orphanedNoteIds: string[] = [];
+    for (const node of get().nodes) {
+      if (!idSet.has(node.id) || node.type !== 'folder') {
+        continue;
+      }
+      const children = ((node.data as any)?.children ?? []) as Array<{
+        noteId?: string;
+        type?: string;
+      }>;
+      for (const child of children) {
+        if (child.noteId && child.type !== 'image') {
+          orphanedNoteIds.push(child.noteId);
+        }
+      }
+    }
+    get().saveSnapshot();
     set((s) => ({
       edges: s.edges.filter(
         (e) => !(idSet.has(e.source) || idSet.has(e.target))
@@ -714,6 +772,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           return n;
         }),
     }));
+    for (const noteId of orphanedNoteIds) {
+      rpcDeleteNote(noteId).catch((error) => {
+        console.error(
+          '[canvasStore] Failed to delete folder child note:',
+          error
+        );
+      });
+    }
   },
 
   changeNodeColor: (nodeId) => {
@@ -770,6 +836,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addFolderChild: (folderId) => {
     get().saveSnapshot();
     const childId = `child-${nanoid(8)}`;
+    // Each folder card-child maps 1:1 to an independent .md file (M5). The
+    // actual file is created lazily by saveManifest; the noteId is stamped
+    // up-front so the renderer and saver treat it like a top-level card.
+    const noteId = `note_${nanoid(8)}`;
     set((s) => ({
       nodes: s.nodes.map((n) => {
         if (n.id !== folderId) {
@@ -779,12 +849,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ...((n.data as any).children || []),
           {
             id: childId,
+            noteId,
             type: 'card' as const,
             data: {
               type: 'text' as const,
               title: '',
               content: '',
               color: '#FFFFFF',
+              noteId,
             },
           },
         ];
@@ -832,6 +904,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const restoredNodeId = existingIds.has(child.id)
         ? `node-${nanoid(8)}`
         : child.id;
+      // Preserve the child's full data (including noteId) so the restored
+      // top-level card keeps pointing at the same .md file on disk.
       const restoredNode: Node = {
         ...spec.base,
         id: restoredNodeId,

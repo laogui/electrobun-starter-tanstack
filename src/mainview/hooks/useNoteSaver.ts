@@ -11,6 +11,13 @@ interface UseNoteSaverOptions {
   frontmatter: Record<string, unknown>;
   nodeId: string;
   noteId?: unknown;
+  /**
+   * Called on successful save with the preview metadata updates. When
+   * provided, this overrides the default `updateNodeData(nodeId, …)` path,
+   * letting folder-child editors route preview metadata back into the owning
+   * folder via `updateFolderChildData`.
+   */
+  onPreviewUpdate?: (updates: Record<string, unknown>) => void;
 }
 
 interface PreviewResponse {
@@ -65,9 +72,11 @@ export function useNoteSaver({
   frontmatter,
   nodeId,
   noteId,
+  onPreviewUpdate,
 }: UseNoteSaverOptions) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const updateNodeDataRef = useRef(updateNodeData);
+  const onPreviewUpdateRef = useRef(onPreviewUpdate);
   const frontmatterRef = useRef(frontmatter);
   const noteIdRef = useRef(noteId);
   const enabledRef = useRef(enabled);
@@ -80,6 +89,10 @@ export function useNoteSaver({
   useEffect(() => {
     updateNodeDataRef.current = updateNodeData;
   }, [updateNodeData]);
+
+  useEffect(() => {
+    onPreviewUpdateRef.current = onPreviewUpdate;
+  }, [onPreviewUpdate]);
 
   useEffect(() => {
     frontmatterRef.current = frontmatter;
@@ -127,10 +140,12 @@ export function useNoteSaver({
         }
 
         dirtyRef.current = false;
-        updateNodeDataRef.current(
-          nodeId,
-          previewToUpdates(body, response.preview)
-        );
+        const updates = previewToUpdates(body, response.preview);
+        if (onPreviewUpdateRef.current) {
+          onPreviewUpdateRef.current(updates);
+        } else {
+          updateNodeDataRef.current(nodeId, updates);
+        }
       } catch (error) {
         console.error('[note] Failed to save note:', error);
       }

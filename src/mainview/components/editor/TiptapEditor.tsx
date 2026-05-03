@@ -14,6 +14,8 @@ interface TiptapEditorProps {
   nodeId: string;
   noteId?: unknown;
   onMarkdownChange: (markdown: string) => void;
+  /** Optional override for where preview metadata updates are routed. */
+  onPreviewUpdate?: (updates: Record<string, unknown>) => void;
   onTitleChange: (title: string) => void;
   title?: unknown;
 }
@@ -28,6 +30,7 @@ export default function TiptapEditor({
   nodeId,
   noteId,
   onMarkdownChange,
+  onPreviewUpdate,
   onTitleChange,
   title,
 }: TiptapEditorProps) {
@@ -49,6 +52,7 @@ export default function TiptapEditor({
     frontmatter,
     nodeId,
     noteId,
+    onPreviewUpdate,
   });
 
   const handleMarkdownChange = useCallback(

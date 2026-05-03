@@ -19,7 +19,11 @@ import type { SearchResult } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface SearchDialogProps {
-  rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
+  /**
+   * Optional in document mode — search results that match nodes will route to
+   * the document editor via `selectedDocumentId` instead of `setCenter`.
+   */
+  rfInstance?: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
 export function SearchDialog({ rfInstance }: SearchDialogProps) {
@@ -31,6 +35,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     (s) => s.setPendingSearchTarget
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
+  const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -80,7 +85,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       setNodes((prev) =>
         prev.map((n) => ({ ...n, selected: n.id === result.nodeId }))
       );
-      const inst = rfInstance.current;
+      const inst = rfInstance?.current;
       if (inst && result.position) {
         const viewport = inst.getViewport?.();
         const zoom = viewport?.zoom ?? 1;
@@ -108,6 +113,8 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     async (result: SearchResult) => {
       setOpen(false);
 
+      const layoutMode = useCanvasStore.getState().layoutMode;
+
       if (result.kind === 'view' || result.viewId !== activeViewId) {
         if (await isRpcAvailable()) {
           const { nodes, edges } = useCanvasStore.getState();
@@ -120,11 +127,23 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
             nodeId: result.nodeId,
             edgeId: result.edgeId,
           });
+          // Decision 20: document mode opens the right-side editor directly.
+          // Pre-set the document selection now; nodes from the target view will
+          // become available after hydrate.
+          if (layoutMode === 'document' && result.nodeId) {
+            setSelectedDocumentId(`node:${result.nodeId}`);
+          }
         }
         setActiveView(result.viewId);
         return;
       }
 
+      // Same-view selection — document mode routes to the editor, canvas mode
+      // pans / zooms to the node.
+      if (layoutMode === 'document' && result.nodeId) {
+        setSelectedDocumentId(`node:${result.nodeId}`);
+        return;
+      }
       locateInCurrentView(result);
     },
     [
@@ -133,6 +152,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       setActiveView,
       setPendingSearchTarget,
       locateInCurrentView,
+      setSelectedDocumentId,
     ]
   );
 

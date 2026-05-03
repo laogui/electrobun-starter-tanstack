@@ -1,9 +1,11 @@
 import type { Node } from '@xyflow/react';
 import { ArrowDownUp, FileText, Plus, Search } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../../paraglide/messages.js';
 
 interface NoteEntry {
   createdAt?: string;
@@ -13,6 +15,18 @@ interface NoteEntry {
   title: string;
   /** ISO-ish display string; falls back to em dash. */
   updatedAt?: string;
+  /** Raw epoch ms for sorting; 0 when missing/invalid. */
+  updatedAtMs: number;
+}
+
+type SortOrder = 'desc' | 'asc';
+
+function readDateMs(value: unknown): number {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return 0;
+  }
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? t : 0;
 }
 
 function getString(data: Record<string, unknown>, key: string): string {
@@ -69,10 +83,13 @@ function nodeToEntry(node: Node, idOverride?: string): NoteEntry | null {
     id: idOverride ?? `node:${node.id}`,
     title:
       getString(data, 'title') ||
-      (node.type === 'image' ? 'Image' : 'Untitled'),
+      (node.type === 'image'
+        ? m.document_image_label()
+        : m.document_untitled()),
     preview: makePreview(data),
     updatedAt: formatDateShort((data as { updatedAt?: unknown }).updatedAt),
     createdAt: formatDateShort((data as { createdAt?: unknown }).createdAt),
+    updatedAtMs: readDateMs((data as { updatedAt?: unknown }).updatedAt),
   };
 }
 
@@ -84,7 +101,9 @@ function childToEntry(
     id: `child:${folderId}:${child.id}`,
     title:
       getString(child.data, 'title') ||
-      (child.type === 'image' ? 'Image' : 'Untitled'),
+      (child.type === 'image'
+        ? m.document_image_label()
+        : m.document_untitled()),
     preview: makePreview(child.data),
     updatedAt: formatDateShort(
       (child.data as { updatedAt?: unknown }).updatedAt
@@ -92,23 +111,42 @@ function childToEntry(
     createdAt: formatDateShort(
       (child.data as { createdAt?: unknown }).createdAt
     ),
+    updatedAtMs: readDateMs((child.data as { updatedAt?: unknown }).updatedAt),
   };
+}
+
+/**
+ * Decision 19 (docs/todo/双布局-PRD-待决问题.md): document mode defaults to
+ * "last edited" descending. Items lacking `updatedAt` sort last (treat as 0)
+ * but keep insertion order between themselves to stay stable.
+ */
+function sortEntries(entries: NoteEntry[], order: SortOrder): NoteEntry[] {
+  const sign = order === 'desc' ? -1 : 1;
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      if (a.entry.updatedAtMs !== b.entry.updatedAtMs) {
+        return sign * (a.entry.updatedAtMs - b.entry.updatedAtMs);
+      }
+      return a.index - b.index;
+    })
+    .map(({ entry }) => entry);
 }
 
 function getSectionTitle(section: string, folderTitle?: string): string {
   if (section === 'inbox') {
-    return 'Inbox';
+    return m.document_inbox();
   }
   if (section === 'all') {
-    return 'All Notes';
+    return m.document_all_notes();
   }
   if (section === 'archive') {
-    return 'Archive';
+    return m.document_archive();
   }
   if (section.startsWith('folder:')) {
-    return folderTitle ?? 'Folder';
+    return folderTitle ?? m.document_folder_section();
   }
-  return 'Documents';
+  return m.document_section_documents();
 }
 
 export function NoteList() {
@@ -118,6 +156,7 @@ export function NoteList() {
   const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
   const createDetachedNote = useCanvasStore((s) => s.createDetachedNote);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
+  const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
 
   const folderId = documentSection.startsWith('folder:')
     ? documentSection.slice(7)
@@ -127,6 +166,8 @@ export function NoteList() {
     () => (folderId ? nodes.find((n) => n.id === folderId) : null),
     [folderId, nodes]
   );
+
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const entries: NoteEntry[] = useMemo(() => {
     if (documentSection === 'archive') {
@@ -138,7 +179,10 @@ export function NoteList() {
         id: string;
         type?: string;
       }>;
-      return children.map((c) => childToEntry(folderId, c));
+      return sortEntries(
+        children.map((c) => childToEntry(folderId, c)),
+        sortOrder
+      );
     }
     if (documentSection === 'inbox') {
       const out: NoteEntry[] = [];
@@ -148,7 +192,7 @@ export function NoteList() {
           out.push(e);
         }
       }
-      return out;
+      return sortEntries(out, sortOrder);
     }
     // All
     const out: NoteEntry[] = [];
@@ -168,14 +212,14 @@ export function NoteList() {
         }
       }
     }
-    return out;
-  }, [documentSection, folderId, folderNode, nodes]);
+    return sortEntries(out, sortOrder);
+  }, [documentSection, folderId, folderNode, nodes, sortOrder]);
 
   const sectionTitle = getSectionTitle(
     documentSection,
     folderNode
       ? getString(folderNode.data as Record<string, unknown>, 'title') ||
-          'Folder'
+          m.document_folder_section()
       : undefined
   );
 
@@ -196,21 +240,37 @@ export function NoteList() {
         </h2>
         <div className="flex items-center gap-0.5 text-gray-400">
           <button
-            aria-label="Sort"
+            aria-label={
+              sortOrder === 'desc'
+                ? m.document_aria_sort_newest()
+                : m.document_aria_sort_oldest()
+            }
+            aria-pressed={sortOrder === 'asc'}
             className="flex size-6 items-center justify-center rounded hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+            onClick={() => {
+              setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+            }}
+            title={
+              sortOrder === 'desc'
+                ? m.document_aria_sort_newest()
+                : m.document_aria_sort_oldest()
+            }
             type="button"
           >
             <ArrowDownUp size={13} />
           </button>
           <button
-            aria-label="Search"
+            aria-label={m.document_aria_search()}
             className="flex size-6 items-center justify-center rounded hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+            onClick={() => {
+              setSearchOpen(true);
+            }}
             type="button"
           >
             <Search size={13} />
           </button>
           <button
-            aria-label="New"
+            aria-label={m.document_aria_new_note()}
             className="flex size-6 items-center justify-center rounded hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
             onClick={handleCreate}
             type="button"
@@ -223,13 +283,13 @@ export function NoteList() {
         {entries.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-8 text-center text-gray-400 dark:text-gray-500">
             <FileText size={28} strokeWidth={1.4} />
-            <p className="text-xs">No notes here yet.</p>
+            <p className="text-xs">{m.document_empty_no_notes()}</p>
             <button
               className="rounded-md bg-black/5 px-2.5 py-1 text-xs hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
               onClick={handleCreate}
               type="button"
             >
-              Create note
+              {m.document_empty_create_note()}
             </button>
           </div>
         ) : (
@@ -272,13 +332,15 @@ export function NoteList() {
                     </p>
                   ) : (
                     <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
-                      Empty note
+                      {m.document_empty_note()}
                     </p>
                   )}
                   <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
                     <span>{entry.updatedAt ?? '—'}</span>
                     <span>
-                      {entry.createdAt ? `Created ${entry.createdAt}` : ''}
+                      {entry.createdAt
+                        ? m.document_created_at({ date: entry.createdAt })
+                        : ''}
                     </span>
                   </div>
                 </li>

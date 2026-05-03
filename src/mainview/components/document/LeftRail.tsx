@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 import type { DocumentSection } from '@/store/canvasStore';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../../paraglide/messages.js';
+
 interface RailEntry {
   count?: number;
   icon: typeof Inbox;
@@ -131,12 +133,12 @@ export function LeftRail() {
   const top: RailEntry[] = [
     {
       section: 'inbox',
-      label: 'Inbox',
+      label: m.document_inbox(),
       icon: Inbox,
       count: inboxCount,
     },
-    { section: 'all', label: 'All Notes', icon: StickyNote },
-    { section: 'archive', label: 'Archive', icon: Layers },
+    { section: 'all', label: m.document_all_notes(), icon: StickyNote },
+    { section: 'archive', label: m.document_archive(), icon: Layers },
   ];
 
   const handleNewFolder = useCallback(() => {
@@ -164,7 +166,7 @@ export function LeftRail() {
         <SectionHeader
           collapsed={!viewsOpen}
           hasAdd={false}
-          label="Views"
+          label={m.document_views()}
           onToggle={() => {
             setViewsOpen((v) => !v);
           }}
@@ -175,7 +177,7 @@ export function LeftRail() {
         <SectionHeader
           collapsed={!typesOpen}
           hasAdd={false}
-          label="Types"
+          label={m.document_types()}
           onToggle={() => {
             setTypesOpen((v) => !v);
           }}
@@ -186,7 +188,7 @@ export function LeftRail() {
         <SectionHeader
           collapsed={!foldersOpen}
           hasAdd
-          label="Folders"
+          label={m.document_folders()}
           onAdd={handleNewFolder}
           onToggle={() => {
             setFoldersOpen((v) => !v);
@@ -196,7 +198,7 @@ export function LeftRail() {
           <div className="flex flex-col gap-0.5">
             {folders.length === 0 ? (
               <p className="px-2 py-1 text-[11px] text-gray-400 dark:text-gray-500">
-                No folders yet
+                {m.document_no_folders()}
               </p>
             ) : (
               folders.map((f) => {
@@ -210,7 +212,7 @@ export function LeftRail() {
                     key={f.id}
                     label={getCardTitle(
                       f.data as Record<string, unknown>,
-                      'Untitled folder'
+                      m.document_untitled_folder()
                     )}
                     onClick={() => {
                       setDocumentSection(section);

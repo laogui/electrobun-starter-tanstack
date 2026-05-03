@@ -16,6 +16,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcDeleteView: vi.fn(),
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
+  rpcGetSettings: vi.fn(),
 }));
 
 const interactionMocks = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/rpc', () => ({
   rpcDeleteView: rpcMocks.rpcDeleteView,
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
+  rpcGetSettings: rpcMocks.rpcGetSettings,
 }));
 
 vi.mock('better-themes', () => ({
@@ -253,6 +255,8 @@ describe('routes/index', () => {
     rpcMocks.rpcDeleteView.mockReset();
     rpcMocks.rpcListViews.mockReset();
     rpcMocks.rpcRenameView.mockReset();
+    rpcMocks.rpcGetSettings.mockReset();
+    rpcMocks.rpcGetSettings.mockResolvedValue(null);
     interactionMocks.onCreateNode.mockReset();
     reactFlowMocks.props.mockReset();
 

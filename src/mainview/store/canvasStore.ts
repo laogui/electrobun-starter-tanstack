@@ -300,6 +300,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   documentSection: 'all',
 
   setLayoutMode: (mode) => {
+    if (mode === 'document') {
+      // Entering document mode freezes canvas state: clear modal/transient
+      // canvas UI so it doesn't bleed through when the user switches back.
+      // (See decisions 7, 8, 12 in docs/todo/双布局-PRD-待决问题.md.)
+      set({
+        layoutMode: mode,
+        focusedNode: null,
+        focusedFolder: null,
+        createMenuOpen: false,
+      });
+      return;
+    }
     set({ layoutMode: mode });
   },
   setSelectedDocumentId: (id) => {

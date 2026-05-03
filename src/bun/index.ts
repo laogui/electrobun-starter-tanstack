@@ -119,7 +119,11 @@ interface CanvasRPC {
       };
       getSettings: {
         params: Record<string, unknown>;
-        response: { theme: string; locale: string };
+        response: {
+          theme: string;
+          locale: string;
+          defaultLayoutMode: 'canvas' | 'document';
+        };
       };
       listViews: {
         params: Record<string, unknown>;
@@ -166,10 +170,18 @@ interface SettingsRPC {
     requests: {
       getSettings: {
         params: Record<string, unknown>;
-        response: { theme: string; locale: string };
+        response: {
+          theme: string;
+          locale: string;
+          defaultLayoutMode: 'canvas' | 'document';
+        };
       };
       saveSettings: {
-        params: { theme: string; locale: string };
+        params: {
+          theme: string;
+          locale: string;
+          defaultLayoutMode: 'canvas' | 'document';
+        };
         response: { success: boolean };
       };
     };
@@ -182,11 +194,16 @@ interface SettingsRPC {
 }
 
 interface AppSettings {
+  defaultLayoutMode: 'canvas' | 'document';
   locale: string;
   theme: string;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { theme: 'system', locale: 'en' };
+export const DEFAULT_SETTINGS: AppSettings = {
+  theme: 'system',
+  locale: 'en',
+  defaultLayoutMode: 'canvas',
+};
 
 // Cached in memory, backed by settings.json on disk
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -221,9 +238,11 @@ function createSettingsWindow(): BrowserWindow {
     handlers: {
       requests: {
         getSettings: () => cachedSettings,
-        saveSettings: async ({ theme, locale }) => {
-          await persistSettings({ theme, locale });
-          // Push update to main window
+        saveSettings: async ({ theme, locale, defaultLayoutMode }) => {
+          await persistSettings({ theme, locale, defaultLayoutMode });
+          // Push update to main window. Note: only theme/locale are pushed
+          // live — `defaultLayoutMode` only matters for cold-start, no need
+          // to retro-apply it to the running window.
           mainRpc?.send?.settingsUpdated({ theme, locale });
           return { success: true };
         },
@@ -238,7 +257,7 @@ function createSettingsWindow(): BrowserWindow {
     rpc: settingsRpc,
     frame: {
       width: 400,
-      height: 300,
+      height: 380,
       x: 350,
       y: 250,
     },

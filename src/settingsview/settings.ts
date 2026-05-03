@@ -5,10 +5,18 @@ interface SettingsRPC {
     requests: {
       getSettings: {
         params: Record<string, unknown>;
-        response: { theme: string; locale: string };
+        response: {
+          theme: string;
+          locale: string;
+          defaultLayoutMode: 'canvas' | 'document';
+        };
       };
       saveSettings: {
-        params: { theme: string; locale: string };
+        params: {
+          theme: string;
+          locale: string;
+          defaultLayoutMode: 'canvas' | 'document';
+        };
         response: { success: boolean };
       };
     };
@@ -22,10 +30,25 @@ interface SettingsRPC {
 
 const localeStrings: Record<
   string,
-  { title: string; language: string; theme: string }
+  {
+    title: string;
+    language: string;
+    theme: string;
+    defaultLayout: string;
+  }
 > = {
-  en: { title: 'Settings', language: 'Language', theme: 'Theme' },
-  zh: { title: '设置', language: '语言', theme: '主题' },
+  en: {
+    title: 'Settings',
+    language: 'Language',
+    theme: 'Theme',
+    defaultLayout: 'Default Layout',
+  },
+  zh: {
+    title: '设置',
+    language: '语言',
+    theme: '主题',
+    defaultLayout: '默认布局',
+  },
 };
 
 function applyTheme(theme: string) {
@@ -51,6 +74,7 @@ function applyLocale(locale: string) {
   const titleEl = document.querySelector('#settings-title');
   const labelLanguage = document.querySelector('#label-language');
   const labelTheme = document.querySelector('#label-theme');
+  const labelDefaultLayout = document.querySelector('#label-default-layout');
   if (titleEl) {
     titleEl.textContent = strings.title;
   }
@@ -59,6 +83,9 @@ function applyLocale(locale: string) {
   }
   if (labelTheme) {
     labelTheme.textContent = strings.theme;
+  }
+  if (labelDefaultLayout) {
+    labelDefaultLayout.textContent = strings.defaultLayout;
   }
   document.documentElement.lang = locale;
 }
@@ -79,6 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector<HTMLSelectElement>('#locale-select')!;
   const themeSelect =
     document.querySelector<HTMLSelectElement>('#theme-select')!;
+  const defaultLayoutSelect = document.querySelector<HTMLSelectElement>(
+    '#default-layout-select'
+  )!;
 
   // Load initial settings from bun process
   electrobun.rpc?.request
@@ -86,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .then((settings) => {
       themeSelect.value = settings.theme;
       localeSelect.value = settings.locale;
+      defaultLayoutSelect.value = settings.defaultLayoutMode;
       applyTheme(settings.theme);
       applyLocale(settings.locale);
     })
@@ -94,10 +125,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
   function saveCurrentSettings() {
+    const value = defaultLayoutSelect.value;
+    const defaultLayoutMode: 'canvas' | 'document' =
+      value === 'document' ? 'document' : 'canvas';
     electrobun.rpc?.request
       .saveSettings({
         theme: themeSelect.value,
         locale: localeSelect.value,
+        defaultLayoutMode,
       })
       .catch((error: unknown) => {
         console.warn('[settings] Failed to save settings:', error);
@@ -111,6 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   themeSelect.addEventListener('change', () => {
     applyTheme(themeSelect.value);
+    saveCurrentSettings();
+  });
+
+  defaultLayoutSelect.addEventListener('change', () => {
     saveCurrentSettings();
   });
 

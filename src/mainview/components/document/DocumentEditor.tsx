@@ -6,6 +6,8 @@ import { resolveDocumentSelection } from '@/lib/canvasUtils';
 import { FLAGS } from '@/lib/flags';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../../paraglide/messages.js';
+
 const TiptapEditor = lazy(() => import('@/components/editor/TiptapEditor'));
 
 const EditorSkeleton = () => (
@@ -18,7 +20,7 @@ const EditorSkeleton = () => (
 const EmptyState = () => (
   <div className="flex h-full flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500">
     <FileText size={36} strokeWidth={1.4} />
-    <p className="text-sm">Select a document from the sidebar to begin.</p>
+    <p className="text-sm">{m.document_select_to_begin()}</p>
   </div>
 );
 
@@ -105,7 +107,7 @@ export function DocumentEditor() {
   if (!(isText && FLAGS.tiptapEditor)) {
     return (
       <div className="flex h-full items-center justify-center text-gray-400 text-sm">
-        This document type can only be edited from the canvas view.
+        {m.document_canvas_only()}
       </div>
     );
   }

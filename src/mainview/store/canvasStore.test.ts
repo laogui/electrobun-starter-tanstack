@@ -943,3 +943,37 @@ describe('canvasStore — detachNoteFromCanvas', () => {
     expect((node.data as any).detached).toBeUndefined();
   });
 });
+
+describe('canvasStore — setLayoutMode', () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it('switching to document mode clears focusedNode, focusedFolder, and createMenuOpen', () => {
+    useCanvasStore.setState({
+      focusedNode: { id: 'node-1', data: {}, rect: fakeRect() },
+      focusedFolder: { id: 'folder-1', data: {}, rect: fakeRect() },
+      createMenuOpen: true,
+    });
+
+    useCanvasStore.getState().setLayoutMode('document');
+
+    const state = useCanvasStore.getState();
+    expect(state.layoutMode).toBe('document');
+    expect(state.focusedNode).toBeNull();
+    expect(state.focusedFolder).toBeNull();
+    expect(state.createMenuOpen).toBe(false);
+  });
+
+  it('switching back to canvas mode does not touch focused state', () => {
+    useCanvasStore.setState({ layoutMode: 'document' });
+    const focused = { id: 'node-1', data: {}, rect: fakeRect() };
+
+    useCanvasStore.getState().setLayoutMode('canvas');
+    // Simulate a stale focused entry being set after the switch.
+    useCanvasStore.setState({ focusedNode: focused });
+
+    expect(useCanvasStore.getState().layoutMode).toBe('canvas');
+    expect(useCanvasStore.getState().focusedNode).toBe(focused);
+  });
+});

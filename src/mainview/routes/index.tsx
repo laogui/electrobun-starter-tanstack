@@ -34,7 +34,12 @@ import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
-import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
+import {
+  isRpcAvailable,
+  loadCanvas,
+  rpcGetSettings,
+  rpcSaveManifest,
+} from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import {
   type ConnectionStartState,
@@ -79,12 +84,17 @@ export const Route = createFileRoute('/')({
 
 const LAYOUT_MODE_STORAGE_KEY = 'ghostboard.layoutMode';
 
-function loadLayoutModeFromStorage(viewId: string): 'canvas' | 'document' {
+function loadLayoutModeFromStorage(
+  viewId: string
+): 'canvas' | 'document' | null {
   try {
     const raw = localStorage.getItem(`${LAYOUT_MODE_STORAGE_KEY}.${viewId}`);
-    return raw === 'document' ? 'document' : 'canvas';
+    if (raw === 'document' || raw === 'canvas') {
+      return raw;
+    }
+    return null;
   } catch {
-    return 'canvas';
+    return null;
   }
 }
 
@@ -106,10 +116,37 @@ function useLayoutModePersistence() {
   latest.current = { layoutMode, setLayoutMode };
 
   useEffect(() => {
+    let cancelled = false;
     const stored = loadLayoutModeFromStorage(activeViewId);
-    if (stored !== latest.current.layoutMode) {
-      latest.current.setLayoutMode(stored);
+    if (stored) {
+      if (stored !== latest.current.layoutMode) {
+        latest.current.setLayoutMode(stored);
+      }
+      return () => {
+        cancelled = true;
+      };
     }
+
+    // Decision 16: no per-view override yet → fall back to the user's
+    // app-wide default (settings.json `defaultLayoutMode`, default `canvas`).
+    rpcGetSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        const fallback: 'canvas' | 'document' =
+          settings?.defaultLayoutMode === 'document' ? 'document' : 'canvas';
+        if (fallback !== latest.current.layoutMode) {
+          latest.current.setLayoutMode(fallback);
+        }
+      })
+      .catch(() => {
+        // Settings RPC unavailable (browser dev mode) — keep current mode.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeViewId]);
 
   useEffect(() => {

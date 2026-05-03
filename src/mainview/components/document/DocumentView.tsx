@@ -9,12 +9,16 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Loader } from '@/components/layout/Loader';
+import { SearchDialog } from '@/components/search/SearchDialog';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
+import { useDocumentKeyboard } from '@/hooks/useDocumentKeyboard';
 import { resolveDocumentSelection } from '@/lib/canvasUtils';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../../paraglide/messages.js';
 
 import { DocumentEditor } from './DocumentEditor';
 import { LeftRail } from './LeftRail';
@@ -25,7 +29,15 @@ function getString(data: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
-function useEditorTitle(): { title: string; kind: 'Note' | 'Image' } | null {
+type EditorKind = 'note' | 'image';
+
+function kindLabel(kind: EditorKind): string {
+  return kind === 'image'
+    ? m.document_breadcrumb_image()
+    : m.document_breadcrumb_note();
+}
+
+function useEditorTitle(): { title: string; kind: EditorKind } | null {
   const selection = useCanvasStore((s) => s.selectedDocumentId);
   const nodes = useCanvasStore((s) => s.nodes);
   return useMemo(() => {
@@ -39,11 +51,12 @@ function useEditorTitle(): { title: string; kind: 'Note' | 'Image' } | null {
         return null;
       }
       const data = node.data as Record<string, unknown>;
+      const isImage = node.type === 'image';
       return {
         title:
           getString(data, 'title') ||
-          (node.type === 'image' ? 'Image' : 'Untitled'),
-        kind: node.type === 'image' ? 'Image' : 'Note',
+          (isImage ? m.document_image_label() : m.document_untitled()),
+        kind: isImage ? 'image' : 'note',
       };
     }
     const folder = nodes.find((n) => n.id === ref.folderId);
@@ -56,11 +69,12 @@ function useEditorTitle(): { title: string; kind: 'Note' | 'Image' } | null {
     if (!child) {
       return null;
     }
+    const isImage = child.type === 'image';
     return {
       title:
         getString(child.data, 'title') ||
-        (child.type === 'image' ? 'Image' : 'Untitled'),
-      kind: child.type === 'image' ? 'Image' : 'Note',
+        (isImage ? m.document_image_label() : m.document_untitled()),
+      kind: isImage ? 'image' : 'note',
     };
   }, [nodes, selection]);
 }
@@ -91,32 +105,34 @@ function EditorToolbar() {
         {head ? (
           <>
             <FileText className="opacity-70" size={13} />
-            <span>{head.kind}</span>
+            <span>{kindLabel(head.kind)}</span>
             <ChevronRight className="opacity-50" size={12} />
             <span className="truncate font-medium text-gray-800 dark:text-gray-100">
               {head.title}
             </span>
           </>
         ) : (
-          <span className="text-gray-400">No document selected</span>
+          <span className="text-gray-400">
+            {m.document_no_document_selected()}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-0.5 text-gray-400">
         {head ? (
           <>
-            <ToolbarBtn label="Star">
+            <ToolbarBtn label={m.document_aria_star()}>
               <Star size={13} />
             </ToolbarBtn>
-            <ToolbarBtn label="History">
+            <ToolbarBtn label={m.document_aria_history()}>
               <History size={13} />
             </ToolbarBtn>
-            <ToolbarBtn label="Source">
+            <ToolbarBtn label={m.document_aria_source()}>
               <Code2 size={13} />
             </ToolbarBtn>
-            <ToolbarBtn label="Delete" onClick={handleDelete}>
+            <ToolbarBtn label={m.document_aria_delete()} onClick={handleDelete}>
               <Trash2 size={13} />
             </ToolbarBtn>
-            <ToolbarBtn label="More">
+            <ToolbarBtn label={m.document_aria_more()}>
               <MoreHorizontal size={14} />
             </ToolbarBtn>
           </>
@@ -153,6 +169,7 @@ export function DocumentView() {
   const activeViewId = useCanvasStore((s) => s.activeViewId);
 
   useCanvasPersistence();
+  useDocumentKeyboard();
 
   useEffect(() => {
     if (hydrated) {
@@ -193,6 +210,7 @@ export function DocumentView() {
           <DocumentEditor />
         </div>
       </main>
+      <SearchDialog />
     </div>
   );
 }

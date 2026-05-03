@@ -244,6 +244,59 @@ describe('useCanvasKeyboard', () => {
     expect(useCanvasStore.getState().focusedFolder).toBeNull();
   });
 
+  it('short-circuits canvas shortcuts while in document layout mode', () => {
+    useCanvasStore.setState({
+      layoutMode: 'document',
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: true,
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+
+    // Delete must not fall through to deleteNodes.
+    act(() => {
+      dispatchKeyboard({ key: 'Delete' });
+    });
+    expect(useCanvasStore.getState().nodes).toHaveLength(1);
+
+    // Cmd+N must not toggle the canvas create menu.
+    act(() => {
+      dispatchKeyboard({ key: 'n', metaKey: true, cancelable: true });
+    });
+    expect(useCanvasStore.getState().createMenuOpen).toBe(false);
+
+    // Cmd+A must not select all canvas nodes.
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: false,
+        },
+      ],
+    });
+    act(() => {
+      dispatchKeyboard({ key: 'a', metaKey: true, cancelable: true });
+    });
+    expect(useCanvasStore.getState().nodes[0]?.selected).toBe(false);
+
+    // Cmd+K is still allowed: search remains reachable from document mode.
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+    act(() => {
+      dispatchKeyboard({ key: 'k', metaKey: true, cancelable: true });
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(true);
+  });
+
   it('cleans up the keydown listener on unmount', () => {
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const view = render(<TestComponent />);

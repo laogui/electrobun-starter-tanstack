@@ -116,4 +116,22 @@ describe('sanitizeForPersistence', () => {
     }
     expect(result.edges[0]).not.toHaveProperty('selected');
   });
+
+  it('preserves data.detached field for detached notes', () => {
+    const node = createNode({
+      data: {
+        type: 'text',
+        title: 'Detached note',
+        content: '',
+        color: '#FFFFFF',
+        detached: true,
+      },
+    });
+
+    const result = sanitizeForPersistence([node], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+
+    expect(data.detached).toBe(true);
+    expect(data.title).toBe('Detached note');
+  });
 });

@@ -176,6 +176,9 @@ vi.mock('@xyflow/react', async () => {
     Background: () => <div>Background</div>,
     Controls: () => <div>Controls</div>,
     MiniMap: () => <div>MiniMap</div>,
+    useReactFlow: () => ({
+      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+    }),
   };
 });
 

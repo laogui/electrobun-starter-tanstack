@@ -116,7 +116,7 @@ export function NoteList() {
   const documentSection = useCanvasStore((s) => s.documentSection);
   const selectedDocumentId = useCanvasStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
-  const createNode = useCanvasStore((s) => s.createNode);
+  const createDetachedNote = useCanvasStore((s) => s.createDetachedNote);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
 
   const folderId = documentSection.startsWith('folder:')
@@ -184,8 +184,9 @@ export function NoteList() {
       addFolderChild(folderId);
       return;
     }
-    createNode('card', null);
-  }, [addFolderChild, createNode, folderId]);
+    const id = createDetachedNote();
+    setSelectedDocumentId(`node:${id}`);
+  }, [addFolderChild, createDetachedNote, folderId, setSelectedDocumentId]);
 
   return (
     <section className="flex h-full min-h-0 flex-col border-black/5 border-r bg-white dark:border-white/5 dark:bg-neutral-900">

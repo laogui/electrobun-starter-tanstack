@@ -196,6 +196,9 @@ export interface CanvasState {
 
   // Actions – clipboard
   copySelected: () => void;
+
+  // Detached notes (document-mode notes not placed on canvas)
+  createDetachedNote: () => string;
   createMenuOpen: boolean;
 
   // Actions – node CRUD
@@ -207,6 +210,7 @@ export interface CanvasState {
   deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
   deleteNodes: (ids: string[]) => void;
+  detachNoteFromCanvas: (nodeId: string) => void;
   documentSection: DocumentSection;
   edges: Edge[];
 
@@ -232,6 +236,7 @@ export interface CanvasState {
   nodes: Node[];
   pasteClipboard: (offset?: number) => void;
   pendingSearchTarget: PendingSearchTarget | null;
+  pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
   reset: () => void;
   saveSnapshot: () => void;
@@ -843,6 +848,70 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ]),
       };
     });
+  },
+
+  // -- detached notes -------------------------------------------------------
+  createDetachedNote: () => {
+    get().saveSnapshot();
+    const id = get().nextNodeId();
+    const newNode: Node = {
+      id,
+      type: 'card',
+      position: { x: 0, y: 0 },
+      style: { width: CARD_W, height: CARD_H },
+      data: {
+        type: 'text' as const,
+        title: '',
+        content: '',
+        color: '#FFFFFF',
+        detached: true,
+      },
+    };
+    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
+    return id;
+  },
+
+  pinNoteToCanvas: (nodeId, position) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!(node && (node.data as any).detached)) {
+      return;
+    }
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((n) => {
+        if (n.id !== nodeId) {
+          return n;
+        }
+        const { detached: _, ...cleanData } = n.data as Record<string, unknown>;
+        return {
+          ...n,
+          position,
+          style: n.style ?? { width: CARD_W, height: CARD_H },
+          data: cleanData,
+        };
+      }),
+    }));
+  },
+
+  detachNoteFromCanvas: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node || (node.type !== 'card' && node.type !== 'image')) {
+      return;
+    }
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((n) => {
+        if (n.id !== nodeId) {
+          return n;
+        }
+        return {
+          ...n,
+          position: { x: 0, y: 0 },
+          data: { ...n.data, detached: true },
+        };
+      }),
+      edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+    }));
   },
 
   // -- undo / redo ----------------------------------------------------------

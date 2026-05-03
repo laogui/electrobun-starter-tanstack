@@ -828,3 +828,118 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
     expect(useCanvasStore.getState().canUndo()).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Detached notes
+// ---------------------------------------------------------------------------
+
+describe('canvasStore — createDetachedNote', () => {
+  beforeEach(() => resetStore());
+
+  it('creates a card node with detached: true and position {0,0}', () => {
+    const id = useCanvasStore.getState().createDetachedNote();
+
+    expect(id).toMatch(NODE_ID_REGEX);
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === id);
+    expect(node).toBeDefined();
+    expect(node!.type).toBe('card');
+    expect(node!.position).toEqual({ x: 0, y: 0 });
+    expect((node!.data as any).detached).toBe(true);
+    expect((node!.data as any).type).toBe('text');
+  });
+
+  it('takes a snapshot for undo', () => {
+    expect(useCanvasStore.getState().canUndo()).toBe(false);
+    useCanvasStore.getState().createDetachedNote();
+    expect(useCanvasStore.getState().canUndo()).toBe(true);
+  });
+});
+
+describe('canvasStore — pinNoteToCanvas', () => {
+  beforeEach(() => resetStore());
+
+  it('removes detached flag and updates position', () => {
+    const id = useCanvasStore.getState().createDetachedNote();
+    useCanvasStore.getState().pinNoteToCanvas(id, { x: 100, y: 200 });
+
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === id)!;
+    expect(node.position).toEqual({ x: 100, y: 200 });
+    expect((node.data as any).detached).toBeUndefined();
+  });
+
+  it('no-ops if node is not detached', () => {
+    const nodes: Node[] = [
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 50, y: 50 },
+        data: { type: 'text', title: '' },
+      },
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
+
+    useCanvasStore.getState().pinNoteToCanvas('card-1', { x: 200, y: 200 });
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'card-1')!;
+    expect(node.position).toEqual({ x: 50, y: 50 });
+  });
+});
+
+describe('canvasStore — detachNoteFromCanvas', () => {
+  beforeEach(() => resetStore());
+
+  it('sets detached: true and clears associated edges', () => {
+    const nodes: Node[] = [
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 100, y: 100 },
+        data: { type: 'text', title: 'Hello' },
+      },
+      {
+        id: 'card-2',
+        type: 'card',
+        position: { x: 300, y: 100 },
+        data: { type: 'text', title: 'World' },
+      },
+    ];
+    useCanvasStore.setState({
+      nodes,
+      edges: [
+        { id: 'e1', source: 'card-1', target: 'card-2' },
+        { id: 'e2', source: 'card-2', target: 'card-1' },
+      ],
+      _hydrated: true,
+    });
+
+    useCanvasStore.getState().detachNoteFromCanvas('card-1');
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'card-1')!;
+    expect((node.data as any).detached).toBe(true);
+    expect(node.position).toEqual({ x: 0, y: 0 });
+    expect(useCanvasStore.getState().edges).toHaveLength(0);
+  });
+
+  it('no-ops for non-card/image node types', () => {
+    const nodes: Node[] = [
+      {
+        id: 'group-1',
+        type: 'group',
+        position: { x: 0, y: 0 },
+        data: { label: 'Group' },
+      },
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
+
+    useCanvasStore.getState().detachNoteFromCanvas('group-1');
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'group-1')!;
+    expect((node.data as any).detached).toBeUndefined();
+  });
+});

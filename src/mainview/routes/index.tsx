@@ -9,13 +9,15 @@ import {
   ReactFlow,
   ReactFlowProvider,
   SelectionMode,
+  useReactFlow,
 } from '@xyflow/react';
 import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
@@ -132,6 +134,7 @@ function CanvasComponent() {
   const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
   const addConnection = useCanvasStore((s) => s.addConnection);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } =
     useNodeDrag();
@@ -160,6 +163,13 @@ function CanvasComponent() {
   const moveFolderChildToCanvas = useCanvasStore(
     (s) => s.moveFolderChildToCanvas
   );
+  const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
+
+  const [detachedSidebarOpen, setDetachedSidebarOpen] = useState(false);
+
+  const onCreateDetachedNote = useCallback(() => {
+    setDetachedSidebarOpen(true);
+  }, []);
 
   useCanvasPersistence();
 
@@ -327,17 +337,44 @@ function CanvasComponent() {
 
   const nodesWithState = useMemo(
     () =>
-      nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          isHidden:
-            focusedNode?.id === node.id || focusedFolder?.id === node.id,
-          isDropTarget: dropTargetId === node.id,
-        },
-      })),
+      nodes
+        .filter((node) => !(node.data as Record<string, unknown>).detached)
+        .map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            isHidden:
+              focusedNode?.id === node.id || focusedFolder?.id === node.id,
+            isDropTarget: dropTargetId === node.id,
+          },
+        })),
     [nodes, focusedNode, focusedFolder, dropTargetId]
   );
+
+  const onDropDetachedNote = useCallback(
+    (e: React.DragEvent | DragEvent) => {
+      const nodeId = (e as React.DragEvent).dataTransfer?.getData(
+        'application/ghostboard-detached-note'
+      );
+      if (!nodeId) {
+        return;
+      }
+      e.preventDefault();
+      const position = screenToFlowPosition({
+        x: (e as React.DragEvent).clientX,
+        y: (e as React.DragEvent).clientY,
+      });
+      pinNoteToCanvas(nodeId, position);
+    },
+    [pinNoteToCanvas, screenToFlowPosition]
+  );
+
+  const onDragOverCanvas = useCallback((e: React.DragEvent | DragEvent) => {
+    e.preventDefault();
+    if ((e as React.DragEvent).dataTransfer) {
+      (e as React.DragEvent).dataTransfer.dropEffect = 'move';
+    }
+  }, []);
 
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
@@ -358,7 +395,7 @@ function CanvasComponent() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]">
       <ReactFlow
         connectionLineComponent={ConnectionPreviewLine}
         connectionMode={ConnectionMode.Loose}
@@ -375,6 +412,8 @@ function CanvasComponent() {
         onConnect={onConnect}
         onConnectEnd={onConnectEnd}
         onConnectStart={onConnectStart}
+        onDragOver={onDragOverCanvas}
+        onDrop={onDropDetachedNote}
         onEdgeContextMenu={onEdgeContextMenu}
         onEdgesChange={onEdgesChange}
         onInit={(instance) => {
@@ -442,8 +481,19 @@ function CanvasComponent() {
         ) : null}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {detachedSidebarOpen ? (
+          <DetachedNotesSidebar
+            onClose={() => {
+              setDetachedSidebarOpen(false);
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
+
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
+        onCreateDetachedNote={onCreateDetachedNote}
         onCreateNode={onCreateNode}
         setCreateMenuOpen={setCreateMenuOpen}
       />

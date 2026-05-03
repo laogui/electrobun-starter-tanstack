@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   ClipboardPaste,
   Copy,
   FilePlus,
@@ -80,6 +81,7 @@ const getCardItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'detach-from-canvas', label: 'Move to Library', icon: BookOpen },
   {
     id: 'delete',
     label: m.menu_delete(),

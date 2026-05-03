@@ -462,6 +462,7 @@ async function main() {
                   noteId,
                   file: filePath,
                   type: node.data.type, // keep for quick component selection
+                  ...(node.data.detached ? { detached: true } : {}),
                 },
               };
             })

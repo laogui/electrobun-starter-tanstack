@@ -40,6 +40,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
   const createNode = useCanvasStore((s) => s.createNode);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -226,6 +227,15 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
           }
           break;
         }
+        case 'detach-from-canvas': {
+          if (nodeId) {
+            detachNoteFromCanvas(nodeId);
+            toast('Note moved to library', {
+              action: { label: m.toast_undo(), onClick: () => undo() },
+            });
+          }
+          break;
+        }
         case 'delete-edge': {
           if (nodeId) {
             deleteEdge(nodeId);
@@ -247,6 +257,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       setFocusedFolder,
       deleteNodes,
       deleteEdge,
+      detachNoteFromCanvas,
       undo,
       updateEdgeData,
       setEditingEdgeId,

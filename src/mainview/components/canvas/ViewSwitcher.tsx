@@ -1,5 +1,6 @@
 import { Menu } from '@base-ui/react/menu';
 import {
+  BookOpen,
   Check,
   ChevronUp,
   File,
@@ -48,13 +49,15 @@ const getCreateMenuItems = () => [
 
 export function ViewSwitcher({
   onCreateNode,
+  onCreateDetachedNote,
   createMenuOpen,
   setCreateMenuOpen,
 }: {
+  createMenuOpen: boolean;
+  onCreateDetachedNote?: () => void;
   onCreateNode: (
     type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
   ) => void;
-  createMenuOpen: boolean;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -246,7 +249,9 @@ export function ViewSwitcher({
             >
               <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
                 {getCreateMenuItems().map((item, index) => {
-                  const isLast = index === getCreateMenuItems().length - 1;
+                  const isLast =
+                    !onCreateDetachedNote &&
+                    index === getCreateMenuItems().length - 1;
                   return (
                     <Menu.Item
                       aria-label={item.label}
@@ -286,6 +291,17 @@ export function ViewSwitcher({
                     </Menu.Item>
                   );
                 })}
+                {onCreateDetachedNote ? (
+                  <Menu.Item
+                    aria-label="Library Note"
+                    className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                    closeOnClick
+                    onClick={onCreateDetachedNote}
+                  >
+                    <BookOpen size={18} />
+                    Library Note
+                  </Menu.Item>
+                ) : null}
               </Menu.Popup>
             </Menu.Positioner>
           </Menu.Portal>

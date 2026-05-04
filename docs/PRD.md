@@ -129,11 +129,11 @@
 
 ### 2.9 撤销/重做 (Undo / Redo)
 
-- **功能描述**：对画布上所有操作（移动、创建、删除、编辑、拖入文件夹等）提供撤销和重做能力。
+- **功能描述**：对画布上的结构性与离散操作（移动、创建、删除、Resize、拖入文件夹、节点级提交等）提供撤销和重做能力。正文长文编辑不进入画布撤销栈，而是由 Tiptap 自身历史栈处理；标题输入框使用浏览器原生 input undo。
 - **交互逻辑**：
-  - `Cmd+Z` 撤销，`Cmd+Shift+Z` 重做。
-  - 维护一个操作历史栈（Operation History Stack），每次用户操作生成一个快照或差异记录。
-  - **栈深度上限**：最多保留 **100** 步操作历史，超出后丢弃最早记录，避免大画布场景下内存不可控增长。
+  - 非编辑态下，`Cmd+Z` 撤销，`Cmd+Shift+Z` 重做；若焦点位于 `input` / `textarea` / `contenteditable` 中，则快捷键交给当前编辑控件，不由画布 store 接管。
+  - 维护一个画布快照历史栈（Snapshot History Stack），每次离散画布操作前保存当前 `{nodes, edges}` 快照；当前实现不记录 diff / command。
+  - **栈深度上限**：最多保留 **50** 步操作历史，超出后丢弃最早记录，避免大画布场景下内存不可控增长。
   - **撤销与持久化的一致性策略**：撤销/重做仅回滚内存状态，不直接触发磁盘反向写入。下一次 debounce 到期时，以当前内存状态为准覆盖磁盘文件。这意味着：用户编辑 → debounce 写盘 → `Cmd+Z` 撤销 → 内存回滚 → 下次 debounce 再次以内存状态覆盖磁盘，保证内存与磁盘最终一致。
   - **生命周期**：撤销栈仅存在于内存中，关闭应用或切换 workspace 后清空，不做持久化。
 
@@ -141,7 +141,7 @@
 
 | macOS                   | Windows / Linux           | 画布模式                                                                        | 文档模式                                                           |
 | ----------------------- | ------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 画布快照栈撤销 / 重做                                                           | 仅 Tiptap 自身的 undo/redo（与画布栈隔离，事件不冒泡到画布 store） |
+| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 非编辑态下走画布快照栈；若焦点在 `input` / `textarea` / `contenteditable`，则交给当前编辑控件 | 正文由 Tiptap history 处理；标题 input 走浏览器原生 undo；均与画布栈隔离，不冒泡到 canvas store |
 | `Cmd+C` / `Cmd+V`       | `Ctrl+C` / `Ctrl+V`       | 复制 / 粘贴卡片                                                                 | 按浏览器默认行为走（纯文本剪贴），不做卡片级复制                   |
 | `Delete` / `Backspace`  | `Delete` / `Backspace`    | 从当前画布移除选中的节点（不删除 .md 内容文件；永久删除需通过右键菜单二次确认） | 屏蔽（左栏/NoteList 的删除通过右键菜单或工具栏显式触发）           |
 | `Cmd+F`                 | `Ctrl+F`                  | 打开搜索，命中后 fitView 到画布节点                                             | 打开搜索，命中后直接打开右侧编辑器（见 §2.8）                      |
@@ -174,10 +174,29 @@
   - **文档模式 (`document`)**：用于线性、聚焦的长文编辑与结构化浏览。
 - **切换器**：顶部的 `LayoutSwitcher` 提供「画布 / 文档」两档 Segmented Control；底部 `ViewSwitcher` 维持不动，两个切换器职责不同（布局 vs 多画布）。切换布局不卸载 store，数据互通。
 - **文档模式布局**：
-  - **左栏 `LeftRail`**：All Notes / Inbox / Archive / Folders / Views / Types 分区树，支持展开折叠和新建 Folder。
+  - **左栏 `LeftRail`**：All Notes / Inbox / Archive / Folders / Views / Types 分区树，支持展开折叠和新建 Folder。其中 **Types** 分组下当前提供 `Images` 类型条目（带数量徽标），点击进入瀑布流图片库视图（详见下文「类型视图：Images 图片库」）。
   - **中栏 `NoteList`**：当前分区下的笔记列表，默认按 `updatedAt` 倒序（排序按钮可切换）。
   - **右栏 `DocumentEditor`**：常驻 Tiptap 编辑器，从 `FocusedView` 模态升格为面板形态。
 - **文档模式可见节点类型**：仅渲染 `Card` / `Folder` / `Image`。`Sticky` / `Group` / `Edge` 仍保留在 store，但文档模式下不渲染；切回画布模式仍可见。首次切到文档模式时弹一次 toast 提示“便签、分组、连线已保留但不在文档模式展示”（待 OD-1 确认是否继续保留 sticky 计数入口）。
+
+#### 类型视图：Images 图片库 ✅
+
+- **入口**：左栏 `LeftRail` 的 `Types` 分组（默认折叠）下的 `Images` 条目。`documentSection` 取值为 `type:image`，与 `all` / `inbox` / `archive` / `folder:${id}` 并列。
+- **数量徽标**：聚合所有顶层 `image` 节点 + 所有 `folder` 节点的 `image` 类型 children，实时显示总数。
+- **布局变化**：选中 `Images` 时，文档模式右侧从默认的 `[220px, 320px, 1fr]`（LeftRail / NoteList / Editor）切换为 `[220px, 1fr]`（LeftRail / ImageGallery），中栏与右栏合并为单一图片库面板。
+- **瀑布流呈现**：使用 CSS multi-column 实现自适应瀑布流，按视窗宽度 `2 / 3 / 4 / 5` 列阶梯切换；每张图片懒加载（`loading="lazy"`），按原始宽高比铺排，悬浮时轻微放大并加深阴影。
+- **数据来源**：与左栏徽标一致——遍历 store 中所有节点，收集顶层 `image` 节点和 `folder` children 中 `type === 'image'` 的条目，过滤掉 `imageUrl` 为空的占位图。条目 `id` 沿用文档选择 token 形式（`node:<id>` / `child:<folderId>:<childId>`），方便后续与 `selectedDocumentId` 打通。
+- **空状态**：无任何图片时显示居中的 `ImageOff` 图标 + 「暂无图片 / No images yet」文案。
+- **点击放大（Lightbox）**：点击任意缩略图打开全屏 lightbox，带 `motion/react` 淡入 + 缩放动效；
+  - 退出方式：点击背景遮罩、点击右上角关闭按钮、按 `Esc`。
+  - 图片本体 `object-contain`，最长边贴合视窗，保留原比例。
+  - 标题以胶囊形式悬浮在底部居中。
+  - 点击图片本体不触发关闭（`stopPropagation`），避免误退出。
+- **国际化**：`document_type_images` / `document_image_gallery_empty` / `document_image_gallery_close`（`en` / `zh` 两套已就绪）。
+- **未来扩展（暂不做）**：
+  - 双击缩略图回跳画布并 fitView 到对应节点（与 `pendingSearchTarget` 复用）。
+  - 网格 / 瀑布流切换、按时间或文件夹分组、批量选择与删除、原图导出。
+  - 其他 `Types`（`Notes` / `Checklists` / `Folders`）平行入口。
 
 #### Detached notes（文档 ↔ 画布 的共享笔记池）
 
@@ -198,7 +217,7 @@
 | 创建不同类型 | `CreateMenu` 全量 Note/Checklist/Image/Sticky/Folder | 仅 Note（可能后续开 Folder）。Sticky / Checklist / Image 必须先切回画布 |
 | 删除带 edge 的卡片 | 无额外提示 | **自动清理 edge 无确认弹框**（决策：文档模式用户看不到连线，添加确认框反而引入权衡负担） |
 | Extract to Canvas | drill-down 右键菜单/工具栏暴露 | **不暴露**（出 folder 后坐标不确定；需要返回画布完成） |
-| Undo / Redo | 画布快照栈 | 仅 Tiptap 自带 undo，与画布栈**隔离**（Cmd+Z 不冒泡到 canvas store） |
+| Undo / Redo | 画布快照栈；仅覆盖节点/边的结构性与离散操作 | 正文使用 Tiptap history，标题 input 使用浏览器原生 undo；二者都与画布栈**隔离**（Cmd+Z 不冒泡到 canvas store） |
 
 #### 默认布局模式偏好
 

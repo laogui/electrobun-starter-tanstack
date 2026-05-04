@@ -16,11 +16,13 @@ import { useDocumentKeyboard } from '@/hooks/useDocumentKeyboard';
 import { resolveDocumentSelection } from '@/lib/canvasUtils';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
+import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
 
 import { DocumentEditor } from './DocumentEditor';
+import { ImageGallery } from './ImageGallery';
 import { LeftRail } from './LeftRail';
 import { NoteList } from './NoteList';
 
@@ -167,6 +169,8 @@ export function DocumentView() {
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
+  const documentSection = useCanvasStore((s) => s.documentSection);
+  const isImageGallery = documentSection === 'type:image';
 
   useCanvasPersistence();
   useDocumentKeyboard();
@@ -201,15 +205,26 @@ export function DocumentView() {
   }
 
   return (
-    <div className="grid h-screen w-screen grid-cols-[220px_320px_1fr] grid-rows-[minmax(0,1fr)] overflow-hidden bg-[#F7F7F5] pt-10 font-sans dark:bg-[#141414]">
+    <div
+      className={cn(
+        'grid h-screen w-screen grid-rows-[minmax(0,1fr)] overflow-hidden bg-[#F7F7F5] pt-10 font-sans dark:bg-[#141414]',
+        isImageGallery ? 'grid-cols-[220px_1fr]' : 'grid-cols-[220px_320px_1fr]'
+      )}
+    >
       <LeftRail />
-      <NoteList />
-      <main className="flex h-full min-w-0 flex-col overflow-hidden bg-white dark:bg-neutral-900">
-        <EditorToolbar />
-        <div className="min-h-0 flex-1">
-          <DocumentEditor />
-        </div>
-      </main>
+      {isImageGallery ? (
+        <ImageGallery />
+      ) : (
+        <>
+          <NoteList />
+          <main className="flex h-full min-w-0 flex-col overflow-hidden bg-white dark:bg-neutral-900">
+            <EditorToolbar />
+            <div className="min-h-0 flex-1">
+              <DocumentEditor />
+            </div>
+          </main>
+        </>
+      )}
       <SearchDialog />
     </div>
   );

@@ -162,7 +162,12 @@ export type LayoutMode = 'canvas' | 'document';
  * - "archive": currently empty placeholder
  * - "folder:<id>": filter to a single folder's children
  */
-export type DocumentSection = 'all' | 'inbox' | 'archive' | `folder:${string}`;
+export type DocumentSection =
+  | 'all'
+  | 'inbox'
+  | 'archive'
+  | `folder:${string}`
+  | `type:${string}`;
 
 export interface CanvasState {
   // Hydration

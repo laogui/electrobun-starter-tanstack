@@ -2,12 +2,12 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
-  Inbox,
+  Image as ImageIcon,
   Layers,
   Plus,
   StickyNote,
 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import type { DocumentSection } from '@/store/canvasStore';
@@ -17,7 +17,7 @@ import * as m from '../../../paraglide/messages.js';
 
 interface RailEntry {
   count?: number;
-  icon: typeof Inbox;
+  icon: typeof StickyNote;
   label: string;
   section: DocumentSection;
 }
@@ -73,7 +73,7 @@ function RailItem({
 }: {
   active: boolean;
   count?: number;
-  icon: typeof Inbox;
+  icon: typeof StickyNote;
   label: string;
   onClick: () => void;
 }) {
@@ -114,36 +114,37 @@ export function LeftRail() {
   const nodes = useCanvasStore((s) => s.nodes);
   const documentSection = useCanvasStore((s) => s.documentSection);
   const setDocumentSection = useCanvasStore((s) => s.setDocumentSection);
-  const createNode = useCanvasStore((s) => s.createNode);
 
   const [foldersOpen, setFoldersOpen] = useState(true);
-  const [viewsOpen, setViewsOpen] = useState(false);
   const [typesOpen, setTypesOpen] = useState(false);
-
-  const inboxCount = useMemo(
-    () => nodes.filter((n) => n.type === 'card' || n.type === 'image').length,
-    [nodes]
-  );
 
   const folders = useMemo(
     () => nodes.filter((n) => n.type === 'folder'),
     [nodes]
   );
 
+  const imageCount = useMemo(() => {
+    let count = 0;
+    for (const n of nodes) {
+      if (n.type === 'image') {
+        count += 1;
+      } else if (n.type === 'folder') {
+        const children = ((n.data as { children?: unknown }).children ??
+          []) as Array<{ type?: string }>;
+        for (const c of children) {
+          if (c.type === 'image') {
+            count += 1;
+          }
+        }
+      }
+    }
+    return count;
+  }, [nodes]);
+
   const top: RailEntry[] = [
-    {
-      section: 'inbox',
-      label: m.document_inbox(),
-      icon: Inbox,
-      count: inboxCount,
-    },
     { section: 'all', label: m.document_all_notes(), icon: StickyNote },
     { section: 'archive', label: m.document_archive(), icon: Layers },
   ];
-
-  const handleNewFolder = useCallback(() => {
-    createNode('folder', null);
-  }, [createNode]);
 
   return (
     <aside className="flex h-full flex-col gap-0.5 border-black/5 border-r bg-[#F7F7F5] px-2 py-3 dark:border-white/5 dark:bg-[#1a1a1a]">
@@ -162,17 +163,6 @@ export function LeftRail() {
         ))}
       </div>
 
-      <div className="mt-3">
-        <SectionHeader
-          collapsed={!viewsOpen}
-          hasAdd={false}
-          label={m.document_views()}
-          onToggle={() => {
-            setViewsOpen((v) => !v);
-          }}
-        />
-      </div>
-
       <div>
         <SectionHeader
           collapsed={!typesOpen}
@@ -182,14 +172,26 @@ export function LeftRail() {
             setTypesOpen((v) => !v);
           }}
         />
+        {typesOpen ? (
+          <div className="flex flex-col gap-0.5">
+            <RailItem
+              active={documentSection === 'type:image'}
+              count={imageCount}
+              icon={ImageIcon}
+              label={m.document_type_images()}
+              onClick={() => {
+                setDocumentSection('type:image');
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div>
         <SectionHeader
           collapsed={!foldersOpen}
-          hasAdd
+          hasAdd={false}
           label={m.document_folders()}
-          onAdd={handleNewFolder}
           onToggle={() => {
             setFoldersOpen((v) => !v);
           }}

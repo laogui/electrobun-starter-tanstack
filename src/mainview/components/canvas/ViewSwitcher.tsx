@@ -3,6 +3,7 @@ import {
   BookOpen,
   Check,
   ChevronUp,
+  Download,
   File,
   Folder,
   Group,
@@ -49,6 +50,7 @@ const getCreateMenuItems = () => [
 
 export function ViewSwitcher({
   onCreateNode,
+  onExportCanvas,
   onOpenNoteLibrary,
   createMenuOpen,
   setCreateMenuOpen,
@@ -57,6 +59,7 @@ export function ViewSwitcher({
   onCreateNode: (
     type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
   ) => void;
+  onExportCanvas?: () => void;
   onOpenNoteLibrary?: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
@@ -225,6 +228,18 @@ export function ViewSwitcher({
             <ChevronUp className="text-gray-400" size={14} />
           </motion.span>
         </Menu.Trigger>
+
+        {onExportCanvas ? (
+          <motion.button
+            aria-label="Export canvas as PNG"
+            className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+            onClick={onExportCanvas}
+            type="button"
+            whileTap={{ scale: 0.9 }}
+          >
+            <Download className="text-gray-500 dark:text-gray-400" size={16} />
+          </motion.button>
+        ) : null}
 
         <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
           <Menu.Trigger

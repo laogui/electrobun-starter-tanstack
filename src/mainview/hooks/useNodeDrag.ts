@@ -93,7 +93,13 @@ export function useNodeDrag() {
   );
 
   const onNodeDrag: OnNodeDrag = useCallback(
-    (_, node) => {
+    (_, node, draggedNodes = []) => {
+      const liveDraggedNodes = new Map<string, Node>();
+      for (const draggedNode of draggedNodes) {
+        liveDraggedNodes.set(draggedNode.id, draggedNode);
+      }
+      liveDraggedNodes.set(node.id, node);
+
       // --- Determine drop target ---
       let targetGroupId: string | null = null;
       let targetFolderId: string | null = null;
@@ -149,10 +155,25 @@ export function useNodeDrag() {
       // approach and enter them without pushing them away.
       setNodes((nds) => {
         const exemptIds = new Set<string>();
-        // Collect all selected (dragging) node IDs
-        const draggingIds = new Set(
-          nds.filter((n) => n.selected).map((n) => n.id)
-        );
+        const hasReportedDraggedNodes = draggedNodes.length > 0;
+        const nodesForRepulsion = nds.map((n) => {
+          const draggedNode = liveDraggedNodes.get(n.id);
+          if (!draggedNode) {
+            return n;
+          }
+          return {
+            ...n,
+            parentId: draggedNode.parentId,
+            extent: draggedNode.extent,
+            measured: draggedNode.measured ?? n.measured,
+            position: { ...draggedNode.position },
+            style: draggedNode.style ?? n.style,
+          };
+        });
+
+        const draggingIds = hasReportedDraggedNodes
+          ? new Set(liveDraggedNodes.keys())
+          : new Set(nds.filter((n) => n.selected).map((n) => n.id));
         if (!draggingIds.has(node.id)) {
           draggingIds.add(node.id);
         }
@@ -181,14 +202,14 @@ export function useNodeDrag() {
 
         // Parents of any dragging node should not be pushed
         for (const id of draggingIds) {
-          const dragging = nds.find((n) => n.id === id);
+          const dragging = nodesForRepulsion.find((n) => n.id === id);
           if (dragging?.parentId) {
             exemptIds.add(dragging.parentId);
           }
         }
 
         return applyRepulsion({
-          nodes: nds,
+          nodes: nodesForRepulsion,
           activeNodeId: node.id,
           activeNodeIds: draggingIds,
           pushedOrigins: pushedOriginsRef.current,

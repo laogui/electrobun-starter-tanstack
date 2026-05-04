@@ -5,6 +5,7 @@ import {
   BrowserView,
   BrowserWindow,
   Updater,
+  Utils,
 } from 'electrobun/bun';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
@@ -33,8 +34,13 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const SETTINGS_DEV_SERVER_URL = `${DEV_SERVER_URL}/settings.html`;
 const SETTINGS_VIEW_URL = 'views://settingsview/index.html';
 const DATA_URL_RE = /^data:(image\/([a-z+]+));base64,(.+)$/i;
+const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
+const SETTINGS_WINDOW_WIDTH = 400;
+const SETTINGS_WINDOW_HEIGHT = 380;
+const FALLBACK_SETTINGS_WINDOW_X = 350;
+const FALLBACK_SETTINGS_WINDOW_Y = 250;
 
 export async function sleep(ms: number) {
   return await new Promise((resolve) => setTimeout(resolve, ms));
@@ -120,6 +126,10 @@ interface CanvasRPC {
       loadAttachment: {
         params: { filePath: string };
         response: { dataUrl: string } | null;
+      };
+      exportPng: {
+        params: { dataUrl: string; fileName: string };
+        response: { canceled?: boolean; filePath?: string; success: boolean };
       };
       openSettings: {
         params: Record<string, unknown>;
@@ -217,6 +227,7 @@ let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
 let settingsFilePath = '';
 let settingsViewUrl = SETTINGS_VIEW_URL;
 let settingsWindow: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
 
@@ -240,7 +251,33 @@ export async function persistSettings(settings: AppSettings) {
   }
 }
 
-function createSettingsWindow(): BrowserWindow {
+function getCenteredSettingsWindowFrame(parentWindow: BrowserWindow | null) {
+  if (!parentWindow) {
+    return {
+      width: SETTINGS_WINDOW_WIDTH,
+      height: SETTINGS_WINDOW_HEIGHT,
+      x: FALLBACK_SETTINGS_WINDOW_X,
+      y: FALLBACK_SETTINGS_WINDOW_Y,
+    };
+  }
+
+  const parentFrame = parentWindow.getFrame();
+
+  return {
+    width: SETTINGS_WINDOW_WIDTH,
+    height: SETTINGS_WINDOW_HEIGHT,
+    x: Math.round(
+      parentFrame.x + (parentFrame.width - SETTINGS_WINDOW_WIDTH) / 2
+    ),
+    y: Math.round(
+      parentFrame.y + (parentFrame.height - SETTINGS_WINDOW_HEIGHT) / 2
+    ),
+  };
+}
+
+function createSettingsWindow(
+  parentWindow: BrowserWindow | null
+): BrowserWindow {
   const settingsRpc = BrowserView.defineRPC<SettingsRPC>({
     maxRequestTime: 5000,
     handlers: {
@@ -263,12 +300,7 @@ function createSettingsWindow(): BrowserWindow {
     title: 'Settings',
     url: settingsViewUrl,
     rpc: settingsRpc,
-    frame: {
-      width: 400,
-      height: 380,
-      x: 350,
-      y: 250,
-    },
+    frame: getCenteredSettingsWindowFrame(parentWindow),
   });
 
   win.on('close', () => {
@@ -769,12 +801,40 @@ async function main() {
           return { dataUrl: `data:${mimeType};base64,${base64}` };
         },
 
+        exportPng: async ({ dataUrl, fileName }) => {
+          const match = PNG_DATA_URL_RE.exec(dataUrl);
+          if (!match) {
+            throw new Error('Invalid PNG data URL');
+          }
+
+          const selectedFolders = await Utils.openFileDialog({
+            allowedFileTypes: 'png',
+            allowsMultipleSelection: false,
+            canChooseDirectory: true,
+            canChooseFiles: false,
+            startingFolder: '~/Desktop',
+          });
+          const selectedFolder = selectedFolders.find(Boolean);
+          if (!selectedFolder) {
+            return { canceled: true, success: false };
+          }
+
+          const safeFileName = fileName.endsWith('.png')
+            ? fileName
+            : `${fileName}.png`;
+          const outputPath = join(selectedFolder, safeFileName);
+          const buffer = Buffer.from(match[1]!, 'base64');
+          await Bun.write(outputPath, new Uint8Array(buffer));
+
+          return { filePath: outputPath, success: true };
+        },
+
         openSettings: () => {
           if (settingsWindow) {
             settingsWindow.focus();
             return { success: true };
           }
-          settingsWindow = createSettingsWindow();
+          settingsWindow = createSettingsWindow(mainWindow);
           return { success: true };
         },
 
@@ -818,7 +878,7 @@ async function main() {
     },
   }));
 
-  return new BrowserWindow({
+  mainWindow = new BrowserWindow({
     title: 'React + Tailwind + Vite',
     url,
     rpc,
@@ -830,6 +890,8 @@ async function main() {
       y: 200,
     },
   });
+
+  return mainWindow;
 }
 
 main().catch((err) => {

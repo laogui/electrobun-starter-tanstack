@@ -151,6 +151,14 @@ export async function rpcLoadAttachment(filePath: string) {
   return eb.rpc.request.loadAttachment({ filePath });
 }
 
+export async function rpcExportPng(dataUrl: string, fileName: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.exportPng({ dataUrl, fileName });
+}
+
 export async function rpcGetSettings() {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

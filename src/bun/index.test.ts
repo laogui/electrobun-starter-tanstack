@@ -22,12 +22,26 @@ const browserWindowFocusMock = vi.fn();
 const browserWindowOnMock = vi.fn();
 const browserWindowMock = vi.fn();
 const setApplicationMenuMock = vi.fn();
+const openFileDialogMock = vi.fn();
+
+interface BrowserWindowOptions {
+  frame?: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+}
 
 function BrowserWindowMock(...args: unknown[]) {
   browserWindowMock(...args);
+  const options = args[0] as BrowserWindowOptions | undefined;
   return {
     on: browserWindowOnMock,
     focus: browserWindowFocusMock,
+    getFrame: vi.fn(
+      () => options?.frame ?? { x: 0, y: 0, width: 0, height: 0 }
+    ),
   };
 }
 
@@ -45,6 +59,9 @@ vi.mock('electrobun/bun', () => ({
     localInfo: {
       channel: localInfoChannelMock,
     },
+  },
+  Utils: {
+    openFileDialog: openFileDialogMock,
   },
 }));
 
@@ -147,6 +164,7 @@ interface CanvasHandlers {
   createView: AnyHandler;
   deleteNote: AnyHandler;
   deleteView: AnyHandler;
+  exportPng: AnyHandler;
   getSettings: AnyHandler;
   listViews: AnyHandler;
   loadAttachment: AnyHandler;
@@ -182,6 +200,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   localInfoChannelMock.mockResolvedValue('prod');
+  openFileDialogMock.mockResolvedValue(['/tmp/exports']);
   fetchMock.mockReset();
   bunFileMock.mockReset();
   bunWriteMock.mockReset();
@@ -383,9 +402,21 @@ describe('src/bun/index helpers', () => {
 
     expect(canvasHandlers.openSettings()).toEqual({ success: true });
     expect(browserWindowMock).toHaveBeenCalledTimes(2);
+    expect(browserWindowMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: 'Settings',
+        frame: {
+          width: 400,
+          height: 380,
+          x: 450,
+          y: 360,
+        },
+      })
+    );
 
     expect(canvasHandlers.openSettings()).toEqual({ success: true });
     expect(browserWindowFocusMock).toHaveBeenCalled();
+    expect(browserWindowMock).toHaveBeenCalledTimes(2);
   });
 
   it('settings RPC returns cached settings and saveSettings pushes updates', async () => {
@@ -555,6 +586,53 @@ describe('src/bun/index helpers', () => {
     await expect(
       canvasHandlers.saveAttachment({ dataUrl: 'not-a-data-url' })
     ).rejects.toThrow('Invalid data URL');
+  });
+
+  it('exportPng opens a folder picker and writes the selected PNG path', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.exportPng({
+        dataUrl: 'data:image/png;base64,AQID',
+        fileName: 'My Canvas.png',
+      })
+    ).resolves.toEqual({
+      filePath: '/tmp/exports/My Canvas.png',
+      success: true,
+    });
+
+    expect(openFileDialogMock).toHaveBeenCalledWith({
+      allowedFileTypes: 'png',
+      allowsMultipleSelection: false,
+      canChooseDirectory: true,
+      canChooseFiles: false,
+      startingFolder: '~/Desktop',
+    });
+    expect(bunWriteMock).toHaveBeenCalledWith(
+      '/tmp/exports/My Canvas.png',
+      expect.any(Uint8Array)
+    );
+  });
+
+  it('exportPng handles cancel and rejects invalid data urls', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    openFileDialogMock.mockResolvedValueOnce([]);
+    await expect(
+      canvasHandlers.exportPng({
+        dataUrl: 'data:image/png;base64,AQID',
+        fileName: 'Canceled',
+      })
+    ).resolves.toEqual({ canceled: true, success: false });
+
+    await expect(
+      canvasHandlers.exportPng({
+        dataUrl: 'data:image/jpeg;base64,AQID',
+        fileName: 'Wrong type',
+      })
+    ).rejects.toThrow('Invalid PNG data URL');
   });
 
   it('loadAttachment returns null for missing file and data url for existing file', async () => {

@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 
+const applyRepulsionMock = vi.hoisted(() =>
+  vi.fn(({ nodes }: { nodes: unknown[] }) => nodes)
+);
+
 const state = {
   nodes: [
     {
@@ -86,7 +90,7 @@ vi.mock('@xyflow/react', () => ({
 }));
 
 vi.mock('@/lib/collision', () => ({
-  applyRepulsion: ({ nodes }: { nodes: unknown[] }) => nodes,
+  applyRepulsion: applyRepulsionMock,
 }));
 
 vi.mock('@/store/canvasStore', () => ({
@@ -144,6 +148,22 @@ const Harness = () => {
         type="button"
       >
         dragging
+      </button>
+      <button
+        onClick={() => {
+          const liveNode = {
+            id: 'card-1',
+            type: 'card',
+            position: { x: 900, y: 920 },
+            data: { title: 'Card', color: '#fff' },
+            measured: { width: 350, height: 450 },
+            style: { width: 350, height: 450 },
+          };
+          onNodeDrag({} as never, liveNode as never, [liveNode] as never);
+        }}
+        type="button"
+      >
+        dragging-live-position
       </button>
       <button
         onClick={() => {
@@ -460,6 +480,28 @@ describe('useNodeDrag – group and folder interactions', () => {
     expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
       data: { active: true },
     });
+  });
+
+  it('uses the live dragged position for repulsion checks', () => {
+    state.nodes = state.nodes.map((node) =>
+      node.id === 'group-2' ? { ...node, selected: true } : node
+    ) as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'dragging-live-position' })
+    );
+
+    const lastCall = applyRepulsionMock.mock.calls.at(-1);
+    const params = lastCall?.[0] as {
+      activeNodeIds: Set<string>;
+      nodes: typeof state.nodes;
+    };
+    expect(params.nodes.find((n) => n.id === 'card-1')?.position).toEqual({
+      x: 900,
+      y: 920,
+    });
+    expect(params.activeNodeIds).toEqual(new Set(['card-1']));
   });
 
   it('keeps top-level group unchanged on drag start', () => {

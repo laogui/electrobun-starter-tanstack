@@ -16,6 +16,7 @@ import { AnimatePresence } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
@@ -34,6 +35,10 @@ import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
+import {
+  exportReactFlowCanvasToPng,
+  sanitizeExportFileName,
+} from '@/lib/canvasExport';
 import {
   isRpcAvailable,
   loadCanvas,
@@ -192,6 +197,7 @@ function CanvasComponent() {
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
+  const views = useCanvasStore((s) => s.views);
   const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
   const setPendingSearchTarget = useCanvasStore(
     (s) => s.setPendingSearchTarget
@@ -422,6 +428,31 @@ function CanvasComponent() {
     ? MINIMAP_BORDER_DARK
     : MINIMAP_BORDER_LIGHT;
   const miniMapMask = isDarkTheme ? MINIMAP_MASK_DARK : MINIMAP_MASK_LIGHT;
+  const activeViewName =
+    views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
+
+  const onExportCanvas = useCallback(async () => {
+    const instance = rfInstance.current;
+    if (!instance) {
+      toast.error('画布尚未准备好，暂时无法导出。');
+      return;
+    }
+
+    try {
+      const exported = await exportReactFlowCanvasToPng({
+        backgroundColor: canvasBackground,
+        fileName: sanitizeExportFileName(activeViewName),
+        instance,
+      });
+      if (exported) {
+        toast.success('PNG 已导出。');
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'PNG 导出失败，请重试。';
+      toast.error(message);
+    }
+  }, [activeViewName, canvasBackground]);
 
   if (!hydrated) {
     return (
@@ -537,6 +568,7 @@ function CanvasComponent() {
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
         onCreateNode={onCreateNode}
+        onExportCanvas={onExportCanvas}
         onOpenNoteLibrary={onOpenNoteLibrary}
         setCreateMenuOpen={setCreateMenuOpen}
       />

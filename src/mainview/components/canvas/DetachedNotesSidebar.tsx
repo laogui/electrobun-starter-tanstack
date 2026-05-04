@@ -1,4 +1,4 @@
-import { FileText, MapPin, Plus, X } from 'lucide-react';
+import { FileText, MapPin, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useMemo } from 'react';
 
@@ -37,7 +37,6 @@ function makePreview(data: Record<string, unknown>): string {
 export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const nodes = useCanvasStore((s) => s.nodes);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
-  const createDetachedNote = useCanvasStore((s) => s.createDetachedNote);
   const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
   const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
 
@@ -128,42 +127,27 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
     []
   );
 
-  const handleCreate = useCallback(() => {
-    const id = createDetachedNote();
-    setSelectedDocumentId(`node:${id}`);
-    setLayoutMode('document');
-  }, [createDetachedNote, setSelectedDocumentId, setLayoutMode]);
-
   return (
     <motion.aside
       animate={{ x: 0, opacity: 1 }}
-      className="absolute top-0 left-0 z-50 flex h-full w-[300px] flex-col border-black/5 border-r bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
-      exit={{ x: -300, opacity: 0 }}
-      initial={{ x: -300, opacity: 0 }}
+      className="absolute right-0 bottom-0 z-40 flex w-[300px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
+      exit={{ x: 300, opacity: 0 }}
+      initial={{ x: 300, opacity: 0 }}
+      style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
       transition={{ type: 'spring', damping: 28, stiffness: 350 }}
     >
       <header className="flex items-center justify-between border-black/5 border-b px-4 py-3 dark:border-white/5">
         <h2 className="font-semibold text-[13px] text-gray-800 dark:text-gray-100">
           Note Library
         </h2>
-        <div className="flex items-center gap-1">
-          <button
-            aria-label="New detached note"
-            className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
-            onClick={handleCreate}
-            type="button"
-          >
-            <Plus size={14} />
-          </button>
-          <button
-            aria-label="Close sidebar"
-            className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <button
+          aria-label="Close sidebar"
+          className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+          onClick={onClose}
+          type="button"
+        >
+          <X size={14} />
+        </button>
       </header>
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
@@ -171,13 +155,6 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col items-center gap-3 p-8 text-center text-gray-400 dark:text-gray-500">
             <FileText size={32} strokeWidth={1.2} />
             <p className="text-xs">All notes are on the canvas.</p>
-            <button
-              className="rounded-md bg-black/5 px-3 py-1.5 text-xs hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
-              onClick={handleCreate}
-              type="button"
-            >
-              Create note
-            </button>
           </div>
         ) : (
           <ul className="flex flex-col">

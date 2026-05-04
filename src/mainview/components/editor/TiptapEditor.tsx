@@ -1,4 +1,6 @@
 import { EditorContent, useEditor } from '@tiptap/react';
+import 'overlayscrollbars/overlayscrollbars.css';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { buildTextNoteFrontmatter, useNoteSaver } from '@/hooks/useNoteSaver';
@@ -112,7 +114,17 @@ export default function TiptapEditor({
       )}
       style={colorToStyle(colorValue)}
     >
-      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+      <OverlayScrollbarsComponent
+        className="min-h-0 flex-1"
+        defer
+        options={{
+          scrollbars: {
+            theme: 'os-theme-dark',
+            autoHide: 'never',
+          },
+          overflow: { x: 'hidden' },
+        }}
+      >
         <div className="mx-auto w-full max-w-3xl px-8 py-12 sm:px-12">
           <input
             aria-label="Note title"
@@ -137,7 +149,7 @@ export default function TiptapEditor({
             <div className="h-64 animate-pulse rounded-lg bg-black/5" />
           )}
         </div>
-      </div>
+      </OverlayScrollbarsComponent>
     </div>
   );
 }

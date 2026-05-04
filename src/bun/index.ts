@@ -30,6 +30,8 @@ import {
 
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+const SETTINGS_DEV_SERVER_URL = `${DEV_SERVER_URL}/settings.html`;
+const SETTINGS_VIEW_URL = 'views://settingsview/index.html';
 const DATA_URL_RE = /^data:(image\/([a-z+]+));base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
@@ -67,6 +69,12 @@ export async function getMainViewUrl(): Promise<string> {
     );
   }
   return 'views://mainview/index.html';
+}
+
+export function getSettingsViewUrl(mainViewUrl: string): string {
+  return mainViewUrl === DEV_SERVER_URL
+    ? SETTINGS_DEV_SERVER_URL
+    : SETTINGS_VIEW_URL;
 }
 
 interface CanvasRPC {
@@ -153,13 +161,12 @@ interface CanvasRPC {
         response: SearchResult[];
       };
     };
-    messages: {
-      openSearch: Record<never, unknown>;
-    };
+    messages: Record<never, unknown>;
   };
   webview: {
     requests: Record<string, { params: unknown; response: unknown }>;
     messages: {
+      openSearch: Record<never, unknown>;
       settingsUpdated: { theme: string; locale: string };
     };
   };
@@ -208,6 +215,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 // Cached in memory, backed by settings.json on disk
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
 let settingsFilePath = '';
+let settingsViewUrl = SETTINGS_VIEW_URL;
 let settingsWindow: BrowserWindow | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
@@ -253,7 +261,7 @@ function createSettingsWindow(): BrowserWindow {
 
   const win = new BrowserWindow({
     title: 'Settings',
-    url: 'views://settingsview/index.html',
+    url: settingsViewUrl,
     rpc: settingsRpc,
     frame: {
       width: 400,
@@ -310,6 +318,7 @@ async function main() {
   const wsPath = initWorkspace();
   await loadSettings(wsPath);
   const url = await getMainViewUrl();
+  settingsViewUrl = getSettingsViewUrl(url);
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: 5000,

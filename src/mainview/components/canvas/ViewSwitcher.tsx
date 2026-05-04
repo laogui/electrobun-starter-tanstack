@@ -49,15 +49,15 @@ const getCreateMenuItems = () => [
 
 export function ViewSwitcher({
   onCreateNode,
-  onCreateDetachedNote,
+  onOpenNoteLibrary,
   createMenuOpen,
   setCreateMenuOpen,
 }: {
   createMenuOpen: boolean;
-  onCreateDetachedNote?: () => void;
   onCreateNode: (
     type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
   ) => void;
+  onOpenNoteLibrary?: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -250,7 +250,7 @@ export function ViewSwitcher({
               <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
                 {getCreateMenuItems().map((item, index) => {
                   const isLast =
-                    !onCreateDetachedNote &&
+                    !onOpenNoteLibrary &&
                     index === getCreateMenuItems().length - 1;
                   return (
                     <Menu.Item
@@ -291,15 +291,15 @@ export function ViewSwitcher({
                     </Menu.Item>
                   );
                 })}
-                {onCreateDetachedNote ? (
+                {onOpenNoteLibrary ? (
                   <Menu.Item
-                    aria-label="Library Note"
+                    aria-label="Note Library"
                     className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
                     closeOnClick
-                    onClick={onCreateDetachedNote}
+                    onClick={onOpenNoteLibrary}
                   >
                     <BookOpen size={18} />
-                    Library Note
+                    Note Library
                   </Menu.Item>
                 ) : null}
               </Menu.Popup>

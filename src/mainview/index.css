@@ -132,11 +132,6 @@ body.resizing-nwse * {
   opacity: 0.65;
 }
 
-.tiptap-editor {
-  scrollbar-color: gray transparent;
-  scrollbar-width: thin;
-}
-
 .tiptap-editor .ProseMirror {
   min-height: 100%;
   padding-right: 0.75rem;

@@ -7,7 +7,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
 import { FileText, LayoutGrid, Settings } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
@@ -71,6 +71,8 @@ function LayoutSwitcher() {
 
 import { setLocale } from '../../paraglide/runtime.js';
 
+const TITLEBAR_HEIGHT_CSS_VAR = '--app-titlebar-height';
+
 export interface RouterAppContext {
   queryClient: QueryClient;
 }
@@ -81,6 +83,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   const { setTheme } = useTheme();
+  const titlebarRef = useTitlebarHeightVar();
 
   // Pull persisted settings on mount
   useEffect(() => {
@@ -163,6 +166,7 @@ function RootDocument() {
       <div
         className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"
         data-testid="app-titlebar"
+        ref={titlebarRef}
       >
         <div className="flex-1" />
         <LayoutSwitcher />
@@ -201,4 +205,44 @@ function RootDocument() {
       />
     </>
   );
+}
+
+function useTitlebarHeightVar() {
+  const titlebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const titlebar = titlebarRef.current;
+    if (!titlebar) {
+      return;
+    }
+
+    const updateTitlebarHeight = () => {
+      const measuredHeight =
+        titlebar.getBoundingClientRect().height || titlebar.offsetHeight;
+
+      if (measuredHeight > 0) {
+        document.documentElement.style.setProperty(
+          TITLEBAR_HEIGHT_CSS_VAR,
+          `${measuredHeight}px`
+        );
+      }
+    };
+
+    updateTitlebarHeight();
+    window.addEventListener('resize', updateTitlebarHeight);
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(updateTitlebarHeight);
+    resizeObserver?.observe(titlebar);
+
+    return () => {
+      window.removeEventListener('resize', updateTitlebarHeight);
+      resizeObserver?.disconnect();
+      document.documentElement.style.removeProperty(TITLEBAR_HEIGHT_CSS_VAR);
+    };
+  }, []);
+
+  return titlebarRef;
 }

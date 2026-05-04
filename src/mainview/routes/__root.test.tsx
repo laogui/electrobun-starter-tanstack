@@ -142,6 +142,36 @@ describe('__root route', () => {
     expect(titlebar.className).toContain('dark:bg-[#141414]/45');
   });
 
+  it('publishes the measured titlebar height for overlays', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      bottom: 48,
+      height: 48,
+      left: 0,
+      right: 0,
+      toJSON: () => ({}),
+      top: 0,
+      width: 0,
+      x: 0,
+      y: 0,
+    } as DOMRect);
+    const setPropertySpy = vi.spyOn(
+      document.documentElement.style,
+      'setProperty'
+    );
+
+    const RootDocument = await loadRootDocument();
+    const view = render(<RootDocument />);
+
+    await waitFor(() => {
+      expect(setPropertySpy).toHaveBeenCalledWith(
+        '--app-titlebar-height',
+        '48px'
+      );
+    });
+
+    view.unmount();
+  });
+
   it('removes the event listener on unmount', async () => {
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const RootDocument = await loadRootDocument();

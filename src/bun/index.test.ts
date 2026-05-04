@@ -218,8 +218,14 @@ describe('src/bun/index helpers', () => {
     fetchMock.mockResolvedValue({ ok: true });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const { getMainViewUrl } = await loadIndexModule();
+    const { getMainViewUrl, getSettingsViewUrl } = await loadIndexModule();
     await expect(getMainViewUrl()).resolves.toBe('http://localhost:5173');
+    expect(getSettingsViewUrl('http://localhost:5173')).toBe(
+      'http://localhost:5173/settings.html'
+    );
+    expect(getSettingsViewUrl('views://mainview/index.html')).toBe(
+      'views://settingsview/index.html'
+    );
 
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:5173', {
       method: 'HEAD',

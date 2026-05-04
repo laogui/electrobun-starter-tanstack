@@ -204,7 +204,7 @@ function CanvasComponent() {
 
   const [detachedSidebarOpen, setDetachedSidebarOpen] = useState(false);
 
-  const onCreateDetachedNote = useCallback(() => {
+  const onOpenNoteLibrary = useCallback(() => {
     setDetachedSidebarOpen(true);
   }, []);
 
@@ -536,8 +536,8 @@ function CanvasComponent() {
 
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
-        onCreateDetachedNote={onCreateDetachedNote}
         onCreateNode={onCreateNode}
+        onOpenNoteLibrary={onOpenNoteLibrary}
         setCreateMenuOpen={setCreateMenuOpen}
       />
       <CanvasContextMenu

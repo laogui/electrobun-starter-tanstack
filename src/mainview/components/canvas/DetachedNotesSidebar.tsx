@@ -1,7 +1,8 @@
 import { FileText, MapPin, X } from 'lucide-react';
-import { motion } from 'motion/react';
-import { useCallback, useMemo } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { NotePreview } from '@/components/preview/NotePreview';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -11,6 +12,8 @@ interface DetachedEntry {
   preview: string;
   title: string;
 }
+
+const SIDEBAR_WIDTH = 300;
 
 function getString(data: Record<string, unknown>, key: string): string {
   const v = data[key];
@@ -40,6 +43,8 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
   const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
 
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
   const entries: DetachedEntry[] = useMemo(() => {
     const out: DetachedEntry[] = [];
     for (const n of nodes) {
@@ -58,6 +63,31 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
     }
     return out;
   }, [nodes]);
+
+  // Drop selection if the source node disappears (deleted, pinned back, etc.)
+  useEffect(() => {
+    if (
+      selectedNodeId &&
+      !entries.some((entry) => entry.nodeId === selectedNodeId)
+    ) {
+      setSelectedNodeId(null);
+    }
+  }, [entries, selectedNodeId]);
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId]
+  );
+
+  const selectedData =
+    selectedNode && (selectedNode.data as Record<string, unknown>);
+  const selectedTitle = selectedData
+    ? getString(selectedData, 'title') || 'Untitled'
+    : '';
+  const selectedImageUrl = selectedData
+    ? getString(selectedData, 'imageUrl')
+    : '';
+  const isImageSelection = selectedNode?.type === 'image';
 
   const handlePin = useCallback(
     (nodeId: string) => {
@@ -128,84 +158,147 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <motion.aside
-      animate={{ x: 0, opacity: 1 }}
-      className="absolute right-0 bottom-0 z-40 flex w-[300px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
-      exit={{ x: 300, opacity: 0 }}
-      initial={{ x: 300, opacity: 0 }}
-      style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
-      transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-    >
-      <header className="flex items-center justify-between border-black/5 border-b px-4 py-3 dark:border-white/5">
-        <h2 className="font-semibold text-[13px] text-gray-800 dark:text-gray-100">
-          Note Library
-        </h2>
-        <button
-          aria-label="Close sidebar"
-          className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
-          onClick={onClose}
-          type="button"
-        >
-          <X size={14} />
-        </button>
-      </header>
-
-      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 p-8 text-center text-gray-400 dark:text-gray-500">
-            <FileText size={32} strokeWidth={1.2} />
-            <p className="text-xs">All notes are on the canvas.</p>
-          </div>
-        ) : (
-          <ul className="flex flex-col">
-            {entries.map((entry, idx) => (
-              <li
-                className={cn(
-                  'group cursor-grab px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] active:cursor-grabbing dark:hover:bg-white/[0.03]',
-                  idx > 0 && 'border-black/5 border-t dark:border-white/5'
-                )}
-                draggable
-                key={entry.id}
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    handleOpenInDocMode(entry);
-                  }
+    <>
+      <AnimatePresence>
+        {selectedNode ? (
+          <motion.section
+            animate={{ opacity: 1 }}
+            aria-label="Note preview"
+            className="absolute bottom-0 left-0 z-30 flex flex-col bg-white/95 backdrop-blur-sm dark:bg-neutral-900/95"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            style={{
+              top: 'var(--app-titlebar-height, 2.5rem)',
+              right: SIDEBAR_WIDTH,
+            }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <header className="flex items-center justify-between gap-3 border-black/5 border-b px-6 py-3 dark:border-white/5">
+              <h2 className="truncate font-semibold text-gray-800 text-sm dark:text-gray-100">
+                {selectedTitle}
+              </h2>
+              <button
+                aria-label="Close preview"
+                className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+                onClick={() => {
+                  setSelectedNodeId(null);
                 }}
-                onDragStart={(e) => {
-                  handleDragStart(e, entry);
-                }}
+                type="button"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="truncate font-medium text-gray-800 dark:text-gray-100">
-                    {entry.title}
-                  </h3>
-                  <button
-                    aria-label="Pin to canvas"
-                    className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-gray-400 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover:opacity-100 dark:hover:bg-blue-500/10 dark:hover:text-blue-400"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePin(entry.nodeId);
-                    }}
-                    type="button"
-                  >
-                    <MapPin size={11} />
-                    Pin
-                  </button>
-                </div>
-                {entry.preview ? (
-                  <p className="mt-1 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">
-                    {entry.preview}
-                  </p>
+                <X size={14} />
+              </button>
+            </header>
+
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-3xl px-8 py-8">
+                {isImageSelection && selectedImageUrl ? (
+                  <img
+                    alt={selectedTitle}
+                    className="mx-auto h-auto max-w-full rounded-lg"
+                    src={selectedImageUrl}
+                  />
                 ) : (
-                  <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
-                    Empty note
-                  </p>
+                  <NotePreview
+                    excerpt={selectedData?.previewExcerpt}
+                    fallback={selectedData?.content}
+                    html={selectedData?.previewHtml}
+                  />
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </motion.aside>
+              </div>
+            </div>
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
+
+      <motion.aside
+        animate={{ x: 0, opacity: 1 }}
+        className="absolute right-0 bottom-0 z-40 flex w-[300px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
+        exit={{ x: 300, opacity: 0 }}
+        initial={{ x: 300, opacity: 0 }}
+        style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 350 }}
+      >
+        <header className="flex items-center justify-between border-black/5 border-b px-4 py-3 dark:border-white/5">
+          <h2 className="font-semibold text-[13px] text-gray-800 dark:text-gray-100">
+            Note Library
+          </h2>
+          <button
+            aria-label="Close sidebar"
+            className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+          {entries.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 p-8 text-center text-gray-400 dark:text-gray-500">
+              <FileText size={32} strokeWidth={1.2} />
+              <p className="text-xs">All notes are on the canvas.</p>
+            </div>
+          ) : (
+            <ul className="flex flex-col">
+              {entries.map((entry, idx) => {
+                const isSelected = entry.nodeId === selectedNodeId;
+                return (
+                  <li
+                    aria-current={isSelected ? 'true' : undefined}
+                    className={cn(
+                      'group cursor-pointer px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
+                      idx > 0 && 'border-black/5 border-t dark:border-white/5',
+                      isSelected &&
+                        'bg-blue-50/80 hover:bg-blue-50 dark:bg-blue-500/10 dark:hover:bg-blue-500/15'
+                    )}
+                    draggable
+                    key={entry.id}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey) {
+                        handleOpenInDocMode(entry);
+                        return;
+                      }
+                      setSelectedNodeId((current) =>
+                        current === entry.nodeId ? null : entry.nodeId
+                      );
+                    }}
+                    onDragStart={(e) => {
+                      handleDragStart(e, entry);
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="truncate font-medium text-gray-800 dark:text-gray-100">
+                        {entry.title}
+                      </h3>
+                      <button
+                        aria-label="Pin to canvas"
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-gray-400 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover:opacity-100 dark:hover:bg-blue-500/10 dark:hover:text-blue-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePin(entry.nodeId);
+                        }}
+                        type="button"
+                      >
+                        <MapPin size={11} />
+                        Pin
+                      </button>
+                    </div>
+                    {entry.preview ? (
+                      <p className="mt-1 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">
+                        {entry.preview}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
+                        Empty note
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </motion.aside>
+    </>
   );
 }

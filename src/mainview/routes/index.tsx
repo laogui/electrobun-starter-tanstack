@@ -18,6 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
@@ -51,6 +52,8 @@ import {
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../paraglide/messages.js';
 
 // ─── 画布颜色 ────────────────────────────────────────────────────────────────
 // 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
@@ -175,6 +178,8 @@ function CanvasComponent() {
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
   const addConnection = useCanvasStore((s) => s.addConnection);
+  const deleteNodes = useCanvasStore((s) => s.deleteNodes);
+  const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -182,15 +187,6 @@ function CanvasComponent() {
     useNodeDrag();
 
   const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
-
-  const {
-    contextMenu,
-    setContextMenu,
-    onPaneContextMenu,
-    onNodeContextMenu,
-    onEdgeContextMenu,
-    handleContextMenuAction,
-  } = useContextMenu({ rfInstance });
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
 
@@ -209,10 +205,52 @@ function CanvasComponent() {
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
   const [detachedSidebarOpen, setDetachedSidebarOpen] = useState(false);
+  const [pendingFolderDeleteIds, setPendingFolderDeleteIds] = useState<
+    string[] | null
+  >(null);
 
   const onOpenNoteLibrary = useCallback(() => {
     setDetachedSidebarOpen(true);
   }, []);
+
+  const deleteNodesWithToast = useCallback(
+    (ids: string[]) => {
+      deleteNodes(ids);
+      toast(
+        ids.length > 1
+          ? m.toast_nodes_deleted({ count: ids.length })
+          : m.toast_node_deleted(),
+        { action: { label: m.toast_undo(), onClick: () => undo() } }
+      );
+    },
+    [deleteNodes, undo]
+  );
+
+  const requestDeleteNodes = useCallback(
+    (ids: string[]) => {
+      const idSet = new Set(ids);
+      const hasFolder = useCanvasStore
+        .getState()
+        .nodes.some((node) => idSet.has(node.id) && node.type === 'folder');
+
+      if (hasFolder) {
+        setPendingFolderDeleteIds(ids);
+        return;
+      }
+
+      deleteNodesWithToast(ids);
+    },
+    [deleteNodesWithToast]
+  );
+
+  const {
+    contextMenu,
+    setContextMenu,
+    onPaneContextMenu,
+    onNodeContextMenu,
+    onEdgeContextMenu,
+    handleContextMenuAction,
+  } = useContextMenu({ onDeleteNodes: requestDeleteNodes, rfInstance });
 
   useCanvasPersistence();
 
@@ -289,7 +327,7 @@ function CanvasComponent() {
       });
   }, [hydrate, hydrated, activeViewId]);
 
-  useCanvasKeyboard();
+  useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes });
 
   const onEdgesChange = useCallback(
     (changes: any) => {
@@ -564,6 +602,19 @@ function CanvasComponent() {
           />
         ) : null}
       </AnimatePresence>
+
+      {pendingFolderDeleteIds ? (
+        <DeleteFolderConfirmDialog
+          onCancel={() => {
+            setPendingFolderDeleteIds(null);
+          }}
+          onConfirm={() => {
+            deleteNodesWithToast(pendingFolderDeleteIds);
+            setPendingFolderDeleteIds(null);
+          }}
+          open
+        />
+      ) : null}
 
       <ViewSwitcher
         createMenuOpen={createMenuOpen}

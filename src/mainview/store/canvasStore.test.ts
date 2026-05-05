@@ -973,7 +973,7 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
     rpcDeleteNoteMock.mockResolvedValue({ success: true });
   });
 
-  it('fires rpcDeleteNote for each card child noteId when deleting a folder', () => {
+  it('moves folder children to detached notes without deleting their note files', () => {
     useCanvasStore.setState({
       nodes: [
         makeNode('folder', {
@@ -990,22 +990,39 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
               },
               {
                 id: 'child-2',
-                noteId: 'note_b',
-                type: 'card',
-                data: { type: 'text', noteId: 'note_b' },
+                type: 'image',
+                data: { title: 'Picture', imageUrl: '', color: '#FFFFFF' },
               },
             ],
           },
         }),
+        makeNode('other'),
       ],
       edges: [],
     });
 
     useCanvasStore.getState().deleteNodes(['folder']);
+    const state = useCanvasStore.getState();
+    const detachedCard = state.nodes.find((node) => node.id === 'child-1');
+    const detachedImage = state.nodes.find((node) => node.id === 'child-2');
 
-    expect(rpcDeleteNoteMock).toHaveBeenCalledTimes(2);
-    expect(rpcDeleteNoteMock).toHaveBeenCalledWith('note_a');
-    expect(rpcDeleteNoteMock).toHaveBeenCalledWith('note_b');
+    expect(state.nodes.find((node) => node.id === 'folder')).toBeUndefined();
+    expect(state.nodes.find((node) => node.id === 'other')).toBeDefined();
+    expect(detachedCard).toMatchObject({
+      id: 'child-1',
+      type: 'card',
+      position: { x: 0, y: 0 },
+      style: { width: CARD_W, height: CARD_H },
+      data: { type: 'text', noteId: 'note_a', detached: true },
+    });
+    expect(detachedImage).toMatchObject({
+      id: 'child-2',
+      type: 'image',
+      position: { x: 0, y: 0 },
+      style: { width: IMAGE_W, height: IMAGE_H },
+      data: { title: 'Picture', detached: true },
+    });
+    expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
   });
 });
 

@@ -5,7 +5,13 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
 
-export function useCanvasKeyboard() {
+interface UseCanvasKeyboardOptions {
+  onDeleteNodes?: (ids: string[]) => void;
+}
+
+export function useCanvasKeyboard({
+  onDeleteNodes,
+}: UseCanvasKeyboardOptions = {}) {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
@@ -86,13 +92,17 @@ export function useCanvasKeyboard() {
         const { nodes } = useCanvasStore.getState();
         const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
         if (selectedIds.length > 0) {
-          deleteNodes(selectedIds);
-          toast(
-            selectedIds.length > 1
-              ? m.toast_nodes_deleted({ count: selectedIds.length })
-              : m.toast_node_deleted(),
-            { action: { label: m.toast_undo(), onClick: () => undo() } }
-          );
+          if (onDeleteNodes) {
+            onDeleteNodes(selectedIds);
+          } else {
+            deleteNodes(selectedIds);
+            toast(
+              selectedIds.length > 1
+                ? m.toast_nodes_deleted({ count: selectedIds.length })
+                : m.toast_node_deleted(),
+              { action: { label: m.toast_undo(), onClick: () => undo() } }
+            );
+          }
         }
         return;
       }
@@ -168,6 +178,7 @@ export function useCanvasKeyboard() {
     setCreateMenuOpen,
     setSearchOpen,
     searchOpen,
+    onDeleteNodes,
     undo,
     redo,
   ]);

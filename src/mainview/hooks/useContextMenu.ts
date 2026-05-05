@@ -8,6 +8,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
+  onDeleteNodes?: (ids: string[]) => void;
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
@@ -27,7 +28,10 @@ const NEW_NODE_ACTIONS: Record<string, NewNodeType> = {
   'new-image': 'image',
 };
 
-export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
+export function useContextMenu({
+  onDeleteNodes,
+  rfInstance,
+}: UseContextMenuOptions) {
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
@@ -172,13 +176,17 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
               selected.length > 1 && selected.some((n) => n.id === nodeId)
                 ? selected.map((n) => n.id)
                 : [nodeId];
-            deleteNodes(ids);
-            toast(
-              ids.length > 1
-                ? m.toast_nodes_deleted({ count: ids.length })
-                : m.toast_node_deleted(),
-              { action: { label: m.toast_undo(), onClick: () => undo() } }
-            );
+            if (onDeleteNodes) {
+              onDeleteNodes(ids);
+            } else {
+              deleteNodes(ids);
+              toast(
+                ids.length > 1
+                  ? m.toast_nodes_deleted({ count: ids.length })
+                  : m.toast_node_deleted(),
+                { action: { label: m.toast_undo(), onClick: () => undo() } }
+              );
+            }
           }
           break;
         }
@@ -255,6 +263,7 @@ export function useContextMenu({ rfInstance }: UseContextMenuOptions) {
       rfInstance,
       setFocusedNode,
       setFocusedFolder,
+      onDeleteNodes,
       deleteNodes,
       deleteEdge,
       detachNoteFromCanvas,

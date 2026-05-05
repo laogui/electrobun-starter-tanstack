@@ -76,7 +76,45 @@ interface NodeSpec {
 interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
+  noteId?: string;
   type?: string;
+}
+
+function uniqueDetachedNodeId(
+  candidateId: string,
+  usedNodeIds: Set<string>
+): string {
+  let id = candidateId;
+  while (usedNodeIds.has(id)) {
+    id = `node-${nanoid(8)}`;
+  }
+  usedNodeIds.add(id);
+  return id;
+}
+
+function folderChildToDetachedNode(
+  child: FolderChildEntry,
+  usedNodeIds: Set<string>
+): Node {
+  const isImage = child.type === 'image';
+  const {
+    isDropTarget: _isDropTarget,
+    isHidden: _isHidden,
+    ...data
+  } = child.data;
+  return {
+    id: uniqueDetachedNodeId(child.id, usedNodeIds),
+    type: isImage ? 'image' : 'card',
+    position: { x: 0, y: 0 },
+    style: isImage
+      ? { width: IMAGE_W, height: IMAGE_H }
+      : { width: CARD_W, height: CARD_H },
+    data: {
+      ...data,
+      ...(child.noteId && !isImage ? { noteId: child.noteId } : {}),
+      detached: true,
+    },
+  };
 }
 
 function buildNewNodeSpec(
@@ -745,46 +783,40 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   deleteNodes: (ids) => {
     const idSet = new Set(ids);
-    // Collect noteIds of folder card-children so their .md files can be deleted
-    // alongside the folder (images keep their attachment pattern).
-    const orphanedNoteIds: string[] = [];
-    for (const node of get().nodes) {
-      if (!idSet.has(node.id) || node.type !== 'folder') {
-        continue;
-      }
-      const children = ((node.data as any)?.children ?? []) as Array<{
-        noteId?: string;
-        type?: string;
-      }>;
-      for (const child of children) {
-        if (child.noteId && child.type !== 'image') {
-          orphanedNoteIds.push(child.noteId);
-        }
-      }
-    }
     get().saveSnapshot();
-    set((s) => ({
-      edges: s.edges.filter(
-        (e) => !(idSet.has(e.source) || idSet.has(e.target))
-      ),
-      nodes: s.nodes
-        .filter((n) => !idSet.has(n.id))
-        .map((n) => {
-          if (n.parentId && idSet.has(n.parentId)) {
-            const { parentId, extent, ...rest } = n as any;
-            return rest as Node;
-          }
-          return n;
-        }),
-    }));
-    for (const noteId of orphanedNoteIds) {
-      rpcDeleteNote(noteId).catch((error) => {
-        console.error(
-          '[canvasStore] Failed to delete folder child note:',
-          error
+    set((s) => {
+      const usedNodeIds = new Set(
+        s.nodes.filter((node) => !idSet.has(node.id)).map((node) => node.id)
+      );
+      const detachedFolderChildren = s.nodes.flatMap((node) => {
+        if (!idSet.has(node.id) || node.type !== 'folder') {
+          return [];
+        }
+        const children = ((node.data as any)?.children ??
+          []) as FolderChildEntry[];
+        return children.map((child) =>
+          folderChildToDetachedNode(child, usedNodeIds)
         );
       });
-    }
+
+      return {
+        edges: s.edges.filter(
+          (e) => !(idSet.has(e.source) || idSet.has(e.target))
+        ),
+        nodes: sortNodesByParent([
+          ...s.nodes
+            .filter((n) => !idSet.has(n.id))
+            .map((n) => {
+              if (n.parentId && idSet.has(n.parentId)) {
+                const { parentId, extent, ...rest } = n as any;
+                return rest as Node;
+              }
+              return n;
+            }),
+          ...detachedFolderChildren,
+        ]),
+      };
+    });
   },
 
   changeNodeColor: (nodeId) => {

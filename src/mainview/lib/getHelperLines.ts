@@ -11,22 +11,22 @@ const SNAP_THRESHOLD = 5;
 // Node dimensions used for alignment (center, right, bottom)
 const NODE_WIDTH: Record<string, number> = {
   card: 350,
-  folder: 350,
+  folder: 280,
 };
 const NODE_HEIGHT: Record<string, number> = {
   card: 450,
-  folder: 350,
+  folder: 280,
 };
 
 function getNodeDimensions(node: Node) {
   const style = node.style as Record<string, any> | undefined;
   const w =
-    node.measured?.width ?? style?.width ?? NODE_WIDTH[node.type ?? ''] ?? 350;
+    node.measured?.width ?? style?.width ?? NODE_WIDTH[node.type ?? ''] ?? 280;
   const h =
     node.measured?.height ??
     style?.height ??
     NODE_HEIGHT[node.type ?? ''] ??
-    350;
+    280;
   return { w, h };
 }
 

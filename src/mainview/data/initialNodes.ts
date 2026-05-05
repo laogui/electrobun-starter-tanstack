@@ -97,7 +97,7 @@ export const initialNodes: Node[] = [
       ],
     },
     type: 'folder',
-    style: { height: 350, width: 350 },
+    style: { height: 280, width: 280 },
   },
   {
     id: 'node-init0007',
@@ -214,7 +214,7 @@ export const initialNodes: Node[] = [
       ],
     },
     type: 'folder',
-    style: { height: 350, width: 350 },
+    style: { height: 280, width: 280 },
   },
   {
     id: 'node-init0010',

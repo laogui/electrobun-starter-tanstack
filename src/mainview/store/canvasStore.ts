@@ -150,6 +150,7 @@ function buildNewNodeSpec(
         size: { width: FOLDER_W, height: FOLDER_H },
         base: {
           type: 'folder',
+          style: { width: FOLDER_W, height: FOLDER_H },
           data: {
             title: m.default_folder_title(),
             subtitle: '',

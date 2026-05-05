@@ -23,8 +23,8 @@ const state = {
       type: 'folder',
       position: { x: 20, y: 20 },
       data: { title: 'Folder', children: [] },
-      measured: { width: 350, height: 350 },
-      style: { width: 350, height: 350 },
+      measured: { width: 280, height: 280 },
+      style: { width: 280, height: 280 },
     },
     {
       id: 'card-1',
@@ -60,7 +60,7 @@ const rfMock = {
     if (id === 'folder-1') {
       return {
         internals: { positionAbsolute: { x: 20, y: 20 } },
-        measured: { width: 350, height: 350 },
+        measured: { width: 280, height: 280 },
       };
     }
     if (id === 'sticky-1') {
@@ -266,8 +266,8 @@ const Harness = () => {
               type: 'folder',
               position: { x: 20, y: 20 },
               data: { title: 'Folder', children: [] },
-              measured: { width: 350, height: 350 },
-              style: { width: 350, height: 350 },
+              measured: { width: 280, height: 280 },
+              style: { width: 280, height: 280 },
             } as never,
             [] as never
           );
@@ -285,8 +285,8 @@ const Harness = () => {
               type: 'folder',
               position: { x: 40, y: 60 },
               data: { title: 'Folder', children: [] },
-              measured: { width: 350, height: 350 },
-              style: { width: 350, height: 350 },
+              measured: { width: 280, height: 280 },
+              style: { width: 280, height: 280 },
             } as never,
             [] as never
           );
@@ -397,8 +397,8 @@ const initialNodes = () => [
     type: 'folder',
     position: { x: 20, y: 20 },
     data: { title: 'Folder', children: [] },
-    measured: { width: 350, height: 350 },
-    style: { width: 350, height: 350 },
+    measured: { width: 280, height: 280 },
+    style: { width: 280, height: 280 },
   },
   {
     id: 'card-1',

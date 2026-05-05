@@ -17,8 +17,8 @@ export const CARD_W = 350;
 export const CARD_H = 450;
 export const IMAGE_W = 350;
 export const IMAGE_H = 350;
-export const FOLDER_W = 350;
-export const FOLDER_H = 350;
+export const FOLDER_W = 280;
+export const FOLDER_H = 280;
 export const STICKY_W = 200;
 export const STICKY_H = 200;
 

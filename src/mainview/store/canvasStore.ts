@@ -284,6 +284,7 @@ export interface CanvasState {
   pendingSearchTarget: PendingSearchTarget | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
+  renamingFolderId: string | null;
   reset: () => void;
   saveSnapshot: () => void;
 
@@ -307,6 +308,7 @@ export interface CanvasState {
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
+  setRenamingFolderId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setSelectedDocumentId: (id: string | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
@@ -338,6 +340,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
+  renamingFolderId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
   pendingSearchTarget: null,
@@ -569,6 +572,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- edge actions -----------------------------------------------------------
   setEditingEdgeId: (id) => {
     set({ editingEdgeId: id });
+  },
+
+  setRenamingFolderId: (id) => {
+    set({ renamingFolderId: id });
   },
 
   updateEdgeData: (edgeId, updates) => {

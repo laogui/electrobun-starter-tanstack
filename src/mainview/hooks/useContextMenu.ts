@@ -39,6 +39,7 @@ export function useContextMenu({
   const undo = useCanvasStore((s) => s.undo);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
+  const setRenamingFolderId = useCanvasStore((s) => s.setRenamingFolderId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
@@ -202,6 +203,12 @@ export function useContextMenu({
           }
           break;
         }
+        case 'rename': {
+          if (nodeId) {
+            setRenamingFolderId(nodeId);
+          }
+          break;
+        }
         case 'edit-edge-label': {
           // nodeId here is actually edgeId (passed through the generic slot)
           if (nodeId) {
@@ -270,6 +277,7 @@ export function useContextMenu({
       undo,
       updateEdgeData,
       setEditingEdgeId,
+      setRenamingFolderId,
       changeNodeColor,
       addFolderChild,
       pasteClipboard,

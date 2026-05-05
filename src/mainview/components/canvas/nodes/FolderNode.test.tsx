@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useCanvasStore } from '@/store/canvasStore';
 import FolderNode from './FolderNode';
 
 const useViewportMock = vi.fn(() => ({ zoom: 1 }));
+const commitNodeDataMock = vi.fn();
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -38,7 +46,15 @@ vi.mock('@xyflow/react', () => ({
 }));
 
 describe('FolderNode', () => {
+  beforeEach(() => {
+    useCanvasStore.setState({
+      commitNodeData: commitNodeDataMock,
+      renamingFolderId: null,
+    });
+  });
+
   afterEach(() => {
+    commitNodeDataMock.mockReset();
     useViewportMock.mockReset();
     useViewportMock.mockReturnValue({ zoom: 1 });
     document.body.className = '';
@@ -53,6 +69,7 @@ describe('FolderNode', () => {
           subtitle: '12 children',
           title: 'Research',
         }}
+        id="folder-1"
       />
     );
 
@@ -72,6 +89,7 @@ describe('FolderNode', () => {
           subtitle: 'Hidden subtitle',
           title: 'Archive',
         }}
+        id="folder-2"
       />
     );
 
@@ -83,5 +101,43 @@ describe('FolderNode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'end resize' }));
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
+  });
+
+  it('renames the folder title after the context menu requests editing', async () => {
+    const keydownSpy = vi.fn();
+    globalThis.addEventListener('keydown', keydownSpy);
+
+    render(
+      <FolderNode
+        data={{
+          subtitle: '12 children',
+          title: 'Research',
+        }}
+        id="folder-3"
+      />
+    );
+
+    const title = screen.getByText('Research');
+
+    act(() => {
+      useCanvasStore.getState().setRenamingFolderId('folder-3');
+    });
+
+    await waitFor(() => {
+      expect(title).toHaveAttribute('contenteditable', 'true');
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(title);
+    });
+
+    title.textContent = 'Designs';
+    fireEvent.keyDown(title, { key: 'Enter' });
+
+    expect(commitNodeDataMock).toHaveBeenCalledWith('folder-3', {
+      title: 'Designs',
+    });
+    expect(keydownSpy).not.toHaveBeenCalled();
+
+    globalThis.removeEventListener('keydown', keydownSpy);
   });
 });

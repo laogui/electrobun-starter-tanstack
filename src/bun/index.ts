@@ -7,6 +7,11 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
+import {
+  deleteUnlinkedNotes,
+  scanUnlinkedNotes,
+  type UnlinkedFileEntry,
+} from './cleanup';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
@@ -24,10 +29,13 @@ import {
   addView,
   atomicWrite,
   initWorkspace,
+  listTrash,
   loadWorkspaceConfig,
+  purgeTrash,
   removeView,
   renameView,
   restoreView,
+  type TrashEntry,
 } from './workspace';
 
 const DEV_SERVER_PORT = '5173';
@@ -214,12 +222,34 @@ interface SettingsRPC {
         };
         response: { success: boolean };
       };
+      listTrash: {
+        params: Record<string, unknown>;
+        response: TrashEntry[];
+      };
+      restoreTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      purgeTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      scanUnlinkedNotes: {
+        params: Record<string, unknown>;
+        response: { entries: UnlinkedFileEntry[] };
+      };
+      deleteUnlinkedNotes: {
+        params: { files: string[] };
+        response: { deleted: string[]; skipped: string[] };
+      };
     };
     messages: Record<never, unknown>;
   };
   webview: {
     requests: Record<string, { params: unknown; response: unknown }>;
-    messages: Record<never, unknown>;
+    messages: {
+      trashUpdated: Record<never, unknown>;
+    };
   };
 }
 
@@ -243,6 +273,10 @@ let settingsWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
+// Reference to settings window RPC — set when the settings window is opened.
+// The main window uses this to push trash-list refresh hints into settings.
+let settingsRpc: ReturnType<typeof BrowserView.defineRPC<SettingsRPC>> | null =
+  null;
 
 export async function loadSettings(wsPath: string): Promise<AppSettings> {
   settingsFilePath = join(wsPath, '.ghostboard', 'settings.json');
@@ -289,9 +323,10 @@ function getCenteredSettingsWindowFrame(parentWindow: BrowserWindow | null) {
 }
 
 function createSettingsWindow(
-  parentWindow: BrowserWindow | null
+  parentWindow: BrowserWindow | null,
+  wsPath: string
 ): BrowserWindow {
-  const settingsRpc = BrowserView.defineRPC<SettingsRPC>({
+  settingsRpc = BrowserView.defineRPC<SettingsRPC>({
     maxRequestTime: 5000,
     handlers: {
       requests: {
@@ -304,6 +339,18 @@ function createSettingsWindow(
           mainRpc?.send?.settingsUpdated({ theme, locale });
           return { success: true };
         },
+        listTrash: async () => await listTrash(wsPath),
+        restoreTrash: async ({ trashId }) => {
+          const result = await restoreView(wsPath, trashId);
+          return { success: result.success };
+        },
+        purgeTrash: async ({ trashId }) => await purgeTrash(wsPath, trashId),
+        scanUnlinkedNotes: async () => {
+          const entries = await scanUnlinkedNotes(wsPath);
+          return { entries };
+        },
+        deleteUnlinkedNotes: async ({ files }) =>
+          await deleteUnlinkedNotes(wsPath, files),
       },
       messages: {},
     },
@@ -318,6 +365,7 @@ function createSettingsWindow(
 
   win.on('close', () => {
     settingsWindow = null;
+    settingsRpc = null;
   });
 
   return win;
@@ -847,7 +895,7 @@ async function main() {
             settingsWindow.focus();
             return { success: true };
           }
-          settingsWindow = createSettingsWindow(mainWindow);
+          settingsWindow = createSettingsWindow(mainWindow, wsPath);
           return { success: true };
         },
 
@@ -875,6 +923,8 @@ async function main() {
           if (!result.success) {
             return { success: false };
           }
+          // Notify settings window so its trash list refreshes immediately.
+          settingsRpc?.send?.trashUpdated({});
           return {
             success: true,
             activeViewId: result.activeViewId,
@@ -887,6 +937,7 @@ async function main() {
           if (!result.success) {
             return { success: false };
           }
+          settingsRpc?.send?.trashUpdated({});
           return {
             success: true,
             view: result.view,

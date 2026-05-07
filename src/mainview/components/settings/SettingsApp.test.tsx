@@ -9,14 +9,19 @@ import {
   type SettingsClient,
   TRASH_UPDATED_EVENT,
   type TrashEntry,
+  type UnlinkedFileEntry,
 } from '@/settingsClient';
 
 import { applyTheme, normalizeSettings, SettingsApp } from './SettingsApp';
 
 interface ClientOverrides {
+  deleteUnlinkedNotes?: (
+    files: string[]
+  ) => Promise<{ deleted: string[]; skipped: string[] }>;
   listTrash?: () => Promise<TrashEntry[]>;
   purgeTrash?: (trashId: string) => Promise<{ success: boolean }>;
   restoreTrash?: (trashId: string) => Promise<{ success: boolean }>;
+  scanUnlinkedNotes?: () => Promise<UnlinkedFileEntry[]>;
 }
 
 const createClient = (
@@ -31,6 +36,13 @@ const createClient = (
   ),
   purgeTrash: vi.fn(
     overrides.purgeTrash ?? (() => Promise.resolve({ success: true }))
+  ),
+  scanUnlinkedNotes: vi.fn(
+    overrides.scanUnlinkedNotes ?? (() => Promise.resolve([]))
+  ),
+  deleteUnlinkedNotes: vi.fn(
+    overrides.deleteUnlinkedNotes ??
+      (() => Promise.resolve({ deleted: [], skipped: [] }))
   ),
 });
 

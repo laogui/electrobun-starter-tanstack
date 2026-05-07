@@ -221,6 +221,42 @@ export async function restoreView(
   };
 }
 
+/** List soft-deleted views, newest first. */
+export async function listTrash(wsPath: string): Promise<TrashEntry[]> {
+  const config = await loadWorkspaceConfig(wsPath);
+  return [...(config.trash ?? [])].sort((a, b) => b.deletedAt - a.deletedAt);
+}
+
+/**
+ * Permanently remove a trash entry: drop it from `workspace.json` and move
+ * the manifest file to the system Trash via Electrobun's `Utils.moveToTrash`.
+ */
+export async function purgeTrash(
+  wsPath: string,
+  trashId: string
+): Promise<{ success: boolean }> {
+  const config = await loadWorkspaceConfig(wsPath);
+  const trash = config.trash ?? [];
+  const entry = trash.find((t) => t.trashId === trashId);
+  if (!entry) {
+    return { success: false };
+  }
+  const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
+  if (existsSync(trashPath)) {
+    try {
+      Utils.moveToTrash(trashPath);
+    } catch (err) {
+      console.warn(
+        '[workspace] Failed to move trashed manifest to system Trash:',
+        err
+      );
+    }
+  }
+  config.trash = trash.filter((t) => t.trashId !== trashId);
+  await saveWorkspaceConfig(wsPath, config);
+  return { success: true };
+}
+
 /** Rename a view. */
 export async function renameView(
   wsPath: string,

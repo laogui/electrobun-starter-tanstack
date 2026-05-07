@@ -15,12 +15,25 @@ export interface TrashEntry {
   view: { file: string; id: string; name: string };
 }
 
+export interface UnlinkedFileEntry {
+  file: string;
+  hasFrontmatterId: boolean;
+  modifiedAt: number;
+  noteId: string | null;
+  size: number;
+  title: string;
+}
+
 export interface SettingsClient {
+  deleteUnlinkedNotes: (
+    files: string[]
+  ) => Promise<{ deleted: string[]; skipped: string[] }>;
   getSettings: () => Promise<AppSettings>;
   listTrash: () => Promise<TrashEntry[]>;
   purgeTrash: (trashId: string) => Promise<{ success: boolean }>;
   restoreTrash: (trashId: string) => Promise<{ success: boolean }>;
   saveSettings: (settings: AppSettings) => Promise<{ success: boolean }>;
+  scanUnlinkedNotes: () => Promise<UnlinkedFileEntry[]>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -52,6 +65,14 @@ interface SettingsRPC {
         params: { trashId: string };
         response: { success: boolean };
       };
+      scanUnlinkedNotes: {
+        params: Record<string, unknown>;
+        response: { entries: UnlinkedFileEntry[] };
+      };
+      deleteUnlinkedNotes: {
+        params: { files: string[] };
+        response: { deleted: string[]; skipped: string[] };
+      };
     };
     messages: Record<never, unknown>;
   };
@@ -68,6 +89,9 @@ export const TRASH_UPDATED_EVENT = 'trash-updated';
 interface SettingsElectroview {
   rpc?: {
     request: {
+      deleteUnlinkedNotes: (params: {
+        files: string[];
+      }) => Promise<{ deleted: string[]; skipped: string[] }>;
       getSettings: (params: Record<string, unknown>) => Promise<AppSettings>;
       listTrash: (params: Record<string, unknown>) => Promise<TrashEntry[]>;
       purgeTrash: (params: {
@@ -77,6 +101,9 @@ interface SettingsElectroview {
         trashId: string;
       }) => Promise<{ success: boolean }>;
       saveSettings: (params: AppSettings) => Promise<{ success: boolean }>;
+      scanUnlinkedNotes: (
+        params: Record<string, unknown>
+      ) => Promise<{ entries: UnlinkedFileEntry[] }>;
     };
   };
 }
@@ -152,6 +179,21 @@ export function createSettingsClient(): SettingsClient {
         return { success: false };
       }
       return await electrobun.rpc.request.purgeTrash({ trashId });
+    },
+    scanUnlinkedNotes: async () => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return [];
+      }
+      const result = await electrobun.rpc.request.scanUnlinkedNotes({});
+      return result.entries;
+    },
+    deleteUnlinkedNotes: async (files) => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return { deleted: [], skipped: files };
+      }
+      return await electrobun.rpc.request.deleteUnlinkedNotes({ files });
     },
   };
 }

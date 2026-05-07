@@ -4,13 +4,34 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AppSettings, SettingsClient } from '@/settingsClient';
+import {
+  type AppSettings,
+  type SettingsClient,
+  TRASH_UPDATED_EVENT,
+  type TrashEntry,
+} from '@/settingsClient';
 
 import { applyTheme, normalizeSettings, SettingsApp } from './SettingsApp';
 
-const createClient = (settings: AppSettings): SettingsClient => ({
+interface ClientOverrides {
+  listTrash?: () => Promise<TrashEntry[]>;
+  purgeTrash?: (trashId: string) => Promise<{ success: boolean }>;
+  restoreTrash?: (trashId: string) => Promise<{ success: boolean }>;
+}
+
+const createClient = (
+  settings: AppSettings,
+  overrides: ClientOverrides = {}
+): SettingsClient => ({
   getSettings: vi.fn().mockResolvedValue(settings),
   saveSettings: vi.fn().mockResolvedValue({ success: true }),
+  listTrash: vi.fn(overrides.listTrash ?? (() => Promise.resolve([]))),
+  restoreTrash: vi.fn(
+    overrides.restoreTrash ?? (() => Promise.resolve({ success: true }))
+  ),
+  purgeTrash: vi.fn(
+    overrides.purgeTrash ?? (() => Promise.resolve({ success: true }))
+  ),
 });
 
 describe('SettingsApp helpers', () => {
@@ -112,5 +133,124 @@ describe('SettingsApp', () => {
         defaultLayoutMode: 'canvas',
       });
     });
+  });
+});
+
+describe('SettingsApp trash section', () => {
+  const baseSettings: AppSettings = {
+    theme: 'light',
+    locale: 'en',
+    defaultLayoutMode: 'canvas',
+  };
+
+  const trashEntry: TrashEntry = {
+    trashId: 'trash_abc',
+    deletedAt: Date.UTC(2025, 0, 15, 12, 30),
+    trashFile: 'trash/trash_abc.canvas.json',
+    view: { id: 'view_x', name: 'My Canvas', file: 'views/view_x.canvas.json' },
+  };
+
+  beforeEach(() => {
+    document.documentElement.className = '';
+    document.documentElement.lang = 'en';
+    document.documentElement.removeAttribute('data-base-ui-scroll-locked');
+    document.documentElement.removeAttribute('style');
+    document.body.removeAttribute('style');
+    document.title = '';
+  });
+
+  it('shows the empty state when trash is empty', async () => {
+    const client = createClient(baseSettings);
+    render(<SettingsApp client={client} />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Deleted Canvases' })
+    ).toBeVisible();
+    expect(screen.getByText('No deleted canvases.')).toBeVisible();
+  });
+
+  it('lists trash entries and restores them', async () => {
+    const client = createClient(baseSettings, {
+      listTrash: vi
+        .fn()
+        .mockResolvedValueOnce([trashEntry])
+        .mockResolvedValueOnce([]),
+    });
+
+    render(<SettingsApp client={client} />);
+
+    expect(await screen.findByText('My Canvas')).toBeVisible();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Restore My Canvas' }));
+
+    await waitFor(() => {
+      expect(client.restoreTrash).toHaveBeenCalledWith('trash_abc');
+    });
+    await waitFor(() => {
+      expect(screen.getByText('No deleted canvases.')).toBeVisible();
+    });
+  });
+
+  it('purges trash entries after confirmation', async () => {
+    const client = createClient(baseSettings, {
+      listTrash: vi
+        .fn()
+        .mockResolvedValueOnce([trashEntry])
+        .mockResolvedValueOnce([]),
+    });
+
+    render(<SettingsApp client={client} />);
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Permanently delete My Canvas',
+      })
+    );
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete Forever' })
+    );
+
+    await waitFor(() => {
+      expect(client.purgeTrash).toHaveBeenCalledWith('trash_abc');
+    });
+    await waitFor(() => {
+      expect(screen.getByText('No deleted canvases.')).toBeVisible();
+    });
+  });
+
+  it('shows an error message when restore fails', async () => {
+    const client = createClient(baseSettings, {
+      listTrash: vi.fn().mockResolvedValue([trashEntry]),
+      restoreTrash: vi.fn().mockResolvedValue({ success: false }),
+    });
+
+    render(<SettingsApp client={client} />);
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', { name: 'Restore My Canvas' })
+    );
+
+    expect(await screen.findByText('Unable to restore canvas.')).toBeVisible();
+  });
+
+  it('reloads when a trash-updated event is dispatched', async () => {
+    const listTrash = vi
+      .fn<() => Promise<TrashEntry[]>>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([trashEntry]);
+    const client = createClient(baseSettings, { listTrash });
+
+    render(<SettingsApp client={client} />);
+
+    expect(await screen.findByText('No deleted canvases.')).toBeVisible();
+
+    globalThis.dispatchEvent(new CustomEvent(TRASH_UPDATED_EVENT));
+
+    expect(await screen.findByText('My Canvas')).toBeVisible();
+    expect(listTrash).toHaveBeenCalledTimes(2);
   });
 });

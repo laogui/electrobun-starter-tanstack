@@ -8,8 +8,18 @@ export interface AppSettings {
   theme: ThemeSetting;
 }
 
+export interface TrashEntry {
+  deletedAt: number;
+  trashFile: string;
+  trashId: string;
+  view: { file: string; id: string; name: string };
+}
+
 export interface SettingsClient {
   getSettings: () => Promise<AppSettings>;
+  listTrash: () => Promise<TrashEntry[]>;
+  purgeTrash: (trashId: string) => Promise<{ success: boolean }>;
+  restoreTrash: (trashId: string) => Promise<{ success: boolean }>;
   saveSettings: (settings: AppSettings) => Promise<{ success: boolean }>;
 }
 
@@ -30,19 +40,42 @@ interface SettingsRPC {
         params: AppSettings;
         response: { success: boolean };
       };
+      listTrash: {
+        params: Record<string, unknown>;
+        response: TrashEntry[];
+      };
+      restoreTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      purgeTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
     };
     messages: Record<never, unknown>;
   };
   webview: {
     requests: Record<string, { params: unknown; response: unknown }>;
-    messages: Record<never, unknown>;
+    messages: {
+      trashUpdated: Record<never, unknown>;
+    };
   };
 }
+
+export const TRASH_UPDATED_EVENT = 'trash-updated';
 
 interface SettingsElectroview {
   rpc?: {
     request: {
       getSettings: (params: Record<string, unknown>) => Promise<AppSettings>;
+      listTrash: (params: Record<string, unknown>) => Promise<TrashEntry[]>;
+      purgeTrash: (params: {
+        trashId: string;
+      }) => Promise<{ success: boolean }>;
+      restoreTrash: (params: {
+        trashId: string;
+      }) => Promise<{ success: boolean }>;
       saveSettings: (params: AppSettings) => Promise<{ success: boolean }>;
     };
   };
@@ -62,7 +95,11 @@ async function initElectrobun(): Promise<SettingsElectroview | null> {
     const rpc = Electroview.defineRPC<SettingsRPC>({
       handlers: {
         requests: {},
-        messages: {},
+        messages: {
+          trashUpdated: () => {
+            globalThis.dispatchEvent(new CustomEvent(TRASH_UPDATED_EVENT));
+          },
+        },
       },
     });
 
@@ -94,6 +131,27 @@ export function createSettingsClient(): SettingsClient {
       }
 
       return await electrobun.rpc.request.saveSettings(settings);
+    },
+    listTrash: async () => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return [];
+      }
+      return await electrobun.rpc.request.listTrash({});
+    },
+    restoreTrash: async (trashId) => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return { success: false };
+      }
+      return await electrobun.rpc.request.restoreTrash({ trashId });
+    },
+    purgeTrash: async (trashId) => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return { success: false };
+      }
+      return await electrobun.rpc.request.purgeTrash({ trashId });
     },
   };
 }

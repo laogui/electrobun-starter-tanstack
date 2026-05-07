@@ -61,7 +61,7 @@ vi.mock('better-themes', () => ({
   useTheme: () => ({ theme: 'light', systemTheme: 'light' }),
 }));
 
-vi.mock('../../../paraglide/messages.js', () => ({
+const paraglideMessageMocks = vi.hoisted(() => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
   view_new_canvas: () => 'New Canvas',
@@ -92,39 +92,20 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_toggle_straight: () => 'Toggle Straight',
   menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
+  delete_view_confirm_title: () => 'Delete canvas?',
+  delete_view_confirm_body: ({ name }: { name: string }) =>
+    `"${name}" and everything on it will be moved to trash.`,
+  delete_view_confirm_cancel: () => 'Cancel',
+  delete_view_confirm_action: () => 'Delete Canvas',
+  toast_view_deleted: ({ name }: { name: string }) =>
+    `Canvas "${name}" deleted`,
+  toast_view_restored: ({ name }: { name: string }) =>
+    `Canvas "${name}" restored`,
+  toast_view_restore_failed: () => 'Could not restore canvas',
+  toast_undo: () => 'Undo',
 }));
-vi.mock('../../paraglide/messages.js', () => ({
-  default_folder_title: () => 'New Folder',
-  default_new_group_label: () => 'New Group',
-  view_new_canvas: () => 'New Canvas',
-  menu_note: () => 'Note',
-  menu_checklist: () => 'Checklist',
-  menu_sticky: () => 'Sticky',
-  menu_image: () => 'Image',
-  menu_folder: () => 'Folder',
-  menu_group: () => 'Group',
-  menu_file: () => 'File',
-  menu_new_note: () => 'New note',
-  menu_new_checklist: () => 'New checklist',
-  menu_new_sticky: () => 'New sticky',
-  menu_new_image: () => 'New image',
-  menu_new_folder: () => 'New folder',
-  menu_new_group: () => 'New group',
-  menu_paste: () => 'Paste',
-  menu_reset_zoom: () => 'Reset zoom',
-  menu_open_focused: () => 'Open focused',
-  menu_copy: () => 'Copy',
-  menu_change_color: () => 'Change color',
-  menu_delete: () => 'Delete',
-  menu_open: () => 'Open',
-  menu_rename: () => 'Rename',
-  menu_new_card_inside: () => 'New child',
-  menu_edit_label: () => 'Edit label',
-  menu_toggle_animation: () => 'Toggle animation',
-  menu_toggle_straight: () => 'Toggle Straight',
-  menu_toggle_curved: () => 'Toggle Curved',
-  menu_delete_edge: () => 'Delete edge',
-}));
+vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
+vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);
 
 vi.mock('@xyflow/react', async () => {
   const actual = await vi.importActual('@xyflow/react');

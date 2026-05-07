@@ -199,6 +199,14 @@ export async function rpcDeleteView(viewId: string) {
   return eb.rpc.request.deleteView({ viewId });
 }
 
+export async function rpcRestoreView(trashId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.restoreView({ trashId });
+}
+
 export async function rpcRenameView(viewId: string, name: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

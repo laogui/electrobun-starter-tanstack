@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const DATA_TMP_RE = /^.*data\.json\.[\da-f]+\.tmp$/;
+const TRASH_ID_RE = /^trash_/;
 
 vi.mock('electrobun/bun', () => ({
   Utils: {
@@ -198,7 +199,7 @@ describe('workspace', () => {
     expect(config.views).toHaveLength(2);
   });
 
-  it('removeView returns false when attempting to remove the last view', async () => {
+  it('removeView returns success=false when attempting to remove the last view', async () => {
     const { initWorkspace, removeView } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
@@ -223,10 +224,12 @@ describe('workspace', () => {
       json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
     }));
 
-    await expect(removeView(workspaceRoot, 'default')).resolves.toBe(false);
+    await expect(removeView(workspaceRoot, 'default')).resolves.toEqual({
+      success: false,
+    });
   });
 
-  it('removeView deletes the manifest file and reassigns activeViewId', async () => {
+  it('removeView soft-deletes the manifest into trash and reassigns activeViewId', async () => {
     const { initWorkspace, removeView } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
@@ -252,22 +255,126 @@ describe('workspace', () => {
       'views',
       'view-2.canvas.json'
     );
-    writeFileSync(manifestPath, '{}');
+    writeFileSync(manifestPath, '{"payload":"keep me"}');
 
     setBunFile((filePath) => ({
       exists: async () => existsSync(filePath),
       json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
     }));
 
-    await expect(removeView(workspaceRoot, 'view-2')).resolves.toBe(true);
+    const result = await removeView(workspaceRoot, 'view-2');
+    expect(result.success).toBe(true);
+    expect(result.activeViewId).toBe('default');
+    expect(result.trashId).toMatch(TRASH_ID_RE);
+
     const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
       activeViewId: string;
       views: unknown[];
+      trash?: Array<{
+        trashId: string;
+        trashFile: string;
+        view: { id: string };
+      }>;
     };
-
     expect(saved.activeViewId).toBe('default');
     expect(saved.views).toHaveLength(1);
     expect(existsSync(manifestPath)).toBe(false);
+
+    expect(saved.trash).toHaveLength(1);
+    const trashEntry = saved.trash?.[0];
+    expect(trashEntry?.view.id).toBe('view-2');
+    const trashPath = join(
+      workspaceRoot,
+      '.ghostboard',
+      trashEntry?.trashFile ?? ''
+    );
+    expect(existsSync(trashPath)).toBe(true);
+    expect(readFileSync(trashPath, 'utf8')).toBe('{"payload":"keep me"}');
+  });
+
+  it('restoreView moves the manifest back and re-adds the view entry', async () => {
+    const { initWorkspace, removeView, restoreView } = await import(
+      './workspace'
+    );
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'view-2',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+          { id: 'view-2', name: 'Second', file: 'views/view-2.canvas.json' },
+        ],
+      })
+    );
+    const manifestPath = join(
+      workspaceRoot,
+      '.ghostboard',
+      'views',
+      'view-2.canvas.json'
+    );
+    writeFileSync(manifestPath, '{"payload":"keep me"}');
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    const deleted = await removeView(workspaceRoot, 'view-2');
+    expect(deleted.trashId).toBeDefined();
+
+    const restored = await restoreView(
+      workspaceRoot,
+      deleted.trashId as string
+    );
+    expect(restored.success).toBe(true);
+    expect(restored.view?.id).toBe('view-2');
+
+    const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      views: Array<{ id: string }>;
+      trash?: unknown[];
+    };
+    expect(saved.views.map((v) => v.id)).toContain('view-2');
+    expect(saved.trash ?? []).toHaveLength(0);
+    expect(existsSync(manifestPath)).toBe(true);
+    expect(readFileSync(manifestPath, 'utf8')).toBe('{"payload":"keep me"}');
+  });
+
+  it('restoreView returns success=false for an unknown trashId', async () => {
+    const { initWorkspace, restoreView } = await import('./workspace');
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await expect(
+      restoreView(workspaceRoot, 'trash_does_not_exist')
+    ).resolves.toEqual({ success: false });
   });
 
   it('renameView updates an existing view name and returns false for missing views', async () => {

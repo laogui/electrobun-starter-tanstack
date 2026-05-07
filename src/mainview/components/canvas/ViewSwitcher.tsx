@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import {
   isRpcAvailable,
@@ -26,12 +27,14 @@ import {
   rpcDeleteView,
   rpcListViews,
   rpcRenameView,
+  rpcRestoreView,
   rpcSaveManifest,
 } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
+import { DeleteViewConfirmDialog } from './DeleteViewConfirmDialog';
 
 const getCreateMenuItems = () => [
   { id: 'note', label: m.menu_note(), icon: StickyNote, enabled: true },
@@ -66,6 +69,7 @@ export function ViewSwitcher({
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const activeViewId = useCanvasStore((s) => s.activeViewId);
@@ -140,14 +144,56 @@ export function ViewSwitcher({
     await handleSwitchView(result.id);
   }, [views, setViews, handleSwitchView]);
 
-  const handleDelete = useCallback(
+  const handleRestore = useCallback(
+    async (
+      trashId: string,
+      restoredView: { id: string; name: string },
+      previousActiveViewId: string
+    ) => {
+      const result = (await rpcRestoreView(trashId)) as {
+        success: boolean;
+        view?: { id: string; name: string; file: string };
+        activeViewId?: string;
+      } | null;
+      if (!result?.success) {
+        toast.error(m.toast_view_restore_failed());
+        return;
+      }
+      const current = useCanvasStore.getState().views;
+      if (!current.some((v) => v.id === restoredView.id)) {
+        setViews([
+          ...current,
+          { id: restoredView.id, name: restoredView.name },
+        ]);
+      }
+      // Switch back to the previously active view if the restore happened
+      // while the user was on a different one.
+      const nowActive = useCanvasStore.getState().activeViewId;
+      if (
+        previousActiveViewId === restoredView.id &&
+        nowActive !== restoredView.id
+      ) {
+        await handleSwitchView(restoredView.id);
+      }
+      toast.success(m.toast_view_restored({ name: restoredView.name }));
+    },
+    [setViews, handleSwitchView]
+  );
+
+  const handleDeleteConfirmed = useCallback(
     async (viewId: string) => {
       if (views.length <= 1) {
         return;
       }
+      const view = views.find((v) => v.id === viewId);
+      if (!view) {
+        return;
+      }
+      const previousActiveViewId = activeViewId;
       const result = (await rpcDeleteView(viewId)) as {
         success: boolean;
         activeViewId?: string;
+        trashId?: string;
       } | null;
       if (!result?.success) {
         return;
@@ -159,9 +205,31 @@ export function ViewSwitcher({
       if (viewId === activeViewId && result.activeViewId !== undefined) {
         await handleSwitchView(result.activeViewId);
       }
+
+      if (result.trashId !== undefined) {
+        const trashId = result.trashId;
+        toast(m.toast_view_deleted({ name: view.name }), {
+          action: {
+            label: m.toast_undo(),
+            onClick: () => {
+              handleRestore(
+                trashId,
+                { id: view.id, name: view.name },
+                previousActiveViewId
+              );
+            },
+          },
+        });
+      }
     },
-    [views, activeViewId, setViews, handleSwitchView]
+    [views, activeViewId, setViews, handleSwitchView, handleRestore]
   );
+
+  const handleDelete = useCallback((viewId: string) => {
+    setPendingDeleteId(viewId);
+  }, []);
+
+  const pendingDeleteView = views.find((v) => v.id === pendingDeleteId);
 
   const handleRenameStart = useCallback(
     (viewId: string) => {
@@ -196,244 +264,265 @@ export function ViewSwitcher({
   const activeView = views.find((v) => v.id === activeViewId);
 
   return (
-    <Menu.Root
-      onOpenChange={(nextOpen, details) => {
-        // Escape during rename should cancel the edit, not close the menu
-        if (
-          !nextOpen &&
-          editingId !== null &&
-          details.reason === 'escape-key'
-        ) {
-          details.cancel();
-          handleRenameCancel();
-          return;
-        }
-        setOpen(nextOpen);
-      }}
-      open={open}
-    >
-      <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2">
-        <Menu.Trigger
-          className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-800/80 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80"
-          render={<motion.button whileTap={{ scale: 0.95 }} />}
-        >
-          <Layers className="text-gray-500 dark:text-gray-400" size={16} />
-          <span className="max-w-30 truncate text-gray-700 dark:text-gray-200">
-            {activeView?.name ?? 'Canvas'}
-          </span>
-          <motion.span
-            animate={{ rotate: open ? 180 : 0 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          >
-            <ChevronUp className="text-gray-400" size={14} />
-          </motion.span>
-        </Menu.Trigger>
-
-        {onExportCanvas ? (
-          <motion.button
-            aria-label="Export canvas as PNG"
-            className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
-            onClick={onExportCanvas}
-            type="button"
-            whileTap={{ scale: 0.9 }}
-          >
-            <Download className="text-gray-500 dark:text-gray-400" size={16} />
-          </motion.button>
-        ) : null}
-
-        <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
+    <>
+      <DeleteViewConfirmDialog
+        onCancel={() => {
+          setPendingDeleteId(null);
+        }}
+        onConfirm={() => {
+          const id = pendingDeleteId;
+          setPendingDeleteId(null);
+          if (id !== null) {
+            handleDeleteConfirmed(id);
+          }
+        }}
+        open={pendingDeleteId !== null}
+        viewName={pendingDeleteView?.name ?? ''}
+      />
+      <Menu.Root
+        onOpenChange={(nextOpen, details) => {
+          // Escape during rename should cancel the edit, not close the menu
+          if (
+            !nextOpen &&
+            editingId !== null &&
+            details.reason === 'escape-key'
+          ) {
+            details.cancel();
+            handleRenameCancel();
+            return;
+          }
+          setOpen(nextOpen);
+        }}
+        open={open}
+      >
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2">
           <Menu.Trigger
-            className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
-            render={<motion.button whileTap={{ scale: 0.9 }} />}
+            className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-800/80 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80"
+            render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
+            <Layers className="text-gray-500 dark:text-gray-400" size={16} />
+            <span className="max-w-30 truncate text-gray-700 dark:text-gray-200">
+              {activeView?.name ?? 'Canvas'}
+            </span>
             <motion.span
-              animate={{ rotate: createMenuOpen ? 45 : 0 }}
-              className="flex items-center justify-center"
+              animate={{ rotate: open ? 180 : 0 }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
             >
-              <Plus className="text-gray-500 dark:text-gray-400" size={16} />
+              <ChevronUp className="text-gray-400" size={14} />
             </motion.span>
           </Menu.Trigger>
 
-          <Menu.Portal>
-            <Menu.Positioner
-              align="end"
-              className="z-50 outline-hidden"
-              side="top"
-              sideOffset={12}
+          {onExportCanvas ? (
+            <motion.button
+              aria-label="Export canvas as PNG"
+              className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+              onClick={onExportCanvas}
+              type="button"
+              whileTap={{ scale: 0.9 }}
             >
-              <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
-                {getCreateMenuItems().map((item, index) => {
-                  const isLast =
-                    !onOpenNoteLibrary &&
-                    index === getCreateMenuItems().length - 1;
-                  return (
+              <Download
+                className="text-gray-500 dark:text-gray-400"
+                size={16}
+              />
+            </motion.button>
+          ) : null}
+
+          <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
+            <Menu.Trigger
+              className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+              render={<motion.button whileTap={{ scale: 0.9 }} />}
+            >
+              <motion.span
+                animate={{ rotate: createMenuOpen ? 45 : 0 }}
+                className="flex items-center justify-center"
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+              >
+                <Plus className="text-gray-500 dark:text-gray-400" size={16} />
+              </motion.span>
+            </Menu.Trigger>
+
+            <Menu.Portal>
+              <Menu.Positioner
+                align="end"
+                className="z-50 outline-hidden"
+                side="top"
+                sideOffset={12}
+              >
+                <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                  {getCreateMenuItems().map((item, index) => {
+                    const isLast =
+                      !onOpenNoteLibrary &&
+                      index === getCreateMenuItems().length - 1;
+                    return (
+                      <Menu.Item
+                        aria-label={item.label}
+                        className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
+                          item.enabled
+                            ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
+                            : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
+                        } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
+                        closeOnClick
+                        disabled={!item.enabled}
+                        key={item.id}
+                        onClick={() => {
+                          const map: Record<
+                            string,
+                            | 'card'
+                            | 'checklist'
+                            | 'image'
+                            | 'folder'
+                            | 'group'
+                            | 'sticky'
+                          > = {
+                            note: 'card',
+                            checklist: 'checklist',
+                            sticky: 'sticky',
+                            image: 'image',
+                            folder: 'folder',
+                            group: 'group',
+                          };
+                          const type = map[item.id];
+                          if (type) {
+                            onCreateNode(type);
+                          }
+                        }}
+                      >
+                        <item.icon size={18} />
+                        {item.label}
+                      </Menu.Item>
+                    );
+                  })}
+                  {onOpenNoteLibrary ? (
                     <Menu.Item
-                      aria-label={item.label}
-                      className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
-                        item.enabled
-                          ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
-                          : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
-                      } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
+                      aria-label="Note Library"
+                      className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
                       closeOnClick
-                      disabled={!item.enabled}
-                      key={item.id}
-                      onClick={() => {
-                        const map: Record<
-                          string,
-                          | 'card'
-                          | 'checklist'
-                          | 'image'
-                          | 'folder'
-                          | 'group'
-                          | 'sticky'
-                        > = {
-                          note: 'card',
-                          checklist: 'checklist',
-                          sticky: 'sticky',
-                          image: 'image',
-                          folder: 'folder',
-                          group: 'group',
-                        };
-                        const type = map[item.id];
-                        if (type) {
-                          onCreateNode(type);
-                        }
-                      }}
+                      onClick={onOpenNoteLibrary}
                     >
-                      <item.icon size={18} />
-                      {item.label}
+                      <BookOpen size={18} />
+                      Note Library
                     </Menu.Item>
+                  ) : null}
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
+        </div>
+
+        <Menu.Portal>
+          <Menu.Positioner
+            align="center"
+            className="z-50 outline-hidden"
+            side="top"
+            sideOffset={8}
+          >
+            <Menu.Popup className="min-w-65 origin-(--transform-origin) overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+              {views.map((view, index) => {
+                const isLast = index === views.length - 1;
+                const rowBorder = isLast
+                  ? ''
+                  : 'border-gray-100 border-b dark:border-neutral-700';
+
+                if (editingId === view.id) {
+                  return (
+                    <div
+                      className={`flex items-center gap-2 px-4 py-3 ${rowBorder}`}
+                      key={view.id}
+                    >
+                      <input
+                        className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
+                        onChange={(e) => {
+                          setEditingName(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleRenameConfirm();
+                          }
+                        }}
+                        ref={inputRef}
+                        type="text"
+                        value={editingName}
+                      />
+                      <button
+                        aria-label="Confirm rename"
+                        className="rounded-sm p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
+                        onClick={handleRenameConfirm}
+                        type="button"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        aria-label="Cancel rename"
+                        className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
+                        onClick={handleRenameCancel}
+                        type="button"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   );
-                })}
-                {onOpenNoteLibrary ? (
-                  <Menu.Item
-                    aria-label="Note Library"
-                    className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
-                    closeOnClick
-                    onClick={onOpenNoteLibrary}
-                  >
-                    <BookOpen size={18} />
-                    Note Library
-                  </Menu.Item>
-                ) : null}
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
-      </div>
+                }
 
-      <Menu.Portal>
-        <Menu.Positioner
-          align="center"
-          className="z-50 outline-hidden"
-          side="top"
-          sideOffset={8}
-        >
-          <Menu.Popup className="min-w-65 origin-(--transform-origin) overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
-            {views.map((view, index) => {
-              const isLast = index === views.length - 1;
-              const rowBorder = isLast
-                ? ''
-                : 'border-gray-100 border-b dark:border-neutral-700';
-
-              if (editingId === view.id) {
+                const isActive = view.id === activeViewId;
                 return (
-                  <div
-                    className={`flex items-center gap-2 px-4 py-3 ${rowBorder}`}
+                  <Menu.Item
+                    aria-label={view.name}
+                    className={`group flex cursor-default items-center gap-3 px-4 py-3 text-sm outline-hidden data-highlighted:bg-black/5 dark:data-highlighted:bg-white/5 ${
+                      isActive
+                        ? 'font-semibold text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-300'
+                    } ${rowBorder}`}
+                    closeOnClick={false}
                     key={view.id}
-                  >
-                    <input
-                      className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-                      onChange={(e) => {
-                        setEditingName(e.target.value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleRenameConfirm();
-                        }
-                      }}
-                      ref={inputRef}
-                      type="text"
-                      value={editingName}
-                    />
-                    <button
-                      aria-label="Confirm rename"
-                      className="rounded-sm p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
-                      onClick={handleRenameConfirm}
-                      type="button"
-                    >
-                      <Check size={14} />
-                    </button>
-                    <button
-                      aria-label="Cancel rename"
-                      className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
-                      onClick={handleRenameCancel}
-                      type="button"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                );
-              }
-
-              const isActive = view.id === activeViewId;
-              return (
-                <Menu.Item
-                  aria-label={view.name}
-                  className={`group flex cursor-default items-center gap-3 px-4 py-3 text-sm outline-hidden data-highlighted:bg-black/5 dark:data-highlighted:bg-white/5 ${
-                    isActive
-                      ? 'font-semibold text-gray-900 dark:text-white'
-                      : 'text-gray-600 dark:text-gray-300'
-                  } ${rowBorder}`}
-                  closeOnClick={false}
-                  key={view.id}
-                  onClick={async () => {
-                    await handleSwitchView(view.id);
-                  }}
-                >
-                  <Layers className="shrink-0 opacity-50" size={16} />
-                  <span className="flex-1 truncate text-left">{view.name}</span>
-                  <button
-                    aria-label={`Rename ${view.name}`}
-                    className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRenameStart(view.id);
+                    onClick={async () => {
+                      await handleSwitchView(view.id);
                     }}
-                    type="button"
                   >
-                    <Pencil size={13} />
-                  </button>
-                  {views.length > 1 ? (
+                    <Layers className="shrink-0 opacity-50" size={16} />
+                    <span className="flex-1 truncate text-left">
+                      {view.name}
+                    </span>
                     <button
-                      aria-label={`Delete ${view.name}`}
-                      className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-red-900/30"
+                      aria-label={`Rename ${view.name}`}
+                      className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-white/10 dark:hover:text-gray-200"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(view.id);
+                        handleRenameStart(view.id);
                       }}
                       type="button"
                     >
-                      <Trash2 size={13} />
+                      <Pencil size={13} />
                     </button>
-                  ) : null}
-                </Menu.Item>
-              );
-            })}
+                    {views.length > 1 ? (
+                      <button
+                        aria-label={`Delete ${view.name}`}
+                        className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-red-900/30"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(view.id);
+                        }}
+                        type="button"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    ) : null}
+                  </Menu.Item>
+                );
+              })}
 
-            <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+              <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 
-            <Menu.Item
-              className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5"
-              onClick={handleCreate}
-            >
-              <Plus className="opacity-50" size={16} />
-              {m.view_new_canvas()}
-            </Menu.Item>
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+              <Menu.Item
+                className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5"
+                onClick={handleCreate}
+              >
+                <Plus className="opacity-50" size={16} />
+                {m.view_new_canvas()}
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </>
   );
 }

@@ -13,6 +13,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcDeleteView: vi.fn(),
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
+  rpcRestoreView: vi.fn(),
   rpcSaveManifest: vi.fn(),
 }));
 
@@ -23,8 +24,20 @@ vi.mock('@/lib/rpc', () => ({
   rpcDeleteView: rpcMocks.rpcDeleteView,
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
+  rpcRestoreView: rpcMocks.rpcRestoreView,
   rpcSaveManifest: rpcMocks.rpcSaveManifest,
 }));
+
+vi.mock('sonner', () => {
+  const toastFn = vi.fn() as unknown as {
+    (msg: string, opts?: unknown): void;
+    success: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+  };
+  toastFn.success = vi.fn();
+  toastFn.error = vi.fn();
+  return { toast: toastFn };
+});
 
 vi.mock('../../../paraglide/messages.js', () => ({
   view_new_canvas: () => 'New Canvas',
@@ -35,6 +48,17 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  delete_view_confirm_title: () => 'Delete canvas?',
+  delete_view_confirm_body: ({ name }: { name: string }) =>
+    `"${name}" and everything on it will be moved to trash.`,
+  delete_view_confirm_cancel: () => 'Cancel',
+  delete_view_confirm_action: () => 'Delete Canvas',
+  toast_view_deleted: ({ name }: { name: string }) =>
+    `Canvas "${name}" deleted`,
+  toast_view_restored: ({ name }: { name: string }) =>
+    `Canvas "${name}" restored`,
+  toast_view_restore_failed: () => 'Could not restore canvas',
+  toast_undo: () => 'Undo',
 }));
 
 const resetStore = () => {
@@ -115,6 +139,17 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcDeleteView.mockResolvedValue({
       success: true,
       activeViewId: 'focus',
+      trashId: 'trash_test',
+    });
+    rpcMocks.rpcRestoreView.mockReset();
+    rpcMocks.rpcRestoreView.mockResolvedValue({
+      success: true,
+      view: {
+        id: 'focus',
+        name: 'Focus Mode',
+        file: 'views/focus.canvas.json',
+      },
+      activeViewId: 'default',
     });
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
   });
@@ -198,7 +233,7 @@ describe('viewSwitcher', () => {
     });
   });
 
-  it('deletes a non-active view from the menu', async () => {
+  it('deletes a non-active view after confirming the dialog', async () => {
     renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
@@ -207,12 +242,33 @@ describe('viewSwitcher', () => {
     fireEvent.click(screen.getByText('Default Canvas'));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Focus Mode' }));
 
+    // Dialog is open — rpc must not have been called yet
+    expect(rpcMocks.rpcDeleteView).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Canvas' }));
+
     await waitFor(() => {
       expect(rpcMocks.rpcDeleteView).toHaveBeenCalledWith('focus');
       expect(useCanvasStore.getState().views).toEqual([
         { id: 'default', name: 'Default Canvas' },
       ]);
     });
+  });
+
+  it('cancels deletion when the dialog Cancel button is clicked', async () => {
+    renderViewSwitcher();
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Focus Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(rpcMocks.rpcDeleteView).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().views).toEqual([
+      { id: 'default', name: 'Default Canvas' },
+      { id: 'focus', name: 'Focus Mode' },
+    ]);
   });
 
   it('keeps state unchanged when create rpc calls return null', async () => {
@@ -246,6 +302,7 @@ describe('viewSwitcher', () => {
 
     fireEvent.click(screen.getByText('Default Canvas'));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Focus Mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Canvas' }));
 
     await waitFor(() => {
       expect(useCanvasStore.getState().views).toEqual([

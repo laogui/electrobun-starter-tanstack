@@ -27,6 +27,7 @@ import {
   loadWorkspaceConfig,
   removeView,
   renameView,
+  restoreView,
 } from './workspace';
 
 const DEV_SERVER_PORT = '5173';
@@ -156,7 +157,19 @@ interface CanvasRPC {
       };
       deleteView: {
         params: { viewId: string };
-        response: { success: boolean; activeViewId?: string };
+        response: {
+          success: boolean;
+          activeViewId?: string;
+          trashId?: string;
+        };
+      };
+      restoreView: {
+        params: { trashId: string };
+        response: {
+          success: boolean;
+          view?: { id: string; name: string; file: string };
+          activeViewId?: string;
+        };
       };
       renameView: {
         params: { viewId: string; name: string };
@@ -858,12 +871,27 @@ async function main() {
         },
 
         deleteView: async ({ viewId }) => {
-          const success = await removeView(wsPath, viewId);
-          if (success) {
-            const config = await loadWorkspaceConfig(wsPath);
-            return { success: true, activeViewId: config.activeViewId };
+          const result = await removeView(wsPath, viewId);
+          if (!result.success) {
+            return { success: false };
           }
-          return { success: false };
+          return {
+            success: true,
+            activeViewId: result.activeViewId,
+            trashId: result.trashId,
+          };
+        },
+
+        restoreView: async ({ trashId }) => {
+          const result = await restoreView(wsPath, trashId);
+          if (!result.success) {
+            return { success: false };
+          }
+          return {
+            success: true,
+            view: result.view,
+            activeViewId: result.activeViewId,
+          };
         },
 
         renameView: async ({ viewId, name }) => {

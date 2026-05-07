@@ -91,6 +91,7 @@ const workspaceMocks = {
   loadWorkspaceConfig: vi.fn(),
   removeView: vi.fn(),
   renameView: vi.fn(),
+  restoreView: vi.fn(),
 };
 
 vi.mock('./manifest', () => ({
@@ -137,6 +138,8 @@ vi.mock('./workspace', () => ({
     workspaceMocks.removeView(...args),
   renameView: (...args: Parameters<typeof workspaceMocks.renameView>) =>
     workspaceMocks.renameView(...args),
+  restoreView: (...args: Parameters<typeof workspaceMocks.restoreView>) =>
+    workspaceMocks.restoreView(...args),
 }));
 
 const bunFileMock = vi.fn();
@@ -216,8 +219,13 @@ beforeEach(() => {
     name: 'Inbox',
     file: 'views/view-new.canvas.json',
   });
-  workspaceMocks.removeView.mockResolvedValue(true);
+  workspaceMocks.removeView.mockResolvedValue({
+    success: true,
+    activeViewId: 'default',
+    trashId: 'trash_default',
+  });
   workspaceMocks.renameView.mockResolvedValue(true);
+  workspaceMocks.restoreView.mockResolvedValue({ success: false });
   manifestMocks.saveManifest.mockResolvedValue(undefined);
   previewMocks.writeNoteWithPreview.mockResolvedValue({
     html: '<p>Body</p>',
@@ -353,25 +361,24 @@ describe('src/bun/index helpers', () => {
     );
   });
 
-  it('deleteView returns success with activeViewId and false when removal fails', async () => {
+  it('deleteView returns success with activeViewId and trashId, and false when removal fails', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
 
-    workspaceMocks.removeView.mockResolvedValueOnce(true);
-    workspaceMocks.loadWorkspaceConfig.mockResolvedValueOnce({
+    workspaceMocks.removeView.mockResolvedValueOnce({
+      success: true,
       activeViewId: 'default',
-      views: [
-        { id: 'default', name: 'Default', file: 'views/default.canvas.json' },
-      ],
+      trashId: 'trash_123',
     });
     await expect(
       canvasHandlers.deleteView({ viewId: 'view-2' })
     ).resolves.toEqual({
       success: true,
       activeViewId: 'default',
+      trashId: 'trash_123',
     });
 
-    workspaceMocks.removeView.mockResolvedValueOnce(false);
+    workspaceMocks.removeView.mockResolvedValueOnce({ success: false });
     await expect(
       canvasHandlers.deleteView({ viewId: 'missing' })
     ).resolves.toEqual({

@@ -3,12 +3,23 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const TRANSFORM_RE = /^translate\(.+\) scale\(.+\)$/;
+const RHF_VIEWPORT_RE = /React Flow viewport/i;
+
 const rpcMocks = vi.hoisted(() => ({
   rpcExportPng: vi.fn(),
 }));
 
+const htmlToImageMocks = vi.hoisted(() => ({
+  toBlob: vi.fn(),
+}));
+
 vi.mock('@/lib/rpc', () => ({
   rpcExportPng: rpcMocks.rpcExportPng,
+}));
+
+vi.mock('html-to-image', () => ({
+  toBlob: htmlToImageMocks.toBlob,
 }));
 
 import {
@@ -39,6 +50,8 @@ const createInstance = (nodes: Node[], bounds = { x: 10, y: 20 }) =>
 describe('canvas export helpers', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+    htmlToImageMocks.toBlob.mockReset();
+    rpcMocks.rpcExportPng.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -75,7 +88,11 @@ describe('canvas export helpers', () => {
     expect(prepareCanvasExport(createInstance([]), [])).toBeNull();
   });
 
-  it('opens the browser save picker and writes the PNG blob', async () => {
+  it('opens the browser save picker and writes the PNG blob from html-to-image', async () => {
+    const viewportEl = document.createElement('div');
+    viewportEl.className = 'react-flow__viewport';
+    document.body.appendChild(viewportEl);
+
     const writeMock = vi.fn().mockResolvedValue(undefined);
     const closeMock = vi.fn().mockResolvedValue(undefined);
     const showSaveFilePickerMock = vi.fn().mockResolvedValue({
@@ -86,27 +103,10 @@ describe('canvas export helpers', () => {
     });
 
     vi.stubGlobal('showSaveFilePicker', showSaveFilePickerMock);
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-      arcTo: vi.fn(),
-      beginPath: vi.fn(),
-      closePath: vi.fn(),
-      fill: vi.fn(),
-      fillRect: vi.fn(),
-      fillText: vi.fn(),
-      lineTo: vi.fn(),
-      measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
-      moveTo: vi.fn(),
-      restore: vi.fn(),
-      save: vi.fn(),
-      scale: vi.fn(),
-      setLineDash: vi.fn(),
-      stroke: vi.fn(),
-    } as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(
-      (callback) => {
-        callback(new Blob(['png'], { type: 'image/png' }));
-      }
-    );
+
+    const expectedBlob = new Blob(['png'], { type: 'image/png' });
+    htmlToImageMocks.toBlob.mockResolvedValue(expectedBlob);
+
     const exported = await exportReactFlowCanvasToPng({
       backgroundColor: '#fff',
       fileName: 'My Canvas',
@@ -115,11 +115,74 @@ describe('canvas export helpers', () => {
     });
 
     expect(exported).toBe(true);
+    expect(htmlToImageMocks.toBlob).toHaveBeenCalledTimes(1);
+    const [target, options] = htmlToImageMocks.toBlob.mock.calls[0]!;
+    expect(target).toBe(viewportEl);
+    expect(options).toMatchObject({
+      backgroundColor: '#fff',
+      width: 368,
+      height: 288,
+      pixelRatio: 1,
+    });
+    expect(options.style.width).toBe('368px');
+    expect(options.style.height).toBe('288px');
+    expect(options.style.transform).toMatch(TRANSFORM_RE);
+
     expect(showSaveFilePickerMock).toHaveBeenCalledWith(
       expect.objectContaining({ suggestedName: 'My Canvas.png' })
     );
-    expect(writeMock).toHaveBeenCalledWith(expect.any(Blob));
+    expect(writeMock).toHaveBeenCalledWith(expectedBlob);
     expect(closeMock).toHaveBeenCalled();
     expect(rpcMocks.rpcExportPng).not.toHaveBeenCalled();
+  });
+
+  it('throws when the React Flow viewport element is missing', async () => {
+    htmlToImageMocks.toBlob.mockResolvedValue(
+      new Blob(['png'], { type: 'image/png' })
+    );
+
+    await expect(
+      exportReactFlowCanvasToPng({
+        backgroundColor: '#fff',
+        fileName: 'no-viewport',
+        instance: createInstance([createNode('node-1')]),
+        pixelRatio: 1,
+      })
+    ).rejects.toThrow(RHF_VIEWPORT_RE);
+  });
+
+  it('filters out controls, minimap, attribution and panels from the snapshot', async () => {
+    const viewportEl = document.createElement('div');
+    viewportEl.className = 'react-flow__viewport';
+    document.body.appendChild(viewportEl);
+
+    htmlToImageMocks.toBlob.mockResolvedValue(
+      new Blob(['png'], { type: 'image/png' })
+    );
+
+    await exportReactFlowCanvasToPng({
+      backgroundColor: '#fff',
+      fileName: 'filter-test',
+      instance: createInstance([createNode('node-1')]),
+      pixelRatio: 1,
+    });
+
+    const filter = htmlToImageMocks.toBlob.mock.calls[0]?.[1]?.filter as (
+      node: HTMLElement
+    ) => boolean;
+    expect(typeof filter).toBe('function');
+
+    const make = (className: string) => {
+      const el = document.createElement('div');
+      el.className = className;
+      return el;
+    };
+
+    expect(filter(make('react-flow__node react-flow__node-card'))).toBe(true);
+    expect(filter(make('react-flow__edge'))).toBe(true);
+    expect(filter(make('react-flow__minimap'))).toBe(false);
+    expect(filter(make('react-flow__controls'))).toBe(false);
+    expect(filter(make('react-flow__attribution'))).toBe(false);
+    expect(filter(make('react-flow__panel some-extra'))).toBe(false);
   });
 });

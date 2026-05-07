@@ -9,10 +9,24 @@ export function getDefaultWorkspacePath(): string {
   return join(Utils.paths.userData, 'workspace');
 }
 
+export interface ViewEntry {
+  file: string;
+  id: string;
+  name: string;
+}
+
+export interface TrashEntry {
+  deletedAt: number;
+  trashFile: string;
+  trashId: string;
+  view: ViewEntry;
+}
+
 export interface WorkspaceConfig {
   activeViewId: string;
   schema: 'ghostboard-workspace/v1';
-  views: Array<{ id: string; name: string; file: string }>;
+  trash?: TrashEntry[];
+  views: ViewEntry[];
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
@@ -34,6 +48,7 @@ export function initWorkspace(workspacePath?: string): string {
     wsPath,
     join(wsPath, '.ghostboard'),
     join(wsPath, '.ghostboard', 'views'),
+    join(wsPath, '.ghostboard', 'trash'),
     join(wsPath, 'content'),
     join(wsPath, 'attachments'),
   ];
@@ -82,49 +97,128 @@ export async function saveWorkspaceConfig(
 export async function addView(
   wsPath: string,
   name: string
-): Promise<{ id: string; name: string; file: string }> {
+): Promise<ViewEntry> {
   const config = await loadWorkspaceConfig(wsPath);
   const id = `view_${crypto.randomUUID().slice(0, 8)}`;
   const file = `views/${id}.canvas.json`;
-  const entry = { id, name, file };
+  const entry: ViewEntry = { id, name, file };
   config.views.push(entry);
   config.activeViewId = id;
   await saveWorkspaceConfig(wsPath, config);
   return entry;
 }
 
-/** Remove a view from the workspace. Returns false if it's the last view. */
+export interface RemoveViewResult {
+  activeViewId?: string;
+  success: boolean;
+  trashId?: string;
+}
+
+/**
+ * Soft-delete a view: move its manifest into `.ghostboard/trash/` and
+ * record a TrashEntry in workspace.json. The deletion is recoverable via
+ * `restoreView` until the trash entry is purged. Returns success=false if
+ * this is the last remaining view.
+ */
 export async function removeView(
   wsPath: string,
   viewId: string
-): Promise<boolean> {
+): Promise<RemoveViewResult> {
   const config = await loadWorkspaceConfig(wsPath);
   if (config.views.length <= 1) {
-    return false;
+    return { success: false };
   }
   const viewEntry = config.views.find((v) => v.id === viewId);
+  if (!viewEntry) {
+    return { success: false };
+  }
   config.views = config.views.filter((v) => v.id !== viewId);
   if (config.activeViewId === viewId) {
     const nextView = config.views[0];
     if (!nextView) {
-      return false;
+      return { success: false };
     }
     config.activeViewId = nextView.id;
   }
-  await saveWorkspaceConfig(wsPath, config);
-  // Delete the manifest file
-  if (viewEntry) {
-    const filePath = join(wsPath, '.ghostboard', viewEntry.file);
-    try {
-      const { unlinkSync } = await import('node:fs');
-      if (existsSync(filePath)) {
-        unlinkSync(filePath);
-      }
-    } catch {
-      // ignore
+
+  const trashId = `trash_${crypto.randomUUID().slice(0, 8)}`;
+  const deletedAt = Date.now();
+  const trashFile = `trash/${trashId}.canvas.json`;
+  const sourcePath = join(wsPath, '.ghostboard', viewEntry.file);
+  const trashPath = join(wsPath, '.ghostboard', trashFile);
+
+  // Move manifest into trash. If the source is missing we still record the
+  // trash entry with an empty payload so restore can succeed gracefully.
+  try {
+    if (existsSync(sourcePath)) {
+      await rename(sourcePath, trashPath);
+    } else {
+      await Bun.write(trashPath, '{}');
     }
+  } catch (err) {
+    console.error('[workspace] Failed to move manifest to trash:', err);
+    return { success: false };
   }
-  return true;
+
+  const trashEntry: TrashEntry = {
+    trashId,
+    view: viewEntry,
+    trashFile,
+    deletedAt,
+  };
+  config.trash = [...(config.trash ?? []), trashEntry];
+
+  await saveWorkspaceConfig(wsPath, config);
+  return { success: true, activeViewId: config.activeViewId, trashId };
+}
+
+export interface RestoreViewResult {
+  activeViewId?: string;
+  success: boolean;
+  view?: ViewEntry;
+}
+
+/**
+ * Restore a previously soft-deleted view. Moves the manifest back to its
+ * original location and re-inserts the view entry into `views`. The active
+ * view is left unchanged unless it is now invalid.
+ */
+export async function restoreView(
+  wsPath: string,
+  trashId: string
+): Promise<RestoreViewResult> {
+  const config = await loadWorkspaceConfig(wsPath);
+  const trash = config.trash ?? [];
+  const entry = trash.find((t) => t.trashId === trashId);
+  if (!entry) {
+    return { success: false };
+  }
+
+  const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
+  const restorePath = join(wsPath, '.ghostboard', entry.view.file);
+
+  // If the original id is somehow already taken, refuse rather than clobber.
+  if (config.views.some((v) => v.id === entry.view.id)) {
+    return { success: false };
+  }
+
+  try {
+    if (existsSync(trashPath)) {
+      await rename(trashPath, restorePath);
+    }
+  } catch (err) {
+    console.error('[workspace] Failed to restore manifest from trash:', err);
+    return { success: false };
+  }
+
+  config.views = [...config.views, entry.view];
+  config.trash = trash.filter((t) => t.trashId !== trashId);
+  await saveWorkspaceConfig(wsPath, config);
+  return {
+    success: true,
+    view: entry.view,
+    activeViewId: config.activeViewId,
+  };
 }
 
 /** Rename a view. */

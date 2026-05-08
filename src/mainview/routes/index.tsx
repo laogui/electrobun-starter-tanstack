@@ -37,6 +37,7 @@ import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
+  exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
@@ -492,6 +493,32 @@ function CanvasComponent() {
     }
   }, [activeViewName, canvasBackground]);
 
+  const onExportCanvasJson = useCallback(async () => {
+    const instance = rfInstance.current;
+    if (!instance) {
+      toast.error('画布尚未准备好，暂时无法导出。');
+      return;
+    }
+
+    try {
+      const exported = await exportReactFlowCanvasToJson({
+        edges,
+        fileName: sanitizeExportFileName(activeViewName),
+        nodes,
+        viewId: activeViewId,
+        viewName: activeViewName,
+        viewport: instance.getViewport?.(),
+      });
+      if (exported) {
+        toast.success('JSON 已导出。');
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'JSON 导出失败，请重试。';
+      toast.error(message);
+    }
+  }, [activeViewId, activeViewName, edges, nodes]);
+
   if (!hydrated) {
     return (
       <div className="h-screen w-screen bg-[#EFF3F4] dark:bg-[#141414]">
@@ -620,6 +647,7 @@ function CanvasComponent() {
         createMenuOpen={createMenuOpen}
         onCreateNode={onCreateNode}
         onExportCanvas={onExportCanvas}
+        onExportCanvasJson={onExportCanvasJson}
         onOpenNoteLibrary={onOpenNoteLibrary}
         setCreateMenuOpen={setCreateMenuOpen}
       />

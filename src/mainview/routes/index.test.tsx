@@ -24,6 +24,7 @@ const interactionMocks = vi.hoisted(() => ({
 }));
 
 const exportMocks = vi.hoisted(() => ({
+  exportReactFlowCanvasToJson: vi.fn(),
   exportReactFlowCanvasToPng: vi.fn(),
   sanitizeExportFileName: vi.fn(),
 }));
@@ -49,6 +50,7 @@ vi.mock('@/lib/rpc', () => ({
 }));
 
 vi.mock('@/lib/canvasExport', () => ({
+  exportReactFlowCanvasToJson: exportMocks.exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng: exportMocks.exportReactFlowCanvasToPng,
   sanitizeExportFileName: exportMocks.sanitizeExportFileName,
 }));
@@ -260,6 +262,8 @@ describe('routes/index', () => {
     interactionMocks.onCreateNode.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockResolvedValue(true);
+    exportMocks.exportReactFlowCanvasToJson.mockReset();
+    exportMocks.exportReactFlowCanvasToJson.mockResolvedValue(true);
     exportMocks.sanitizeExportFileName.mockReset();
     exportMocks.sanitizeExportFileName.mockImplementation(
       (name: string) => `safe-${name}`
@@ -372,8 +376,9 @@ describe('routes/index', () => {
       expect(screen.getByText('Loaded Card')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Export canvas' }));
     fireEvent.click(
-      screen.getByRole('button', { name: 'Export canvas as PNG' })
+      await screen.findByRole('menuitem', { name: 'Export PNG' })
     );
 
     await waitFor(() => {
@@ -384,6 +389,34 @@ describe('routes/index', () => {
         })
       );
       expect(toastMocks.success).toHaveBeenCalledWith('PNG 已导出。');
+    });
+  });
+
+  it('exports the current canvas as JSON from the toolbar', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export canvas' }));
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Export JSON' })
+    );
+
+    await waitFor(() => {
+      expect(exportMocks.exportReactFlowCanvasToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'safe-Default Canvas',
+          viewName: 'Default Canvas',
+        })
+      );
+      expect(toastMocks.success).toHaveBeenCalledWith('JSON 已导出。');
     });
   });
 

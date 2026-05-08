@@ -1,7 +1,26 @@
-import type { Node, ReactFlowInstance, Rect, Viewport } from '@xyflow/react';
+import type {
+  Edge,
+  Node,
+  ReactFlowInstance,
+  Rect,
+  Viewport,
+} from '@xyflow/react';
 import { getViewportForBounds } from '@xyflow/react';
 import { toBlob } from 'html-to-image';
-import { rpcExportPng } from '@/lib/rpc';
+import { rpcExportJson, rpcExportPng } from '@/lib/rpc';
+import { sanitizeForPersistence } from '@/lib/sanitize';
+
+export const CANVAS_EXPORT_SCHEMA = 'ghostboard-canvas-export/v1' as const;
+
+export interface CanvasExportDocument {
+  edges: Record<string, unknown>[];
+  exportedAt: string;
+  nodes: Record<string, unknown>[];
+  schema: typeof CANVAS_EXPORT_SCHEMA;
+  viewId?: string;
+  viewName?: string;
+  viewport?: Viewport;
+}
 
 const EXPORT_PADDING = 64;
 const EXPORT_MIN_ZOOM = 0.1;
@@ -259,6 +278,158 @@ export async function exportReactFlowCanvasToPng({
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
+  link.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+interface BuildCanvasExportJsonInput {
+  edges: Edge[];
+  nodes: Node[];
+  viewId?: string;
+  viewName?: string;
+  viewport?: Viewport;
+}
+
+/**
+ * Build a serializable canvas export document from the live in-memory
+ * nodes/edges. Card / folder nodes already carry hydrated content (title,
+ * body, color, children) in `data`, so the export is self-contained — no need
+ * to roundtrip through the .md files on disk.
+ */
+export function buildCanvasExportJson({
+  edges,
+  nodes,
+  viewId,
+  viewName,
+  viewport,
+}: BuildCanvasExportJsonInput): CanvasExportDocument {
+  const visibleNodes = nodes.filter((node) => {
+    const data = node.data as CanvasNodeData | undefined;
+    return !(data?.detached || data?.isHidden);
+  });
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const visibleEdges = edges.filter(
+    (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+  );
+
+  const sanitized = sanitizeForPersistence(visibleNodes, visibleEdges);
+
+  return {
+    schema: CANVAS_EXPORT_SCHEMA,
+    exportedAt: new Date().toISOString(),
+    ...(viewId ? { viewId } : {}),
+    ...(viewName ? { viewName } : {}),
+    ...(viewport ? { viewport } : {}),
+    nodes: sanitized.nodes,
+    edges: sanitized.edges,
+  };
+}
+
+interface JsonFileSavePicker {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string;
+    types?: Array<{
+      accept: Record<string, string[]>;
+      description: string;
+    }>;
+  }) => Promise<{
+    createWritable: () => Promise<{
+      close: () => Promise<void>;
+      write: (data: Blob | string) => Promise<void>;
+    }>;
+  }>;
+}
+
+async function requestBrowserSaveHandleForJson(fileName: string) {
+  const picker = globalThis as typeof globalThis & JsonFileSavePicker;
+  if (!picker.showSaveFilePicker) {
+    return null;
+  }
+
+  return await picker.showSaveFilePicker({
+    suggestedName: fileName.endsWith('.json') ? fileName : `${fileName}.json`,
+    types: [
+      {
+        description: 'Canvas JSON export',
+        accept: { 'application/json': ['.json'] },
+      },
+    ],
+  });
+}
+
+interface ExportCanvasJsonOptions {
+  edges: Edge[];
+  fileName: string;
+  nodes: Node[];
+  viewId?: string;
+  viewName?: string;
+  viewport?: Viewport;
+}
+
+/**
+ * Serialize the current canvas to JSON and offer it for download.
+ *
+ * Order of attempts:
+ *   1. `showSaveFilePicker` (modern browsers / Electrobun browser context)
+ *   2. Native Bun-side save dialog via {@link rpcExportJson}
+ *   3. `<a download>` fallback (legacy browsers, headless Electrobun)
+ *
+ * Returns `true` when a file was written, `false` when the user canceled.
+ */
+export async function exportReactFlowCanvasToJson({
+  edges,
+  fileName,
+  nodes,
+  viewId,
+  viewName,
+  viewport,
+}: ExportCanvasJsonOptions) {
+  const document_ = buildCanvasExportJson({
+    edges,
+    nodes,
+    viewId,
+    viewName,
+    viewport,
+  });
+
+  if (document_.nodes.length === 0) {
+    throw new Error('Canvas has no visible nodes to export.');
+  }
+
+  const json = JSON.stringify(document_, null, 2);
+
+  let browserSaveHandle: Awaited<
+    ReturnType<NonNullable<JsonFileSavePicker['showSaveFilePicker']>>
+  > | null = null;
+  try {
+    browserSaveHandle = await requestBrowserSaveHandleForJson(fileName);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return false;
+    }
+    throw error;
+  }
+
+  if (browserSaveHandle) {
+    const writable = await browserSaveHandle.createWritable();
+    await writable.write(
+      new Blob([json], { type: 'application/json;charset=utf-8' })
+    );
+    await writable.close();
+    return true;
+  }
+
+  const nativeResult = await rpcExportJson(json, fileName);
+  if (nativeResult !== null) {
+    return nativeResult.success;
+  }
+
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
   link.click();
   URL.revokeObjectURL(url);
   return true;

@@ -5,6 +5,8 @@ import {
   ChevronUp,
   Download,
   File,
+  FileImage,
+  FileJson,
   Folder,
   Group,
   ImageIcon,
@@ -54,6 +56,7 @@ const getCreateMenuItems = () => [
 export function ViewSwitcher({
   onCreateNode,
   onExportCanvas,
+  onExportCanvasJson,
   onOpenNoteLibrary,
   createMenuOpen,
   setCreateMenuOpen,
@@ -63,6 +66,7 @@ export function ViewSwitcher({
     type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
   ) => void;
   onExportCanvas?: () => void;
+  onExportCanvasJson?: () => void;
   onOpenNoteLibrary?: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
@@ -312,19 +316,56 @@ export function ViewSwitcher({
             </motion.span>
           </Menu.Trigger>
 
-          {onExportCanvas ? (
-            <motion.button
-              aria-label="Export canvas as PNG"
-              className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
-              onClick={onExportCanvas}
-              type="button"
-              whileTap={{ scale: 0.9 }}
-            >
-              <Download
-                className="text-gray-500 dark:text-gray-400"
-                size={16}
-              />
-            </motion.button>
+          {onExportCanvas || onExportCanvasJson ? (
+            <Menu.Root>
+              <Menu.Trigger
+                aria-label="Export canvas"
+                className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+                render={<motion.button whileTap={{ scale: 0.9 }} />}
+              >
+                <Download
+                  className="text-gray-500 dark:text-gray-400"
+                  size={16}
+                />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner
+                  align="center"
+                  className="z-50 outline-hidden"
+                  side="top"
+                  sideOffset={12}
+                >
+                  <Menu.Popup className="min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                    {onExportCanvas ? (
+                      <Menu.Item
+                        aria-label="Export PNG"
+                        className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                        onClick={onExportCanvas}
+                      >
+                        <FileImage
+                          className="text-gray-500 dark:text-gray-400"
+                          size={16}
+                        />
+                        <span>Export PNG</span>
+                      </Menu.Item>
+                    ) : null}
+                    {onExportCanvasJson ? (
+                      <Menu.Item
+                        aria-label="Export JSON"
+                        className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                        onClick={onExportCanvasJson}
+                      >
+                        <FileJson
+                          className="text-gray-500 dark:text-gray-400"
+                          size={16}
+                        />
+                        <span>Export JSON</span>
+                      </Menu.Item>
+                    ) : null}
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
           ) : null}
 
           <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>

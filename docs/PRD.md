@@ -620,7 +620,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | 12   | **连线标签与动画** — 可编辑 label + 流动虚线 + Marker 端点           | 低     | ✅ 已完成 |
 | 13   | **Group 嵌套** — 多级 parentId + 防循环                            | 中     | ✅ 已完成 |
 | 13.1 | **画布标题栏模糊** — 顶部工具栏背景模糊效果                          | 低     | ✅ 已完成 |
-| 14   | **画布导出 PNG/JSON**（文档模式下的导出语义见 §8 OD-6）                                              | 低     | ❌ 待实现 |
+| 14   | **画布导出 PNG/JSON**（文档模式下的导出语义见 §8 OD-6）                                              | 低     | ✅ 已完成 |
 | 14.1 | **文档模式（Document Layout）** — LayoutSwitcher + LeftRail/NoteList/Editor 三栏 + Detached Notes       | 高     | ✅ 已完成 |
 | 14.2 | **Folder Card 子节点迁移 noteId + 独立 .md**（M5）                     | 中     | ✅ 已完成 |
 | 14.3 | **设置窗口与 `defaultLayoutMode` 偏好**                            | 低     | ✅ 已完成 |

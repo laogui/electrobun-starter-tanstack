@@ -140,6 +140,10 @@ interface CanvasRPC {
         params: { dataUrl: string; fileName: string };
         response: { canceled?: boolean; filePath?: string; success: boolean };
       };
+      exportJson: {
+        params: { fileName: string; json: string };
+        response: { canceled?: boolean; filePath?: string; success: boolean };
+      };
       openSettings: {
         params: Record<string, unknown>;
         response: { success: boolean };
@@ -886,6 +890,28 @@ async function main() {
           const outputPath = join(selectedFolder, safeFileName);
           const buffer = Buffer.from(match[1]!, 'base64');
           await Bun.write(outputPath, new Uint8Array(buffer));
+
+          return { filePath: outputPath, success: true };
+        },
+
+        exportJson: async ({ json, fileName }) => {
+          const selectedFolders = await Utils.openFileDialog({
+            allowedFileTypes: 'json',
+            allowsMultipleSelection: false,
+            canChooseDirectory: true,
+            canChooseFiles: false,
+            startingFolder: '~/Desktop',
+          });
+          const selectedFolder = selectedFolders.find(Boolean);
+          if (!selectedFolder) {
+            return { canceled: true, success: false };
+          }
+
+          const safeFileName = fileName.endsWith('.json')
+            ? fileName
+            : `${fileName}.json`;
+          const outputPath = join(selectedFolder, safeFileName);
+          await Bun.write(outputPath, json);
 
           return { filePath: outputPath, success: true };
         },

@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const TRANSFORM_RE = /^translate\(.+\) scale\(.+\)$/;
 const RHF_VIEWPORT_RE = /React Flow viewport/i;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T/;
+const NO_VISIBLE_NODES_RE = /no visible nodes/i;
 
 const rpcMocks = vi.hoisted(() => ({
+  rpcExportJson: vi.fn(),
   rpcExportPng: vi.fn(),
 }));
 
@@ -15,6 +18,7 @@ const htmlToImageMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/rpc', () => ({
+  rpcExportJson: rpcMocks.rpcExportJson,
   rpcExportPng: rpcMocks.rpcExportPng,
 }));
 
@@ -23,6 +27,9 @@ vi.mock('html-to-image', () => ({
 }));
 
 import {
+  buildCanvasExportJson,
+  CANVAS_EXPORT_SCHEMA,
+  exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   getVisibleExportNodes,
   prepareCanvasExport,
@@ -52,6 +59,7 @@ describe('canvas export helpers', () => {
     document.body.innerHTML = '';
     htmlToImageMocks.toBlob.mockReset();
     rpcMocks.rpcExportPng.mockReset();
+    rpcMocks.rpcExportJson.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -184,5 +192,100 @@ describe('canvas export helpers', () => {
     expect(filter(make('react-flow__controls'))).toBe(false);
     expect(filter(make('react-flow__attribution'))).toBe(false);
     expect(filter(make('react-flow__panel some-extra'))).toBe(false);
+  });
+
+  it('builds a self-contained JSON document and skips detached / hidden nodes plus dangling edges', () => {
+    const visible = createNode('visible', {
+      title: 'Hello',
+      content: '## Body',
+    });
+    const detached = createNode('detached', { detached: true });
+    const hidden = createNode('hidden', { isHidden: true });
+
+    const doc = buildCanvasExportJson({
+      nodes: [visible, detached, hidden],
+      edges: [
+        { id: 'e-keep', source: 'visible', target: 'visible' },
+        { id: 'e-drop', source: 'visible', target: 'hidden' },
+      ] as any,
+      viewId: 'view_1',
+      viewName: 'Roadmap',
+      viewport: { x: 1, y: 2, zoom: 1.5 },
+    });
+
+    expect(doc.schema).toBe(CANVAS_EXPORT_SCHEMA);
+    expect(doc.viewId).toBe('view_1');
+    expect(doc.viewName).toBe('Roadmap');
+    expect(doc.viewport).toEqual({ x: 1, y: 2, zoom: 1.5 });
+    expect(doc.exportedAt).toMatch(ISO_DATE_RE);
+    expect(doc.nodes.map((n) => (n as { id: string }).id)).toEqual(['visible']);
+    expect(doc.nodes[0]).toMatchObject({
+      id: 'visible',
+      data: { title: 'Hello', content: '## Body' },
+    });
+    expect(doc.edges.map((e) => (e as { id: string }).id)).toEqual(['e-keep']);
+  });
+
+  it('opens the browser save picker and writes the JSON document', async () => {
+    const writeMock = vi.fn().mockResolvedValue(undefined);
+    const closeMock = vi.fn().mockResolvedValue(undefined);
+    const showSaveFilePickerMock = vi.fn().mockResolvedValue({
+      createWritable: vi.fn().mockResolvedValue({
+        close: closeMock,
+        write: writeMock,
+      }),
+    });
+    vi.stubGlobal('showSaveFilePicker', showSaveFilePickerMock);
+
+    const exported = await exportReactFlowCanvasToJson({
+      edges: [],
+      fileName: 'My Canvas',
+      nodes: [createNode('node-1', { title: 'Card' })],
+      viewId: 'view_1',
+      viewName: 'My Canvas',
+      viewport: { x: 0, y: 0, zoom: 1 },
+    });
+
+    expect(exported).toBe(true);
+    expect(showSaveFilePickerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedName: 'My Canvas.json' })
+    );
+    expect(writeMock).toHaveBeenCalledTimes(1);
+    const writtenBlob = writeMock.mock.calls[0]![0] as Blob;
+    expect(writtenBlob).toBeInstanceOf(Blob);
+    expect(writtenBlob.type).toContain('application/json');
+    expect(writtenBlob.size).toBeGreaterThan(0);
+    expect(closeMock).toHaveBeenCalled();
+    expect(rpcMocks.rpcExportJson).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the native save dialog when showSaveFilePicker is unavailable', async () => {
+    rpcMocks.rpcExportJson.mockResolvedValue({
+      filePath: '/tmp/canvas.json',
+      success: true,
+    });
+
+    const exported = await exportReactFlowCanvasToJson({
+      edges: [],
+      fileName: 'Roadmap',
+      nodes: [createNode('node-1', { title: 'Card' })],
+    });
+
+    expect(exported).toBe(true);
+    expect(rpcMocks.rpcExportJson).toHaveBeenCalledTimes(1);
+    const [json, fileName] = rpcMocks.rpcExportJson.mock.calls[0]!;
+    expect(fileName).toBe('Roadmap');
+    const parsed = JSON.parse(json as string) as { schema: string };
+    expect(parsed.schema).toBe(CANVAS_EXPORT_SCHEMA);
+  });
+
+  it('throws when the canvas has no exportable nodes', async () => {
+    await expect(
+      exportReactFlowCanvasToJson({
+        edges: [],
+        fileName: 'empty',
+        nodes: [createNode('detached', { detached: true })],
+      })
+    ).rejects.toThrow(NO_VISIBLE_NODES_RE);
   });
 });

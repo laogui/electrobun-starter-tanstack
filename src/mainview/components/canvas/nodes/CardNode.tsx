@@ -15,7 +15,12 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
-export const CardContent = ({ data, isFocused, onChange }: any) => {
+export const CardContent = ({
+  data,
+  isFocused,
+  onChange,
+  readOnly = false,
+}: any) => {
   const [newItem, setNewItem] = useState('');
 
   if (data.type === 'image') {
@@ -110,17 +115,26 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
               </div>
             ) : (
               <div
-                className="group flex cursor-pointer items-start gap-3 py-1"
+                className={cn(
+                  'group flex items-start gap-3 py-1',
+                  readOnly ? '' : 'cursor-pointer'
+                )}
                 key={i}
-                onClick={() => {
-                  if (onChange) {
-                    const newItems = data.items.map(
-                      (item: any, index: number) =>
-                        index === i ? { ...item, checked: !item.checked } : item
-                    );
-                    onChange({ ...data, items: newItems });
-                  }
-                }}
+                onClick={
+                  readOnly
+                    ? undefined
+                    : () => {
+                        if (onChange) {
+                          const newItems = data.items.map(
+                            (item: any, index: number) =>
+                              index === i
+                                ? { ...item, checked: !item.checked }
+                                : item
+                          );
+                          onChange({ ...data, items: newItems });
+                        }
+                      }
+                }
               >
                 <div
                   className={cn(
@@ -147,38 +161,41 @@ export const CardContent = ({ data, isFocused, onChange }: any) => {
               </div>
             )
           )}
-          {/* Add new item input */}
-          <div className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100">
-            <div className="size-4 shrink-0 rounded-sm border border-gray-400" />
-            <input
-              className="w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none"
-              onChange={(e) => {
-                setNewItem(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newItem.trim() && onChange) {
-                  onChange({
-                    ...data,
-                    items: [
-                      ...(data.items || []),
-                      { text: newItem.trim(), checked: false },
-                    ],
-                  });
-                  setNewItem('');
-                }
-              }}
-              placeholder="Add item..."
-              type="text"
-              value={newItem}
-            />
-          </div>
+          {/* Add new item input — hidden in readOnly (e.g., template previews) */}
+          {readOnly ? null : (
+            <div className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100">
+              <div className="size-4 shrink-0 rounded-sm border border-gray-400" />
+              <input
+                className="w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none"
+                onChange={(e) => {
+                  setNewItem(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newItem.trim() && onChange) {
+                    onChange({
+                      ...data,
+                      items: [
+                        ...(data.items || []),
+                        { text: newItem.trim(), checked: false },
+                      ],
+                    });
+                    setNewItem('');
+                  }
+                }}
+                placeholder="Add item..."
+                type="text"
+                value={newItem}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  // Default text card — editable only in focused (expanded) view
-  if (!isFocused) {
+  // Default text card — editable only in focused (expanded) view.
+  // readOnly forces the non-editable preview regardless of focus.
+  if (!isFocused || readOnly) {
     return (
       <div
         className={cn(

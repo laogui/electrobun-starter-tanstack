@@ -356,3 +356,33 @@ body.resizing-nwse * {
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* ═══ Custom Marquee Selection Styles ═══ */
+
+/* Drag-to-select box — light theme */
+.react-flow__selection {
+  background: hsl(var(--connection-active) / 0.08) !important;
+  border: 1.5px solid hsl(var(--connection-active) / 0.45) !important;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px hsl(var(--connection-active) / 0.04);
+}
+
+/* Drag-to-select box — dark theme */
+.dark .react-flow__selection {
+  background: hsl(var(--connection-active) / 0.12) !important;
+  border: 1.5px solid hsl(var(--connection-active) / 0.55) !important;
+  box-shadow: 0 0 0 3px hsl(var(--connection-active) / 0.06);
+}
+
+/* Multi-selected nodes bounding rect — light theme */
+.react-flow__nodesselection-rect {
+  background: hsl(var(--connection-active) / 0.06) !important;
+  border: 1.5px solid hsl(var(--connection-active) / 0.4) !important;
+  border-radius: 6px;
+}
+
+/* Multi-selected nodes bounding rect — dark theme */
+.dark .react-flow__nodesselection-rect {
+  background: hsl(var(--connection-active) / 0.1) !important;
+  border: 1.5px solid hsl(var(--connection-active) / 0.5) !important;
+}

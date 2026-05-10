@@ -3,6 +3,13 @@ import CardNode from '@/components/canvas/nodes/CardNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
+import {
+  CardNodeReadOnly,
+  FolderNodeReadOnly,
+  GroupNodeReadOnly,
+  ImageNodeReadOnly,
+  StickyNodeReadOnly,
+} from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
 
 export {
@@ -28,6 +35,20 @@ export const nodeTypes = {
   group: GroupNode,
   image: ImageNode,
   sticky: StickyNode,
+};
+
+/**
+ * Same visual set as `nodeTypes` but without store subscriptions, RPC calls,
+ * or interactive editing. Use this `nodeTypes` object when rendering a
+ * React Flow canvas for preview-only purposes (e.g. template gallery, PNG
+ * export, minimap thumbnails).
+ */
+export const readOnlyNodeTypes = {
+  card: CardNodeReadOnly,
+  folder: FolderNodeReadOnly,
+  group: GroupNodeReadOnly,
+  image: ImageNodeReadOnly,
+  sticky: StickyNodeReadOnly,
 };
 
 export const edgeTypes = {

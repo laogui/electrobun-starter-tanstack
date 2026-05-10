@@ -161,6 +161,55 @@ describe('CardNode', () => {
     );
   });
 
+  it('renders checklist in readOnly mode without click handlers or add-item input', () => {
+    const onChange = vi.fn();
+
+    render(
+      <CardContent
+        data={{
+          color: '#ffffff',
+          items: [
+            { checked: false, text: 'Ship it' },
+            { checked: true, text: 'Done already' },
+          ],
+          title: 'Readonly Checklist',
+          type: 'checklist',
+        }}
+        isFocused={false}
+        onChange={onChange}
+        readOnly
+      />
+    );
+
+    expect(screen.queryByPlaceholderText('Add item...')).toBeNull();
+
+    fireEvent.click(screen.getByText('Ship it'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps default card in preview mode when readOnly even if isFocused', () => {
+    render(
+      <CardContent
+        data={{
+          color: '#ffffff',
+          content: 'Do not touch',
+          previewHtml: '<p>Preview body</p>',
+          title: 'Static',
+        }}
+        isFocused={true}
+        readOnly
+      />
+    );
+
+    expect(screen.getByText('Static')).toBeInTheDocument();
+    expect(screen.getByTestId('note-preview')).toHaveTextContent(
+      '<p>Preview body</p>'
+    );
+    expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(
+      0
+    );
+  });
+
   it('renders image card legends and editable focused content updates', () => {
     const onChange = vi.fn();
 

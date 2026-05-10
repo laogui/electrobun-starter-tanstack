@@ -39,6 +39,89 @@ const caretRangeFromPoint = (x: number, y: number): Range | null => {
   return null;
 };
 
+export interface StickyContentProps {
+  data: any;
+  /** Enables contentEditable on the body text. */
+  editing?: boolean;
+  /** When true, renders the simplified zoomed-out placeholder. */
+  isZoomedOut?: boolean;
+  /** Blur handler for the body text (ignored unless `editing`). */
+  onBlur?: () => void;
+  /** Keydown handler for the body text (ignored unless `editing`). */
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+  /** Ref forwarded to the contentEditable body text element. */
+  textRef?: React.Ref<HTMLDivElement>;
+}
+
+/**
+ * Pure presentational sticky-note content. Renders the colored body, editable
+ * (or read-only) text area, and the folded-corner decoration. No store / RPC
+ * coupling — reusable for template previews, exports, thumbnails.
+ */
+export const StickyContent = ({
+  data,
+  isZoomedOut = false,
+  editing = false,
+  textRef,
+  onBlur,
+  onKeyDown,
+}: StickyContentProps) => (
+  <>
+    {isZoomedOut ? (
+      <div className="size-full p-3" style={colorToStyle(data.color)}>
+        <div className="mt-1 space-y-2 opacity-30">
+          <div className="h-2 w-full rounded-full bg-current" />
+          <div className="h-2 w-4/6 rounded-full bg-current" />
+        </div>
+      </div>
+    ) : (
+      <div
+        className="flex size-full flex-col p-4"
+        style={colorToStyle(data.color)}
+      >
+        <div
+          className={cn(
+            'wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed outline-none',
+            editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
+          )}
+          contentEditable={editing}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          ref={textRef}
+          suppressContentEditableWarning
+        >
+          {data.content}
+        </div>
+      </div>
+    )}
+    <div className="pointer-events-none absolute top-0 right-0 size-6">
+      <div
+        className="absolute inset-0"
+        style={{
+          opacity: 0.3,
+          background: 'linear-gradient(225deg, #ddd 50%, transparent 50%)',
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0"
+        style={{
+          width: '100%',
+          height: '100%',
+          background:
+            'linear-gradient(45deg, rgba(0,0,0,0.07) 50%, transparent 50%)',
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(225deg, transparent 46%, rgba(0,0,0,0.15) 50%, transparent 54%)',
+        }}
+      />
+    </div>
+  </>
+);
+
 const StickyNode = ({ id, data }: any) => {
   const { zoom } = useViewport();
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
@@ -161,58 +244,14 @@ const StickyNode = ({ id, data }: any) => {
         )}
         onClick={handleClick}
       >
-        {isZoomedOut ? (
-          <div className="size-full p-3" style={colorToStyle(data.color)}>
-            <div className="mt-1 space-y-2 opacity-30">
-              <div className="h-2 w-full rounded-full bg-current" />
-              <div className="h-2 w-4/6 rounded-full bg-current" />
-            </div>
-          </div>
-        ) : (
-          <div
-            className="flex size-full flex-col p-4"
-            style={colorToStyle(data.color)}
-          >
-            <div
-              className={cn(
-                'wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed outline-none',
-                editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
-              )}
-              contentEditable={editing}
-              onBlur={handleBlur}
-              onKeyDown={handleKeyDown}
-              ref={textRef}
-              suppressContentEditableWarning
-            >
-              {data.content}
-            </div>
-          </div>
-        )}
-        <div className="pointer-events-none absolute top-0 right-0 size-6">
-          <div
-            className="absolute inset-0"
-            style={{
-              opacity: 0.3,
-              background: 'linear-gradient(225deg, #ddd 50%, transparent 50%)',
-            }}
-          />
-          <div
-            className="absolute bottom-0 left-0"
-            style={{
-              width: '100%',
-              height: '100%',
-              background:
-                'linear-gradient(45deg, rgba(0,0,0,0.07) 50%, transparent 50%)',
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(225deg, transparent 46%, rgba(0,0,0,0.15) 50%, transparent 54%)',
-            }}
-          />
-        </div>
+        <StickyContent
+          data={data}
+          editing={editing}
+          isZoomedOut={isZoomedOut}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          textRef={textRef}
+        />
       </div>
     </div>
   );

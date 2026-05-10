@@ -14,6 +14,70 @@ import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = 'conn-handle nodrag';
 
+export interface GroupContentProps {
+  /** Slot for Handles / NodeResizer when wrapped inside a React Flow node. */
+  children?: React.ReactNode;
+  data: any;
+  /** Enables contentEditable on the label. */
+  editingLabel?: boolean;
+  /** Ref forwarded to the contentEditable label element. */
+  labelRef?: React.Ref<HTMLDivElement>;
+  /** Blur handler for the label (ignored unless `editingLabel`). */
+  onLabelBlur?: () => void;
+  /** Double-click handler to enter edit mode (caller must flip `editingLabel`). */
+  onLabelDoubleClick?: (e: React.MouseEvent) => void;
+  /** Whether the wrapper node is selected (adds `selected` class). */
+  selected?: boolean;
+}
+
+/**
+ * Pure presentational group container: the translucent colored panel plus the
+ * label in the top-left. No store / RPC coupling — reusable for template
+ * previews. The `children` slot receives Handles and NodeResizer from the
+ * wrapper component.
+ */
+export const GroupContent = ({
+  data,
+  selected = false,
+  editingLabel = false,
+  labelRef,
+  onLabelBlur,
+  onLabelDoubleClick,
+  children,
+}: GroupContentProps) => (
+  <motion.div
+    animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
+    className={cn(
+      `canvas-group group-${data.color || 'blue'} size-full`,
+      selected && 'selected',
+      data.active && 'ring-2 ring-blue-400 ring-offset-2',
+      data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+    )}
+    initial={{ opacity: 0, scale: 0.95 }}
+    transition={{ duration: 0.2 }}
+  >
+    {children}
+
+    <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
+      <div
+        className={cn(
+          'nodrag nopan font-semibold text-xs tracking-wide outline-none',
+          'text-gray-600',
+          editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
+        )}
+        contentEditable={editingLabel}
+        onBlur={onLabelBlur}
+        onDoubleClick={onLabelDoubleClick}
+        ref={labelRef}
+        suppressContentEditableWarning
+      >
+        {data.label}
+      </div>
+      <span className="text-gray-300 text-xs">⋮⋮</span>
+    </div>
+  </motion.div>
+);
+
 const GroupNode = ({ id, data, selected }: any) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -40,17 +104,20 @@ const GroupNode = ({ id, data, selected }: any) => {
     setEditingLabel(false);
   }, [id, data.label, onUpdate]);
 
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingLabel(true);
+    setTimeout(() => labelRef.current?.focus(), 10);
+  }, []);
+
   return (
-    <motion.div
-      animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
-      className={cn(
-        `canvas-group group-${data.color || 'blue'} size-full`,
-        selected && 'selected',
-        data.active && 'ring-2 ring-blue-400 ring-offset-2',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
-      )}
-      initial={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
+    <GroupContent
+      data={data}
+      editingLabel={editingLabel}
+      labelRef={labelRef}
+      onLabelBlur={handleBlur}
+      onLabelDoubleClick={handleDoubleClick}
+      selected={selected}
     >
       <NodeResizer
         handleClassName="!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2"
@@ -85,29 +152,7 @@ const GroupNode = ({ id, data, selected }: any) => {
         position={Position.Left}
         type="source"
       />
-
-      <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
-        <div
-          className={cn(
-            'nodrag nopan font-semibold text-xs tracking-wide outline-none',
-            'text-gray-600',
-            editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
-          )}
-          contentEditable={editingLabel}
-          onBlur={handleBlur}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            setEditingLabel(true);
-            setTimeout(() => labelRef.current?.focus(), 10);
-          }}
-          ref={labelRef}
-          suppressContentEditableWarning
-        >
-          {data.label}
-        </div>
-        <span className="text-gray-300 text-xs">⋮⋮</span>
-      </div>
-    </motion.div>
+    </GroupContent>
   );
 };
 

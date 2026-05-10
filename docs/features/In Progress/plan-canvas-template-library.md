@@ -1,8 +1,8 @@
 # Canvas 模板库功能 · 开发进度与规划
 
-> 状态：**P0 已完成**，临时验证路由 `/preview-test` 已搭建并通过实机验证。待进入 **P1（后端地基 + 第一个模板）**。
+> 状态：**P0–P4 已完成**，Demo 模板已添加。待进入 **P5（其余模板 + 缩略图 + i18n 完善）**。
 >
-> 最后更新：在实现 P0 节点重构 + 临时预览路由之后。
+> 最后更新：P1–P4 后端 + 前端 + Demo 模板全部实现完成。
 
 ---
 
@@ -135,11 +135,11 @@ export interface TemplateManifest {
 |------|------|---------|------|
 | **P0** | 节点重构：抽出 5 个纯展示 `XxxContent` + `readOnlyNodeTypes` | 所有节点单测绿；无 store/RPC 泄漏 | ✅ **完成** |
 | **P0.5** | 临时 dev 路由 `/preview-test` 验证只读节点渲染保真度 | 真实浏览器下 5 种节点显示正常 | ✅ **完成** |
-| **P1** | 后端地基：`src/bun/templates.ts` + 3 个 RPC + 第一个模板（Kanban） | `bun run test` 覆盖 `list / get / createViewFromTemplate`；可通过 DevTools 手动调 RPC 建画布 | ⏳ 待开始 |
-| **P2** | ViewSwitcher 改 Submenu | 两项可点击，空白走旧流程，"选择模板"跳 `/templates` | ⏳ |
-| **P3** | `/templates` 列表页 + `useTemplates` hook | Grid、搜索、分类；`?q=&category=` 深链可用 | ⏳ |
-| **P4** | `/templates/$templateId` 预览页 + 使用流程 | 只读 ReactFlow 渲染；`[使用此模板]` 端到端建 view 并切换 | ⏳ |
-| **P5** | 其余 5 个模板 + 缩略图 + i18n + 完整测试 + `bun run ci` 通过 | 视觉完整、CI 绿 | ⏳ |
+| **P1** | 后端地基：`src/bun/templates.ts` + 3 个 RPC + 第一个模板（Kanban） | `bun run test` 覆盖 `list / get / createViewFromTemplate`；可通过 DevTools 手动调 RPC 建画布 | ✅ **完成** |
+| **P2** | ViewSwitcher 改 Submenu | 两项可点击，空白走旧流程，"选择模板"跳 `/templates` | ✅ **完成** |
+| **P3** | `/templates` 列表页 + `useTemplates` hook | Grid、搜索、分类；`?q=&category=` 深链可用 | ✅ **完成** |
+| **P4** | `/templates/$templateId` 预览页 + 使用流程 | 只读 ReactFlow 渲染；`[使用此模板]` 端到端建 view 并切换 | ✅ **完成** |
+| **P5** | 其余模板 + 缩略图 + i18n + 完整测试 + `bun run ci` 通过 | 视觉完整、CI 绿 | ⏳ Demo 模板已添加，其余模板待补充 |
 
 ---
 

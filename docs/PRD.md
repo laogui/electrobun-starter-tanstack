@@ -73,7 +73,7 @@
   - **嵌套**：Group 可嵌套 Group（需防止循环嵌套）。
   - **连线**：Group 内的子节点可以与画布上任意节点建立连线。
   - **适用场景**：主题分区、看板、思维导图分支。
-  - **排斥与碰撞**：Group 在拖拽调整大小或移动时，与邻近节点存在** gentle repulsion（柔和排斥）**机制——当 Group 边界靠近其他节点一定阈值时，邻近节点会被轻微推开，避免视觉重叠。同时提供**碰撞检测与放置解析**能力：释放节点时若检测到与 Group 区域重叠，系统会自动判断是"纳入 Group"还是"放在 Group 旁边"，确保放置意图明确。嵌套 Group 时同样遵循此规则，并防止循环嵌套。
+  - **排斥与碰撞**：Group 在拖拽调整大小或移动时，与邻近节点存在** gentle repulsion（柔和排斥）**机制——当 Group 边界靠近其他节点一定阈值时，邻近节点会被轻微推开，避免视觉重叠。同时提供**碰撞检测与放置解析**能力：释放节点时若检测到与 Group 区域重叠，系统会自动判断是"纳入 Group"还是"放在 Group 旁边"，确保放置意图明确。嵌套 Group 时同样遵循此规则，并防止循环嵌套。**Resize 排斥豁免**：当 Group 内的子节点触发 resize 排斥时，父节点（Group 本身）自动豁免——否则 Group 被推开后通过 `extent: 'parent'` 反向约束子节点，产生闪烁抖动。
 
 #### 2.5.2 Folder 堆叠式文件夹 (Folder Stack)
 
@@ -108,7 +108,9 @@
 - **交互逻辑**：
   - **底部切换器**：画布底部居中显示一个浮动的 `ViewSwitcher` 面板，包含当前画布名称、节点计数和画布数量。
   - **切换画布**：点击切换器展开画布列表，点击任一画布立即切换。切换时自动保存当前画布的未持久化变更（`flushNow`），然后清空 UI 状态（聚焦模式、Folder drill-down、剪贴板、undo/redo 历史栈）并加载目标画布。
-  - **新建画布**：通过切换器右侧的 `+` 按钮或弹出菜单底部的 `New Canvas` 创建空画布，自动命名为 `Canvas N` 并切换过去。
+  - **Viewport 持久化**：每个画布视图的 ReactFlow viewport（`x` / `y` / `zoom`）随 manifest 一起持久化到 `.canvas.json` 的 `viewport` 字段。切换画布时恢复目标画布的上次 viewport；刷新页面或重启应用后 viewport 也会恢复。
+  - **活跃画布持久化**：用户当前选中的画布 `activeViewId` 持久化到 `workspace.json`，重启应用后自动恢复到上次使用的画布。
+  - **新建画布**：通过切换器右侧的 `+` 按钮触发子菜单，提供两种创建方式：① **空白画布**（沿用原有 `handleCreate` 流程，自动命名为 `Canvas N` 并切换过去）；② **选择模板…**（跳转 `/templates` 路由页浏览模板库，选中模板后在只读 ReactFlow 预览页确认后基于模板创建新画布，自动为模板中的每张 Card 生成新 `noteId` + 示例 `.md` 文件）。
   - **重命名**：在弹出菜单中点击铅笔图标进入行内编辑模式，`Enter` 确认、`Escape` 取消。
   - **删除画布**：在弹出菜单中点击删除图标。至少保留一个画布，删除最后一个时操作被拒绝。删除当前画布时自动切换到列表中的第一个画布。
   - **数据隔离**：每个画布对应独立的 `.ghostboard/views/{viewId}.canvas.json` manifest 文件。`content/*.md` 笔记文件在所有画布间共享（通过 `noteId` 引用）。
@@ -424,6 +426,8 @@ updatedAt: 2026-03-31T14:30:00Z
 }
 ```
 
+- **`activeViewId` 持久化**：用户切换画布时，`activeViewId` 实时写入 `workspace.json`，确保应用重启后自动恢复到上次使用的画布。
+
 ### 5.6 Canvas View Manifest
 
 `.ghostboard/views/default.canvas.json`（与 @xyflow/react 原生 Node/Edge JSON 完全一致）：
@@ -514,6 +518,7 @@ updatedAt: 2026-03-31T14:30:00Z
 - Folder `children` 在 drill-down 中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
 - **Folder Card 子节点的水化与落盘**（M5 ✅）：加载时 `loadCanvas` 按 `noteId + file` 读取 `.md` frontmatter 与正文，通过 `noteToCardData()` 水化回 `title` / `content` / `color` 等字段填充到 `data` 中；保存时 `saveManifest` 调用 `writeNoteWithPreview()` 将正文写入子笔记的 `.md`，并把 manifest 吐到 `{ id, noteId, type, data: { noteId, file, type } }` 的引用形式（不写正文、不写 preview 元数据）。Legacy 内嵌 children 在加载时自动 stamp 一个 `noteId`，下次 save 时内容迁到 `.md`。
 - **Image 子节点例外**：Folder 中的 Image 子节点继续使用 `imageFile` 附件指针模式，不分配 `noteId`，不生成 `.md`。
+- **Viewport 持久化**：`viewport` 字段（`x` / `y` / `zoom`）随 manifest 一起持久化。切换画布时保存当前 viewport 到源 manifest、从目标 manifest 恢复 viewport；应用重启后通过 `hydrate` 回写 ReactFlow，确保用户回到上次浏览位置。
 
 ### 5.7 TypeScript 类型定义
 
@@ -557,6 +562,8 @@ updatedAt: 2026-03-31T14:30:00Z
 | z-order            | 数组顺序（后覆盖前）                                                            | 简单直观，React Flow 原生行为                                              |
 | 路径格式           | workspace-relative POSIX path                                                   | 跨平台一致性                                                               |
 | 颜色来源           | manifest `color` 覆盖 frontmatter `color`                                       | 保留内容语义色与视图强调色的分层                                           |
+| Viewport 持久化    | Per-view `viewport` 字段写入 `.canvas.json`，切换画布/重启后恢复                  | 用户回到上次浏览位置，避免每次打开从原点开始                             |
+| 活跃画布持久化     | `activeViewId` 实时写入 `workspace.json`                                          | 重启后恢复到上次使用的画布                                               |
 
 ### 5.11 Edge Cases & Guardrails
 
@@ -625,6 +632,9 @@ updatedAt: 2026-03-31T14:30:00Z
 | 14.2 | **Folder Card 子节点迁移 noteId + 独立 .md**（M5）                     | 中     | ✅ 已完成 |
 | 14.3 | **设置窗口与 `defaultLayoutMode` 偏好**                            | 低     | ✅ 已完成 |
 | 14.4 | **文档模式 i18n（zh / en）** — LeftRail / NoteList / DocumentEditor / EditorToolbar 文案走 paraglide | 低     | ⏳ 待实施（决策已确定，见 §8 OD-8） |
+| 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮改为子菜单（空白画布 / 选择模板），TanStack Router 新路由 `/templates` 列表 + `/templates/$templateId` 只读 ReactFlow 预览，基于模板创建新画布（重新生成 noteId + 示例 .md） | 高     | ⏳ 进行中（P0/P0.5 节点重构 + 预览验证已完成；P1 后端 + Kanban 模板进行中） |
+| 14.6 | **Per-view Viewport 持久化** — 每个画布的 ReactFlow viewport（x/y/zoom）随 `.canvas.json` 持久化，切换画布/重启后恢复 | 低     | ✅ 已完成 |
+| 14.7 | **活跃画布持久化** — `activeViewId` 写入 `workspace.json`，重启后恢复到上次使用的画布 | 低     | ✅ 已完成 |
 
 ### ⚪ P3 — 后续迭代
 

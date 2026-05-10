@@ -420,6 +420,35 @@ describe('routes/index', () => {
     });
   });
 
+  it('hydrates the saved viewport from loadCanvas into the store', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'loaded-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Loaded Card', content: '', color: '#fff' },
+        },
+      ],
+      edges: [],
+      viewport: { x: 42, y: 84, zoom: 1.25 },
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(useCanvasStore.getState().viewport).toEqual({
+        x: 42,
+        y: 84,
+        zoom: 1.25,
+      });
+    });
+  });
+
   it('seeds initial nodes when load returns empty data and rpc is available', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
     const module = await import('./index');

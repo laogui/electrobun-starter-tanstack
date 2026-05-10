@@ -99,8 +99,27 @@ describe('useCanvasPersistence', () => {
           data: {},
         },
       ],
-      []
+      [],
+      undefined
     );
+  });
+
+  it('debounces and persists viewport changes', async () => {
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    // First change is consumed by the post-hydrate guard.
+    useCanvasStore.getState().setViewport({ x: 50, y: 60, zoom: 1 });
+    useCanvasStore.getState().setViewport({ x: 100, y: 200, zoom: 1.5 });
+
+    vi.advanceTimersByTime(2500);
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith('default', [], [], {
+      x: 100,
+      y: 200,
+      zoom: 1.5,
+    });
   });
 
   it('flushes pending changes when the window blurs', async () => {
@@ -133,8 +152,29 @@ describe('useCanvasPersistence', () => {
           data: {},
         },
       ],
-      []
+      [],
+      undefined
     );
+  });
+
+  it('includes the latest viewport when flushing on blur', async () => {
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 0, y: 0 }, data: {} },
+      ]);
+    useCanvasStore.getState().setViewport({ x: 50, y: 60, zoom: 0.75 });
+
+    act(() => {
+      globalThis.dispatchEvent(new Event('blur'));
+    });
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    const lastCall = rpcMocks.rpcSaveManifest.mock.calls.at(-1);
+    expect(lastCall?.[3]).toEqual({ x: 50, y: 60, zoom: 0.75 });
   });
 
   it('cancels pending timer and does not flush when activeViewId changes', async () => {

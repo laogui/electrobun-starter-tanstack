@@ -18,9 +18,14 @@ function flushNow(
     clearTimeout(pendingTimer.current);
     pendingTimer.current = null;
   }
-  const { nodes, edges } = useCanvasStore.getState();
+  const { nodes, edges, viewport } = useCanvasStore.getState();
   const sanitized = sanitizeForPersistence(nodes, edges);
-  rpcSaveManifest(viewId, sanitized.nodes, sanitized.edges).catch((error) => {
+  rpcSaveManifest(
+    viewId,
+    sanitized.nodes,
+    sanitized.edges,
+    viewport ?? undefined
+  ).catch((error) => {
     console.error('[persistence] Failed to flush manifest:', error);
   });
 }
@@ -67,7 +72,11 @@ export function useCanvasPersistence() {
     });
 
     const unsub = useCanvasStore.subscribe((state, prevState) => {
-      if (state.nodes === prevState?.nodes && state.edges === prevState.edges) {
+      if (
+        state.nodes === prevState?.nodes &&
+        state.edges === prevState.edges &&
+        state.viewport === prevState?.viewport
+      ) {
         return;
       }
 

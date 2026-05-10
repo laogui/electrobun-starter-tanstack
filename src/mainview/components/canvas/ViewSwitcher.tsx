@@ -121,9 +121,14 @@ export function ViewSwitcher({
 
       // Flush current canvas before switching
       if (await isRpcAvailable()) {
-        const { nodes, edges } = useCanvasStore.getState();
+        const { nodes, edges, viewport } = useCanvasStore.getState();
         const sanitized = sanitizeForPersistence(nodes, edges);
-        await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
+        await rpcSaveManifest(
+          activeViewId,
+          sanitized.nodes,
+          sanitized.edges,
+          viewport ?? undefined
+        );
       }
 
       // Clear store & set new view ID; index.tsx's effect will load + hydrate

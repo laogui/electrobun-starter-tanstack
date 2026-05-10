@@ -181,12 +181,35 @@ describe('viewSwitcher', () => {
             data: { title: 'Saved Node', content: '', color: '#fff' },
           },
         ],
-        [{ id: 'edge-1', source: 'node-1', target: 'node-2' }]
+        [{ id: 'edge-1', source: 'node-1', target: 'node-2' }],
+        undefined
       );
       // ViewSwitcher no longer loads the new canvas; index.tsx's effect handles that
       expect(useCanvasStore.getState().activeViewId).toBe('focus');
       expect(useCanvasStore.getState()._hydrated).toBe(false);
     });
+  });
+
+  it('flushes the current viewport when switching views', async () => {
+    useCanvasStore.setState({
+      viewport: { x: 12, y: 34, zoom: 0.8 },
+    });
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalledTimes(1);
+      expect(useCanvasStore.getState().views).toHaveLength(2);
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Focus Mode' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    });
+
+    const lastCall = rpcMocks.rpcSaveManifest.mock.calls.at(-1);
+    expect(lastCall?.[3]).toEqual({ x: 12, y: 34, zoom: 0.8 });
   });
 
   it('creates a new view and switches to it', async () => {

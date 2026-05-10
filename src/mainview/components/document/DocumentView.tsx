@@ -14,8 +14,7 @@ import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useDocumentKeyboard } from '@/hooks/useDocumentKeyboard';
 import { resolveDocumentSelection } from '@/lib/canvasUtils';
-import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
+import { isRpcAvailable, loadCanvas } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -181,13 +180,18 @@ export function DocumentView() {
     }
     loadCanvas(activeViewId)
       .then(async (data) => {
-        if (data && data.nodes.length > 0) {
+        if (data) {
+          // Respect what the manifest contains — including empty arrays for
+          // canvases the user just created via "New Canvas → Blank Canvas".
+          // First-run seeding for the default view now happens on the bun
+          // side in `initWorkspace`.
           hydrate(data.nodes, data.edges);
         } else if (await isRpcAvailable()) {
-          const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
-          await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          hydrate(initialNodes, initialEdges);
+          // RPC is up but no manifest exists for this view — start blank.
+          hydrate([], []);
         } else {
+          // Browser/dev fallback (no Electrobun RPC): hydrate with the demo
+          // initialNodes so the document view is usable for debugging.
           hydrate(initialNodes, initialEdges);
         }
       })

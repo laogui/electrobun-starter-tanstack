@@ -430,8 +430,13 @@ describe('routes/index', () => {
     });
   });
 
-  it('seeds initial nodes when load returns empty data and rpc is available', async () => {
+  it('respects an empty manifest as a blank canvas (no auto-seed)', async () => {
+    // Regression: previously the renderer would re-seed `initialNodes` whenever
+    // the loaded manifest was empty, which made "New Canvas → Blank Canvas"
+    // come up populated with demo content. First-run seeding now lives on the
+    // bun side, so an empty manifest from the RPC must remain empty.
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+    rpcMocks.isRpcAvailable.mockResolvedValueOnce(true);
     const module = await import('./index');
     const CanvasRoute = module.Route.options
       .component as () => React.ReactElement;
@@ -439,9 +444,12 @@ describe('routes/index', () => {
     render(<CanvasRoute />);
 
     await waitFor(() => {
-      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalled();
-      expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(useCanvasStore.getState()._hydrated).toBe(true);
     });
+
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 
   it('keeps loading state when load fails and does not focus without rect', async () => {
@@ -462,7 +470,10 @@ describe('routes/index', () => {
   });
 
   it('hydrates initial nodes in-memory when rpc is unavailable (browser/dev fallback)', async () => {
-    rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+    // Without Electrobun RPC, `loadCanvas` resolves to `null` (see
+    // `@/lib/rpc.ts`). The renderer should then fall back to the in-memory
+    // demo nodes so the canvas remains usable for browser-only debugging.
+    rpcMocks.loadCanvas.mockResolvedValueOnce(null);
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(false);
     const module = await import('./index');
     const CanvasRoute = module.Route.options

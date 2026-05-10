@@ -19,6 +19,41 @@ describe('templates', () => {
     expect(kanban?.tags).toContain('kanban');
   });
 
+  it('listAllTemplates returns the built-in demo template', () => {
+    const templates = listAllTemplates();
+
+    const demo = templates.find((t) => t.id === 'demo');
+    expect(demo).toBeDefined();
+    expect(demo?.name).toBe('Demo Canvas');
+    expect(demo?.tags).toContain('demo');
+  });
+
+  it('loadTemplate returns the demo template with mixed node types', () => {
+    const template = loadTemplate('demo');
+
+    expect(template).not.toBeNull();
+    expect(template?.meta.id).toBe('demo');
+
+    // Demo showcases card / folder / group / sticky / image primitives.
+    const types = new Set(template?.nodes.map((n) => n.type));
+    expect(types).toContain('card');
+    expect(types).toContain('folder');
+    expect(types).toContain('group');
+    expect(types).toContain('sticky');
+    expect(types).toContain('image');
+
+    // Every top-level card with a noteId should reference a real noteContent.
+    const noteKeys = new Set(Object.keys(template?.noteContents ?? {}));
+    const cardsWithNotes =
+      template?.nodes.filter(
+        (n) => n.type === 'card' && typeof n.data.noteId === 'string'
+      ) ?? [];
+    expect(cardsWithNotes.length).toBeGreaterThan(0);
+    for (const card of cardsWithNotes) {
+      expect(noteKeys.has(card.data.noteId as string)).toBe(true);
+    }
+  });
+
   it('listAllTemplates returns copies (not references to internal data)', () => {
     const a = listAllTemplates();
     const b = listAllTemplates();

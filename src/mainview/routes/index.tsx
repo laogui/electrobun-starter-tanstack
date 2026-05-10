@@ -41,13 +41,7 @@ import {
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
-import {
-  isRpcAvailable,
-  loadCanvas,
-  rpcGetSettings,
-  rpcSaveManifest,
-} from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
+import { isRpcAvailable, loadCanvas, rpcGetSettings } from '@/lib/rpc';
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
@@ -310,13 +304,15 @@ function CanvasComponent() {
     }
     loadCanvas(activeViewId)
       .then(async (data) => {
-        if (data && data.nodes.length > 0) {
+        if (data) {
+          // Respect what the manifest contains — including empty arrays for
+          // canvases the user just created via "New Canvas → Blank Canvas".
+          // First-run seeding for the default view now happens on the bun
+          // side in `initWorkspace`.
           hydrate(data.nodes, data.edges);
         } else if (await isRpcAvailable()) {
-          // First run: seed workspace with initialNodes + initialEdges
-          const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
-          await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          hydrate(initialNodes, initialEdges);
+          // RPC is up but no manifest exists for this view — start blank.
+          hydrate([], []);
         } else {
           // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
           // the initial data so the canvas is usable for debugging without persistence.

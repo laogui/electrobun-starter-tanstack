@@ -7,6 +7,7 @@ import { Utils } from 'electrobun/bun';
 import type { CanvasManifest } from './manifest';
 import { saveManifest } from './manifest';
 import { createNote, saveNote } from './notes';
+import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
 
 // Default workspace is inside the app's userData directory
@@ -46,6 +47,13 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
   ],
 };
 
+/**
+ * Template id used to seed the default canvas on the very first launch
+ * (when `workspace.json` does not yet exist). Setting this to `null` skips
+ * first-run seeding entirely so the default canvas opens blank.
+ */
+const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'demo';
+
 /** Ensure workspace directory structure exists. Returns workspace path. */
 export function initWorkspace(workspacePath?: string): string {
   const wsPath = workspacePath ?? getDefaultWorkspacePath();
@@ -63,6 +71,35 @@ export function initWorkspace(workspacePath?: string): string {
     }
   }
   return wsPath;
+}
+
+/**
+ * On the very first launch (workspace.json absent), write the default
+ * config and seed the default canvas from the demo template so users land
+ * in a populated workspace. Subsequent launches and explicit "New Canvas
+ * → Blank Canvas" creations leave manifests untouched.
+ */
+export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
+  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
+  if (existsSync(configPath)) {
+    return;
+  }
+
+  await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
+
+  if (!FIRST_RUN_SEED_TEMPLATE_ID) {
+    return;
+  }
+  const template = loadTemplate(FIRST_RUN_SEED_TEMPLATE_ID);
+  const defaultView = DEFAULT_CONFIG.views[0];
+  if (!(template && defaultView)) {
+    return;
+  }
+  try {
+    await populateViewFromTemplate(wsPath, defaultView, template);
+  } catch (err) {
+    console.error('[workspace] First-run seeding failed:', err);
+  }
 }
 
 /** Read workspace.json. Returns default config if not found. */
@@ -284,38 +321,28 @@ export interface AddViewFromTemplateResult {
 }
 
 /**
- * Create a new view pre-populated from a built-in template.
+ * Populate an existing view's manifest from a template:
+ *   1. Generate a real noteId for every placeholder in `template.noteContents`
+ *   2. Create the corresponding .md note files
+ *   3. Rewrite top-level node `noteId` references to the real ids
+ *   4. Write the populated canvas manifest to disk
  *
- * 1. Load the template manifest
- * 2. Create a new view entry in workspace.json
- * 3. For each card node with a placeholder noteId, generate a real noteId,
- *    create the corresponding .md file, and rewrite the node data
- * 4. Write the populated .canvas.json manifest
+ * Used both for first-run seeding (the default view) and for creating new
+ * views from the templates browser.
  */
-export async function addViewFromTemplate(
+async function populateViewFromTemplate(
   wsPath: string,
-  name: string,
-  templateId: string
-): Promise<AddViewFromTemplateResult> {
-  const template = loadTemplate(templateId);
-  if (!template) {
-    throw new Error(`Template not found: ${templateId}`);
-  }
-
-  // Create workspace view entry
-  const entry = await addView(wsPath, name);
-
-  // Build a mapping from placeholder noteId → real noteId
+  view: ViewEntry,
+  template: TemplateManifest
+): Promise<void> {
   const noteIdMap = new Map<string, string>();
   const noteContents = template.noteContents ?? {};
 
-  // Pre-generate real noteIds for every placeholder
   for (const placeholderId of Object.keys(noteContents)) {
     const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
     noteIdMap.set(placeholderId, realId);
   }
 
-  // Create .md files for each note
   for (const [placeholderId, realId] of noteIdMap) {
     const content = noteContents[placeholderId];
     if (!content) {
@@ -327,7 +354,6 @@ export async function addViewFromTemplate(
       content.title,
       content.displayHint
     );
-    // Overwrite with template body if provided
     if (content.body) {
       const now = new Date().toISOString();
       await saveNote(
@@ -345,7 +371,6 @@ export async function addViewFromTemplate(
     }
   }
 
-  // Rewrite nodes: replace placeholder noteIds with real ones
   const nodes = template.nodes.map((node) => {
     const noteId = node.data.noteId as string | undefined;
     if (noteId && noteIdMap.has(noteId)) {
@@ -357,14 +382,29 @@ export async function addViewFromTemplate(
     return node;
   });
 
-  // Write the canvas manifest
   const manifest: CanvasManifest = {
     schema: 'ghostboard-canvas/v1',
-    viewId: entry.id,
+    viewId: view.id,
     nodes,
     edges: template.edges,
   };
-  await saveManifest(wsPath, entry.file, manifest);
+  await saveManifest(wsPath, view.file, manifest);
+}
 
+/**
+ * Create a new view pre-populated from a built-in template.
+ */
+export async function addViewFromTemplate(
+  wsPath: string,
+  name: string,
+  templateId: string
+): Promise<AddViewFromTemplateResult> {
+  const template = loadTemplate(templateId);
+  if (!template) {
+    throw new Error(`Template not found: ${templateId}`);
+  }
+
+  const entry = await addView(wsPath, name);
+  await populateViewFromTemplate(wsPath, entry, template);
   return { success: true, entry };
 }

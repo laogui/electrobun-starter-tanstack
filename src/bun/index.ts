@@ -38,6 +38,7 @@ import {
   removeView,
   renameView,
   restoreView,
+  seedFirstRunIfNeeded,
   type TrashEntry,
 } from './workspace';
 
@@ -428,6 +429,7 @@ async function main() {
   });
 
   const wsPath = initWorkspace();
+  await seedFirstRunIfNeeded(wsPath);
   await loadSettings(wsPath);
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);

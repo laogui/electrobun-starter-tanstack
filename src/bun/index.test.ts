@@ -92,6 +92,7 @@ const workspaceMocks = {
   removeView: vi.fn(),
   renameView: vi.fn(),
   restoreView: vi.fn(),
+  seedFirstRunIfNeeded: vi.fn(async () => undefined),
 };
 
 vi.mock('./manifest', () => ({
@@ -140,6 +141,9 @@ vi.mock('./workspace', () => ({
     workspaceMocks.renameView(...args),
   restoreView: (...args: Parameters<typeof workspaceMocks.restoreView>) =>
     workspaceMocks.restoreView(...args),
+  seedFirstRunIfNeeded: (
+    ...args: Parameters<typeof workspaceMocks.seedFirstRunIfNeeded>
+  ) => workspaceMocks.seedFirstRunIfNeeded(...args),
 }));
 
 const bunFileMock = vi.fn();

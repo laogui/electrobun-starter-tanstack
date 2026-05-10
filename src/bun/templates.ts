@@ -6,6 +6,8 @@ import type { ManifestEdge, ManifestNode } from './manifest';
 // after Electrobun bundles everything into a single file.
 // ---------------------------------------------------------------------------
 
+import demoManifest from './templates/demo/manifest.canvas.json';
+import demoMeta from './templates/demo/meta.json';
 import kanbanManifest from './templates/kanban/manifest.canvas.json';
 import kanbanMeta from './templates/kanban/meta.json';
 
@@ -39,6 +41,10 @@ const TEMPLATE_REGISTRY: Record<
   string,
   { meta: TemplateMeta; manifest: Omit<TemplateManifest, 'meta'> }
 > = {
+  demo: {
+    meta: demoMeta as unknown as TemplateMeta,
+    manifest: demoManifest as unknown as Omit<TemplateManifest, 'meta'>,
+  },
   kanban: {
     meta: kanbanMeta as unknown as TemplateMeta,
     manifest: kanbanManifest as unknown as Omit<TemplateManifest, 'meta'>,

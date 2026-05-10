@@ -514,4 +514,75 @@ describe('workspace', () => {
       addViewFromTemplate(workspaceRoot, 'Test', 'nonexistent')
     ).rejects.toThrow('Template not found: nonexistent');
   });
+
+  it('seedFirstRunIfNeeded populates the default canvas with the demo template on first launch', async () => {
+    const { initWorkspace, seedFirstRunIfNeeded } = await import('./workspace');
+    initWorkspace(workspaceRoot);
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await seedFirstRunIfNeeded(workspaceRoot);
+
+    // workspace.json now exists with the default config.
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    expect(existsSync(configPath)).toBe(true);
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      activeViewId: string;
+      views: Array<{ id: string; file: string }>;
+    };
+    expect(config.activeViewId).toBe('default');
+
+    // Default canvas manifest is populated with demo template content.
+    const manifestPath = join(
+      workspaceRoot,
+      '.ghostboard',
+      'views',
+      'default.canvas.json'
+    );
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      nodes: Array<{ data: { noteId?: string }; type: string }>;
+    };
+    expect(manifest.nodes.length).toBeGreaterThan(0);
+    // Every card noteId in the seeded manifest should be a real note id,
+    // not a `tpl-demo-*` placeholder.
+    for (const node of manifest.nodes) {
+      if (node.type === 'card' && node.data.noteId) {
+        expect(node.data.noteId).toMatch(NOTE_ID_RE);
+      }
+    }
+  });
+
+  it('seedFirstRunIfNeeded is a no-op when workspace.json already exists', async () => {
+    const { initWorkspace, seedFirstRunIfNeeded } = await import('./workspace');
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    const customConfig = {
+      schema: 'ghostboard-workspace/v1',
+      activeViewId: 'custom',
+      views: [
+        { id: 'custom', name: 'Custom', file: 'views/custom.canvas.json' },
+      ],
+    };
+    writeFileSync(configPath, JSON.stringify(customConfig));
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await seedFirstRunIfNeeded(workspaceRoot);
+
+    // Existing config left alone; no demo manifest written.
+    expect(JSON.parse(readFileSync(configPath, 'utf8'))).toEqual(customConfig);
+    expect(
+      existsSync(
+        join(workspaceRoot, '.ghostboard', 'views', 'default.canvas.json')
+      )
+    ).toBe(false);
+  });
 });

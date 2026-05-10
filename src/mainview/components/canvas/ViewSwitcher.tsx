@@ -35,6 +35,7 @@ import {
   rpcRenameView,
   rpcRestoreView,
   rpcSaveManifest,
+  rpcSetActiveView,
 } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -84,22 +85,30 @@ export function ViewSwitcher({
   const views = useCanvasStore((s) => s.views);
   const setViews = useCanvasStore((s) => s.setViews);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
-
-  // Load views list on mount
+  // Load views list + persisted activeViewId on mount
   useEffect(() => {
     (async () => {
       const data = await rpcListViews();
       if (data === null) {
         return;
       }
-      setViews(
-        (data.views as Array<{ id: string; name: string }>).map((v) => ({
+      const viewsList = (data.views as Array<{ id: string; name: string }>).map(
+        (v) => ({
           id: v.id,
           name: v.name,
-        }))
+        })
       );
+      setViews(viewsList);
+
+      // Restore the last-active canvas persisted in workspace.json.
+      // Use setActiveView (not setActiveViewId) so _hydrated resets and
+      // index.tsx's loadCanvas effect re-runs for the correct canvas.
+      const persisted = (data as { activeViewId?: string }).activeViewId;
+      if (persisted && viewsList.some((v) => v.id === persisted)) {
+        setActiveView(persisted);
+      }
     })();
-  }, [setViews]);
+  }, [setViews, setActiveView]);
 
   // Reset rename state whenever the menu closes
   useEffect(() => {
@@ -134,6 +143,9 @@ export function ViewSwitcher({
           viewport ?? undefined
         );
       }
+
+      // Persist the active view selection so it survives restarts
+      rpcSetActiveView(viewId).catch(() => {});
 
       // Clear store & set new view ID; index.tsx's effect will load + hydrate
       setActiveView(viewId);

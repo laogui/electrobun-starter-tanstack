@@ -39,6 +39,7 @@ import {
   renameView,
   restoreView,
   seedFirstRunIfNeeded,
+  setActiveViewId,
   type TrashEntry,
 } from './workspace';
 
@@ -189,6 +190,10 @@ interface CanvasRPC {
       };
       renameView: {
         params: { viewId: string; name: string };
+        response: { success: boolean };
+      };
+      setActiveView: {
+        params: { viewId: string };
         response: { success: boolean };
       };
       searchCanvas: {
@@ -990,6 +995,11 @@ async function main() {
 
         renameView: async ({ viewId, name }) => {
           const success = await renameView(wsPath, viewId, name);
+          return { success };
+        },
+
+        setActiveView: async ({ viewId }) => {
+          const success = await setActiveViewId(wsPath, viewId);
           return { success };
         },
 

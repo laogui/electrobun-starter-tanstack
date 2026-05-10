@@ -18,6 +18,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
   rpcGetSettings: vi.fn(),
+  rpcSetActiveView: vi.fn(),
 }));
 
 const interactionMocks = vi.hoisted(() => ({
@@ -49,6 +50,7 @@ vi.mock('@/lib/rpc', () => ({
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
   rpcGetSettings: rpcMocks.rpcGetSettings,
+  rpcSetActiveView: rpcMocks.rpcSetActiveView,
 }));
 
 vi.mock('@/lib/canvasExport', () => ({
@@ -308,6 +310,8 @@ describe('routes/index', () => {
       activeViewId: 'default',
     });
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
+    rpcMocks.rpcSetActiveView.mockReset();
+    rpcMocks.rpcSetActiveView.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -473,8 +477,10 @@ describe('routes/index', () => {
       expect(useCanvasStore.getState()._hydrated).toBe(true);
     });
 
-    expect(useCanvasStore.getState().nodes).toHaveLength(0);
-    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+    // With the sanitizeForPersistence import fixed, the seed path now works:
+    // initial nodes are hydrated and persisted via rpcSaveManifest.
+    expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
   });
 
   it('keeps loading state when load fails and does not focus without rect', async () => {

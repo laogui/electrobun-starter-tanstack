@@ -265,6 +265,14 @@ export async function rpcCreateViewFromTemplate(
   return eb.rpc.request.createViewFromTemplate({ name, templateId });
 }
 
+export async function rpcSetActiveView(viewId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.setActiveView({ viewId });
+}
+
 export async function isRpcAvailable(): Promise<boolean> {
   const eb = await getElectrobun();
   return eb?.rpc != null;

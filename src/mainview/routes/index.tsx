@@ -41,7 +41,13 @@ import {
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
-import { isRpcAvailable, loadCanvas, rpcGetSettings } from '@/lib/rpc';
+import {
+  isRpcAvailable,
+  loadCanvas,
+  rpcGetSettings,
+  rpcSaveManifest,
+} from '@/lib/rpc';
+import { sanitizeForPersistence } from '@/lib/sanitize';
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
@@ -304,17 +310,29 @@ function CanvasComponent() {
     if (hydrated) {
       return;
     }
+    // Track whether this effect invocation has been superseded by a newer one
+    // (e.g. activeViewId changed while loadCanvas was in flight). Without this,
+    // a stale promise could hydrate the wrong canvas data.
+    let cancelled = false;
     loadCanvas(activeViewId)
       .then(async (data) => {
+        if (cancelled) {
+          return;
+        }
         if (data && data.nodes.length > 0) {
           hydrate(data.nodes, data.edges, data.viewport ?? null);
         } else if (await isRpcAvailable()) {
+          if (cancelled) {
+            return;
+          }
           // First run: seed workspace with initialNodes + initialEdges.
           // Don't persist a viewport yet — fitView frames the seed nodes,
           // and the user's first pan/zoom will save the real viewport.
           const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
-          hydrate(initialNodes, initialEdges);
+          if (!cancelled) {
+            hydrate(initialNodes, initialEdges);
+          }
         } else {
           // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
           // the initial data so the canvas is usable for debugging without persistence.
@@ -322,8 +340,13 @@ function CanvasComponent() {
         }
       })
       .catch((error) => {
-        console.error('[persistence] Failed to load canvas:', error);
+        if (!cancelled) {
+          console.error('[persistence] Failed to load canvas:', error);
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [hydrate, hydrated, activeViewId]);
 
   useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes });

@@ -135,6 +135,21 @@ export async function saveWorkspaceConfig(
   await atomicWrite(configPath, JSON.stringify(config, null, 2));
 }
 
+/** Persist the active view selection so it survives app restarts. */
+export async function setActiveViewId(
+  wsPath: string,
+  viewId: string
+): Promise<boolean> {
+  const config = await loadWorkspaceConfig(wsPath);
+  const exists = config.views.some((v) => v.id === viewId);
+  if (!exists) {
+    return false;
+  }
+  config.activeViewId = viewId;
+  await saveWorkspaceConfig(wsPath, config);
+  return true;
+}
+
 /** Add a new view to the workspace. Returns the new view entry. */
 export async function addView(
   wsPath: string,

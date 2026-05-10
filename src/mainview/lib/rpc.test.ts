@@ -79,6 +79,9 @@ describe('rpc', () => {
     await expect(rpc.rpcCreateView('Inbox')).resolves.toBeNull();
     await expect(rpc.rpcDeleteView('view-1')).resolves.toBeNull();
     await expect(rpc.rpcRenameView('view-1', 'Inbox')).resolves.toBeNull();
+    await expect(rpc.rpcSetActiveView('view-1')).resolves.toEqual({
+      success: false,
+    });
     await expect(rpc.rpcSearchCanvas('hello')).resolves.toBeNull();
     await expect(rpc.rpcListTemplates()).resolves.toBeNull();
     await expect(rpc.rpcGetTemplate('kanban')).resolves.toBeNull();

@@ -22,6 +22,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcRenameView: vi.fn(),
   rpcRestoreView: vi.fn(),
   rpcSaveManifest: vi.fn(),
+  rpcSetActiveView: vi.fn(),
 }));
 
 vi.mock('@/lib/rpc', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/rpc', () => ({
   rpcRenameView: rpcMocks.rpcRenameView,
   rpcRestoreView: rpcMocks.rpcRestoreView,
   rpcSaveManifest: rpcMocks.rpcSaveManifest,
+  rpcSetActiveView: rpcMocks.rpcSetActiveView,
 }));
 
 vi.mock('sonner', () => {
@@ -164,6 +166,8 @@ describe('viewSwitcher', () => {
       activeViewId: 'default',
     });
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
+    rpcMocks.rpcSetActiveView.mockReset();
+    rpcMocks.rpcSetActiveView.mockResolvedValue({ success: true });
     rpcMocks.rpcCreateViewFromTemplate.mockResolvedValue({
       id: 'view-tpl',
       name: 'Canvas 3',

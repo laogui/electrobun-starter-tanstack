@@ -25,8 +25,11 @@ import {
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
+import type { TemplateManifest, TemplateMeta } from './templates';
+import { listAllTemplates, loadTemplate } from './templates';
 import {
   addView,
+  addViewFromTemplate,
   atomicWrite,
   initWorkspace,
   listTrash,
@@ -194,6 +197,18 @@ interface CanvasRPC {
           limit?: number;
         };
         response: SearchResult[];
+      };
+      listTemplates: {
+        params: Record<string, unknown>;
+        response: TemplateMeta[];
+      };
+      getTemplate: {
+        params: { id: string };
+        response: TemplateManifest | null;
+      };
+      createViewFromTemplate: {
+        params: { name: string; templateId: string };
+        response: { id: string; name: string; file: string };
       };
     };
     messages: Record<never, unknown>;
@@ -978,6 +993,15 @@ async function main() {
 
         searchCanvas: async ({ query, viewId, limit }) =>
           await searchWorkspace(wsPath, { query, viewId, limit }),
+
+        listTemplates: () => listAllTemplates(),
+
+        getTemplate: ({ id }) => loadTemplate(id),
+
+        createViewFromTemplate: async ({ name, templateId }) => {
+          const result = await addViewFromTemplate(wsPath, name, templateId);
+          return result.entry;
+        },
       },
       messages: {},
     },

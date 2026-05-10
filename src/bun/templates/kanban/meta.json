@@ -1,0 +1,8 @@
+{
+  "id": "kanban",
+  "name": "Kanban Board",
+  "description": "A simple Kanban board with To Do, In Progress, and Done columns. Each column contains sample checklist cards.",
+  "category": "planning",
+  "tags": ["kanban", "project", "task management"],
+  "thumbnail": ""
+}

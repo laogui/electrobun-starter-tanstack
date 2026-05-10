@@ -4,6 +4,11 @@ import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
+import type { CanvasManifest } from './manifest';
+import { saveManifest } from './manifest';
+import { createNote, saveNote } from './notes';
+import { loadTemplate } from './templates';
+
 // Default workspace is inside the app's userData directory
 export function getDefaultWorkspacePath(): string {
   return join(Utils.paths.userData, 'workspace');
@@ -271,4 +276,95 @@ export async function renameView(
   view.name = name;
   await saveWorkspaceConfig(wsPath, config);
   return true;
+}
+
+export interface AddViewFromTemplateResult {
+  entry: ViewEntry;
+  success: boolean;
+}
+
+/**
+ * Create a new view pre-populated from a built-in template.
+ *
+ * 1. Load the template manifest
+ * 2. Create a new view entry in workspace.json
+ * 3. For each card node with a placeholder noteId, generate a real noteId,
+ *    create the corresponding .md file, and rewrite the node data
+ * 4. Write the populated .canvas.json manifest
+ */
+export async function addViewFromTemplate(
+  wsPath: string,
+  name: string,
+  templateId: string
+): Promise<AddViewFromTemplateResult> {
+  const template = loadTemplate(templateId);
+  if (!template) {
+    throw new Error(`Template not found: ${templateId}`);
+  }
+
+  // Create workspace view entry
+  const entry = await addView(wsPath, name);
+
+  // Build a mapping from placeholder noteId → real noteId
+  const noteIdMap = new Map<string, string>();
+  const noteContents = template.noteContents ?? {};
+
+  // Pre-generate real noteIds for every placeholder
+  for (const placeholderId of Object.keys(noteContents)) {
+    const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
+    noteIdMap.set(placeholderId, realId);
+  }
+
+  // Create .md files for each note
+  for (const [placeholderId, realId] of noteIdMap) {
+    const content = noteContents[placeholderId];
+    if (!content) {
+      continue;
+    }
+    const filePath = await createNote(
+      wsPath,
+      realId,
+      content.title,
+      content.displayHint
+    );
+    // Overwrite with template body if provided
+    if (content.body) {
+      const now = new Date().toISOString();
+      await saveNote(
+        wsPath,
+        filePath,
+        {
+          id: realId,
+          title: content.title,
+          displayHint: content.displayHint,
+          createdAt: now,
+          updatedAt: now,
+        },
+        content.body
+      );
+    }
+  }
+
+  // Rewrite nodes: replace placeholder noteIds with real ones
+  const nodes = template.nodes.map((node) => {
+    const noteId = node.data.noteId as string | undefined;
+    if (noteId && noteIdMap.has(noteId)) {
+      return {
+        ...node,
+        data: { ...node.data, noteId: noteIdMap.get(noteId) },
+      };
+    }
+    return node;
+  });
+
+  // Write the canvas manifest
+  const manifest: CanvasManifest = {
+    schema: 'ghostboard-canvas/v1',
+    viewId: entry.id,
+    nodes,
+    edges: template.edges,
+  };
+  await saveManifest(wsPath, entry.file, manifest);
+
+  return { success: true, entry };
 }

@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: (props: Record<string, unknown>) =>
+    createElement('a', { href: props.to as string }, props.children as string),
+}));
 
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -10,6 +16,7 @@ const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
   loadCanvas: vi.fn(),
   rpcCreateView: vi.fn(),
+  rpcCreateViewFromTemplate: vi.fn(),
   rpcDeleteView: vi.fn(),
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
@@ -21,6 +28,7 @@ vi.mock('@/lib/rpc', () => ({
   isRpcAvailable: rpcMocks.isRpcAvailable,
   loadCanvas: rpcMocks.loadCanvas,
   rpcCreateView: rpcMocks.rpcCreateView,
+  rpcCreateViewFromTemplate: rpcMocks.rpcCreateViewFromTemplate,
   rpcDeleteView: rpcMocks.rpcDeleteView,
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
@@ -41,6 +49,8 @@ vi.mock('sonner', () => {
 
 vi.mock('../../../paraglide/messages.js', () => ({
   view_new_canvas: () => 'New Canvas',
+  view_blank_canvas: () => 'Blank Canvas',
+  view_from_template: () => 'From Template',
   menu_note: () => 'Note',
   menu_checklist: () => 'Checklist',
   menu_sticky: () => 'Sticky',
@@ -59,6 +69,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
     `Canvas "${name}" restored`,
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
+  templates_browse_all: () => 'Browse all templates…',
 }));
 
 const resetStore = () => {
@@ -109,6 +120,7 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcSaveManifest.mockReset();
     rpcMocks.loadCanvas.mockReset();
     rpcMocks.rpcCreateView.mockReset();
+    rpcMocks.rpcCreateViewFromTemplate.mockReset();
     rpcMocks.rpcDeleteView.mockReset();
     rpcMocks.rpcRenameView.mockReset();
 
@@ -152,6 +164,10 @@ describe('viewSwitcher', () => {
       activeViewId: 'default',
     });
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
+    rpcMocks.rpcCreateViewFromTemplate.mockResolvedValue({
+      id: 'view-tpl',
+      name: 'Canvas 3',
+    });
   });
 
   afterEach(() => {
@@ -189,14 +205,16 @@ describe('viewSwitcher', () => {
     });
   });
 
-  it('creates a new view and switches to it', async () => {
+  it('creates a blank canvas from the submenu', async () => {
     renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getByText('Default Canvas'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'New Canvas' }));
+    // "New Canvas" is now a submenu trigger
+    fireEvent.click(screen.getByText('New Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Blank Canvas' }));
 
     await waitFor(() => {
       expect(rpcMocks.rpcCreateView).toHaveBeenCalledWith('Canvas 3');
@@ -206,6 +224,30 @@ describe('viewSwitcher', () => {
           .views.some((view: { id: string }) => view.id === 'view-2')
       ).toBe(true);
       expect(useCanvasStore.getState().activeViewId).toBe('view-2');
+    });
+  });
+
+  it('creates a canvas from template via the submenu', async () => {
+    renderViewSwitcher();
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByText('New Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Kanban Board' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcCreateViewFromTemplate).toHaveBeenCalledWith(
+        'Canvas 3',
+        'kanban'
+      );
+      expect(
+        useCanvasStore
+          .getState()
+          .views.some((view: { id: string }) => view.id === 'view-tpl')
+      ).toBe(true);
+      expect(useCanvasStore.getState().activeViewId).toBe('view-tpl');
     });
   });
 
@@ -281,7 +323,8 @@ describe('viewSwitcher', () => {
     });
 
     fireEvent.click(screen.getByText('Default Canvas'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'New Canvas' }));
+    fireEvent.click(screen.getByText('New Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Blank Canvas' }));
 
     await waitFor(() => {
       expect(useCanvasStore.getState().views).toEqual([

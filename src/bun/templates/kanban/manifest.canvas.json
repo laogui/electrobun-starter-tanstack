@@ -1,0 +1,115 @@
+{
+  "nodes": [
+    {
+      "id": "group-todo",
+      "type": "group",
+      "position": { "x": 0, "y": 0 },
+      "style": { "width": 320, "height": 520 },
+      "data": { "label": "📋 To Do" }
+    },
+    {
+      "id": "group-inprogress",
+      "type": "group",
+      "position": { "x": 360, "y": 0 },
+      "style": { "width": 320, "height": 520 },
+      "data": { "label": "🔨 In Progress" }
+    },
+    {
+      "id": "group-done",
+      "type": "group",
+      "position": { "x": 720, "y": 0 },
+      "style": { "width": 320, "height": 520 },
+      "data": { "label": "✅ Done" }
+    },
+    {
+      "id": "card-todo-1",
+      "type": "card",
+      "position": { "x": 20, "y": 60 },
+      "parentId": "group-todo",
+      "extent": "parent",
+      "data": { "noteId": "tpl-todo-1", "type": "checklist" }
+    },
+    {
+      "id": "card-todo-2",
+      "type": "card",
+      "position": { "x": 20, "y": 280 },
+      "parentId": "group-todo",
+      "extent": "parent",
+      "data": { "noteId": "tpl-todo-2", "type": "checklist" }
+    },
+    {
+      "id": "card-ip-1",
+      "type": "card",
+      "position": { "x": 20, "y": 60 },
+      "parentId": "group-inprogress",
+      "extent": "parent",
+      "data": { "noteId": "tpl-ip-1", "type": "checklist" }
+    },
+    {
+      "id": "card-ip-2",
+      "type": "card",
+      "position": { "x": 20, "y": 280 },
+      "parentId": "group-inprogress",
+      "extent": "parent",
+      "data": { "noteId": "tpl-ip-2", "type": "checklist" }
+    },
+    {
+      "id": "card-done-1",
+      "type": "card",
+      "position": { "x": 20, "y": 60 },
+      "parentId": "group-done",
+      "extent": "parent",
+      "data": { "noteId": "tpl-done-1", "type": "checklist" }
+    },
+    {
+      "id": "card-done-2",
+      "type": "card",
+      "position": { "x": 20, "y": 280 },
+      "parentId": "group-done",
+      "extent": "parent",
+      "data": { "noteId": "tpl-done-2", "type": "checklist" }
+    },
+    {
+      "id": "sticky-intro",
+      "type": "sticky",
+      "position": { "x": 380, "y": -120 },
+      "data": {
+        "body": "🎯 Drag cards between columns to track progress. Double-click to edit.",
+        "color": "#fef9c3"
+      }
+    }
+  ],
+  "edges": [],
+  "noteContents": {
+    "tpl-todo-1": {
+      "title": "Research & Planning",
+      "displayHint": "checklist",
+      "body": "- [ ] Define project scope\n- [ ] Gather requirements\n- [ ] Create timeline"
+    },
+    "tpl-todo-2": {
+      "title": "Design Phase",
+      "displayHint": "checklist",
+      "body": "- [ ] Wireframe mockups\n- [ ] Design review\n- [ ] Finalize assets"
+    },
+    "tpl-ip-1": {
+      "title": "Build Core Features",
+      "displayHint": "checklist",
+      "body": "- [x] Set up project\n- [x] Create data models\n- [ ] Implement API"
+    },
+    "tpl-ip-2": {
+      "title": "Testing Setup",
+      "displayHint": "checklist",
+      "body": "- [x] Configure test framework\n- [ ] Write unit tests\n- [ ] Set up CI pipeline"
+    },
+    "tpl-done-1": {
+      "title": "Project Kickoff",
+      "displayHint": "checklist",
+      "body": "- [x] Team meeting\n- [x] Assign roles\n- [x] Set up repository"
+    },
+    "tpl-done-2": {
+      "title": "Environment Setup",
+      "displayHint": "checklist",
+      "body": "- [x] Install dependencies\n- [x] Configure dev tools\n- [x] Document setup steps"
+    }
+  }
+}

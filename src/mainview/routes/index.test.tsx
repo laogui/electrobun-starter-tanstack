@@ -13,6 +13,7 @@ const rpcMocks = vi.hoisted(() => ({
   loadCanvas: vi.fn(),
   rpcSaveManifest: vi.fn(),
   rpcCreateView: vi.fn(),
+  rpcCreateViewFromTemplate: vi.fn(),
   rpcDeleteView: vi.fn(),
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('@/lib/rpc', () => ({
   loadCanvas: rpcMocks.loadCanvas,
   rpcSaveManifest: rpcMocks.rpcSaveManifest,
   rpcCreateView: rpcMocks.rpcCreateView,
+  rpcCreateViewFromTemplate: rpcMocks.rpcCreateViewFromTemplate,
   rpcDeleteView: rpcMocks.rpcDeleteView,
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
@@ -67,6 +69,8 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
   view_new_canvas: () => 'New Canvas',
+  view_blank_canvas: () => 'Blank Canvas',
+  view_from_template: () => 'From Template',
   menu_note: () => 'Note',
   menu_checklist: () => 'Checklist',
   menu_sticky: () => 'Sticky',
@@ -105,6 +109,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
     `Canvas "${name}" restored`,
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
+  templates_browse_all: () => 'Browse all templates…',
 }));
 vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
 vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);
@@ -230,9 +235,14 @@ vi.mock('@/components/canvas/HelperLines', () => ({
 }));
 
 const routeFactoryMock = vi.fn((options) => ({ options }));
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => routeFactoryMock,
-}));
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    createFileRoute: () => routeFactoryMock,
+  };
+});
 
 const resetStore = () => {
   useCanvasStore.getState().reset();

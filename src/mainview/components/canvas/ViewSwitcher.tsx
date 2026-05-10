@@ -1,7 +1,9 @@
 import { Menu } from '@base-ui/react/menu';
+import { Link } from '@tanstack/react-router';
 import {
   BookOpen,
   Check,
+  ChevronRight,
   ChevronUp,
   Download,
   File,
@@ -10,6 +12,7 @@ import {
   Folder,
   Group,
   ImageIcon,
+  Kanban,
   Layers,
   ListChecks,
   NotebookPen,
@@ -26,6 +29,7 @@ import { toast } from 'sonner';
 import {
   isRpcAvailable,
   rpcCreateView,
+  rpcCreateViewFromTemplate,
   rpcDeleteView,
   rpcListViews,
   rpcRenameView,
@@ -147,6 +151,24 @@ export function ViewSwitcher({
     setViews(newViews);
     await handleSwitchView(result.id);
   }, [views, setViews, handleSwitchView]);
+
+  const handleCreateFromTemplate = useCallback(
+    async (templateId: string) => {
+      const name = `Canvas ${String(views.length + 1)}`;
+      const result = (await rpcCreateViewFromTemplate(name, templateId)) as {
+        id: string;
+        name: string;
+      } | null;
+      if (result === null) {
+        return;
+      }
+
+      const newViews = [...views, { id: result.id, name: result.name }];
+      setViews(newViews);
+      await handleSwitchView(result.id);
+    },
+    [views, setViews, handleSwitchView]
+  );
 
   const handleRestore = useCallback(
     async (
@@ -553,13 +575,54 @@ export function ViewSwitcher({
 
               <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 
-              <Menu.Item
-                className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5"
-                onClick={handleCreate}
-              >
-                <Plus className="opacity-50" size={16} />
-                {m.view_new_canvas()}
-              </Menu.Item>
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5">
+                  <Plus className="opacity-50" size={16} />
+                  <span className="flex-1">{m.view_new_canvas()}</span>
+                  <ChevronRight className="opacity-40" size={14} />
+                </Menu.SubmenuTrigger>
+                <Menu.Portal>
+                  <Menu.Positioner
+                    align="start"
+                    className="z-50 outline-hidden"
+                    side="right"
+                    sideOffset={4}
+                  >
+                    <Menu.Popup className="min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                      <Menu.Item
+                        className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                        onClick={handleCreate}
+                      >
+                        <Plus size={16} />
+                        {m.view_blank_canvas()}
+                      </Menu.Item>
+
+                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+
+                      <div className="px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:text-gray-500">
+                        {m.view_from_template()}
+                      </div>
+
+                      <Menu.Item
+                        className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                        onClick={() => handleCreateFromTemplate('kanban')}
+                      >
+                        <Kanban size={16} />
+                        Kanban Board
+                      </Menu.Item>
+
+                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+
+                      <Menu.Item
+                        className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-xs outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/10"
+                        render={<Link to="/templates" />}
+                      >
+                        {m.templates_browse_all()}
+                      </Menu.Item>
+                    </Menu.Popup>
+                  </Menu.Positioner>
+                </Menu.Portal>
+              </Menu.SubmenuRoot>
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>

@@ -15,6 +15,9 @@ const request = {
   deleteView: vi.fn(),
   renameView: vi.fn(),
   searchCanvas: vi.fn(),
+  listTemplates: vi.fn(),
+  getTemplate: vi.fn(),
+  createViewFromTemplate: vi.fn(),
 };
 
 const defineRPC = vi.fn(() => ({ request }));
@@ -77,6 +80,11 @@ describe('rpc', () => {
     await expect(rpc.rpcDeleteView('view-1')).resolves.toBeNull();
     await expect(rpc.rpcRenameView('view-1', 'Inbox')).resolves.toBeNull();
     await expect(rpc.rpcSearchCanvas('hello')).resolves.toBeNull();
+    await expect(rpc.rpcListTemplates()).resolves.toBeNull();
+    await expect(rpc.rpcGetTemplate('kanban')).resolves.toBeNull();
+    await expect(
+      rpc.rpcCreateViewFromTemplate('My Board', 'kanban')
+    ).resolves.toBeNull();
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
   });
 
@@ -117,6 +125,9 @@ describe('rpc', () => {
     await rpc.rpcDeleteView('view-1');
     await rpc.rpcRenameView('view-1', 'Renamed');
     await rpc.rpcSearchCanvas('foo', { viewId: 'v1', limit: 20 });
+    await rpc.rpcListTemplates();
+    await rpc.rpcGetTemplate('kanban');
+    await rpc.rpcCreateViewFromTemplate('My Kanban', 'kanban');
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -154,6 +165,12 @@ describe('rpc', () => {
       query: 'foo',
       viewId: 'v1',
       limit: 20,
+    });
+    expect(request.listTemplates).toHaveBeenCalledWith({});
+    expect(request.getTemplate).toHaveBeenCalledWith({ id: 'kanban' });
+    expect(request.createViewFromTemplate).toHaveBeenCalledWith({
+      name: 'My Kanban',
+      templateId: 'kanban',
     });
   });
 

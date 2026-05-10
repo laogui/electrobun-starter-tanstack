@@ -1,6 +1,7 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -13,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const DATA_TMP_RE = /^.*data\.json\.[\da-f]+\.tmp$/;
 const TRASH_ID_RE = /^trash_/;
+const NOTE_ID_RE = /^note_/;
 
 vi.mock('electrobun/bun', () => ({
   Utils: {
@@ -413,5 +415,103 @@ describe('workspace', () => {
       views: { name: string }[];
     };
     expect(saved.views[0]?.name).toBe('Renamed');
+  });
+
+  it('addViewFromTemplate creates a view with populated notes from the kanban template', async () => {
+    const { initWorkspace, addViewFromTemplate, loadWorkspaceConfig } =
+      await import('./workspace');
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    const result = await addViewFromTemplate(
+      workspaceRoot,
+      'My Kanban',
+      'kanban'
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.entry.name).toBe('My Kanban');
+
+    // Verify the view was added to workspace config
+    const config = await loadWorkspaceConfig(workspaceRoot);
+    const view = config.views.find((v) => v.id === result.entry.id);
+    expect(view).toBeDefined();
+
+    // Verify the canvas manifest was written
+    const manifestPath = join(workspaceRoot, '.ghostboard', result.entry.file);
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      nodes: Array<{ data: { noteId?: string }; type: string }>;
+      edges: unknown[];
+    };
+
+    // Should have 10 nodes (3 groups + 6 cards + 1 sticky)
+    expect(manifest.nodes).toHaveLength(10);
+
+    // Card nodes should have real noteIds (not template placeholders)
+    const cardNodes = manifest.nodes.filter((n) => n.type === 'card');
+    expect(cardNodes).toHaveLength(6);
+    for (const card of cardNodes) {
+      expect(card.data.noteId).toMatch(NOTE_ID_RE);
+    }
+
+    // All noteIds should be unique
+    const noteIds = cardNodes.map((c) => c.data.noteId);
+    expect(new Set(noteIds).size).toBe(6);
+
+    // Verify .md files were created in content/
+    const contentDir = join(workspaceRoot, 'content');
+    const mdFiles = readdirSync(contentDir).filter((f) => f.endsWith('.md'));
+    expect(mdFiles).toHaveLength(6);
+  });
+
+  it('addViewFromTemplate throws for a non-existent template', async () => {
+    const { initWorkspace, addViewFromTemplate } = await import('./workspace');
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await expect(
+      addViewFromTemplate(workspaceRoot, 'Test', 'nonexistent')
+    ).rejects.toThrow('Template not found: nonexistent');
   });
 });

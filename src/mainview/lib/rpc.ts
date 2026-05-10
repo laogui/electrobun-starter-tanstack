@@ -238,6 +238,33 @@ export async function rpcSearchCanvas(
   });
 }
 
+export async function rpcListTemplates() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.listTemplates({});
+}
+
+export async function rpcGetTemplate(id: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.getTemplate({ id });
+}
+
+export async function rpcCreateViewFromTemplate(
+  name: string,
+  templateId: string
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.createViewFromTemplate({ name, templateId });
+}
+
 export async function isRpcAvailable(): Promise<boolean> {
   const eb = await getElectrobun();
   return eb?.rpc != null;

@@ -42,6 +42,12 @@ import * as m from '../../paraglide/messages.js';
 // Types
 // ---------------------------------------------------------------------------
 
+export interface CanvasViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
 export interface FocusedItem {
   data: Record<string, unknown>;
   /** Owning folder id when this item is an embedded folder child. */
@@ -267,7 +273,11 @@ export interface CanvasState {
 
   // UI state
   focusedNode: FocusedItem | null;
-  hydrate: (nodes: Node[], edges: Edge[]) => void;
+  hydrate: (
+    nodes: Node[],
+    edges: Edge[],
+    viewport?: CanvasViewport | null
+  ) => void;
 
   // Layout mode (canvas vs document)
   layoutMode: LayoutMode;
@@ -312,6 +322,7 @@ export interface CanvasState {
   setRenamingFolderId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setSelectedDocumentId: (id: string | null) => void;
+  setViewport: (viewport: CanvasViewport | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
 
   undo: () => void;
@@ -322,6 +333,9 @@ export interface CanvasState {
     updates: Record<string, unknown>
   ) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
+
+  // Persisted ReactFlow viewport (zoom + pan) for the active canvas.
+  viewport: CanvasViewport | null;
   views: Array<{ id: string; name: string }>;
 }
 
@@ -348,6 +362,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   layoutMode: 'canvas',
   selectedDocumentId: null,
   documentSection: 'all',
+  viewport: null,
 
   setLayoutMode: (mode) => {
     if (mode === 'document') {
@@ -504,10 +519,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // -- hydration ------------------------------------------------------------
-  hydrate: (nodes, edges) => {
+  hydrate: (nodes, edges, viewport = null) => {
     set({
       nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
       edges,
+      viewport,
       _hydrated: true,
     });
   },
@@ -516,12 +532,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: [],
       edges: [],
+      viewport: null,
       _hydrated: false,
       focusedNode: null,
       focusedFolder: null,
       clipboard: [],
       _undoRedo: createUndoRedoState(),
     });
+  },
+
+  setViewport: (viewport) => {
+    const current = get().viewport;
+    if (
+      current?.x === viewport?.x &&
+      current?.y === viewport?.y &&
+      current?.zoom === viewport?.zoom
+    ) {
+      return;
+    }
+    set({ viewport });
   },
 
   // -- core actions ---------------------------------------------------------
@@ -654,6 +683,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeViewId: viewId,
       nodes: [],
       edges: [],
+      viewport: null,
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),

@@ -430,11 +430,36 @@ describe('routes/index', () => {
     });
   });
 
-  it('respects an empty manifest as a blank canvas (no auto-seed)', async () => {
-    // Regression: previously the renderer would re-seed `initialNodes` whenever
-    // the loaded manifest was empty, which made "New Canvas → Blank Canvas"
-    // come up populated with demo content. First-run seeding now lives on the
-    // bun side, so an empty manifest from the RPC must remain empty.
+  it('hydrates the saved viewport from loadCanvas into the store', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'loaded-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Loaded Card', content: '', color: '#fff' },
+        },
+      ],
+      edges: [],
+      viewport: { x: 42, y: 84, zoom: 1.25 },
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(useCanvasStore.getState().viewport).toEqual({
+        x: 42,
+        y: 84,
+        zoom: 1.25,
+      });
+    });
+  });
+
+  it('seeds initial nodes when load returns empty data and rpc is available', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(true);
     const module = await import('./index');

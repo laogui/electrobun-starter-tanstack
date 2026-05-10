@@ -187,6 +187,8 @@ function CanvasComponent() {
 
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
+  const savedViewport = useCanvasStore((s) => s.viewport);
+  const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
   const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
@@ -304,15 +306,15 @@ function CanvasComponent() {
     }
     loadCanvas(activeViewId)
       .then(async (data) => {
-        if (data) {
-          // Respect what the manifest contains — including empty arrays for
-          // canvases the user just created via "New Canvas → Blank Canvas".
-          // First-run seeding for the default view now happens on the bun
-          // side in `initWorkspace`.
-          hydrate(data.nodes, data.edges);
+        if (data && data.nodes.length > 0) {
+          hydrate(data.nodes, data.edges, data.viewport ?? null);
         } else if (await isRpcAvailable()) {
-          // RPC is up but no manifest exists for this view — start blank.
-          hydrate([], []);
+          // First run: seed workspace with initialNodes + initialEdges.
+          // Don't persist a viewport yet — fitView frames the seed nodes,
+          // and the user's first pan/zoom will save the real viewport.
+          const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
+          await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
+          hydrate(initialNodes, initialEdges);
         } else {
           // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
           // the initial data so the canvas is usable for debugging without persistence.
@@ -530,10 +532,11 @@ function CanvasComponent() {
         connectionMode={ConnectionMode.Loose}
         connectionRadius={30}
         defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
+        defaultViewport={savedViewport ?? undefined}
         edges={edges}
         edgeTypes={edgeTypes}
         elevateEdgesOnSelect
-        fitView
+        fitView={!savedViewport}
         maxZoom={4}
         minZoom={0.1}
         nodes={nodesWithState}
@@ -547,6 +550,9 @@ function CanvasComponent() {
         onEdgesChange={onEdgesChange}
         onInit={(instance) => {
           rfInstance.current = instance;
+        }}
+        onMoveEnd={(_, viewport) => {
+          setViewport(viewport);
         }}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}

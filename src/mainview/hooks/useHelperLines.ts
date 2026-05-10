@@ -85,12 +85,21 @@ export function useHelperLines() {
         setNodes((nds) => {
           let next = applyCanvasNodeChanges(changes, nds);
 
+          // Exempt the parent of the resized node so a group containing the
+          // active child isn't pushed by repulsion (which would feed back into
+          // the child via `extent: 'parent'` and cause flicker).
+          const exemptIds = new Set<string>();
+          const active = next.find((n) => n.id === resizeChange.id);
+          if (active?.parentId) {
+            exemptIds.add(active.parentId);
+          }
+
           // Apply repulsion for resize
           next = applyRepulsion({
             nodes: next,
             activeNodeId: resizeChange.id,
             pushedOrigins: resizePushedRef.current,
-            exemptIds: new Set<string>(),
+            exemptIds,
             gap: 20,
           });
 

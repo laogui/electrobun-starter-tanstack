@@ -134,4 +134,131 @@ describe('sanitizeForPersistence', () => {
     expect(data.detached).toBe(true);
     expect(data.title).toBe('Detached note');
   });
+
+  it('strips previewUrl and thumbnailUrl from top-level data', () => {
+    const node = createNode({
+      type: 'image',
+      data: {
+        title: 'Pic',
+        imageUrl: '',
+        imageFile: 'attachments/img_abc.png',
+        thumbnailFile: 'attachments/thumb_abc.jpg',
+        previewUrl: 'blob:http://localhost/runtime',
+        thumbnailUrl: 'data:image/jpeg;base64,xxx',
+        color: '#FFFFFF',
+      },
+    });
+
+    const result = sanitizeForPersistence([node], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+
+    expect(data).not.toHaveProperty('previewUrl');
+    expect(data).not.toHaveProperty('thumbnailUrl');
+    expect(data.imageFile).toBe('attachments/img_abc.png');
+    expect(data.thumbnailFile).toBe('attachments/thumb_abc.jpg');
+  });
+
+  it('recursively strips runtime fields from folder children', () => {
+    const folder = createNode({
+      type: 'folder',
+      data: {
+        title: 'Folder',
+        children: [
+          {
+            id: 'child-1',
+            type: 'card',
+            data: {
+              type: 'text',
+              title: 'Note',
+              content: '',
+              color: '#FFFFFF',
+              isHidden: true,
+              isDropTarget: true,
+              previewUrl: 'blob:1',
+              thumbnailUrl: 'blob:2',
+            },
+          },
+          {
+            id: 'child-2',
+            type: 'image',
+            data: {
+              title: 'Pic',
+              imageUrl: '',
+              color: '#FFFFFF',
+              isHidden: true,
+              previewUrl: 'data:image/png;base64,zzz',
+              thumbnailUrl: 'data:image/jpeg;base64,yyy',
+            },
+          },
+        ],
+      },
+    });
+
+    const result = sanitizeForPersistence([folder], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+    const children = data.children as Array<{
+      id: string;
+      data: Record<string, unknown>;
+    }>;
+
+    expect(children).toHaveLength(2);
+    for (const child of children) {
+      expect(child.data).not.toHaveProperty('isHidden');
+      expect(child.data).not.toHaveProperty('isDropTarget');
+      expect(child.data).not.toHaveProperty('previewUrl');
+      expect(child.data).not.toHaveProperty('thumbnailUrl');
+    }
+    expect(children[0]?.data.title).toBe('Note');
+    expect(children[1]?.data.title).toBe('Pic');
+  });
+
+  it('preserves folder-child non-runtime metadata on recursion', () => {
+    const folder = createNode({
+      type: 'folder',
+      data: {
+        title: 'Folder',
+        children: [
+          {
+            id: 'child-1',
+            noteId: 'note-1',
+            type: 'card',
+            data: {
+              type: 'text',
+              title: 'Keep me',
+              content: 'body',
+              color: '#FFFFFF',
+            },
+          },
+        ],
+      },
+    });
+
+    const result = sanitizeForPersistence([folder], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+    const children = data.children as Array<{
+      id: string;
+      noteId?: string;
+      type?: string;
+      data: Record<string, unknown>;
+    }>;
+
+    expect(children[0]?.id).toBe('child-1');
+    expect(children[0]?.noteId).toBe('note-1');
+    expect(children[0]?.type).toBe('card');
+    expect(children[0]?.data.content).toBe('body');
+  });
+
+  it('leaves non-array data.children untouched (defensive)', () => {
+    const folder = createNode({
+      type: 'folder',
+      data: {
+        title: 'Folder',
+        children: 'unexpected-shape',
+      },
+    });
+
+    const result = sanitizeForPersistence([folder], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+    expect(data.children).toBe('unexpected-shape');
+  });
 });

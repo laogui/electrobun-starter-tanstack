@@ -4,16 +4,20 @@ import { useCallback, useRef, useState } from 'react';
 
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
 import {
-  canAbsorbIntoFolder,
-  GROUP_CHILD_TYPES,
-  sortNodesByParent,
-} from '@/lib/canvasUtils';
+  isCanvasContentNode,
+  isGroupChildNode,
+} from '@/lib/canvasNodePredicates';
+import { canAbsorbIntoFolder, sortNodesByParent } from '@/lib/canvasUtils';
 import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
 import { useCanvasStore } from '@/store/canvasStore';
 
-/** Node types that can be placed inside a Group or absorbed into a Folder. */
-const CONTENT_TYPES = new Set(['card', 'image', 'sticky']);
-const isContentNode = (node: Node) => CONTENT_TYPES.has(node.type ?? '');
+/**
+ * "Content" here means a node that can be placed inside a Group or absorbed
+ * into a Folder. Sourced from the canvas node registry via
+ * `isCanvasContentNode`, so adding `asset` / `link` later flows through
+ * automatically.
+ */
+const isContentNode = (node: Node) => isCanvasContentNode(node.type);
 
 export function useNodeDrag() {
   const setNodes = useCanvasStore((s) => s.setNodes);
@@ -63,7 +67,7 @@ export function useNodeDrag() {
     (_, node) => {
       saveSnapshot();
       // Detach from parent group if the node is a group child type
-      if (!(node.parentId && GROUP_CHILD_TYPES.has(node.type ?? ''))) {
+      if (!(node.parentId && isGroupChildNode(node.type))) {
         return;
       }
       const abs =

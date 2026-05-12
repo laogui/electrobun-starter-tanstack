@@ -21,11 +21,11 @@ import {
   IMAGE_H,
   IMAGE_W,
   STICKY_COLORS,
-  STICKY_H,
-  STICKY_W,
 } from '@/lib/canvasConstants';
+import { buildNewNodeSpec } from '@/lib/canvasNodeRegistry';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
-import { buildAbsoluteRects, type Size } from '@/lib/collision';
+import { buildAbsoluteRects } from '@/lib/collision';
+import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import { rpcDeleteNote } from '@/lib/rpc';
 import type { UndoRedoState } from '@/lib/undoRedo';
@@ -74,11 +74,6 @@ export interface AddConnectionOptions {
   reverseVisualDirection?: boolean;
 }
 
-interface NodeSpec {
-  base: Omit<Node, 'id' | 'position'>;
-  size: Size;
-}
-
 interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
@@ -123,80 +118,9 @@ function folderChildToDetachedNode(
   };
 }
 
-function buildNewNodeSpec(
-  type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
-): NodeSpec {
-  switch (type) {
-    case 'group': {
-      const color =
-        GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
-      return {
-        size: { width: 500, height: 300 },
-        base: {
-          type: 'group',
-          style: { width: 500, height: 300 },
-          data: { label: m.default_new_group_label(), color },
-        },
-      };
-    }
-    case 'sticky': {
-      const color =
-        STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
-      return {
-        size: { width: STICKY_W, height: STICKY_H },
-        base: {
-          type: 'sticky',
-          style: { width: STICKY_W, height: STICKY_H },
-          data: { content: '', color },
-        },
-      };
-    }
-    case 'folder': {
-      return {
-        size: { width: FOLDER_W, height: FOLDER_H },
-        base: {
-          type: 'folder',
-          style: { width: FOLDER_W, height: FOLDER_H },
-          data: {
-            title: m.default_folder_title(),
-            subtitle: '',
-            children: [],
-          },
-        },
-      };
-    }
-    case 'image': {
-      return {
-        size: { width: IMAGE_W, height: IMAGE_H },
-        base: {
-          type: 'image',
-          style: { width: IMAGE_W, height: IMAGE_H },
-          data: { imageUrl: '', title: '', color: '#FFFFFF' },
-        },
-      };
-    }
-    case 'checklist': {
-      return {
-        size: { width: CARD_W, height: CARD_H },
-        base: {
-          type: 'card',
-          style: { width: CARD_W, height: CARD_H },
-          data: { type: 'checklist', title: '', items: [], color: '#FFFFFF' },
-        },
-      };
-    }
-    default: {
-      return {
-        size: { width: CARD_W, height: CARD_H },
-        base: {
-          type: 'card',
-          style: { width: CARD_W, height: CARD_H },
-          data: { type: 'text', title: '', content: '', color: '#FFFFFF' },
-        },
-      };
-    }
-  }
-}
+// `buildNewNodeSpec` (and its result shape) now lives in
+// `@/lib/canvasNodeRegistry` so all node defaults (size, data, type) come from
+// a single registry.
 
 export type LayoutMode = 'canvas' | 'document';
 
@@ -256,7 +180,7 @@ export interface CanvasState {
 
   // Actions – node CRUD
   createNode: (
-    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky',
+    type: CreatableCanvasNodeKind,
     rfInstance: ReactFlowInstance<any, any> | null,
     options?: CreateNodeOptions
   ) => void;

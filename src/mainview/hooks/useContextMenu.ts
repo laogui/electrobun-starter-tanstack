@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
+import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
@@ -12,14 +13,7 @@ interface UseContextMenuOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
-type NewNodeType =
-  | 'card'
-  | 'checklist'
-  | 'folder'
-  | 'group'
-  | 'image'
-  | 'sticky';
-const NEW_NODE_ACTIONS: Record<string, NewNodeType> = {
+const NEW_NODE_ACTIONS: Record<string, CreatableCanvasNodeKind> = {
   'new-note': 'card',
   'new-folder': 'folder',
   'new-checklist': 'checklist',
@@ -27,6 +21,25 @@ const NEW_NODE_ACTIONS: Record<string, NewNodeType> = {
   'new-group': 'group',
   'new-image': 'image',
 };
+
+type NodeContextTarget = 'card' | 'folder' | 'group' | 'sticky' | 'image';
+
+/**
+ * Map a React Flow `node.type` to the context-menu `target` discriminator.
+ * Anything we don't have a dedicated menu for falls back to `'card'` (the
+ * card menu is the most generic content menu).
+ */
+const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
+  folder: 'folder',
+  group: 'group',
+  sticky: 'sticky',
+  image: 'image',
+};
+
+function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {
+  const mapped = type ? NODE_CONTEXT_TARGET[type] : undefined;
+  return mapped ?? 'card';
+}
 
 export function useContextMenu({
   onDeleteNodes,
@@ -59,16 +72,7 @@ export function useContextMenu({
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      target:
-        node.type === 'folder'
-          ? 'folder'
-          : node.type === 'group'
-            ? 'group'
-            : node.type === 'sticky'
-              ? 'sticky'
-              : node.type === 'image'
-                ? 'image'
-                : 'card',
+      target: nodeContextMenuTarget(node.type),
       nodeId: node.id,
     });
   }, []);

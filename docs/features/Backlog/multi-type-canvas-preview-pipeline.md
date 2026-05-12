@@ -58,7 +58,9 @@ AssetNode / LinkNode renderer
 attachments/ local files + manifest metadata
 ```
 
-第一阶段先做 `link` 和 `asset.kind = "file"`，把节点模型、创建入口、持久化和 focused view 跑通；第二阶段再接入 `video` / `audio` 播放和缩略图。
+开发顺序需要先补一层地基：先做 `CanvasNodeKind` / `AssetKind` / node spec map / predicates / manifest 序列化边界，让现有节点行为保持不变；再做 `link` 和 `asset.kind = "file"`，把节点模型、创建入口、持久化和 focused view 跑通；最后再接入 `video` / `audio` 播放和缩略图。
+
+第一阶段的首个 PR 不应改变产品行为。它只负责把当前散落的节点类型、默认尺寸、创建默认数据、`card || image` 判断收敛到共享模块，为后续 `link` / `asset` 接入留出稳定接口。
 
 ---
 
@@ -73,6 +75,7 @@ attachments/ local files + manifest metadata
 5. 新类型能复用现有 undo / redo、持久化、folder / group、搜索的架构。
 6. 用 registry / spec map 收敛节点尺寸、默认数据、创建逻辑和渲染组件。
 7. 用 `isContentNode()` 等工具函数替代散落的 `'card' | 'image'` 硬编码判断。
+8. 在新增类型前先完成 foundation PR，确保现有 card / image / sticky / folder / group 行为不变。
 
 ### 3.2 非目标
 
@@ -122,13 +125,44 @@ attachments/ local files + manifest metadata
   - 泛化 `saveAttachment`
   - 泛化 `loadAttachment`
   - 保存 manifest 时去掉运行时 URL，只保留文件引用
-  - 加载 manifest 时 hydrate 可预览 URL
+  - 加载 manifest 时只 hydrate 轻量缩略图或缺失状态，完整附件在 focused view / open action 中懒加载
 
 - `src/mainview/lib/canvasUtils.ts`
   - 扩展 `GROUP_CHILD_TYPES`
   - 扩展 `FOLDER_CHILD_TYPES`
   - 扩展 document mode 的树结构时再纳入 asset / link
   - 抽出 `isContentNode()`、`isAssetNode()`、`isDocumentNode()` 等判断函数
+
+- `src/mainview/lib/sanitize.ts`
+  - 递归清理 `previewUrl`、`thumbnailUrl` 等运行时字段
+  - folder child 中的 asset / link 也必须经过同一套 manifest 序列化边界
+  - 当前实现只清理 top-level `data`，folder child 完全没经过 sanitize；Phase 0 必须补
+
+额外散落点（与方案核心列表平级，应在 Phase 0 一起收敛，否则 `asset` / `link` 接入时仍会出现行为不一致）：
+
+- `src/mainview/hooks/useNodeCreation.ts`
+  - 复制了一份 `'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'` union
+  - 应改为引用共享 `CanvasNodeKind`
+
+- `src/mainview/hooks/useNodeDrag.ts`
+  - 本地常量 `CONTENT_TYPES = new Set(['card', 'image', 'sticky'])`
+  - 应改走 `isGroupChildNode()` / `isFolderChildNode()` / `isCanvasContentNode()`
+
+- `src/mainview/lib/resolvePlacement.ts`
+  - 重复定义了第二份 `GROUP_CHILD_TYPES`
+  - 应统一从 `canvasNodePredicates` 导入，避免两份 set 漂移
+
+- `src/mainview/lib/collision.ts`
+  - 按 `node.type` switch 返回 `CARD_W` / `IMAGE_W` / `FOLDER_W` / `STICKY_W` / 默认 group 尺寸
+  - 应改为消费 `getNodeSpec(type).size`，registry 是单一尺寸来源
+
+- `src/mainview/lib/canvasUtils.ts`
+  - `DocumentTreeNode.kind` 与常量 `DOC_TREE_TYPES` 都硬编码 `'folder' | 'card' | 'image'`
+  - Phase 0 不扩展 document mode，但 `DOC_TREE_TYPES` 应改走 predicate；`kind` union 等到 Phase 4 再扩
+
+- `src/mainview/lib/searchTypes.ts`
+  - `SearchResultKind` 已含 `'sticky' | 'folder' | 'group' | 'image' | 'card' | 'edge' | 'view'`
+  - Phase 0 不动；Phase 4 再补 `'asset'` / `'link'`
 
 ---
 
@@ -139,7 +173,7 @@ attachments/ local files + manifest metadata
 `asset` 覆盖本地文件类内容。
 
 ```ts
-type AssetKind = 'video' | 'audio' | 'pdf' | 'file';
+type AssetKind = 'video' | 'audio' | 'file';
 
 interface AssetNodeData {
   kind: AssetKind;
@@ -168,6 +202,7 @@ interface AssetNodeData {
 
 - MVP 不把 `link` 放进 `AssetKind`。链接没有本地附件生命周期，应单独建模。
 - MVP 也不迁移现有 `image`。图片未来可以并入 `asset.kind = "image"`，但不作为第一阶段目标。
+- MVP 不把 PDF 提升为独立 `AssetKind`。PDF 先作为 `kind: "file"` + `mimeType: "application/pdf"` 处理；等要做 PDF 首页缩略图或内嵌 PDF viewer 时，再评估是否把 PDF 提升为一等类型。
 - 如果后续迁移图片，应先实现兼容读取：旧 manifest 的 `type: "image"` 继续渲染，新创建的图片才逐步走 `type: "asset"`。
 
 ### 5.2 Link 节点
@@ -231,6 +266,7 @@ type CanvasNodeKind =
 type CreateAssetOptions = {
   assetKind: AssetKind;
   file?: File;
+  sourcePath?: string;
 };
 
 type CreateLinkOptions = {
@@ -246,6 +282,36 @@ createNode('asset', { assetKind: 'video', file });
 createNode('asset', { assetKind: 'audio', file });
 createNode('link', { url });
 ```
+
+`file` 适合小文件和浏览器拖拽场景；`sourcePath` 是后续给主进程复制大文件预留的路径，避免 renderer 为大视频 / 音频长期持有完整 base64。
+
+推荐的 `classifyFile()` 与 `getAssetDisplayTitle()` 签名（Phase 0 落地）：
+
+```ts
+interface ClassifyFileInput {
+  name: string;
+  type?: string;
+  size?: number;
+}
+
+interface ClassifyFileResult {
+  kind: AssetKind;
+  mimeType: string;
+  isPdf: boolean;
+}
+
+function classifyFile(input: File | ClassifyFileInput): ClassifyFileResult;
+
+function getAssetDisplayTitle(
+  data: Pick<AssetNodeData, 'title' | 'fileName' | 'mimeType'>
+): string;
+```
+
+约定：
+
+- `classifyFile()` 优先看 MIME，回退到扩展名；未知一律归 `file`，但保留原 MIME 字符串。
+- PDF 在 MVP 不是独立 `AssetKind`，由 `isPdf` 标记，便于后续 PDF 首页缩略图分支。
+- `getAssetDisplayTitle()` 的回退顺序为 `title` → `fileName` → MIME 友好名 → `'Untitled'`。
 
 ### 5.5 Node registry / spec map
 
@@ -280,6 +346,8 @@ const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
 
 第一步可以只让 `buildNewNodeSpec()` 从 registry 读取尺寸和默认数据；后续再从 registry 派生 `nodeTypes`、`readOnlyNodeTypes`、菜单项和 document mode 支持矩阵。
 
+Phase 0 不要顺手把 `nodeTypes` / `readOnlyNodeTypes` 改成 spec 派生；这两个对象会被 React Flow 直接用作组件注册，自动派生需要再加一层稳定引用与 React.memo 配合，超出 foundation PR 的范围。
+
 ---
 
 ## 6. 内容生命周期
@@ -302,16 +370,18 @@ link: 规范化 URL，生成基础 link metadata
   ↓
 manifest 保存轻量引用
   ↓
-下次打开时 hydrate runtime URL
+下次打开时 hydrate metadata / thumbnail / missing 状态
   ↓
 画布缩略态渲染
   ↓
-点击进入 focused resolver
+点击进入 focused resolver，按需懒加载完整附件
 ```
 
 这个流程的关键是：**类型解析发生在创建和 hydrate 时，不要在点击放大时才猜类型**。
 
 创建时允许先生成节点，再异步补齐 metadata / thumbnail。缩略图生成、链接 unfurl、波形提取都不能阻塞基础节点落到画布。
+
+完整附件不应作为启动 hydrate 的默认动作。图片可以沿用现有兼容路径；新 `asset` 节点默认只在 focused view、打开文件、或生成缩略图时读取完整资源，避免画布启动时把大视频 / 音频全部读进 renderer。
 
 ---
 
@@ -327,8 +397,8 @@ AssetNode
     ImageThumbnail
     VideoThumbnail
     AudioThumbnail
-    PdfThumbnail
     FileThumbnail
+      PdfFileState
 
 LinkNode
   LinkThumbnail
@@ -522,19 +592,17 @@ data.kind === 'video'
 ```tsx
 function AssetFocusedView({ data }: { data: AssetNodeData }) {
   switch (data.kind) {
-    case 'image':
-      return <img alt={data.title} src={data.previewUrl} />;
     case 'video':
-      return <video controls src={data.previewUrl} />;
+      return <VideoFocusedView data={data} />;
     case 'audio':
       return <AudioFocusedView data={data} />;
-    case 'pdf':
-      return <PdfFocusedView data={data} />;
     case 'file':
       return <FileFocusedView data={data} />;
   }
 }
 ```
+
+MVP 中图片仍由现有 `ImageNode` 处理；PDF 是 `kind: "file"` 的一个 MIME 分支，不在第一阶段作为独立 `kind` 分发。
 
 ### 9.2 聚焦视图职责
 
@@ -617,9 +685,10 @@ openAttachment(filePath): Promise<{ success: boolean }>
 
 加载 manifest 时：
 
-- 如果 `attachmentFile` 存在，读取为 runtime `previewUrl`。
-- 如果 `thumbnailFile` 存在，读取为 runtime `thumbnailUrl`。
+- 如果 `thumbnailFile` 存在，读取为 runtime `thumbnailUrl`，供画布缩略态使用。
+- 如果只有 `attachmentFile`，启动 hydrate 不默认读取完整附件；节点保留 metadata，focused view 或 open action 再按需加载。
 - 如果文件不存在，保留节点但显示 missing attachment 状态。
+- `previewUrl` 只代表当前会话的运行时 URL，必须可重新生成，不能作为数据源。
 
 ### 10.3 附件保存 RPC 泛化
 
@@ -657,6 +726,13 @@ saveAttachmentFile({
 ```
 
 长期目标是让大文件走主进程文件复制或二进制流，不让 renderer 长期持有完整 base64。
+
+实现约束：
+
+- data URL 路径只用于小文件；需要设置明确大小上限，超过上限时返回可恢复错误。
+- `sourcePath` / `filePath` 必须是 workspace 内允许范围，Bun 侧拒绝绝对路径、`../`、空路径和 workspace 外路径。
+- `openAttachment(filePath)` 只能打开 manifest 中保存的相对附件路径，renderer 不直接拼绝对路径。
+- `mimeType` 和扩展名需要 allowlist / fallback；未知类型保存为 `file`，不尝试执行或解析。
 
 ---
 
@@ -735,6 +811,33 @@ MVP 搜索字段：
 
 ## 13. MVP 分期
 
+### Phase 0：Canvas content foundation
+
+目标：
+
+- 新增 `contentTypes.ts`，集中 `CanvasNodeKind`、`AssetKind`、`AssetNodeData`、`LinkNodeData`、`classifyFile()`、`getAssetDisplayTitle()`。
+- 新增 `canvasNodeRegistry.ts`，用 spec map 管理节点默认尺寸、默认 data、创建语义；现有 6 类全部进 registry，`asset` / `link` 写好 spec 但不暴露创建入口。
+- 新增 `canvasNodePredicates.ts`，集中 `isCanvasContentNode()`、`isFolderChildNode()`、`isGroupChildNode()`、`isFocusableNode()`。MVP 中 `isFocusableNode()` 等价于 `node.type === 'card' || node.type === 'image'`。
+- 让 `canvasStore` 的 `buildNewNodeSpec()` 改为从 registry 读取，现有产品行为保持不变。
+- 把 `useNodeCreation` / `useContextMenu` / `useNodeDrag` / `resolvePlacement` / `collision` / `canvasUtils` 中的散落 union 与 set 收敛到共享类型 / predicates / registry。
+- 递归清理 manifest 运行时字段，覆盖 top-level nodes 和 folder children；`RUNTIME_DATA_KEYS` 增补 `previewUrl` / `thumbnailUrl`。
+
+不在 Phase 0 范围：
+
+- 不动 `nodeTypes` / `readOnlyNodeTypes` 的静态注册形态。
+- 不扩展 `SearchResultKind`、`DocumentTreeNode.kind`。
+- 不改任何附件 RPC、不接 `LinkNode` / `AssetNode` UI。
+
+验收标准：
+
+- 现有 `card` / `checklist` / `sticky` / `image` / `folder` / `group` 创建行为不变。
+- 现有 folder / group 拖拽、copy / paste、undo / redo 行为不变。
+- `classifyFile()` 能正确识别 image / video / audio / pdf / 未知 → `file`。
+- `isFocusableNode()` 覆盖现有 `card` / `image`，并为 `asset` / `link` 留出 true 分支。
+- `sanitizeForPersistence()` 不会把 `previewUrl` / `thumbnailUrl` 写进 top-level node 或 folder child。
+- `getNodeSpec(type).size` 与 `collision.ts` 给出的尺寸完全一致（registry 是单一来源）。
+- 既有 `canvasStore.test.ts` 覆盖的 image 折叠 / 还原、folder child detach 用例无需修改语义即可通过。
+
 ### Phase 1A：Link 节点基础闭环
 
 目标：
@@ -745,6 +848,7 @@ MVP 搜索字段：
 - 支持基础 link card
 - 聚焦视图可打开链接
 - 暂不依赖网络 unfurl
+- manifest 保存稳定 URL metadata，不保存抓取失败等 transient 状态
 
 验收标准：
 
@@ -752,6 +856,7 @@ MVP 搜索字段：
 - 节点至少显示 title / host / url fallback。
 - 点击聚焦后可以打开链接。
 - 网络不可用时 link 节点仍完整可用。
+- 旧 manifest 没有 link 节点时行为不变，新 manifest 有 link 节点时能正常 hydrate。
 
 ### Phase 1B：Asset file 基础闭环
 
@@ -761,10 +866,11 @@ MVP 搜索字段：
 - 支持拖入任意文件
 - 支持保存附件
 - 支持 manifest 轻量保存
-- 支持 hydrate runtime URL
+- 支持 hydrate metadata / missing 状态；完整附件按需加载
 - 支持画布缩略态
 - 支持聚焦视图展示文件信息、打开文件
 - `file` 菜单项从 disabled 改为可用
+- `openAttachment()` 只能打开 workspace 内相对附件路径
 
 验收标准：
 
@@ -774,6 +880,7 @@ MVP 搜索字段：
 - 可通过系统默认应用打开文件。
 - 重启应用后文件仍可定位。
 - manifest 不包含大体积 data URL。
+- 删除 / 移动 folder child 不会丢失 asset/link 数据，也不会写入运行时 URL。
 
 ### Phase 2：Video / Audio 支持
 
@@ -784,6 +891,7 @@ MVP 搜索字段：
 - 视频首帧缩略图尽力生成
 - 音频先显示图标、标题、时长
 - missing attachment 状态
+- focused view 才加载完整媒体；画布态不创建完整播放器
 
 验收标准：
 
@@ -793,6 +901,7 @@ MVP 搜索字段：
 - 拖入音频后画布出现音频卡。
 - 双击后进入音频播放器。
 - 重启应用后视频 / 音频仍可播放。
+- 启动 hydrate 不会把所有视频 / 音频完整读入 renderer。
 
 ### Phase 3：缩略图质量与 Link Unfurl
 
@@ -837,9 +946,10 @@ MVP 搜索字段：
 
 缓解：
 
-- MVP 可以限制单文件大小。
-- 后续新增二进制保存 RPC，避免把大文件完整 base64 传给 renderer。
+- MVP 必须限制 data URL 路径的单文件大小；超过上限时提示用户稍后支持大文件导入，而不是继续读入内存。
+- 后续新增二进制保存 RPC 或主进程文件复制，避免把大文件完整 base64 传给 renderer。
 - 视频缩略图使用 object URL，原文件保存走更底层的文件复制能力。
+- 启动 hydrate 只加载缩略图 / metadata，不默认加载完整 `attachmentFile`。
 
 ### 14.2 缩略图生成失败
 
@@ -874,6 +984,19 @@ MVP 搜索字段：
 - 抽出 `serializeNodeDataForManifest` / `hydrateNodeDataFromManifest`。
 - 把 asset / link 的保存、hydrate 做成可注册 handler。
 
+### 14.5 本地附件路径安全
+
+风险：
+
+- renderer 如果能传任意路径给 `openAttachment()` / `loadAttachment()`，就可能打开 workspace 外文件或路径穿越。
+
+缓解：
+
+- manifest 只保存 workspace 内相对附件路径。
+- Bun 侧规范化路径后校验必须位于 workspace 的 `attachments/` 下。
+- 拒绝绝对路径、`../`、空路径和符号链接逃逸。
+- `openAttachment()` 不接受 URL，不执行文件，只交给系统默认应用打开已保存附件。
+
 ---
 
 ## 15. 建议代码结构
@@ -897,7 +1020,13 @@ src/mainview/lib/canvasNodePredicates.ts
   isCanvasContentNode()
   isGroupChildNode()
   isFolderChildNode()
+  isFocusableNode()
   isDocumentNode()
+
+src/mainview/lib/canvasNodeSerialization.ts
+  serializeNodeForManifest()
+  serializeNodeDataForManifest()
+  stripRuntimeAssetFields()
 
 src/mainview/lib/thumbnail.ts
   createImageThumbnail()
@@ -911,8 +1040,10 @@ src/mainview/components/canvas/nodes/LinkFocusedView.tsx
 
 src/bun/attachments.ts
   saveAttachment()
+  saveAttachmentFile()
   loadAttachment()
   openAttachment()
+  assertWorkspaceAttachmentPath()
 
 src/bun/linkPreview.ts
   unfurlLink()
@@ -937,10 +1068,11 @@ interface CanvasContentRenderer<TData> {
 ### Unit tests
 
 - `classifyFile()` 正确识别 image / video / audio / pdf / file。
+- PDF 在 MVP 中分类为 `asset.kind = "file"`，同时保留 `mimeType: "application/pdf"`。
 - `CanvasNodeKind` / `AssetKind` 覆盖创建入口需要的类型。
 - `CANVAS_NODE_SPECS` 能返回 asset / link 的默认尺寸与默认 data。
 - `isCanvasContentNode()` / `isFolderChildNode()` 覆盖 card / image / asset / link。
-- `sanitizeForPersistence()` 会移除 `previewUrl` / `thumbnailUrl`。
+- `sanitizeForPersistence()` / `serializeNodeForManifest()` 会递归移除 `previewUrl` / `thumbnailUrl`，包括 folder child。
 - `buildNewNodeSpec()` 能创建 `asset` / `link` 默认节点。
 - `searchCurrentView()` 能搜索 asset / link 元数据。
 
@@ -955,7 +1087,8 @@ interface CanvasContentRenderer<TData> {
 - `saveAttachment` 能保存非图片 MIME。
 - `loadAttachment` 能返回正确 data URL。
 - manifest 保存时不写入大 base64。
-- manifest 加载时能 hydrate attachment 和 thumbnail。
+- manifest 加载时能 hydrate thumbnail / missing 状态，不默认读取完整大附件。
+- `openAttachment()` 拒绝绝对路径、`../` 和 workspace 外路径。
 
 ### Manual QA
 
@@ -971,13 +1104,100 @@ interface CanvasContentRenderer<TData> {
 
 第一版建议只承诺：
 
-1. 先做 `link` 基础 URL card，不依赖 unfurl。
-2. 再做 `asset.kind = "file"`，跑通附件保存、manifest、hydrate、打开文件。
-3. 建立 `CanvasNodeKind` / `AssetKind` / node spec map，减少散落 union 和 switch。
-4. 抽出 `isCanvasContentNode()`、`isFolderChildNode()`、`isGroupChildNode()`，替代硬编码 `card || image`。
+1. 先做 foundation PR：`CanvasNodeKind` / `AssetKind` / node spec map / predicates / 递归 runtime 字段清理，现有行为不变。
+2. 再做 `link` 基础 URL card，不依赖 unfurl。
+3. 再做 `asset.kind = "file"`，跑通附件保存、manifest、metadata hydrate、打开文件。
+4. 抽出 `isCanvasContentNode()`、`isFolderChildNode()`、`isGroupChildNode()`、`isFocusableNode()`，替代硬编码 `card || image`。
 5. 视频 / 音频作为第二阶段，画布态只显示缩略卡，播放器只放 focused view。
 6. PDF 先显示文件卡，PDF 首页缩略图放到增强。
 7. 不迁移现有 `image` 节点。
 8. manifest 坚决不保存大 base64。
+9. 新 `asset` 启动 hydrate 不默认读取完整附件；完整文件读取只发生在 focused view、open action 或缩略图生成路径。
+10. Phase 0 不要顺手做 `nodeTypes` / `readOnlyNodeTypes` 自动派生，也不要扩 `SearchResultKind`；这些都是后续阶段的事，留到该阶段再动。
 
 这样可以先把架构闭环做稳，再逐步提高不同内容类型的预览质量。
+
+---
+
+## 18. 首个 PR 范围
+
+首个 PR 只做 foundation，不新增可见功能，目标是降低后续 `link` / `asset` 接入风险。
+
+包含：
+
+- 新建 `src/mainview/lib/contentTypes.ts`
+  - `CanvasNodeKind`
+  - `AssetKind`
+  - `AssetNodeData`
+  - `LinkNodeData`
+  - `classifyFile()`，签名见 5.4
+  - `getAssetDisplayTitle()`，签名见 5.4
+
+- 新建 `src/mainview/lib/canvasNodeRegistry.ts`
+  - `CANVAS_NODE_SPECS`
+  - `getNodeSpec()`
+  - `buildNewNodeSpec()`
+  - 先覆盖现有 `card` / `checklist` / `sticky` / `image` / `folder` / `group`
+  - 预留 `asset` / `link` spec，但不暴露创建入口（CreateMenu 不动、`createNode()` union 暂不放出）
+
+- 新建 `src/mainview/lib/canvasNodePredicates.ts`
+  - `isCanvasContentNode()`
+  - `isGroupChildNode()`
+  - `isFolderChildNode()`
+  - `isFocusableNode()`，MVP 等价于 `node.type === 'card' || node.type === 'image'`
+
+- 调整 `src/mainview/store/canvasStore.ts`
+  - 移除本地散落 union，引用共享 `CanvasNodeKind`
+  - `createNode()` 和 `buildNewNodeSpec()` 走 registry
+  - `folderChildToDetachedNode()` 使用 predicates / registry，避免只认识 image / card
+
+- 调整 `src/mainview/hooks/useNodeCreation.ts`
+  - `onCreateNode` 入参类型改用 `CanvasNodeKind`
+
+- 调整 `src/mainview/hooks/useContextMenu.ts`
+  - `NewNodeType` 与 `NEW_NODE_ACTIONS` 改用共享 `CanvasNodeKind`
+  - 节点右键 target 判断改走 predicates / registry，不再手写 `'card' | 'image' | 'sticky' | ...` 链式三元
+
+- 调整 `src/mainview/hooks/useNodeDrag.ts`
+  - 删除本地 `CONTENT_TYPES`，改用 `isGroupChildNode()` / `isFolderChildNode()`
+
+- 调整 `src/mainview/lib/resolvePlacement.ts`
+  - 删除重复的 `GROUP_CHILD_TYPES`，从 predicates 导入
+
+- 调整 `src/mainview/lib/collision.ts`
+  - `getNodeWidth()` / `getNodeHeight()` 改为消费 `getNodeSpec(type).size`
+
+- 调整 `src/mainview/lib/canvasUtils.ts`
+  - `GROUP_CHILD_TYPES` / `FOLDER_CHILD_TYPES` 改为转发自 predicates，保留导出兼容现有引用
+  - `DOC_TREE_TYPES` 改走 predicate；`DocumentTreeNode.kind` 不动
+
+- 调整 manifest 清理边界（`src/mainview/lib/sanitize.ts`）
+  - `RUNTIME_DATA_KEYS` 加 `previewUrl`、`thumbnailUrl`
+  - `sanitizeNode()` 递归处理 `data.children`，对 folder child 走相同清理
+  - 现有 image 行为保持兼容
+
+不包含：
+
+- 不新增 `LinkNode` / `AssetNode` UI
+- 不开启 `file` 菜单
+- 不改 `saveAttachment` / `loadAttachment` / `openAttachment` RPC
+- 不做视频 / 音频
+- 不做 link unfurl
+- 不迁移现有 image 节点
+- 不动 `nodeTypes` / `readOnlyNodeTypes` 静态注册
+- 不扩展 `SearchResultKind` / `DocumentTreeNode.kind`
+
+新增 / 扩展的单测：
+
+- `contentTypes.test.ts`：`classifyFile()` 覆盖 image / video / audio / pdf / 未知；`getAssetDisplayTitle()` 覆盖 4 条回退路径。
+- `canvasNodeRegistry.test.ts`：6 个现有 type 的尺寸、默认 data、`canEnterGroup` / `canEnterFolder` 真值表。
+- `canvasNodePredicates.test.ts`：`isCanvasContentNode` / `isFolderChildNode` / `isGroupChildNode` / `isFocusableNode` 真值表。
+- `sanitize.test.ts` 增量：folder child 中的 `previewUrl` / `thumbnailUrl` / `isHidden` / `isDropTarget` 都被剥离；嵌套 image child 行为不变。
+- `canvasStore.test.ts` 不应需要语义改动；只允许把 helper 替换为 registry / predicates。
+
+验证：
+
+```bash
+bun run test
+bun run type-check
+```

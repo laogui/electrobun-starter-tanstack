@@ -41,6 +41,7 @@ import {
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import {
   isRpcAvailable,
   loadCanvas,
@@ -399,7 +400,7 @@ function CanvasComponent() {
       }
       if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
-      } else if (node.type === 'card' || node.type === 'image') {
+      } else if (isFocusableNode(node.type)) {
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
       }
     },

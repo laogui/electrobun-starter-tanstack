@@ -1,15 +1,7 @@
 import type { Node } from '@xyflow/react';
 
-import {
-  CARD_H,
-  CARD_W,
-  FOLDER_H,
-  FOLDER_W,
-  IMAGE_H,
-  IMAGE_W,
-  STICKY_H,
-  STICKY_W,
-} from './canvasConstants';
+import { CARD_H, CARD_W } from './canvasConstants';
+import { findSpecByNodeType } from './canvasNodeRegistry';
 
 export interface Point {
   x: number;
@@ -30,9 +22,6 @@ export interface Rect {
 
 export type Direction = 'down' | 'left' | 'right' | 'up';
 
-const DEFAULT_GROUP_W = 500;
-const DEFAULT_GROUP_H = 300;
-
 export const GRID_STEP = 40;
 export const MAX_SCAN_RADIUS = 40;
 
@@ -42,49 +31,26 @@ function pickNumber(value: unknown): number | undefined {
 
 export function getNodeSize(node: Node): Size {
   const style = node.style as Record<string, unknown> | undefined;
+  const fallback = defaultSize(node.type);
   const width =
-    node.measured?.width ??
-    pickNumber(style?.width) ??
-    defaultW(node.type ?? '');
+    node.measured?.width ?? pickNumber(style?.width) ?? fallback.width;
   const height =
-    node.measured?.height ??
-    pickNumber(style?.height) ??
-    defaultH(node.type ?? '');
+    node.measured?.height ?? pickNumber(style?.height) ?? fallback.height;
   return { width, height };
 }
 
-function defaultW(type: string): number {
-  switch (type) {
-    case 'card':
-      return CARD_W;
-    case 'image':
-      return IMAGE_W;
-    case 'folder':
-      return FOLDER_W;
-    case 'sticky':
-      return STICKY_W;
-    case 'group':
-      return DEFAULT_GROUP_W;
-    default:
-      return CARD_W;
+/** Default size for a React Flow node type, consulted only when the node
+ *  itself does not provide measured / styled dimensions. Sourced from the
+ *  canvas node registry so the registry remains the single source of size
+ *  truth across `getNodeSize`, `buildNewNodeSpec`, and placement helpers. */
+function defaultSize(type: string | undefined): Size {
+  const spec = type ? findSpecByNodeType(type) : null;
+  if (spec) {
+    return spec.size;
   }
-}
-
-function defaultH(type: string): number {
-  switch (type) {
-    case 'card':
-      return CARD_H;
-    case 'image':
-      return IMAGE_H;
-    case 'folder':
-      return FOLDER_H;
-    case 'sticky':
-      return STICKY_H;
-    case 'group':
-      return DEFAULT_GROUP_H;
-    default:
-      return CARD_H;
-  }
+  // Unknown node type (e.g. legacy or future-only kinds): fall back to the
+  // historical card dimensions to preserve existing behavior.
+  return { width: CARD_W, height: CARD_H };
 }
 
 /** Build absolute rects for every node, accounting for nested parent offsets. */

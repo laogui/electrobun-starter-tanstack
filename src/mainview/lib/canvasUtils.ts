@@ -1,22 +1,18 @@
 import type { Node } from '@xyflow/react';
 
-/** Node types that can be placed inside a Group. */
-export const GROUP_CHILD_TYPES = new Set(['card', 'image', 'sticky', 'folder']);
-
-/** Node types that can be absorbed into a Folder's children array. */
-export const FOLDER_CHILD_TYPES = new Set(['card', 'image']);
+import { isFolderChildNode, isGroupChildNode } from './canvasNodePredicates';
 
 /** Returns true when the child node type can be parented to the parent node. */
 export function canBeChildOf(parent: Node, child: Node): boolean {
   if (parent.type === 'group') {
-    return GROUP_CHILD_TYPES.has(child.type ?? '');
+    return isGroupChildNode(child.type);
   }
   return false;
 }
 
 /** Returns true when a node can be absorbed into a folder's children array. */
 export function canAbsorbIntoFolder(child: Node): boolean {
-  return FOLDER_CHILD_TYPES.has(child.type ?? '');
+  return isFolderChildNode(child.type);
 }
 
 /** Strip invalid parent relationships (e.g. group-in-group from legacy data). */
@@ -127,7 +123,9 @@ export interface DocumentTreeNode {
   kind: 'folder' | 'card' | 'image';
 }
 
-const DOC_TREE_TYPES = new Set(['folder', 'card', 'image']);
+function isDocumentTreeNodeType(type: string | undefined): boolean {
+  return type === 'folder' || type === 'card' || type === 'image';
+}
 
 /**
  * Project React Flow nodes into a tree suitable for the document-mode sidebar.
@@ -139,7 +137,7 @@ const DOC_TREE_TYPES = new Set(['folder', 'card', 'image']);
 export function nodesToDocumentTree(nodes: Node[]): DocumentTreeNode[] {
   const roots: DocumentTreeNode[] = [];
   for (const node of nodes) {
-    if (!DOC_TREE_TYPES.has(node.type ?? '')) {
+    if (!isDocumentTreeNodeType(node.type)) {
       continue;
     }
     if (node.type === 'folder') {

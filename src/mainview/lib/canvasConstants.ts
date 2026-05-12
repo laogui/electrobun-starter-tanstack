@@ -12,6 +12,21 @@ import {
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
 
+/**
+ * Default node dimensions. These now live in `canvasNodeRegistry` (the spec
+ * registry is the single source of truth for size); re-exported here so
+ * existing call sites keep working unchanged.
+ */
+export {
+  CARD_H,
+  CARD_W,
+  FOLDER_H,
+  FOLDER_W,
+  IMAGE_H,
+  IMAGE_W,
+  STICKY_H,
+  STICKY_W,
+} from './canvasNodeRegistry';
 export {
   CARD_COLORS,
   colorToStyle,
@@ -19,15 +34,6 @@ export {
   isColorDark,
   STICKY_COLORS,
 } from './colorUtils';
-
-export const CARD_W = 350;
-export const CARD_H = 450;
-export const IMAGE_W = 350;
-export const IMAGE_H = 350;
-export const FOLDER_W = 280;
-export const FOLDER_H = 280;
-export const STICKY_W = 200;
-export const STICKY_H = 200;
 
 export const nodeTypes = {
   card: CardNode,

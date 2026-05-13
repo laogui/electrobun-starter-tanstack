@@ -134,13 +134,18 @@ export async function rpcDeleteNote(noteId: string) {
 
 export async function rpcSaveAttachment(
   dataUrl: string,
-  existingFile?: string
+  existingFile?: string,
+  options?: {
+    kind?: 'audio' | 'file' | 'image' | 'video';
+    mimeType?: string;
+    suggestedName?: string;
+  }
 ) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;
   }
-  return eb.rpc.request.saveAttachment({ dataUrl, existingFile });
+  return eb.rpc.request.saveAttachment({ dataUrl, existingFile, ...options });
 }
 
 export async function rpcLoadAttachment(filePath: string) {
@@ -149,6 +154,14 @@ export async function rpcLoadAttachment(filePath: string) {
     return null;
   }
   return eb.rpc.request.loadAttachment({ filePath });
+}
+
+export async function rpcOpenAttachment(filePath: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.openAttachment({ filePath });
 }
 
 export async function rpcExportPng(dataUrl: string, fileName: string) {

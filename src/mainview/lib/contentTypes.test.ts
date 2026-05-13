@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyFile,
+  createAssetNodeData,
   createLinkNodeData,
   extractLinkUrl,
   getAssetDisplayTitle,
@@ -132,6 +133,33 @@ describe('getAssetDisplayTitle', () => {
         mimeType: 'text/plain',
       })
     ).toBe('Notes');
+  });
+});
+
+describe('createAssetNodeData', () => {
+  it('creates lightweight asset metadata for saved files', () => {
+    const data = createAssetNodeData(
+      { name: 'report.pdf', size: 2048, type: 'application/pdf' },
+      { attachmentFile: 'attachments/file_abc.pdf' }
+    );
+
+    expect(data).toEqual({
+      attachmentFile: 'attachments/file_abc.pdf',
+      color: '#FFFFFF',
+      fileName: 'report.pdf',
+      kind: 'file',
+      mimeType: 'application/pdf',
+      size: 2048,
+      title: 'report.pdf',
+    });
+  });
+
+  it('falls back to an untitled file name when metadata is empty', () => {
+    const data = createAssetNodeData({ name: '', type: '' });
+
+    expect(data.fileName).toBe('Untitled file');
+    expect(data.title).toBe('Untitled file');
+    expect(data.mimeType).toBe('application/octet-stream');
   });
 });
 

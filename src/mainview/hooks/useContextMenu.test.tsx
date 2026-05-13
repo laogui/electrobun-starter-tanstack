@@ -45,6 +45,18 @@ const storeState = {
       position: { x: 110, y: 120 },
       data: { url: 'https://example.com/', title: 'Example', color: '#FFFFFF' },
     },
+    {
+      id: 'asset-1',
+      type: 'asset',
+      position: { x: 130, y: 140 },
+      data: {
+        attachmentFile: 'attachments/file_abc.pdf',
+        fileName: 'report.pdf',
+        kind: 'file',
+        mimeType: 'application/pdf',
+        title: 'Report',
+      },
+    },
   ],
   edges: [
     {
@@ -309,6 +321,32 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 95,
+              clientY: 75,
+            } as never,
+            {
+              id: 'asset-1',
+              type: 'asset',
+              position: { x: 0, y: 0 },
+              data: {
+                attachmentFile: 'attachments/file_abc.pdf',
+                fileName: 'report.pdf',
+                kind: 'file',
+                mimeType: 'application/pdf',
+                title: 'Report',
+              },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-asset
+      </button>
+      <button
+        onClick={() => {
           onEdgeContextMenu(
             {
               preventDefault: vi.fn(),
@@ -529,6 +567,11 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'node-link' }));
     expect(output).toHaveTextContent(
       '{"x":94,"y":74,"target":"link","nodeId":"link-1"}'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'node-asset' }));
+    expect(output).toHaveTextContent(
+      '{"x":95,"y":75,"target":"asset","nodeId":"asset-1"}'
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));

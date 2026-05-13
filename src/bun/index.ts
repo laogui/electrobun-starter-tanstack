@@ -8,6 +8,12 @@ import {
   Utils,
 } from 'electrobun/bun';
 import {
+  attachmentExists,
+  loadAttachment as loadWorkspaceAttachment,
+  openAttachment as openWorkspaceAttachment,
+  saveAttachment as saveWorkspaceAttachment,
+} from './attachments';
+import {
   deleteUnlinkedNotes,
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
@@ -47,7 +53,6 @@ const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const SETTINGS_DEV_SERVER_URL = `${DEV_SERVER_URL}/settings.html`;
 const SETTINGS_VIEW_URL = 'views://settingsview/index.html';
-const DATA_URL_RE = /^data:(image\/([a-z+]+));base64,(.+)$/i;
 const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
@@ -89,6 +94,50 @@ export async function getMainViewUrl(): Promise<string> {
     );
   }
   return 'views://mainview/index.html';
+}
+
+function stripAttachmentRuntimeData(
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  const {
+    missing: _missing,
+    previewUrl: _previewUrl,
+    thumbnailUrl: _thumbnailUrl,
+    ...restData
+  } = data;
+  return restData;
+}
+
+async function hydrateAssetData(
+  wsPath: string,
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const nextData: Record<string, unknown> = { ...data };
+  const attachmentFile = data.attachmentFile;
+  if (typeof attachmentFile === 'string') {
+    try {
+      const exists = await attachmentExists(wsPath, attachmentFile);
+      if (!exists) {
+        nextData.missing = true;
+      }
+    } catch {
+      nextData.missing = true;
+    }
+  }
+
+  const thumbnailFile = data.thumbnailFile;
+  if (typeof thumbnailFile === 'string') {
+    try {
+      const thumbnail = await loadWorkspaceAttachment(wsPath, thumbnailFile);
+      if (thumbnail) {
+        nextData.thumbnailUrl = thumbnail.dataUrl;
+      }
+    } catch {
+      // Thumbnail hydrate is best-effort; keep the asset usable without it.
+    }
+  }
+
+  return nextData;
 }
 
 export function getSettingsViewUrl(mainViewUrl: string): string {
@@ -134,12 +183,22 @@ interface CanvasRPC {
         response: { success: boolean };
       };
       saveAttachment: {
-        params: { dataUrl: string; existingFile?: string };
+        params: {
+          dataUrl: string;
+          existingFile?: string;
+          kind?: 'audio' | 'file' | 'image' | 'video';
+          mimeType?: string;
+          suggestedName?: string;
+        };
         response: { filePath: string };
       };
       loadAttachment: {
         params: { filePath: string };
         response: { dataUrl: string } | null;
+      };
+      openAttachment: {
+        params: { filePath: string };
+        response: { success: boolean };
       };
       exportPng: {
         params: { dataUrl: string; fileName: string };
@@ -459,6 +518,13 @@ async function main() {
 
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
+              if (node.type === 'asset') {
+                return {
+                  ...node,
+                  data: await hydrateAssetData(wsPath, node.data),
+                };
+              }
+
               // Hydrate image nodes: read attachment file → data URL
               if (
                 node.type === 'image' &&
@@ -520,6 +586,15 @@ async function main() {
                 }>;
                 const hydratedChildren = await Promise.all(
                   rawChildren.map(async (child) => {
+                    if (child.type === 'asset') {
+                      return {
+                        ...child,
+                        data: await hydrateAssetData(
+                          wsPath,
+                          (child.data ?? {}) as Record<string, unknown>
+                        ),
+                      };
+                    }
                     if (child.type !== 'card') {
                       return child;
                     }
@@ -679,6 +754,18 @@ async function main() {
                 };
               }
 
+              if (node.type === 'asset') {
+                return {
+                  id: node.id,
+                  type: node.type,
+                  position: node.position,
+                  ...(node.style ? { style: node.style } : {}),
+                  ...(node.parentId ? { parentId: node.parentId } : {}),
+                  ...(node.extent ? { extent: node.extent } : {}),
+                  data: stripAttachmentRuntimeData(node.data),
+                };
+              }
+
               // Folder nodes: write each card-child's .md file and serialize
               // children as thin references (mirrors top-level card flow).
               if (node.type === 'folder') {
@@ -691,6 +778,14 @@ async function main() {
                 const childPathMap = folderChildPathMap.get(idx);
                 const serializedChildren = await Promise.all(
                   rawChildren.map(async (child, cidx) => {
+                    if (child.type === 'asset') {
+                      return {
+                        ...child,
+                        data: stripAttachmentRuntimeData(
+                          (child.data ?? {}) as Record<string, unknown>
+                        ),
+                      };
+                    }
                     if (child.type === 'image') {
                       const childData = (child.data ?? {}) as Record<
                         string,
@@ -843,50 +938,14 @@ async function main() {
           return { success: deleted };
         },
 
-        saveAttachment: async ({ dataUrl, existingFile }) => {
-          const match = DATA_URL_RE.exec(dataUrl);
-          if (!match) {
-            throw new Error('Invalid data URL');
-          }
-          const mimeSubtype = match[2]!;
-          const base64Data = match[3]!;
+        saveAttachment: async (params) =>
+          saveWorkspaceAttachment(wsPath, params),
 
-          // Map MIME subtype to file extension
-          const extMap: Record<string, string> = {
-            jpeg: 'jpg',
-            png: 'png',
-            gif: 'gif',
-            webp: 'webp',
-            svg: 'svg',
-            'svg+xml': 'svg',
-            bmp: 'bmp',
-            tiff: 'tiff',
-          };
-          const ext = extMap[mimeSubtype.toLowerCase()] || 'png';
+        loadAttachment: async ({ filePath }) =>
+          loadWorkspaceAttachment(wsPath, filePath),
 
-          // If updating an existing file, overwrite it
-          const filePath =
-            existingFile ||
-            `attachments/img_${crypto.randomUUID().slice(0, 8)}.${ext}`;
-          const fullPath = join(wsPath, filePath);
-          const buffer = Buffer.from(base64Data, 'base64');
-          await Bun.write(fullPath, new Uint8Array(buffer));
-
-          return { filePath };
-        },
-
-        loadAttachment: async ({ filePath }) => {
-          const fullPath = join(wsPath, filePath);
-          const file = Bun.file(fullPath);
-          if (!(await file.exists())) {
-            return null;
-          }
-
-          const buffer = await file.arrayBuffer();
-          const mimeType = file.type || 'image/png';
-          const base64 = Buffer.from(buffer).toString('base64');
-          return { dataUrl: `data:${mimeType};base64,${base64}` };
-        },
+        openAttachment: async ({ filePath }) =>
+          openWorkspaceAttachment(wsPath, filePath),
 
         exportPng: async ({ dataUrl, fileName }) => {
           const match = PNG_DATA_URL_RE.exec(dataUrl);

@@ -35,6 +35,20 @@ vi.mock('@/components/canvas/nodes/ImageNode', () => ({
   ),
 }));
 
+vi.mock('@/components/canvas/nodes/AssetNode', () => ({
+  AssetContent: ({
+    data,
+    isFocused,
+  }: {
+    data: { fileName?: string; title?: string };
+    isFocused?: boolean;
+  }) => (
+    <div>
+      {`asset:${isFocused ? 'focused' : 'card'}:${data.title ?? data.fileName ?? 'untitled'}`}
+    </div>
+  ),
+}));
+
 vi.mock('@/components/canvas/nodes/LinkNode', () => ({
   LinkContent: ({
     data,
@@ -264,6 +278,28 @@ describe('focusedView', () => {
     );
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renders asset nodes through the asset focused content', () => {
+    render(
+      <FocusedView
+        node={{
+          id: 'asset-1',
+          type: 'asset',
+          data: {
+            attachmentFile: 'attachments/file_abc.pdf',
+            fileName: 'report.pdf',
+            kind: 'file',
+            mimeType: 'application/pdf',
+            title: 'Report',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('asset:focused:Report')).toBeInTheDocument();
   });
 
   it('renders link nodes through the link focused view', () => {

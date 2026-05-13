@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AssetNodeReadOnly,
   CardNodeReadOnly,
   FolderNodeReadOnly,
   GroupNodeReadOnly,
@@ -63,6 +64,9 @@ vi.mock('@/store/canvasStore', () => ({
 
 // Hard-fail if any read-only wrapper accidentally calls RPC.
 vi.mock('@/lib/rpc', () => ({
+  rpcOpenAttachment: () => {
+    throw new Error('read-only nodes must not open attachments');
+  },
   rpcSaveAttachment: () => {
     throw new Error('read-only nodes must not call RPC');
   },
@@ -160,6 +164,28 @@ describe('readOnlyNodes', () => {
 
       expect(screen.getAllByText('example.com')).toHaveLength(2);
       expect(screen.getByText('Link')).toBeInTheDocument();
+      expect(screen.getByTestId('handle-right')).toBeInTheDocument();
+    });
+  });
+
+  describe('AssetNodeReadOnly', () => {
+    it('renders asset metadata with handles', () => {
+      render(
+        <AssetNodeReadOnly
+          data={{
+            attachmentFile: 'attachments/file_abc.pdf',
+            color: '#ffffff',
+            fileName: 'report.pdf',
+            kind: 'file',
+            mimeType: 'application/pdf',
+            size: 2048,
+            title: 'report.pdf',
+          }}
+        />
+      );
+
+      expect(screen.getByText('report.pdf')).toBeInTheDocument();
+      expect(screen.getByText('application/pdf')).toBeInTheDocument();
       expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     });
   });

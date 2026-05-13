@@ -23,6 +23,7 @@ const NEW_NODE_ACTIONS: Record<string, CreatableCanvasNodeKind> = {
 };
 
 type NodeContextTarget =
+  | 'asset'
   | 'card'
   | 'folder'
   | 'group'
@@ -36,6 +37,7 @@ type NodeContextTarget =
  * card menu is the most generic content menu).
  */
 const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
+  asset: 'asset',
   folder: 'folder',
   group: 'group',
   sticky: 'sticky',

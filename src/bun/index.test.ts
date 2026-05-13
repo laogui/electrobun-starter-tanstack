@@ -23,6 +23,7 @@ const browserWindowOnMock = vi.fn();
 const browserWindowMock = vi.fn();
 const setApplicationMenuMock = vi.fn();
 const openFileDialogMock = vi.fn();
+const openPathMock = vi.fn();
 
 interface BrowserWindowOptions {
   frame?: {
@@ -62,6 +63,7 @@ vi.mock('electrobun/bun', () => ({
   },
   Utils: {
     openFileDialog: openFileDialogMock,
+    openPath: openPathMock,
   },
 }));
 
@@ -176,6 +178,7 @@ interface CanvasHandlers {
   listViews: AnyHandler;
   loadAttachment: AnyHandler;
   loadCanvas: AnyHandler;
+  openAttachment: AnyHandler;
   openSettings: AnyHandler;
   renameView: AnyHandler;
   saveAttachment: AnyHandler;
@@ -208,6 +211,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   localInfoChannelMock.mockResolvedValue('prod');
   openFileDialogMock.mockResolvedValue(['/tmp/exports']);
+  openPathMock.mockReset();
+  openPathMock.mockReturnValue(true);
   fetchMock.mockReset();
   bunFileMock.mockReset();
   bunWriteMock.mockReset();
@@ -599,6 +604,27 @@ describe('src/bun/index helpers', () => {
     ).rejects.toThrow('Invalid data URL');
   });
 
+  it('saveAttachment stores non-image files with stable attachment paths', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      'abcdef12-abcd-0000-0000-000000000000'
+    );
+
+    await expect(
+      canvasHandlers.saveAttachment({
+        dataUrl: 'data:application/pdf;base64,Zm9v',
+        kind: 'file',
+        mimeType: 'application/pdf',
+        suggestedName: 'report.pdf',
+      })
+    ).resolves.toEqual({ filePath: 'attachments/file_abcdef12.pdf' });
+    expect(bunWriteMock).toHaveBeenCalledWith(
+      '/tmp/workspace/attachments/file_abcdef12.pdf',
+      expect.any(Uint8Array)
+    );
+  });
+
   it('exportPng opens a folder picker and writes the selected PNG path', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -667,6 +693,34 @@ describe('src/bun/index helpers', () => {
     ).resolves.toEqual({ dataUrl: 'data:image/png;base64,AQID' });
   });
 
+  it('loadAttachment and openAttachment reject unsafe attachment paths', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.loadAttachment({ filePath: '../secret.txt' })
+    ).rejects.toThrow('Attachment path must stay inside attachments/.');
+    await expect(
+      canvasHandlers.openAttachment({ filePath: '/tmp/secret.txt' })
+    ).rejects.toThrow('Attachment path must be relative.');
+  });
+
+  it('openAttachment opens an existing workspace attachment with the default app', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    bunFileMock.mockReturnValueOnce({
+      exists: vi.fn().mockResolvedValue(true),
+    });
+
+    await expect(
+      canvasHandlers.openAttachment({ filePath: 'attachments/report.pdf' })
+    ).resolves.toEqual({ success: true });
+    expect(openPathMock).toHaveBeenCalledWith(
+      '/tmp/workspace/attachments/report.pdf'
+    );
+  });
+
   it('saveManifest writes folder card-children as independent notes and reduces them to references', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -732,6 +786,75 @@ describe('src/bun/index helpers', () => {
         type: 'text',
       },
     });
+  });
+
+  it('saveManifest strips runtime asset fields from top-level nodes and folder children', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'asset-1',
+            type: 'asset',
+            position: { x: 10, y: 20 },
+            data: {
+              attachmentFile: 'attachments/file_abc.pdf',
+              fileName: 'report.pdf',
+              kind: 'file',
+              mimeType: 'application/pdf',
+              missing: true,
+              previewUrl: 'blob:asset',
+              thumbnailUrl: 'blob:thumb',
+              title: 'report.pdf',
+            },
+          },
+          {
+            id: 'folder-1',
+            type: 'folder',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '1 items',
+              children: [
+                {
+                  id: 'asset-child',
+                  type: 'asset',
+                  data: {
+                    attachmentFile: 'attachments/file_child.pdf',
+                    fileName: 'child.pdf',
+                    kind: 'file',
+                    mimeType: 'application/pdf',
+                    missing: true,
+                    previewUrl: 'blob:child',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: true });
+
+    const manifest = manifestMocks.saveManifest.mock.calls.at(-1)?.[2] as {
+      nodes: Array<{ data: Record<string, unknown> }>;
+    };
+    const assetData = manifest.nodes[0]?.data;
+    const folderChildren = manifest.nodes[1]?.data.children as Array<{
+      data: Record<string, unknown>;
+    }>;
+
+    expect(assetData).not.toHaveProperty('missing');
+    expect(assetData).not.toHaveProperty('previewUrl');
+    expect(assetData).not.toHaveProperty('thumbnailUrl');
+    expect(folderChildren[0]?.data).not.toHaveProperty('missing');
+    expect(folderChildren[0]?.data).not.toHaveProperty('previewUrl');
+    expect(folderChildren[0]?.data.attachmentFile).toBe(
+      'attachments/file_child.pdf'
+    );
   });
 
   it('saveManifest reuses an existing note file for folder children with a noteId', async () => {
@@ -882,5 +1005,70 @@ describe('src/bun/index helpers', () => {
     expect(child.data.title).toBe('Hydrated');
     expect(child.data.content).toBe('hydrated body');
     expect(child.data.noteId).toBe('note_abc');
+  });
+
+  it('loadCanvas marks asset nodes and folder children missing without reading full attachments', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'asset-1',
+          type: 'asset',
+          position: { x: 0, y: 0 },
+          data: {
+            attachmentFile: 'attachments/missing.pdf',
+            fileName: 'missing.pdf',
+            kind: 'file',
+            mimeType: 'application/pdf',
+            title: 'missing.pdf',
+          },
+        },
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: '1 items',
+            children: [
+              {
+                id: 'child-asset',
+                type: 'asset',
+                data: {
+                  attachmentFile: 'attachments/child.pdf',
+                  fileName: 'child.pdf',
+                  kind: 'file',
+                  mimeType: 'application/pdf',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+    const topLevelFile = {
+      exists: vi.fn().mockResolvedValue(false),
+      arrayBuffer: vi.fn(),
+    };
+    const childFile = {
+      exists: vi.fn().mockResolvedValue(false),
+      arrayBuffer: vi.fn(),
+    };
+    bunFileMock
+      .mockReturnValueOnce(topLevelFile)
+      .mockReturnValueOnce(childFile);
+
+    const result = (await canvasHandlers.loadCanvas({
+      viewId: 'default',
+    })) as { nodes: Array<{ data: Record<string, any> }> };
+
+    expect(result.nodes[0]?.data.missing).toBe(true);
+    expect(result.nodes[1]?.data.children[0].data.missing).toBe(true);
+    expect(topLevelFile.arrayBuffer).not.toHaveBeenCalled();
+    expect(childFile.arrayBuffer).not.toHaveBeenCalled();
   });
 });

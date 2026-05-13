@@ -7,7 +7,8 @@
  * MVP scope notes:
  * - `image` remains its own `CanvasNodeKind` and is NOT rolled into `asset`.
  *   Migration is deferred (see docs/features/Backlog/multi-type-canvas-preview-pipeline.md §5.1).
- * - `link` is wired in Phase 1A. `asset` remains reserved for Phase 1B.
+ * - `link` is wired in Phase 1A. `asset` is wired in Phase 1B for generic
+ *   local attachments. Images still keep their existing dedicated node.
  */
 
 /** Every node kind the canvas can construct or render. */
@@ -24,10 +25,10 @@ export type CanvasNodeKind =
 /**
  * Subset of `CanvasNodeKind` that user-facing creation entry points (menus,
  * keyboard shortcuts, context-menu actions) are allowed to instantiate in
- * MVP. `link` is exposed in Phase 1A. `asset` stays out until the attachment
- * save / hydrate path lands in Phase 1B.
+ * MVP. `link` is exposed in Phase 1A and `asset` is exposed in Phase 1B once
+ * the attachment save / hydrate path exists.
  */
-export type CreatableCanvasNodeKind = Exclude<CanvasNodeKind, 'asset'>;
+export type CreatableCanvasNodeKind = CanvasNodeKind;
 
 /** Sub-kind for `asset` nodes. PDFs flow through `file` plus `mimeType`. */
 export type AssetKind = 'video' | 'audio' | 'file';
@@ -45,7 +46,8 @@ export interface AssetNodeData {
   kind: AssetKind;
   mimeType: string;
 
-  // Runtime-only hydrated URLs. NEVER persist these.
+  // Runtime-only hydrated URLs / status. NEVER persist these.
+  missing?: boolean;
   previewUrl?: string;
   size?: number;
   thumbnailFile?: string;
@@ -319,4 +321,23 @@ export function getAssetDisplayTitle(
     return friendly;
   }
   return 'Untitled';
+}
+
+export function createAssetNodeData(
+  input: File | ClassifyFileInput,
+  options?: { attachmentFile?: string; color?: string }
+): AssetNodeData {
+  const { kind, mimeType } = classifyFile(input);
+  const fileName = input.name.trim() || 'Untitled file';
+  return {
+    ...(options?.attachmentFile
+      ? { attachmentFile: options.attachmentFile }
+      : {}),
+    color: options?.color ?? '#FFFFFF',
+    fileName,
+    kind,
+    mimeType,
+    ...(typeof input.size === 'number' ? { size: input.size } : {}),
+    title: fileName,
+  };
 }

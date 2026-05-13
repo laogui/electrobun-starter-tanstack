@@ -27,6 +27,7 @@ const RUNTIME_NODE_KEYS = new Set([
 const RUNTIME_DATA_KEYS = new Set([
   'isHidden',
   'isDropTarget',
+  'missing',
   'previewUrl',
   'thumbnailUrl',
 ]);

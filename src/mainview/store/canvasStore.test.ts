@@ -736,6 +736,43 @@ describe('canvasStore — createNode', () => {
     });
   });
 
+  it('creates an asset node with provided attachment metadata', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 900,
+      innerHeight: 700,
+    });
+    const assetSize = CANVAS_NODE_SPECS.asset.size;
+
+    useCanvasStore
+      .getState()
+      .createNode('asset', createRfInstance({ x: 0, y: 0, zoom: 1 }), {
+        data: {
+          attachmentFile: 'attachments/file_abc.pdf',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          size: 2048,
+          title: 'report.pdf',
+        },
+      });
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('asset');
+    expect(node.position).toEqual({
+      x: 450 - assetSize.width / 2,
+      y: 350 - assetSize.height / 2,
+    });
+    expect(node.style).toEqual(assetSize);
+    expect(node.data).toMatchObject({
+      attachmentFile: 'attachments/file_abc.pdf',
+      fileName: 'report.pdf',
+      kind: 'file',
+      mimeType: 'application/pdf',
+      size: 2048,
+      title: 'report.pdf',
+    });
+  });
+
   it('creates a sticky node with a random palette color', () => {
     vi.stubGlobal('window', {
       innerWidth: 800,
@@ -980,6 +1017,44 @@ describe('canvasStore — absorbCardIntoFolder', () => {
     expect(children[0]!.data.noteId).toBeUndefined();
     expect(children[0]!.type).toBe('image');
   });
+
+  it('preserves asset metadata when absorbing an asset into a folder', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('asset-1', {
+          type: 'asset',
+          data: {
+            attachmentFile: 'attachments/file_abc.pdf',
+            fileName: 'report.pdf',
+            kind: 'file',
+            mimeType: 'application/pdf',
+            size: 2048,
+            title: 'report.pdf',
+          },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '0 items', subtitle: '', children: [] },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().absorbCardIntoFolder('asset-1', 'folder');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+    const children = folder.data.children as Array<{
+      data: { attachmentFile?: string; noteId?: string };
+      id: string;
+      noteId?: string;
+      type?: string;
+    }>;
+
+    expect(children[0]!.type).toBe('asset');
+    expect(children[0]!.noteId).toBeUndefined();
+    expect(children[0]!.data.noteId).toBeUndefined();
+    expect(children[0]!.data.attachmentFile).toBe('attachments/file_abc.pdf');
+  });
 });
 
 describe('canvasStore — deleteFolderChild', () => {
@@ -1049,6 +1124,36 @@ describe('canvasStore — deleteFolderChild', () => {
 
     expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
   });
+
+  it('does not call rpcDeleteNote for asset children', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-asset',
+                type: 'asset',
+                data: {
+                  attachmentFile: 'attachments/file_abc.pdf',
+                  fileName: 'report.pdf',
+                  kind: 'file',
+                  mimeType: 'application/pdf',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().deleteFolderChild('folder', 'child-asset');
+
+    expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('canvasStore — deleteNodes (folder children notes)', () => {
@@ -1063,7 +1168,7 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
         makeNode('folder', {
           type: 'folder',
           data: {
-            title: '3 items',
+            title: '4 items',
             subtitle: '',
             children: [
               {
@@ -1086,6 +1191,17 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
                   color: '#FFFFFF',
                 },
               },
+              {
+                id: 'child-4',
+                type: 'asset',
+                data: {
+                  attachmentFile: 'attachments/file_abc.pdf',
+                  fileName: 'report.pdf',
+                  kind: 'file',
+                  mimeType: 'application/pdf',
+                  title: 'report.pdf',
+                },
+              },
             ],
           },
         }),
@@ -1099,7 +1215,9 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
     const detachedCard = state.nodes.find((node) => node.id === 'child-1');
     const detachedImage = state.nodes.find((node) => node.id === 'child-2');
     const detachedLink = state.nodes.find((node) => node.id === 'child-3');
+    const detachedAsset = state.nodes.find((node) => node.id === 'child-4');
     const linkSize = CANVAS_NODE_SPECS.link.size;
+    const assetSize = CANVAS_NODE_SPECS.asset.size;
 
     expect(state.nodes.find((node) => node.id === 'folder')).toBeUndefined();
     expect(state.nodes.find((node) => node.id === 'other')).toBeDefined();
@@ -1125,6 +1243,18 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
       data: {
         title: 'Example',
         url: 'https://example.com/',
+        detached: true,
+      },
+    });
+    expect(detachedAsset).toMatchObject({
+      id: 'child-4',
+      type: 'asset',
+      position: { x: 0, y: 0 },
+      style: assetSize,
+      data: {
+        attachmentFile: 'attachments/file_abc.pdf',
+        fileName: 'report.pdf',
+        kind: 'file',
         detached: true,
       },
     });
@@ -1282,6 +1412,59 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
     ).toMatchObject({
       title: '0 items',
       children: [],
+    });
+  });
+
+  it('restores an asset folder child as an asset node', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-asset',
+                type: 'asset',
+                data: {
+                  attachmentFile: 'attachments/file_abc.pdf',
+                  fileName: 'report.pdf',
+                  kind: 'file',
+                  mimeType: 'application/pdf',
+                  title: 'report.pdf',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+    const assetSize = CANVAS_NODE_SPECS.asset.size;
+
+    useCanvasStore.getState().moveFolderChildToCanvas('folder', 'child-asset', {
+      anchorCenter: { x: 500, y: 400 },
+    });
+
+    const state = useCanvasStore.getState();
+    const restored = state.nodes.find((node) => node.id === 'child-asset');
+
+    expect(restored).toMatchObject({
+      id: 'child-asset',
+      type: 'asset',
+      data: {
+        attachmentFile: 'attachments/file_abc.pdf',
+        fileName: 'report.pdf',
+        kind: 'file',
+        mimeType: 'application/pdf',
+        title: 'report.pdf',
+      },
+      position: {
+        x: 500 - assetSize.width / 2,
+        y: 400 - assetSize.height / 2,
+      },
+      selected: true,
     });
   });
 

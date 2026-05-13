@@ -139,6 +139,18 @@ describe('buildNewNodeSpec', () => {
     expect(data.color).toBe('#FFFFFF');
   });
 
+  it('builds an asset node with empty file metadata defaults', () => {
+    const spec = buildNewNodeSpec('asset');
+    expect(spec.base.type).toBe('asset');
+    expect(spec.size.width).toBeGreaterThan(0);
+    expect(spec.size.height).toBeGreaterThan(0);
+    const data = spec.base.data as Record<string, unknown>;
+    expect(data.kind).toBe('file');
+    expect(data.fileName).toBe('');
+    expect(data.mimeType).toBe('application/octet-stream');
+    expect(data.color).toBe('#FFFFFF');
+  });
+
   it('builds a folder with an empty children array', () => {
     const spec = buildNewNodeSpec('folder');
     expect(spec.base.type).toBe('folder');

@@ -8,6 +8,7 @@ const request = {
   deleteNote: vi.fn(),
   saveAttachment: vi.fn(),
   loadAttachment: vi.fn(),
+  openAttachment: vi.fn(),
   getSettings: vi.fn(),
   openSettings: vi.fn(),
   listViews: vi.fn(),
@@ -73,6 +74,9 @@ describe('rpc', () => {
       rpc.rpcSaveAttachment('data:image/png;base64,abc')
     ).resolves.toBeNull();
     await expect(rpc.rpcLoadAttachment('/tmp/a.png')).resolves.toBeNull();
+    await expect(rpc.rpcOpenAttachment('/tmp/a.png')).resolves.toEqual({
+      success: false,
+    });
     await expect(rpc.rpcGetSettings()).resolves.toBeNull();
     await expect(rpc.rpcOpenSettings()).resolves.toEqual({ success: false });
     await expect(rpc.rpcListViews()).resolves.toBeNull();
@@ -122,7 +126,13 @@ describe('rpc', () => {
     await rpc.rpcCreateNote('note-2', 'New', 'text');
     await rpc.rpcDeleteNote('note-2');
     await rpc.rpcSaveAttachment('data:image/png;base64,abc', 'images/a.png');
+    await rpc.rpcSaveAttachment('data:application/pdf;base64,abc', undefined, {
+      kind: 'file',
+      mimeType: 'application/pdf',
+      suggestedName: 'report.pdf',
+    });
     await rpc.rpcLoadAttachment('images/a.png');
+    await rpc.rpcOpenAttachment('attachments/file_abc.pdf');
     await rpc.rpcOpenSettings();
     await rpc.rpcCreateView('Inbox');
     await rpc.rpcDeleteView('view-1');
@@ -154,8 +164,18 @@ describe('rpc', () => {
       dataUrl: 'data:image/png;base64,abc',
       existingFile: 'images/a.png',
     });
+    expect(request.saveAttachment).toHaveBeenCalledWith({
+      dataUrl: 'data:application/pdf;base64,abc',
+      existingFile: undefined,
+      kind: 'file',
+      mimeType: 'application/pdf',
+      suggestedName: 'report.pdf',
+    });
     expect(request.loadAttachment).toHaveBeenCalledWith({
       filePath: 'images/a.png',
+    });
+    expect(request.openAttachment).toHaveBeenCalledWith({
+      filePath: 'attachments/file_abc.pdf',
     });
     expect(request.openSettings).toHaveBeenCalledWith({});
     expect(request.createView).toHaveBeenCalledWith({ name: 'Inbox' });

@@ -98,7 +98,9 @@ function folderChildToDetachedNode(
   usedNodeIds: Set<string>
 ): Node {
   const kind =
-    child.type === 'image' || child.type === 'link' ? child.type : 'card';
+    child.type === 'asset' || child.type === 'image' || child.type === 'link'
+      ? child.type
+      : 'card';
   const spec = buildNewNodeSpec(kind);
   const {
     isDropTarget: _isDropTarget,
@@ -317,20 +319,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (!(card && folder) || folder.type !== 'folder') {
       return;
     }
-    if (card.type !== 'card' && card.type !== 'image') {
+    if (
+      card.type !== 'asset' &&
+      card.type !== 'card' &&
+      card.type !== 'image'
+    ) {
       return;
     }
     // Preserve / synthesize noteId for card children so they map 1:1 to .md files
     // (images continue to use the imageFile attachment pattern).
-    const isImage = card.type === 'image';
+    const isNoteBackedCard = card.type === 'card';
     const cardData = card.data as Record<string, unknown>;
     const existingNoteId = cardData.noteId as string | undefined;
-    const childNoteId = isImage
-      ? undefined
-      : (existingNoteId ?? `note_${nanoid(8)}`);
-    const childData: Record<string, unknown> = isImage
-      ? cardData
-      : { ...cardData, noteId: childNoteId };
+    const childNoteId = isNoteBackedCard
+      ? (existingNoteId ?? `note_${nanoid(8)}`)
+      : undefined;
+    const childData: Record<string, unknown> = isNoteBackedCard
+      ? { ...cardData, noteId: childNoteId }
+      : cardData;
     get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes
@@ -350,7 +356,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             {
               id: card.id,
               ...(childNoteId ? { noteId: childNoteId } : {}),
-              type: card.type as 'card' | 'image',
+              type: card.type as 'asset' | 'card' | 'image',
               data: childData,
             },
           ];
@@ -882,7 +888,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     const kind =
-      child.type === 'image' || child.type === 'link' ? child.type : 'card';
+      child.type === 'asset' || child.type === 'image' || child.type === 'link'
+        ? child.type
+        : 'card';
     const spec = buildNewNodeSpec(kind);
     const anchor =
       options?.anchor ??

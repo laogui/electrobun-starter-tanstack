@@ -181,4 +181,22 @@ describe('canvasContextMenu', () => {
     expect(onAction).toHaveBeenCalledWith('focus', 'link-1');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('renders asset node actions', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 40, y: 60, target: 'asset', nodeId: 'asset-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
+
+    expect(onAction).toHaveBeenCalledWith('focus', 'asset-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

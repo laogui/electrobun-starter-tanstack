@@ -10,7 +10,14 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
+import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+
+const saveAssetFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/assetFiles', () => ({
+  saveAssetFile: saveAssetFileMock,
+}));
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -102,14 +109,7 @@ const renderViewSwitcher = ({
 }: {
   createMenuOpen?: boolean;
   onCreateNode?: (
-    type:
-      | 'card'
-      | 'checklist'
-      | 'image'
-      | 'link'
-      | 'folder'
-      | 'group'
-      | 'sticky',
+    type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
   setCreateMenuOpen?: (v: boolean) => void;
@@ -133,6 +133,7 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcCreateViewFromTemplate.mockReset();
     rpcMocks.rpcDeleteView.mockReset();
     rpcMocks.rpcRenameView.mockReset();
+    saveAssetFileMock.mockReset();
 
     rpcMocks.rpcListViews.mockResolvedValue({
       views: [
@@ -466,7 +467,7 @@ describe('viewSwitcher', () => {
     expect(rpcMocks.rpcDeleteView).not.toHaveBeenCalled();
   });
 
-  it('creates supported nodes from the create menu and ignores disabled items', async () => {
+  it('creates supported nodes from the create menu', async () => {
     const onCreateNode = vi.fn();
     renderViewSwitcher({ createMenuOpen: true, onCreateNode });
 
@@ -478,9 +479,37 @@ describe('viewSwitcher', () => {
     expect(onCreateNode).toHaveBeenCalledWith('image');
 
     const fileItem = screen.getByRole('menuitem', { name: 'File' });
-    expect(fileItem).toHaveAttribute('aria-disabled', 'true');
-    fireEvent.click(fileItem);
-    expect(onCreateNode).toHaveBeenCalledTimes(1);
+    expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('creates asset nodes from the create menu file picker', async () => {
+    const onCreateNode = vi.fn();
+    const assetData = {
+      attachmentFile: 'attachments/file_abc.txt',
+      color: '#FFFFFF',
+      fileName: 'notes.txt',
+      kind: 'file',
+      mimeType: 'text/plain',
+      size: 5,
+      title: 'notes.txt',
+    };
+    saveAssetFileMock.mockResolvedValueOnce(assetData);
+
+    const { container } = renderViewSwitcher({
+      createMenuOpen: true,
+      onCreateNode,
+    });
+    const input = container.querySelector('input[type="file"]')!;
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(saveAssetFileMock).toHaveBeenCalledWith(file);
+      expect(onCreateNode).toHaveBeenCalledWith('asset', {
+        data: assetData,
+      });
+    });
   });
 
   it('closes the menu without saving when switching to the active view', async () => {

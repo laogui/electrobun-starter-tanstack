@@ -41,6 +41,7 @@ type ContextMenuState = {
   y: number;
   target:
     | 'canvas'
+    | 'asset'
     | 'card'
     | 'folder-child'
     | 'image'
@@ -173,6 +174,24 @@ const getLinkItems = (): MenuItem[] => [
   },
 ];
 
+const getAssetItems = (): MenuItem[] => [
+  {
+    id: 'focus',
+    label: m.menu_open_focused(),
+    icon: Maximize2,
+    shortcut: 'Enter',
+  },
+  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
+  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
+];
+
 type EdgePathType = 'smoothstep' | 'bezier';
 
 const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
@@ -263,9 +282,11 @@ export function CanvasContextMenu({
                 ? getImageItems()
                 : menu.target === 'link'
                   ? getLinkItems()
-                  : menu.target === 'card'
-                    ? getCardItems()
-                    : getCanvasItems()
+                  : menu.target === 'asset'
+                    ? getAssetItems()
+                    : menu.target === 'card'
+                      ? getCardItems()
+                      : getCanvasItems()
     : [];
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;

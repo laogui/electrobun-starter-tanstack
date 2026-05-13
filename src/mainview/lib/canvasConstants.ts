@@ -1,10 +1,12 @@
 import LabeledEdge from '@/components/canvas/edges/LabeledEdge';
+import AssetNode from '@/components/canvas/nodes/AssetNode';
 import CardNode from '@/components/canvas/nodes/CardNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
 import LinkNode from '@/components/canvas/nodes/LinkNode';
 import {
+  AssetNodeReadOnly,
   CardNodeReadOnly,
   FolderNodeReadOnly,
   GroupNodeReadOnly,
@@ -38,6 +40,7 @@ export {
 } from './colorUtils';
 
 export const nodeTypes = {
+  asset: AssetNode,
   card: CardNode,
   folder: FolderNode,
   group: GroupNode,
@@ -53,6 +56,7 @@ export const nodeTypes = {
  * export, minimap thumbnails).
  */
 export const readOnlyNodeTypes = {
+  asset: AssetNodeReadOnly,
   card: CardNodeReadOnly,
   folder: FolderNodeReadOnly,
   group: GroupNodeReadOnly,

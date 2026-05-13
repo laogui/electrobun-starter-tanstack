@@ -25,6 +25,10 @@ const interactionMocks = vi.hoisted(() => ({
   onCreateNode: vi.fn(),
 }));
 
+const assetFileMocks = vi.hoisted(() => ({
+  saveAssetFile: vi.fn(),
+}));
+
 const exportMocks = vi.hoisted(() => ({
   exportReactFlowCanvasToJson: vi.fn(),
   exportReactFlowCanvasToPng: vi.fn(),
@@ -57,6 +61,10 @@ vi.mock('@/lib/canvasExport', () => ({
   exportReactFlowCanvasToJson: exportMocks.exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng: exportMocks.exportReactFlowCanvasToPng,
   sanitizeExportFileName: exportMocks.sanitizeExportFileName,
+}));
+
+vi.mock('@/lib/assetFiles', () => ({
+  saveAssetFile: assetFileMocks.saveAssetFile,
 }));
 
 vi.mock('sonner', () => ({
@@ -128,6 +136,8 @@ vi.mock('@xyflow/react', async () => {
       nodes,
       onInit,
       onPaneContextMenu,
+      onDragOver,
+      onDrop,
       onNodeDoubleClick,
       children,
     }: {
@@ -142,6 +152,8 @@ vi.mock('@xyflow/react', async () => {
         getViewport: () => { x: number; y: number; zoom: number };
       }) => void;
       onPaneContextMenu?: (event: MouseEvent) => void;
+      onDragOver?: (event: DragEvent) => void;
+      onDrop?: (event: DragEvent) => void;
       onNodeDoubleClick?: (
         event: MouseEvent,
         node: { id: string; type?: string; data: Record<string, unknown> }
@@ -162,6 +174,43 @@ vi.mock('@xyflow/react', async () => {
             type="button"
           >
             Open canvas menu
+          </button>
+          <button
+            onClick={() => {
+              const file = new File(['hello'], 'notes.txt', {
+                type: 'text/plain',
+              });
+              const event = {
+                clientX: 320,
+                clientY: 420,
+                dataTransfer: {
+                  files: [file],
+                  getData: () => '',
+                  types: ['Files'],
+                },
+                preventDefault: vi.fn(),
+              } as unknown as DragEvent;
+              onDrop?.(event);
+            }}
+            type="button"
+          >
+            Drop file
+          </button>
+          <button
+            onClick={() => {
+              const event = {
+                dataTransfer: {
+                  dropEffect: 'move',
+                  files: [],
+                  types: ['Files'],
+                },
+                preventDefault: vi.fn(),
+              } as unknown as DragEvent;
+              onDragOver?.(event);
+            }}
+            type="button"
+          >
+            Drag file over canvas
           </button>
           <button
             onClick={() => {
@@ -272,6 +321,7 @@ describe('routes/index', () => {
     rpcMocks.rpcGetSettings.mockReset();
     rpcMocks.rpcGetSettings.mockResolvedValue(null);
     interactionMocks.onCreateNode.mockReset();
+    assetFileMocks.saveAssetFile.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockResolvedValue(true);
     exportMocks.exportReactFlowCanvasToJson.mockReset();
@@ -312,6 +362,15 @@ describe('routes/index', () => {
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
     rpcMocks.rpcSetActiveView.mockReset();
     rpcMocks.rpcSetActiveView.mockResolvedValue({ success: true });
+    assetFileMocks.saveAssetFile.mockResolvedValue({
+      attachmentFile: 'attachments/file_abc.txt',
+      color: '#FFFFFF',
+      fileName: 'notes.txt',
+      kind: 'file',
+      mimeType: 'text/plain',
+      size: 5,
+      title: 'notes.txt',
+    });
   });
 
   afterEach(() => {
@@ -434,6 +493,38 @@ describe('routes/index', () => {
         title: 'example.com',
         color: '#FFFFFF',
       },
+    });
+  });
+
+  it('creates asset nodes from dropped files', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drop file' }));
+
+    await waitFor(() => {
+      expect(assetFileMocks.saveAssetFile).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'notes.txt' })
+      );
+      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('asset', {
+        anchorCenter: { x: 320, y: 420 },
+        data: {
+          attachmentFile: 'attachments/file_abc.txt',
+          color: '#FFFFFF',
+          fileName: 'notes.txt',
+          kind: 'file',
+          mimeType: 'text/plain',
+          size: 5,
+          title: 'notes.txt',
+        },
+      });
     });
   });
 

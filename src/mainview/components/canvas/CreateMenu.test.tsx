@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateMenu } from '@/components/canvas/CreateMenu';
+
+const saveAssetFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/assetFiles', () => ({
+  saveAssetFile: saveAssetFileMock,
+}));
 
 vi.mock('../../../paraglide/messages.js', () => ({
   menu_note: () => 'Note',
@@ -48,7 +54,7 @@ describe('createMenu', () => {
     expect(onCreateNode).toHaveBeenCalledWith('checklist');
   });
 
-  it('does not allow disabled menu items to trigger creation', () => {
+  it('exposes file creation as an enabled menu item', () => {
     const onCreateNode = vi.fn();
     const setOpen = vi.fn();
 
@@ -56,13 +62,41 @@ describe('createMenu', () => {
       <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
     );
 
-    expect(screen.getByRole('menuitem', { name: 'File' })).toHaveAttribute(
+    expect(screen.getByRole('menuitem', { name: 'File' })).not.toHaveAttribute(
       'aria-disabled',
       'true'
     );
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
+  });
 
-    expect(onCreateNode).not.toHaveBeenCalled();
+  it('creates an asset node from the file picker', async () => {
+    const onCreateNode = vi.fn();
+    const setOpen = vi.fn();
+    const assetData = {
+      attachmentFile: 'attachments/file_abc.txt',
+      color: '#FFFFFF',
+      fileName: 'notes.txt',
+      kind: 'file',
+      mimeType: 'text/plain',
+      size: 5,
+      title: 'notes.txt',
+    };
+    saveAssetFileMock.mockResolvedValueOnce(assetData);
+
+    const { container } = render(
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+    );
+    const input = container.querySelector('input[type="file"]')!;
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(saveAssetFileMock).toHaveBeenCalledWith(file);
+      expect(onCreateNode).toHaveBeenCalledWith('asset', {
+        data: assetData,
+      });
+      expect(setOpen).toHaveBeenCalledWith(false);
+    });
   });
 
   it('creates a link node from the inline URL form', () => {

@@ -27,6 +27,8 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { saveAssetFile } from '@/lib/assetFiles';
+import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   isRpcAvailable,
   rpcCreateView,
@@ -58,7 +60,7 @@ const getCreateMenuItems = () => [
   { id: 'link', label: 'Link', icon: LinkIcon, enabled: true },
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
   { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
-  { id: 'file', label: m.menu_file(), icon: File, enabled: false },
+  { id: 'file', label: m.menu_file(), icon: File, enabled: true },
 ];
 
 export function ViewSwitcher({
@@ -71,14 +73,7 @@ export function ViewSwitcher({
 }: {
   createMenuOpen: boolean;
   onCreateNode: (
-    type:
-      | 'card'
-      | 'checklist'
-      | 'image'
-      | 'link'
-      | 'folder'
-      | 'group'
-      | 'sticky',
+    type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
   onExportCanvas?: () => void;
@@ -92,6 +87,7 @@ export function ViewSwitcher({
   const [linkFormOpen, setLinkFormOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const assetFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
@@ -318,8 +314,35 @@ export function ViewSwitcher({
 
   const activeView = views.find((v) => v.id === activeViewId);
 
+  const handleAssetFile = useCallback(
+    async (file: File) => {
+      try {
+        const data = await saveAssetFile(file);
+        onCreateNode('asset', { data: { ...data } });
+        setCreateMenuOpen(false);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'File could not be saved.';
+        toast.error(message);
+      }
+    },
+    [onCreateNode, setCreateMenuOpen]
+  );
+
   return (
     <>
+      <input
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            handleAssetFile(file);
+          }
+          event.target.value = '';
+        }}
+        ref={assetFileInputRef}
+        type="file"
+      />
       <DeleteViewConfirmDialog
         onCancel={() => {
           setPendingDeleteId(null);
@@ -461,20 +484,11 @@ export function ViewSwitcher({
                             ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
                             : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
                         } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
-                        closeOnClick={item.id !== 'link'}
+                        closeOnClick={item.id !== 'link' && item.id !== 'file'}
                         disabled={!item.enabled}
                         key={item.id}
                         onClick={() => {
-                          const map: Record<
-                            string,
-                            | 'card'
-                            | 'checklist'
-                            | 'image'
-                            | 'link'
-                            | 'folder'
-                            | 'group'
-                            | 'sticky'
-                          > = {
+                          const map: Record<string, CreatableCanvasNodeKind> = {
                             note: 'card',
                             checklist: 'checklist',
                             sticky: 'sticky',
@@ -482,11 +496,16 @@ export function ViewSwitcher({
                             link: 'link',
                             folder: 'folder',
                             group: 'group',
+                            file: 'asset',
                           };
                           const type = map[item.id];
                           if (type) {
                             if (type === 'link') {
                               setLinkFormOpen(true);
+                              return;
+                            }
+                            if (type === 'asset') {
+                              assetFileInputRef.current?.click();
                               return;
                             }
                             onCreateNode(type);

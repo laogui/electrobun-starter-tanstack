@@ -6,6 +6,7 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { FLAGS } from '@/lib/flags';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import { AssetContent } from './nodes/AssetNode';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
@@ -173,6 +174,8 @@ export const FocusedView = ({ node, onClose }: any) => {
         <div className="h-full">
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
+          ) : node.type === 'asset' ? (
+            <AssetContent data={node.data} isFocused={true} />
           ) : node.type === 'link' ? (
             <LinkContent data={node.data} isFocused={true} />
           ) : isText ? (

@@ -35,6 +35,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
+import { saveAssetFile } from '@/lib/assetFiles';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
   exportReactFlowCanvasToJson,
@@ -115,6 +116,13 @@ function getDroppedText(dataTransfer: DataTransfer | null): string {
     dataTransfer.getData('text/plain') ||
     dataTransfer.getData('text')
   );
+}
+
+function getDroppedFiles(dataTransfer: DataTransfer | null): File[] {
+  if (!dataTransfer?.files?.length) {
+    return [];
+  }
+  return Array.from(dataTransfer.files).filter((file) => file.size >= 0);
 }
 
 function loadLayoutModeFromStorage(
@@ -233,6 +241,28 @@ function CanvasComponent() {
         data: { ...data },
       });
       return true;
+    },
+    [onCreateNode]
+  );
+
+  const createAssetsFromFiles = useCallback(
+    async (files: File[], anchorCenter: { x: number; y: number }) => {
+      for (const [index, file] of files.entries()) {
+        try {
+          const data = await saveAssetFile(file);
+          onCreateNode('asset', {
+            anchorCenter: {
+              x: anchorCenter.x + index * 28,
+              y: anchorCenter.y + index * 28,
+            },
+            data: { ...data },
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'File could not be saved.';
+          toast.error(message);
+        }
+      }
     },
     [onCreateNode]
   );
@@ -538,12 +568,24 @@ function CanvasComponent() {
         return;
       }
 
+      const files = getDroppedFiles(dataTransfer ?? null);
+      if (files.length > 0) {
+        e.preventDefault();
+        createAssetsFromFiles(files, position);
+        return;
+      }
+
       const text = getDroppedText(dataTransfer ?? null);
       if (createLinkFromText(text, { anchorCenter: position })) {
         e.preventDefault();
       }
     },
-    [createLinkFromText, pinNoteToCanvas, screenToFlowPosition]
+    [
+      createAssetsFromFiles,
+      createLinkFromText,
+      pinNoteToCanvas,
+      screenToFlowPosition,
+    ]
   );
 
   const onDragOverCanvas = useCallback((e: React.DragEvent | DragEvent) => {
@@ -551,11 +593,14 @@ function CanvasComponent() {
     const dataTransfer = (e as React.DragEvent).dataTransfer;
     if (dataTransfer) {
       const types = Array.from(dataTransfer.types);
+      const hasFilePayload =
+        types.includes('Files') || (dataTransfer.files?.length ?? 0) > 0;
       const hasLinkPayload =
         types.includes('text/uri-list') ||
         types.includes('text/plain') ||
         types.includes('text');
-      dataTransfer.dropEffect = hasLinkPayload ? 'copy' : 'move';
+      dataTransfer.dropEffect =
+        hasFilePayload || hasLinkPayload ? 'copy' : 'move';
     }
   }, []);
 

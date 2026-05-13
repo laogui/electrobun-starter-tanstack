@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { colorToStyle } from '@/lib/colorUtils';
 
 import { CanvasContextMenu, type ContextMenuState } from './ContextMenu';
+import { AssetContent } from './nodes/AssetNode';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
@@ -27,6 +28,9 @@ const FolderChildContent = ({ child }: { child: FolderChild }) => {
   }
   if (child.type === 'link') {
     return <LinkContent data={child.data} />;
+  }
+  if (child.type === 'asset') {
+    return <AssetContent data={child.data} />;
   }
   if (child.type === 'sticky') {
     return (

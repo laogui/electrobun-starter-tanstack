@@ -16,6 +16,7 @@
 import { Handle, Position } from '@xyflow/react';
 import { memo } from 'react';
 
+import { AssetContent } from './AssetNode';
 import { CardContent } from './CardNode';
 import { FolderContent } from './FolderNode';
 import { GroupContent } from './GroupNode';
@@ -85,6 +86,16 @@ export const LinkNodeReadOnly = memo(({ data }: { data: any }) => (
   </div>
 ));
 LinkNodeReadOnly.displayName = 'LinkNodeReadOnly';
+
+export const AssetNodeReadOnly = memo(({ data }: { data: any }) => (
+  <div className="size-full">
+    <ReadOnlyHandles />
+    <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+      <AssetContent data={data} />
+    </div>
+  </div>
+));
+AssetNodeReadOnly.displayName = 'AssetNodeReadOnly';
 
 export const StickyNodeReadOnly = memo(({ data }: { data: any }) => (
   <div className="size-full">

@@ -142,6 +142,7 @@ describe('sanitizeForPersistence', () => {
         title: 'Pic',
         imageUrl: '',
         imageFile: 'attachments/img_abc.png',
+        missing: true,
         thumbnailFile: 'attachments/thumb_abc.jpg',
         previewUrl: 'blob:http://localhost/runtime',
         thumbnailUrl: 'data:image/jpeg;base64,xxx',
@@ -154,6 +155,7 @@ describe('sanitizeForPersistence', () => {
 
     expect(data).not.toHaveProperty('previewUrl');
     expect(data).not.toHaveProperty('thumbnailUrl');
+    expect(data).not.toHaveProperty('missing');
     expect(data.imageFile).toBe('attachments/img_abc.png');
     expect(data.thumbnailFile).toBe('attachments/thumb_abc.jpg');
   });
@@ -174,6 +176,7 @@ describe('sanitizeForPersistence', () => {
               color: '#FFFFFF',
               isHidden: true,
               isDropTarget: true,
+              missing: true,
               previewUrl: 'blob:1',
               thumbnailUrl: 'blob:2',
             },
@@ -207,6 +210,7 @@ describe('sanitizeForPersistence', () => {
       expect(child.data).not.toHaveProperty('isDropTarget');
       expect(child.data).not.toHaveProperty('previewUrl');
       expect(child.data).not.toHaveProperty('thumbnailUrl');
+      expect(child.data).not.toHaveProperty('missing');
     }
     expect(children[0]?.data.title).toBe('Note');
     expect(children[1]?.data.title).toBe('Pic');

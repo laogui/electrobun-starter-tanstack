@@ -11,9 +11,12 @@ import {
   StickyNote,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { LinkCreateForm } from '@/components/canvas/LinkCreateForm';
+import { saveAssetFile } from '@/lib/assetFiles';
+import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import type { CreateNodeOptions } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
 
@@ -30,7 +33,7 @@ const getMenuItems = () => [
   { id: 'link', label: 'Link', icon: LinkIcon, enabled: true },
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
   { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
-  { id: 'file', label: m.menu_file(), icon: File, enabled: false },
+  { id: 'file', label: m.menu_file(), icon: File, enabled: true },
 ];
 
 export function CreateMenu({
@@ -39,20 +42,29 @@ export function CreateMenu({
   setOpen,
 }: {
   onCreateNode: (
-    type:
-      | 'card'
-      | 'checklist'
-      | 'image'
-      | 'link'
-      | 'folder'
-      | 'group'
-      | 'sticky',
+    type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
   open: boolean;
   setOpen: (v: boolean, details?: unknown) => void;
 }) {
   const [linkFormOpen, setLinkFormOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      try {
+        const data = await saveAssetFile(file);
+        onCreateNode('asset', { data: { ...data } });
+        setOpen(false);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'File could not be saved.';
+        toast.error(message);
+      }
+    },
+    [onCreateNode, setOpen]
+  );
 
   const handleSelect = (id: string) => {
     switch (id) {
@@ -84,6 +96,10 @@ export function CreateMenu({
         onCreateNode('group');
         break;
       }
+      case 'file': {
+        fileInputRef.current?.click();
+        break;
+      }
     }
   };
 
@@ -91,6 +107,18 @@ export function CreateMenu({
 
   return (
     <div className="fixed right-6 bottom-6 z-40">
+      <input
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            handleFile(file);
+          }
+          event.target.value = '';
+        }}
+        ref={fileInputRef}
+        type="file"
+      />
       <Menu.Root
         onOpenChange={(nextOpen, details) => {
           if (!nextOpen) {
@@ -128,7 +156,7 @@ export function CreateMenu({
                         ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/5'
                         : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
                     } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
-                    closeOnClick={item.id !== 'link'}
+                    closeOnClick={item.id !== 'link' && item.id !== 'file'}
                     disabled={!item.enabled}
                     key={item.id}
                     onClick={() => handleSelect(item.id)}

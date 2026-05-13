@@ -9,6 +9,9 @@ import { rpcSaveAttachment } from '@/lib/rpc';
 const MEDIA_METADATA_TIMEOUT_MS = 4500;
 const VIDEO_THUMBNAIL_MAX_EDGE = 640;
 const VIDEO_THUMBNAIL_QUALITY = 0.82;
+const VIDEO_THUMBNAIL_SEEK_FRACTIONS = [0.1, 0.25, 0.5, 0] as const;
+const AUDIO_WAVEFORM_SAMPLE_COUNT = 48;
+const AUDIO_WAVEFORM_MAX_DURATION_S = 10 * 60;
 
 export interface AssetImportProgress {
   fileName: string;
@@ -125,20 +128,7 @@ function sizeVideoThumbnail(video: HTMLVideoElement): {
   };
 }
 
-async function captureVideoThumbnail(
-  video: HTMLVideoElement,
-  duration: number | undefined
-): Promise<string | undefined> {
-  if (!(video.videoWidth && video.videoHeight)) {
-    await waitForMediaEvent(video, 'loadeddata');
-  }
-
-  const seekTarget = duration ? Math.min(1, duration * 0.1) : 0;
-  if (seekTarget > 0) {
-    video.currentTime = seekTarget;
-    await waitForMediaEvent(video, 'seeked');
-  }
-
+function drawVideoThumbnail(video: HTMLVideoElement): string | undefined {
   const { width, height } = sizeVideoThumbnail(video);
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -149,6 +139,48 @@ async function captureVideoThumbnail(
   }
   context.drawImage(video, 0, 0, width, height);
   return canvas.toDataURL('image/jpeg', VIDEO_THUMBNAIL_QUALITY);
+}
+
+async function captureVideoThumbnail(
+  video: HTMLVideoElement,
+  duration: number | undefined
+): Promise<string | undefined> {
+  if (!(video.videoWidth && video.videoHeight)) {
+    await waitForMediaEvent(video, 'loadeddata');
+  }
+
+  // Try a sequence of seek targets so codecs that fail at one timestamp can
+  // still produce a usable thumbnail. The frame may be black at t=0 for some
+  // encoders, so prefer a small offset first and fall back to the start.
+  const candidates: number[] = duration
+    ? VIDEO_THUMBNAIL_SEEK_FRACTIONS.map((fraction) => {
+        if (fraction === 0) {
+          return 0;
+        }
+        return Math.min(Math.max(0.5, duration * fraction), duration - 0.01);
+      })
+    : [0];
+
+  let lastError: unknown;
+  for (const target of candidates) {
+    try {
+      if (target > 0) {
+        video.currentTime = target;
+        await waitForMediaEvent(video, 'seeked');
+      }
+      const dataUrl = drawVideoThumbnail(video);
+      if (dataUrl) {
+        return dataUrl;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  return;
 }
 
 async function extractVideoMetadata(file: File): Promise<{
@@ -210,6 +242,105 @@ async function extractAudioMetadata(file: File): Promise<{
       // jsdom and some embedded runtimes do not implement media reset.
     }
     URL.revokeObjectURL(objectUrl);
+  }
+}
+
+type AudioContextLike = AudioContext & { close(): Promise<void> };
+
+function getAudioContextConstructor(): (new () => AudioContextLike) | null {
+  const w = globalThis as unknown as {
+    AudioContext?: new () => AudioContextLike;
+    webkitAudioContext?: new () => AudioContextLike;
+  };
+  return w.AudioContext ?? w.webkitAudioContext ?? null;
+}
+
+/**
+ * Reduce a PCM channel to a small array of normalized peak amplitudes that
+ * can be persisted in the manifest. Values are clamped to the [0, 1] range
+ * so renderers can scale them to bar heights without further bookkeeping.
+ */
+export function summarizeWaveform(
+  channel: Float32Array,
+  sampleCount = AUDIO_WAVEFORM_SAMPLE_COUNT
+): number[] {
+  if (sampleCount <= 0 || channel.length === 0) {
+    return [];
+  }
+  const buckets = Math.max(1, Math.floor(sampleCount));
+  const bucketSize = Math.max(1, Math.floor(channel.length / buckets));
+  const peaks = new Array<number>(buckets);
+  let maxPeak = 0;
+  for (let bucket = 0; bucket < buckets; bucket += 1) {
+    const start = bucket * bucketSize;
+    const end =
+      bucket === buckets - 1
+        ? channel.length
+        : Math.min(start + bucketSize, channel.length);
+    let peak = 0;
+    for (let index = start; index < end; index += 1) {
+      const value = Math.abs(channel[index] ?? 0);
+      if (value > peak) {
+        peak = value;
+      }
+    }
+    peaks[bucket] = peak;
+    if (peak > maxPeak) {
+      maxPeak = peak;
+    }
+  }
+  if (maxPeak <= 0) {
+    return peaks.fill(0);
+  }
+  return peaks.map((value) => Math.min(1, value / maxPeak));
+}
+
+function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Unable to read file as ArrayBuffer.'));
+    });
+    reader.addEventListener('error', () => {
+      reject(new Error('Unable to read file.'));
+    });
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function extractAudioWaveform(
+  file: File,
+  duration: number | undefined
+): Promise<number[] | undefined> {
+  // Skip very long clips to keep decode time and memory bounded; the waveform
+  // is decorative and a stable fallback bar set already exists.
+  if (duration && duration > AUDIO_WAVEFORM_MAX_DURATION_S) {
+    return;
+  }
+  const Ctor = getAudioContextConstructor();
+  if (!Ctor) {
+    return;
+  }
+
+  let context: AudioContextLike | null = null;
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    context = new Ctor();
+    const decoded = await context.decodeAudioData(buffer.slice(0));
+    const channel = decoded.getChannelData(0);
+    return summarizeWaveform(channel);
+  } catch {
+    return;
+  } finally {
+    try {
+      await context?.close();
+    } catch {
+      // Some runtimes (jsdom) do not implement close(); ignore.
+    }
   }
 }
 
@@ -290,6 +421,12 @@ export async function saveAssetFile(
     reportProgress(0.96, 'Saving thumbnail');
   }
 
+  let waveform: number[] | undefined;
+  if (classified.kind === 'audio') {
+    reportProgress(0.94, 'Reading waveform');
+    waveform = await extractAudioWaveform(file, mediaMetadata.duration);
+  }
+
   const data = createAssetNodeData(file, {
     attachmentFile: result?.filePath,
   });
@@ -301,5 +438,6 @@ export async function saveAssetFile(
     ...(mediaMetadata.thumbnailUrl
       ? { thumbnailUrl: mediaMetadata.thumbnailUrl }
       : {}),
+    ...(waveform && waveform.length > 0 ? { waveform } : {}),
   };
 }

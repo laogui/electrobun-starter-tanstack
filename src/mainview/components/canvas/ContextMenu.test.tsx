@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
 const COPY_RE = /copy/i;
+const NEW_NOTE_RE = /new note/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
   edges: [
@@ -82,6 +83,17 @@ describe('canvasContextMenu', () => {
         onClose={onClose}
       />
     );
+
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: 'Paste ⌘V' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reset zoom' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: NEW_NOTE_RE })
+    ).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
 

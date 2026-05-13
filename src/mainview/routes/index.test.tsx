@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/store/canvasStore';
 
-const NEW_NOTE_RE = /new note/i;
 const FOCUSED_RE = /Focused/;
+const NEW_NOTE_RE = /new note/i;
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -430,11 +430,16 @@ describe('routes/index', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
-    fireEvent.click(screen.getByRole('button', { name: NEW_NOTE_RE }));
 
-    await waitFor(() => {
-      expect(useCanvasStore.getState().nodes.length).toBeGreaterThanOrEqual(2);
-    });
+    expect(
+      screen.getByRole('button', { name: 'Paste ⌘V' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reset zoom' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: NEW_NOTE_RE })
+    ).not.toBeInTheDocument();
   });
 
   it('creates link nodes from the create menu URL form', async () => {

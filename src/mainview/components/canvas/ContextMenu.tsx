@@ -3,19 +3,13 @@ import {
   ClipboardPaste,
   Copy,
   FilePlus,
-  Folder,
   FolderOpen,
-  Group,
-  ImageIcon,
-  ListChecks,
   LogOut,
   Maximize2,
-  NotebookPen,
   Palette,
   PenLine,
   Sparkles,
   Spline,
-  StickyNote,
   Tag,
   Trash2,
   ZoomIn,
@@ -55,21 +49,6 @@ type ContextMenuState = {
 } | null;
 
 const getCanvasItems = (): MenuItem[] => [
-  {
-    id: 'new-note',
-    label: m.menu_new_note(),
-    icon: StickyNote,
-    shortcut: '⌘N',
-  },
-  {
-    id: 'new-checklist',
-    label: m.menu_new_checklist(),
-    icon: ListChecks,
-  },
-  { id: 'new-sticky', label: m.menu_new_sticky(), icon: NotebookPen },
-  { id: 'new-image', label: m.menu_new_image(), icon: ImageIcon },
-  { id: 'new-folder', label: m.menu_new_folder(), icon: Folder },
-  { id: 'new-group', label: m.menu_new_group(), icon: Group },
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
 ];

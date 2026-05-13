@@ -23,8 +23,15 @@ vi.mock('@xyflow/react', () => ({
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
-    selector: (state: { saveSnapshot: () => void }) => unknown
-  ) => selector({ saveSnapshot: vi.fn() }),
+    selector: (state: {
+      saveSnapshot: () => void;
+      updateNodeData: (id: string, updates: Record<string, unknown>) => void;
+    }) => unknown
+  ) => selector({ saveSnapshot: vi.fn(), updateNodeData: vi.fn() }),
+}));
+
+vi.mock('@/lib/rpc', () => ({
+  rpcUnfurlLink: vi.fn(async () => null),
 }));
 
 describe('LinkContent', () => {

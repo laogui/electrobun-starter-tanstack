@@ -1071,4 +1071,84 @@ describe('src/bun/index helpers', () => {
     expect(topLevelFile.arrayBuffer).not.toHaveBeenCalled();
     expect(childFile.arrayBuffer).not.toHaveBeenCalled();
   });
+
+  it('loadCanvas hydrates image thumbnails for top-level nodes and folder children with original fallback', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: {
+            color: '#fff',
+            imageFile: 'attachments/full.png',
+            thumbnailFile: 'attachments/missing-thumb.jpg',
+          },
+        },
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 10, y: 10 },
+          data: {
+            title: '1 item',
+            children: [
+              {
+                id: 'child-image',
+                type: 'image',
+                data: {
+                  color: '#fff',
+                  imageFile: 'attachments/child-full.png',
+                  thumbnailFile: 'attachments/child-thumb.jpg',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+
+    const missingThumbnail = {
+      exists: vi.fn().mockResolvedValue(false),
+    };
+    const originalFile = {
+      exists: vi.fn().mockResolvedValue(true),
+      arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+      type: 'image/png',
+    };
+    const childThumbnail = {
+      exists: vi.fn().mockResolvedValue(true),
+      arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6]).buffer),
+      type: 'image/jpeg',
+    };
+    bunFileMock.mockImplementation((path: string) => {
+      if (path.endsWith('/attachments/missing-thumb.jpg')) {
+        return missingThumbnail;
+      }
+      if (path.endsWith('/attachments/full.png')) {
+        return originalFile;
+      }
+      if (path.endsWith('/attachments/child-thumb.jpg')) {
+        return childThumbnail;
+      }
+      return { exists: vi.fn().mockResolvedValue(false) };
+    });
+
+    const result = (await canvasHandlers.loadCanvas({
+      viewId: 'default',
+    })) as { nodes: Array<{ data: Record<string, any> }> };
+
+    expect(result.nodes[0]?.data.imageUrl).toBe('data:image/png;base64,AQID');
+    expect(result.nodes[0]?.data.thumbnailUrl).toBeUndefined();
+    expect(result.nodes[1]?.data.children[0].data.thumbnailUrl).toBe(
+      'data:image/jpeg;base64,BAUG'
+    );
+    expect(originalFile.arrayBuffer).toHaveBeenCalledTimes(1);
+    expect(childThumbnail.arrayBuffer).toHaveBeenCalledTimes(1);
+  });
 });

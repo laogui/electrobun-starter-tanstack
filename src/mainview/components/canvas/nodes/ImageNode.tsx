@@ -4,11 +4,12 @@ import {
   Position,
   useViewport,
 } from '@xyflow/react';
-import { ImagePlus } from 'lucide-react';
-import { memo, useCallback, useRef } from 'react';
+import { ImagePlus, Loader2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
-import { rpcSaveAttachment } from '@/lib/rpc';
+import { createImageThumbnail } from '@/lib/imageThumbnail';
+import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -21,6 +22,8 @@ export interface ImageData {
   imageUrl: string;
   isDropTarget?: boolean;
   isHidden?: boolean;
+  thumbnailFile?: string;
+  thumbnailUrl?: string;
   title?: string;
 }
 
@@ -31,7 +34,58 @@ export const ImageContent = ({
   data: ImageData;
   isFocused?: boolean;
 }) => {
-  if (!data.imageUrl) {
+  // The canvas always prefers the lightweight thumbnail when present so we
+  // avoid keeping the original full-resolution bitmap in memory just to draw
+  // a card preview. The focused / lightbox view falls back to the original
+  // and lazy-loads it from the workspace attachment when needed.
+  const [lazyImageUrl, setLazyImageUrl] = useState<string | null>(null);
+  const [lazyLoadFailed, setLazyLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLazyImageUrl(null);
+    setLazyLoadFailed(false);
+    if (!isFocused) {
+      return;
+    }
+    if (data.imageUrl) {
+      return;
+    }
+    if (!data.imageFile) {
+      return;
+    }
+    let cancelled = false;
+    rpcLoadAttachment(data.imageFile)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        if (result?.dataUrl) {
+          setLazyImageUrl(result.dataUrl);
+          return;
+        }
+        setLazyLoadFailed(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLazyLoadFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.imageFile, data.imageUrl, isFocused]);
+
+  const focusedSrc = data.imageUrl || lazyImageUrl || data.thumbnailUrl;
+  const previewSrc = data.thumbnailUrl || data.imageUrl;
+  const displaySrc = isFocused ? focusedSrc : previewSrc;
+  const isLazyLoading =
+    isFocused &&
+    !data.imageUrl &&
+    !!data.imageFile &&
+    !lazyImageUrl &&
+    !lazyLoadFailed;
+
+  if (!(displaySrc || isLazyLoading)) {
     return (
       <div
         className="flex size-full flex-col items-center justify-center gap-3"
@@ -45,16 +99,23 @@ export const ImageContent = ({
 
   return (
     <div className="flex size-full flex-col" style={colorToStyle(data.color)}>
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <img
-          alt={data.title ?? ''}
-          className={cn(
-            'pointer-events-none size-full',
-            isFocused ? 'object-contain' : 'object-cover'
-          )}
-          draggable={false}
-          src={data.imageUrl}
-        />
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {displaySrc ? (
+          <img
+            alt={data.title ?? ''}
+            className={cn(
+              'pointer-events-none size-full',
+              isFocused ? 'object-contain' : 'object-cover'
+            )}
+            draggable={false}
+            src={displaySrc}
+          />
+        ) : null}
+        {isLazyLoading ? (
+          <div className="absolute inset-0 grid place-items-center bg-black/5">
+            <Loader2 className="animate-spin text-white/80" size={28} />
+          </div>
+        ) : null}
       </div>
       {data.title ? (
         <div className="border-black/5 border-t px-4 py-3">
@@ -86,23 +147,50 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         return;
       }
       const reader = new FileReader();
-      reader.addEventListener('load', (e) => {
+      reader.addEventListener('load', async (e) => {
         const imageUrl = e.target?.result as string;
         const title = data.title || file.name.replace(FILE_EXT_RE, '');
 
         // Show image immediately with data URL — snapshot for undo
         commitNodeData(id, { imageUrl, title });
 
-        // Save to local file in background (side-effect, no extra snapshot)
-        rpcSaveAttachment(imageUrl, data.imageFile)
-          .then((result) => {
-            if (result?.filePath) {
-              updateNodeData(id, { imageFile: result.filePath });
+        // Save the original to a workspace attachment (side-effect; no extra snapshot)
+        try {
+          const original = await rpcSaveAttachment(imageUrl, data.imageFile);
+          if (original?.filePath) {
+            updateNodeData(id, { imageFile: original.filePath });
+          }
+        } catch (error) {
+          console.error('[ImageNode] Failed to save attachment:', error);
+          return;
+        }
+
+        // Generate and persist a lightweight thumbnail. Best-effort: large
+        // images get a small preview the canvas can display without holding
+        // the original bitmap in memory; small images skip this entirely.
+        try {
+          const thumbnailDataUrl = await createImageThumbnail(imageUrl);
+          if (!thumbnailDataUrl) {
+            return;
+          }
+          const thumb = await rpcSaveAttachment(
+            thumbnailDataUrl,
+            data.thumbnailFile,
+            {
+              kind: 'image',
+              mimeType: 'image/jpeg',
+              suggestedName: `${file.name.replace(FILE_EXT_RE, '')}-thumbnail.jpg`,
             }
-          })
-          .catch((error) => {
-            console.error('[ImageNode] Failed to save attachment:', error);
-          });
+          );
+          if (thumb?.filePath) {
+            updateNodeData(id, {
+              thumbnailFile: thumb.filePath,
+              thumbnailUrl: thumbnailDataUrl,
+            });
+          }
+        } catch (error) {
+          console.error('[ImageNode] Failed to save thumbnail:', error);
+        }
       });
       reader.readAsDataURL(file);
     },

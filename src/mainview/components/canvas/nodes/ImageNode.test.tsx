@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ImageNode, { ImageContent } from './ImageNode';
 
 const updateNodeDataMock = vi.fn();
+const rpcLoadAttachmentMock = vi.fn();
 const rpcSaveAttachmentMock = vi.fn();
 const useViewportMock = vi.fn(() => ({ zoom: 1 }));
 
@@ -78,6 +79,7 @@ vi.mock('@/store/canvasStore', () => ({
 }));
 
 vi.mock('@/lib/rpc', () => ({
+  rpcLoadAttachment: (...args: unknown[]) => rpcLoadAttachmentMock(...args),
   rpcSaveAttachment: (...args: unknown[]) => rpcSaveAttachmentMock(...args),
 }));
 
@@ -86,6 +88,7 @@ describe('ImageNode', () => {
 
   afterEach(() => {
     updateNodeDataMock.mockReset();
+    rpcLoadAttachmentMock.mockReset();
     rpcSaveAttachmentMock.mockReset();
     rpcSaveAttachmentMock.mockResolvedValue({ filePath: '/tmp/image.png' });
     useViewportMock.mockReset();
@@ -145,6 +148,35 @@ describe('ImageNode', () => {
     expect(
       document.querySelector('img[src="https://example.com/z.png"]')
     ).not.toBeNull();
+  });
+
+  it('falls back to the thumbnail when focused original image loading fails', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce(null);
+
+    render(
+      <ImageContent
+        data={{
+          color: '#fff',
+          imageFile: 'attachments/full.png',
+          imageUrl: '',
+          thumbnailUrl: 'data:image/jpeg;base64,thumb',
+          title: 'Preview',
+        }}
+        isFocused={true}
+      />
+    );
+
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute(
+      'src',
+      'data:image/jpeg;base64,thumb'
+    );
+
+    await waitFor(() => {
+      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+        'attachments/full.png'
+      );
+      expect(document.querySelector('.animate-spin')).toBeNull();
+    });
   });
 
   it('handles file input uploads and saves attachments', async () => {

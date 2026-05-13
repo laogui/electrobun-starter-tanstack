@@ -18,6 +18,7 @@ import {
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
 } from './cleanup';
+import { type UnfurlResult, unfurlLink } from './linkPreview';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
@@ -140,6 +141,45 @@ async function hydrateAssetData(
   return nextData;
 }
 
+async function hydrateImageData(
+  wsPath: string,
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const nextData: Record<string, unknown> = { ...data };
+  const existingPreview =
+    typeof data.thumbnailUrl === 'string' && Boolean(data.thumbnailUrl);
+  let hasPreview = existingPreview;
+
+  const thumbnailFile = data.thumbnailFile;
+  if (typeof thumbnailFile === 'string' && !hasPreview) {
+    try {
+      const thumbnail = await loadWorkspaceAttachment(wsPath, thumbnailFile);
+      if (thumbnail) {
+        nextData.thumbnailUrl = thumbnail.dataUrl;
+        hasPreview = true;
+      }
+    } catch {
+      // Thumbnail hydrate is best-effort; fall back to the original below.
+    }
+  }
+
+  const imageFile = data.imageFile;
+  if (typeof imageFile === 'string' && !data.imageUrl && !hasPreview) {
+    try {
+      const image = await loadWorkspaceAttachment(wsPath, imageFile);
+      if (image) {
+        nextData.imageUrl = image.dataUrl;
+      } else {
+        console.warn(`[persistence] Attachment not found: ${imageFile}`);
+      }
+    } catch {
+      console.warn(`[persistence] Attachment not found: ${imageFile}`);
+    }
+  }
+
+  return nextData;
+}
+
 export function getSettingsViewUrl(mainViewUrl: string): string {
   return mainViewUrl === DEV_SERVER_URL
     ? SETTINGS_DEV_SERVER_URL
@@ -199,6 +239,10 @@ interface CanvasRPC {
       openAttachment: {
         params: { filePath: string };
         response: { success: boolean };
+      };
+      unfurlLink: {
+        params: { url: string };
+        response: UnfurlResult;
       };
       exportPng: {
         params: { dataUrl: string; fileName: string };
@@ -525,29 +569,16 @@ async function main() {
                 };
               }
 
-              // Hydrate image nodes: read attachment file → data URL
-              if (
-                node.type === 'image' &&
-                node.data.imageFile &&
-                !node.data.imageUrl
-              ) {
-                const fullPath = join(wsPath, node.data.imageFile as string);
-                const file = Bun.file(fullPath);
-                if (await file.exists()) {
-                  const buffer = await file.arrayBuffer();
-                  const mimeType = file.type || 'image/png';
-                  const base64 = Buffer.from(buffer).toString('base64');
-                  return {
-                    ...node,
-                    data: {
-                      ...node.data,
-                      imageUrl: `data:${mimeType};base64,${base64}`,
-                    },
-                  };
-                }
-                console.warn(
-                  `[persistence] Attachment not found: ${node.data.imageFile}`
-                );
+              // Hydrate image nodes. New images persist a small thumbnail and
+              // the canvas displays it directly; the original full-resolution
+              // `imageUrl` is loaded lazily by the focused / lightbox view.
+              // Legacy images (no `thumbnailFile`) still hydrate `imageUrl`
+              // eagerly so older manifests keep rendering as before.
+              if (node.type === 'image') {
+                return {
+                  ...node,
+                  data: await hydrateImageData(wsPath, node.data),
+                };
               }
 
               // Hydrate card nodes that have a noteId reference
@@ -590,6 +621,15 @@ async function main() {
                       return {
                         ...child,
                         data: await hydrateAssetData(
+                          wsPath,
+                          (child.data ?? {}) as Record<string, unknown>
+                        ),
+                      };
+                    }
+                    if (child.type === 'image') {
+                      return {
+                        ...child,
+                        data: await hydrateImageData(
                           wsPath,
                           (child.data ?? {}) as Record<string, unknown>
                         ),
@@ -740,9 +780,14 @@ async function main() {
           // Phase 2: Write content in parallel (paths are now unique)
           const manifestNodes = await Promise.all(
             nodes.map(async (node, idx) => {
-              // Image nodes: strip imageUrl (large base64), keep imageFile ref
+              // Image nodes: strip imageUrl / thumbnailUrl (large base64),
+              // keep imageFile / thumbnailFile references.
               if (node.type === 'image') {
-                const { imageUrl, ...restData } = node.data;
+                const {
+                  imageUrl: _imageUrl,
+                  thumbnailUrl: _thumbnailUrl,
+                  ...restData
+                } = node.data;
                 return {
                   id: node.id,
                   type: node.type,
@@ -791,7 +836,11 @@ async function main() {
                         string,
                         unknown
                       >;
-                      const { imageUrl, ...rest } = childData;
+                      const {
+                        imageUrl: _imageUrl,
+                        thumbnailUrl: _thumbnailUrl,
+                        ...rest
+                      } = childData;
                       return { ...child, data: rest };
                     }
                     if (child.type !== 'card') {
@@ -946,6 +995,8 @@ async function main() {
 
         openAttachment: async ({ filePath }) =>
           openWorkspaceAttachment(wsPath, filePath),
+
+        unfurlLink: async ({ url }) => unfurlLink(url),
 
         exportPng: async ({ dataUrl, fileName }) => {
           const match = PNG_DATA_URL_RE.exec(dataUrl);

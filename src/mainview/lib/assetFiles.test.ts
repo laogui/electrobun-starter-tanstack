@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { saveAssetFile } from '@/lib/assetFiles';
+import { saveAssetFile, summarizeWaveform } from '@/lib/assetFiles';
 
 const rpcSaveAttachmentMock = vi.hoisted(() => vi.fn());
 
@@ -168,6 +168,139 @@ describe('saveAssetFile', () => {
         mimeType: 'image/jpeg',
         suggestedName: 'clip.mp4-thumbnail.jpg',
       }
+    );
+  });
+
+  it('extracts an audio waveform when AudioContext is available', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce({
+      filePath: 'attachments/audio_abc.mp3',
+    });
+
+    const objectUrl = 'blob:audio';
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => objectUrl),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(((
+      tagName: string
+    ) => {
+      if (tagName === 'audio') {
+        const audio = originalCreateElement('audio') as HTMLAudioElement;
+        Object.defineProperties(audio, {
+          duration: { configurable: true, value: 30 },
+          load: { configurable: true, value: vi.fn() },
+          src: {
+            configurable: true,
+            get: () => objectUrl,
+            set: () => {
+              window.setTimeout(() => {
+                audio.dispatchEvent(new Event('loadedmetadata'));
+              }, 0);
+            },
+          },
+        });
+        return audio;
+      }
+      return originalCreateElement(tagName);
+    }) as unknown as typeof document.createElement);
+
+    const decodeAudioData = vi.fn(async () => ({
+      getChannelData: () =>
+        new Float32Array(
+          Array.from({ length: 96 }, (_, index) => Math.sin(index / 4) * 0.6)
+        ),
+    }));
+    const close = vi.fn(async () => undefined);
+    let constructed = 0;
+    class FakeAudioContext {
+      decodeAudioData = decodeAudioData;
+      close = close;
+      constructor() {
+        constructed += 1;
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+
+    const file = new File(['music'], 'song.mp3', { type: 'audio/mpeg' });
+    const result = await saveAssetFile(file);
+
+    expect(constructed).toBe(1);
+    expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(result.duration).toBe(30);
+    expect(result.waveform).toBeDefined();
+    expect(result.waveform).toHaveLength(48);
+    for (const value of result.waveform ?? []) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('omits the waveform when AudioContext is unavailable', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce({
+      filePath: 'attachments/audio_abc.mp3',
+    });
+
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:audio'),
+      revokeObjectURL: vi.fn(),
+    });
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(((
+      tagName: string
+    ) => {
+      if (tagName === 'audio') {
+        const audio = originalCreateElement('audio') as HTMLAudioElement;
+        Object.defineProperties(audio, {
+          duration: { configurable: true, value: 5 },
+          load: { configurable: true, value: vi.fn() },
+          src: {
+            configurable: true,
+            get: () => 'blob:audio',
+            set: () => {
+              window.setTimeout(() => {
+                audio.dispatchEvent(new Event('loadedmetadata'));
+              }, 0);
+            },
+          },
+        });
+        return audio;
+      }
+      return originalCreateElement(tagName);
+    }) as unknown as typeof document.createElement);
+    vi.stubGlobal('AudioContext', undefined);
+    vi.stubGlobal('webkitAudioContext', undefined);
+
+    const file = new File(['x'], 'short.mp3', { type: 'audio/mpeg' });
+    const result = await saveAssetFile(file);
+    expect(result.waveform).toBeUndefined();
+  });
+});
+
+describe('summarizeWaveform', () => {
+  it('returns an empty array when given no samples', () => {
+    expect(summarizeWaveform(new Float32Array(0))).toEqual([]);
+  });
+
+  it('reduces a long channel into a normalized peak summary', () => {
+    const channel = new Float32Array(960);
+    for (let index = 0; index < channel.length; index += 1) {
+      channel[index] = Math.sin(index / 5) * 0.5;
+    }
+    const summary = summarizeWaveform(channel, 32);
+    expect(summary).toHaveLength(32);
+    expect(Math.max(...summary)).toBeCloseTo(1, 2);
+    for (const value of summary) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('returns zeros when the channel is silent', () => {
+    expect(summarizeWaveform(new Float32Array(100), 8)).toEqual(
+      new Array(8).fill(0)
     );
   });
 });

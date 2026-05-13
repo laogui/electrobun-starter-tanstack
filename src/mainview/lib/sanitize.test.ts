@@ -265,4 +265,54 @@ describe('sanitizeForPersistence', () => {
     const data = result.nodes[0]?.data as Record<string, unknown>;
     expect(data.children).toBe('unexpected-shape');
   });
+
+  it('drops transient unfurl status / error from link nodes', () => {
+    const node = createNode({
+      type: 'link',
+      data: {
+        url: 'https://example.com/',
+        title: 'Loading…',
+        color: '#FFFFFF',
+        unfurlStatus: 'loading',
+        unfurlError: 'temporary',
+      },
+    });
+
+    const result = sanitizeForPersistence([node], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+
+    expect(data).not.toHaveProperty('unfurlStatus');
+    expect(data).not.toHaveProperty('unfurlError');
+    expect(data.url).toBe('https://example.com/');
+  });
+
+  it('preserves terminal unfurl statuses (ready / failed)', () => {
+    const ready = createNode({
+      id: 'ready',
+      type: 'link',
+      data: {
+        url: 'https://example.com/',
+        title: 'OK',
+        color: '#FFFFFF',
+        unfurlStatus: 'ready',
+      },
+    });
+    const failed = createNode({
+      id: 'failed',
+      type: 'link',
+      data: {
+        url: 'https://example.com/',
+        title: 'OK',
+        color: '#FFFFFF',
+        unfurlStatus: 'failed',
+      },
+    });
+
+    const result = sanitizeForPersistence([ready, failed], []);
+    const readyData = result.nodes[0]?.data as Record<string, unknown>;
+    const failedData = result.nodes[1]?.data as Record<string, unknown>;
+
+    expect(readyData.unfurlStatus).toBe('ready');
+    expect(failedData.unfurlStatus).toBe('failed');
+  });
 });

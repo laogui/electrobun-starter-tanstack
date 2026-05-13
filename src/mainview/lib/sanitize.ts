@@ -23,6 +23,9 @@ const RUNTIME_NODE_KEYS = new Set([
  * - `previewUrl` / `thumbnailUrl`: hydrated runtime URLs (object URLs, data
  *   URLs) for asset / link / image nodes. The persisted source of truth is
  *   `attachmentFile` / `thumbnailFile`; the URL is regenerated on hydrate.
+ * - `unfurlError`: transient error string from the link preview fetch. The
+ *   `unfurlStatus` is stripped when it is in a non-terminal state (loading)
+ *   so the next session can re-attempt the fetch instead of being stuck.
  */
 const RUNTIME_DATA_KEYS = new Set([
   'isHidden',
@@ -30,7 +33,10 @@ const RUNTIME_DATA_KEYS = new Set([
   'missing',
   'previewUrl',
   'thumbnailUrl',
+  'unfurlError',
 ]);
+
+const TRANSIENT_UNFURL_STATUSES = new Set(['loading', 'idle']);
 
 interface FolderChildLike {
   data?: unknown;
@@ -49,6 +55,15 @@ function sanitizeNodeData(
   const cleanData: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
     if (RUNTIME_DATA_KEYS.has(k)) {
+      continue;
+    }
+    if (
+      k === 'unfurlStatus' &&
+      typeof v === 'string' &&
+      TRANSIENT_UNFURL_STATUSES.has(v)
+    ) {
+      // Drop "in flight" statuses so a fresh hydrate can retry the unfurl
+      // instead of remaining stuck in a loading spinner.
       continue;
     }
     if (k === 'children' && Array.isArray(v)) {

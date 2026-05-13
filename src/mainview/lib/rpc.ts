@@ -164,6 +164,26 @@ export async function rpcOpenAttachment(filePath: string) {
   return eb.rpc.request.openAttachment({ filePath });
 }
 
+export interface UnfurlLinkResult {
+  description?: string;
+  faviconUrl?: string;
+  imageUrl?: string;
+  siteName?: string;
+  status: 'failed' | 'ready';
+  title?: string;
+  url: string;
+}
+
+export async function rpcUnfurlLink(
+  url: string
+): Promise<UnfurlLinkResult | null> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.unfurlLink({ url });
+}
+
 export async function rpcExportPng(dataUrl: string, fileName: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

@@ -5,7 +5,7 @@ import {
   useViewport,
 } from '@xyflow/react';
 import { ExternalLink, Globe2, Link as LinkIcon } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
@@ -14,6 +14,7 @@ import {
   getLinkHost,
   normalizeLinkUrl,
 } from '@/lib/contentTypes';
+import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -164,10 +165,73 @@ export const LinkContent = ({
   );
 };
 
-const LinkNode = ({ data }: { id: string; data: LinkNodeRuntimeData }) => {
+const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const isZoomedOut = zoom < 0.4;
+
+  // Each (nodeId,url) pair is fetched at most once per session. Store the
+  // attempted url so re-renders with stale `data` references do not re-issue
+  // the request, but allow re-fetching when the user edits the URL later.
+  const unfurlAttemptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const url = typeof data.url === 'string' ? data.url : '';
+    if (!url) {
+      return;
+    }
+    const normalized = normalizeLinkUrl(url);
+    if (!normalized) {
+      return;
+    }
+    if (data.unfurlStatus === 'ready' || data.unfurlStatus === 'loading') {
+      return;
+    }
+    if (unfurlAttemptRef.current === normalized) {
+      return;
+    }
+    unfurlAttemptRef.current = normalized;
+    updateNodeData(id, { unfurlStatus: 'loading' });
+
+    let cancelled = false;
+    rpcUnfurlLink(normalized)
+      .then((result) => {
+        if (cancelled || !result) {
+          return;
+        }
+        if (result.status === 'failed') {
+          updateNodeData(id, {
+            unfurlStatus: 'failed',
+            unfurlError: 'Could not load link preview.',
+          });
+          return;
+        }
+        const { status: _status, url: _url, ...meta } = result;
+        updateNodeData(id, {
+          unfurlStatus: 'ready',
+          unfurlError: undefined,
+          ...(meta.title ? { title: meta.title } : {}),
+          ...(meta.description ? { description: meta.description } : {}),
+          ...(meta.siteName ? { siteName: meta.siteName } : {}),
+          ...(meta.imageUrl ? { imageUrl: meta.imageUrl } : {}),
+          ...(meta.faviconUrl ? { faviconUrl: meta.faviconUrl } : {}),
+        });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        updateNodeData(id, {
+          unfurlStatus: 'failed',
+          unfurlError: 'Could not load link preview.',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data.url, data.unfurlStatus, id, updateNodeData]);
 
   return (
     <div

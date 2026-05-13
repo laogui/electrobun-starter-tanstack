@@ -260,6 +260,7 @@ type CanvasNodeKind =
   | 'sticky'
   | 'folder'
   | 'group'
+  | 'image'
   | 'asset'
   | 'link';
 

@@ -12,14 +12,16 @@ import {
   FileQuestion,
   FileText,
   FileVideo,
+  Loader2,
+  Play,
 } from 'lucide-react';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { colorToStyle } from '@/lib/colorUtils';
 import type { AssetKind, AssetNodeData } from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
-import { rpcOpenAttachment } from '@/lib/rpc';
+import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -81,6 +83,29 @@ export function formatFileSize(size: number | undefined): string {
   return `${value.toFixed(precision)} ${units[unitIndex]}`;
 }
 
+export function formatDuration(duration: number | undefined): string | null {
+  if (
+    typeof duration !== 'number' ||
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
+    return null;
+  }
+
+  const totalSeconds = Math.round(duration);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
+      .toString()
+      .padStart(2, '0')}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function getAssetLabel(asset: AssetNodeData): string {
   if (asset.mimeType === 'application/pdf') {
     return 'PDF';
@@ -137,6 +162,186 @@ function AssetIcon({
   return <FileQuestion {...props} />;
 }
 
+function isPlayableMedia(asset: AssetNodeData): boolean {
+  return asset.kind === 'video' || asset.kind === 'audio';
+}
+
+function VideoThumbnail({
+  asset,
+  title,
+}: {
+  asset: AssetNodeData;
+  title: string;
+}) {
+  const duration = formatDuration(asset.duration);
+  return (
+    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
+      {asset.thumbnailUrl ? (
+        <img
+          alt={`${title} thumbnail`}
+          className="size-full object-cover"
+          src={asset.thumbnailUrl}
+        />
+      ) : (
+        <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.7_0.08_250/.28),transparent_48%),oklch(0.22_0.02_255)]">
+          <FileVideo className="opacity-75" size={38} />
+        </div>
+      )}
+      <div className="absolute inset-0 grid place-items-center bg-black/10">
+        <div className="grid size-11 place-items-center rounded-full bg-white/90 text-neutral-950 shadow-lg">
+          <Play fill="currentColor" size={20} />
+        </div>
+      </div>
+      {duration ? (
+        <span className="absolute right-2 bottom-2 rounded-md bg-black/70 px-2 py-1 font-medium text-[11px] text-white">
+          {duration}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
+  const duration = formatDuration(asset.duration);
+  const bars = asset.waveform?.length ? asset.waveform.slice(0, 32) : null;
+  return (
+    <div className="mb-4 rounded-2xl border border-black/10 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/8">
+      <div className="flex items-center gap-3">
+        <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-neutral-950 text-neutral-50 dark:bg-neutral-50 dark:text-neutral-950">
+          <FileAudio size={23} />
+        </div>
+        <div className="flex min-w-0 flex-1 items-end gap-1">
+          {(bars ?? Array.from({ length: 24 }, (_, index) => index)).map(
+            (value, index) => {
+              const height =
+                typeof value === 'number'
+                  ? Math.max(18, Math.round((0.25 + value * 0.75) * 44))
+                  : 18 + ((index * 7) % 26);
+              return (
+                <span
+                  className="block w-1 flex-1 rounded-full bg-neutral-950/22 dark:bg-neutral-50/24"
+                  key={`bar-${index}`}
+                  style={{ height }}
+                />
+              );
+            }
+          )}
+        </div>
+      </div>
+      {duration ? (
+        <p className="mt-3 text-right font-medium text-neutral-500 text-xs dark:text-neutral-400">
+          {duration}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AssetThumbnail({
+  asset,
+  title,
+}: {
+  asset: AssetNodeData;
+  title: string;
+}) {
+  if (asset.kind === 'video') {
+    return <VideoThumbnail asset={asset} title={title} />;
+  }
+  if (asset.kind === 'audio') {
+    return <AudioThumbnail asset={asset} />;
+  }
+  return null;
+}
+
+function MetadataGrid({ asset }: { asset: AssetNodeData }) {
+  const duration = formatDuration(asset.duration);
+  return (
+    <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
+      <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
+        <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
+          Type
+        </p>
+        <p className="mt-1 break-words text-neutral-800 dark:text-neutral-100">
+          {asset.mimeType}
+        </p>
+      </div>
+      <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
+        <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
+          Size
+        </p>
+        <p className="mt-1 text-neutral-800 dark:text-neutral-100">
+          {formatFileSize(asset.size)}
+        </p>
+      </div>
+      {duration ? (
+        <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
+          <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
+            Duration
+          </p>
+          <p className="mt-1 text-neutral-800 dark:text-neutral-100">
+            {duration}
+          </p>
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          'rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20',
+          duration ? '' : 'col-span-2'
+        )}
+      >
+        <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
+          File
+        </p>
+        <p className="mt-1 break-all font-mono text-neutral-700 text-sm dark:text-neutral-200">
+          {asset.fileName || 'Untitled file'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function getMediaLoadState({
+  asset,
+  mediaError,
+  mediaLoading,
+}: {
+  asset: AssetNodeData;
+  mediaError: string | null;
+  mediaLoading: boolean;
+}) {
+  if (asset.missing) {
+    return (
+      <div className="grid min-h-56 place-items-center rounded-2xl border border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
+        <div className="flex items-center gap-2 font-medium text-sm">
+          <AlertTriangle size={16} />
+          Missing attachment
+        </div>
+      </div>
+    );
+  }
+  if (mediaLoading) {
+    return (
+      <div className="grid min-h-56 place-items-center rounded-2xl border border-black/10 bg-neutral-50 text-neutral-500 dark:border-white/10 dark:bg-black/20 dark:text-neutral-300">
+        <div className="flex items-center gap-2 font-medium text-sm">
+          <Loader2 className="animate-spin" size={16} />
+          Loading media
+        </div>
+      </div>
+    );
+  }
+  if (mediaError) {
+    return (
+      <div className="grid min-h-56 place-items-center rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+        <div className="flex items-center gap-2 font-medium text-sm">
+          <AlertTriangle size={16} />
+          {mediaError}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export const AssetContent = ({
   data,
   isFocused = false,
@@ -148,6 +353,12 @@ export const AssetContent = ({
   const title = getAssetDisplayTitle(asset);
   const label = getAssetLabel(asset);
   const canOpen = Boolean(asset.attachmentFile && !asset.missing);
+  const playableMedia = isPlayableMedia(asset);
+  const [mediaSrc, setMediaSrc] = useState<string | null>(
+    asset.previewUrl ?? null
+  );
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const handleOpen = useCallback(async () => {
     if (!asset.attachmentFile) {
@@ -160,7 +371,63 @@ export const AssetContent = ({
     }
   }, [asset.attachmentFile]);
 
+  useEffect(() => {
+    if (
+      !(isFocused && playableMedia && asset.attachmentFile && !asset.missing)
+    ) {
+      return;
+    }
+    if (asset.previewUrl) {
+      setMediaSrc(asset.previewUrl);
+      setMediaError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setMediaLoading(true);
+    setMediaError(null);
+    rpcLoadAttachment(asset.attachmentFile)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        if (!result?.dataUrl) {
+          setMediaSrc(null);
+          setMediaError('Media file could not be loaded.');
+          return;
+        }
+        setMediaSrc(result.dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMediaSrc(null);
+          setMediaError('Media file could not be loaded.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMediaLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    asset.attachmentFile,
+    asset.missing,
+    asset.previewUrl,
+    isFocused,
+    playableMedia,
+  ]);
+
   if (isFocused) {
+    const mediaState = getMediaLoadState({
+      asset,
+      mediaError,
+      mediaLoading,
+    });
+
     return (
       <div
         className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
@@ -203,32 +470,38 @@ export const AssetContent = ({
               <h1 className="text-balance font-bold text-4xl leading-tight tracking-normal">
                 {title}
               </h1>
-              <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
-                <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
-                  <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-                    Type
-                  </p>
-                  <p className="mt-1 break-words text-neutral-800 dark:text-neutral-100">
-                    {asset.mimeType}
-                  </p>
+              {asset.kind === 'video' ? (
+                <div className="mt-8">
+                  {mediaState ??
+                    (mediaSrc ? (
+                      // biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet.
+                      <video
+                        aria-label={`${title} video player`}
+                        className="aspect-video w-full rounded-2xl bg-neutral-950 shadow-sm"
+                        controls
+                        poster={asset.thumbnailUrl}
+                        preload="metadata"
+                        src={mediaSrc}
+                      />
+                    ) : null)}
                 </div>
-                <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
-                  <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-                    Size
-                  </p>
-                  <p className="mt-1 text-neutral-800 dark:text-neutral-100">
-                    {formatFileSize(asset.size)}
-                  </p>
+              ) : null}
+              {asset.kind === 'audio' ? (
+                <div className="mt-8 rounded-2xl border border-black/10 bg-neutral-50 p-5 dark:border-white/10 dark:bg-black/20">
+                  {mediaState ??
+                    (mediaSrc ? (
+                      // biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet.
+                      <audio
+                        aria-label={`${title} audio player`}
+                        className="w-full"
+                        controls
+                        preload="metadata"
+                        src={mediaSrc}
+                      />
+                    ) : null)}
                 </div>
-                <div className="col-span-2 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
-                  <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-                    File
-                  </p>
-                  <p className="mt-1 break-all font-mono text-neutral-700 text-sm dark:text-neutral-200">
-                    {asset.fileName || 'Untitled file'}
-                  </p>
-                </div>
-              </div>
+              ) : null}
+              <MetadataGrid asset={asset} />
             </div>
           </div>
         </div>
@@ -257,6 +530,7 @@ export const AssetContent = ({
             {asset.missing ? 'Missing' : label}
           </span>
         </div>
+        <AssetThumbnail asset={asset} title={title} />
         <h3 className="line-clamp-3 font-bold text-xl leading-tight">
           {title}
         </h3>

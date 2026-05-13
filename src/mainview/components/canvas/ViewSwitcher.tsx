@@ -27,7 +27,7 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { saveAssetFile } from '@/lib/assetFiles';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   isRpcAvailable,
@@ -317,13 +317,11 @@ export function ViewSwitcher({
   const handleAssetFile = useCallback(
     async (file: File) => {
       try {
-        const data = await saveAssetFile(file);
+        const data = await saveAssetFileWithProgressToast(file);
         onCreateNode('asset', { data: { ...data } });
         setCreateMenuOpen(false);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'File could not be saved.';
-        toast.error(message);
+      } catch {
+        return;
       }
     },
     [onCreateNode, setCreateMenuOpen]

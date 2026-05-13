@@ -26,7 +26,7 @@ const interactionMocks = vi.hoisted(() => ({
 }));
 
 const assetFileMocks = vi.hoisted(() => ({
-  saveAssetFile: vi.fn(),
+  saveAssetFileWithProgressToast: vi.fn(),
 }));
 
 const exportMocks = vi.hoisted(() => ({
@@ -63,8 +63,8 @@ vi.mock('@/lib/canvasExport', () => ({
   sanitizeExportFileName: exportMocks.sanitizeExportFileName,
 }));
 
-vi.mock('@/lib/assetFiles', () => ({
-  saveAssetFile: assetFileMocks.saveAssetFile,
+vi.mock('@/lib/assetImportProgress', () => ({
+  saveAssetFileWithProgressToast: assetFileMocks.saveAssetFileWithProgressToast,
 }));
 
 vi.mock('sonner', () => ({
@@ -321,7 +321,7 @@ describe('routes/index', () => {
     rpcMocks.rpcGetSettings.mockReset();
     rpcMocks.rpcGetSettings.mockResolvedValue(null);
     interactionMocks.onCreateNode.mockReset();
-    assetFileMocks.saveAssetFile.mockReset();
+    assetFileMocks.saveAssetFileWithProgressToast.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockResolvedValue(true);
     exportMocks.exportReactFlowCanvasToJson.mockReset();
@@ -362,7 +362,7 @@ describe('routes/index', () => {
     rpcMocks.rpcRenameView.mockResolvedValue({ success: true });
     rpcMocks.rpcSetActiveView.mockReset();
     rpcMocks.rpcSetActiveView.mockResolvedValue({ success: true });
-    assetFileMocks.saveAssetFile.mockResolvedValue({
+    assetFileMocks.saveAssetFileWithProgressToast.mockResolvedValue({
       attachmentFile: 'attachments/file_abc.txt',
       color: '#FFFFFF',
       fileName: 'notes.txt',
@@ -510,9 +510,9 @@ describe('routes/index', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Drop file' }));
 
     await waitFor(() => {
-      expect(assetFileMocks.saveAssetFile).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'notes.txt' })
-      );
+      expect(
+        assetFileMocks.saveAssetFileWithProgressToast
+      ).toHaveBeenCalledWith(expect.objectContaining({ name: 'notes.txt' }));
       expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('asset', {
         anchorCenter: { x: 320, y: 420 },
         data: {

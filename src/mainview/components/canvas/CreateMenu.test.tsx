@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateMenu } from '@/components/canvas/CreateMenu';
 
-const saveAssetFileMock = vi.hoisted(() => vi.fn());
+const saveAssetFileWithProgressToastMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/assetFiles', () => ({
-  saveAssetFile: saveAssetFileMock,
+vi.mock('@/lib/assetImportProgress', () => ({
+  saveAssetFileWithProgressToast: saveAssetFileWithProgressToastMock,
 }));
 
 vi.mock('../../../paraglide/messages.js', () => ({
@@ -80,7 +80,7 @@ describe('createMenu', () => {
       size: 5,
       title: 'notes.txt',
     };
-    saveAssetFileMock.mockResolvedValueOnce(assetData);
+    saveAssetFileWithProgressToastMock.mockResolvedValueOnce(assetData);
 
     const { container } = render(
       <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
@@ -91,7 +91,7 @@ describe('createMenu', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(saveAssetFileMock).toHaveBeenCalledWith(file);
+      expect(saveAssetFileWithProgressToastMock).toHaveBeenCalledWith(file);
       expect(onCreateNode).toHaveBeenCalledWith('asset', {
         data: assetData,
       });

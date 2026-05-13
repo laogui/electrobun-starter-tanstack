@@ -13,10 +13,10 @@ import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
-const saveAssetFileMock = vi.hoisted(() => vi.fn());
+const saveAssetFileWithProgressToastMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/assetFiles', () => ({
-  saveAssetFile: saveAssetFileMock,
+vi.mock('@/lib/assetImportProgress', () => ({
+  saveAssetFileWithProgressToast: saveAssetFileWithProgressToastMock,
 }));
 
 const rpcMocks = vi.hoisted(() => ({
@@ -133,7 +133,7 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcCreateViewFromTemplate.mockReset();
     rpcMocks.rpcDeleteView.mockReset();
     rpcMocks.rpcRenameView.mockReset();
-    saveAssetFileMock.mockReset();
+    saveAssetFileWithProgressToastMock.mockReset();
 
     rpcMocks.rpcListViews.mockResolvedValue({
       views: [
@@ -493,7 +493,7 @@ describe('viewSwitcher', () => {
       size: 5,
       title: 'notes.txt',
     };
-    saveAssetFileMock.mockResolvedValueOnce(assetData);
+    saveAssetFileWithProgressToastMock.mockResolvedValueOnce(assetData);
 
     const { container } = renderViewSwitcher({
       createMenuOpen: true,
@@ -505,7 +505,7 @@ describe('viewSwitcher', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(saveAssetFileMock).toHaveBeenCalledWith(file);
+      expect(saveAssetFileWithProgressToastMock).toHaveBeenCalledWith(file);
       expect(onCreateNode).toHaveBeenCalledWith('asset', {
         data: assetData,
       });

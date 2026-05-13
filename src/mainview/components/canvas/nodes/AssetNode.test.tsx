@@ -3,9 +3,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import AssetNode, { AssetContent, formatFileSize } from './AssetNode';
+import AssetNode, {
+  AssetContent,
+  formatDuration,
+  formatFileSize,
+} from './AssetNode';
 
 const OPEN_FILE_RE = /open file/i;
+const rpcLoadAttachmentMock = vi.hoisted(() => vi.fn());
 const rpcOpenAttachmentMock = vi.hoisted(() => vi.fn());
 const toastErrorMock = vi.hoisted(() => vi.fn());
 
@@ -30,6 +35,7 @@ vi.mock('@/store/canvasStore', () => ({
 }));
 
 vi.mock('@/lib/rpc', () => ({
+  rpcLoadAttachment: rpcLoadAttachmentMock,
   rpcOpenAttachment: rpcOpenAttachmentMock,
 }));
 
@@ -45,6 +51,14 @@ describe('formatFileSize', () => {
     expect(formatFileSize(2048)).toBe('2.0 KB');
     expect(formatFileSize(5 * 1024 * 1024)).toBe('5.0 MB');
     expect(formatFileSize(undefined)).toBe('Unknown size');
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats media durations for node metadata', () => {
+    expect(formatDuration(65.2)).toBe('1:05');
+    expect(formatDuration(3661)).toBe('1:01:01');
+    expect(formatDuration(undefined)).toBeNull();
   });
 });
 
@@ -114,6 +128,90 @@ describe('AssetContent', () => {
 
     expect(screen.getByText('Missing attachment')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: OPEN_FILE_RE })).toBeDisabled();
+  });
+
+  it('renders a video thumbnail on the canvas without a player', () => {
+    const { container } = render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/video_abc.mp4',
+          color: '#ffffff',
+          duration: 92,
+          fileName: 'demo.mp4',
+          kind: 'video',
+          mimeType: 'video/mp4',
+          size: 4096,
+          thumbnailUrl: 'data:image/jpeg;base64,thumb',
+          title: 'Demo video',
+        }}
+      />
+    );
+
+    expect(screen.getByAltText('Demo video thumbnail')).toBeInTheDocument();
+    expect(screen.getByText('1:32')).toBeInTheDocument();
+    expect(container.querySelector('video')).toBeNull();
+  });
+
+  it('loads focused video media only through the attachment RPC', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:video/mp4;base64,AAAA',
+    });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/video_abc.mp4',
+          color: '#ffffff',
+          duration: 12,
+          fileName: 'demo.mp4',
+          kind: 'video',
+          mimeType: 'video/mp4',
+          size: 4096,
+          title: 'Demo video',
+        }}
+        isFocused
+      />
+    );
+
+    await waitFor(() => {
+      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+        'attachments/video_abc.mp4'
+      );
+    });
+    expect(
+      await screen.findByLabelText('Demo video video player')
+    ).toHaveAttribute('src', 'data:video/mp4;base64,AAAA');
+  });
+
+  it('loads focused audio media through the attachment RPC', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:audio/mpeg;base64,AAAA',
+    });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/audio_abc.mp3',
+          color: '#ffffff',
+          duration: 185,
+          fileName: 'demo.mp3',
+          kind: 'audio',
+          mimeType: 'audio/mpeg',
+          size: 4096,
+          title: 'Demo audio',
+        }}
+        isFocused
+      />
+    );
+
+    await waitFor(() => {
+      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+        'attachments/audio_abc.mp3'
+      );
+    });
+    expect(
+      await screen.findByLabelText('Demo audio audio player')
+    ).toHaveAttribute('src', 'data:audio/mpeg;base64,AAAA');
   });
 });
 

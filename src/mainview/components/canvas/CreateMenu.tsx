@@ -12,10 +12,9 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { LinkCreateForm } from '@/components/canvas/LinkCreateForm';
-import { saveAssetFile } from '@/lib/assetFiles';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import type { CreateNodeOptions } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
@@ -54,13 +53,11 @@ export function CreateMenu({
   const handleFile = useCallback(
     async (file: File) => {
       try {
-        const data = await saveAssetFile(file);
+        const data = await saveAssetFileWithProgressToast(file);
         onCreateNode('asset', { data: { ...data } });
         setOpen(false);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'File could not be saved.';
-        toast.error(message);
+      } catch {
+        return;
       }
     },
     [onCreateNode, setOpen]

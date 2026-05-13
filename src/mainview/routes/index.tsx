@@ -35,7 +35,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
-import { saveAssetFile } from '@/lib/assetFiles';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
   exportReactFlowCanvasToJson,
@@ -249,7 +249,7 @@ function CanvasComponent() {
     async (files: File[], anchorCenter: { x: number; y: number }) => {
       for (const [index, file] of files.entries()) {
         try {
-          const data = await saveAssetFile(file);
+          const data = await saveAssetFileWithProgressToast(file);
           onCreateNode('asset', {
             anchorCenter: {
               x: anchorCenter.x + index * 28,
@@ -257,11 +257,7 @@ function CanvasComponent() {
             },
             data: { ...data },
           });
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : 'File could not be saved.';
-          toast.error(message);
-        }
+        } catch {}
       }
     },
     [onCreateNode]

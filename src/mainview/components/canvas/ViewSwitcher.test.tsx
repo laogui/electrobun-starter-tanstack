@@ -10,7 +10,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
-import { useCanvasStore } from '@/store/canvasStore';
+import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -102,7 +102,15 @@ const renderViewSwitcher = ({
 }: {
   createMenuOpen?: boolean;
   onCreateNode?: (
-    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
+    type:
+      | 'card'
+      | 'checklist'
+      | 'image'
+      | 'link'
+      | 'folder'
+      | 'group'
+      | 'sticky',
+    options?: CreateNodeOptions
   ) => void;
   setCreateMenuOpen?: (v: boolean) => void;
 } = {}) =>

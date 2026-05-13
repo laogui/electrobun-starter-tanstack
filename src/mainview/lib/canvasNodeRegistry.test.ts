@@ -128,6 +128,17 @@ describe('buildNewNodeSpec', () => {
     expect(data.title).toBe('');
   });
 
+  it('builds a link node with empty URL metadata defaults', () => {
+    const spec = buildNewNodeSpec('link');
+    expect(spec.base.type).toBe('link');
+    expect(spec.size.width).toBeGreaterThan(0);
+    expect(spec.size.height).toBeGreaterThan(0);
+    const data = spec.base.data as Record<string, unknown>;
+    expect(data.url).toBe('');
+    expect(data.title).toBe('');
+    expect(data.color).toBe('#FFFFFF');
+  });
+
   it('builds a folder with an empty children array', () => {
     const spec = buildNewNodeSpec('folder');
     expect(spec.base.type).toBe('folder');

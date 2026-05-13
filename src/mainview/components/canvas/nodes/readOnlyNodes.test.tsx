@@ -8,6 +8,7 @@ import {
   FolderNodeReadOnly,
   GroupNodeReadOnly,
   ImageNodeReadOnly,
+  LinkNodeReadOnly,
   StickyNodeReadOnly,
 } from './readOnlyNodes';
 
@@ -142,6 +143,24 @@ describe('readOnlyNodes', () => {
       expect(
         screen.queryByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
       ).toBeNull();
+    });
+  });
+
+  describe('LinkNodeReadOnly', () => {
+    it('renders link metadata with handles', () => {
+      render(
+        <LinkNodeReadOnly
+          data={{
+            color: '#ffffff',
+            title: '',
+            url: 'https://www.example.com/docs',
+          }}
+        />
+      );
+
+      expect(screen.getAllByText('example.com')).toHaveLength(2);
+      expect(screen.getByText('Link')).toBeInTheDocument();
+      expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     });
   });
 

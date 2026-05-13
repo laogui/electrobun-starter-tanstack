@@ -8,6 +8,7 @@ import { colorToStyle } from '@/lib/colorUtils';
 import { CanvasContextMenu, type ContextMenuState } from './ContextMenu';
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
+import { LinkContent } from './nodes/LinkNode';
 
 interface FolderChild {
   data: any;
@@ -23,6 +24,9 @@ interface ActiveChildMenu {
 const FolderChildContent = ({ child }: { child: FolderChild }) => {
   if (child.type === 'image') {
     return <ImageContent data={child.data} />;
+  }
+  if (child.type === 'link') {
+    return <LinkContent data={child.data} />;
   }
   if (child.type === 'sticky') {
     return (

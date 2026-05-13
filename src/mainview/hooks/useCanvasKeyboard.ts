@@ -119,8 +119,10 @@ export function useCanvasKeyboard({
       }
 
       if (mod && e.key === 'v') {
-        e.preventDefault();
-        pasteClipboard();
+        if (useCanvasStore.getState().clipboard.length > 0) {
+          e.preventDefault();
+          pasteClipboard();
+        }
         return;
       }
 

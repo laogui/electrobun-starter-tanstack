@@ -7,8 +7,7 @@
  * MVP scope notes:
  * - `image` remains its own `CanvasNodeKind` and is NOT rolled into `asset`.
  *   Migration is deferred (see docs/features/Backlog/multi-type-canvas-preview-pipeline.md §5.1).
- * - `asset` and `link` specs exist in the registry but no creation entry point
- *   is wired up yet; UI surfaces are added in Phase 1A / 1B.
+ * - `link` is wired in Phase 1A. `asset` remains reserved for Phase 1B.
  */
 
 /** Every node kind the canvas can construct or render. */
@@ -25,11 +24,10 @@ export type CanvasNodeKind =
 /**
  * Subset of `CanvasNodeKind` that user-facing creation entry points (menus,
  * keyboard shortcuts, context-menu actions) are allowed to instantiate in
- * MVP. `asset` / `link` specs exist in the registry but their UI is wired up
- * in Phase 1A / 1B — keeping them out of this union prevents accidental
- * exposure before the rest of the pipeline is ready.
+ * MVP. `link` is exposed in Phase 1A. `asset` stays out until the attachment
+ * save / hydrate path lands in Phase 1B.
  */
-export type CreatableCanvasNodeKind = Exclude<CanvasNodeKind, 'asset' | 'link'>;
+export type CreatableCanvasNodeKind = Exclude<CanvasNodeKind, 'asset'>;
 
 /** Sub-kind for `asset` nodes. PDFs flow through `file` plus `mimeType`. */
 export type AssetKind = 'video' | 'audio' | 'file';
@@ -70,6 +68,111 @@ export interface LinkNodeData {
 
   unfurlStatus?: 'idle' | 'loading' | 'ready' | 'failed';
   url: string;
+}
+
+// ---------------------------------------------------------------------------
+// Link helpers
+// ---------------------------------------------------------------------------
+
+const URL_WITH_PROTOCOL_RE = /\bhttps?:\/\/[^\s<>"']+/i;
+const URL_PROTOCOL_RE = /^[a-z][a-z\d+.-]*:/i;
+const HOST_LIKE_RE =
+  /^(?:localhost|(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)+[a-z]{2,})(?::\d+)?(?:[/?#]|$)/i;
+const TRAILING_URL_PUNCTUATION_RE = /[),.;!?]+$/;
+const LINE_BREAK_RE = /\r?\n/;
+const WWW_PREFIX_RE = /^www\./i;
+
+function trimUrlCandidate(value: string): string {
+  return value.trim().replace(TRAILING_URL_PUNCTUATION_RE, '');
+}
+
+/**
+ * Extract a URL candidate from pasted or dragged text. Full http(s) URLs can
+ * appear inside prose; bare domains are accepted only when the whole line is a
+ * host-like value to avoid turning ordinary text into links accidentally.
+ */
+export function extractLinkUrl(text: string): string | null {
+  for (const line of text.split(LINE_BREAK_RE)) {
+    const trimmed = line.trim();
+    if (!(trimmed && !trimmed.startsWith('#'))) {
+      continue;
+    }
+    const explicitUrl = trimmed.match(URL_WITH_PROTOCOL_RE)?.[0];
+    if (explicitUrl) {
+      return normalizeLinkUrl(trimUrlCandidate(explicitUrl));
+    }
+    const candidate = trimUrlCandidate(trimmed);
+    if (HOST_LIKE_RE.test(candidate)) {
+      return normalizeLinkUrl(candidate);
+    }
+  }
+  return null;
+}
+
+/**
+ * Normalize a user-entered link to a safe http(s) URL. Unsupported schemes
+ * return null so `javascript:` / `file:` / custom protocols are never persisted
+ * as link nodes by accident.
+ */
+export function normalizeLinkUrl(rawUrl: string): string | null {
+  const trimmed = trimUrlCandidate(rawUrl);
+  if (!trimmed) {
+    return null;
+  }
+  const hasProtocol = URL_PROTOCOL_RE.test(trimmed);
+  if (!(hasProtocol || HOST_LIKE_RE.test(trimmed))) {
+    return null;
+  }
+  const candidate = hasProtocol ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    if (!url.hostname) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function getLinkHost(url: string): string {
+  try {
+    const host = new URL(url).host;
+    return host.replace(WWW_PREFIX_RE, '');
+  } catch {
+    return '';
+  }
+}
+
+export function getLinkDisplayTitle(
+  data: Pick<LinkNodeData, 'title' | 'url' | 'siteName'>
+): string {
+  const title = data.title.trim();
+  if (title) {
+    return title;
+  }
+  const siteName = data.siteName?.trim();
+  if (siteName) {
+    return siteName;
+  }
+  return getLinkHost(data.url) || data.url || 'Untitled link';
+}
+
+export function createLinkNodeData(rawUrl: string): LinkNodeData | null {
+  const url = normalizeLinkUrl(rawUrl);
+  if (!url) {
+    return null;
+  }
+  const host = getLinkHost(url);
+  return {
+    url,
+    title: host || url,
+    color: '#FFFFFF',
+  };
 }
 
 // ---------------------------------------------------------------------------

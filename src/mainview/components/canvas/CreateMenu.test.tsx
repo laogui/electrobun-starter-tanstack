@@ -65,6 +65,29 @@ describe('createMenu', () => {
     expect(onCreateNode).not.toHaveBeenCalled();
   });
 
+  it('creates a link node from the inline URL form', () => {
+    const onCreateNode = vi.fn();
+    const setOpen = vi.fn();
+
+    render(
+      <CreateMenu onCreateNode={onCreateNode} open={true} setOpen={setOpen} />
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Link' }));
+    fireEvent.change(screen.getByLabelText('Link URL'), {
+      target: { value: 'example.com/docs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    expect(onCreateNode).toHaveBeenCalledWith('link', {
+      data: {
+        url: 'https://example.com/docs',
+        title: 'example.com',
+        color: '#FFFFFF',
+      },
+    });
+  });
+
   it('closes when clicking outside the open menu', () => {
     const onCreateNode = vi.fn();
     const setOpen = vi.fn();

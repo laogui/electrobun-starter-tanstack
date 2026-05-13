@@ -4,13 +4,17 @@ import {
   Folder,
   Group,
   ImageIcon,
+  Link as LinkIcon,
   ListChecks,
   NotebookPen,
   Plus,
   StickyNote,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useState } from 'react';
 
+import { LinkCreateForm } from '@/components/canvas/LinkCreateForm';
+import type { CreateNodeOptions } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
 
 const getMenuItems = () => [
@@ -23,6 +27,7 @@ const getMenuItems = () => [
   },
   { id: 'sticky', label: m.menu_sticky(), icon: NotebookPen, enabled: true },
   { id: 'image', label: m.menu_image(), icon: ImageIcon, enabled: true },
+  { id: 'link', label: 'Link', icon: LinkIcon, enabled: true },
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
   { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
   { id: 'file', label: m.menu_file(), icon: File, enabled: false },
@@ -34,11 +39,21 @@ export function CreateMenu({
   setOpen,
 }: {
   onCreateNode: (
-    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
+    type:
+      | 'card'
+      | 'checklist'
+      | 'image'
+      | 'link'
+      | 'folder'
+      | 'group'
+      | 'sticky',
+    options?: CreateNodeOptions
   ) => void;
   open: boolean;
-  setOpen: (v: boolean) => void;
+  setOpen: (v: boolean, details?: unknown) => void;
 }) {
+  const [linkFormOpen, setLinkFormOpen] = useState(false);
+
   const handleSelect = (id: string) => {
     switch (id) {
       case 'note': {
@@ -57,6 +72,10 @@ export function CreateMenu({
         onCreateNode('image');
         break;
       }
+      case 'link': {
+        setLinkFormOpen(true);
+        break;
+      }
       case 'folder': {
         onCreateNode('folder');
         break;
@@ -72,7 +91,15 @@ export function CreateMenu({
 
   return (
     <div className="fixed right-6 bottom-6 z-40">
-      <Menu.Root onOpenChange={setOpen} open={open}>
+      <Menu.Root
+        onOpenChange={(nextOpen, details) => {
+          if (!nextOpen) {
+            setLinkFormOpen(false);
+          }
+          setOpen(nextOpen, details);
+        }}
+        open={open}
+      >
         <Menu.Trigger className="flex size-12 items-center justify-center rounded-full bg-black text-white shadow-xl ring-1 ring-white/10 transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)] dark:bg-neutral-100 dark:text-black dark:ring-black/10 dark:hover:shadow-[0_8px_30px_rgba(0,0,0,0.6)]">
           <motion.span
             animate={{ rotate: open ? 45 : 0 }}
@@ -101,7 +128,7 @@ export function CreateMenu({
                         ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/5'
                         : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
                     } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
-                    closeOnClick
+                    closeOnClick={item.id !== 'link'}
                     disabled={!item.enabled}
                     key={item.id}
                     onClick={() => handleSelect(item.id)}
@@ -111,6 +138,14 @@ export function CreateMenu({
                   </Menu.Item>
                 );
               })}
+              {linkFormOpen ? (
+                <LinkCreateForm
+                  onCreate={(data) => {
+                    onCreateNode('link', { data: { ...data } });
+                    setOpen(false);
+                  }}
+                />
+              ) : null}
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>

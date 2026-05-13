@@ -54,9 +54,9 @@ const CANVAS_CONTENT_NODE_TYPES = new Set<string>([
   'link',
 ]);
 
-/** React Flow node types that open a focused/zoom view on double-click. MVP
- *  parity: card and image. `asset` and `link` will return `true` once their
- *  focused views land in Phase 1A / 1B. */
+/** React Flow node types that open a focused/zoom view on double-click.
+ *  `asset` is reserved for Phase 1B; keeping it true here lets persisted
+ *  experimental data route through focused view once the UI exists. */
 const FOCUSABLE_NODE_TYPES = new Set<string>([
   'card',
   'image',

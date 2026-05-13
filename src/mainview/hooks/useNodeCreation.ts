@@ -2,7 +2,7 @@ import type { ReactFlowInstance } from '@xyflow/react';
 import { useCallback } from 'react';
 
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
-import { useCanvasStore } from '@/store/canvasStore';
+import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
 interface UseNodeCreationOptions {
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
@@ -12,7 +12,11 @@ export function useNodeCreation({ rfInstance }: UseNodeCreationOptions) {
   const createNode = useCanvasStore((s) => s.createNode);
 
   const onCreateNode = useCallback(
-    (type: CreatableCanvasNodeKind) => {
+    (type: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
+      if (options) {
+        createNode(type, rfInstance.current, options);
+        return;
+      }
       createNode(type, rfInstance.current);
     },
     [createNode, rfInstance]

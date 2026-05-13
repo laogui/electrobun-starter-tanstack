@@ -35,6 +35,20 @@ vi.mock('@/components/canvas/nodes/ImageNode', () => ({
   ),
 }));
 
+vi.mock('@/components/canvas/nodes/LinkNode', () => ({
+  LinkContent: ({
+    data,
+    isFocused,
+  }: {
+    data: { title?: string; url?: string };
+    isFocused?: boolean;
+  }) => (
+    <div>
+      {`link:${isFocused ? 'focused' : 'card'}:${data.title ?? 'untitled'}:${data.url ?? 'none'}`}
+    </div>
+  ),
+}));
+
 vi.mock('@/components/editor/TiptapEditor', () => ({
   default: ({
     markdown,
@@ -250,5 +264,27 @@ describe('focusedView', () => {
     );
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renders link nodes through the link focused view', () => {
+    render(
+      <FocusedView
+        node={{
+          id: 'link-1',
+          type: 'link',
+          data: {
+            title: 'Example',
+            url: 'https://example.com/',
+            color: '#ffffff',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText('link:focused:Example:https://example.com/')
+    ).toBeInTheDocument();
   });
 });

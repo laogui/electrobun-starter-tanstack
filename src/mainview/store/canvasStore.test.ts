@@ -14,6 +14,7 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasConstants';
+import { CANVAS_NODE_SPECS } from '@/lib/canvasNodeRegistry';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const PASTE_ID_RE = /^paste-/;
@@ -705,6 +706,36 @@ describe('canvasStore — createNode', () => {
     });
   });
 
+  it('creates a link node with provided URL metadata', () => {
+    vi.stubGlobal('window', {
+      innerWidth: 900,
+      innerHeight: 700,
+    });
+    const linkSize = CANVAS_NODE_SPECS.link.size;
+
+    useCanvasStore
+      .getState()
+      .createNode('link', createRfInstance({ x: 0, y: 0, zoom: 1 }), {
+        data: {
+          url: 'https://example.com/',
+          title: 'Example',
+        },
+      });
+    const node = useCanvasStore.getState().nodes.at(-1)!;
+
+    expect(node.type).toBe('link');
+    expect(node.position).toEqual({
+      x: 450 - linkSize.width / 2,
+      y: 350 - linkSize.height / 2,
+    });
+    expect(node.style).toEqual(linkSize);
+    expect(node.data).toMatchObject({
+      url: 'https://example.com/',
+      title: 'Example',
+      color: '#FFFFFF',
+    });
+  });
+
   it('creates a sticky node with a random palette color', () => {
     vi.stubGlobal('window', {
       innerWidth: 800,
@@ -1032,7 +1063,7 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
         makeNode('folder', {
           type: 'folder',
           data: {
-            title: '2 items',
+            title: '3 items',
             subtitle: '',
             children: [
               {
@@ -1046,6 +1077,15 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
                 type: 'image',
                 data: { title: 'Picture', imageUrl: '', color: '#FFFFFF' },
               },
+              {
+                id: 'child-3',
+                type: 'link',
+                data: {
+                  title: 'Example',
+                  url: 'https://example.com/',
+                  color: '#FFFFFF',
+                },
+              },
             ],
           },
         }),
@@ -1058,6 +1098,8 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
     const state = useCanvasStore.getState();
     const detachedCard = state.nodes.find((node) => node.id === 'child-1');
     const detachedImage = state.nodes.find((node) => node.id === 'child-2');
+    const detachedLink = state.nodes.find((node) => node.id === 'child-3');
+    const linkSize = CANVAS_NODE_SPECS.link.size;
 
     expect(state.nodes.find((node) => node.id === 'folder')).toBeUndefined();
     expect(state.nodes.find((node) => node.id === 'other')).toBeDefined();
@@ -1074,6 +1116,17 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
       position: { x: 0, y: 0 },
       style: { width: IMAGE_W, height: IMAGE_H },
       data: { title: 'Picture', detached: true },
+    });
+    expect(detachedLink).toMatchObject({
+      id: 'child-3',
+      type: 'link',
+      position: { x: 0, y: 0 },
+      style: linkSize,
+      data: {
+        title: 'Example',
+        url: 'https://example.com/',
+        detached: true,
+      },
     });
     expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
   });
@@ -1175,6 +1228,61 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
       children: [expect.objectContaining({ id: 'child-image' })],
     });
     expect(state.canUndo()).toBe(true);
+  });
+
+  it('restores a link folder child as a link node', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-link',
+                type: 'link',
+                data: {
+                  title: 'Example',
+                  url: 'https://example.com/',
+                  color: '#FFFFFF',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+    const linkSize = CANVAS_NODE_SPECS.link.size;
+
+    useCanvasStore.getState().moveFolderChildToCanvas('folder', 'child-link', {
+      anchorCenter: { x: 500, y: 400 },
+    });
+
+    const state = useCanvasStore.getState();
+    const restored = state.nodes.find((node) => node.id === 'child-link');
+
+    expect(restored).toMatchObject({
+      id: 'child-link',
+      type: 'link',
+      data: {
+        title: 'Example',
+        url: 'https://example.com/',
+        color: '#FFFFFF',
+      },
+      position: {
+        x: 500 - linkSize.width / 2,
+        y: 400 - linkSize.height / 2,
+      },
+      selected: true,
+    });
+    expect(
+      state.nodes.find((node) => node.id === 'folder')?.data
+    ).toMatchObject({
+      title: '0 items',
+      children: [],
+    });
   });
 
   it('does nothing when the folder child is missing', () => {

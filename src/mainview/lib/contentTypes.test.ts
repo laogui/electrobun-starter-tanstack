@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyFile, getAssetDisplayTitle } from '@/lib/contentTypes';
+import {
+  classifyFile,
+  createLinkNodeData,
+  extractLinkUrl,
+  getAssetDisplayTitle,
+  getLinkDisplayTitle,
+  getLinkHost,
+  normalizeLinkUrl,
+} from '@/lib/contentTypes';
 
 describe('classifyFile', () => {
   it('classifies video by MIME type', () => {
@@ -124,5 +132,60 @@ describe('getAssetDisplayTitle', () => {
         mimeType: 'text/plain',
       })
     ).toBe('Notes');
+  });
+});
+
+describe('link helpers', () => {
+  it('normalizes explicit http and https URLs', () => {
+    expect(normalizeLinkUrl('https://example.com/docs')).toBe(
+      'https://example.com/docs'
+    );
+    expect(normalizeLinkUrl('http://example.com')).toBe('http://example.com/');
+  });
+
+  it('adds https to bare host-like input', () => {
+    expect(normalizeLinkUrl('example.com/docs')).toBe(
+      'https://example.com/docs'
+    );
+  });
+
+  it('rejects unsupported protocols and non-URL text', () => {
+    expect(normalizeLinkUrl('javascript:alert(1)')).toBeNull();
+    expect(normalizeLinkUrl('just some words')).toBeNull();
+  });
+
+  it('extracts URLs from pasted text and uri-list payloads', () => {
+    expect(extractLinkUrl('Read https://example.com/page.')).toBe(
+      'https://example.com/page'
+    );
+    expect(extractLinkUrl('# comment\nhttps://example.com/a')).toBe(
+      'https://example.com/a'
+    );
+  });
+
+  it('builds stable link node data without unfurl fields', () => {
+    expect(createLinkNodeData('www.example.com')).toEqual({
+      url: 'https://www.example.com/',
+      title: 'example.com',
+      color: '#FFFFFF',
+    });
+  });
+
+  it('resolves host and display title fallbacks', () => {
+    expect(getLinkHost('https://www.example.com/path')).toBe('example.com');
+    expect(
+      getLinkDisplayTitle({
+        title: '',
+        siteName: 'Example Site',
+        url: 'https://example.com/',
+      })
+    ).toBe('Example Site');
+    expect(
+      getLinkDisplayTitle({
+        title: '',
+        siteName: '',
+        url: 'https://docs.example.com/',
+      })
+    ).toBe('docs.example.com');
   });
 });

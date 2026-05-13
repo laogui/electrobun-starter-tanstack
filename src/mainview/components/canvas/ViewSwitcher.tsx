@@ -1,5 +1,5 @@
 import { Menu } from '@base-ui/react/menu';
-import { Link } from '@tanstack/react-router';
+import { Link as RouterLink } from '@tanstack/react-router';
 import {
   BookOpen,
   Check,
@@ -14,6 +14,7 @@ import {
   ImageIcon,
   Kanban,
   Layers,
+  Link as LinkIcon,
   ListChecks,
   NotebookPen,
   Pencil,
@@ -38,10 +39,11 @@ import {
   rpcSetActiveView,
 } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
-import { useCanvasStore } from '@/store/canvasStore';
+import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
 import { DeleteViewConfirmDialog } from './DeleteViewConfirmDialog';
+import { LinkCreateForm } from './LinkCreateForm';
 
 const getCreateMenuItems = () => [
   { id: 'note', label: m.menu_note(), icon: StickyNote, enabled: true },
@@ -53,6 +55,7 @@ const getCreateMenuItems = () => [
   },
   { id: 'sticky', label: m.menu_sticky(), icon: NotebookPen, enabled: true },
   { id: 'image', label: m.menu_image(), icon: ImageIcon, enabled: true },
+  { id: 'link', label: 'Link', icon: LinkIcon, enabled: true },
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
   { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
   { id: 'file', label: m.menu_file(), icon: File, enabled: false },
@@ -68,7 +71,15 @@ export function ViewSwitcher({
 }: {
   createMenuOpen: boolean;
   onCreateNode: (
-    type: 'card' | 'checklist' | 'image' | 'folder' | 'group' | 'sticky'
+    type:
+      | 'card'
+      | 'checklist'
+      | 'image'
+      | 'link'
+      | 'folder'
+      | 'group'
+      | 'sticky',
+    options?: CreateNodeOptions
   ) => void;
   onExportCanvas?: () => void;
   onExportCanvasJson?: () => void;
@@ -78,6 +89,7 @@ export function ViewSwitcher({
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [linkFormOpen, setLinkFormOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -407,7 +419,15 @@ export function ViewSwitcher({
             </Menu.Root>
           ) : null}
 
-          <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
+          <Menu.Root
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) {
+                setLinkFormOpen(false);
+              }
+              setCreateMenuOpen(nextOpen);
+            }}
+            open={createMenuOpen}
+          >
             <Menu.Trigger
               className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
               render={<motion.button whileTap={{ scale: 0.9 }} />}
@@ -441,7 +461,7 @@ export function ViewSwitcher({
                             ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
                             : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
                         } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
-                        closeOnClick
+                        closeOnClick={item.id !== 'link'}
                         disabled={!item.enabled}
                         key={item.id}
                         onClick={() => {
@@ -450,6 +470,7 @@ export function ViewSwitcher({
                             | 'card'
                             | 'checklist'
                             | 'image'
+                            | 'link'
                             | 'folder'
                             | 'group'
                             | 'sticky'
@@ -458,11 +479,16 @@ export function ViewSwitcher({
                             checklist: 'checklist',
                             sticky: 'sticky',
                             image: 'image',
+                            link: 'link',
                             folder: 'folder',
                             group: 'group',
                           };
                           const type = map[item.id];
                           if (type) {
+                            if (type === 'link') {
+                              setLinkFormOpen(true);
+                              return;
+                            }
                             onCreateNode(type);
                           }
                         }}
@@ -472,6 +498,15 @@ export function ViewSwitcher({
                       </Menu.Item>
                     );
                   })}
+                  {linkFormOpen ? (
+                    <LinkCreateForm
+                      onCreate={(data) => {
+                        onCreateNode('link', { data: { ...data } });
+                        setLinkFormOpen(false);
+                        setCreateMenuOpen(false);
+                      }}
+                    />
+                  ) : null}
                   {onOpenNoteLibrary ? (
                     <Menu.Item
                       aria-label="Note Library"
@@ -632,7 +667,7 @@ export function ViewSwitcher({
 
                       <Menu.Item
                         className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-xs outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/10"
-                        render={<Link to="/templates" />}
+                        render={<RouterLink to="/templates" />}
                       >
                         {m.templates_browse_all()}
                       </Menu.Item>

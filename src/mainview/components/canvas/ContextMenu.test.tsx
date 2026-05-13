@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
 const COPY_RE = /copy/i;
+const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
   edges: [
     {
@@ -160,6 +161,24 @@ describe('canvasContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move Out' }));
 
     expect(onAction).toHaveBeenCalledWith('move-out', 'child-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders link node actions', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 40, y: 60, target: 'link', nodeId: 'link-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
+
+    expect(onAction).toHaveBeenCalledWith('focus', 'link-1');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

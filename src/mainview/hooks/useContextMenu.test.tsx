@@ -39,6 +39,12 @@ const storeState = {
       position: { x: 90, y: 100 },
       data: { imageUrl: '', title: 'Image', color: '#FFFFFF' },
     },
+    {
+      id: 'link-1',
+      type: 'link',
+      position: { x: 110, y: 120 },
+      data: { url: 'https://example.com/', title: 'Example', color: '#FFFFFF' },
+    },
   ],
   edges: [
     {
@@ -279,6 +285,30 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 94,
+              clientY: 74,
+            } as never,
+            {
+              id: 'link-1',
+              type: 'link',
+              position: { x: 0, y: 0 },
+              data: {
+                url: 'https://example.com/',
+                title: 'Example',
+                color: '#FFFFFF',
+              },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-link
+      </button>
+      <button
+        onClick={() => {
           onEdgeContextMenu(
             {
               preventDefault: vi.fn(),
@@ -494,6 +524,11 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'node-image' }));
     expect(output).toHaveTextContent(
       '{"x":93,"y":73,"target":"image","nodeId":"image-1"}'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'node-link' }));
+    expect(output).toHaveTextContent(
+      '{"x":94,"y":74,"target":"link","nodeId":"link-1"}'
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));

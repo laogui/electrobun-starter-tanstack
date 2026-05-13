@@ -8,6 +8,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import { CardContent } from './nodes/CardNode';
 import { ImageContent } from './nodes/ImageNode';
+import { LinkContent } from './nodes/LinkNode';
 
 const TiptapEditor = lazy(() => import('@/components/editor/TiptapEditor'));
 
@@ -172,6 +173,8 @@ export const FocusedView = ({ node, onClose }: any) => {
         <div className="h-full">
           {node.type === 'image' ? (
             <ImageContent data={node.data} isFocused={true} />
+          ) : node.type === 'link' ? (
+            <LinkContent data={node.data} isFocused={true} />
           ) : isText ? (
             <Suspense fallback={<FocusedSkeleton color={node.data.color} />}>
               <TiptapEditor

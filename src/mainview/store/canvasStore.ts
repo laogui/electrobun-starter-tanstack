@@ -18,8 +18,6 @@ import {
   FOLDER_H,
   FOLDER_W,
   GROUP_COLORS,
-  IMAGE_H,
-  IMAGE_W,
   STICKY_COLORS,
 } from '@/lib/canvasConstants';
 import { buildNewNodeSpec } from '@/lib/canvasNodeRegistry';
@@ -68,6 +66,8 @@ export interface CreateNodeOptions {
   anchor?: { x: number; y: number };
   /** Desired center of the new node in flow coords. */
   anchorCenter?: { x: number; y: number };
+  /** Additional data to merge over the node kind's registry defaults. */
+  data?: Record<string, unknown>;
 }
 
 export interface AddConnectionOptions {
@@ -97,7 +97,9 @@ function folderChildToDetachedNode(
   child: FolderChildEntry,
   usedNodeIds: Set<string>
 ): Node {
-  const isImage = child.type === 'image';
+  const kind =
+    child.type === 'image' || child.type === 'link' ? child.type : 'card';
+  const spec = buildNewNodeSpec(kind);
   const {
     isDropTarget: _isDropTarget,
     isHidden: _isHidden,
@@ -105,14 +107,12 @@ function folderChildToDetachedNode(
   } = child.data;
   return {
     id: uniqueDetachedNodeId(child.id, usedNodeIds),
-    type: isImage ? 'image' : 'card',
+    type: spec.base.type,
     position: { x: 0, y: 0 },
-    style: isImage
-      ? { width: IMAGE_W, height: IMAGE_H }
-      : { width: CARD_W, height: CARD_H },
+    style: spec.base.style,
     data: {
       ...data,
-      ...(child.noteId && !isImage ? { noteId: child.noteId } : {}),
+      ...(child.noteId && kind === 'card' ? { noteId: child.noteId } : {}),
       detached: true,
     },
   };
@@ -730,6 +730,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ...spec.base,
       id,
       position,
+      data: {
+        ...(spec.base.data as Record<string, unknown>),
+        ...(options?.data ?? {}),
+      },
       ...(parentId ? { parentId, extent: 'parent' as const } : {}),
     };
     set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
@@ -877,8 +881,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return;
     }
 
-    const isImage = child.type === 'image';
-    const spec = buildNewNodeSpec(isImage ? 'image' : 'card');
+    const kind =
+      child.type === 'image' || child.type === 'link' ? child.type : 'card';
+    const spec = buildNewNodeSpec(kind);
     const anchor =
       options?.anchor ??
       (options?.anchorCenter
@@ -908,7 +913,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const restoredNode: Node = {
         ...spec.base,
         id: restoredNodeId,
-        type: isImage ? 'image' : 'card',
+        type: spec.base.type,
         data: child.data,
         position: anchor,
         selected: true,

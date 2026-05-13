@@ -22,7 +22,13 @@ const NEW_NODE_ACTIONS: Record<string, CreatableCanvasNodeKind> = {
   'new-image': 'image',
 };
 
-type NodeContextTarget = 'card' | 'folder' | 'group' | 'sticky' | 'image';
+type NodeContextTarget =
+  | 'card'
+  | 'folder'
+  | 'group'
+  | 'sticky'
+  | 'image'
+  | 'link';
 
 /**
  * Map a React Flow `node.type` to the context-menu `target` discriminator.
@@ -34,6 +40,7 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   group: 'group',
   sticky: 'sticky',
   image: 'image',
+  link: 'link',
 };
 
 function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {

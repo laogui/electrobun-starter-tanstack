@@ -3,11 +3,13 @@ import CardNode from '@/components/canvas/nodes/CardNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
+import LinkNode from '@/components/canvas/nodes/LinkNode';
 import {
   CardNodeReadOnly,
   FolderNodeReadOnly,
   GroupNodeReadOnly,
   ImageNodeReadOnly,
+  LinkNodeReadOnly,
   StickyNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
@@ -40,6 +42,7 @@ export const nodeTypes = {
   folder: FolderNode,
   group: GroupNode,
   image: ImageNode,
+  link: LinkNode,
   sticky: StickyNode,
 };
 
@@ -54,6 +57,7 @@ export const readOnlyNodeTypes = {
   folder: FolderNodeReadOnly,
   group: GroupNodeReadOnly,
   image: ImageNodeReadOnly,
+  link: LinkNodeReadOnly,
   sticky: StickyNodeReadOnly,
 };
 

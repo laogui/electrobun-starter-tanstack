@@ -378,6 +378,65 @@ describe('routes/index', () => {
     });
   });
 
+  it('creates link nodes from the create menu URL form', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Link' }));
+    fireEvent.change(screen.getByLabelText('Link URL'), {
+      target: { value: 'https://example.com/docs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('link', {
+      data: {
+        url: 'https://example.com/docs',
+        title: 'example.com',
+        color: '#FFFFFF',
+      },
+    });
+  });
+
+  it('creates link nodes from pasted URLs when the canvas is idle', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    const event = new Event('paste', {
+      bubbles: true,
+      cancelable: true,
+    }) as ClipboardEvent;
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        getData: () => 'Read https://example.com/pasted.',
+      },
+    });
+    globalThis.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('link', {
+      data: {
+        url: 'https://example.com/pasted',
+        title: 'example.com',
+        color: '#FFFFFF',
+      },
+    });
+  });
+
   it('exports the current canvas as PNG from the toolbar', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options

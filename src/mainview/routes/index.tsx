@@ -42,6 +42,7 @@ import {
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { createLinkNodeData, extractLinkUrl } from '@/lib/contentTypes';
 import {
   isRpcAvailable,
   loadCanvas,
@@ -93,6 +94,28 @@ export const Route = createFileRoute('/')({
 });
 
 const LAYOUT_MODE_STORAGE_KEY = 'ghostboard.layoutMode';
+
+function isEditablePasteTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target.isContentEditable
+  );
+}
+
+function getDroppedText(dataTransfer: DataTransfer | null): string {
+  if (!dataTransfer) {
+    return '';
+  }
+  return (
+    dataTransfer.getData('text/uri-list') ||
+    dataTransfer.getData('text/plain') ||
+    dataTransfer.getData('text')
+  );
+}
 
 function loadLayoutModeFromStorage(
   viewId: string
@@ -191,6 +214,28 @@ function CanvasComponent() {
   const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
+
+  const createLinkFromText = useCallback(
+    (
+      text: string,
+      options?: { anchorCenter?: { x: number; y: number } }
+    ): boolean => {
+      const url = extractLinkUrl(text);
+      if (!url) {
+        return false;
+      }
+      const data = createLinkNodeData(url);
+      if (!data) {
+        return false;
+      }
+      onCreateNode('link', {
+        ...options,
+        data: { ...data },
+      });
+      return true;
+    },
+    [onCreateNode]
+  );
 
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
@@ -352,6 +397,28 @@ function CanvasComponent() {
 
   useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes });
 
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      if (
+        focusedNode ||
+        focusedFolder ||
+        isEditablePasteTarget(event.target) ||
+        useCanvasStore.getState().layoutMode === 'document'
+      ) {
+        return;
+      }
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (createLinkFromText(text)) {
+        event.preventDefault();
+      }
+    };
+
+    globalThis.addEventListener('paste', handlePaste);
+    return () => {
+      globalThis.removeEventListener('paste', handlePaste);
+    };
+  }, [createLinkFromText, focusedFolder, focusedNode]);
+
   const onEdgesChange = useCallback(
     (changes: any) => {
       applyEdgesChange(changes);
@@ -455,28 +522,40 @@ function CanvasComponent() {
     [nodes, focusedNode, focusedFolder, dropTargetId]
   );
 
-  const onDropDetachedNote = useCallback(
+  const onDropCanvas = useCallback(
     (e: React.DragEvent | DragEvent) => {
-      const nodeId = (e as React.DragEvent).dataTransfer?.getData(
-        'application/ghostboard-detached-note'
-      );
-      if (!nodeId) {
-        return;
-      }
-      e.preventDefault();
+      const dataTransfer = (e as React.DragEvent).dataTransfer;
       const position = screenToFlowPosition({
         x: (e as React.DragEvent).clientX,
         y: (e as React.DragEvent).clientY,
       });
-      pinNoteToCanvas(nodeId, position);
+      const nodeId = dataTransfer?.getData(
+        'application/ghostboard-detached-note'
+      );
+      if (nodeId) {
+        e.preventDefault();
+        pinNoteToCanvas(nodeId, position);
+        return;
+      }
+
+      const text = getDroppedText(dataTransfer ?? null);
+      if (createLinkFromText(text, { anchorCenter: position })) {
+        e.preventDefault();
+      }
     },
-    [pinNoteToCanvas, screenToFlowPosition]
+    [createLinkFromText, pinNoteToCanvas, screenToFlowPosition]
   );
 
   const onDragOverCanvas = useCallback((e: React.DragEvent | DragEvent) => {
     e.preventDefault();
-    if ((e as React.DragEvent).dataTransfer) {
-      (e as React.DragEvent).dataTransfer.dropEffect = 'move';
+    const dataTransfer = (e as React.DragEvent).dataTransfer;
+    if (dataTransfer) {
+      const types = Array.from(dataTransfer.types);
+      const hasLinkPayload =
+        types.includes('text/uri-list') ||
+        types.includes('text/plain') ||
+        types.includes('text');
+      dataTransfer.dropEffect = hasLinkPayload ? 'copy' : 'move';
     }
   }, []);
 
@@ -569,7 +648,7 @@ function CanvasComponent() {
         onConnectEnd={onConnectEnd}
         onConnectStart={onConnectStart}
         onDragOver={onDragOverCanvas}
-        onDrop={onDropDetachedNote}
+        onDrop={onDropCanvas}
         onEdgeContextMenu={onEdgeContextMenu}
         onEdgesChange={onEdgesChange}
         onInit={(instance) => {

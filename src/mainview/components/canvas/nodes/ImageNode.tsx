@@ -8,8 +8,8 @@ import { ImagePlus, Loader2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
-import { createImageThumbnail } from '@/lib/imageThumbnail';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
+import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 

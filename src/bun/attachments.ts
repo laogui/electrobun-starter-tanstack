@@ -16,6 +16,13 @@ interface SaveAttachmentInput {
   suggestedName?: string;
 }
 
+interface SaveAttachmentFileInput {
+  kind?: AttachmentKind;
+  mimeType?: string;
+  sourcePath: string;
+  suggestedName?: string;
+}
+
 interface WorkspaceAttachmentPath {
   fullPath: string;
   relativePath: string;
@@ -230,4 +237,52 @@ export async function openAttachment(
     return { success: false };
   }
   return { success: Utils.openPath(fullPath) };
+}
+
+/**
+ * Copy a file from an absolute OS path into `attachments/` without round-
+ * tripping through a base64 data URL. Used for imports that already have a
+ * stable filesystem location (e.g. native file picker) so the renderer never
+ * has to hold the full bytes in memory — the data URL path caps at
+ * {@link MAX_DATA_URL_ATTACHMENT_BYTES} which is too small for typical video.
+ */
+export async function saveAttachmentFile(
+  wsPath: string,
+  input: SaveAttachmentFileInput
+): Promise<{ filePath: string }> {
+  if (!input.sourcePath.trim()) {
+    throw new Error('Source path is required.');
+  }
+  if (!isAbsolute(input.sourcePath)) {
+    throw new Error('Source path must be absolute.');
+  }
+
+  const sourceFile = Bun.file(input.sourcePath);
+  if (!(await sourceFile.exists())) {
+    throw new Error('Source file does not exist.');
+  }
+
+  const mimeType = (
+    input.mimeType ||
+    sourceFile.type ||
+    'application/octet-stream'
+  ).toLowerCase();
+  const kind = input.kind ?? inferAttachmentKind(mimeType);
+  const prefix = prefixForAttachment(kind, mimeType);
+  const extension =
+    extensionFromName(input.suggestedName) ||
+    extensionFromName(input.sourcePath) ||
+    extensionForMime(mimeType);
+  const filePath = `attachments/${prefix}_${crypto
+    .randomUUID()
+    .slice(0, 8)}.${extension}`;
+  const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
+    wsPath,
+    filePath
+  );
+
+  // Stream the bytes through Bun.write to avoid loading the whole file into
+  // memory; Bun handles BunFile -> path copies as a streamed operation.
+  await Bun.write(fullPath, sourceFile);
+  return { filePath: relativePath };
 }

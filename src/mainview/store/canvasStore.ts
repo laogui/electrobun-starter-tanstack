@@ -20,7 +20,8 @@ import {
   GROUP_COLORS,
   STICKY_COLORS,
 } from '@/lib/canvasConstants';
-import { buildNewNodeSpec } from '@/lib/canvasNodeRegistry';
+import { isFolderChildNode } from '@/lib/canvasNodePredicates';
+import { buildNewNodeSpec, findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects } from '@/lib/collision';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
@@ -93,15 +94,22 @@ function uniqueDetachedNodeId(
   return id;
 }
 
+function resolveFolderChildSpec(childType: string | undefined) {
+  if (!childType) {
+    return buildNewNodeSpec('card');
+  }
+  const spec = findSpecByNodeType(childType);
+  if (!(spec && isFolderChildNode(spec.nodeType))) {
+    return buildNewNodeSpec('card');
+  }
+  return buildNewNodeSpec(spec.kind);
+}
+
 function folderChildToDetachedNode(
   child: FolderChildEntry,
   usedNodeIds: Set<string>
 ): Node {
-  const kind =
-    child.type === 'asset' || child.type === 'image' || child.type === 'link'
-      ? child.type
-      : 'card';
-  const spec = buildNewNodeSpec(kind);
+  const spec = resolveFolderChildSpec(child.type);
   const {
     isDropTarget: _isDropTarget,
     isHidden: _isHidden,
@@ -114,7 +122,9 @@ function folderChildToDetachedNode(
     style: spec.base.style,
     data: {
       ...data,
-      ...(child.noteId && kind === 'card' ? { noteId: child.noteId } : {}),
+      ...(child.noteId && spec.base.type === 'card'
+        ? { noteId: child.noteId }
+        : {}),
       detached: true,
     },
   };
@@ -319,11 +329,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (!(card && folder) || folder.type !== 'folder') {
       return;
     }
-    if (
-      card.type !== 'asset' &&
-      card.type !== 'card' &&
-      card.type !== 'image'
-    ) {
+    if (!isFolderChildNode(card.type)) {
       return;
     }
     // Preserve / synthesize noteId for card children so they map 1:1 to .md files
@@ -356,7 +362,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             {
               id: card.id,
               ...(childNoteId ? { noteId: childNoteId } : {}),
-              type: card.type as 'asset' | 'card' | 'image',
+              type: card.type,
               data: childData,
             },
           ];
@@ -887,11 +893,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return;
     }
 
-    const kind =
-      child.type === 'asset' || child.type === 'image' || child.type === 'link'
-        ? child.type
-        : 'card';
-    const spec = buildNewNodeSpec(kind);
+    const spec = resolveFolderChildSpec(child.type);
     const anchor =
       options?.anchor ??
       (options?.anchorCenter

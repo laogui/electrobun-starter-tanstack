@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createImageThumbnail } from '@/lib/imageThumbnail';
+import { createImageThumbnail } from '@/lib/thumbnail';
 
 interface FakeImageOptions {
   height: number;

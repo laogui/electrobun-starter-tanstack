@@ -12,6 +12,7 @@ import {
   loadAttachment as loadWorkspaceAttachment,
   openAttachment as openWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
+  saveAttachmentFile as saveWorkspaceAttachmentFile,
 } from './attachments';
 import {
   deleteUnlinkedNotes,
@@ -226,6 +227,15 @@ interface CanvasRPC {
         params: {
           dataUrl: string;
           existingFile?: string;
+          kind?: 'audio' | 'file' | 'image' | 'video';
+          mimeType?: string;
+          suggestedName?: string;
+        };
+        response: { filePath: string };
+      };
+      saveAttachmentFile: {
+        params: {
+          sourcePath: string;
           kind?: 'audio' | 'file' | 'image' | 'video';
           mimeType?: string;
           suggestedName?: string;
@@ -989,6 +999,9 @@ async function main() {
 
         saveAttachment: async (params) =>
           saveWorkspaceAttachment(wsPath, params),
+
+        saveAttachmentFile: async (params) =>
+          saveWorkspaceAttachmentFile(wsPath, params),
 
         loadAttachment: async ({ filePath }) =>
           loadWorkspaceAttachment(wsPath, filePath),

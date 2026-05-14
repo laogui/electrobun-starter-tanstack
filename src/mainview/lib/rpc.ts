@@ -148,6 +148,27 @@ export async function rpcSaveAttachment(
   return eb.rpc.request.saveAttachment({ dataUrl, existingFile, ...options });
 }
 
+/**
+ * Copy a file from an absolute OS path into the workspace `attachments/`
+ * folder via the Bun main process. Use this for imports whose bytes are
+ * already on disk (e.g. via a native file picker) so the renderer never
+ * holds the full payload in memory — the data URL path has a 25 MB cap.
+ */
+export async function rpcSaveAttachmentFile(
+  sourcePath: string,
+  options?: {
+    kind?: 'audio' | 'file' | 'image' | 'video';
+    mimeType?: string;
+    suggestedName?: string;
+  }
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.saveAttachmentFile({ sourcePath, ...options });
+}
+
 export async function rpcLoadAttachment(filePath: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

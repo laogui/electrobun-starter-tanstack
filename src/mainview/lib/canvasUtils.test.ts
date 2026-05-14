@@ -5,6 +5,7 @@ import {
   canAbsorbIntoFolder,
   canBeChildOf,
   isDescendant,
+  nodesToDocumentTree,
   normalizeCanvasParenting,
   sortNodesByParent,
 } from '@/lib/canvasUtils';
@@ -205,5 +206,61 @@ describe('normalizeCanvasParenting', () => {
     const f1 = result.find((n) => n.id === 'f1')!;
 
     expect(f1.parentId).toBe('g1');
+  });
+});
+
+describe('nodesToDocumentTree', () => {
+  function makeNode(
+    id: string,
+    type: string,
+    data: Record<string, unknown> = {}
+  ): Node {
+    return { id, type, position: { x: 0, y: 0 }, data } as unknown as Node;
+  }
+
+  it('surfaces top-level card / image / asset / link entries and skips stickies / groups', () => {
+    const nodes: Node[] = [
+      makeNode('card-1', 'card', { title: 'Note' }),
+      makeNode('image-1', 'image', { title: 'Pic' }),
+      makeNode('asset-1', 'asset', { fileName: 'doc.pdf' }),
+      makeNode('link-1', 'link', { url: 'https://example.com' }),
+      makeNode('sticky-1', 'sticky', { content: 'hi' }),
+      makeNode('group-1', 'group', { label: 'Group' }),
+    ];
+
+    const tree = nodesToDocumentTree(nodes);
+    expect(tree.map((t) => `${t.kind}:${t.id}`)).toEqual([
+      'card:node:card-1',
+      'image:node:image-1',
+      'asset:node:asset-1',
+      'link:node:link-1',
+    ]);
+  });
+
+  it('projects folder children of card / image / asset / link kinds', () => {
+    const nodes: Node[] = [
+      makeNode('folder-1', 'folder', {
+        title: 'Folder',
+        children: [
+          { id: 'c1', type: 'card', data: { title: 'Card child' } },
+          { id: 'c2', type: 'image', data: { title: 'Image child' } },
+          { id: 'c3', type: 'asset', data: { fileName: 'a.pdf' } },
+          { id: 'c4', type: 'link', data: { url: 'https://example.com/x' } },
+          { id: 'c5', type: 'sticky', data: { content: 'should be ignored' } },
+        ],
+      }),
+    ];
+
+    const tree = nodesToDocumentTree(nodes);
+    expect(tree).toHaveLength(1);
+    const folder = tree[0]!;
+    expect(folder.kind).toBe('folder');
+    const childKindAndId = folder.children?.map((c) => `${c.kind}:${c.id}`);
+    expect(childKindAndId).toEqual([
+      'card:child:folder-1:c1',
+      'image:child:folder-1:c2',
+      'asset:child:folder-1:c3',
+      'link:child:folder-1:c4',
+    ]);
   });
 });

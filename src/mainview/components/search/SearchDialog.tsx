@@ -7,6 +7,8 @@ import {
   Group,
   ImageIcon,
   Layers,
+  Link2,
+  Paperclip,
   Search,
   StickyNote,
 } from 'lucide-react';
@@ -313,6 +315,10 @@ function iconFor(kind: SearchResult['kind']) {
       return Group;
     case 'image':
       return ImageIcon;
+    case 'asset':
+      return Paperclip;
+    case 'link':
+      return Link2;
     case 'view':
       return Layers;
     default:

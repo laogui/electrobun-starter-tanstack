@@ -112,6 +112,8 @@ export function isDescendant(
 // Document mode tree
 // ---------------------------------------------------------------------------
 
+export type DocumentTreeKind = 'folder' | 'card' | 'image' | 'asset' | 'link';
+
 export interface DocumentTreeNode {
   /** Folder children: { folderId, childId }; top-level cards/folders/images: top-level node id. */
   childId?: string;
@@ -120,17 +122,52 @@ export interface DocumentTreeNode {
   folderId?: string;
   /** Composite id used as React key + selection token; "node:<id>" or "child:<folderId>:<childId>". */
   id: string;
-  kind: 'folder' | 'card' | 'image';
+  kind: DocumentTreeKind;
 }
 
+const DOC_TREE_TOP_LEVEL_TYPES = new Set<string>([
+  'folder',
+  'card',
+  'image',
+  'asset',
+  'link',
+]);
+
+const DOC_TREE_CHILD_TYPES = new Set<string>([
+  'card',
+  'image',
+  'asset',
+  'link',
+]);
+
 function isDocumentTreeNodeType(type: string | undefined): boolean {
-  return type === 'folder' || type === 'card' || type === 'image';
+  return type ? DOC_TREE_TOP_LEVEL_TYPES.has(type) : false;
+}
+
+function childKindFor(type: string | undefined): DocumentTreeKind {
+  if (type === 'image') {
+    return 'image';
+  }
+  if (type === 'asset') {
+    return 'asset';
+  }
+  if (type === 'link') {
+    return 'link';
+  }
+  return 'card';
+}
+
+function topLevelKindFor(type: string | undefined): DocumentTreeKind {
+  if (type === 'folder') {
+    return 'folder';
+  }
+  return childKindFor(type);
 }
 
 /**
  * Project React Flow nodes into a tree suitable for the document-mode sidebar.
  * - Folders become expandable branches; their children come from `data.children`.
- * - Top-level cards / images / folders are root entries.
+ * - Top-level cards / images / assets / links / folders are root entries.
  * - Stickies, groups, and edges are intentionally omitted.
  * - Cards parented to a Group still appear at the root (groups are ignored in document mode).
  */
@@ -146,13 +183,15 @@ export function nodesToDocumentTree(nodes: Node[]): DocumentTreeNode[] {
         id: string;
         type?: string;
       }>;
-      const children = rawChildren.map<DocumentTreeNode>((c) => ({
-        id: `child:${node.id}:${c.id}`,
-        kind: c.type === 'image' ? 'image' : 'card',
-        data: c.data,
-        folderId: node.id,
-        childId: c.id,
-      }));
+      const children = rawChildren
+        .filter((c) => DOC_TREE_CHILD_TYPES.has(c.type ?? ''))
+        .map<DocumentTreeNode>((c) => ({
+          id: `child:${node.id}:${c.id}`,
+          kind: childKindFor(c.type),
+          data: c.data,
+          folderId: node.id,
+          childId: c.id,
+        }));
       roots.push({
         id: `node:${node.id}`,
         kind: 'folder',
@@ -163,7 +202,7 @@ export function nodesToDocumentTree(nodes: Node[]): DocumentTreeNode[] {
     }
     roots.push({
       id: `node:${node.id}`,
-      kind: node.type === 'image' ? 'image' : 'card',
+      kind: topLevelKindFor(node.type),
       data: node.data as Record<string, unknown>,
     });
   }

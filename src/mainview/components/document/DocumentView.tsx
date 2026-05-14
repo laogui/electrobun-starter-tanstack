@@ -3,7 +3,11 @@ import {
   Code2,
   FileText,
   History,
+  ImageIcon,
+  Link2,
+  type LucideIcon,
   MoreHorizontal,
+  Paperclip,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -14,6 +18,12 @@ import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useDocumentKeyboard } from '@/hooks/useDocumentKeyboard';
 import { resolveDocumentSelection } from '@/lib/canvasUtils';
+import {
+  type AssetNodeData,
+  getAssetDisplayTitle,
+  getLinkDisplayTitle,
+  type LinkNodeData,
+} from '@/lib/contentTypes';
 import { isRpcAvailable, loadCanvas } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -30,12 +40,67 @@ function getString(data: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
-type EditorKind = 'note' | 'image';
+type EditorKind = 'note' | 'image' | 'asset' | 'link';
 
 function kindLabel(kind: EditorKind): string {
-  return kind === 'image'
-    ? m.document_breadcrumb_image()
-    : m.document_breadcrumb_note();
+  switch (kind) {
+    case 'image':
+      return m.document_breadcrumb_image();
+    case 'asset':
+      return m.document_breadcrumb_file();
+    case 'link':
+      return m.document_breadcrumb_link();
+    default:
+      return m.document_breadcrumb_note();
+  }
+}
+
+const KIND_ICON: Record<EditorKind, LucideIcon> = {
+  note: FileText,
+  image: ImageIcon,
+  asset: Paperclip,
+  link: Link2,
+};
+
+function editorKindForType(type: string | undefined): EditorKind {
+  switch (type) {
+    case 'image':
+      return 'image';
+    case 'asset':
+      return 'asset';
+    case 'link':
+      return 'link';
+    default:
+      return 'note';
+  }
+}
+
+function editorTitleFor(
+  kind: EditorKind,
+  data: Record<string, unknown>
+): string {
+  switch (kind) {
+    case 'image':
+      return getString(data, 'title') || m.document_image_label();
+    case 'asset': {
+      const view: Pick<AssetNodeData, 'title' | 'fileName' | 'mimeType'> = {
+        title: getString(data, 'title'),
+        fileName: getString(data, 'fileName'),
+        mimeType: getString(data, 'mimeType'),
+      };
+      return getAssetDisplayTitle(view) || m.document_file_label();
+    }
+    case 'link': {
+      const view: Pick<LinkNodeData, 'title' | 'url' | 'siteName'> = {
+        title: getString(data, 'title'),
+        url: getString(data, 'url'),
+        siteName: getString(data, 'siteName'),
+      };
+      return getLinkDisplayTitle(view) || m.document_link_label();
+    }
+    default:
+      return getString(data, 'title') || m.document_untitled();
+  }
 }
 
 function useEditorTitle(): { title: string; kind: EditorKind } | null {
@@ -52,13 +117,8 @@ function useEditorTitle(): { title: string; kind: EditorKind } | null {
         return null;
       }
       const data = node.data as Record<string, unknown>;
-      const isImage = node.type === 'image';
-      return {
-        title:
-          getString(data, 'title') ||
-          (isImage ? m.document_image_label() : m.document_untitled()),
-        kind: isImage ? 'image' : 'note',
-      };
+      const kind = editorKindForType(node.type);
+      return { title: editorTitleFor(kind, data), kind };
     }
     const folder = nodes.find((n) => n.id === ref.folderId);
     const children = ((folder?.data as any)?.children ?? []) as Array<{
@@ -70,13 +130,8 @@ function useEditorTitle(): { title: string; kind: EditorKind } | null {
     if (!child) {
       return null;
     }
-    const isImage = child.type === 'image';
-    return {
-      title:
-        getString(child.data, 'title') ||
-        (isImage ? m.document_image_label() : m.document_untitled()),
-      kind: isImage ? 'image' : 'note',
-    };
+    const kind = editorKindForType(child.type);
+    return { title: editorTitleFor(kind, child.data), kind };
   }, [nodes, selection]);
 }
 
@@ -105,7 +160,10 @@ function EditorToolbar() {
       <div className="flex min-w-0 items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-400">
         {head ? (
           <>
-            <FileText className="opacity-70" size={13} />
+            {(() => {
+              const Icon = KIND_ICON[head.kind];
+              return <Icon className="opacity-70" size={13} />;
+            })()}
             <span>{kindLabel(head.kind)}</span>
             <ChevronRight className="opacity-50" size={12} />
             <span className="truncate font-medium text-gray-800 dark:text-gray-100">

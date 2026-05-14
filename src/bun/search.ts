@@ -15,6 +15,8 @@ export type SearchResultKind =
   | 'group'
   | 'image'
   | 'card'
+  | 'asset'
+  | 'link'
   | 'edge'
   | 'view';
 
@@ -25,7 +27,12 @@ export type SearchMatchField =
   | 'content'
   | 'label'
   | 'subtitle'
-  | 'viewName';
+  | 'viewName'
+  | 'fileName'
+  | 'mimeType'
+  | 'url'
+  | 'description'
+  | 'siteName';
 
 export interface SearchResult {
   edgeId?: string;
@@ -108,11 +115,16 @@ export function buildExcerpt(text: string, matchAt: number): string {
 
 const FIELD_BASE_SCORE: Record<SearchMatchField, number> = {
   title: 100,
+  fileName: 90,
+  url: 85,
   tag: 80,
   label: 70,
   subtitle: 60,
+  siteName: 60,
+  description: 55,
   content: 55,
   body: 50,
+  mimeType: 40,
   viewName: 30,
 };
 
@@ -276,6 +288,20 @@ function addManifestNodeMatches(
     case 'image':
       candidates.push({ field: 'title', value: asString(data.title) });
       break;
+    case 'asset':
+      candidates.push({ field: 'title', value: asString(data.title) });
+      candidates.push({ field: 'fileName', value: asString(data.fileName) });
+      candidates.push({ field: 'mimeType', value: asString(data.mimeType) });
+      break;
+    case 'link':
+      candidates.push({ field: 'title', value: asString(data.title) });
+      candidates.push({ field: 'url', value: asString(data.url) });
+      candidates.push({
+        field: 'description',
+        value: asString(data.description),
+      });
+      candidates.push({ field: 'siteName', value: asString(data.siteName) });
+      break;
     case 'card':
       // In case the manifest still has hydrated values (e.g., before save).
       candidates.push({ field: 'title', value: asString(data.title) });
@@ -354,6 +380,10 @@ function nodeKind(nodeType: string): SearchResultKind {
       return 'group';
     case 'image':
       return 'image';
+    case 'asset':
+      return 'asset';
+    case 'link':
+      return 'link';
     case 'card':
       return 'card';
     default:

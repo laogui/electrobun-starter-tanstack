@@ -125,11 +125,16 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
 
 const FIELD_BASE_SCORE: Record<SearchMatchField, number> = {
   title: 100,
+  fileName: 90,
+  url: 85,
   tag: 80,
   label: 70,
   subtitle: 60,
+  siteName: 60,
+  description: 55,
   content: 55,
   body: 50,
+  mimeType: 40,
   viewName: 30,
 };
 
@@ -150,6 +155,10 @@ function nodeKindFor(nodeType: string | undefined): SearchResultKind {
       return 'group';
     case 'image':
       return 'image';
+    case 'asset':
+      return 'asset';
+    case 'link':
+      return 'link';
     default:
       return 'card';
   }
@@ -201,6 +210,38 @@ export function searchCurrentView(
         candidates.push({
           field: 'title',
           value: typeof data.title === 'string' ? data.title : '',
+        });
+        break;
+      case 'asset':
+        candidates.push({
+          field: 'title',
+          value: typeof data.title === 'string' ? data.title : '',
+        });
+        candidates.push({
+          field: 'fileName',
+          value: typeof data.fileName === 'string' ? data.fileName : '',
+        });
+        candidates.push({
+          field: 'mimeType',
+          value: typeof data.mimeType === 'string' ? data.mimeType : '',
+        });
+        break;
+      case 'link':
+        candidates.push({
+          field: 'title',
+          value: typeof data.title === 'string' ? data.title : '',
+        });
+        candidates.push({
+          field: 'url',
+          value: typeof data.url === 'string' ? data.url : '',
+        });
+        candidates.push({
+          field: 'description',
+          value: typeof data.description === 'string' ? data.description : '',
+        });
+        candidates.push({
+          field: 'siteName',
+          value: typeof data.siteName === 'string' ? data.siteName : '',
         });
         break;
       case 'card':

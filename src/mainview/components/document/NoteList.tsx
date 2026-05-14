@@ -1,16 +1,35 @@
 import type { Node } from '@xyflow/react';
-import { ArrowDownUp, FileText, Plus, Search } from 'lucide-react';
+import {
+  ArrowDownUp,
+  FileText,
+  Link2,
+  type LucideIcon,
+  Paperclip,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
+import {
+  type AssetNodeData,
+  getAssetDisplayTitle,
+  getLinkDisplayTitle,
+  getLinkHost,
+  type LinkNodeData,
+} from '@/lib/contentTypes';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
 
+type NoteEntryKind = 'note' | 'image' | 'asset' | 'link';
+
 interface NoteEntry {
   createdAt?: string;
   /** Composite selection token; matches `selectedDocumentId`. */
   id: string;
+  /** Discriminator used for icons / filtering by type:* sections. */
+  kind: NoteEntryKind;
   preview: string;
   title: string;
   /** ISO-ish display string; falls back to em dash. */
@@ -20,6 +39,13 @@ interface NoteEntry {
 }
 
 type SortOrder = 'desc' | 'asc';
+
+const ENTRY_ICONS: Record<NoteEntryKind, LucideIcon> = {
+  note: FileText,
+  image: FileText,
+  asset: Paperclip,
+  link: Link2,
+};
 
 function readDateMs(value: unknown): number {
   if (typeof value !== 'string' && typeof value !== 'number') {
@@ -74,19 +100,80 @@ function formatDateShort(value: unknown): string | undefined {
   });
 }
 
+function entryKindForType(type: string | undefined): NoteEntryKind | null {
+  switch (type) {
+    case 'card':
+      return 'note';
+    case 'image':
+      return 'image';
+    case 'asset':
+      return 'asset';
+    case 'link':
+      return 'link';
+    default:
+      return null;
+  }
+}
+
+function entryTitleFor(
+  kind: NoteEntryKind,
+  data: Record<string, unknown>
+): string {
+  switch (kind) {
+    case 'image':
+      return getString(data, 'title') || m.document_image_label();
+    case 'asset': {
+      const view: Pick<AssetNodeData, 'title' | 'fileName' | 'mimeType'> = {
+        title: getString(data, 'title'),
+        fileName: getString(data, 'fileName'),
+        mimeType: getString(data, 'mimeType'),
+      };
+      return getAssetDisplayTitle(view) || m.document_file_label();
+    }
+    case 'link': {
+      const view: Pick<LinkNodeData, 'title' | 'url' | 'siteName'> = {
+        title: getString(data, 'title'),
+        url: getString(data, 'url'),
+        siteName: getString(data, 'siteName'),
+      };
+      return getLinkDisplayTitle(view) || m.document_link_label();
+    }
+    default:
+      return getString(data, 'title') || m.document_untitled();
+  }
+}
+
+function entryPreviewFor(
+  kind: NoteEntryKind,
+  data: Record<string, unknown>
+): string {
+  if (kind === 'asset') {
+    const fileName = getString(data, 'fileName');
+    const mimeType = getString(data, 'mimeType');
+    return [fileName, mimeType].filter(Boolean).join(' · ');
+  }
+  if (kind === 'link') {
+    const description = getString(data, 'description');
+    if (description.trim()) {
+      return description.trim();
+    }
+    const url = getString(data, 'url');
+    return getLinkHost(url) || url;
+  }
+  return makePreview(data);
+}
+
 function nodeToEntry(node: Node, idOverride?: string): NoteEntry | null {
-  if (node.type !== 'card' && node.type !== 'image') {
+  const kind = entryKindForType(node.type);
+  if (!kind) {
     return null;
   }
   const data = node.data as Record<string, unknown>;
   return {
     id: idOverride ?? `node:${node.id}`,
-    title:
-      getString(data, 'title') ||
-      (node.type === 'image'
-        ? m.document_image_label()
-        : m.document_untitled()),
-    preview: makePreview(data),
+    kind,
+    title: entryTitleFor(kind, data),
+    preview: entryPreviewFor(kind, data),
     updatedAt: formatDateShort((data as { updatedAt?: unknown }).updatedAt),
     createdAt: formatDateShort((data as { createdAt?: unknown }).createdAt),
     updatedAtMs: readDateMs((data as { updatedAt?: unknown }).updatedAt),
@@ -96,15 +183,16 @@ function nodeToEntry(node: Node, idOverride?: string): NoteEntry | null {
 function childToEntry(
   folderId: string,
   child: { data: Record<string, unknown>; id: string; type?: string }
-): NoteEntry {
+): NoteEntry | null {
+  const kind = entryKindForType(child.type);
+  if (!kind) {
+    return null;
+  }
   return {
     id: `child:${folderId}:${child.id}`,
-    title:
-      getString(child.data, 'title') ||
-      (child.type === 'image'
-        ? m.document_image_label()
-        : m.document_untitled()),
-    preview: makePreview(child.data),
+    kind,
+    title: entryTitleFor(kind, child.data),
+    preview: entryPreviewFor(kind, child.data),
     updatedAt: formatDateShort(
       (child.data as { updatedAt?: unknown }).updatedAt
     ),
@@ -143,6 +231,12 @@ function getSectionTitle(section: string, folderTitle?: string): string {
   if (section === 'archive') {
     return m.document_archive();
   }
+  if (section === 'type:asset') {
+    return m.document_type_files();
+  }
+  if (section === 'type:link') {
+    return m.document_type_links();
+  }
   if (section.startsWith('folder:')) {
     return folderTitle ?? m.document_folder_section();
   }
@@ -169,6 +263,18 @@ export function NoteList() {
 
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
+  /** type:asset → 'asset', type:link → 'link'. Other type:* values keep this null so
+   *  type:image keeps routing to ImageGallery (handled in DocumentView). */
+  const typeFilter: NoteEntryKind | null = useMemo(() => {
+    if (documentSection === 'type:asset') {
+      return 'asset';
+    }
+    if (documentSection === 'type:link') {
+      return 'link';
+    }
+    return null;
+  }, [documentSection]);
+
   const entries: NoteEntry[] = useMemo(() => {
     if (documentSection === 'archive') {
       return [];
@@ -179,26 +285,30 @@ export function NoteList() {
         id: string;
         type?: string;
       }>;
-      return sortEntries(
-        children.map((c) => childToEntry(folderId, c)),
-        sortOrder
-      );
+      const childEntries: NoteEntry[] = [];
+      for (const c of children) {
+        const entry = childToEntry(folderId, c);
+        if (entry) {
+          childEntries.push(entry);
+        }
+      }
+      return sortEntries(childEntries, sortOrder);
     }
     if (documentSection === 'inbox') {
       const out: NoteEntry[] = [];
       for (const n of nodes) {
         const e = nodeToEntry(n);
-        if (e) {
+        if (e && (!typeFilter || e.kind === typeFilter)) {
           out.push(e);
         }
       }
       return sortEntries(out, sortOrder);
     }
-    // All
+    // All / type:asset / type:link
     const out: NoteEntry[] = [];
     for (const n of nodes) {
       const e = nodeToEntry(n);
-      if (e) {
+      if (e && (!typeFilter || e.kind === typeFilter)) {
         out.push(e);
       }
       if (n.type === 'folder') {
@@ -208,12 +318,15 @@ export function NoteList() {
           type?: string;
         }>;
         for (const c of children) {
-          out.push(childToEntry(n.id, c));
+          const childEntry = childToEntry(n.id, c);
+          if (childEntry && (!typeFilter || childEntry.kind === typeFilter)) {
+            out.push(childEntry);
+          }
         }
       }
     }
     return sortEntries(out, sortOrder);
-  }, [documentSection, folderId, folderNode, nodes, sortOrder]);
+  }, [documentSection, folderId, folderNode, nodes, sortOrder, typeFilter]);
 
   const sectionTitle = getSectionTitle(
     documentSection,
@@ -283,19 +396,28 @@ export function NoteList() {
         {entries.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-8 text-center text-gray-400 dark:text-gray-500">
             <FileText size={28} strokeWidth={1.4} />
-            <p className="text-xs">{m.document_empty_no_notes()}</p>
-            <button
-              className="rounded-md bg-black/5 px-2.5 py-1 text-xs hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
-              onClick={handleCreate}
-              type="button"
-            >
-              {m.document_empty_create_note()}
-            </button>
+            <p className="text-xs">
+              {typeFilter === 'asset'
+                ? m.document_files_empty()
+                : typeFilter === 'link'
+                  ? m.document_links_empty()
+                  : m.document_empty_no_notes()}
+            </p>
+            {typeFilter ? null : (
+              <button
+                className="rounded-md bg-black/5 px-2.5 py-1 text-xs hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
+                onClick={handleCreate}
+                type="button"
+              >
+                {m.document_empty_create_note()}
+              </button>
+            )}
           </div>
         ) : (
           <ul className="flex flex-col">
             {entries.map((entry, idx) => {
               const active = entry.id === selectedDocumentId;
+              const EntryIcon = ENTRY_ICONS[entry.kind];
               return (
                 <li
                   className={cn(
@@ -321,7 +443,7 @@ export function NoteList() {
                     >
                       {entry.title}
                     </h3>
-                    <FileText
+                    <EntryIcon
                       className="mt-0.5 shrink-0 text-gray-300 dark:text-gray-600"
                       size={12}
                     />

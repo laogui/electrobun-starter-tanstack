@@ -10,6 +10,8 @@ export type SearchResultKind =
   | 'group'
   | 'image'
   | 'card'
+  | 'asset'
+  | 'link'
   | 'edge'
   | 'view';
 
@@ -20,7 +22,12 @@ export type SearchMatchField =
   | 'content'
   | 'label'
   | 'subtitle'
-  | 'viewName';
+  | 'viewName'
+  | 'fileName'
+  | 'mimeType'
+  | 'url'
+  | 'description'
+  | 'siteName';
 
 export interface SearchResult {
   edgeId?: string;

@@ -1,7 +1,9 @@
 import { FileText } from 'lucide-react';
 import { lazy, Suspense, useMemo } from 'react';
 
+import { AssetContent } from '@/components/canvas/nodes/AssetNode';
 import { ImageContent } from '@/components/canvas/nodes/ImageNode';
+import { LinkContent } from '@/components/canvas/nodes/LinkNode';
 import { resolveDocumentSelection } from '@/lib/canvasUtils';
 import { FLAGS } from '@/lib/flags';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -24,6 +26,8 @@ const EmptyState = () => (
   </div>
 );
 
+type ResolvedDocType = 'card' | 'image' | 'asset' | 'link';
+
 interface ResolvedDoc {
   childId?: string;
   data: Record<string, unknown>;
@@ -33,7 +37,21 @@ interface ResolvedDoc {
   key: string;
   /** Top-level node id (for cards) or undefined for folder children. */
   nodeId?: string;
-  type: 'card' | 'image';
+  type: ResolvedDocType;
+}
+
+const SUPPORTED_DOC_TYPES = new Set<ResolvedDocType>([
+  'card',
+  'image',
+  'asset',
+  'link',
+]);
+
+function resolveDocType(type: string | undefined): ResolvedDocType | null {
+  if (type && SUPPORTED_DOC_TYPES.has(type as ResolvedDocType)) {
+    return type as ResolvedDocType;
+  }
+  return null;
 }
 
 function useResolvedDocument(): ResolvedDoc | null {
@@ -49,7 +67,8 @@ function useResolvedDocument(): ResolvedDoc | null {
       if (!node) {
         return null;
       }
-      if (node.type !== 'card' && node.type !== 'image') {
+      const docType = resolveDocType(node.type);
+      if (!docType) {
         return null;
       }
       return {
@@ -57,7 +76,7 @@ function useResolvedDocument(): ResolvedDoc | null {
         data: node.data as Record<string, unknown>,
         nodeId: node.id,
         isFolderChild: false,
-        type: node.type,
+        type: docType,
       };
     }
     const folder = nodes.find((n) => n.id === ref.folderId);
@@ -73,13 +92,14 @@ function useResolvedDocument(): ResolvedDoc | null {
     if (!child) {
       return null;
     }
+    const childType = resolveDocType(child.type) ?? 'card';
     return {
       key: `child:${ref.folderId}:${ref.childId}`,
       data: child.data,
       folderId: ref.folderId,
       childId: ref.childId,
       isFolderChild: true,
-      type: child.type === 'image' ? 'image' : 'card',
+      type: childType,
     };
   }, [nodes, selection]);
 }
@@ -97,6 +117,22 @@ export function DocumentEditor() {
     return (
       <div className="h-full">
         <ImageContent data={doc.data as never} isFocused />
+      </div>
+    );
+  }
+
+  if (doc.type === 'asset') {
+    return (
+      <div className="h-full">
+        <AssetContent data={doc.data as never} isFocused />
+      </div>
+    );
+  }
+
+  if (doc.type === 'link') {
+    return (
+      <div className="h-full">
+        <LinkContent data={doc.data as never} isFocused />
       </div>
     );
   }

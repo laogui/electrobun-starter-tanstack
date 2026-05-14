@@ -158,6 +158,121 @@ describe('search', () => {
     });
   });
 
+  it('matches asset metadata (title, fileName, mimeType) and link metadata (url, description, siteName)', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'n-asset-pdf',
+              type: 'asset',
+              position: { x: 0, y: 0 },
+              data: {
+                title: 'Quarterly report',
+                fileName: 'q3-financials.pdf',
+                mimeType: 'application/pdf',
+              },
+            },
+            {
+              id: 'n-asset-img',
+              type: 'asset',
+              position: { x: 1, y: 1 },
+              data: {
+                title: 'Snapshot',
+                fileName: 'snapshot.png',
+                mimeType: 'image/png',
+              },
+            },
+            {
+              id: 'n-link',
+              type: 'link',
+              position: { x: 2, y: 2 },
+              data: {
+                title: 'Docs',
+                url: 'https://example.com/docs',
+                description: 'Reference manual entry point',
+                siteName: 'Example Docs',
+              },
+            },
+          ],
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+
+    const fileNameHits = await searchWorkspace(workspaceRoot, {
+      query: 'q3-financials',
+    });
+    expect(
+      fileNameHits.find(
+        (r) => r.kind === 'asset' && r.matchField === 'fileName'
+      )
+    ).toBeDefined();
+
+    const mimeHits = await searchWorkspace(workspaceRoot, {
+      query: 'application/pdf',
+    });
+    expect(
+      mimeHits.find((r) => r.kind === 'asset' && r.matchField === 'mimeType')
+    ).toBeDefined();
+
+    const urlHits = await searchWorkspace(workspaceRoot, {
+      query: 'example.com/docs',
+    });
+    expect(
+      urlHits.find((r) => r.kind === 'link' && r.matchField === 'url')
+    ).toBeDefined();
+
+    const descHits = await searchWorkspace(workspaceRoot, {
+      query: 'reference manual',
+    });
+    expect(
+      descHits.find((r) => r.kind === 'link' && r.matchField === 'description')
+    ).toBeDefined();
+
+    const siteHits = await searchWorkspace(workspaceRoot, {
+      query: 'example docs',
+    });
+    expect(
+      siteHits.find((r) => r.kind === 'link' && r.matchField === 'siteName')
+    ).toBeDefined();
+  });
+
+  it('asset title scores higher than its mimeType / fileName matches', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'asset-1',
+              type: 'asset',
+              position: { x: 0, y: 0 },
+              data: {
+                title: 'pdf overview',
+                fileName: 'pdf-overview.pdf',
+                mimeType: 'application/pdf',
+              },
+            },
+          ],
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+    const results = await searchWorkspace(workspaceRoot, { query: 'pdf' });
+    const titleHit = results.find((r) => r.matchField === 'title');
+    const fileNameHit = results.find((r) => r.matchField === 'fileName');
+    const mimeHit = results.find((r) => r.matchField === 'mimeType');
+    expect(titleHit).toBeDefined();
+    expect(fileNameHit).toBeDefined();
+    expect(mimeHit).toBeDefined();
+    expect(titleHit!.score).toBeGreaterThan(fileNameHit!.score);
+    expect(fileNameHit!.score).toBeGreaterThan(mimeHit!.score);
+  });
+
   it('matches sticky content, folder title/subtitle, group label, edge label', async () => {
     writeWorkspace(workspaceRoot, {
       activeViewId: 'v1',

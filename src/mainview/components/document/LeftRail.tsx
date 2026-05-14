@@ -4,6 +4,8 @@ import {
   Folder,
   Image as ImageIcon,
   Layers,
+  Link2,
+  Paperclip,
   Plus,
   StickyNote,
 } from 'lucide-react';
@@ -123,22 +125,30 @@ export function LeftRail() {
     [nodes]
   );
 
-  const imageCount = useMemo(() => {
-    let count = 0;
+  const typeCounts = useMemo(() => {
+    const counts = { image: 0, asset: 0, link: 0 };
     for (const n of nodes) {
       if (n.type === 'image') {
-        count += 1;
+        counts.image += 1;
+      } else if (n.type === 'asset') {
+        counts.asset += 1;
+      } else if (n.type === 'link') {
+        counts.link += 1;
       } else if (n.type === 'folder') {
         const children = ((n.data as { children?: unknown }).children ??
           []) as Array<{ type?: string }>;
         for (const c of children) {
           if (c.type === 'image') {
-            count += 1;
+            counts.image += 1;
+          } else if (c.type === 'asset') {
+            counts.asset += 1;
+          } else if (c.type === 'link') {
+            counts.link += 1;
           }
         }
       }
     }
-    return count;
+    return counts;
   }, [nodes]);
 
   const top: RailEntry[] = [
@@ -176,11 +186,29 @@ export function LeftRail() {
           <div className="flex flex-col gap-0.5">
             <RailItem
               active={documentSection === 'type:image'}
-              count={imageCount}
+              count={typeCounts.image}
               icon={ImageIcon}
               label={m.document_type_images()}
               onClick={() => {
                 setDocumentSection('type:image');
+              }}
+            />
+            <RailItem
+              active={documentSection === 'type:asset'}
+              count={typeCounts.asset}
+              icon={Paperclip}
+              label={m.document_type_files()}
+              onClick={() => {
+                setDocumentSection('type:asset');
+              }}
+            />
+            <RailItem
+              active={documentSection === 'type:link'}
+              count={typeCounts.link}
+              icon={Link2}
+              label={m.document_type_links()}
+              onClick={() => {
+                setDocumentSection('type:link');
               }}
             />
           </div>

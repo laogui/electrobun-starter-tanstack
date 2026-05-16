@@ -274,6 +274,7 @@ function CanvasComponent() {
     (s) => s.setPendingSearchTarget
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
+  const setEdges = useCanvasStore((s) => s.setEdges);
   const moveFolderChildToCanvas = useCanvasStore(
     (s) => s.moveFolderChildToCanvas
   );
@@ -329,7 +330,7 @@ function CanvasComponent() {
 
   useCanvasPersistence();
 
-  // Cross-view search target: locate node after hydration completes.
+  // Cross-view search target: locate node or edge after hydration completes.
   useEffect(() => {
     if (!(hydrated && pendingSearchTarget)) {
       return;
@@ -342,12 +343,12 @@ function CanvasComponent() {
       setPendingSearchTarget(null);
       return;
     }
+    const inst = rfInstance.current;
     if (pendingSearchTarget.nodeId) {
       const nodeId = pendingSearchTarget.nodeId;
       setNodes((prev) =>
         prev.map((n) => ({ ...n, selected: n.id === nodeId }))
       );
-      const inst = rfInstance.current;
       const target = inst
         ?.getNodes?.()
         ?.find((n: { id: string }) => n.id === nodeId) as
@@ -368,6 +369,37 @@ function CanvasComponent() {
           duration: 240,
         });
       }
+    } else if (pendingSearchTarget.edgeId) {
+      const edgeId = pendingSearchTarget.edgeId;
+      setEdges((prev) =>
+        prev.map((e) => ({ ...e, selected: e.id === edgeId }))
+      );
+      const edge = inst
+        ?.getEdges?.()
+        ?.find((e: { id: string }) => e.id === edgeId) as
+        | { source?: string; target?: string }
+        | undefined;
+      if (inst && edge?.source && edge.target) {
+        const nodes = (inst.getNodes?.() ?? []) as Array<{
+          id: string;
+          position?: { x: number; y: number };
+          measured?: { width?: number; height?: number };
+          width?: number;
+          height?: number;
+        }>;
+        const src = nodes.find((n) => n.id === edge.source);
+        const tgt = nodes.find((n) => n.id === edge.target);
+        if (src?.position && tgt?.position) {
+          const sw = src.measured?.width ?? src.width ?? 240;
+          const sh = src.measured?.height ?? src.height ?? 160;
+          const tw = tgt.measured?.width ?? tgt.width ?? 240;
+          const th = tgt.measured?.height ?? tgt.height ?? 160;
+          const cx = (src.position.x + sw / 2 + (tgt.position.x + tw / 2)) / 2;
+          const cy = (src.position.y + sh / 2 + (tgt.position.y + th / 2)) / 2;
+          const zoom = inst.getViewport?.()?.zoom ?? 1;
+          inst.setCenter?.(cx, cy, { zoom, duration: 240 });
+        }
+      }
     }
     setPendingSearchTarget(null);
   }, [
@@ -376,6 +408,7 @@ function CanvasComponent() {
     activeViewId,
     setPendingSearchTarget,
     setNodes,
+    setEdges,
   ]);
 
   useEffect(() => {

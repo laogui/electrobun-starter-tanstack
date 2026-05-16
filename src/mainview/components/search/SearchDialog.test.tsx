@@ -1,0 +1,344 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { SearchResult } from '@/lib/searchTypes';
+import { useCanvasStore } from '@/store/canvasStore';
+
+const searchState = vi.hoisted(() => ({
+  current: {
+    query: '',
+    setQuery: vi.fn(),
+    results: [] as SearchResult[],
+    isLoading: false,
+    error: null as string | null,
+    fallback: false,
+  },
+}));
+
+vi.mock('@/hooks/useSearch', () => ({
+  useSearch: () => searchState.current,
+}));
+
+const rpcMocks = vi.hoisted(() => ({
+  isRpcAvailable: vi.fn(),
+  rpcSaveManifest: vi.fn(),
+}));
+
+vi.mock('@/lib/rpc', () => ({
+  isRpcAvailable: rpcMocks.isRpcAvailable,
+  rpcSaveManifest: rpcMocks.rpcSaveManifest,
+}));
+
+import { SearchDialog } from './SearchDialog';
+
+const SEARCH_FAILED_RE = /Search failed: boom/;
+const OFFLINE_FALLBACK_RE = /Searching current canvas only/i;
+
+function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
+  return {
+    id: 'node:default:n1:title',
+    kind: 'note',
+    viewId: 'default',
+    viewName: 'Default Canvas',
+    nodeId: 'n1',
+    title: 'Hello world',
+    excerpt: 'Hello world body',
+    matchField: 'title',
+    score: 100,
+    position: { x: 100, y: 50 },
+    ...overrides,
+  };
+}
+
+function setSearch(partial: Partial<typeof searchState.current>) {
+  searchState.current = { ...searchState.current, ...partial };
+}
+
+function buildRfInstance() {
+  const setCenter = vi.fn();
+  return {
+    setCenter,
+    ref: {
+      current: {
+        getViewport: () => ({ zoom: 1, x: 0, y: 0 }),
+        getNodes: () => [
+          {
+            id: 'n1',
+            position: { x: 100, y: 50 },
+            measured: { width: 200, height: 100 },
+          },
+        ],
+        getEdges: () => [],
+        setCenter,
+      },
+    } as any,
+  };
+}
+
+function buildRfInstanceWithEdge() {
+  const setCenter = vi.fn();
+  return {
+    setCenter,
+    ref: {
+      current: {
+        getViewport: () => ({ zoom: 1, x: 0, y: 0 }),
+        getNodes: () => [
+          {
+            id: 'n1',
+            position: { x: 0, y: 0 },
+            measured: { width: 100, height: 100 },
+          },
+          {
+            id: 'n2',
+            position: { x: 200, y: 100 },
+            measured: { width: 100, height: 100 },
+          },
+        ],
+        getEdges: () => [{ id: 'e1', source: 'n1', target: 'n2' }],
+        setCenter,
+      },
+    } as any,
+  };
+}
+
+beforeEach(() => {
+  useCanvasStore.getState().reset();
+  useCanvasStore.setState({
+    activeViewId: 'default',
+    views: [
+      { id: 'default', name: 'Default Canvas' },
+      { id: 'other', name: 'Other Canvas' },
+    ],
+    nodes: [],
+    edges: [],
+    searchOpen: true,
+    pendingSearchTarget: null,
+    layoutMode: 'canvas',
+    selectedDocumentId: null,
+  });
+  rpcMocks.isRpcAvailable.mockReset().mockResolvedValue(true);
+  rpcMocks.rpcSaveManifest.mockReset().mockResolvedValue(undefined);
+  searchState.current = {
+    query: '',
+    setQuery: vi.fn(),
+    results: [],
+    isLoading: false,
+    error: null,
+    fallback: false,
+  };
+});
+
+describe('searchDialog', () => {
+  it('renders nothing when searchOpen is false', () => {
+    useCanvasStore.setState({ searchOpen: false });
+    render(<SearchDialog />);
+    expect(screen.queryByLabelText('Search query')).not.toBeInTheDocument();
+  });
+
+  it('renders the search input and listbox when open', () => {
+    render(<SearchDialog />);
+    expect(screen.getByLabelText('Search query')).toBeInTheDocument();
+    expect(screen.getByTestId('search-results')).toBeInTheDocument();
+  });
+
+  it('shows the loading indicator when isLoading is true', () => {
+    setSearch({ query: 'foo', isLoading: true });
+    render(<SearchDialog />);
+    expect(screen.getByText('…')).toBeInTheDocument();
+  });
+
+  it('renders the empty state when the query has no matches', () => {
+    setSearch({ query: 'nothing', results: [] });
+    render(<SearchDialog />);
+    expect(screen.getByText('No matches')).toBeInTheDocument();
+  });
+
+  it('renders an error message when the search hook reports an error', () => {
+    setSearch({ query: 'foo', error: 'boom' });
+    render(<SearchDialog />);
+    expect(screen.getByText(SEARCH_FAILED_RE)).toBeInTheDocument();
+  });
+
+  it('renders the offline fallback banner when fallback is true', () => {
+    setSearch({ query: 'foo', fallback: true });
+    render(<SearchDialog />);
+    expect(screen.getByText(OFFLINE_FALLBACK_RE)).toBeInTheDocument();
+  });
+});
+
+describe('searchDialog interactions', () => {
+  it('moves the active row with ArrowDown / ArrowUp', () => {
+    setSearch({
+      query: 'h',
+      results: [
+        makeResult({ id: 'r1', title: 'First' }),
+        makeResult({ id: 'r2', title: 'Second', nodeId: 'n2' }),
+      ],
+    });
+    render(<SearchDialog />);
+    const input = screen.getByLabelText('Search query');
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(screen.getAllByRole('option')[0]).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+
+  it('Enter on a same-view result selects the node, locates it, and closes', async () => {
+    const { ref, setCenter } = buildRfInstance();
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'n1',
+          type: 'card',
+          position: { x: 100, y: 50 },
+          data: {},
+        } as any,
+      ],
+    });
+    setSearch({ query: 'h', results: [makeResult()] });
+    render(<SearchDialog rfInstance={ref} />);
+    fireEvent.keyDown(screen.getByLabelText('Search query'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(setCenter).toHaveBeenCalledTimes(1);
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'n1')?.selected
+    ).toBe(true);
+  });
+
+  it('clicking a cross-view result saves the manifest, switches view, and sets the pending target', async () => {
+    setSearch({
+      query: 'h',
+      results: [
+        makeResult({
+          id: 'node:other:n2:title',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: 'n2',
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+    fireEvent.click(screen.getByRole('option'));
+    await waitFor(() => {
+      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    });
+    expect(useCanvasStore.getState().activeViewId).toBe('other');
+    expect(useCanvasStore.getState().pendingSearchTarget).toEqual({
+      viewId: 'other',
+      nodeId: 'n2',
+      edgeId: undefined,
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('selecting a view-kind result switches view without setting a pending target', async () => {
+    setSearch({
+      query: 'other',
+      results: [
+        makeResult({
+          id: 'view:other',
+          kind: 'view',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: undefined,
+          position: undefined,
+          matchField: 'viewName',
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+    fireEvent.click(screen.getByRole('option'));
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeViewId).toBe('other');
+    });
+    expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+  });
+
+  it('in document layout, same-view results route to the document editor instead of centering', async () => {
+    const { ref, setCenter } = buildRfInstance();
+    useCanvasStore.setState({ layoutMode: 'document' });
+    setSearch({ query: 'h', results: [makeResult()] });
+    render(<SearchDialog rfInstance={ref} />);
+    fireEvent.click(screen.getByRole('option'));
+    await waitFor(() => {
+      expect(useCanvasStore.getState().selectedDocumentId).toBe('node:n1');
+    });
+    expect(setCenter).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('Enter on a same-view edge result selects the edge and centers on its midpoint', async () => {
+    const { ref, setCenter } = buildRfInstanceWithEdge();
+    useCanvasStore.setState({
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' } as any],
+    });
+    setSearch({
+      query: 'flow',
+      results: [
+        makeResult({
+          id: 'edge:default:e1:label',
+          kind: 'edge',
+          nodeId: undefined,
+          edgeId: 'e1',
+          matchField: 'label',
+          position: undefined,
+          title: 'flow',
+          excerpt: 'flow',
+        }),
+      ],
+    });
+    render(<SearchDialog rfInstance={ref} />);
+    fireEvent.keyDown(screen.getByLabelText('Search query'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(setCenter).toHaveBeenCalledTimes(1);
+    });
+    // Midpoint of (50, 50) and (250, 150) = (150, 100)
+    expect(setCenter).toHaveBeenCalledWith(150, 100, expect.any(Object));
+    expect(
+      useCanvasStore.getState().edges.find((e) => e.id === 'e1')?.selected
+    ).toBe(true);
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('clicking a cross-view edge result writes the pending target with edgeId', async () => {
+    setSearch({
+      query: 'flow',
+      results: [
+        makeResult({
+          id: 'edge:other:e9:label',
+          kind: 'edge',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: undefined,
+          edgeId: 'e9',
+          matchField: 'label',
+          position: undefined,
+          title: 'flow',
+          excerpt: 'flow',
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+    fireEvent.click(screen.getByRole('option'));
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeViewId).toBe('other');
+    });
+    expect(useCanvasStore.getState().pendingSearchTarget).toEqual({
+      viewId: 'other',
+      nodeId: undefined,
+      edgeId: 'e9',
+    });
+  });
+});

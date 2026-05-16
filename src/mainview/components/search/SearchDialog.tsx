@@ -37,6 +37,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     (s) => s.setPendingSearchTarget
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
+  const setEdges = useCanvasStore((s) => s.setEdges);
   const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -81,34 +82,40 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   const locateInCurrentView = useCallback(
     (result: SearchResult) => {
-      if (!result.nodeId) {
+      const inst = rfInstance?.current;
+      if (result.nodeId) {
+        const nodeId = result.nodeId;
+        setNodes((prev) =>
+          prev.map((n) => ({ ...n, selected: n.id === nodeId }))
+        );
+        if (inst && result.position) {
+          const node = inst
+            .getNodes?.()
+            ?.find((n: { id: string }) => n.id === nodeId);
+          const center = nodeCenter(node, result.position);
+          if (center) {
+            const zoom = inst.getViewport?.()?.zoom ?? 1;
+            inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
+          }
+        }
         return;
       }
-      setNodes((prev) =>
-        prev.map((n) => ({ ...n, selected: n.id === result.nodeId }))
-      );
-      const inst = rfInstance?.current;
-      if (inst && result.position) {
-        const viewport = inst.getViewport?.();
-        const zoom = viewport?.zoom ?? 1;
-        const node = inst
-          .getNodes?.()
-          ?.find((n: { id: string }) => n.id === result.nodeId) as
-          | {
-              measured?: { width?: number; height?: number };
-              width?: number;
-              height?: number;
-            }
-          | undefined;
-        const w = node?.measured?.width ?? node?.width ?? 240;
-        const h = node?.measured?.height ?? node?.height ?? 160;
-        inst.setCenter?.(result.position.x + w / 2, result.position.y + h / 2, {
-          zoom,
-          duration: 240,
-        });
+      if (result.edgeId) {
+        const edgeId = result.edgeId;
+        setEdges((prev) =>
+          prev.map((e) => ({ ...e, selected: e.id === edgeId }))
+        );
+        if (!inst) {
+          return;
+        }
+        const center = edgeMidpoint(inst, edgeId);
+        if (center) {
+          const zoom = inst.getViewport?.()?.zoom ?? 1;
+          inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
+        }
       }
     },
-    [setNodes, rfInstance]
+    [setNodes, setEdges, rfInstance]
   );
 
   const handleSelect = useCallback(
@@ -303,6 +310,52 @@ function ResultRow({
       </div>
     </button>
   );
+}
+
+interface NodeLike {
+  height?: number;
+  measured?: { width?: number; height?: number };
+  position?: { x: number; y: number };
+  width?: number;
+}
+
+function nodeCenter(
+  node: NodeLike | undefined,
+  fallbackPosition?: { x: number; y: number }
+): { x: number; y: number } | null {
+  const position = node?.position ?? fallbackPosition;
+  if (!position) {
+    return null;
+  }
+  const w = node?.measured?.width ?? node?.width ?? 240;
+  const h = node?.measured?.height ?? node?.height ?? 160;
+  return { x: position.x + w / 2, y: position.y + h / 2 };
+}
+
+function edgeMidpoint(
+  inst: ReactFlowInstance<any, any>,
+  edgeId: string
+): { x: number; y: number } | null {
+  const edge = inst
+    .getEdges?.()
+    ?.find((e: { id: string }) => e.id === edgeId) as
+    | { source?: string; target?: string }
+    | undefined;
+  if (!(edge?.source && edge.target)) {
+    return null;
+  }
+  const nodes = (inst.getNodes?.() ?? []) as Array<NodeLike & { id: string }>;
+  const src = nodes.find((n) => n.id === edge.source);
+  const tgt = nodes.find((n) => n.id === edge.target);
+  const srcCenter = nodeCenter(src);
+  const tgtCenter = nodeCenter(tgt);
+  if (!(srcCenter && tgtCenter)) {
+    return null;
+  }
+  return {
+    x: (srcCenter.x + tgtCenter.x) / 2,
+    y: (srcCenter.y + tgtCenter.y) / 2,
+  };
 }
 
 function iconFor(kind: SearchResult['kind']) {

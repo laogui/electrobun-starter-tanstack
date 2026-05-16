@@ -69,6 +69,12 @@ src/
     workspace.ts                           # workspace 初始化 + 读写 workspace.json + 画布视图 CRUD (addView/removeView/renameView)
     manifest.ts                            # canvas manifest 读写 + 原子写入
     notes.ts                               # .md 文件 CRUD + frontmatter 解析/序列化
+    attachments.ts                         # attachments/ 附件保存、读取、打开与路径校验
+    thumbnail.ts                           # 图片/视频缩略图与音频 waveform 生成
+    linkPreview.ts                         # Link unfurl：抓取网页 title/description/icon/image
+    search.ts                              # workspace 搜索索引与匹配评分
+    templates.ts                           # 内置模板 registry + manifest/meta 加载
+    templates/                             # 内置 demo / kanban 模板数据
   mainview/                                # React 渲染端
     main.tsx                               # 挂载 ThemeProvider + RouterProvider
     router.tsx                             # TanStack Router 创建，注入 QueryClient
@@ -77,8 +83,12 @@ src/
     routes/
       __root.tsx                           # 全局 Shell：主题/语言切换、Sonner toaster、DevTools
       index.tsx                            # 主画布页面：ReactFlow + FocusedView + FolderView + ViewSwitcher + CreateMenu + ContextMenu
+      templates/
+        index.tsx                          # 模板库列表
+        $templateId.tsx                    # 模板只读预览 + 从模板创建画布
+      preview-test.tsx                     # 临时预览调试路由（待删除）
     store/
-      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布
+      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布/布局模式/文档选择
     hooks/
       useCanvasKeyboard.ts                 # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape
       useCanvasPersistence.ts              # 自动保存：subscribe store → debounce 2500ms → RPC saveManifest（动态 viewId）
@@ -86,6 +96,9 @@ src/
       useHelperLines.ts                    # 辅助对齐线（拖拽时的 snap-to 提示）
       useNodeCreation.ts                   # 节点创建入口（CreateMenu + ContextMenu 共用）
       useNodeDrag.ts                       # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
+      useSearch.ts                         # SearchDialog 数据源：后端搜索 + 当前画布内存结果合并
+      useTemplates.ts                      # 模板列表/详情 query hooks
+      useDocumentKeyboard.ts               # 文档模式快捷键（搜索别名、屏蔽画布快捷键）
     components/
       canvas/
         ContextMenu.tsx                    # 右键菜单 UI（canvas/card/folder/group/sticky/image 六种上下文）
@@ -99,13 +112,24 @@ src/
           FolderNode.tsx                   # 堆叠式文件夹节点
           GroupNode.tsx                    # 开放式分组容器节点
           ImageNode.tsx                    # 图片卡片节点
+          AssetNode.tsx                    # 本地文件/视频/音频节点
+          LinkNode.tsx                     # URL 链接节点
           StickyNode.tsx                   # 便签节点
+      document/                            # Document Layout：LeftRail / NoteList / ImageGallery / Editor
+      search/
+        SearchDialog.tsx                   # 全局搜索弹窗
+      settings/
+        SettingsApp.tsx                    # 设置窗口：theme/locale/defaultLayoutMode/trash/unlinked cleanup
       ui/                                  # shadcn/ui 基础组件
       layout/                              # ErrorBoundary, Loader
     lib/
       canvasConstants.ts                   # 节点尺寸常量 + nodeTypes 注册表
+      canvasNodeRegistry.ts                # 节点规格单一 registry（默认尺寸、data、Folder/Group 能力）
+      canvasNodePredicates.ts              # 节点能力谓词（可聚焦、可进 Folder/Group 等）
+      contentTypes.ts                      # CanvasNodeKind、Asset/Link 数据结构、文件分类、URL helper
       canvasUtils.ts                       # sortNodesByParent, isDescendant 等工具函数
       colorUtils.ts                        # 颜色常量（hex）+ colorToStyle 转换
+      assetFiles.ts                        # 前端文件导入：保存附件、生成缩略图/waveform
       getHelperLines.ts                    # 辅助线计算逻辑
       queryClient.ts                       # React Query 共享客户端（错误→Sonner toast）
       rpc.ts                               # Electrobun RPC 客户端封装（非 Electrobun 环境自动降级）
@@ -122,15 +146,17 @@ src/
 
 ### 3.1 nodeTypes 注册表
 
-`canvasConstants.ts` 中定义了五种节点类型，直接传入 ReactFlow `nodeTypes` prop：
+`canvasConstants.ts` 中注册所有 React Flow 节点类型；节点规格的单一来源是 `canvasNodeRegistry.ts`：
 
-| type     | 组件         | 持久化方式                                              | 可聚焦             | 可 Resize                    |
-| -------- | ------------ | ------------------------------------------------------- | ------------------ | ---------------------------- |
-| `card`   | `CardNode`   | 独立 `.md` 文件（`noteId` + frontmatter）               | ✅                 | ✅ (150~800 × 150~900)       |
-| `image`  | `ImageNode`  | 独立 `.md` 文件 + base64（MVP）/ `attachments/`（后续） | ✅                 | ✅ (150~800 × 150~900)       |
-| `folder` | `FolderNode` | manifest `data.children` 内嵌                           | ✅ drill-down      | ✅ (250~600 × 250~600)       |
-| `group`  | `GroupNode`  | manifest `data.label` + `data.color`                    | ❌                 | ✅ NodeResizer (min 300×200) |
-| `sticky` | `StickyNode` | manifest `data.content` + `data.color` 内嵌             | ❌（双击原地编辑） | ✅ (120~500 × 120~500)       |
+| type     | 组件         | 持久化方式                                                | 可聚焦             | 可 Resize                    |
+| -------- | ------------ | --------------------------------------------------------- | ------------------ | ---------------------------- |
+| `card`   | `CardNode`   | 独立 `.md` 文件（`noteId` + frontmatter + Markdown body） | ✅                 | ✅ (150~800 × 150~900)       |
+| `image`  | `ImageNode`  | `attachments/` 原图 + thumbnail，manifest 存相对路径      | ✅                 | ✅ (150~800 × 150~900)       |
+| `asset`  | `AssetNode`  | `attachments/` 本地文件 + 可选 thumbnail/waveform         | ✅                 | ✅                           |
+| `link`   | `LinkNode`   | manifest `data.url` + unfurl 元数据                       | ✅                 | ✅                           |
+| `folder` | `FolderNode` | manifest `data.children` 引用子节点/子笔记                | ✅ drill-down      | ✅ (250~600 × 250~600)       |
+| `group`  | `GroupNode`  | manifest `data.label` + `data.color`                      | ❌                 | ✅ NodeResizer (min 300×200) |
+| `sticky` | `StickyNode` | manifest `data.content` + `data.color` 内嵌               | ❌（双击原地编辑） | ✅ (120~500 × 120~500)       |
 
 ### 3.2 TypeScript 类型定义
 
@@ -141,6 +167,15 @@ src/
 type NoteID = string; // 内容实体 ID，如 "note_a1b2c3d4"
 type NodeID = string; // 画布实例 ID，如 "node_7f3a"
 type ViewID = string;
+type CanvasNodeKind =
+  | 'card'
+  | 'checklist'
+  | 'sticky'
+  | 'folder'
+  | 'group'
+  | 'image'
+  | 'asset'
+  | 'link';
 
 // ─── 内容层：Markdown 文件 ───
 interface NoteFrontmatter {
@@ -170,7 +205,8 @@ interface CardNodeData {
 
 interface FolderChildEntry {
   id: string;
-  type: 'card';
+  noteId?: NoteID;
+  type: 'card' | 'image' | 'asset' | 'link';
   data: Record<string, unknown>;
 }
 
@@ -194,18 +230,60 @@ interface StickyNodeData {
 }
 
 interface ImageNodeData {
-  imageUrl: string;
+  imageFile?: string;
+  imageUrl?: string; // runtime hydrated data URL
+  thumbnailFile?: string;
+  thumbnailUrl?: string; // runtime hydrated/generated data URL
   title?: string;
   color: string; // hex，如 "#FFFFFF"
   [key: string]: unknown;
 }
 
+type AssetKind = 'video' | 'audio' | 'file';
+
+interface AssetNodeData {
+  attachmentFile?: string;
+  color: string;
+  duration?: number;
+  fileName: string;
+  kind: AssetKind;
+  mimeType: string;
+  missing?: boolean;
+  previewUrl?: string; // runtime only
+  size?: number;
+  thumbnailFile?: string;
+  thumbnailUrl?: string; // runtime only
+  title: string;
+  waveform?: number[];
+}
+
+interface LinkNodeData {
+  color: string;
+  description?: string;
+  faviconUrl?: string;
+  imageUrl?: string;
+  siteName?: string;
+  title: string;
+  unfurlError?: string;
+  unfurlStatus?: 'idle' | 'loading' | 'ready' | 'failed';
+  url: string;
+}
+
 type CardNode = Node<CardNodeData, 'card'>;
 type ImageNode = Node<ImageNodeData, 'image'>;
+type AssetNode = Node<AssetNodeData, 'asset'>;
+type LinkNode = Node<LinkNodeData, 'link'>;
 type FolderNode = Node<FolderNodeData, 'folder'>;
 type GroupNode = Node<GroupNodeData, 'group'>;
 type StickyNode = Node<StickyNodeData, 'sticky'>;
-type CanvasNode = CardNode | ImageNode | FolderNode | GroupNode | StickyNode;
+type CanvasNode =
+  | CardNode
+  | ImageNode
+  | AssetNode
+  | LinkNode
+  | FolderNode
+  | GroupNode
+  | StickyNode;
 
 type CanvasEdge = Edge;
 
@@ -229,6 +307,12 @@ interface AppConfig {
   activeWorkspace?: string;
   preferences: { theme: 'light' | 'dark' | 'system'; language: string };
 }
+
+interface WorkspaceSettings {
+  theme: 'light' | 'dark' | 'system';
+  locale: 'en' | 'zh';
+  defaultLayoutMode: 'canvas' | 'document';
+}
 ```
 
 ### 3.3 displayHint 与 data.type 映射
@@ -242,6 +326,8 @@ interface AppConfig {
 | `image`                   | `image`            |
 
 映射在 `src/bun/notes.ts` 的 `cardDataToNote` / `noteToCardData` 中处理。
+
+`asset` 与 `link` 是独立 node kind，不使用 Markdown frontmatter 的 `displayHint`。Asset 的内容实体是 `attachments/` 文件引用；Link 的内容实体是 URL 与 unfurl 元数据，均直接存放在 manifest `data` 中。
 
 ---
 
@@ -260,13 +346,15 @@ interface AppConfig {
 ```
 CanvasState
 ├── 核心数据: nodes, edges
-├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter
+├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter, searchOpen
+├── 文档模式: layoutMode, documentSection, selectedDocumentId, pendingSearchTarget
 ├── 多画布: activeViewId, views[]
-├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData
-├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen
-├── 多画布 actions: setActiveView, setViews, setActiveViewId
+├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData, commitNodeData, commitEdgeData
+├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen, setSearchOpen, setLayoutMode
+├── 多画布 actions: setActiveView, setViews, setActiveViewId, setPendingSearchTarget
 ├── 剪贴板: copySelected, pasteClipboard
-├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild
+├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild, deleteFolderChild, updateFolderChildData
+├── 笔记池: createDetachedNote, detachNoteFromCanvas, pinNoteToCanvas
 ├── Hydration: hydrate(nodes, edges), reset(), _hydrated
 └── Undo/Redo: saveSnapshot, undo, redo, canUndo, canRedo (_undoRedo: UndoRedoState)
 ```
@@ -291,10 +379,10 @@ CanvasState
 ```
 setActiveView(viewId)
   1. 若 viewId === 当前 activeViewId → 跳过
-  2. flushNow() — 立即保存当前画布的 pending saves（useCanvasPersistence 监听 activeViewId 变化自动触发）
-  3. 清空 UI 状态：focusedNode / focusedFolder / clipboard / undo-redo 历史栈
-  4. 设置 _hydrated = false → 触发 index.tsx 中的加载 useEffect
-  5. loadCanvas(viewId) → hydrate(newNodes, newEdges)
+  2. 调用方先 flush 当前画布 pending saves（ViewSwitcher / Search 跨画布跳转会显式保存；store action 本身不直接写盘）
+  3. setActiveView(viewId) 清空 UI 状态：nodes / edges / focusedNode / focusedFolder / clipboard / selectedDocumentId / undo-redo 历史栈
+  4. 设置 _hydrated = false → 触发 index.tsx / DocumentView 中的加载 useEffect
+  5. loadCanvas(viewId) → hydrate(newNodes, newEdges, viewport)
 ```
 
 #### 持久化 hook 适配
@@ -310,12 +398,15 @@ setActiveView(viewId)
 `ViewSwitcher.tsx` — 底部居中浮动面板：
 
 - **触发器**：显示当前画布名称 + 节点计数 + 画布数量
-- **弹出菜单**：列出所有画布，点击切换；支持行内重命名（双击或铅笔图标）、删除（至少保留 1 个）
-- **快捷创建**：`+` 按钮创建新空画布，自动切换到新画布
+- **弹出菜单**：列出所有画布，点击切换；支持行内重命名（铅笔图标）、软删除（至少保留 1 个）
+- **快捷创建**：`+` 按钮打开子菜单，支持新建空白画布、从 Kanban 模板快速创建、跳转模板库浏览全部模板
+- **Trash**：删除 view 时 manifest 移入 `.ghostboard/trash/`，settings window 可恢复或永久清理
 
 #### 后端 workspace.ts
 
-新增函数：`addView(wsPath, name)` / `removeView(wsPath, viewId)` / `renameView(wsPath, viewId, name)` / `saveWorkspaceConfig(wsPath, config)`。`addView` 同时创建空的 `.canvas.json` manifest；`removeView` 同时删除 manifest 文件并确保至少保留一个画布。
+关键函数：`addView(wsPath, name)` / `addViewFromTemplate(wsPath, name, templateId)` / `removeView(wsPath, viewId)` / `restoreView(wsPath, trashId)` / `purgeTrash(wsPath, trashId)` / `renameView(wsPath, viewId, name)` / `setActiveViewId(wsPath, viewId)` / `saveWorkspaceConfig(wsPath, config)`。
+
+`addView` 只注册空 view；真正的空 manifest 会在首次保存时落盘。`addViewFromTemplate` 会复制模板 manifest，为模板 note placeholder 生成新的 `noteId` 与 Markdown 文件。`removeView` 是软删除，至少保留一个画布。
 
 ---
 
@@ -385,6 +476,8 @@ setActiveView(viewId)
 workspace/
 ├── .ghostboard/
 │   ├── workspace.json              # activeViewId + views 列表
+│   ├── settings.json               # theme / locale / defaultLayoutMode（当前实现）
+│   ├── trash/                      # soft-deleted canvas manifests
 │   └── views/
 │       └── default.canvas.json     # 画布 manifest（节点/边/viewport）
 ├── content/
@@ -392,12 +485,16 @@ workspace/
 │   ├── prio-before-launch.md
 │   └── alpha-feedback.md
 └── attachments/
-    └── a1b2c3d4-chart.png          # 附件（后续）
+    ├── a1b2c3d4-chart.png          # 图片/文件附件
+    ├── a1b2c3d4-chart-thumbnail.jpg
+    └── demo-video.mp4
 ```
 
 - `workspace.ts` 负责初始化目录结构、读写 `workspace.json`，并提供 `atomicWrite()` 工具函数。
 - `manifest.ts` 负责 canvas manifest 的序列化/反序列化。
 - `notes.ts` 负责 `.md` 文件 CRUD、frontmatter 解析/序列化、`displayHint` ↔ `data.type` 映射。
+- `attachments.ts` 负责附件写入、读取、打开和 workspace-relative 路径校验。
+- `settings.json` 当前是 workspace-level；多 workspace 的 app-level `~/.ghostboard/app-config.json` 仍是待实现目标。
 
 ### 7.2 文件格式
 
@@ -463,23 +560,42 @@ updatedAt: 2026-04-03T14:30:00Z
         "children": [
           {
             "id": "child_1",
+            "noteId": "note_floating",
             "type": "card",
             "data": {
+              "noteId": "note_floating",
+              "file": "content/floating-notes.md",
               "type": "text",
-              "content": "Floating notes idea",
               "color": "#A3E635"
             }
           },
           {
             "id": "child_2",
-            "type": "card",
+            "type": "asset",
             "data": {
-              "type": "text",
-              "content": "Drop in anything",
+              "attachmentFile": "attachments/demo-video.mp4",
+              "fileName": "demo-video.mp4",
+              "kind": "video",
+              "mimeType": "video/mp4",
+              "thumbnailFile": "attachments/demo-video-thumbnail.jpg",
+              "title": "Demo video",
               "color": "#FFFFFF"
             }
           }
         ]
+      }
+    },
+    {
+      "id": "node_link1",
+      "type": "link",
+      "position": { "x": 1320, "y": 140 },
+      "style": { "width": 320, "height": 180 },
+      "data": {
+        "url": "https://example.com/",
+        "title": "Example Domain",
+        "description": "Example site",
+        "siteName": "example.com",
+        "color": "#FFFFFF"
       }
     }
   ],
@@ -498,7 +614,7 @@ updatedAt: 2026-04-03T14:30:00Z
 
 - 保留的字段（白名单）：`id`, `type`, `position`, `style`, `parentId`, `extent`, `data`
 - 必须丢弃的运行时字段：`selected`, `dragging`, `resizing`, `measured`, `draggable`, `selectable`, `deletable`, `focusable`, `width`, `height`, `internals`
-- data 内丢弃：`isHidden`, `isDropTarget`
+- data 内丢弃：`isHidden`, `isDropTarget`，以及 Image/Asset 的 runtime data URL（如 `imageUrl`/`thumbnailUrl`/`previewUrl`）等可由附件重新 hydrate 的字段
 - Edge 丢弃：`selected`
 
 ### 7.3 RPC 协议
@@ -562,8 +678,83 @@ type CanvasRPC = {
         params: { viewId: string; name: string };
         response: { success: boolean };
       };
+      setActiveView: {
+        params: { viewId: string };
+        response: { success: boolean };
+      };
+      listTrash: {
+        params: {};
+        response: Array<{ trashId: string; view: { id: string; name: string; file: string }; deletedAt: number }>;
+      };
+      restoreView: {
+        params: { trashId: string };
+        response: { success: boolean; view?: { id: string; name: string; file: string }; activeViewId?: string };
+      };
+      purgeTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      // ── Search ──
+      searchCanvas: {
+        params: { query: string; viewId?: string; limit?: number };
+        response: { query: string; results: SearchResult[] };
+      };
+      // ── Attachments / assets / links ──
+      saveAttachment: {
+        params: { dataUrl: string; suggestedName?: string };
+        response: { filePath: string };
+      };
+      saveAttachmentFile: {
+        params: { sourcePath: string; suggestedName?: string };
+        response: { filePath: string };
+      };
+      loadAttachment: {
+        params: { filePath: string };
+        response: { dataUrl: string; mimeType: string } | null;
+      };
+      openAttachment: {
+        params: { filePath: string };
+        response: { success: boolean };
+      };
+      unfurlLink: {
+        params: { url: string };
+        response: UnfurlResult;
+      };
+      // ── Templates ──
+      listTemplates: {
+        params: {};
+        response: TemplateMeta[];
+      };
+      getTemplate: {
+        params: { id: string };
+        response: TemplateManifest | null;
+      };
+      createViewFromTemplate: {
+        params: { name: string; templateId: string };
+        response: { success: boolean; entry: { id: string; name: string; file: string } };
+      };
+      // ── Settings / cleanup ──
+      getSettings: {
+        params: {};
+        response: WorkspaceSettings;
+      };
+      openSettings: {
+        params: {};
+        response: { success: boolean };
+      };
+      scanUnlinkedNotes: {
+        params: {};
+        response: { entries: UnlinkedFileEntry[] };
+      };
+      deleteUnlinkedNotes: {
+        params: { files: string[] };
+        response: { deleted: number };
+      };
     };
-    messages: {};
+    messages: {
+      openSearch: {};
+      settingsUpdated: { theme: string; locale: string };
+    };
   };
   webview: {
     requests: {};
@@ -579,10 +770,10 @@ type CanvasRPC = {
 | 操作类型                                 | Debounce        | 写入目标                              | 实现状态                     |
 | ---------------------------------------- | --------------- | ------------------------------------- | ---------------------------- |
 | 布局变化（拖拽、resize、增删节点、连线） | 2500ms trailing | `.canvas.json`（通过 `saveManifest`） | ✅ `useCanvasPersistence.ts` |
-| 内容编辑（标题、正文、checklist）        | 1500ms trailing | `content/*.md`（通过 `saveNote`）     | 🔲 待实现                    |
+| 内容编辑（标题、正文、checklist）        | 当前随 manifest debounce；目标 1500ms 独立队列 | `content/*.md`（当前经 `saveManifest` 水化/落盘；目标通过 `saveNote`） | ✅ 可落盘 / ⚠️ 独立队列待实现 |
 | 窗口失焦                                 | 立即 flush      | 所有 pending manifest                 | ✅ `window blur` 事件        |
 
-> 当前 `useCanvasPersistence` 仅处理 manifest 保存（2500ms debounce + blur flush）。`saveNote` 的独立 debounce 尚未实现，content 变更随 manifest 一起落盘。
+> 当前 `useCanvasPersistence` 统一处理 manifest 保存（2500ms debounce + blur flush）。Bun 侧 `saveManifest` 会把 Card 及 Folder Card children 的正文写回 `.md`，再把 manifest 序列化为轻引用。`saveNote` RPC 存在，但独立的内容 debounce 队列尚未接入。
 
 #### 原子写入
 
@@ -590,10 +781,9 @@ type CanvasRPC = {
 
 ```typescript
 export async function atomicWrite(filePath: string, data: string) {
-  const tmp = `${filePath}.tmp`;
+  const tmp = `${filePath}.${crypto.randomUUID().slice(0, 8)}.tmp`;
   await Bun.write(tmp, data);
-  const fs = await import('fs/promises');
-  await fs.rename(tmp, filePath);
+  await rename(tmp, filePath);
 }
 ```
 
@@ -630,25 +820,29 @@ Edge 剥离 `selected`。
 4. 遍历 manifest.nodes：
    - type=card 且有 noteId → 读取 content/{file}.md → 解析 frontmatter
      → noteToCardData() 将 frontmatter + body 合并到 node.data
-   - type=sticky/group/image → 直接使用 manifest 中的 data
-   - type=folder → children 已内嵌，直接使用
+   - type=image → 通过 imageFile / thumbnailFile hydrate runtime data URL，缺失时保留占位状态
+   - type=asset → 通过 attachmentFile / thumbnailFile hydrate previewUrl / thumbnailUrl，缺失时标记 missing
+   - type=link → 直接使用 manifest 中的 URL 与 unfurl metadata
+   - type=sticky/group → 直接使用 manifest 中的 data
+   - type=folder → 遍历 children；Card child 按 noteId/file hydrate，Image/Asset child hydrate附件，Link child 直接使用 metadata；legacy inline Card child 会在加载时补 noteId 并在下次保存迁移为引用
 5. RPC 返回完整 { nodes, edges, viewport }
-6. 渲染端 canvasStore.hydrate(nodes, edges)
+6. 渲染端 canvasStore.hydrate(nodes, edges, viewport)
 ```
 
 **首次启动 / 无 workspace**：
 
-渲染端 `index.tsx` 检测到 `loadCanvas` 返回空数据时，将当前 `initialNodes`（种子数据）通过 `sanitizeForPersistence` + `rpcSaveManifest` 写入磁盘，完成一次性 seed 操作。
+Bun 侧 `seedFirstRunIfNeeded()` 在 `.ghostboard/workspace.json` 不存在时写入默认 config，并用内置 `demo` 模板填充默认画布。显式创建的空白画布不会自动 seed。
 
 ### 7.6 Folder children 模型
 
-Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不生成独立 `.md` 文件。
+Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card child 已升级为与顶层 Card 对等的 `noteId + .md` 引用：
 
-理由：
+- Card child：`{ id, noteId, type: "card", data: { noteId, file, type } }`，加载时 hydrate 正文，保存时写回 `.md`。
+- Image child：继续走 `imageFile` / `thumbnailFile` 附件模式，不分配 `noteId`。
+- Asset child：走 `attachmentFile` / `thumbnailFile` / `waveform` 附件模式。
+- Link child：保存 URL 与 unfurl metadata。
 
-- PRD §2.5.2 明确子卡片为轻量条目
-- MVP 阶段无需独立文件级别管理
-- 后续可迁移为目录驱动模型
+当前 Folder children 仍不是独立子画布：不持久化内部自由坐标，不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
 
 ### 7.7 MVP 不做
 
@@ -656,8 +850,10 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 - ❌ 多 workspace 管理 / 欢迎页
 - ❌ 跨画布拖拽节点
 - ❌ frontmatter 无损 round-trip（MVP 接受规范化重写）
-- ❌ Folder children 迁移为 noteId 引用
 - ❌ 独立的 saveNote debounce（content 随 manifest 落盘）
+- ❌ filesystem-first Document Workspace（当前 Document Layout 为 canvas-derived）
+- ❌ Folder children / unlinked Markdown 完整搜索覆盖
+- ❌ Asset 大文件 native path 导入 UI（底层 RPC 已有，前端主要仍走 data URL）
 
 ---
 
@@ -701,10 +897,10 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 | 场景                             | 处理策略                                                                                        |
 | -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 文件被外部重命名/移动            | `noteId` 为主键，watcher 检测到新文件时匹配 frontmatter ID，更新 manifest `file` 缓存           |
+| 文件被外部重命名/移动            | 当前未实现 watcher；目标方案是以 `noteId` 为主键，检测到新文件时匹配 frontmatter ID 并更新 manifest `file` 缓存 |
 | manifest 指向的 .md 不存在       | 加载时标记为"断链节点"，UI 显示占位卡片，不静默删除                                             |
-| `noteId` 零引用                  | 不删除 `.md`；标记为 `unplaced`，纳入全局搜索                                                   |
-| watcher 自触发循环               | 写盘前加入 `pendingWrites` 集合，watcher 检查后忽略                                             |
+| `noteId` 零引用                  | 不自动删除 `.md`；当前通过 settings window 的 Unlinked Files 扫描/清理暴露，是否纳入全局搜索待决 |
+| watcher 自触发循环               | watcher 实现时，写盘前加入 `pendingWrites` 集合，watcher 检查后忽略                             |
 | frontmatter round-trip 破坏格式  | 最小改写策略，保留未知字段，不重排 YAML 字段顺序                                                |
 | 附件同名冲突                     | `{contentHash前8位}-{原始名}` 格式                                                              |
 | 带 Edge 的卡片拖入 Folder        | MVP 阻止并 toast 提示先断开连线                                                                 |
@@ -713,9 +909,13 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 | 窗口失焦/关闭时有 pending writes | 阻塞退出直至队列 drain，超 3 秒强制关闭并保留最近有效快照                                       |
 | manifest JSON 损坏               | 保留坏文件副本，尝试从备份恢复                                                                  |
 | displayHint 未知值               | 回退 `note` 渲染 + 诊断日志                                                                     |
-| 切换画布时有未保存变更           | `setActiveView` 先 `flushNow` 旧画布，`useCanvasPersistence` 监听 `activeViewId` 变化自动 flush |
+| 切换画布时有未保存变更           | 调用方（ViewSwitcher / Search 跨画布跳转）先保存旧画布，再调用 `setActiveView` 清空 UI 并加载目标 view |
 | 删除当前激活的画布               | 自动切换到 `views[0]`，后端更新 `workspace.json` 的 `activeViewId`                              |
 | 删除最后一个画布                 | 后端拒绝（`removeView` 返回 `false`），至少保留一个画布                                         |
+| 删除画布                         | 软删除：manifest 移入 `.ghostboard/trash/`，settings window 可恢复或 purge                      |
+| Link unfurl SSRF                 | 当前阻止 localhost / 私网字面 IP / 非 http(s) scheme；DNS 解析后的私网 IP 防护待补               |
+| Asset data URL 超限              | `saveAttachment` 对 data URL 有大小限制；大文件应走 `saveAttachmentFile`，UI 接入待补            |
+| Template thumbnail 缺失          | 模板列表 fallback 到占位样式；P5 需要接入 meta.thumbnail 和实际 thumbnail 文件                   |
 
 ---
 
@@ -727,7 +927,7 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 1. **`onNodeDragStart`**：若节点有 `parentId`，解除父子关系，将局部坐标转换为画布绝对坐标。
 2. **`onNodeDrag`**：
-   - 内容节点（card/image/sticky）：`getIntersectingNodes` 检测 Group 交叉 → 高亮目标 Group；同时检测 Folder 重叠 → 设置 dropTarget。
+   - 内容节点（card/image/asset/link/sticky）：`getIntersectingNodes` 检测 Group 交叉 → 高亮目标 Group；同时检测 Folder 重叠 → 设置 dropTarget。
    - Group 节点：检测与其他 Group 的交叉（`isDescendant` 防循环）；自动推开重叠的非子节点卡片（按最短轴方向，碰撞检测避免推入其他 Group）。
 3. **`onNodeDragStop`**：
    - 若 drop 到 Folder → 移除画布节点，追加到 `folder.data.children`。
@@ -744,4 +944,20 @@ Folder 的子卡片通过 `data.children` 数组**内嵌在 manifest 中**，不
 
 必须丢弃的运行时字段：`selected`, `dragging`, `resizing`, `measured`, `draggable`, `selectable`, `deletable`, `focusable`, `width`, `height`, `internals`
 
-data 内丢弃：`isHidden`, `isDropTarget`
+data 内丢弃：`isHidden`, `isDropTarget`，以及可由附件 hydrate 的 runtime URL 字段（如 `imageUrl` / `thumbnailUrl` / `previewUrl`）
+
+---
+
+## 11. 技术待办与未决策
+
+> 产品层面的完整列表见 [PRD §8](./PRD.md#8-项目待办与未决策-backlog--open-decisions)。本节只保留会影响技术架构或数据模型的事项。
+
+| ID | 事项 | 技术影响 |
+| --- | --- | --- |
+| T-1 | **Document Workspace 是否 filesystem-first** | 若改为 filesystem-first，需要新增 `listNotes` / `loadNoteById` / folder CRUD / move / rename / reveal in Finder / reference guard，并让 DocumentView 不再只依赖 active canvas manifest。 |
+| T-2 | **搜索索引范围** | 若搜索整个 workspace，需要索引 Folder children 与 unreferenced Markdown，并区分 placed / detached / unlinked 结果。当前 `search.ts` 主要索引顶层 manifest nodes。 |
+| T-3 | **多 Workspace 与 app config** | 需要 `~/.ghostboard/app-config.json`、recent workspaces、active workspace、workspace switching、settings 迁移策略，并重新评估 query cache / store reset 边界。 |
+| T-4 | **Asset 大文件导入** | `saveAttachmentFile` RPC 已可从路径复制文件，但文件选择/拖拽 UI 仍主要走 `FileReader` data URL。需要接入 native path 或分块/stream 方案。 |
+| T-5 | **Link unfurl hardening** | 当前有 scheme/localhost/private literal host 防护；需要 DNS resolve 后再次拦截私网 IP，降低 SSRF/DNS rebinding 风险。 |
+| T-6 | **Template P5** | 需要接入 thumbnail、删除 `preview-test`、补模板数量、决定模板 metadata i18n 与列表 query 参数同步。 |
+| T-7 | **独立内容保存队列** | 当前内容随 `saveManifest` 写回 `.md`；如果文档模式承担重编辑场景，需要独立 `saveNote` debounce、串行队列与冲突处理。 |

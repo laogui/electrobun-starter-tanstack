@@ -33,13 +33,15 @@
   - **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。画布上的勾选和添加条目操作不改变交互状态（保持 `idle` 或 `selected`），不触发 `inline-editing`；仅当需要完整编辑时通过聚焦模式处理。
   - **长文本/文档**：承载长篇幅的文章。在聚焦模式下使用 **Tiptap 编辑器**进行所见即所得的富文本编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用 Markdown 子集。Tiptap 通过 `@tiptap/markdown` 实现 Markdown 与编辑器文档的双向序列化，保证内容以标准 Markdown 格式持久化。
   - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。
+  - **本地文件卡片 (Asset)**：支持从文件选择器或拖拽导入本地文件，文件内容保存到 `attachments/`，画布上显示文件名、类型、缩略图或 waveform。视频/音频在聚焦模式下可播放，普通文件提供打开原文件入口。当前 PDF 仍按普通文件处理，暂不提供页面级预览。
+  - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统会尝试抓取网页标题、描述、站点名、favicon/image 元数据；当前画布 UI 主要展示标题/URL/描述，富媒体卡片样式仍属后续增强。
   - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；双击进入原地编辑模式，失焦后自动保存。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
 - **卡片通用能力**：
   - **Markdown 预览渲染**：普通文本卡片在画布态（非聚焦态）下通过 **markdown-it** 将 Markdown 正文渲染为安全的 HTML 预览，经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist 卡片在画布上保持独立的结构化 `data.items` 交互，不走 markdown-it 预览渲染。
   - **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。
   - **复制/粘贴**：支持 `Cmd+C` / `Cmd+V` 复制粘贴卡片。
   - **聚焦入口约定**：双击卡片或选中后按 `Enter` 进入聚焦模式（FocusedView），卡片平滑放大至屏幕中央。Checklist 卡片在画布上可直接勾选和添加条目，无需进入聚焦模式。
-  - **创建流程**：画布右下角提供 `CreateMenu` 浮动按钮，支持快速新建卡片（Card）或文件夹（Folder），新节点在当前视口中心创建。后续计划支持 `Cmd/Ctrl+N` 快捷键和右键菜单创建。
+  - **创建流程**：画布右下角提供 `CreateMenu` 浮动按钮，支持快速新建 Card、Sticky、Folder、Image、Asset、Link；新节点在当前视口中心创建，或在拖拽/粘贴位置附近创建。后续计划支持更完整的右键菜单创建与命令面板入口。
 
 ### 2.3 沉浸式聚焦模式 (Focused View / Modal Expansion)
 
@@ -77,21 +79,24 @@
 
 #### 2.5.2 Folder 堆叠式文件夹 (Folder Stack)
 
-- **功能描述**：在二维画布上引入第三个维度（Z轴层级）。将多个相关的卡片收纳为一个视觉上的"堆叠实体"（Folder），子节点**隐藏**。
+- **功能描述**：在二维画布上引入第三个维度（Z轴层级）。Folder 是**内容集合 / 资料夹**，用于把多个相关内容节点收纳为一个视觉上的"堆叠实体"，子节点**隐藏**。它不是万能容器，也不是可自由布局的子画布。
 - **交互逻辑**：
   - **外观**：在画布上表现为一个带有标签的堆叠卡片组（如演示中的 "3 items - The really great ideas..."）。
+  - **封面渲染原则**：Folder 封面只表达摘要，不渲染完整的内部小画布。封面信息优先级为：标题 / item 数量 / 主要类型分布 / 最近的 2–4 个代表性缩略图或类型图标。没有图片时使用类型图标组合和数量文案兜底，避免每新增一种节点类型都重写封面布局。
   - **进入图层 (Drill-down)**：选中文件夹后双击、按 `Enter`，或通过右键菜单 `Open` 触发**隔离层模式**。
     - 背景画布整体变暗或模糊（失去焦点）。
     - 文件夹内的卡片从堆叠状态平滑展开（散开）到当前的临时图层上，供用户浏览或编辑。MVP 采用确定性的自动排布（横向 strip 或 grid），排列顺序按 `children` 数组索引（即拖入先后顺序），不提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
       - 在此模式下，画布上的其他非同组元素不可见或不可交互。
   - **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
-  - **成员来源**：Folder 的成员通过以下两种方式产生：
+  - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Checklist` / `Image` / `Asset` / `Link`。这些类型都被视为"内容条目"，可在 Folder drill-down 和文档模式中被浏览、聚焦或编辑。
+  - **不允许收纳的节点类型**：Folder 不收纳 `Folder` / `Group` / `Sticky`。`Folder` 嵌套会把资料夹变成递归信息架构；`Group` 带空间布局语义；`Sticky` 是画布上的临时注释，默认保留在画布层。若未来需要便签归档，应作为独立功能评估，不改变 Folder 的基本定位。
+  - **成员来源**：Folder 的成员通过以下方式产生：
     1. **在 Folder 内直接新建**：在 Folder drill-down 视图中通过顶部工具栏或右键菜单的 `New Card` 新建卡片，直接追加到该 Folder 的 `children` 数组。
-    2. **从画布提取 (Extract to Canvas) 的逆操作**：不支持直接将画布上已有卡片拖入 Folder（MVP 阶段为避免连线悬空和身份转换复杂度，该操作已移除）。如需将画布内容收纳进 Folder，建议先复制内容，再在 Folder 内新建卡片粘贴。
+    2. **从画布拖入**：将允许收纳的内容节点拖到 Folder 上，节点从当前画布移除并写入该 Folder 的 `data.children`。若节点带有 Edge，系统清理相关 Edge；需要保留外部关系时，应先连接到 Folder 封面节点。
   - **取回到主画布**：drill-down 视图中选中子卡片后，可通过顶部工具栏的 ↗ `Extract to Canvas` 按钮或右键菜单将该卡片作为新的独立画布节点放回 Folder 邻近区域。**M5 之后 Folder Card 子节点本身已拥有独立 `.md` 和 `noteId`**，Extract 动作仅是把 manifest 中的 `children` 引用提升为顶层节点并分配新的 `nodeId`，不再涉及文件创建；`.md` 文件保留不动（同一 `noteId` 可在 Extract 前后被其他画布共用）。
   - **Extract 可发现性**：为降低 `Extract to Canvas` 被用户忽略的风险（仅藏在右键菜单中发现性不足），drill-down 视图顶部工具栏需提供一个显式的 ↗ `Extract to Canvas` 按钮。当用户在 drill-down 中选中一张或多张子卡片时，该按钮高亮可用；未选中时置灰。此按钮与右键菜单中的 `Extract to Canvas` 行为一致。
-  - **Folder 内操作边界（MVP）**：支持在 drill-down 视图中浏览和聚焦子卡片；不支持自由拖拽改变卡片顺序，也不支持跨 Folder 边界直接建立子卡片连线。后续若需要自由布局，将升级为子画布模型单独设计。
-  - **适用场景**：归档收纳、减少画布视觉噪音。
+  - **Folder 内操作边界（MVP）**：支持在 drill-down 视图中浏览和聚焦子内容；不支持自由拖拽改变顺序，也不支持跨 Folder 边界直接建立子卡片连线。后续若需要自由布局，应升级为独立的 Sub-canvas / View 模型，单独保存 `nodes + edges + viewport`，而不是继续扩展 `data.children`。
+  - **适用场景**：归档收纳、减少画布视觉噪音。空间布局、看板分区和关系可视化继续由 Group / Canvas View 承担。
 
 ### 2.6 右键菜单 / Context Menu
 
@@ -118,16 +123,21 @@
   - 不支持跨画布拖拽节点。
   - 不支持画布间的 noteId 引用关系可视化。
 
-### 2.8 搜索 (Search)
+### 2.8 搜索 (Search) ✅ MVP / ⚠️ 覆盖范围待补
 
-- **功能描述**：全局搜索 workspace 中的所有内容，包括画布上的卡片标题、正文、待办事项文本，以及暂时未被任何画布引用的 `unplaced notes`。
+- **功能描述**：全局搜索当前 workspace 中的画布可定位内容，包括各画布视图、顶层 Card/Sticky/Folder/Group/Image/Asset/Link、Edge label，以及这些节点引用的 Markdown 正文。
 - **交互逻辑**：
-  - 通过 `Cmd+F` 或顶部搜索图标唤起搜索面板。
-  - 输入关键词后，实时高亮匹配的卡片，未匹配的卡片降低透明度。
-  - 点击搜索结果项，若该内容已有画布实例，则自动平移缩放至对应卡片位置；若该内容当前没有任何节点实例，则提供“放回当前画布”操作，在视口中心创建新节点。
-  - **排序规则（MVP）**：标题匹配优先于正文匹配；同等匹配度下按 `updatedAt` 降序排列。Folder 内的子卡片内容纳入搜索范围。后续可引入相关性评分。
-  - **文档模式下的搜索行为**：在文档模式下 `Cmd+F` 仍然唤起同一个搜索面板，命中后直接写入 `selectedDocumentId`（含 `child:<folderId>:<childId>` 形式的子卡片），右侧编辑器立即打开匹配笔记，而不是在画布上 fitView。
-  - **Detached notes 的可见性**：文档模式下新建的笔记 (`createDetachedNote`) 以及用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍参与搜索和文档模式左栏的 All Notes / Inbox。画布模式通过 `CreateMenu` 中的「Library Note / 文库笔记」入口打开 `DetachedNotesSidebar` 浏览这些游离笔记，拖入画布时通过 `pinNoteToCanvas` 赋予真实坐标。这套机制替代了早期规划中的 `unplaced notes` 概念——内容永远可被找回，不再存在「零引用隐性丢失」。
+  - 通过 `Cmd/Ctrl+K` 或应用菜单唤起 `SearchDialog`；文档模式额外保留 `Cmd/Ctrl+F` 作为搜索别名。
+  - 输入关键词后 debounce 调用 Bun 侧 `searchCanvas`；当前画布内存状态会与后端结果合并，降低未落盘编辑被漏搜的概率。
+  - 点击搜索结果项，若命中当前画布节点或连线，则选中并平移缩放至对应位置；若命中其他画布，则先切换 `activeViewId`，待目标 manifest hydrate 后再定位。
+  - **排序规则（MVP）**：标题/名称匹配优先于正文匹配，再按基础相关性评分和更新时间排序。后续可引入更完整的字段权重与索引。
+  - **文档模式下的搜索行为**：搜索结果若能映射为 `node:<id>` 或 `child:<folderId>:<childId>`，则直接写入 `selectedDocumentId`，右侧编辑器打开匹配内容；不触发画布 `fitView`。
+  - **Detached notes 的可见性**：文档模式下新建的笔记 (`createDetachedNote`) 以及用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索和文档模式 All Notes。画布模式通过 `CreateMenu` 中的「Library Note / 文库笔记」入口打开 `DetachedNotesSidebar` 浏览这些游离笔记，拖入画布时通过 `pinNoteToCanvas` 赋予真实坐标。
+- **当前限制 / 待办**：
+  - 后端搜索目前主要索引 manifest 顶层节点；Folder `children` 中的 Card/Asset/Link/Image 仍可能漏搜。文档模式如果继续依赖 folder children，这项应作为 P0 补齐。
+  - 纯粹存在于 `content/*.md`、但没有任何 manifest 引用的 Markdown 文件不会作为一等搜索结果返回；它们目前通过设置页的 Unlinked Files 清理工具暴露，而不是通过搜索面板暴露。
+  - 早期规划中的“输入时实时高亮画布匹配/未匹配节点变淡”尚未实现。
+  - 对未放置内容提供“一键放回当前画布”的搜索结果操作尚未实现；当前放回路径主要是 `DetachedNotesSidebar`。
 
 ### 2.9 撤销/重做 (Undo / Redo)
 
@@ -146,7 +156,7 @@
 | `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 非编辑态下走画布快照栈；若焦点在 `input` / `textarea` / `contenteditable`，则交给当前编辑控件 | 正文由 Tiptap history 处理；标题 input 走浏览器原生 undo；均与画布栈隔离，不冒泡到 canvas store |
 | `Cmd+C` / `Cmd+V`       | `Ctrl+C` / `Ctrl+V`       | 复制 / 粘贴卡片                                                                 | 按浏览器默认行为走（纯文本剪贴），不做卡片级复制                   |
 | `Delete` / `Backspace`  | `Delete` / `Backspace`    | 从当前画布移除选中的节点（不删除 .md 内容文件；永久删除需通过右键菜单二次确认） | 屏蔽（左栏/NoteList 的删除通过右键菜单或工具栏显式触发）           |
-| `Cmd+F`                 | `Ctrl+F`                  | 打开搜索，命中后 fitView 到画布节点                                             | 打开搜索，命中后直接打开右侧编辑器（见 §2.8）                      |
+| `Cmd+K`                 | `Ctrl+K`                  | 打开搜索，命中后 fitView 到画布节点                                             | 打开搜索，命中后直接打开右侧编辑器；`Cmd/Ctrl+F` 在文档模式中保留为搜索别名（见 §2.8） |
 | `Cmd+A`                 | `Ctrl+A`                  | 全选当前上下文中的节点                                                          | 屏蔽（仅 Tiptap 编辑器内生效，选中正文）                           |
 | `Cmd+N`                 | `Ctrl+N`                  | 打开新建卡片菜单                                                                | 屏蔽（文档模式新建走左栏 `+` 按钮，只产出 Note 类型）              |
 | `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式                                                          | 屏蔽（右侧已是常驻编辑器；树上 Enter 仅作为打开当前高亮项）        |
@@ -176,14 +186,15 @@
   - **文档模式 (`document`)**：用于线性、聚焦的长文编辑与结构化浏览。
 - **切换器**：顶部的 `LayoutSwitcher` 提供「画布 / 文档」两档 Segmented Control；底部 `ViewSwitcher` 维持不动，两个切换器职责不同（布局 vs 多画布）。切换布局不卸载 store，数据互通。
 - **文档模式布局**：
-  - **左栏 `LeftRail`**：All Notes / Inbox / Archive / Folders / Views / Types 分区树，支持展开折叠和新建 Folder。其中 **Types** 分组下当前提供 `Images` 类型条目（带数量徽标），点击进入瀑布流图片库视图（详见下文「类型视图：Images 图片库」）。
+  - **左栏 `LeftRail`**：All Notes / Archive / Folders / Types 分区树，支持展开折叠。其中 **Types** 分组提供 `Images`、`Files`、`Links` 类型条目（带数量徽标）。
   - **中栏 `NoteList`**：当前分区下的笔记列表，默认按 `updatedAt` 倒序（排序按钮可切换）。
   - **右栏 `DocumentEditor`**：常驻 Tiptap 编辑器，从 `FocusedView` 模态升格为面板形态。
-- **文档模式可见节点类型**：仅渲染 `Card` / `Folder` / `Image`。`Sticky` / `Group` / `Edge` 仍保留在 store，但文档模式下不渲染；切回画布模式仍可见。首次切到文档模式时弹一次 toast 提示“便签、分组、连线已保留但不在文档模式展示”（待 OD-1 确认是否继续保留 sticky 计数入口）。
+- **当前信息架构边界**：当前 Document Layout 是 **canvas-derived**，即从当前 active canvas 的 manifest 派生文档列表（顶层节点 + Folder children）。它不是 filesystem-first 的 `content/` 文件树浏览器；未被任何 manifest 引用的 Markdown 文件不会自然出现在左栏或列表中。
+- **文档模式可见节点类型**：渲染 `Card` / `Folder` / `Image` / `Asset` / `Link`。`Sticky` / `Group` / `Edge` 仍保留在 store，但文档模式下不渲染；切回画布模式仍可见。首次切到文档模式时弹一次 toast 提示“便签、分组、连线已保留但不在文档模式展示”（待 OD-1 确认是否继续保留 sticky 计数入口）。
 
 #### 类型视图：Images 图片库 ✅
 
-- **入口**：左栏 `LeftRail` 的 `Types` 分组（默认折叠）下的 `Images` 条目。`documentSection` 取值为 `type:image`，与 `all` / `inbox` / `archive` / `folder:${id}` 并列。
+- **入口**：左栏 `LeftRail` 的 `Types` 分组（默认折叠）下的 `Images` 条目。`documentSection` 取值为 `type:image`，与 `all` / `archive` / `folder:${id}` 并列。
 - **数量徽标**：聚合所有顶层 `image` 节点 + 所有 `folder` 节点的 `image` 类型 children，实时显示总数。
 - **布局变化**：选中 `Images` 时，文档模式右侧从默认的 `[220px, 320px, 1fr]`（LeftRail / NoteList / Editor）切换为 `[220px, 1fr]`（LeftRail / ImageGallery），中栏与右栏合并为单一图片库面板。
 - **瀑布流呈现**：使用 CSS multi-column 实现自适应瀑布流，按视窗宽度 `2 / 3 / 4 / 5` 列阶梯切换；每张图片懒加载（`loading="lazy"`），按原始宽高比铺排，悬浮时轻微放大并加深阴影。
@@ -199,6 +210,13 @@
   - 双击缩略图回跳画布并 fitView 到对应节点（与 `pendingSearchTarget` 复用）。
   - 网格 / 瀑布流切换、按时间或文件夹分组、批量选择与删除、原图导出。
   - 其他 `Types`（`Notes` / `Checklists` / `Folders`）平行入口。
+
+#### 类型视图：Files / Links ✅
+
+- **入口**：左栏 `LeftRail` 的 `Types` 分组下的 `Files` 与 `Links` 条目。`documentSection` 分别为 `type:asset` 与 `type:link`。
+- **数据来源**：遍历当前 active canvas 的顶层节点和 Folder children，收集 `type === 'asset'` / `type === 'link'` 的条目。
+- **呈现**：复用 `NoteList`。Asset 显示文件名、MIME type、文件图标；Link 显示标题、站点/URL 与描述。点击后右侧 `DocumentEditor` 复用 `AssetContent` / `LinkContent` focused 内容面板。
+- **当前限制**：Files / Links 类型视图不是全 workspace 附件库或书签库，只显示当前 active canvas 派生出的条目。
 
 #### Detached notes（文档 ↔ 画布 的共享笔记池）
 
@@ -223,12 +241,13 @@
 
 #### 默认布局模式偏好
 
-- 设置窗口提供 `defaultLayoutMode`（`canvas` | `document`）偏好项，存入 `~/.ghostboard/app-config.json` `preferences.defaultLayoutMode`（见 §5.2）。默认 `canvas`。
-- 启动时读取 settings；设置值优先于 localStorage 中的 `ghostboard.layoutMode`。
+- 设置窗口提供 `defaultLayoutMode`（`canvas` | `document`）偏好项，当前存入 workspace 内的 `.ghostboard/settings.json`。默认 `canvas`。
+- 每个 view 的最近布局模式会写入 localStorage（key 带 `viewId`）；启动或切换 view 时先读取 per-view localStorage，没有记录时再 fallback 到 `.ghostboard/settings.json` 的 `defaultLayoutMode`。
+- 若未来实现多 workspace，需要重新决策该偏好属于 app-level、workspace-level 还是 per-view（见 §8 OD-8）。
 
 #### 搜索集成
 
-- `Cmd+F` 在两种模式都唤起同一个 `SearchDialog`。
+- `Cmd/Ctrl+K` 在两种模式都唤起同一个 `SearchDialog`；文档模式额外支持 `Cmd/Ctrl+F` 别名。
 - 文档模式命中时：直接写入 `selectedDocumentId`（子卡片使用 `child:<folderId>:<childId>` 形式），右侧编辑器立即打开；不触发画布 `fitView`。
 - 画布模式命中时：按原行为 fitView 到节点（见 §2.8）。
 
@@ -291,11 +310,35 @@
    > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式，仅在 GhostBoard 内可见。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会将内嵌内容写入独立 `.md` 并把 manifest 吐到引用形式。
 2. **内容与布局解耦** —— 内容级属性（标题、标签、创建时间）存 frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
-4. **删除实例不等于删除内容** —— 删除 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留为可搜索的 **detached note**（见 §2.12），直到用户显式执行永久删除。删除 Folder 时同步删除其下 Card 子节点的 `.md` 文件（流程与顶层 Card 一致）；Image 子节点的附件同样会被清理。
+4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留，直到用户显式执行永久删除或在设置页 Unlinked Files 清理工具中删除。删除 Folder 时，其 Card/Asset/Link 等 children 会被转换为 detached 节点留在笔记库，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 `.md` 会被清理，Image/Asset 仍遵循附件模式。
 
-### 5.2 应用级配置（跨 Workspace）
+### 5.2 配置文件与偏好
 
-应用本身的全局配置独立于任何 workspace，存放在用户目录下：
+#### 当前实现：Workspace settings ✅
+
+当前版本还没有多 workspace 管理；应用启动时直接打开默认 workspace。用户偏好存放在当前 workspace 内：
+
+```
+workspace/
+└── .ghostboard/
+    └── settings.json
+```
+
+```json
+{
+  "theme": "system",
+  "locale": "zh",
+  "defaultLayoutMode": "canvas"
+}
+```
+
+- `theme` 与 `locale` 会通过 settings window 保存，并向主窗口推送即时更新。
+- `defaultLayoutMode` 只作为冷启动或新 view 无 localStorage 记录时的 fallback；不会强制覆盖已经记录过布局模式的 view。
+- 画布软删除 Trash 与 Unlinked Files 清理入口目前也在 settings window 中承载。
+
+#### 目标设计：App config（多 Workspace 前置）❌ 待实现
+
+多 workspace 管理需要一个独立于 workspace 的应用级配置，建议存放在用户目录下：
 
 ```
 ~/.ghostboard/
@@ -326,21 +369,25 @@
 }
 ```
 
-> `preferences.defaultLayoutMode`（`canvas` | `document`）控制冷启动时默认进入哪种布局模式，默认 `canvas`；见 §2.12。
+> `preferences.defaultLayoutMode`（`canvas` | `document`）是多 workspace 目标设计。当前实现使用 `.ghostboard/settings.json`，见上方“当前实现”。
 
 **启动流程**：
 
 1. 读取 `~/.ghostboard/app-config.json`
 2. 若有 `activeWorkspace` → 直接打开该 workspace
 3. 若无（首次启动）→ 显示欢迎页，引导用户创建或选择 workspace 目录
-4. 进入 workspace 后 → 读取 `.ghostboard/workspace.json` → 加载画布
+4. 进入 workspace 后 → 读取 `.ghostboard/workspace.json` 与 `.ghostboard/settings.json` → 加载画布
+
+> 当前启动流程是固定默认 workspace：`initWorkspace()` → `seedFirstRunIfNeeded()` → `loadSettings(wsPath)` → 读取 `.ghostboard/workspace.json` 的 `activeViewId`。
 
 ### 5.3 Workspace 文件系统结构
 
 ```
 workspace/
 ├── .ghostboard/                        # 应用元数据（不是用户内容）
-│   ├── workspace.json                  # 全局设置、活跃视图
+│   ├── workspace.json                  # workspace 内视图列表、activeViewId、trash 记录
+│   ├── settings.json                   # 当前实现的主题、语言、默认布局偏好
+│   ├── trash/                          # 被软删除的 canvas manifest
 │   └── views/                          # 每个画布一个 manifest
 │       ├── default.canvas.json
 │       └── roadmap.canvas.json
@@ -353,12 +400,14 @@ workspace/
 │       └── drop-in-anything.md
 └── attachments/                        # 图片和附件（文件名带哈希前缀避免冲突）
     ├── a1b2c3d4-chart.png
+    ├── a1b2c3d4-chart-thumbnail.jpg
+    ├── f1e2d3c4-demo-video.mp4
     └── e5f6g7h8-photo.jpg
 ```
 
 - **单一内容树**：所有笔记统一放在 `content/` 下（扁平结构）。**M5 之后 Folder Card 子节点同样在 `content/` 下拥有自己的 `.md` 文件**（与顶层 Card 并列，不使用子目录），manifest 通过 `children[].noteId + file` 引用。示意图中的 `great-ideas/` 子目录仅为远期「文件夹即目录」模型的占位示意，当前不启用。
 - **Per-view manifest**：每个画布视图独立一个 `.canvas.json`，避免单文件成为写入热点。
-- **附件去重**：附件文件名使用 `{hash}-{原始名}` 格式，避免同名冲突。路径统一为 workspace-relative POSIX 路径。
+- **附件去重**：附件文件名使用 `{hash}-{原始名}` 格式，避免同名冲突。路径统一为 workspace-relative POSIX 路径。Image / Asset 节点保存原始附件引用，视频/音频/图片可额外保存 thumbnail 或 waveform 元数据。
 
 ### 5.4 Markdown 文件格式
 
@@ -512,12 +561,14 @@ updatedAt: 2026-03-31T14:30:00Z
 
 - 所有字段（`position`、`data`、`style`、`parentId`、`extent`、`source`/`target`、`sourceHandle`/`targetHandle`）均为 React Flow 原生字段，加载时可直接传入 `<ReactFlow nodes={} edges={} />` 无需转换。
 - 业务自定义字段（`noteId`、`file`、`label`、`color`、`children` 等）统一放在 `data` 对象内。
-- 节点 `type` 使用 `'card'`/`'folder'`/`'group'`，与代码中 `nodeTypes` 一致。
+- 节点 `type` 使用 `'card'` / `'image'` / `'asset'` / `'link'` / `'sticky'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
-- Folder 的 `data.children` 存放被收纳的子卡片；封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生。
+- Folder 的 `data.children` 存放被收纳的内容条目；当前允许的 child 类型为 `card` / `image` / `asset` / `link`（Checklist 以 `type: "card"` + `data.type: "checklist"` 表达）。`folder` / `group` / `sticky` 不进入 Folder。
+- Folder 封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生；封面只渲染摘要信息，不渲染内部完整小画布。
 - Folder `children` 在 drill-down 中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
 - **Folder Card 子节点的水化与落盘**（M5 ✅）：加载时 `loadCanvas` 按 `noteId + file` 读取 `.md` frontmatter 与正文，通过 `noteToCardData()` 水化回 `title` / `content` / `color` 等字段填充到 `data` 中；保存时 `saveManifest` 调用 `writeNoteWithPreview()` 将正文写入子笔记的 `.md`，并把 manifest 吐到 `{ id, noteId, type, data: { noteId, file, type } }` 的引用形式（不写正文、不写 preview 元数据）。Legacy 内嵌 children 在加载时自动 stamp 一个 `noteId`，下次 save 时内容迁到 `.md`。
 - **Image 子节点例外**：Folder 中的 Image 子节点继续使用 `imageFile` 附件指针模式，不分配 `noteId`，不生成 `.md`。
+- **Asset / Link 节点**：Asset 使用 `attachmentFile`、`thumbnailFile`、`waveform`、`mimeType`、`kind` 等字段描述本地附件；Link 使用 `url`、`title`、`description`、`siteName`、`faviconUrl`、`imageUrl` 等字段描述网页链接。Asset/Link 可以作为顶层节点，也可以作为 Folder children，长期产品语义为"资料夹中的内容条目"。
 - **Viewport 持久化**：`viewport` 字段（`x` / `y` / `zoom`）随 manifest 一起持久化。切换画布时保存当前 viewport 到源 manifest、从目标 manifest 恢复 viewport；应用重启后通过 `hydrate` 回写 ReactFlow，确保用户回到上次浏览位置。
 
 ### 5.7 TypeScript 类型定义
@@ -547,9 +598,11 @@ updatedAt: 2026-03-31T14:30:00Z
 | 布局存储           | Per-view manifest，不放 frontmatter                                             | 布局和内容解耦，避免单文件热点                                             |
 | 内容树结构         | 统一 `content/` 目录                                                            | 避免 `notes/` + `folders/` 双根混乱                                        |
 | 内容生命周期       | 删 `node` 只删实例；零引用 `note` 保留为 **detached note**（见 §2.12）                             | 避免误删共享内容，也避免内容文件无入口可找回                               |
+| Folder 范围        | Folder 是内容集合，不是万能容器；可收纳 Card/Checklist/Image/Asset/Link，不收纳 Folder/Group/Sticky | 保持 Folder 的资料夹语义，避免递归层级、空间布局和临时便签混进同一个模型 |
 | Folder Card 子节点  | 与顶层 Card 对等：独立 `.md` + `noteId`；manifest 仅保留 `{ id, noteId, type, data: { noteId, file, type } }` 引用（M5 ✅）       | 外部编辑器可见、可跨画布复用 noteId；消除早期「仅画布内可见」降级定位       |
 | Folder Image 子节点 | 继续使用 `attachments/` + `imageFile` 指针，不分配 `noteId`                                       | Image 没有文本正文概念，附件模式已足够；保持与顶层 Image 节点一致                                 |
-| 默认布局模式       | `settings.json` `preferences.defaultLayoutMode`（默认 `canvas`）；启动时覆盖 localStorage                    | 用户个人偏好，各工作区一致；避免首次安装后仍落回画布                                                         |
+| Asset / Link 节点 | 作为独立 node kind，不并入 `image` 或 `card`；Asset 走 `attachments/`，Link 走 URL + unfurl 元数据 | 避免把本地文件、网页链接和 Markdown 文档混成一个数据模型 |
+| 默认布局模式       | `.ghostboard/settings.json` `defaultLayoutMode`（默认 `canvas`）；per-view localStorage 优先，settings 只做 fallback                    | 保留用户对不同画布的最近布局选择，同时提供冷启动默认偏好 |
 | Folder / Edge 边界 | Folder 封面可连线；`children` 不跨层暴露 Handle                                 | 避免 drill-down 时连线语义失真                                             |
 | Folder 内布局      | MVP 使用自动排布，不存子坐标                                                    | 避免过早引入子画布复杂度                                                   |
 | ID 生成            | `nanoid`，写入 frontmatter                                                      | 文件重命名不影响引用关系                                                   |
@@ -582,12 +635,12 @@ updatedAt: 2026-03-31T14:30:00Z
 ### 6.1 明确排除项 (Out of Scope for MVP)
 
 - **实时协作**：MVP 不提供多人协作、CRDT、远程同步或 presence。冲突处理默认以单设备本地文件系统为边界，外部修改通过 watcher 同步，超出此范围不承诺一致性。
-- **Folder 子画布**：MVP 不把 Folder 设计为可自由摆放节点的嵌套画布，仅提供目录级 drill-down 与自动排布。
+- **Folder 子画布 / 万能容器**：MVP 不把 Folder 设计为可自由摆放节点的嵌套画布，也不允许它收纳所有节点类型。完整空间结构继续由 Group / Canvas View 承担；若未来需要 Sub-canvas，应作为独立模型设计。
 
 ### 6.2 无障碍基线 (Accessibility Baseline)
 
 - **键盘可达性**：Tab 在当前上下文的可聚焦控件间移动；方向键可在选中节点之间导航；`Enter` 打开聚焦；`Escape` 返回上一级。
-- **语义标注**：卡片、Folder、连接点、上下文菜单需预留 ARIA label / role，保证后续可接入屏幕阅读器。文档模式左栏 `LeftRail` 的分区树目前仅是通用可聚焦列表，ARIA `tree` role + roving tabindex 的正式规范待补充（见 §8 OD-7）。
+- **语义标注**：卡片、Folder、连接点、上下文菜单需预留 ARIA label / role，保证后续可接入屏幕阅读器。文档模式左栏 `LeftRail` 的分区树目前仅是通用可聚焦列表，ARIA `tree` role + roving tabindex 的正式规范待补充（见 §8 OD-13）。
 - **视觉对比**：颜色不是唯一状态来源；选中、锁定、错误态需同时提供描边、图标或文字反馈，高对比主题作为预留能力。
 
 ---
@@ -623,7 +676,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | #    | 任务                                                               | 复杂度 | 状态      |
 | ---  | ------------------------------------------------------------------ | ------ | --------- |
 | 10   | **数据持久化** — 端到端链路（manifest + .md 拆分 + RPC + hydrate） | 高     | ✅ 已完成 |
-| 11   | **全局搜索** — Cmd+F，匹配高亮，fitView 定位（含跨画布跳转 + 文档模式直接打开右侧）         | 中     | ✅ 已完成 |
+| 11   | **全局搜索** — Cmd/Ctrl+K，跨画布搜索与定位，文档模式直接打开右侧；Folder children / unreferenced Markdown 覆盖待补 | 中     | ✅ MVP 已完成 / ⚠️ 覆盖待补 |
 | 12   | **连线标签与动画** — 可编辑 label + 流动虚线 + Marker 端点           | 低     | ✅ 已完成 |
 | 13   | **Group 嵌套** — 多级 parentId + 防循环                            | 中     | ✅ 已完成 |
 | 13.1 | **画布标题栏模糊** — 顶部工具栏背景模糊效果                          | 低     | ✅ 已完成 |
@@ -631,10 +684,11 @@ updatedAt: 2026-03-31T14:30:00Z
 | 14.1 | **文档模式（Document Layout）** — LayoutSwitcher + LeftRail/NoteList/Editor 三栏 + Detached Notes       | 高     | ✅ 已完成 |
 | 14.2 | **Folder Card 子节点迁移 noteId + 独立 .md**（M5）                     | 中     | ✅ 已完成 |
 | 14.3 | **设置窗口与 `defaultLayoutMode` 偏好**                            | 低     | ✅ 已完成 |
-| 14.4 | **文档模式 i18n（zh / en）** — LeftRail / NoteList / DocumentEditor / EditorToolbar 文案走 paraglide | 低     | ⏳ 待实施（决策已确定，见 §8 OD-8） |
-| 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮改为子菜单（空白画布 / 选择模板），TanStack Router 新路由 `/templates` 列表 + `/templates/$templateId` 只读 ReactFlow 预览，基于模板创建新画布（重新生成 noteId + 示例 .md） | 高     | ⏳ 进行中（P0/P0.5 节点重构 + 预览验证已完成；P1 后端 + Kanban 模板进行中） |
+| 14.4 | **文档模式 i18n（zh / en）** — LeftRail / NoteList / DocumentEditor / EditorToolbar 文案走 paraglide | 低     | ✅ 已完成 |
+| 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮子菜单、`/templates` 列表、`/templates/$templateId` 只读预览、基于模板创建新画布 | 高     | ✅ MVP 已完成 / ⚠️ P5 收尾待补 |
 | 14.6 | **Per-view Viewport 持久化** — 每个画布的 ReactFlow viewport（x/y/zoom）随 `.canvas.json` 持久化，切换画布/重启后恢复 | 低     | ✅ 已完成 |
 | 14.7 | **活跃画布持久化** — `activeViewId` 写入 `workspace.json`，重启后恢复到上次使用的画布 | 低     | ✅ 已完成 |
+| 14.8 | **Asset / Link 多模态节点** — 本地文件、视频/音频预览、链接创建与 unfurl、Document 类型视图接入 | 高 | ✅ MVP 已完成 / ⚠️ 大文件、PDF、富链接待补 |
 
 ### ⚪ P3 — 后续迭代
 
@@ -655,8 +709,8 @@ updatedAt: 2026-03-31T14:30:00Z
 
 | #   | 任务                     | 说明                                                                                                                                                                                             |
 | --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 24  | **视频卡片**             | .mp4 / .gif / .webm 嵌入                                                                                                                                                                         |
-| 25  | **Web Clips**            | 网页剪藏，Magazine 风格预览                                                                                                                                                                      |
+| 24  | **高级视频/PDF 卡片**    | Asset MVP 已支持视频/音频播放；后续补大文件原生导入、PDF 页面预览、视频转码/封面编辑                                                                                                                                 |
+| 25  | **富 Web Clips**         | Link MVP 已支持 URL 节点和基础 unfurl；后续补 favicon/image 展示、网页剪藏、Magazine 风格预览                                                                                                                                 |
 | 26  | **全局快捷键快速输入**   | Quick Input from anywhere                                                                                                                                                                        |
 | 27  | **AI 辅助**              | Gemini 总结、生成、关联推荐                                                                                                                                                                      |
 | 28  | **商业化**               | Free + Pro 订阅                                                                                                                                                                                  |
@@ -664,40 +718,56 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ---
 
-## 8. 布局模式待决决策 (Open Decisions)
+## 8. 项目待办与未决策 (Backlog & Open Decisions)
 
-> 本章节汇总所有与**文档模式 / 布局切换**相关但尚未决策的问题。原始出处 [todo/双布局-PRD-待决问题.md](./todo/双布局-PRD-待决问题.md)——已决策项已合并到 §2.8 / §2.10 / §2.11 / §2.12 / §5.1 / §5.2 / §5.6 / §5.10；此处仅保留待决项。
->
-> **迭代流程**：决策落地后请把对应行**从本表删除**，同时把内容写进正文对应小节，保持本 PRD 作为唯一事实源。
+> 本章节是产品层面的待办与未决策总表。决策落地后，把对应行从本表删除或改为“已决策”，并同步回写正文对应小节，保持本 PRD 与 [技术规范文档](./tech-spec.md) 为唯一事实源。
 
-| ID    | 题目                                  | 背景与选项                                                                                                                                                                                                                                                                                                                       | 状态 |
-| ----- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| OD-1  | **Sticky 在文档模式的曝光**           | Sticky 今天在文档模式完全不渲染。选项：① 保持隐藏；② 左栏底部加只读的 `📌 Stickies (n)` 计数入口，点击跳回画布；③ 未来做独立的「便签收件箱」面板。影响：习惯用 Sticky 快速捕获的用户进文档模式后会失去视觉锚点。                                                                                                                                   | 待决 |
-| OD-2  | **Image 在文档模式的可编辑性**        | 文档模式点击图片进入「只读预览」。选项：① 完全只读，引导切回画布改 alt / 换图；② 复用 ImageNode 右键菜单提供基础编辑（换图、改 alt、删除）。影响 Tiptap 侧图片节点的行为边界。                                                                                                                                                                  | 待决 |
-| OD-3  | **Checklist 在文档模式的形态**        | 选项：① 右侧面板嵌入原 ChecklistNode（`data.items` 结构，与画布对齐）；② 在右侧转换为 Tiptap task list（需做 `data.items` ↔ Tiptap doc 双向序列化，且 PRD §2.2 明确 Checklist 不走 markdown-it）。影响：是否需要新增序列化层，以及 checklist 作为 note 文件的磁盘格式。                                                                                          | 待决 |
-| OD-4  | **layoutMode 的作用域**               | 当前实现：全局（localStorage + `settings.defaultLayoutMode`）。选项：① per-view 持久化到每个 `.canvas.json`（Roadmap 视图=文档、Brainstorm=画布）；② per-workspace；③ 维持全局。同时要决定新建 View 时默认 layoutMode 是否继承当前。                                                                                                                         | 待决 |
-| OD-5  | **模式切换时的 viewport / 编辑态细节** | 切到文档模式时：① 当前 Tiptap 草稿是否强制 flush（目前走 1500ms debounce，切换不主动 flush）？切回画布模式：② 默认恢复上次 viewport，还是 fitView 到当前选中的文档？                                                                                                                           | 待决 |
-| OD-6  | **导出 PNG/SVG 在文档模式的语义**     | 画布模式导出的是视口截图。文档模式下选项：① 禁用导出按钮（引导切回画布）；② 替换为「导出 Markdown」（当前选中文档或整棵树）。与路线图 #14 耦合。                                                                                                                                                                                                       | 待决 |
-| OD-7  | **左栏 ARIA tree role 规范**          | 目前 LeftRail 仅是通用可聚焦列表。需确定：① 使用 ARIA `tree` + `treeitem` + roving tabindex 的正式实现；② 展开/折叠使用 `aria-expanded`；③ 与 `NoteList` 组成 `tree` + `tabpanel` 还是并列 region。这比 §6.2 的「键盘可达」更具体，落地后回写 §6.2。                                                                                                                        | 待决 |
-| OD-8  | **文档模式 i18n（zh / en）**          | **决策已确定**（需补 zh / en 两套），**待实施**：`messages/{en,zh}.json` 增 ~17 个 `document.*` key；替换 LeftRail、NoteList、DocumentEditor、EditorToolbar 中硬编码英文字符串为 paraglide 调用；路线图 #14.4 跟踪。                                                                                                                                                | 待实施 |
+### 8.1 架构级未决策
 
-### 8.1 已落地的决策映射（供回查）
+| ID | 题目 | 背景与选项 | 状态 |
+| --- | --- | --- | --- |
+| OD-1 | **Document Workspace 信息架构** | 当前实现是 canvas-derived：从 active canvas manifest 派生 All/Folders/Types。早期 PRD 目标是 filesystem-first：直接浏览 `content/**/*.md` 文件树。选项：① 接受当前方向并将功能命名为 Canvas Document Mode；② 回到 filesystem-first，新增真实文件树、目录 CRUD、文件移动/重命名、引用保护和 Add to Canvas。 | 待决 |
+| OD-2 | **搜索范围** | 当前搜索 MVP 覆盖画布可定位对象和其 Markdown 正文，但 Folder children 与未被 manifest 引用的 `.md` 仍可能漏搜。选项：① 只承诺 canvas-addressable 搜索；② 搜索整个 workspace 文档库；③ 搜索结果区分 placed / detached / unlinked。 | 待决 |
+| OD-3 | **多 Workspace 管理** | 当前固定打开默认 workspace；多 workspace 需要欢迎页、recentWorkspaces、activeWorkspace、workspace switch、app-level config。 | 待实现 |
+| OD-4 | **app-level vs workspace-level settings** | 当前设置在 `.ghostboard/settings.json`；多 workspace 目标需要 `~/.ghostboard/app-config.json`。需要决定 theme/locale/defaultLayoutMode/trash cleanup 等设置的归属。 | 待决 |
+| OD-5 | **Document mode 删除语义** | 当前顶层删除移除 canvas node，Folder child 删除会清理 child note，删除 Folder 会把 children 转为 detached 节点。若转向 filesystem-first，需要重新定义“删除引用”与“删除真实文件”的确认流程。 | 待决 |
 
-| 原 TODO 编号 | 决策摘要                                               | 落地位置                       |
-| ------------ | ------------------------------------------------------ | ------------------------------ |
-| 决策 1 / 2   | 文档模式新建仅 Note 类型，通过 `createDetachedNote`    | §2.12「Detached notes」        |
-| 决策 3       | Folder 子卡片强制 `noteId + .md`（M5）                 | §5.1、§5.6、§5.10 决策表       |
-| 决策 7       | 文档模式禁用 folder drill-down，切换时自动收起         | §2.12「状态冻结与行为差异」表  |
-| 决策 8       | 文档模式禁用 `focused`，双击/Enter → 内联编辑          | §2.12「状态冻结与行为差异」表  |
-| 决策 9       | 文档模式不暴露 Extract to Canvas                       | §2.12「状态冻结与行为差异」表  |
-| 决策 11      | Detached notes 取代 `unplaced notes`                   | §2.8、§2.12「Detached notes」  |
-| 决策 12      | document 模式冻结画布所有状态                          | §2.11 末尾的「与布局模式的关系」|
-| 决策 13      | 快捷键差异化（画布 vs 文档）                           | §2.10 快捷键表新增文档模式列   |
-| 决策 14      | Tiptap 与画布 undo/redo 栈隔离                         | §2.10、§2.12 行为差异表        |
-| 决策 15      | 删除带 edge 的卡片自动清理不提示                       | §2.12 行为差异表               |
-| 决策 16      | `defaultLayoutMode` 偏好（默认 canvas）                | §2.12、§5.2、§5.10             |
-| 决策 18      | LayoutSwitcher 置顶，ViewSwitcher 保持底部             | §2.12「切换器」                |
-| 决策 19      | 默认按 `updatedAt` 倒序排序                            | §2.12「文档模式布局」          |
-| 决策 20      | 文档模式 `Cmd+F` 命中后直接打开右侧编辑器              | §2.8、§2.12「搜索集成」        |
+### 8.2 产品体验未决策
 
-> **表中未列出的 TODO 决策编号（4、5、6、10、17、21、22、23）均仍在 §8 上方的 OD-1..OD-8 待决表中，未来决策落地后再回填本表。**
+| ID | 题目 | 背景与选项 | 状态 |
+| --- | --- | --- | --- |
+| OD-6 | **Sticky 在文档模式的曝光** | Sticky 今天在文档模式不渲染。选项：① 保持隐藏；② 左栏增加只读计数入口，点击跳回画布；③ 未来做独立便签收件箱。 | 待决 |
+| OD-8 | **layoutMode 的作用域** | 当前是 per-view localStorage，`.ghostboard/settings.json` 只做 fallback。选项：① 保持当前；② 写入每个 `.canvas.json`；③ workspace-level；④ app-level。新建 View 是否继承当前 layoutMode 也需决定。 | 待决 |
+| OD-9 | **模式切换时的 viewport / 编辑态细节** | 切到文档模式时是否强制 flush Tiptap 草稿；切回画布模式时恢复上次 viewport，还是 fitView 到当前选中的文档。 | 待决 |
+| OD-10 | **导出 PNG/SVG 在文档模式的语义** | 画布模式导出视口截图。文档模式下选项：① 禁用导出；② 替换为导出 Markdown；③ 导出当前文档为 PDF/HTML。 | 待决 |
+| OD-11 | **Image / Asset / Link 在文档模式的编辑性** | 当前右侧主要是预览/focused 内容。是否允许在文档模式替换图片、编辑 Asset title、编辑 Link URL/metadata，需要单独定交互。 | 待决 |
+| OD-12 | **Checklist 在文档模式的形态** | 选项：① 继续使用结构化 `data.items`；② 转成 Tiptap task list 并做双向序列化。影响 checklist 的磁盘格式和编辑器实现。 | 待决 |
+| OD-13 | **左栏 ARIA tree role 规范** | 当前 LeftRail 是通用可聚焦列表。需要决定是否实现正式 ARIA `tree` / `treeitem` / roving tabindex。 | 待决 |
+
+### 8.3 已知待办
+
+| ID | 事项 | 目标 | 优先级 |
+| --- | --- | --- | --- |
+| TODO-1 | **补 Folder children 搜索** | 后端和前端 fallback 都应索引 Folder children 中的 Card/Asset/Link/Image，并能在文档模式打开对应 `child:<folderId>:<childId>`。 | P0 |
+| TODO-2 | **明确 unlinked Markdown 策略** | 决定 `content/*.md` 中无 manifest 引用的文件是进入搜索/文档模式，还是只留在设置页清理工具。 | P0 |
+| TODO-3 | **Asset 大文件导入** | 文件选择/拖拽不要只走 data URL；接入 native path copy，避免视频/大文件触发 25 MB data URL 限制。 | P1 |
+| TODO-4 | **Link 富预览与安全硬化** | UI 展示 favicon/image preview；unfurl 增加 DNS 解析后的私网 IP 防护，降低 DNS rebinding 风险。 | P1 |
+| TODO-5 | **PDF 预览** | Asset 中 PDF 从普通文件升级为页面缩略图/内嵌预览。 | P2 |
+| TODO-6 | **模板库 P5 收尾** | 补模板数量，接入 thumbnail，删除 `preview-test` 路由，决定从模板创建的画布命名规则，考虑 URL query 同步与 i18n metadata。 | P1 |
+| TODO-7 | **Multi-workspace** | 欢迎页、创建/打开/切换 workspace、recent list、app config、settings 迁移策略。 | P2 |
+| TODO-8 | **独立 saveNote debounce** | 当前正文修改主要经 manifest 保存链路写回；若后续文档模式变重，需要独立内容保存队列。 | P2 |
+
+### 8.4 已落地的关键决策映射（供回查）
+
+| 决策摘要 | 落地位置 |
+| --- | --- |
+| 文档模式新建仅 Note 类型，通过 `createDetachedNote` | §2.12「Detached notes」 |
+| Folder Card 子节点强制 `noteId + .md`（M5） | §5.1、§5.6、§5.10 |
+| Folder 是内容集合，不是万能容器；允许 Card/Checklist/Image/Asset/Link，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
+| 文档模式禁用 folder drill-down 与 focused 模态，切换时冻结画布状态 | §2.11、§2.12 |
+| 文档模式不暴露 Extract to Canvas | §2.12「状态冻结与行为差异」 |
+| Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |
+| Tiptap 与画布 undo/redo 栈隔离 | §2.10、§2.12 |
+| LayoutSwitcher 置顶，ViewSwitcher 保持底部 | §2.12「切换器」 |
+| 默认按 `updatedAt` 倒序排序 | §2.12「文档模式布局」 |
+| 文档模式搜索命中后直接打开右侧编辑器 | §2.8、§2.12「搜索集成」 |

@@ -1,0 +1,8 @@
+{
+  "id": "weekly-planner",
+  "name": "Weekly Planner",
+  "description": "周一到周日 7 列泳道，每天一张待办清单 + 周目标 + 本周复盘。",
+  "category": "planning",
+  "tags": ["weekly", "planning", "todo", "schedule"],
+  "thumbnail": ""
+}

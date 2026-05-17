@@ -38,6 +38,26 @@ vi.mock('../../../paraglide/messages.js', () => ({
   templates_empty: () => 'No templates found',
   templates_empty_search: ({ query }: { query: string }) =>
     `No templates match "${query}"`,
+  // Per-template name / description used by useTemplates' localizeMeta.
+  // Keep values stable so the assertions below still match.
+  template_quick_start_name: () => 'Quick Start',
+  template_quick_start_description: () => 'Quick Start description',
+  template_blank_name: () => 'Blank Canvas',
+  template_blank_description: () => 'Blank description',
+  template_weekly_planner_name: () => 'Weekly Planner',
+  template_weekly_planner_description: () => 'Weekly Planner description',
+  template_kanban_name: () => 'Kanban Board',
+  template_kanban_description: () => 'A simple kanban board',
+  template_sprint_retro_name: () => 'Sprint Retro',
+  template_sprint_retro_description: () => 'Sprint Retro description',
+  template_brainstorm_mindmap_name: () => 'Brainstorm Mindmap',
+  template_brainstorm_mindmap_description: () => 'Mindmap description',
+  template_eisenhower_matrix_name: () => 'Eisenhower Matrix',
+  template_eisenhower_matrix_description: () => 'Eisenhower description',
+  template_reading_notes_name: () => 'Reading Notes',
+  template_reading_notes_description: () => 'Reading Notes description',
+  template_demo_name: () => 'Demo Canvas',
+  template_demo_description: () => 'Demo description',
 }));
 
 // ---------------------------------------------------------------------------

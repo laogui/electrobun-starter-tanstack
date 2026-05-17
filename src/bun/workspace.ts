@@ -51,8 +51,12 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
  * Template id used to seed the default canvas on the very first launch
  * (when `workspace.json` does not yet exist). Setting this to `null` skips
  * first-run seeding entirely so the default canvas opens blank.
+ *
+ * Defaults to `quick-start` so newcomers land on an interactive 5-minute
+ * tutorial that demonstrates pan/zoom, focused mode, edges, and folder
+ * stacking on a single canvas.
  */
-const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'demo';
+const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'quick-start';
 
 /** Ensure workspace directory structure exists. Returns workspace path. */
 export function initWorkspace(workspacePath?: string): string {

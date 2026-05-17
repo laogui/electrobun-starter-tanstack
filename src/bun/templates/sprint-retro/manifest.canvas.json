@@ -1,0 +1,198 @@
+{
+  "viewport": { "x": 40, "y": 40, "zoom": 0.8 },
+  "nodes": [
+    {
+      "id": "sr-card-header",
+      "type": "card",
+      "position": { "x": 60, "y": 20 },
+      "style": { "width": 1120, "height": 110 },
+      "data": {
+        "noteId": "tpl-sr-header",
+        "type": "text",
+        "tag": "Retro",
+        "tagColor": "#DDD6FE",
+        "color": "#F5F3FF"
+      }
+    },
+    {
+      "id": "sr-group-good",
+      "type": "group",
+      "position": { "x": 60, "y": 160 },
+      "style": { "width": 270, "height": 520 },
+      "data": { "label": "💚 做得好", "color": "green" }
+    },
+    {
+      "id": "sr-good-1",
+      "type": "sticky",
+      "parentId": "sr-group-good",
+      "extent": "parent",
+      "position": { "x": 20, "y": 60 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "上线节奏稳定，没有被紧急事故打断。",
+        "color": "#BBF7D0"
+      }
+    },
+    {
+      "id": "sr-good-2",
+      "type": "sticky",
+      "parentId": "sr-group-good",
+      "extent": "parent",
+      "position": { "x": 20, "y": 210 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "代码评审更细致，bug 在合并前被发现。",
+        "color": "#A7F3D0"
+      }
+    },
+    {
+      "id": "sr-good-3",
+      "type": "sticky",
+      "parentId": "sr-group-good",
+      "extent": "parent",
+      "position": { "x": 20, "y": 360 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "新人上手很快，很快产出了第一个 PR。",
+        "color": "#86EFAC"
+      }
+    },
+    {
+      "id": "sr-group-improve",
+      "type": "group",
+      "position": { "x": 350, "y": 160 },
+      "style": { "width": 270, "height": 520 },
+      "data": { "label": "🔧 要改进", "color": "orange" }
+    },
+    {
+      "id": "sr-improve-1",
+      "type": "sticky",
+      "parentId": "sr-group-improve",
+      "extent": "parent",
+      "position": { "x": 20, "y": 60 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "需求变更没有提前通知，导致返工。",
+        "color": "#FED7AA"
+      }
+    },
+    {
+      "id": "sr-improve-2",
+      "type": "sticky",
+      "parentId": "sr-group-improve",
+      "extent": "parent",
+      "position": { "x": 20, "y": 210 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "测试环境数据偶尔过期，影响联调。",
+        "color": "#FDBA74"
+      }
+    },
+    {
+      "id": "sr-improve-3",
+      "type": "sticky",
+      "parentId": "sr-group-improve",
+      "extent": "parent",
+      "position": { "x": 20, "y": 360 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "周会节奏太紧，没有留出技术分享时间。",
+        "color": "#FDE68A"
+      }
+    },
+    {
+      "id": "sr-group-action",
+      "type": "group",
+      "position": { "x": 640, "y": 160 },
+      "style": { "width": 270, "height": 520 },
+      "data": { "label": "⚡ 行动项", "color": "blue" }
+    },
+    {
+      "id": "sr-action-1",
+      "type": "sticky",
+      "parentId": "sr-group-action",
+      "extent": "parent",
+      "position": { "x": 20, "y": 60 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "@A · 下周建立需求变更同步机制（看板 + 通知）",
+        "color": "#BFDBFE"
+      }
+    },
+    {
+      "id": "sr-action-2",
+      "type": "sticky",
+      "parentId": "sr-group-action",
+      "extent": "parent",
+      "position": { "x": 20, "y": 210 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "@B · 写一个测试数据自动重置脚本",
+        "color": "#93C5FD"
+      }
+    },
+    {
+      "id": "sr-action-3",
+      "type": "sticky",
+      "parentId": "sr-group-action",
+      "extent": "parent",
+      "position": { "x": 20, "y": 360 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "@C · 周会结尾留 10 分钟做技术分享",
+        "color": "#60A5FA"
+      }
+    },
+    {
+      "id": "sr-group-thanks",
+      "type": "group",
+      "position": { "x": 930, "y": 160 },
+      "style": { "width": 270, "height": 520 },
+      "data": { "label": "🙌 感谢 / 高光", "color": "purple" }
+    },
+    {
+      "id": "sr-thanks-1",
+      "type": "sticky",
+      "parentId": "sr-group-thanks",
+      "extent": "parent",
+      "position": { "x": 20, "y": 60 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "感谢 @A 周末紧急修了线上 bug。",
+        "color": "#E9D5FF"
+      }
+    },
+    {
+      "id": "sr-thanks-2",
+      "type": "sticky",
+      "parentId": "sr-group-thanks",
+      "extent": "parent",
+      "position": { "x": 20, "y": 210 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "感谢 @D 重写了文档，新人上手快了。",
+        "color": "#DDD6FE"
+      }
+    },
+    {
+      "id": "sr-thanks-3",
+      "type": "sticky",
+      "parentId": "sr-group-thanks",
+      "extent": "parent",
+      "position": { "x": 20, "y": 360 },
+      "style": { "width": 230, "height": 130 },
+      "data": {
+        "content": "感谢全组在大版本前的加班配合 ❤️",
+        "color": "#C4B5FD"
+      }
+    }
+  ],
+  "edges": [],
+  "noteContents": {
+    "tpl-sr-header": {
+      "title": "Sprint Retro",
+      "displayHint": "note",
+      "body": "## Sprint Retro · 第 N 期\n\n时间：YYYY-MM-DD　|　主持：@xxx　|　参与：xxx \n\n规则：每人轮流贴便签 → 同主题归类 → 投票 → 产出可执行的 Action（带 owner 和 deadline）。"
+    }
+  }
+}

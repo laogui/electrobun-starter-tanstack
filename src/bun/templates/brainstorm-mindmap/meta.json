@@ -1,0 +1,8 @@
+{
+  "id": "brainstorm-mindmap",
+  "name": "Brainstorm Mindmap",
+  "description": "中心问题 + 六向放射分支，用连线把发散的想法串成一张地图。",
+  "category": "thinking",
+  "tags": ["brainstorm", "mindmap", "ideation", "edges"],
+  "thumbnail": ""
+}

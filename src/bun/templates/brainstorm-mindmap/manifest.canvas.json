@@ -1,0 +1,189 @@
+{
+  "viewport": { "x": 0, "y": 0, "zoom": 0.7 },
+  "nodes": [
+    {
+      "id": "bm-center",
+      "type": "card",
+      "position": { "x": 680, "y": 400 },
+      "style": { "width": 320, "height": 180 },
+      "data": {
+        "noteId": "tpl-bm-center",
+        "type": "text",
+        "tag": "核心",
+        "tagColor": "#FCA5A5",
+        "color": "#FEF2F2"
+      }
+    },
+    {
+      "id": "bm-branch-growth",
+      "type": "sticky",
+      "position": { "x": 740, "y": 120 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "📈 增长", "color": "#FDE68A" }
+    },
+    {
+      "id": "bm-sub-growth",
+      "type": "sticky",
+      "position": { "x": 740, "y": -40 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "渠道 / 推荐 / 留存", "color": "#FEF3C7" }
+    },
+    {
+      "id": "bm-branch-ux",
+      "type": "sticky",
+      "position": { "x": 1080, "y": 240 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "✨ 体验", "color": "#A7F3D0" }
+    },
+    {
+      "id": "bm-sub-ux",
+      "type": "sticky",
+      "position": { "x": 1340, "y": 240 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "首屏速度 / 操作流畅 / 引导", "color": "#D1FAE5" }
+    },
+    {
+      "id": "bm-branch-content",
+      "type": "sticky",
+      "position": { "x": 1080, "y": 580 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "📚 内容", "color": "#BFDBFE" }
+    },
+    {
+      "id": "bm-sub-content",
+      "type": "sticky",
+      "position": { "x": 1340, "y": 580 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "教程 / 案例 / SEO", "color": "#DBEAFE" }
+    },
+    {
+      "id": "bm-branch-community",
+      "type": "sticky",
+      "position": { "x": 740, "y": 700 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "💬 社区", "color": "#DDD6FE" }
+    },
+    {
+      "id": "bm-sub-community",
+      "type": "sticky",
+      "position": { "x": 740, "y": 860 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "用户群 / 互助 / KOL", "color": "#EDE9FE" }
+    },
+    {
+      "id": "bm-branch-data",
+      "type": "sticky",
+      "position": { "x": 400, "y": 580 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "📊 数据", "color": "#FBCFE8" }
+    },
+    {
+      "id": "bm-sub-data",
+      "type": "sticky",
+      "position": { "x": 140, "y": 580 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "漏斗 / 留存 / 实验", "color": "#FCE7F3" }
+    },
+    {
+      "id": "bm-branch-biz",
+      "type": "sticky",
+      "position": { "x": 400, "y": 240 },
+      "style": { "width": 200, "height": 110 },
+      "data": { "content": "💰 商业", "color": "#FED7AA" }
+    },
+    {
+      "id": "bm-sub-biz",
+      "type": "sticky",
+      "position": { "x": 140, "y": 240 },
+      "style": { "width": 200, "height": 100 },
+      "data": { "content": "定价 / 渠道 / 续费", "color": "#FFEDD5" }
+    }
+  ],
+  "edges": [
+    {
+      "id": "bm-e1",
+      "source": "bm-center",
+      "target": "bm-branch-growth",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e2",
+      "source": "bm-center",
+      "target": "bm-branch-ux",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e3",
+      "source": "bm-center",
+      "target": "bm-branch-content",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e4",
+      "source": "bm-center",
+      "target": "bm-branch-community",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e5",
+      "source": "bm-center",
+      "target": "bm-branch-data",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e6",
+      "source": "bm-center",
+      "target": "bm-branch-biz",
+      "type": "labeledEdge",
+      "animated": true
+    },
+    {
+      "id": "bm-e7",
+      "source": "bm-branch-growth",
+      "target": "bm-sub-growth",
+      "type": "labeledEdge"
+    },
+    {
+      "id": "bm-e8",
+      "source": "bm-branch-ux",
+      "target": "bm-sub-ux",
+      "type": "labeledEdge"
+    },
+    {
+      "id": "bm-e9",
+      "source": "bm-branch-content",
+      "target": "bm-sub-content",
+      "type": "labeledEdge"
+    },
+    {
+      "id": "bm-e10",
+      "source": "bm-branch-community",
+      "target": "bm-sub-community",
+      "type": "labeledEdge"
+    },
+    {
+      "id": "bm-e11",
+      "source": "bm-branch-data",
+      "target": "bm-sub-data",
+      "type": "labeledEdge"
+    },
+    {
+      "id": "bm-e12",
+      "source": "bm-branch-biz",
+      "target": "bm-sub-biz",
+      "type": "labeledEdge"
+    }
+  ],
+  "noteContents": {
+    "tpl-bm-center": {
+      "title": "核心问题",
+      "displayHint": "note",
+      "body": "## 核心问题\n\n_把你想发散的中心问题写在这里。例如：「如何提升产品的 30 天留存？」_\n\n围绕这个问题，先列出 6 个大方向（卫星卡片），再为每个方向延伸 1–2 条线索。\n\n小贴士：双击卡片可以连线，连线可以加 label 描述关系。"
+    }
+  }
+}

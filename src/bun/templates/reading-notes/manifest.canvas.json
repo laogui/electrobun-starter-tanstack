@@ -1,0 +1,160 @@
+{
+  "viewport": { "x": 40, "y": 40, "zoom": 0.8 },
+  "nodes": [
+    {
+      "id": "rn-image-cover",
+      "type": "image",
+      "position": { "x": 60, "y": 20 },
+      "style": { "width": 240, "height": 320 },
+      "data": {
+        "title": "📖 拖入书封图片",
+        "color": "#FFFFFF"
+      }
+    },
+    {
+      "id": "rn-card-summary",
+      "type": "card",
+      "position": { "x": 320, "y": 20 },
+      "style": { "width": 580, "height": 320 },
+      "data": {
+        "noteId": "tpl-rn-summary",
+        "type": "text",
+        "tag": "要点",
+        "tagColor": "#FCD34D",
+        "color": "#FFFBEB"
+      }
+    },
+    {
+      "id": "rn-folder-chapters",
+      "type": "folder",
+      "position": { "x": 60, "y": 380 },
+      "style": { "width": 280, "height": 260 },
+      "data": {
+        "title": "4 章",
+        "subtitle": "📚 章节笔记",
+        "children": [
+          {
+            "id": "rn-folder-chapters-c1",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "## 第一章 · 引言\n\n核心论点：……\n关键例子：……\n个人感受：……",
+              "color": "#FEF9C3"
+            }
+          },
+          {
+            "id": "rn-folder-chapters-c2",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "## 第二章 · 概念框架\n\n本章定义了三个关键概念：A / B / C。",
+              "color": "#FEF3C7"
+            }
+          },
+          {
+            "id": "rn-folder-chapters-c3",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "## 第三章 · 案例与方法\n\n作者用三个案例展示如何应用框架。",
+              "color": "#FFFBEB"
+            }
+          },
+          {
+            "id": "rn-folder-chapters-c4",
+            "type": "card",
+            "data": {
+              "type": "text",
+              "content": "## 第四章 · 反思与延伸\n\n对应到我自己的工作场景，可以做的迁移：……",
+              "color": "#FEF3C7"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "rn-sticky-quote-1",
+      "type": "sticky",
+      "position": { "x": 360, "y": 380 },
+      "style": { "width": 240, "height": 130 },
+      "data": {
+        "content": "💬 \"打动我的一句话写在这里。\" — p.42",
+        "color": "#FBCFE8"
+      }
+    },
+    {
+      "id": "rn-sticky-quote-2",
+      "type": "sticky",
+      "position": { "x": 620, "y": 380 },
+      "style": { "width": 240, "height": 130 },
+      "data": {
+        "content": "💬 \"另一段精彩论述，写在这里。\" — p.103",
+        "color": "#DDD6FE"
+      }
+    },
+    {
+      "id": "rn-sticky-quote-3",
+      "type": "sticky",
+      "position": { "x": 360, "y": 530 },
+      "style": { "width": 240, "height": 130 },
+      "data": {
+        "content": "💬 \"让我犹豫的一句话——为什么我不同意？\" — p.158",
+        "color": "#FED7AA"
+      }
+    },
+    {
+      "id": "rn-card-action",
+      "type": "card",
+      "position": { "x": 880, "y": 380 },
+      "style": { "width": 320, "height": 280 },
+      "data": {
+        "noteId": "tpl-rn-action",
+        "type": "checklist",
+        "tag": "待实践",
+        "tagColor": "#A7F3D0",
+        "color": "#ECFDF5"
+      }
+    },
+    {
+      "id": "rn-link-recommend",
+      "type": "link",
+      "position": { "x": 60, "y": 680 },
+      "style": { "width": 320, "height": 160 },
+      "data": {
+        "url": "",
+        "title": "作者主页 / 书评 / 延伸阅读",
+        "description": "粘贴一条 URL，会自动抓取标题、描述和封面图。",
+        "color": "#EFF6FF"
+      }
+    },
+    {
+      "id": "rn-card-rating",
+      "type": "card",
+      "position": { "x": 400, "y": 680 },
+      "style": { "width": 380, "height": 160 },
+      "data": {
+        "noteId": "tpl-rn-rating",
+        "type": "text",
+        "color": "#FAFAF9"
+      }
+    }
+  ],
+  "edges": [],
+  "noteContents": {
+    "tpl-rn-summary": {
+      "title": "本书要点",
+      "displayHint": "note",
+      "body": "## 一句话总结\n\n_用一句话概括本书的核心主张。_\n\n## 三个关键观点\n\n1. **观点一**：\n2. **观点二**：\n3. **观点三**：\n\n## 谁适合读\n\n- "
+    },
+    "tpl-rn-action": {
+      "title": "待实践",
+      "displayHint": "checklist",
+      "body": "## 读完后我要做\n\n- [ ] 把第一个核心方法在本周试用一次\n- [ ] 推荐给一位需要的同事 / 朋友\n- [ ] 在月底回看：哪些观点真的影响了我的决定？"
+    },
+    "tpl-rn-rating": {
+      "title": "我的评分",
+      "displayHint": "note",
+      "body": "## 我的评分：⭐⭐⭐⭐ / 5\n\n**最值得读的部分**：\n\n**没必要读的部分**：\n\n**重读时机**："
+    }
+  }
+}

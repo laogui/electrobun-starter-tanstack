@@ -25,15 +25,19 @@ function createWrapper() {
     createElement(QueryClientProvider, { client: qc, children });
 }
 
+// Use ids that are NOT registered in the TEMPLATE_I18N dictionary so
+// fallback to raw `name` / `description` is exercised. Built-in templates
+// (kanban, demo, quick-start, ...) get localized via paraglide instead;
+// that path is verified separately below.
 describe('useTemplates', () => {
   it('returns the template list from rpcListTemplates', async () => {
     const templates = [
       {
-        id: 'kanban',
-        name: 'Kanban Board',
-        description: 'A kanban board',
+        id: 'fake-template',
+        name: 'Fake Template',
+        description: 'For tests only',
         category: 'planning',
-        tags: ['kanban'],
+        tags: ['fake'],
         thumbnail: '',
       },
     ];
@@ -63,14 +67,44 @@ describe('useTemplates', () => {
 
     expect(result.current.data).toEqual([]);
   });
+
+  it('localizes name and description for built-in templates', async () => {
+    // Backend returns whatever lives in meta.json, but the hook should
+    // overwrite name + description with the paraglide-resolved strings so
+    // the templates browser respects the active locale.
+    rpcMocks.rpcListTemplates.mockResolvedValue([
+      {
+        id: 'quick-start',
+        name: 'should-be-overwritten',
+        description: 'should-be-overwritten',
+        category: 'blank',
+        tags: ['onboarding'],
+        thumbnail: '',
+      },
+    ]);
+
+    const { result } = renderHook(() => useTemplates(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const tpl = result.current.data?.[0];
+    expect(tpl?.name).not.toBe('should-be-overwritten');
+    expect(tpl?.description).not.toBe('should-be-overwritten');
+    expect(tpl?.name.length).toBeGreaterThan(0);
+    expect(tpl?.description.length).toBeGreaterThan(0);
+  });
 });
 
 describe('useTemplate', () => {
   it('fetches a single template by id', async () => {
     const tpl = {
       meta: {
-        id: 'kanban',
-        name: 'Kanban',
+        id: 'fake-template',
+        name: 'Fake',
         description: '',
         category: 'planning',
         tags: [],
@@ -81,7 +115,7 @@ describe('useTemplate', () => {
     };
     rpcMocks.rpcGetTemplate.mockResolvedValue(tpl);
 
-    const { result } = renderHook(() => useTemplate('kanban'), {
+    const { result } = renderHook(() => useTemplate('fake-template'), {
       wrapper: createWrapper(),
     });
 
@@ -90,7 +124,37 @@ describe('useTemplate', () => {
     });
 
     expect(result.current.data).toEqual(tpl);
-    expect(rpcMocks.rpcGetTemplate).toHaveBeenCalledWith('kanban');
+    expect(rpcMocks.rpcGetTemplate).toHaveBeenCalledWith('fake-template');
+  });
+
+  it('localizes meta on a fetched built-in template', async () => {
+    rpcMocks.rpcGetTemplate.mockResolvedValue({
+      meta: {
+        id: 'kanban',
+        name: 'should-be-overwritten',
+        description: 'should-be-overwritten',
+        category: 'planning',
+        tags: [],
+        thumbnail: '',
+      },
+      nodes: [],
+      edges: [],
+    });
+
+    const { result } = renderHook(() => useTemplate('kanban'), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const meta = result.current.data?.meta as {
+      name: string;
+      description: string;
+    };
+    expect(meta.name).not.toBe('should-be-overwritten');
+    expect(meta.description).not.toBe('should-be-overwritten');
   });
 
   it('throws when template is not found', async () => {

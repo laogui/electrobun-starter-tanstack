@@ -515,7 +515,7 @@ describe('workspace', () => {
     ).rejects.toThrow('Template not found: nonexistent');
   });
 
-  it('seedFirstRunIfNeeded populates the default canvas with the demo template on first launch', async () => {
+  it('seedFirstRunIfNeeded populates the default canvas from the seed template on first launch', async () => {
     const { initWorkspace, seedFirstRunIfNeeded } = await import('./workspace');
     initWorkspace(workspaceRoot);
 
@@ -535,7 +535,8 @@ describe('workspace', () => {
     };
     expect(config.activeViewId).toBe('default');
 
-    // Default canvas manifest is populated with demo template content.
+    // Default canvas manifest is populated from the configured seed template
+    // (currently `quick-start`, see FIRST_RUN_SEED_TEMPLATE_ID in workspace.ts).
     const manifestPath = join(
       workspaceRoot,
       '.ghostboard',
@@ -548,7 +549,7 @@ describe('workspace', () => {
     };
     expect(manifest.nodes.length).toBeGreaterThan(0);
     // Every card noteId in the seeded manifest should be a real note id,
-    // not a `tpl-demo-*` placeholder.
+    // not a `tpl-*` placeholder.
     for (const node of manifest.nodes) {
       if (node.type === 'card' && node.data.noteId) {
         expect(node.data.noteId).toMatch(NOTE_ID_RE);

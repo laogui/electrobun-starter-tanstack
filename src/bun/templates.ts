@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+
 import type { ManifestEdge, ManifestNode } from './manifest';
 
 // ---------------------------------------------------------------------------
@@ -119,5 +123,113 @@ export function loadTemplate(id: string): TemplateManifest | null {
     nodes: entry.manifest.nodes ?? [],
     edges: entry.manifest.edges ?? [],
     noteContents: entry.manifest.noteContents,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Dev-only thumbnail writer
+// ---------------------------------------------------------------------------
+
+const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47] as const;
+const REPO_ROOT_SEARCH_MAX_DEPTH = 12;
+
+export interface WriteTemplateThumbnailResult {
+  path?: string;
+  reason?: string;
+  success: boolean;
+}
+
+/**
+ * Walk up from a starting directory looking for a folder that contains
+ * BOTH `package.json` and `src/bun/templates/` — that's the repo root.
+ *
+ * Why two markers? Electrobun bundles the bun process to
+ *   `<repo>/build/<channel>-<platform>-<arch>/<App>.app/Contents/Resources/app/bun/index.js`
+ * and launches it with `cwd: <App>.app/Contents/MacOS`. Neither
+ * `process.cwd()` nor `Bun.main` is the repo root, but every ancestor
+ * chain from `Bun.main` reaches the repo root within ~7 levels in dev
+ * builds. In production launches the user installs the .app under
+ * `/Applications/` (or elsewhere) and the chain never reaches a
+ * directory with `src/bun/templates`, so the search returns null and
+ * the writer aborts cleanly.
+ */
+function resolveRepoRoot(): string | null {
+  const candidates: string[] = [];
+  if (typeof Bun !== 'undefined' && typeof Bun.main === 'string') {
+    candidates.push(dirname(Bun.main));
+  }
+  candidates.push(process.cwd());
+
+  for (const start of candidates) {
+    let current = start;
+    for (let depth = 0; depth < REPO_ROOT_SEARCH_MAX_DEPTH; depth += 1) {
+      if (
+        existsSync(join(current, 'package.json')) &&
+        existsSync(join(current, 'src', 'bun', 'templates'))
+      ) {
+        return current;
+      }
+      const parent = dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+  }
+  return null;
+}
+
+/**
+ * Write a thumbnail PNG into a built-in template's source directory.
+ * Intended exclusively for the dev-mode "export thumbnail" workflow:
+ * the templates browser UI can capture a ReactFlow snapshot and call
+ * this function (via RPC) to drop it back into the repo so the next
+ * commit picks it up.
+ *
+ * Safety guards:
+ *   - `templateId` must be a registered built-in template (no arbitrary
+ *     filesystem writes).
+ *   - {@link resolveRepoRoot} must locate a directory that contains both
+ *     `package.json` and `src/bun/templates/`. Packaged production apps
+ *     live outside any such tree, so the writer refuses to run there.
+ *   - The decoded payload must start with the PNG signature.
+ */
+export async function writeTemplateThumbnail(
+  templateId: string,
+  pngBase64OrDataUrl: string
+): Promise<WriteTemplateThumbnailResult> {
+  if (!TEMPLATE_REGISTRY[templateId]) {
+    return { success: false, reason: 'unknown-template' };
+  }
+
+  const repoRoot = resolveRepoRoot();
+  if (!repoRoot) {
+    return { success: false, reason: 'repo-root-not-found' };
+  }
+
+  const match = PNG_DATA_URL_RE.exec(pngBase64OrDataUrl);
+  const base64 = match ? (match[1] ?? '') : pngBase64OrDataUrl;
+  if (!base64) {
+    return { success: false, reason: 'empty-payload' };
+  }
+
+  const bytes = Uint8Array.from(Buffer.from(base64, 'base64'));
+  if (
+    bytes.length < PNG_SIGNATURE.length ||
+    !PNG_SIGNATURE.every((byte, idx) => bytes[idx] === byte)
+  ) {
+    return { success: false, reason: 'invalid-png' };
+  }
+
+  const dir = join(repoRoot, 'src', 'bun', 'templates', templateId);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+  const filePath = join(dir, 'thumbnail.png');
+  await writeFile(filePath, bytes);
+  return {
+    success: true,
+    path: `src/bun/templates/${templateId}/thumbnail.png`,
   };
 }

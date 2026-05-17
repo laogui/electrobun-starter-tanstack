@@ -62,13 +62,81 @@ const TEMPLATE_I18N: Record<
   },
 };
 
-/** Apply paraglide i18n to a template's `name` / `description`. */
+/**
+ * Eagerly collect every built-in template's `thumbnail.png` at module load.
+ * Vite resolves these as URLs (dev: served by the dev server with a HMR
+ * fingerprint; prod: hashed asset URL inside the renderer bundle), so the
+ * templates browser can render them directly via `<img src={...} />`.
+ *
+ * The `query: '?url'` form is intentional: without it Vite would inline
+ * the PNG as a base64 data URI for small files, which:
+ *   1. Bloats the renderer bundle, and
+ *   2. Defeats HMR — when the dev-only "export thumbnail" workflow rewrites
+ *      a PNG, we want the browser to refetch it under a new fingerprint.
+ */
+const THUMBNAIL_MODULES = import.meta.glob<string>(
+  '../../bun/templates/*/thumbnail.png',
+  { eager: true, query: '?url', import: 'default' }
+);
+
+const THUMBNAIL_PATH_RE = /\/templates\/([^/]+)\/thumbnail\.png$/;
+
+const TEMPLATE_THUMBNAILS: Record<string, string> = Object.entries(
+  THUMBNAIL_MODULES
+).reduce<Record<string, string>>((acc, [path, url]) => {
+  const match = THUMBNAIL_PATH_RE.exec(path);
+  if (match?.[1]) {
+    acc[match[1]] = url;
+  }
+  return acc;
+}, {});
+
+/**
+ * Per-template thumbnail version counter. Bumped by
+ * {@link bumpTemplateThumbnailVersion} whenever the dev-only "export
+ * thumbnail" flow rewrites a PNG on disk. Vite hands us a stable URL for
+ * each `thumbnail.png`, so without a cache-buster query string the
+ * browser would happily serve the previous (cached) bytes even though
+ * the underlying file has changed.
+ */
+const thumbnailVersions = new Map<string, number>();
+
+/**
+ * Increment the cache-buster for a given template. After calling this,
+ * invalidate the `['templates']` React Query so consumers refetch and
+ * pick up the new `thumbnail.png?v=<n>` URL.
+ */
+export function bumpTemplateThumbnailVersion(templateId: string): void {
+  thumbnailVersions.set(
+    templateId,
+    (thumbnailVersions.get(templateId) ?? 0) + 1
+  );
+}
+
+function appendCacheBuster(url: string, version: number): string {
+  if (!url || version === 0) {
+    return url;
+  }
+  return url.includes('?') ? `${url}&v=${version}` : `${url}?v=${version}`;
+}
+
+/** Apply paraglide i18n + per-template thumbnail to a meta entry. */
 function localizeMeta(meta: TemplateMeta): TemplateMeta {
   const i18n = TEMPLATE_I18N[meta.id];
+  const baseThumbnail = TEMPLATE_THUMBNAILS[meta.id] ?? meta.thumbnail;
+  const thumbnail = appendCacheBuster(
+    baseThumbnail,
+    thumbnailVersions.get(meta.id) ?? 0
+  );
   if (!i18n) {
-    return meta;
+    return thumbnail === meta.thumbnail ? meta : { ...meta, thumbnail };
   }
-  return { ...meta, name: i18n.name(), description: i18n.description() };
+  return {
+    ...meta,
+    name: i18n.name(),
+    description: i18n.description(),
+    thumbnail,
+  };
 }
 
 /** Fetch the full template list from the backend. */

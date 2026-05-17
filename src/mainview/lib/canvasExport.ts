@@ -283,6 +283,54 @@ export async function exportReactFlowCanvasToPng({
   return true;
 }
 
+interface CaptureThumbnailOptions {
+  backgroundColor: string;
+  height: number;
+  instance: ReactFlowInstance<any, any>;
+  width: number;
+}
+
+/**
+ * Capture the current ReactFlow canvas as a PNG data URL with **fixed**
+ * output dimensions, fitting all visible nodes into the frame. This is the
+ * thumbnail-pipeline counterpart to {@link exportReactFlowCanvasToPng};
+ * unlike the user-facing PNG export it does not invoke save dialogs and
+ * always returns a base64 PNG ready to send back over RPC.
+ *
+ * Returns `null` when there is nothing to capture (empty canvas) or when
+ * the ReactFlow viewport element cannot be located in the DOM.
+ */
+export async function captureCanvasThumbnailDataUrl({
+  backgroundColor,
+  height,
+  instance,
+  width,
+}: CaptureThumbnailOptions): Promise<string | null> {
+  const nodes = getVisibleExportNodes(instance);
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const nodeBounds = instance.getNodesBounds(nodes);
+  const padding = Math.max(Math.round(Math.min(width, height) * 0.06), 24);
+  const viewport = getViewportForBounds(
+    nodeBounds,
+    width,
+    height,
+    EXPORT_MIN_ZOOM,
+    EXPORT_MAX_ZOOM,
+    padding / Math.max(width, height)
+  );
+
+  const blob = await renderViewportToPngBlob({
+    backgroundColor,
+    dimensions: { width, height },
+    pixelRatio: 2,
+    viewport,
+  });
+  return await blobToDataUrl(blob);
+}
+
 interface BuildCanvasExportJsonInput {
   edges: Edge[];
   nodes: Node[];

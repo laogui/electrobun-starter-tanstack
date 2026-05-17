@@ -319,6 +319,23 @@ export async function rpcCreateViewFromTemplate(
   return eb.rpc.request.createViewFromTemplate({ name, templateId });
 }
 
+/**
+ * Dev-only: ask the bun process to drop a captured PNG into a built-in
+ * template's source directory so the next git commit picks it up. Returns
+ * `{ success: false, reason: 'production-mode' }` (or null when the RPC
+ * channel itself is unavailable) outside dev launches.
+ */
+export async function rpcSaveTemplateThumbnail(
+  templateId: string,
+  pngBase64: string
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.saveTemplateThumbnail({ templateId, pngBase64 });
+}
+
 export async function rpcSetActiveView(viewId: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

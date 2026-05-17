@@ -33,8 +33,16 @@ import {
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
-import type { TemplateManifest, TemplateMeta } from './templates';
-import { listAllTemplates, loadTemplate } from './templates';
+import type {
+  TemplateManifest,
+  TemplateMeta,
+  WriteTemplateThumbnailResult,
+} from './templates';
+import {
+  listAllTemplates,
+  loadTemplate,
+  writeTemplateThumbnail,
+} from './templates';
 import {
   addView,
   addViewFromTemplate,
@@ -329,6 +337,10 @@ interface CanvasRPC {
         params: { name: string; templateId: string };
         response: { id: string; name: string; file: string };
       };
+      saveTemplateThumbnail: {
+        params: { templateId: string; pngBase64: string };
+        response: WriteTemplateThumbnailResult;
+      };
     };
     messages: Record<never, unknown>;
   };
@@ -551,6 +563,7 @@ async function main() {
   await loadSettings(wsPath);
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);
+  const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: 5000,
@@ -1136,6 +1149,15 @@ async function main() {
         createViewFromTemplate: async ({ name, templateId }) => {
           const result = await addViewFromTemplate(wsPath, name, templateId);
           return result.entry;
+        },
+
+        saveTemplateThumbnail: async ({ templateId, pngBase64 }) => {
+          // Dev-only: refuse in production launches so packaged apps can't
+          // accidentally write back into source-tree paths that don't exist.
+          if (!isDevChannel) {
+            return { success: false, reason: 'production-mode' };
+          }
+          return await writeTemplateThumbnail(templateId, pngBase64);
         },
       },
       messages: {},

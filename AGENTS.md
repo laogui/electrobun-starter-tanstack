@@ -31,6 +31,28 @@ Use `package.json` as the source of truth for scripts: `README.md` still mention
 - Imports use the TS path alias `@/* -> src/mainview/*`. `components.json` also defines the shadcn/ui aliases, so shared UI primitives live under `@/components/ui`.
 - Styling is Tailwind v4 via `@tailwindcss/vite`; there is no separate Tailwind config file in the repo right now.
 
+## Templates
+
+Built-in canvas templates live in `src/bun/templates/<id>/` and each ships:
+
+- `meta.json` — id, category, tags, English `name`/`description` (overridden at runtime by paraglide messages keyed `template_<id>_name` / `template_<id>_description` in `messages/{en,zh}.json`).
+- `manifest.canvas.json` — ReactFlow nodes / edges / `viewport`, plus a `noteContents` map (`tpl-*` placeholder → `{ title, displayHint, body }`) that `populateViewFromTemplate` materializes into real `.md` files.
+- `thumbnail.png` — 800×500 preview surfaced in the templates browser. Loaded via `import.meta.glob('../../bun/templates/*/thumbnail.png', { query: '?url' })` in `src/mainview/hooks/useTemplates.ts` so HMR picks up regenerated PNGs without a reload.
+
+Adding a new template means: drop a directory under `src/bun/templates/<id>/`, register it in `TEMPLATE_REGISTRY` inside `src/bun/templates.ts`, add the i18n keys, and add structural assertions to `src/bun/templates.test.ts`.
+
+### Generating thumbnails (dev only)
+
+The templates preview route exposes a `📸 导出缩略图` button when `import.meta.env.DEV`. It captures the current ReactFlow viewport at 800×500 and asks the bun process (via the `saveTemplateThumbnail` RPC) to drop the PNG into `src/bun/templates/<id>/thumbnail.png` so the next commit can pick it up.
+
+The RPC refuses to write outside dev launches: it requires `Updater.localInfo.channel() === 'dev'`, the templateId must be a registered built-in, and `process.cwd()` must contain a `package.json` (i.e. the repo root). In packaged production builds `process.cwd()` points inside the bundle, which has no `package.json`, so the operation aborts cleanly with `{ success: false, reason: 'cwd-is-not-a-repo-root' }`.
+
+Workflow:
+
+1. `bun run dev:hmr`
+2. Open the templates browser → pick a template → on the preview page click `📸 导出缩略图`.
+3. A toast confirms the relative path written. HMR refreshes the URL, so the browser thumbnail updates immediately.
+
 
 # Ultracite Code Standards
 

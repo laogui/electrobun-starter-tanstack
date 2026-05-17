@@ -53,6 +53,10 @@ vi.mock('@xyflow/react', () => ({
     ),
   ReactFlowProvider: ({ children }: { children: React.ReactNode }) =>
     createElement('div', null, children),
+  useReactFlow: () => ({
+    getNodes: () => [],
+    getNodesBounds: () => ({ x: 0, y: 0, width: 0, height: 0 }),
+  }),
 }));
 
 /** Captures the component passed to createFileRoute(...)({component}). */

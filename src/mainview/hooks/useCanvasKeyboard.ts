@@ -47,14 +47,6 @@ export function useCanvasKeyboard({
         return;
       }
 
-      // Document mode owns its own keyboard model (decisions 12 & 13 in
-      // docs/todo/双布局-PRD-待决问题.md). Short-circuit every canvas-only
-      // shortcut once we're in document layout — Tiptap and the rail handle
-      // their own input. Cmd+K above is the only canvas shortcut allowed.
-      if (useCanvasStore.getState().layoutMode === 'document') {
-        return;
-      }
-
       if (e.key === 'Escape') {
         if (searchOpen) {
           // Let Dialog handle escape itself; do nothing here.

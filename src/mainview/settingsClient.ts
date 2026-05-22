@@ -1,9 +1,7 @@
 export type ThemeSetting = 'dark' | 'light' | 'system';
 export type LocaleSetting = 'en' | 'zh';
-export type DefaultLayoutMode = 'canvas' | 'document';
 
 export interface AppSettings {
-  defaultLayoutMode: DefaultLayoutMode;
   locale: LocaleSetting;
   theme: ThemeSetting;
 }
@@ -39,7 +37,6 @@ export interface SettingsClient {
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   locale: 'en',
-  defaultLayoutMode: 'canvas',
 };
 
 interface SettingsRPC {

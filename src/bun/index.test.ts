@@ -315,16 +315,11 @@ describe('src/bun/index helpers', () => {
     await persistSettings({
       theme: 'dark',
       locale: 'zh',
-      defaultLayoutMode: 'document',
     });
 
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
       '/workspace-c/.ghostboard/settings.json',
-      JSON.stringify(
-        { theme: 'dark', locale: 'zh', defaultLayoutMode: 'document' },
-        null,
-        2
-      )
+      JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
     );
   });
 
@@ -450,25 +445,19 @@ describe('src/bun/index helpers', () => {
     expect(settingsHandlers.getSettings()).toEqual({
       theme: 'system',
       locale: 'en',
-      defaultLayoutMode: 'canvas',
     });
 
     await expect(
       settingsHandlers.saveSettings({
         theme: 'dark',
         locale: 'zh',
-        defaultLayoutMode: 'document',
       })
     ).resolves.toEqual({
       success: true,
     });
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
       '/workspace-settings/.ghostboard/settings.json',
-      JSON.stringify(
-        { theme: 'dark', locale: 'zh', defaultLayoutMode: 'document' },
-        null,
-        2
-      )
+      JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
     );
     expect(settingsUpdatedMock).toHaveBeenCalledWith({
       theme: 'dark',

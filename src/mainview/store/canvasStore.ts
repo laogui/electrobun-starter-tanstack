@@ -134,22 +134,6 @@ function folderChildToDetachedNode(
 // `@/lib/canvasNodeRegistry` so all node defaults (size, data, type) come from
 // a single registry.
 
-export type LayoutMode = 'canvas' | 'document';
-
-/**
- * Sidebar section in document mode.
- * - "all": every card / image (top-level + inside folders)
- * - "inbox": only cards / images at the canvas root
- * - "archive": currently empty placeholder
- * - "folder:<id>": filter to a single folder's children
- */
-export type DocumentSection =
-  | 'all'
-  | 'inbox'
-  | 'archive'
-  | `folder:${string}`
-  | `type:${string}`;
-
 export interface CanvasState {
   // Hydration
   _hydrated: boolean;
@@ -157,7 +141,7 @@ export interface CanvasState {
   // Undo / Redo
   _undoRedo: UndoRedoState;
 
-  // Folder-child mutations exposed for document mode
+  // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
 
   // Multi-view
@@ -186,8 +170,6 @@ export interface CanvasState {
   // Actions – clipboard
   copySelected: () => void;
 
-  // Detached notes (document-mode notes not placed on canvas)
-  createDetachedNote: () => string;
   createMenuOpen: boolean;
 
   // Actions – node CRUD
@@ -200,7 +182,6 @@ export interface CanvasState {
   deleteFolderChild: (folderId: string, childId: string) => void;
   deleteNodes: (ids: string[]) => void;
   detachNoteFromCanvas: (nodeId: string) => void;
-  documentSection: DocumentSection;
   edges: Edge[];
 
   // Actions – edge
@@ -215,8 +196,8 @@ export interface CanvasState {
     viewport?: CanvasViewport | null
   ) => void;
 
-  // Layout mode (canvas vs document)
-  layoutMode: LayoutMode;
+  // Library popup (browse notes on the current canvas)
+  libraryOpen: boolean;
   moveFolderChildToCanvas: (
     folderId: string,
     childId: string,
@@ -237,29 +218,27 @@ export interface CanvasState {
 
   // Search
   searchOpen: boolean;
-  selectedDocumentId: string | null;
 
   // Actions – multi-view
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
-  setDocumentSection: (section: DocumentSection) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
   // Actions – UI
   setFocusedNode: (v: FocusedItem | null) => void;
-  setLayoutMode: (mode: LayoutMode) => void;
+  setLibraryOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
 
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingFolderId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
-  setSelectedDocumentId: (id: string | null) => void;
   setViewport: (viewport: CanvasViewport | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
+  toggleLibrary: () => void;
 
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
@@ -295,31 +274,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
   pendingSearchTarget: null,
-  layoutMode: 'canvas',
-  selectedDocumentId: null,
-  documentSection: 'all',
+  libraryOpen: false,
   viewport: null,
 
-  setLayoutMode: (mode) => {
-    if (mode === 'document') {
-      // Entering document mode freezes canvas state: clear modal/transient
-      // canvas UI so it doesn't bleed through when the user switches back.
-      // (See decisions 7, 8, 12 in docs/todo/双布局-PRD-待决问题.md.)
-      set({
-        layoutMode: mode,
-        focusedNode: null,
-        focusedFolder: null,
-        createMenuOpen: false,
-      });
-      return;
-    }
-    set({ layoutMode: mode });
+  setLibraryOpen: (v) => {
+    set((s) => ({
+      libraryOpen: typeof v === 'function' ? v(s.libraryOpen) : v,
+    }));
   },
-  setSelectedDocumentId: (id) => {
-    set({ selectedDocumentId: id });
-  },
-  setDocumentSection: (section) => {
-    set({ documentSection: section });
+  toggleLibrary: () => {
+    set((s) => ({ libraryOpen: !s.libraryOpen }));
   },
 
   absorbCardIntoFolder: (cardId, folderId) => {
@@ -473,6 +437,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       focusedNode: null,
       focusedFolder: null,
       clipboard: [],
+      libraryOpen: false,
       _undoRedo: createUndoRedoState(),
     });
   },
@@ -951,26 +916,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // -- detached notes -------------------------------------------------------
-  createDetachedNote: () => {
-    get().saveSnapshot();
-    const id = get().nextNodeId();
-    const newNode: Node = {
-      id,
-      type: 'card',
-      position: { x: 0, y: 0 },
-      style: { width: CARD_W, height: CARD_H },
-      data: {
-        type: 'text' as const,
-        title: '',
-        content: '',
-        color: '#FFFFFF',
-        detached: true,
-      },
-    };
-    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
-    return id;
-  },
-
   pinNoteToCanvas: (nodeId, position) => {
     const node = get().nodes.find((n) => n.id === nodeId);
     if (!(node && (node.data as any).detached)) {

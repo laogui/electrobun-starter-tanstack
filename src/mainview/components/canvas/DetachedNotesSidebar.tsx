@@ -40,8 +40,6 @@ function makePreview(data: Record<string, unknown>): string {
 export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const nodes = useCanvasStore((s) => s.nodes);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
-  const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
-  const setSelectedDocumentId = useCanvasStore((s) => s.setSelectedDocumentId);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -98,14 +96,6 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
       pinNoteToCanvas(nodeId, center);
     },
     [pinNoteToCanvas]
-  );
-
-  const handleOpenInDocMode = useCallback(
-    (entry: DetachedEntry) => {
-      setSelectedDocumentId(entry.id);
-      setLayoutMode('document');
-    },
-    [setSelectedDocumentId, setLayoutMode]
   );
 
   const handleDragStart = useCallback(
@@ -253,11 +243,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                     )}
                     draggable
                     key={entry.id}
-                    onClick={(e) => {
-                      if (e.metaKey || e.ctrlKey) {
-                        handleOpenInDocMode(entry);
-                        return;
-                      }
+                    onClick={() => {
                       setSelectedNodeId((current) =>
                         current === entry.nodeId ? null : entry.nodeId
                       );

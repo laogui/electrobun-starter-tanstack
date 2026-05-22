@@ -98,7 +98,6 @@ src/
       useNodeDrag.ts                       # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
       useSearch.ts                         # SearchDialog 数据源：后端搜索 + 当前画布内存结果合并
       useTemplates.ts                      # 模板列表/详情 query hooks
-      useDocumentKeyboard.ts               # 文档模式快捷键（搜索别名、屏蔽画布快捷键）
     components/
       canvas/
         ContextMenu.tsx                    # 右键菜单 UI（canvas/card/folder/group/sticky/image 六种上下文）
@@ -115,11 +114,10 @@ src/
           AssetNode.tsx                    # 本地文件/视频/音频节点
           LinkNode.tsx                     # URL 链接节点
           StickyNode.tsx                   # 便签节点
-      document/                            # Document Layout：LeftRail / NoteList / ImageGallery / Editor
       search/
         SearchDialog.tsx                   # 全局搜索弹窗
       settings/
-        SettingsApp.tsx                    # 设置窗口：theme/locale/defaultLayoutMode/trash/unlinked cleanup
+        SettingsApp.tsx                    # 设置窗口：theme/locale/trash/unlinked cleanup
       ui/                                  # shadcn/ui 基础组件
       layout/                              # ErrorBoundary, Loader
     lib/
@@ -311,7 +309,6 @@ interface AppConfig {
 interface WorkspaceSettings {
   theme: 'light' | 'dark' | 'system';
   locale: 'en' | 'zh';
-  defaultLayoutMode: 'canvas' | 'document';
 }
 ```
 
@@ -346,15 +343,15 @@ interface WorkspaceSettings {
 ```
 CanvasState
 ├── 核心数据: nodes, edges
-├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter, searchOpen
-├── 文档模式: layoutMode, documentSection, selectedDocumentId, pendingSearchTarget
+├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter, searchOpen, libraryOpen
+├── 搜索: pendingSearchTarget
 ├── 多画布: activeViewId, views[]
 ├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData, commitNodeData, commitEdgeData
-├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen, setSearchOpen, setLayoutMode
+├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen, setSearchOpen, setLibraryOpen, toggleLibrary
 ├── 多画布 actions: setActiveView, setViews, setActiveViewId, setPendingSearchTarget
 ├── 剪贴板: copySelected, pasteClipboard
 ├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild, deleteFolderChild, updateFolderChildData
-├── 笔记池: createDetachedNote, detachNoteFromCanvas, pinNoteToCanvas
+├── 笔记池: detachNoteFromCanvas, pinNoteToCanvas
 ├── Hydration: hydrate(nodes, edges), reset(), _hydrated
 └── Undo/Redo: saveSnapshot, undo, redo, canUndo, canRedo (_undoRedo: UndoRedoState)
 ```
@@ -380,8 +377,8 @@ CanvasState
 setActiveView(viewId)
   1. 若 viewId === 当前 activeViewId → 跳过
   2. 调用方先 flush 当前画布 pending saves（ViewSwitcher / Search 跨画布跳转会显式保存；store action 本身不直接写盘）
-  3. setActiveView(viewId) 清空 UI 状态：nodes / edges / focusedNode / focusedFolder / clipboard / selectedDocumentId / undo-redo 历史栈
-  4. 设置 _hydrated = false → 触发 index.tsx / DocumentView 中的加载 useEffect
+  3. setActiveView(viewId) 清空 UI 状态：nodes / edges / focusedNode / focusedFolder / clipboard / undo-redo 历史栈
+  4. 设置 _hydrated = false → 触发 index.tsx 中的加载 useEffect
   5. loadCanvas(viewId) → hydrate(newNodes, newEdges, viewport)
 ```
 
@@ -476,7 +473,7 @@ setActiveView(viewId)
 workspace/
 ├── .ghostboard/
 │   ├── workspace.json              # activeViewId + views 列表
-│   ├── settings.json               # theme / locale / defaultLayoutMode（当前实现）
+│   ├── settings.json               # theme / locale（当前实现）
 │   ├── trash/                      # soft-deleted canvas manifests
 │   └── views/
 │       └── default.canvas.json     # 画布 manifest（节点/边/viewport）
@@ -954,10 +951,10 @@ data 内丢弃：`isHidden`, `isDropTarget`，以及可由附件 hydrate 的 run
 
 | ID | 事项 | 技术影响 |
 | --- | --- | --- |
-| T-1 | **Document Workspace 是否 filesystem-first** | 若改为 filesystem-first，需要新增 `listNotes` / `loadNoteById` / folder CRUD / move / rename / reveal in Finder / reference guard，并让 DocumentView 不再只依赖 active canvas manifest。 |
+| T-1 | **Workspace 内容浏览是否 filesystem-first** | 若未来要在画布之外再开一个真正的文件树/笔记库（不局限于当前画布），需要新增 `listNotes` / `loadNoteById` / folder CRUD / move / rename / reveal in Finder / reference guard 等能力。目前的笔记库弹窗仅 canvas-derived。 |
 | T-2 | **搜索索引范围** | 若搜索整个 workspace，需要索引 Folder children 与 unreferenced Markdown，并区分 placed / detached / unlinked 结果。当前 `search.ts` 主要索引顶层 manifest nodes。 |
 | T-3 | **多 Workspace 与 app config** | 需要 `~/.ghostboard/app-config.json`、recent workspaces、active workspace、workspace switching、settings 迁移策略，并重新评估 query cache / store reset 边界。 |
 | T-4 | **Asset 大文件导入** | `saveAttachmentFile` RPC 已可从路径复制文件，但文件选择/拖拽 UI 仍主要走 `FileReader` data URL。需要接入 native path 或分块/stream 方案。 |
 | T-5 | **Link unfurl hardening** | 当前有 scheme/localhost/private literal host 防护；需要 DNS resolve 后再次拦截私网 IP，降低 SSRF/DNS rebinding 风险。 |
 | T-6 | **Template P5** | 需要接入 thumbnail、删除 `preview-test`、补模板数量、决定模板 metadata i18n 与列表 query 参数同步。 |
-| T-7 | **独立内容保存队列** | 当前内容随 `saveManifest` 写回 `.md`；如果文档模式承担重编辑场景，需要独立 `saveNote` debounce、串行队列与冲突处理。 |
+| T-7 | **独立内容保存队列** | 当前内容随 `saveManifest` 写回 `.md`；如果未来 Library / Sub-canvas 承担重编辑场景，需要独立 `saveNote` debounce、串行队列与冲突处理。 |

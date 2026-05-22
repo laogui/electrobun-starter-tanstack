@@ -1490,36 +1490,25 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
 // Detached notes
 // ---------------------------------------------------------------------------
 
-describe('canvasStore — createDetachedNote', () => {
-  beforeEach(() => resetStore());
-
-  it('creates a card node with detached: true and position {0,0}', () => {
-    const id = useCanvasStore.getState().createDetachedNote();
-
-    expect(id).toMatch(NODE_ID_REGEX);
-    const node = useCanvasStore.getState().nodes.find((n) => n.id === id);
-    expect(node).toBeDefined();
-    expect(node!.type).toBe('card');
-    expect(node!.position).toEqual({ x: 0, y: 0 });
-    expect((node!.data as any).detached).toBe(true);
-    expect((node!.data as any).type).toBe('text');
-  });
-
-  it('takes a snapshot for undo', () => {
-    expect(useCanvasStore.getState().canUndo()).toBe(false);
-    useCanvasStore.getState().createDetachedNote();
-    expect(useCanvasStore.getState().canUndo()).toBe(true);
-  });
-});
-
 describe('canvasStore — pinNoteToCanvas', () => {
   beforeEach(() => resetStore());
 
   it('removes detached flag and updates position', () => {
-    const id = useCanvasStore.getState().createDetachedNote();
-    useCanvasStore.getState().pinNoteToCanvas(id, { x: 100, y: 200 });
+    const nodes: Node[] = [
+      {
+        id: 'detached-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { type: 'text', title: '', detached: true },
+      },
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
 
-    const node = useCanvasStore.getState().nodes.find((n) => n.id === id)!;
+    useCanvasStore.getState().pinNoteToCanvas('detached-1', { x: 100, y: 200 });
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'detached-1')!;
     expect(node.position).toEqual({ x: 100, y: 200 });
     expect((node.data as any).detached).toBeUndefined();
   });
@@ -1598,39 +1587,5 @@ describe('canvasStore — detachNoteFromCanvas', () => {
       .getState()
       .nodes.find((n) => n.id === 'group-1')!;
     expect((node.data as any).detached).toBeUndefined();
-  });
-});
-
-describe('canvasStore — setLayoutMode', () => {
-  beforeEach(() => {
-    resetStore();
-  });
-
-  it('switching to document mode clears focusedNode, focusedFolder, and createMenuOpen', () => {
-    useCanvasStore.setState({
-      focusedNode: { id: 'node-1', data: {}, rect: fakeRect() },
-      focusedFolder: { id: 'folder-1', data: {}, rect: fakeRect() },
-      createMenuOpen: true,
-    });
-
-    useCanvasStore.getState().setLayoutMode('document');
-
-    const state = useCanvasStore.getState();
-    expect(state.layoutMode).toBe('document');
-    expect(state.focusedNode).toBeNull();
-    expect(state.focusedFolder).toBeNull();
-    expect(state.createMenuOpen).toBe(false);
-  });
-
-  it('switching back to canvas mode does not touch focused state', () => {
-    useCanvasStore.setState({ layoutMode: 'document' });
-    const focused = { id: 'node-1', data: {}, rect: fakeRect() };
-
-    useCanvasStore.getState().setLayoutMode('canvas');
-    // Simulate a stale focused entry being set after the switch.
-    useCanvasStore.setState({ focusedNode: focused });
-
-    expect(useCanvasStore.getState().layoutMode).toBe('canvas');
-    expect(useCanvasStore.getState().focusedNode).toBe(focused);
   });
 });

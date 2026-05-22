@@ -24,9 +24,10 @@ import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLi
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
+import { LibraryButton } from '@/components/canvas/LibraryButton';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
-import { DocumentView } from '@/components/document/DocumentView';
 import { Loader } from '@/components/layout/Loader';
+import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
@@ -44,12 +45,7 @@ import {
 } from '@/lib/canvasExport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { createLinkNodeData, extractLinkUrl } from '@/lib/contentTypes';
-import {
-  isRpcAvailable,
-  loadCanvas,
-  rpcGetSettings,
-  rpcSaveManifest,
-} from '@/lib/rpc';
+import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import { sanitizeForPersistence } from '@/lib/sanitize';
 import {
   type ConnectionStartState,
@@ -94,7 +90,29 @@ export const Route = createFileRoute('/')({
   component: CanvasRoute,
 });
 
-const LAYOUT_MODE_STORAGE_KEY = 'ghostboard.layoutMode';
+/**
+ * One-shot sweep that removes legacy `ghostboard.layoutMode.<viewId>` keys
+ * left behind by the previous document-mode persistence. Safe to run on every
+ * mount: once cleared, subsequent runs find nothing to do.
+ */
+const LEGACY_LAYOUT_MODE_KEY_PREFIX = 'ghostboard.layoutMode.';
+
+function sweepLegacyLayoutModeStorage(): void {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(LEGACY_LAYOUT_MODE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage failures (private mode etc.)
+  }
+}
 
 function isEditablePasteTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -123,76 +141,6 @@ function getDroppedFiles(dataTransfer: DataTransfer | null): File[] {
     return [];
   }
   return Array.from(dataTransfer.files).filter((file) => file.size >= 0);
-}
-
-function loadLayoutModeFromStorage(
-  viewId: string
-): 'canvas' | 'document' | null {
-  try {
-    const raw = localStorage.getItem(`${LAYOUT_MODE_STORAGE_KEY}.${viewId}`);
-    if (raw === 'document' || raw === 'canvas') {
-      return raw;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function persistLayoutMode(viewId: string, mode: 'canvas' | 'document') {
-  try {
-    localStorage.setItem(`${LAYOUT_MODE_STORAGE_KEY}.${viewId}`, mode);
-  } catch {
-    // Ignore storage failures (private mode etc.)
-  }
-}
-
-function useLayoutModePersistence() {
-  const layoutMode = useCanvasStore((s) => s.layoutMode);
-  const setLayoutMode = useCanvasStore((s) => s.setLayoutMode);
-  const activeViewId = useCanvasStore((s) => s.activeViewId);
-
-  // Keep latest mode/setter accessible from the load effect without retriggering it.
-  const latest = useRef({ layoutMode, setLayoutMode });
-  latest.current = { layoutMode, setLayoutMode };
-
-  useEffect(() => {
-    let cancelled = false;
-    const stored = loadLayoutModeFromStorage(activeViewId);
-    if (stored) {
-      if (stored !== latest.current.layoutMode) {
-        latest.current.setLayoutMode(stored);
-      }
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    // Decision 16: no per-view override yet → fall back to the user's
-    // app-wide default (settings.json `defaultLayoutMode`, default `canvas`).
-    rpcGetSettings()
-      .then((settings) => {
-        if (cancelled) {
-          return;
-        }
-        const fallback: 'canvas' | 'document' =
-          settings?.defaultLayoutMode === 'document' ? 'document' : 'canvas';
-        if (fallback !== latest.current.layoutMode) {
-          latest.current.setLayoutMode(fallback);
-        }
-      })
-      .catch(() => {
-        // Settings RPC unavailable (browser dev mode) — keep current mode.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeViewId]);
-
-  useEffect(() => {
-    persistLayoutMode(activeViewId, layoutMode);
-  }, [activeViewId, layoutMode]);
 }
 
 function CanvasComponent() {
@@ -458,12 +406,7 @@ function CanvasComponent() {
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
-      if (
-        focusedNode ||
-        focusedFolder ||
-        isEditablePasteTarget(event.target) ||
-        useCanvasStore.getState().layoutMode === 'document'
-      ) {
+      if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
         return;
       }
       const text = event.clipboardData?.getData('text/plain') ?? '';
@@ -822,6 +765,9 @@ function CanvasComponent() {
         />
       ) : null}
 
+      <LibraryButton />
+      <LibraryPopup rfInstance={rfInstance} />
+
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
         onCreateNode={onCreateNode}
@@ -843,18 +789,13 @@ function CanvasComponent() {
 }
 
 function CanvasRoute() {
-  useLayoutModePersistence();
-  const layoutMode = useCanvasStore((s) => s.layoutMode);
+  useEffect(() => {
+    sweepLegacyLayoutModeStorage();
+  }, []);
 
   return (
-    <>
-      {layoutMode === 'document' ? (
-        <DocumentView />
-      ) : (
-        <ReactFlowProvider>
-          <CanvasComponent />
-        </ReactFlowProvider>
-      )}
-    </>
+    <ReactFlowProvider>
+      <CanvasComponent />
+    </ReactFlowProvider>
   );
 }

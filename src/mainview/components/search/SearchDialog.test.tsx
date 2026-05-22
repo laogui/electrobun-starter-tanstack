@@ -115,8 +115,6 @@ beforeEach(() => {
     edges: [],
     searchOpen: true,
     pendingSearchTarget: null,
-    layoutMode: 'canvas',
-    selectedDocumentId: null,
   });
   rpcMocks.isRpcAvailable.mockReset().mockResolvedValue(true);
   rpcMocks.rpcSaveManifest.mockReset().mockResolvedValue(undefined);
@@ -264,19 +262,6 @@ describe('searchDialog interactions', () => {
       expect(useCanvasStore.getState().activeViewId).toBe('other');
     });
     expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
-  });
-
-  it('in document layout, same-view results route to the document editor instead of centering', async () => {
-    const { ref, setCenter } = buildRfInstance();
-    useCanvasStore.setState({ layoutMode: 'document' });
-    setSearch({ query: 'h', results: [makeResult()] });
-    render(<SearchDialog rfInstance={ref} />);
-    fireEvent.click(screen.getByRole('option'));
-    await waitFor(() => {
-      expect(useCanvasStore.getState().selectedDocumentId).toBe('node:n1');
-    });
-    expect(setCenter).not.toHaveBeenCalled();
-    expect(useCanvasStore.getState().searchOpen).toBe(false);
   });
 
   it('Enter on a same-view edge result selects the edge and centers on its midpoint', async () => {

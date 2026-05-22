@@ -279,7 +279,6 @@ interface CanvasRPC {
         response: {
           theme: string;
           locale: string;
-          defaultLayoutMode: 'canvas' | 'document';
         };
       };
       listViews: {
@@ -361,14 +360,12 @@ interface SettingsRPC {
         response: {
           theme: string;
           locale: string;
-          defaultLayoutMode: 'canvas' | 'document';
         };
       };
       saveSettings: {
         params: {
           theme: string;
           locale: string;
-          defaultLayoutMode: 'canvas' | 'document';
         };
         response: { success: boolean };
       };
@@ -404,7 +401,6 @@ interface SettingsRPC {
 }
 
 interface AppSettings {
-  defaultLayoutMode: 'canvas' | 'document';
   locale: string;
   theme: string;
 }
@@ -412,7 +408,6 @@ interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   locale: 'en',
-  defaultLayoutMode: 'canvas',
 };
 
 // Cached in memory, backed by settings.json on disk
@@ -481,11 +476,9 @@ function createSettingsWindow(
     handlers: {
       requests: {
         getSettings: () => cachedSettings,
-        saveSettings: async ({ theme, locale, defaultLayoutMode }) => {
-          await persistSettings({ theme, locale, defaultLayoutMode });
-          // Push update to main window. Note: only theme/locale are pushed
-          // live — `defaultLayoutMode` only matters for cold-start, no need
-          // to retro-apply it to the running window.
+        saveSettings: async ({ theme, locale }) => {
+          await persistSettings({ theme, locale });
+          // Push update to main window so theme/locale apply immediately.
           mainRpc?.send?.settingsUpdated({ theme, locale });
           return { success: true };
         },

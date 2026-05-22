@@ -58,14 +58,12 @@ describe('SettingsApp helpers', () => {
   it('normalizes invalid persisted settings back to defaults', () => {
     expect(
       normalizeSettings({
-        defaultLayoutMode: 'grid' as never,
         locale: 'fr' as never,
         theme: 'sepia' as never,
       })
     ).toEqual({
       theme: 'system',
       locale: 'en',
-      defaultLayoutMode: 'canvas',
     });
   });
 
@@ -105,7 +103,6 @@ describe('SettingsApp', () => {
     const client = createClient({
       theme: 'dark',
       locale: 'zh',
-      defaultLayoutMode: 'document',
     });
 
     render(<SettingsApp client={client} />);
@@ -116,9 +113,6 @@ describe('SettingsApp', () => {
     expect(screen.getByRole('combobox', { name: '主题' })).toHaveTextContent(
       '深色'
     );
-    expect(
-      screen.getByRole('combobox', { name: '默认布局' })
-    ).toHaveTextContent('文档');
     expect(document.documentElement).toHaveClass('dark');
     expect(document.documentElement.lang).toBe('zh');
     expect(document.title).toBe('设置');
@@ -128,7 +122,6 @@ describe('SettingsApp', () => {
     const client = createClient({
       theme: 'system',
       locale: 'en',
-      defaultLayoutMode: 'canvas',
     });
 
     render(<SettingsApp client={client} />);
@@ -142,7 +135,6 @@ describe('SettingsApp', () => {
       expect(client.saveSettings).toHaveBeenCalledWith({
         theme: 'dark',
         locale: 'en',
-        defaultLayoutMode: 'canvas',
       });
     });
   });
@@ -152,7 +144,6 @@ describe('SettingsApp trash section', () => {
   const baseSettings: AppSettings = {
     theme: 'light',
     locale: 'en',
-    defaultLayoutMode: 'canvas',
   };
 
   const trashEntry: TrashEntry = {

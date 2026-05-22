@@ -120,6 +120,23 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
   templates_browse_all: () => 'Browse all templates…',
+  library_button_aria: () => 'Note Library',
+  library_title: () => 'Note Library',
+  library_search_placeholder: () => 'Search notes…',
+  library_sort_label: () => 'Sort',
+  library_sort_recent: () => 'Recently edited',
+  library_sort_name: () => 'Name (A–Z)',
+  library_sort_created: () => 'Created',
+  library_close: () => 'Close',
+  library_ungrouped: () => 'Ungrouped',
+  library_detached: () => 'Detached notes',
+  library_empty: () => 'Nothing on this canvas yet.',
+  library_empty_search: ({ query }: { query: string }) =>
+    `No notes match "${query}".`,
+  library_group_count: ({ count }: { count: number }) => `${count}`,
+  library_untitled: () => 'Untitled',
+  library_detached_toast: () => 'This note is not placed on the canvas yet.',
+  library_detached_pin_action: () => 'Place on canvas',
 }));
 vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
 vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);

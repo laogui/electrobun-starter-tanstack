@@ -13,7 +13,6 @@ import {
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
-  type DefaultLayoutMode,
   type LocaleSetting,
   type SettingsClient,
   type ThemeSetting,
@@ -24,7 +23,6 @@ import {
 
 const THEME_VALUES: readonly ThemeSetting[] = ['system', 'light', 'dark'];
 const LOCALE_VALUES: readonly LocaleSetting[] = ['en', 'zh'];
-const LAYOUT_VALUES: readonly DefaultLayoutMode[] = ['canvas', 'document'];
 
 interface SelectOption<TValue extends string> {
   label: string;
@@ -32,7 +30,6 @@ interface SelectOption<TValue extends string> {
 }
 
 interface SettingsLocaleStrings {
-  canvas: string;
   cleanupConfirmAction: string;
   cleanupConfirmBody: (count: number) => string;
   cleanupConfirmCancel: string;
@@ -53,8 +50,6 @@ interface SettingsLocaleStrings {
   cleanupTitle: string;
   cleanupUnscanned: string;
   dark: string;
-  defaultLayout: string;
-  document: string;
   language: string;
   light: string;
   loadError: string;
@@ -81,12 +76,9 @@ const localeStrings: Record<LocaleSetting, SettingsLocaleStrings> = {
     title: 'Settings',
     language: 'Language',
     theme: 'Theme',
-    defaultLayout: 'Default Layout',
     system: 'System',
     light: 'Light',
     dark: 'Dark',
-    canvas: 'Canvas',
-    document: 'Document',
     loadError: 'Unable to load settings.',
     saveError: 'Unable to save settings.',
     trashTitle: 'Deleted Canvases',
@@ -136,12 +128,9 @@ const localeStrings: Record<LocaleSetting, SettingsLocaleStrings> = {
     title: '设置',
     language: '语言',
     theme: '主题',
-    defaultLayout: '默认布局',
     system: '跟随系统',
     light: '浅色',
     dark: '深色',
-    canvas: '画布',
-    document: '文档',
     loadError: '无法加载设置。',
     saveError: '无法保存设置。',
     trashTitle: '已删除的画布',
@@ -197,9 +186,6 @@ export function normalizeSettings(
     locale: includesValue(LOCALE_VALUES, settings?.locale)
       ? settings.locale
       : DEFAULT_SETTINGS.locale,
-    defaultLayoutMode: includesValue(LAYOUT_VALUES, settings?.defaultLayoutMode)
-      ? settings.defaultLayoutMode
-      : DEFAULT_SETTINGS.defaultLayoutMode,
   };
 }
 
@@ -309,15 +295,6 @@ function SettingsApp({ client }: SettingsAppProps) {
     [strings]
   );
 
-  const layoutOptions = useMemo(
-    () =>
-      [
-        { label: strings.canvas, value: 'canvas' },
-        { label: strings.document, value: 'document' },
-      ] satisfies SelectOption<DefaultLayoutMode>[],
-    [strings]
-  );
-
   useEffect(() => {
     let mounted = true;
 
@@ -407,15 +384,6 @@ function SettingsApp({ client }: SettingsAppProps) {
           }}
           options={themeOptions}
           value={settings.theme}
-        />
-        <SettingsSelect
-          id="settings-default-layout"
-          label={strings.defaultLayout}
-          onValueChange={(defaultLayoutMode) => {
-            updateSettings({ defaultLayoutMode });
-          }}
-          options={layoutOptions}
-          value={settings.defaultLayoutMode}
         />
         {errorMessage ? (
           <p className="text-red-600 text-sm dark:text-red-400" role="alert">

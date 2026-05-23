@@ -64,6 +64,7 @@
   "toast_view_restored": "Canvas \"{name}\" restored",
   "toast_view_restore_failed": "Could not restore canvas",
   "library_button_aria": "Note Library",
+  "search_button_aria": "Search",
   "library_title": "Note Library",
   "library_search_placeholder": "Search notes…",
   "library_sort_label": "Sort",

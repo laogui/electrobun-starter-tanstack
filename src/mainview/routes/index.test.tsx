@@ -121,6 +121,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_undo: () => 'Undo',
   templates_browse_all: () => 'Browse all templates…',
   library_button_aria: () => 'Note Library',
+  search_button_aria: () => 'Search',
   library_title: () => 'Note Library',
   library_search_placeholder: () => 'Search notes…',
   library_sort_label: () => 'Sort',

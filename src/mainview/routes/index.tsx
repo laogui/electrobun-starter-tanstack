@@ -25,6 +25,7 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LibraryButton } from '@/components/canvas/LibraryButton';
+import { SearchButton } from '@/components/canvas/SearchButton';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
@@ -766,6 +767,7 @@ function CanvasComponent() {
       ) : null}
 
       <LibraryButton />
+      <SearchButton />
       <LibraryPopup rfInstance={rfInstance} />
 
       <ViewSwitcher

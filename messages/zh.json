@@ -64,6 +64,7 @@
   "toast_view_restored": "已恢复画布「{name}」",
   "toast_view_restore_failed": "恢复画布失败",
   "library_button_aria": "笔记库",
+  "search_button_aria": "搜索",
   "library_title": "笔记库",
   "library_search_placeholder": "搜索笔记…",
   "library_sort_label": "排序",

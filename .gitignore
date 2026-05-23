@@ -57,6 +57,29 @@ dev-dist
 .wrangler
 .dev.vars*
 
-.open-next
-.collaborator
 .workbuddy
+# Added by code-review-graph
+.code-review-graph/
+labels
+
+/.agents/
+/.claude-plugin/
+/.claude/
+/.codex/
+/.cursor/
+/.cursorrules
+/.factory/
+/.gemini/
+/.github/code-review-graph.instruction.md
+/.kilocode/
+/.kiro/
+/.letta/
+/.opencode.json
+/.qoder/
+/.windsurfrules
+/AGENTS.md
+/GEMINI.md
+/QODER.md
+/config.json
+/events.jsonl
+/statuses/

@@ -1,182 +1,73 @@
-# AGENTS.md
+# Repository Guidelines
 
-## Development commands
+## Project Structure & Module Organization
 
-- `bun install`
-- `bun run dev` — start Electrobun in watch mode without Vite HMR
-- `bun run dev:hmr` — recommended local workflow; runs the Vite dev server and Electrobun together
-- `bun run hmr` — renderer-only Vite dev server on `http://localhost:5173`
-- `bun run start` — build the renderer with Vite, then launch `electrobun dev`
-- `bun run build:canary` — build the renderer and package with Electrobun's canary env
-- `bun run type-check` — runs `tsgo --noEmit`
-- `bun run lint` — runs ESLint with `--fix` and may modify files
-- `bun run format` — runs `biome format --write .` and may modify files
-- `bun run ci` — runs type-check, lint, and format concurrently
-- `bun run test` — runs all Vitest unit tests once (`vitest run`)
-- `bun run test:watch` — runs Vitest in watch mode
+GhostBoard is a Bun/Electrobun desktop app with a React renderer. Main-process code lives in `src/bun/`, including workspace, search, preview, cleanup, attachments, and built-in templates under `src/bun/templates/<id>/`. Renderer code lives in `src/mainview/`: routes in `routes/`, UI in `components/`, hooks in `hooks/`, state in `store/`, and utilities in `lib/`. Shared markdown helpers are in `src/shared/markdown/`. Test helpers are in `src/test/`, planning docs in `docs/`, and localization files in `messages/`.
 
-Use `package.json` as the source of truth for scripts: `README.md` still mentions `bun run build` and `bun run build:prod`, but those scripts are not present.
+## Build, Test, and Development Commands
 
-## Architecture
+- `bun install` installs dependencies.
+- `bun run dev:hmr` starts Vite on `http://localhost:5173` with Electrobun; use it for UI work.
+- `bun run dev` runs Electrobun watch mode without Vite HMR.
+- `bun run hmr` starts the renderer-only Vite server.
+- `bun run start` builds the renderer, then launches `electrobun dev`.
+- `bun run build:canary` creates a canary desktop build.
+- `bun run test`, `bun run test:watch`, and `bun run test:coverage` run Vitest once, in watch mode, or with coverage.
+- `bun run type-check`, `bun run check`, `bun run fix`, and `bun run ci` run TypeScript and Ultracite/Biome validation. Treat `package.json` as the command source of truth.
 
-- The app is split into two runtime sides:
-  - `src/bun/` is the Electrobun main process.
-  - `src/mainview/` is the React renderer loaded into the desktop window.
-- `src/bun/index.ts` decides whether to load the packaged view (`views://mainview/index.html`) or the Vite dev server. In the `dev` channel it polls `http://localhost:5173`; if that server is up, HMR is enabled automatically.
-- `vite.config.ts` sets the Vite root to `src/mainview` and emits the renderer build into `dist/`. `electrobun.config.ts` then copies `dist/index.html` and `dist/assets` into `views/mainview/` for Electrobun packaging. `watchIgnore: ["dist/**"]` avoids rebuild loops while using HMR.
-- The renderer is a TanStack Router app. Routes are file-based under `src/mainview/routes/`, and `@tanstack/router-plugin` generates `src/mainview/routeTree.gen.ts`. Treat `routeTree.gen.ts` as generated output, not a hand-edited source file.
-- `src/mainview/main.tsx` mounts `RouterProvider`, and `src/mainview/router.tsx` creates the router, injects the shared React Query client into router context, and switches to `createHashHistory()` outside `http:`/`https:` so routing works inside the packaged desktop app.
-- `src/mainview/routes/__root.tsx` is the global shell: it renders the route outlet, wires up the Sonner toaster, and mounts TanStack Devtools for Router, Query, and Form state.
-- `src/mainview/lib/queryClient.ts` centralizes React Query behavior. Query failures surface as Sonner toasts with a built-in retry action, so network/data errors are expected to be handled through that shared client instead of per-screen ad hoc notifications.
-- Imports use the TS path alias `@/* -> src/mainview/*`. `components.json` also defines the shadcn/ui aliases, so shared UI primitives live under `@/components/ui`.
-- Styling is Tailwind v4 via `@tailwindcss/vite`; there is no separate Tailwind config file in the repo right now.
+## Coding Style & Naming Conventions
 
-## Templates
+Use strict TypeScript and React function components. Follow Biome/Ultracite formatting: 2-space indentation, single quotes, semicolons, and formatter-ordered imports. Prefer the `@/*` alias for renderer imports from `src/mainview/*`. Do not hand-edit generated files such as `src/mainview/routeTree.gen.ts`. Components use `PascalCase.tsx`; hooks use `useThing.ts`; utilities and stores use descriptive camelCase names.
 
-Built-in canvas templates live in `src/bun/templates/<id>/` and each ships:
+## Testing Guidelines
 
-- `meta.json` — id, category, tags, English `name`/`description` (overridden at runtime by paraglide messages keyed `template_<id>_name` / `template_<id>_description` in `messages/{en,zh}.json`).
-- `manifest.canvas.json` — ReactFlow nodes / edges / `viewport`, plus a `noteContents` map (`tpl-*` placeholder → `{ title, displayHint, body }`) that `populateViewFromTemplate` materializes into real `.md` files.
-- `thumbnail.png` — 800×500 preview surfaced in the templates browser. Loaded via `import.meta.glob('../../bun/templates/*/thumbnail.png', { query: '?url' })` in `src/mainview/hooks/useTemplates.ts` so HMR picks up regenerated PNGs without a reload.
+Vitest covers `src/mainview/**/*.{test,spec}.{ts,tsx}` and `src/bun/**/*.{test,spec}.{ts,tsx}` with setup from `src/test/`. Place tests beside source files, for example `canvasStore.ts` and `canvasStore.test.ts`. Use Testing Library for React behavior and direct unit tests for pure logic. Add or update tests whenever behavior changes, and run `bun run test` before submitting.
 
-Adding a new template means: drop a directory under `src/bun/templates/<id>/`, register it in `TEMPLATE_REGISTRY` inside `src/bun/templates.ts`, add the i18n keys, and add structural assertions to `src/bun/templates.test.ts`.
+## Commit & Pull Request Guidelines
 
-### Generating thumbnails (dev only)
+Recent history uses Conventional Commit-style subjects such as `feat: add demo template` and `refactor: replace saveAssetFile...`; keep the `type: summary` format. PRs should describe the user-visible change, list verification commands, link issues or docs, and include screenshots or recordings for UI changes. Note localization updates when editing `messages/*.json`.
 
-The templates preview route exposes a `📸 导出缩略图` button when `import.meta.env.DEV`. It captures the current ReactFlow viewport at 800×500 and asks the bun process (via the `saveTemplateThumbnail` RPC) to drop the PNG into `src/bun/templates/<id>/thumbnail.png` so the next commit can pick it up.
+## Security & Configuration Tips
 
-The RPC refuses to write outside dev launches: it requires `Updater.localInfo.channel() === 'dev'`, the templateId must be a registered built-in, and `process.cwd()` must contain a `package.json` (i.e. the repo root). In packaged production builds `process.cwd()` points inside the bundle, which has no `package.json`, so the operation aborts cleanly with `{ success: false, reason: 'cwd-is-not-a-repo-root' }`.
-
-Workflow:
-
-1. `bun run dev:hmr`
-2. Open the templates browser → pick a template → on the preview page click `📸 导出缩略图`.
-3. A toast confirms the relative path written. HMR refreshes the URL, so the browser thumbnail updates immediately.
-
-
-# Ultracite Code Standards
-
-This project uses **Ultracite**, a zero-config preset that enforces strict code quality standards through automated formatting and linting.
-
-## Quick Reference
-
-- **Format code**: `bun x ultracite fix`
-- **Check for issues**: `bun x ultracite check`
-- **Diagnose setup**: `bun x ultracite doctor`
-
-Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
+Treat file paths, imported assets, and rendered markdown as untrusted input. Reuse sanitization and validation helpers in `src/mainview/lib/`, `src/shared/markdown/`, and `src/bun/attachments.ts`. Do not commit `dist/`, `build/`, `coverage/`, credentials, or local workspace data.
 
 ---
 
-## Core Principles
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
 
-Write code that is **accessible, performant, type-safe, and maintainable**. Focus on clarity and explicit intent over brevity.
+**IMPORTANT: This project has a knowledge graph. ALWAYS use the
+code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
+the codebase.** The graph is faster, cheaper (fewer tokens), and gives
+you structural context (callers, dependents, test coverage) that file
+scanning cannot.
 
-### Type Safety & Explicitness
+### When to use graph tools FIRST
 
-- Use explicit types for function parameters and return values when they enhance clarity
-- Prefer `unknown` over `any` when the type is genuinely unknown
-- Use const assertions (`as const`) for immutable values and literal types
-- Leverage TypeScript's type narrowing instead of type assertions
-- Use meaningful variable names instead of magic numbers - extract constants with descriptive names
+- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
+- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
+- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
+- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview` + `list_communities`
 
-### Modern JavaScript/TypeScript
+Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
-- Use arrow functions for callbacks and short functions
-- Prefer `for...of` loops over `.forEach()` and indexed `for` loops
-- Use optional chaining (`?.`) and nullish coalescing (`??`) for safer property access
-- Prefer template literals over string concatenation
-- Use destructuring for object and array assignments
-- Use `const` by default, `let` only when reassignment is needed, never `var`
+### Key Tools
 
-### Async & Promises
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context` | Need source snippets for review — token-efficient |
+| `get_impact_radius` | Understanding blast radius of a change |
+| `get_affected_flows` | Finding which execution paths are impacted |
+| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `get_architecture_overview` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
 
-- Always `await` promises in async functions - don't forget to use the return value
-- Use `async/await` syntax instead of promise chains for better readability
-- Handle errors appropriately in async code with try-catch blocks
-- Don't use async functions as Promise executors
+### Workflow
 
-### React & JSX
-
-- Use function components over class components
-- Call hooks at the top level only, never conditionally
-- Specify all dependencies in hook dependency arrays correctly
-- Use the `key` prop for elements in iterables (prefer unique IDs over array indices)
-- Nest children between opening and closing tags instead of passing as props
-- Don't define components inside other components
-- Use semantic HTML and ARIA attributes for accessibility:
-  - Provide meaningful alt text for images
-  - Use proper heading hierarchy
-  - Add labels for form inputs
-  - Include keyboard event handlers alongside mouse events
-  - Use semantic elements (`<button>`, `<nav>`, etc.) instead of divs with roles
-
-### Error Handling & Debugging
-
-- Remove `console.log`, `debugger`, and `alert` statements from production code
-- Throw `Error` objects with descriptive messages, not strings or other values
-- Use `try-catch` blocks meaningfully - don't catch errors just to rethrow them
-- Prefer early returns over nested conditionals for error cases
-
-### Code Organization
-
-- Keep functions focused and under reasonable cognitive complexity limits
-- Extract complex conditions into well-named boolean variables
-- Use early returns to reduce nesting
-- Prefer simple conditionals over nested ternary operators
-- Group related code together and separate concerns
-
-### Security
-
-- Add `rel="noopener"` when using `target="_blank"` on links
-- Avoid `dangerouslySetInnerHTML` unless absolutely necessary
-- Don't use `eval()` or assign directly to `document.cookie`
-- Validate and sanitize user input
-
-### Performance
-
-- Avoid spread syntax in accumulators within loops
-- Use top-level regex literals instead of creating them in loops
-- Prefer specific imports over namespace imports
-- Avoid barrel files (index files that re-export everything)
-- Use proper image components (e.g., Next.js `<Image>`) over `<img>` tags
-
-### Framework-Specific Guidance
-
-**Next.js:**
-- Use Next.js `<Image>` component for images
-- Use `next/head` or App Router metadata API for head elements
-- Use Server Components for async data fetching instead of async Client Components
-
-**React 19+:**
-- Use ref as a prop instead of `React.forwardRef`
-
-**Solid/Svelte/Vue/Qwik:**
-- Use `class` and `for` attributes (not `className` or `htmlFor`)
-
----
-
-## Testing
-
-- All new or modified logic must include corresponding unit tests. Place test files next to the source file using the `*.test.ts` / `*.test.tsx` naming convention.
-- Run `bun run test` after changes to ensure all tests pass before considering the task complete.
-- Write assertions inside `it()` or `test()` blocks
-- Avoid done callbacks in async tests - use async/await instead
-- Don't use `.only` or `.skip` in committed code
-- Keep test suites reasonably flat - avoid excessive `describe` nesting
-
-## When Biome Can't Help
-
-Biome's linter will catch most issues automatically. Focus your attention on:
-
-1. **Business logic correctness** - Biome can't validate your algorithms
-2. **Meaningful naming** - Use descriptive names for functions, variables, and types
-3. **Architecture decisions** - Component structure, data flow, and API design
-4. **Edge cases** - Handle boundary conditions and error states
-5. **User experience** - Accessibility, performance, and usability considerations
-6. **Documentation** - Add comments for complex logic, but prefer self-documenting code
-
----
-
-Most formatting and common issues are automatically fixed by Biome. Run `bun x ultracite fix` before committing to ensure compliance.
-
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes` for code review.
+3. Use `get_affected_flows` to understand impact.
+4. Use `query_graph` pattern="tests_for" to check coverage.

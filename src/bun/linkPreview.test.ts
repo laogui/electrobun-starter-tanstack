@@ -122,7 +122,7 @@ describe('unfurlLink', () => {
   });
 
   it('rejects redirects to private/local hosts', async () => {
-    const response = Response.json('http://127.0.0.1/admin', 302);
+    const response = Response.json('http://127.0.0.1/admin', { status: 302 });
     const fetchSpy = vi.fn(async () => response);
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 

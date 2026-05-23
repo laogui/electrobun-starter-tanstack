@@ -670,3 +670,143 @@ AI 不只生成卡片，也可以建议：
 5. 再扩展到生成画布、整理选区、检索和图像理解
 
 这条路线更稳，也更贴合当前项目的结构优势。
+
+---
+
+## 16. 扩展点子库：基于项目独有结构的增量构想
+
+这一节不重复 §4.2 和 §13 已有的方向，而是顺着当前项目的“独有肌肉”继续推：多视图 manifest、Folder 子画布、per-card markdown note、模板体系、`linkPreview`、`cleanup`、`search`、undo 快照、Bun RPC、本地优先。
+
+### 16.1 利用「多视图 + Folder 子画布」结构
+
+- **跨 view 知识连接**
+  扫描所有 view 的节点，发现“主题相似但分散在不同 view”的节点，建议合并 view 或建立跨 view 引用边；是 §13.2 关系建议的 workspace 级版本。
+- **View 自动起名 + 封面**
+  view 内容变化到阈值时，AI 重新建议 view 名 / emoji / 封面缩略图，刷新 ViewSwitcher 的可识别度。
+- **Folder 孵化建议**
+  当一个 group 内 sticky 增长过多，AI 提示“是否提升为 Folder 子画布并按主题自动分簇”，复用现成的 Folder 子画布模型一键执行。
+- **Inbox 分诊**
+  Quick capture 出来的零散卡，由 AI 判断“应该归到哪个现有 view / folder”，给出 routing 提案而不是直接搬。
+
+### 16.2 利用「Edge + label」的关系语义
+
+- **Edge label 智能补全**
+  用户刚连完一条 edge，AI 立即给出 3–5 个候选标签（依赖 / 因果 / 矛盾 / 派生 / 引用 / 反例），点击即贴；是 §13.2 的微交互化版本。
+- **隐式边发现**
+  对当前 view 做相似度 / 共现分析，建议“这两个节点也许应该连起来”，作为半透明虚影边出现、hover 才显形（贴合「创意特性候选清单」§3 的 Backlink 幽灵线思路）。
+- **逻辑健康检查**
+  检测 cycle、孤岛、断链、跳步推论；以 critique mode 子集呈现，但只针对 graph 层。
+
+### 16.3 利用「per-card markdown note + Tiptap」
+
+- **Tiptap inline AI**
+  在 note 编辑器里选中段落 → 改写 / 简化 / 扩写 / 翻译 / 改语气；这是“note 层”AI，区别于“画布层”AI，高频、低成本。
+- **一卡拆多卡**
+  一张 note 太长时，AI 提议“拆成 3 张并自动连边、保留原文为父卡”。
+- **多卡合并为长 note**
+  反向操作：选中一组 sticky → AI 输出结构化 markdown，直接落到一张新 card 的 note 里。
+- **Auto emoji / 颜色 / 尺寸**
+  §13.6 提到 auto-title/tag/color，可再加 **emoji + 卡片尺寸建议**（重要的卡变大、辅助卡变小），强化语义化缩放体验。
+
+### 16.4 利用「Templates 体系」（`src/bun/templates/*`）
+
+- **模板填充器**
+  用户选一个模板（kanban / sprint-retro / eisenhower），粘贴一段会议记录 / 语音转写，AI 把内容塞到模板各 slot 并保留模板布局。
+- **从画布反推模板**
+  用户在空白画布手工搭了某种结构后，“保存为模板”时 AI 自动抽变量、占位符、注释，沉淀到 `src/bun/templates/<id>/`。
+- **模板推荐**
+  根据当前画布形态（“4 列等宽 + sticky”）建议“切换到 kanban 模板的布局风格”，复用 `resolvePlacement` / `collision` 已有能力。
+
+### 16.5 利用「Image / Attachment / linkPreview」
+
+- **Link card AI 摘要**
+  `src/bun/linkPreview.ts` 已经抓 og；AI 再补一句中文摘要 + 自动 tag + 缩略色块，让 link 卡有信息密度。
+- **白板照片反推画布**
+  §11 Phase 5 提了，但可以更进一步：保留原图位置布局（OCR + 区域聚类），生成的节点尽量贴合原图坐标，原图作为底图淡显。
+- **图片聚类成 group**
+  对一组 image 节点做视觉相似度，建议聚类并自动起 group 名。
+- **截图自动入库**
+  系统剪贴板里有截图时，AI 直接判断“是 UI 截图 / 论文图 / 图表”，给出对应卡类型 + 标题 + tag。
+
+### 16.6 利用「Snapshot / Undo / 时间穿梭」
+
+- **AI Diff narration**
+  对比两个 manifest snapshot，用自然语言写“过去 7 天这块画布发生了什么”，作为 review 的 cover 卡。
+- **Replay 旁白**
+  在「时间穿梭」播放时（创意清单 §7），AI 给每段时间生成一句旁白，做成思考延时摄影的字幕轨。
+- **悔棋复盘**
+  连续 undo 多步后，AI 总结“你刚才尝试了什么思路，为什么撤回”，可作为一张 reflection 卡留下。
+
+### 16.7 利用「Cmd+K + 现有 RPC」做自然语言操控
+
+- **NL → store action**
+  “把所有红色卡片靠右对齐”、“删掉 30 天没改过的 sticky”、“把含 #meeting 的卡聚成 group”——AI 输出 `AIAction[]`，复用 §10 的 apply pipeline，但绑到 Command Palette。
+- **宏录制**
+  用户连做一串操作后，AI 识别为可复用 macro，命名后存为 workspace 命令。
+- **危险操作守门**
+  破坏性 NL 指令（删多张卡、清空 view）默认进入 dry-run 预览，强制走 §3 的 “preview before apply”。
+
+### 16.8 Workspace 健康度（结合 `cleanup.ts` / `search.ts`）
+
+- **重复 / 近似卡合并向导**
+  对整个 workspace 做相似度扫描，输出 side-by-side diff，让用户决定是否合并 + 保留哪个 noteId。
+- **低信息节点检测**
+  识别 “todo”、“测试”、“hahaha” 这类几乎无内容的卡，提示批量清理或补全；天然嫁接到现有 cleanup pipeline。
+- **孤岛笔记复活**
+  没有任何引用 / edge 的 note，AI 给出“建议挂到哪个 view 的哪个 group”。
+
+### 16.9 输出 / 演示场景
+
+- **演示路径自动编排**
+  和「创意清单」§8 演示模式联动：选一个起点节点，AI 推荐一条逻辑顺序 edge 链，自动生成 slideshow。
+- **画布 → 长文导出**
+  选中一组节点 + edges → AI 把空间布局压平成线性 markdown / Notion 文档，连边变成段落过渡词。
+- **会议纪要导出**
+  选中带 `#meeting` 的所有节点 → 标准纪要 markdown（参与者 / 决议 / 行动项），落到一张新 card。
+
+### 16.10 个性化 & 风格化
+
+- **风格学习**
+  AI 记住用户偏好（标题口吻、emoji 习惯、颜色编码体系），后续生成自然贴合，而不是每次都让用户改回去。
+- **知识画像**
+  workspace 级“主题热力图”：最近 30 天最活跃话题、被忽略的旧主题，作为 dashboard view。
+- **画布提醒**
+  “下周三和 X 聊”、“3 天内回复邮件”——AI 在 sticky 里识别时间意图，挂上提醒徽标。
+
+### 16.11 隐私 & 成本（贴合 local-first）
+
+- **本地 / 云 双层路由**
+  取标题、起 emoji、auto-tag 这类高频小任务走本地小模型；总结、生成画布才走云。`AIProvider` 层多一个 `tier: 'fast' | 'smart'`。
+- **外发脱敏**
+  prompt 出本机前，本地正则 + 小模型先脱敏人名 / 邮箱 / token，返回再回填。settings 里加开关。
+- **预算面板**
+  右下角 mini widget 显示本周 AI 花费 + 哪类 task 最贵 + 命中缓存率，反向引导用户用对 tier。
+
+### 16.12 元能力 / Self-improving
+
+- **Prompt Studio**
+  各 task 的 system prompt 当成可编辑、可版本化的 workspace 资源，进 settings window；可 fork / 分享 prompt 包。
+- **Reject → few-shot**
+  用户拒掉某个 AI 结果时可填一句“为什么不好”，下次同 task 自动作为 negative example，效果累积。
+- **本地偏好数据集**
+  accept / reject 沉淀成本地 jsonl，未来可拿来微调本地小模型，做“我自己的 GhostBoard 风格”。
+
+### 16.13 跨应用 / MCP（与「创意清单」§4 的 MCP server 联动）
+
+- **MCP 工具集扩展**
+  在 `ghostboard_search` / `ghostboard_create_card` 之上加 `ghostboard_propose_actions`，让 Claude / Cursor 不能直接改画布，而是产出 v2 的 `AIAction[]`，仍走 preview/apply 安全网。
+- **从外部 App 抓资料**
+  节点里出现 “看一下 X 文档”，AI 提议“我去抓并生成 link card”，复用 linkPreview 管线。
+- **CLI quick capture + AI**
+  `ghostboard quick "..."` 时本地小模型立刻补全成结构化卡（标题 / tag / 推荐 view），不再只是裸 sticky。
+
+---
+
+## 17. 如果只挑 3 个补到主路线里
+
+- **Tiptap inline AI（§16.3）**
+  v2 把“画布层”动作讲透了，但漏了“note 层”AI——这是真正每天高频用的入口，且完全复用 Tiptap 现有选区。
+- **NL → store action via Command Palette（§16.7）**
+  和「创意清单」的 `Cmd+K` 路线天然合体；把 §10 的 `aiRunTask` + `AIAction` pipeline 复用到自然语言操控，零额外架构成本。
+- **本地 / 云双 tier provider（§16.11）**
+  在 §7 的 `AIProviderCapabilities` 上加 `tier`，是 “local-first 信仰落到模型层”的关键一步，也直接影响 §10 的 RPC 形态，越早定越省返工。

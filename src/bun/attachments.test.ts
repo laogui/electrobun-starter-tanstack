@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertWorkspaceAttachmentPath } from '@/bun/attachments';
+import { assertWorkspaceAttachmentPath } from './attachments';
 
 describe('assertWorkspaceAttachmentPath', () => {
   const workspaceRoot = '/tmp/workspace';

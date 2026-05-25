@@ -209,14 +209,15 @@ export interface CanvasState {
   // Core data
   nodes: Node[];
   pasteClipboard: (offset?: number) => void;
+
+  // Search
+  pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
   renamingFolderId: string | null;
   reset: () => void;
   saveSnapshot: () => void;
-
-  // Search
   searchOpen: boolean;
 
   // Actions – multi-view
@@ -233,6 +234,7 @@ export interface CanvasState {
 
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
+  setPendingSearchQuery: (query: string | null) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingFolderId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
@@ -273,6 +275,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   renamingFolderId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
+  pendingSearchQuery: null,
   pendingSearchTarget: null,
   libraryOpen: false,
   viewport: null,
@@ -559,6 +562,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       searchOpen: typeof v === 'function' ? v(s.searchOpen) : v,
     }));
+  },
+
+  setPendingSearchQuery: (query) => {
+    set({ pendingSearchQuery: query });
   },
 
   setPendingSearchTarget: (target) => {

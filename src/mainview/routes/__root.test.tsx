@@ -26,6 +26,8 @@ vi.mock('../../paraglide/runtime.js', () => ({
   setLocale: setLocaleMock,
 }));
 
+const useRouterStateMock = vi.fn<() => string>(() => '/');
+
 vi.mock('@tanstack/react-router', () => ({
   Outlet: () => <div>Outlet content</div>,
   createRootRouteWithContext:
@@ -33,6 +35,25 @@ vi.mock('@tanstack/react-router', () => ({
       id: 'root-route',
       options,
     }),
+  useRouterState: () => useRouterStateMock(),
+}));
+
+const setSearchOpenMock = vi.fn();
+
+interface MockedCanvasStore {
+  setSearchOpen: typeof setSearchOpenMock;
+}
+
+vi.mock('@/store/canvasStore', () => ({
+  useCanvasStore: (selector: (state: MockedCanvasStore) => unknown) =>
+    selector({
+      setSearchOpen: setSearchOpenMock,
+    }),
+}));
+
+vi.mock('../../paraglide/messages.js', () => ({
+  search_button_aria: () => 'Search',
+  titlebar_search_placeholder: () => 'Search notes, links, folders…',
 }));
 
 vi.mock('@tanstack/react-devtools', () => ({
@@ -59,6 +80,7 @@ vi.mock('lucide-react', () => ({
   Settings: () => <svg aria-hidden="true" />,
   LayoutGrid: () => <svg aria-hidden="true" />,
   FileText: () => <svg aria-hidden="true" />,
+  Search: () => <svg aria-hidden="true" />,
 }));
 
 const loadRootDocument = async () => {
@@ -72,6 +94,9 @@ describe('__root route', () => {
     rpcMocks.rpcOpenSettings.mockReset();
     setThemeMock.mockReset();
     setLocaleMock.mockReset();
+    setSearchOpenMock.mockReset();
+    useRouterStateMock.mockReset();
+    useRouterStateMock.mockReturnValue('/');
     rpcMocks.rpcGetSettings.mockResolvedValue({ theme: 'dark', locale: 'zh' });
     rpcMocks.rpcOpenSettings.mockResolvedValue({ success: true });
   });
@@ -170,6 +195,29 @@ describe('__root route', () => {
     });
 
     view.unmount();
+  });
+
+  it('renders a fake search trigger on the canvas route that opens the search dialog', async () => {
+    useRouterStateMock.mockReturnValue('/');
+    const RootDocument = await loadRootDocument();
+    render(<RootDocument />);
+
+    const trigger = screen.getByTestId('titlebar-search-trigger');
+    expect(trigger).toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Search notes, links, folders…');
+
+    fireEvent.click(trigger);
+    expect(setSearchOpenMock).toHaveBeenCalledWith(true);
+  });
+
+  it('hides the titlebar search trigger off the canvas route', async () => {
+    useRouterStateMock.mockReturnValue('/templates');
+    const RootDocument = await loadRootDocument();
+    render(<RootDocument />);
+
+    expect(
+      screen.queryByTestId('titlebar-search-trigger')
+    ).not.toBeInTheDocument();
   });
 
   it('removes the event listener on unmount', async () => {

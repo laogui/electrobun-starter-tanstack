@@ -2,16 +2,25 @@ import { TanStackDevtools } from '@tanstack/react-devtools';
 import { formDevtoolsPlugin } from '@tanstack/react-form-devtools';
 import type { QueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
+import {
+  createRootRouteWithContext,
+  Outlet,
+  useRouterState,
+} from '@tanstack/react-router';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
-import { Settings } from 'lucide-react';
+import { Search, Settings } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
+import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../paraglide/messages.js';
 import { setLocale } from '../../paraglide/runtime.js';
+
+const isMac =
+  typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
 
 const TITLEBAR_HEIGHT_CSS_VAR = '--app-titlebar-height';
 
@@ -26,6 +35,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const { setTheme } = useTheme();
   const titlebarRef = useTitlebarHeightVar();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
+  const showSearchBox = pathname === '/';
 
   // Pull persisted settings on mount
   useEffect(() => {
@@ -111,6 +123,27 @@ function RootDocument() {
         ref={titlebarRef}
       >
         <div className="flex-1" />
+        <div className="flex flex-1 justify-center">
+          {showSearchBox ? (
+            <button
+              aria-label={m.search_button_aria()}
+              className="electrobun-webkit-app-region-no-drag flex h-7 w-full min-w-[14rem] max-w-md items-center gap-2 rounded-md border border-black/5 bg-white/70 px-2.5 text-left text-neutral-500 text-xs shadow-sm transition-colors hover:bg-white hover:text-neutral-700 dark:border-white/5 dark:bg-neutral-800/70 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              data-testid="titlebar-search-trigger"
+              onClick={() => {
+                setSearchOpen(true);
+              }}
+              type="button"
+            >
+              <Search size={13} strokeWidth={1.8} />
+              <span className="flex-1 truncate">
+                {m.titlebar_search_placeholder()}
+              </span>
+              <kbd className="hidden text-[10px] text-neutral-400 sm:inline dark:text-neutral-500">
+                {isMac ? '⌘K' : '⌃K'}
+              </kbd>
+            </button>
+          ) : null}
+        </div>
         <div className="flex flex-1 justify-end">
           <button
             aria-label="Settings"

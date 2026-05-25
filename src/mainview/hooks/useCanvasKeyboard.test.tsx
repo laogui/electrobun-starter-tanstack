@@ -35,6 +35,8 @@ const resetStore = () => {
     clipboard: [],
     createMenuOpen: false,
     editingEdgeId: null,
+    pendingSearchQuery: null,
+    searchOpen: false,
   });
 };
 
@@ -242,6 +244,45 @@ describe('useCanvasKeyboard', () => {
       dispatchKeyboard({ key: 'Escape' });
     });
     expect(useCanvasStore.getState().focusedFolder).toBeNull();
+  });
+
+  it('opens the search dialog and seeds the query when typing on the canvas', () => {
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'h' });
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.searchOpen).toBe(true);
+    expect(state.pendingSearchQuery).toBe('h');
+  });
+
+  it('does not open the search dialog when typing inside an input', () => {
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'h' });
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.searchOpen).toBe(false);
+    expect(state.pendingSearchQuery).toBeNull();
+  });
+
+  it('does not seed the search query for modifier shortcuts', () => {
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'a', metaKey: true, cancelable: true });
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.pendingSearchQuery).toBeNull();
   });
 
   it('cleans up the keydown listener on unmount', () => {

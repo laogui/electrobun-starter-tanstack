@@ -25,6 +25,7 @@ export function useCanvasKeyboard({
   const redo = useCanvasStore((s) => s.redo);
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
   const searchOpen = useCanvasStore((s) => s.searchOpen);
+  const setPendingSearchQuery = useCanvasStore((s) => s.setPendingSearchQuery);
 
   useEffect(() => {
     const isModal = () => focusedNode || focusedFolder;
@@ -146,6 +147,16 @@ export function useCanvasKeyboard({
             rect,
           });
         }
+        return;
+      }
+
+      // Type-to-search: any unmodified single printable character opens the
+      // search dialog and seeds the input. Already past the modal/editing
+      // guard above, so this only fires when the canvas itself has focus.
+      if (!searchOpen && e.key.length === 1 && !(e.shiftKey && e.key === ' ')) {
+        e.preventDefault();
+        setPendingSearchQuery(e.key);
+        setSearchOpen(true);
       }
     };
 
@@ -172,6 +183,7 @@ export function useCanvasKeyboard({
     setCreateMenuOpen,
     setSearchOpen,
     searchOpen,
+    setPendingSearchQuery,
     onDeleteNodes,
     undo,
     redo,

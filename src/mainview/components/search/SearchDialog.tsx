@@ -31,6 +31,8 @@ interface SearchDialogProps {
 export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const open = useCanvasStore((s) => s.searchOpen);
   const setOpen = useCanvasStore((s) => s.setSearchOpen);
+  const pendingSearchQuery = useCanvasStore((s) => s.pendingSearchQuery);
+  const setPendingSearchQuery = useCanvasStore((s) => s.setPendingSearchQuery);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
   const setPendingSearchTarget = useCanvasStore(
@@ -52,6 +54,16 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       setActiveIndex(0);
     }
   }, [open, setQuery]);
+
+  // Seed query from pending-search payload when the dialog opens. This lets
+  // callers (e.g. the titlebar search trigger) pre-fill the input by typing.
+  useEffect(() => {
+    if (!(open && pendingSearchQuery)) {
+      return;
+    }
+    setQuery(pendingSearchQuery);
+    setPendingSearchQuery(null);
+  }, [open, pendingSearchQuery, setQuery, setPendingSearchQuery]);
 
   // Reset active index when results change
   useEffect(() => {

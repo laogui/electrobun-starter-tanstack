@@ -48,7 +48,7 @@ export const GroupContent = ({
   <motion.div
     animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
     className={cn(
-      `canvas-group group-${data.color || 'blue'} size-full`,
+      `group/group-node canvas-group group-${data.color || 'blue'} size-full`,
       selected && 'selected',
       data.active && 'ring-2 ring-blue-400 ring-offset-2',
       data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
@@ -73,7 +73,17 @@ export const GroupContent = ({
       >
         {data.label}
       </div>
-      <span className="text-gray-300 text-xs">⋮⋮</span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'text-gray-300 text-xs transition-opacity duration-150',
+          selected || editingLabel
+            ? 'opacity-100'
+            : 'opacity-0 group-hover/group-node:opacity-100'
+        )}
+      >
+        ⋮⋮
+      </span>
     </div>
   </motion.div>
 );

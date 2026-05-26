@@ -107,7 +107,14 @@ export const FolderContent = ({
                 {data.title}
               </h3>
               {isZoomedOut ? null : (
-                <p className="mt-2 truncate font-medium text-sm text-white/92 leading-none">
+                <p
+                  className="mt-2 truncate font-medium text-sm text-white/92 leading-none"
+                  title={
+                    typeof data.subtitle === 'string'
+                      ? data.subtitle
+                      : undefined
+                  }
+                >
                   {data.subtitle}
                 </p>
               )}

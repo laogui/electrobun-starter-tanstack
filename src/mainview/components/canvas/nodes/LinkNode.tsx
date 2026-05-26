@@ -11,7 +11,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
@@ -60,6 +60,27 @@ function getOpenableUrl(url: string): string | null {
   return normalizeLinkUrl(url);
 }
 
+function LinkFaviconBadge({ faviconUrl }: { faviconUrl?: string }) {
+  const [errored, setErrored] = useState(false);
+  const showImage = !!faviconUrl && !errored;
+  return (
+    <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
+      {showImage ? (
+        <img
+          alt=""
+          className="size-5 object-contain"
+          draggable={false}
+          loading="lazy"
+          onError={() => setErrored(true)}
+          src={faviconUrl}
+        />
+      ) : (
+        <Globe2 size={18} />
+      )}
+    </div>
+  );
+}
+
 export const LinkContent = ({
   data,
   isFocused = false,
@@ -84,9 +105,7 @@ export const LinkContent = ({
         <div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-8">
           <div className="mb-8 flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/10 bg-white/70 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
-                <Globe2 size={21} />
-              </div>
+              <LinkFaviconBadge faviconUrl={link.faviconUrl} />
               <div className="min-w-0">
                 <p className="truncate font-medium text-neutral-500 text-sm dark:text-neutral-400">
                   {host || 'Link'}
@@ -140,11 +159,23 @@ export const LinkContent = ({
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(link.color)}
     >
+      {link.imageUrl ? (
+        <div className="relative h-28 w-full shrink-0 overflow-hidden border-black/5 border-b dark:border-white/10">
+          <img
+            alt=""
+            className="size-full object-cover"
+            draggable={false}
+            loading="lazy"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+            src={link.imageUrl}
+          />
+        </div>
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
-            <Globe2 size={18} />
-          </div>
+          <LinkFaviconBadge faviconUrl={link.faviconUrl} />
           <span className="rounded-full border border-black/10 bg-white/60 px-2 py-1 font-semibold text-[11px] text-neutral-500 uppercase tracking-normal dark:border-white/10 dark:bg-white/10 dark:text-neutral-300">
             Link
           </span>

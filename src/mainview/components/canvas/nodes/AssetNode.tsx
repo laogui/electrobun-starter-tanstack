@@ -211,21 +211,27 @@ function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
           <FileAudio size={23} />
         </div>
         <div className="flex min-w-0 flex-1 items-end gap-1">
-          {(bars ?? Array.from({ length: 24 }, (_, index) => index)).map(
-            (value, index) => {
-              const height =
-                typeof value === 'number'
-                  ? Math.max(18, Math.round((0.25 + value * 0.75) * 44))
-                  : 18 + ((index * 7) % 26);
-              return (
+          {bars
+            ? bars.map((value, index) => (
                 <span
                   className="block w-1 flex-1 rounded-full bg-neutral-950/22 dark:bg-neutral-50/24"
                   key={`bar-${index}`}
-                  style={{ height }}
+                  style={{
+                    height: Math.max(
+                      18,
+                      Math.round((0.25 + value * 0.75) * 44)
+                    ),
+                  }}
                 />
-              );
-            }
-          )}
+              ))
+            : Array.from({ length: 24 }, (_, index) => (
+                // No real waveform yet — render uniform placeholder bars
+                // instead of pseudo-random heights to avoid faking data.
+                <span
+                  className="block h-5 w-1 flex-1 rounded-full bg-neutral-950/15 dark:bg-neutral-50/18"
+                  key={`bar-placeholder-${index}`}
+                />
+              ))}
         </div>
       </div>
       {duration ? (

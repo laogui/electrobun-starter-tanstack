@@ -4,7 +4,7 @@ import {
   Position,
   useViewport,
 } from '@xyflow/react';
-import { Check } from 'lucide-react';
+import { Check, PenLine } from 'lucide-react';
 import { memo, useCallback, useRef, useState } from 'react';
 
 import { NotePreview } from '@/components/preview/NotePreview';
@@ -15,71 +15,47 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
+export interface ChecklistItem {
+  checked?: boolean;
+  isHeader?: boolean;
+  text?: string;
+}
+
+export interface CardContentData {
+  color?: string;
+  content?: string;
+  isHidden?: boolean;
+  items?: ChecklistItem[];
+  noteId?: string;
+  previewBlocks?: unknown;
+  previewExcerpt?: string;
+  previewHtml?: string;
+  previewVersion?: number;
+  tag?: string;
+  tagColor?: string;
+  title?: string;
+  /**
+   * Discriminator for non-default card variants. Default text cards leave
+   * this undefined; checklist cards set 'checklist'.
+   */
+  type?: 'checklist' | 'text';
+}
+
+export interface CardContentProps {
+  data: CardContentData;
+  isFocused?: boolean;
+  onChange?: (next: Partial<CardContentData>) => void;
+  readOnly?: boolean;
+}
+
 export const CardContent = ({
   data,
   isFocused,
   onChange,
   readOnly = false,
-}: any) => {
+}: CardContentProps) => {
   const [newItem, setNewItem] = useState('');
-
-  if (data.type === 'image') {
-    return (
-      <div
-        className={cn(
-          'flex h-full flex-col',
-          isColorDark(data.color) && 'text-white'
-        )}
-        style={colorToStyle(data.color)}
-      >
-        <div className="p-6">
-          <h2
-            className={cn(
-              'whitespace-pre-wrap font-bold',
-              isFocused ? 'text-4xl' : 'text-xl'
-            )}
-          >
-            {data.title}
-          </h2>
-        </div>
-        <div className="flex flex-1 items-center justify-center p-6">
-          <div className="relative aspect-square w-full max-w-[300px] overflow-hidden rounded-full">
-            {/* Mock Pie Chart */}
-            <div
-              className="absolute inset-0 bg-[#555]"
-              style={{
-                clipPath:
-                  'polygon(50% 50%, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0)',
-              }}
-            />
-            <div
-              className="absolute inset-0 bg-[#888]"
-              style={{ clipPath: 'polygon(50% 50%, 0 0, 0 50%)' }}
-            />
-            <div
-              className="absolute inset-0 bg-[#BBB]"
-              style={{ clipPath: 'polygon(50% 50%, 0 50%, 0 100%)' }}
-            />
-            <div
-              className="absolute inset-0 bg-[#EEE]"
-              style={{ clipPath: 'polygon(50% 50%, 50% 0, 100% 0)' }}
-            />
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2 p-6">
-          {data.pieData?.map((item: any, i: number) => (
-            <div className="flex items-center gap-2" key={i}>
-              <span className="font-medium text-sm">{item.label}</span>
-              <div
-                className="size-3 rounded-full"
-                style={{ backgroundColor: item.color }}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const isDark = isColorDark(data.color);
 
   if (data.type === 'checklist') {
     return (
@@ -108,9 +84,15 @@ export const CardContent = ({
           </h2>
         ) : null}
         <div className="flex-1 space-y-1 overflow-hidden">
-          {data.items?.map((item: any, i: number) =>
+          {data.items?.map((item: ChecklistItem, i: number) =>
             item.isHeader ? (
-              <div className="mt-4 mb-2 font-semibold text-gray-800" key={i}>
+              <div
+                className={cn(
+                  'mt-4 mb-2 font-semibold',
+                  isDark ? 'text-white/95' : 'text-gray-800'
+                )}
+                key={i}
+              >
                 {item.text}
               </div>
             ) : (
@@ -125,13 +107,13 @@ export const CardContent = ({
                     ? undefined
                     : () => {
                         if (onChange) {
-                          const newItems = data.items.map(
-                            (item: any, index: number) =>
+                          const newItems = (data.items ?? []).map(
+                            (entry, index) =>
                               index === i
-                                ? { ...item, checked: !item.checked }
-                                : item
+                                ? { ...entry, checked: !entry.checked }
+                                : entry
                           );
-                          onChange({ ...data, items: newItems });
+                          onChange({ items: newItems });
                         }
                       }
                 }
@@ -140,20 +122,31 @@ export const CardContent = ({
                   className={cn(
                     'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
                     item.checked
-                      ? 'border-black bg-black'
-                      : 'border-gray-400 group-hover:border-black'
+                      ? isDark
+                        ? 'border-white bg-white'
+                        : 'border-black bg-black'
+                      : isDark
+                        ? 'border-white/40 group-hover:border-white'
+                        : 'border-gray-400 group-hover:border-black'
                   )}
                 >
                   {item.checked ? (
-                    <Check className="text-white" size={12} />
+                    <Check
+                      className={isDark ? 'text-black' : 'text-white'}
+                      size={12}
+                    />
                   ) : null}
                 </div>
                 <span
                   className={cn(
                     'text-sm/tight transition-colors',
                     item.checked
-                      ? 'text-gray-400 line-through'
-                      : 'text-gray-800'
+                      ? isDark
+                        ? 'text-white/50 line-through'
+                        : 'text-gray-400 line-through'
+                      : isDark
+                        ? 'text-white/95'
+                        : 'text-gray-800'
                   )}
                 >
                   {item.text}
@@ -164,18 +157,25 @@ export const CardContent = ({
           {/* Add new item input — hidden in readOnly (e.g., template previews) */}
           {readOnly ? null : (
             <div className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100">
-              <div className="size-4 shrink-0 rounded-sm border border-gray-400" />
+              <div
+                className={cn(
+                  'size-4 shrink-0 rounded-sm border',
+                  isDark ? 'border-white/40' : 'border-gray-400'
+                )}
+              />
               <input
-                className="w-full border-none bg-transparent text-sm placeholder-gray-500 outline-none"
+                className={cn(
+                  'w-full border-none bg-transparent text-sm outline-none',
+                  isDark ? 'placeholder-white/40' : 'placeholder-gray-500'
+                )}
                 onChange={(e) => {
                   setNewItem(e.target.value);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newItem.trim() && onChange) {
                     onChange({
-                      ...data,
                       items: [
-                        ...(data.items || []),
+                        ...(data.items ?? []),
                         { text: newItem.trim(), checked: false },
                       ],
                     });
@@ -196,21 +196,44 @@ export const CardContent = ({
   // Default text card — editable only in focused (expanded) view.
   // readOnly forces the non-editable preview regardless of focus.
   if (!isFocused || readOnly) {
+    const isEmpty = !(
+      data.title ||
+      data.content ||
+      data.previewExcerpt ||
+      data.previewHtml
+    );
     return (
       <div
-        className={cn(
-          'flex h-full flex-col p-6',
-          isColorDark(data.color) && 'text-white'
-        )}
+        className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
         style={colorToStyle(data.color)}
       >
+        {data.tag ? (
+          <div className="mb-3">
+            <span
+              className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
+              style={colorToStyle(data.tagColor)}
+            >
+              {data.tag}
+            </span>
+          </div>
+        ) : null}
         <h2
-          className={cn('mb-4 font-bold text-xl', !data.title && 'opacity-40')}
+          className={cn(
+            'mb-4 flex items-center gap-2 font-bold text-xl',
+            !data.title && 'opacity-40'
+          )}
         >
           {data.title || 'Untitled'}
+          {isEmpty && !readOnly ? (
+            <PenLine
+              aria-hidden="true"
+              className="shrink-0 opacity-60"
+              size={16}
+            />
+          ) : null}
         </h2>
         <NotePreview
-          className={cn(isColorDark(data.color) && 'prose-invert text-white')}
+          className={cn(isDark && 'prose-invert text-white')}
           excerpt={data.previewExcerpt}
           fallback={data.content}
           html={data.previewHtml}
@@ -222,7 +245,12 @@ export const CardContent = ({
   return <EditableCardContent data={data} onChange={onChange} />;
 };
 
-const EditableCardContent = ({ data, onChange }: any) => {
+interface EditableCardContentProps {
+  data: CardContentData;
+  onChange?: (next: Partial<CardContentData>) => void;
+}
+
+const EditableCardContent = ({ data, onChange }: EditableCardContentProps) => {
   const titleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -280,7 +308,7 @@ const EditableCardContent = ({ data, onChange }: any) => {
   );
 };
 
-const CardNode = ({ id, data }: any) => {
+const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const { zoom } = useViewport();
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
@@ -361,7 +389,7 @@ const CardNode = ({ id, data }: any) => {
       {/* Visual wrapper — keeps Handle positions stable */}
       <div
         className={cn(
-          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card'
+          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
         {isZoomedOut ? (
@@ -392,7 +420,7 @@ const CardNode = ({ id, data }: any) => {
         ) : (
           <CardContent
             data={data}
-            onChange={(newData: any) => {
+            onChange={(newData) => {
               commitNodeData(id, newData);
             }}
           />

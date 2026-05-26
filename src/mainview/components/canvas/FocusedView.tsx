@@ -4,10 +4,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { FLAGS } from '@/lib/flags';
-import { useCanvasStore } from '@/store/canvasStore';
-
+import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 import { AssetContent } from './nodes/AssetNode';
+import type { CardContentData } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
+import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
 
@@ -34,13 +35,27 @@ const FocusedSkeleton = ({ color }: { color?: unknown }) => {
   );
 };
 
-export const FocusedView = ({ node, onClose }: any) => {
+interface FocusedViewProps {
+  node: FocusedItem;
+  onClose: () => void;
+}
+
+export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateFolderChildData = useCanvasStore((s) => s.updateFolderChildData);
   const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
   const folderId =
     typeof node.folderId === 'string' ? node.folderId : undefined;
+  const noteIdRaw = node.data.noteId;
+  const noteId = typeof noteIdRaw === 'string' ? noteIdRaw : undefined;
+  const colorRaw = node.data.color;
+  const color = typeof colorRaw === 'string' ? colorRaw : undefined;
+  const titleRaw = node.data.title;
+  const title = typeof titleRaw === 'string' ? titleRaw : undefined;
+  const contentRaw = node.data.content;
+  const content = typeof contentRaw === 'string' ? contentRaw : undefined;
+  const dataTypeRaw = node.data.type;
   const isFolderChild = Boolean(folderId);
 
   const updateFocusedData = useCallback(
@@ -67,7 +82,7 @@ export const FocusedView = ({ node, onClose }: any) => {
 
   const isText =
     node.type !== 'image' &&
-    (node.data.type === 'text' || node.data.type == null) &&
+    (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.tiptapEditor;
 
   // Notes go fullscreen; other content keeps the original centered modal size.
@@ -173,20 +188,23 @@ export const FocusedView = ({ node, onClose }: any) => {
       >
         <div className="h-full">
           {node.type === 'image' ? (
-            <ImageContent data={node.data} isFocused={true} />
+            <ImageContent
+              data={node.data as unknown as ImageData}
+              isFocused={true}
+            />
           ) : node.type === 'asset' ? (
             <AssetContent data={node.data} isFocused={true} />
           ) : node.type === 'link' ? (
             <LinkContent data={node.data} isFocused={true} />
           ) : isText ? (
-            <Suspense fallback={<FocusedSkeleton color={node.data.color} />}>
+            <Suspense fallback={<FocusedSkeleton color={color} />}>
               <TiptapEditor
-                color={node.data.color}
+                color={color}
                 data={node.data}
                 key={node.id}
-                markdown={node.data.content}
+                markdown={content}
                 nodeId={node.id}
-                noteId={node.data.noteId}
+                noteId={noteId}
                 onMarkdownChange={(markdown) => {
                   updateFocusedData({
                     content: markdown,
@@ -197,17 +215,17 @@ export const FocusedView = ({ node, onClose }: any) => {
                   });
                 }}
                 onPreviewUpdate={isFolderChild ? updateFocusedData : undefined}
-                onTitleChange={(title) => {
-                  updateFocusedData({ title });
+                onTitleChange={(nextTitle) => {
+                  updateFocusedData({ title: nextTitle });
                 }}
-                title={node.data.title}
+                title={title}
               />
             </Suspense>
           ) : (
             <CardContent
-              data={node.data}
+              data={node.data as unknown as CardContentData}
               isFocused={true}
-              onChange={(newData: any) => {
+              onChange={(newData) => {
                 commitFocusedData(newData);
               }}
             />

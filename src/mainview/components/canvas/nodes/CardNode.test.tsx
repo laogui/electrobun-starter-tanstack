@@ -210,26 +210,28 @@ describe('CardNode', () => {
     );
   });
 
-  it('renders image card legends and editable focused content updates', () => {
-    const onChange = vi.fn();
-
-    const { rerender } = render(
+  it('renders tag on default text card preview', () => {
+    render(
       <CardContent
         data={{
           color: '#ffffff',
-          pieData: [{ color: '#123456', label: 'Slice A' }],
-          title: 'Insight',
-          type: 'image',
+          content: 'Body',
+          tag: 'Idea',
+          tagColor: '#ffcc00',
+          title: 'Tagged card',
         }}
-        isFocused={true}
-        onChange={onChange}
+        isFocused={false}
       />
     );
 
-    expect(screen.getByText('Insight')).toBeInTheDocument();
-    expect(screen.getByText('Slice A')).toBeInTheDocument();
+    expect(screen.getByText('Tagged card')).toBeInTheDocument();
+    expect(screen.getByText('Idea')).toBeInTheDocument();
+  });
 
-    rerender(
+  it('updates editable focused content on blur', () => {
+    const onChange = vi.fn();
+
+    render(
       <CardContent
         data={{
           color: '#ffffff',

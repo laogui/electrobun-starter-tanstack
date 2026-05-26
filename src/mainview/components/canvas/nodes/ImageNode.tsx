@@ -4,7 +4,7 @@ import {
   Position,
   useViewport,
 } from '@xyflow/react';
-import { ImagePlus, Loader2 } from 'lucide-react';
+import { ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
@@ -12,6 +12,8 @@ import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
 
 const handleClassName = 'conn-handle nodrag';
 const FILE_EXT_RE = /\.[^.]+$/;
@@ -30,10 +32,66 @@ export interface ImageData {
 export const ImageContent = ({
   data,
   isFocused,
+  onTitleChange,
 }: {
   data: ImageData;
   isFocused?: boolean;
+  onTitleChange?: (title: string) => void;
 }) => {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+
+  const handleTitleBlur = useCallback(() => {
+    setEditingTitle(false);
+    if (!onTitleChange) {
+      return;
+    }
+    const next = titleRef.current?.textContent?.trim() ?? '';
+    if (next !== (data.title ?? '')) {
+      onTitleChange(next);
+    }
+  }, [data.title, onTitleChange]);
+
+  const handleTitleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLHeadingElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        titleRef.current?.blur();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (titleRef.current) {
+          titleRef.current.textContent = data.title ?? '';
+        }
+        titleRef.current?.blur();
+      }
+    },
+    [data.title]
+  );
+
+  const startEditing = useCallback(
+    (e: React.MouseEvent) => {
+      if (!onTitleChange || isFocused) {
+        return;
+      }
+      e.stopPropagation();
+      setEditingTitle(true);
+      globalThis.requestAnimationFrame(() => {
+        titleRef.current?.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        if (titleRef.current) {
+          range.selectNodeContents(titleRef.current);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      });
+    },
+    [isFocused, onTitleChange]
+  );
   // The canvas always prefers the lightweight thumbnail when present so we
   // avoid keeping the original full-resolution bitmap in memory just to draw
   // a card preview. The focused / lightbox view falls back to the original
@@ -92,7 +150,22 @@ export const ImageContent = ({
         style={colorToStyle(data.color)}
       >
         <ImagePlus className="text-gray-300" size={isFocused ? 64 : 40} />
-        <span className="text-gray-400 text-sm">No image</span>
+        <span className="text-gray-400 text-sm">
+          {lazyLoadFailed ? 'Failed to load image' : 'No image'}
+        </span>
+        {lazyLoadFailed ? (
+          <button
+            className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-neutral-600 text-xs shadow-sm transition-colors hover:bg-white dark:border-white/10 dark:bg-white/10 dark:text-neutral-200 dark:hover:bg-white/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLazyLoadFailed(false);
+            }}
+            type="button"
+          >
+            <RefreshCw size={12} />
+            Retry
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -117,15 +190,24 @@ export const ImageContent = ({
           </div>
         ) : null}
       </div>
-      {data.title ? (
+      {data.title || (onTitleChange && !isFocused) ? (
         <div className="border-black/5 border-t px-4 py-3">
           <h3
             className={cn(
-              'truncate font-semibold leading-tight',
-              isFocused ? 'text-xl' : 'text-sm'
+              'truncate font-semibold leading-tight outline-none',
+              isFocused ? 'text-xl' : 'text-sm',
+              !(data.title || editingTitle) && 'opacity-40',
+              editingTitle &&
+                'nodrag nopan rounded-md bg-black/5 px-1 ring-1 ring-blue-400/40 dark:bg-white/10'
             )}
+            contentEditable={editingTitle}
+            onBlur={handleTitleBlur}
+            onClick={onTitleChange && !isFocused ? startEditing : undefined}
+            onKeyDown={handleTitleKeyDown}
+            ref={titleRef}
+            suppressContentEditableWarning
           >
-            {data.title}
+            {data.title || (onTitleChange && !isFocused ? 'Add title…' : '')}
           </h3>
         </div>
       ) : null}
@@ -197,15 +279,33 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
     [id, data, commitNodeData, updateNodeData]
   );
 
+  // Pending replacement file — when set, the confirm dialog is shown.
+  // null = no pending replacement. We store the File so the dialog can defer
+  // processing until the user confirms.
+  const [pendingReplaceFile, setPendingReplaceFile] = useState<File | null>(
+    null
+  );
+
+  const acceptOrConfirm = useCallback(
+    (file: File) => {
+      if (data.imageUrl) {
+        setPendingReplaceFile(file);
+        return;
+      }
+      handleFile(file);
+    },
+    [data.imageUrl, handleFile]
+  );
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
       if (file) {
-        handleFile(file);
+        acceptOrConfirm(file);
       }
     },
-    [handleFile]
+    [acceptOrConfirm]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -219,14 +319,14 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (file) {
-            handleFile(file);
             e.preventDefault();
+            acceptOrConfirm(file);
             return;
           }
         }
       }
     },
-    [handleFile]
+    [acceptOrConfirm]
   );
 
   const handleFileInput = useCallback(
@@ -328,10 +428,20 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         type="file"
       />
 
+      <ReplaceImageConfirmDialog
+        onCancel={() => setPendingReplaceFile(null)}
+        onConfirm={() => {
+          if (pendingReplaceFile) {
+            handleFile(pendingReplaceFile);
+          }
+          setPendingReplaceFile(null);
+        }}
+        open={pendingReplaceFile !== null}
+      />
+
       <div
         className={cn(
-          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-sm',
-          'transition-shadow duration-200 ease-out hover:shadow-xl'
+          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
         {isZoomedOut ? (
@@ -351,7 +461,10 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             )}
           </div>
         ) : data.imageUrl ? (
-          <ImageContent data={data} />
+          <ImageContent
+            data={data}
+            onTitleChange={(title) => commitNodeData(id, { title })}
+          />
         ) : (
           <div
             className="flex size-full flex-col items-center justify-center gap-3"

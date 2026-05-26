@@ -76,12 +76,15 @@ export const StickyContent = ({
       </div>
     ) : (
       <div
-        className="flex size-full flex-col p-4"
+        className={cn(
+          'flex size-full flex-col p-4 transition-shadow duration-150',
+          editing && 'ring-2 ring-blue-400/40 ring-inset'
+        )}
         style={colorToStyle(data.color)}
       >
         <div
           className={cn(
-            'wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed outline-none',
+            'wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
             editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
           )}
           contentEditable={editing}

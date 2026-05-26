@@ -49,6 +49,10 @@ type ContextMenuState = {
 } | null;
 
 const getCanvasItems = (): MenuItem[] => [
+  { id: 'new-note', label: m.menu_new_note(), icon: PenLine },
+  { id: 'new-sticky', label: m.menu_new_sticky(), icon: PenLine },
+  { id: 'new-folder', label: m.menu_new_folder(), icon: FolderOpen },
+  { id: 'new-group', label: m.menu_new_group(), icon: Sparkles },
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
 ];
@@ -62,7 +66,7 @@ const getCardItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'detach-from-canvas', label: 'Move to Library', icon: BookOpen },
+  { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   {
     id: 'delete',
     label: m.menu_delete(),

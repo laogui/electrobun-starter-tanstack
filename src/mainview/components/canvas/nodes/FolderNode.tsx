@@ -17,6 +17,8 @@ export interface FolderContentProps {
   editingTitle?: boolean;
   /** When true, hides subtitle/footer and bumps the title to a larger size. */
   isZoomedOut?: boolean;
+  /** Click handler for the three-dot menu icon. */
+  onMenuClick?: (e: React.MouseEvent) => void;
   /** Blur handler for the title (ignored unless `editingTitle`). */
   onTitleBlur?: () => void;
   /** Keydown handler for the title (ignored unless `editingTitle`). */
@@ -34,6 +36,7 @@ export const FolderContent = ({
   data,
   isZoomedOut = false,
   editingTitle = false,
+  onMenuClick,
   titleRef,
   onTitleBlur,
   onTitleKeyDown,
@@ -109,12 +112,14 @@ export const FolderContent = ({
                 </p>
               )}
             </div>
-            <div
-              aria-hidden="true"
-              className="grid size-7 shrink-0 place-items-center rounded-full border border-white/80 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+            <button
+              aria-label="Folder menu"
+              className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-white/80 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-all hover:scale-110 hover:bg-white/20"
+              onClick={onMenuClick}
+              type="button"
             >
               <span className="-mt-0.5 text-lg leading-none">⋮</span>
-            </div>
+            </button>
           </div>
           {isZoomedOut || !footerText ? null : (
             <p className="relative mt-auto truncate text-sm text-white/92 leading-none">
@@ -196,6 +201,24 @@ const FolderNode = ({ id, data }: any) => {
     [data.title, setRenamingFolderId]
   );
 
+  const handleMenuClick = useCallback((e: React.MouseEvent) => {
+    // Trigger the node context menu by dispatching a contextmenu event on
+    // the node DOM element, so the React Flow onNodeContextMenu fires.
+    e.stopPropagation();
+    const nodeEl = (e.currentTarget as HTMLElement).closest(
+      '.react-flow__node'
+    );
+    if (nodeEl) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const contextEvent = new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: rect.right - 30,
+        clientY: rect.bottom - 10,
+      });
+      nodeEl.dispatchEvent(contextEvent);
+    }
+  }, []);
+
   return (
     <div
       className={cn(
@@ -272,6 +295,7 @@ const FolderNode = ({ id, data }: any) => {
         data={data}
         editingTitle={editingTitle}
         isZoomedOut={isZoomedOut}
+        onMenuClick={handleMenuClick}
         onTitleBlur={handleTitleBlur}
         onTitleKeyDown={handleTitleKeyDown}
         titleRef={titleRef}

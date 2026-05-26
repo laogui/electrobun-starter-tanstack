@@ -43,6 +43,7 @@
   "menu_toggle_straight": "Toggle Straight",
   "menu_toggle_curved": "Toggle Curved",
   "menu_delete_edge": "Delete Connection",
+  "menu_move_to_library": "Move to Library",
   "view_new_canvas": "New Canvas",
   "view_blank_canvas": "Blank Canvas",
   "view_from_template": "From Template",

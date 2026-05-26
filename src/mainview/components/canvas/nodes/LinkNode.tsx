@@ -4,8 +4,14 @@ import {
   Position,
   useViewport,
 } from '@xyflow/react';
-import { ExternalLink, Globe2, Link as LinkIcon } from 'lucide-react';
-import { memo, useEffect, useRef } from 'react';
+import {
+  ExternalLink,
+  Globe2,
+  Link as LinkIcon,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
@@ -57,9 +63,11 @@ function getOpenableUrl(url: string): string | null {
 export const LinkContent = ({
   data,
   isFocused = false,
+  onRetry,
 }: {
   data: LinkNodeRuntimeData;
   isFocused?: boolean;
+  onRetry?: () => void;
 }) => {
   const link = resolveLinkData(data);
   const host = getLinkHost(link.url);
@@ -141,18 +149,43 @@ export const LinkContent = ({
             Link
           </span>
         </div>
-        <h3
-          className={cn(
-            'line-clamp-3 font-bold text-xl leading-tight',
-            !title && 'text-neutral-400'
-          )}
-        >
-          {title || 'Untitled link'}
-        </h3>
-        {description ? (
-          <p className="mt-3 line-clamp-2 text-neutral-500 text-sm leading-snug dark:text-neutral-400">
-            {description}
-          </p>
+        {link.unfurlStatus === 'loading' ? (
+          <div className="space-y-3">
+            <div className="h-6 w-3/4 animate-pulse rounded-lg bg-neutral-200 dark:bg-neutral-700" />
+            <div className="flex items-center gap-2 text-neutral-400 text-xs">
+              <Loader2 className="animate-spin" size={14} />
+              Loading preview...
+            </div>
+          </div>
+        ) : (
+          <>
+            <h3
+              className={cn(
+                'line-clamp-3 font-bold text-xl leading-tight',
+                !title && 'text-neutral-400'
+              )}
+            >
+              {title || 'Untitled link'}
+            </h3>
+            {description ? (
+              <p className="mt-3 line-clamp-2 text-neutral-500 text-sm leading-snug dark:text-neutral-400">
+                {description}
+              </p>
+            ) : null}
+          </>
+        )}
+        {link.unfurlStatus === 'failed' ? (
+          <button
+            className="mt-2 flex items-center gap-1.5 text-neutral-400 text-xs transition-colors hover:text-neutral-600 dark:hover:text-neutral-200"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRetry?.();
+            }}
+            type="button"
+          >
+            <RefreshCw size={12} />
+            <span>Retry</span>
+          </button>
         ) : null}
         <div className="mt-auto min-w-0 pt-4">
           <div className="flex min-w-0 items-center gap-2 rounded-xl border border-black/8 bg-white/55 px-3 py-2 text-neutral-500 dark:border-white/10 dark:bg-white/8 dark:text-neutral-300">
@@ -175,6 +208,11 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   // attempted url so re-renders with stale `data` references do not re-issue
   // the request, but allow re-fetching when the user edits the URL later.
   const unfurlAttemptRef = useRef<string | null>(null);
+
+  const handleRetry = useCallback(() => {
+    unfurlAttemptRef.current = null;
+    updateNodeData(id, { unfurlStatus: 'idle', unfurlError: undefined });
+  }, [id, updateNodeData]);
 
   useEffect(() => {
     const url = typeof data.url === 'string' ? data.url : '';
@@ -318,7 +356,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
             <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
           </div>
         ) : (
-          <LinkContent data={data} />
+          <LinkContent data={data} onRetry={handleRetry} />
         )}
       </div>
     </div>

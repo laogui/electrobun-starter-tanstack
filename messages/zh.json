@@ -43,6 +43,7 @@
   "menu_toggle_straight": "切换为直角",
   "menu_toggle_curved": "切换为曲线",
   "menu_delete_edge": "删除连线",
+  "menu_move_to_library": "移到笔记库",
   "view_new_canvas": "新建画布",
   "view_blank_canvas": "空白画布",
   "view_from_template": "从模板创建",

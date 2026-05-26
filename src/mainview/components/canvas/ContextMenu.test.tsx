@@ -46,6 +46,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_toggle_straight: () => 'Toggle Straight',
   menu_toggle_curved: () => 'Toggle Curved',
   menu_delete_edge: () => 'Delete edge',
+  menu_move_to_library: () => 'Move to Library',
 }));
 
 describe('canvasContextMenu', () => {
@@ -84,16 +85,16 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(screen.getAllByRole('button')).toHaveLength(6);
+    expect(
+      screen.getByRole('button', { name: NEW_NOTE_RE })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Reset zoom' })
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: NEW_NOTE_RE })
-    ).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
 

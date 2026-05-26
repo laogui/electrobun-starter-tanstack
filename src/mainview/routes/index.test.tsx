@@ -450,14 +450,14 @@ describe('routes/index', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
 
     expect(
+      screen.getByRole('button', { name: NEW_NOTE_RE })
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Reset zoom' })
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: NEW_NOTE_RE })
-    ).not.toBeInTheDocument();
   });
 
   it('creates link nodes from the create menu URL form', async () => {

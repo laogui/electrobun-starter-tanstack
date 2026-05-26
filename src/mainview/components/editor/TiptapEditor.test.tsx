@@ -13,10 +13,23 @@ const mocks = vi.hoisted(() => ({
     displayHint: 'note',
   })),
   editor: {
+    chain: vi.fn(() => ({
+      focus: vi.fn(() => ({
+        toggleBold: vi.fn(() => ({ run: vi.fn() })),
+        toggleItalic: vi.fn(() => ({ run: vi.fn() })),
+        toggleStrike: vi.fn(() => ({ run: vi.fn() })),
+        toggleCode: vi.fn(() => ({ run: vi.fn() })),
+        toggleHeading: vi.fn(() => ({ run: vi.fn() })),
+        toggleBulletList: vi.fn(() => ({ run: vi.fn() })),
+        toggleOrderedList: vi.fn(() => ({ run: vi.fn() })),
+        toggleTaskList: vi.fn(() => ({ run: vi.fn() })),
+      })),
+    })),
     commands: {
       setContent: vi.fn(),
     },
     getMarkdown: vi.fn(),
+    isActive: vi.fn(() => false),
   },
   flushNow: vi.fn(),
   latestUseEditorOptions: undefined as any,

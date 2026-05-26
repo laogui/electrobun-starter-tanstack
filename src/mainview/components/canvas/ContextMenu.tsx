@@ -250,27 +250,20 @@ export function CanvasContextMenu({
     };
   }, [menu, onClose]);
 
-  const items = menu
-    ? menu.target === 'edge'
-      ? getEdgeItems(edgePathType)
-      : menu.target === 'folder-child'
-        ? getFolderChildItems()
-        : menu.target === 'folder'
-          ? getFolderItems()
-          : menu.target === 'group'
-            ? getGroupItems()
-            : menu.target === 'sticky'
-              ? getStickyItems()
-              : menu.target === 'image'
-                ? getImageItems()
-                : menu.target === 'link'
-                  ? getLinkItems()
-                  : menu.target === 'asset'
-                    ? getAssetItems()
-                    : menu.target === 'card'
-                      ? getCardItems()
-                      : getCanvasItems()
-    : [];
+  const itemGetters: Record<string, () => MenuItem[]> = {
+    edge: () => getEdgeItems(edgePathType),
+    'folder-child': getFolderChildItems,
+    folder: getFolderItems,
+    group: getGroupItems,
+    sticky: getStickyItems,
+    image: getImageItems,
+    link: getLinkItems,
+    asset: getAssetItems,
+    card: getCardItems,
+    canvas: getCanvasItems,
+  };
+
+  const items = menu ? (itemGetters[menu.target] ?? getCanvasItems)() : [];
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
   const y = menu

@@ -11,11 +11,13 @@
 | Check | Command | 阻塞级别 |
 |-------|---------|----------|
 | TypeScript 类型检查 | `bun run type-check` | 🔴 Blocker |
-| Lint & Format | `bun run ci` (Biome + Ultracite) | 🔴 Blocker |
+| Lint / 静态规则检查 | `bun run check` (Ultracite/Biome 只读检查) | 🔴 Blocker |
 | 单元测试 | `bun run test` | 🔴 Blocker |
-| 测试覆盖率不下降 | `vitest run --coverage` | 🟡 Warning |
+| 测试覆盖率不下降 | `bun run test:coverage` | 🟡 Warning |
 
 > **linter 放宽的规则需人工关注**：本项目在 `biome.jsonc` 中关闭了 `noExplicitAny`、`noArrayIndexKey`、`useKeyWithClickEvents` 等若干规则。审查时这些仍需**人工判断是否合理**，尤其是 a11y 相关项。
+>
+> **命令边界**：`bun run ci` 当前会并发运行 `type-check`、`lint --fix` 和 `format --write`，适合作为本地整理命令；CI gate 应优先使用只读检查命令，避免在 CI 中改写工作区。
 
 ---
 
@@ -25,26 +27,26 @@
 
 #### 安全性
 
-- [ ] **路径遍历**：文件路径操作是否经过了 `assertWorkspaceAttachmentPath` 或类似校验？不允许将用户输入直接拼入 `join()`。
+- [ ] **路径遍历**：附件路径是否经过了 `assertWorkspaceAttachmentPath`？非附件 workspace 路径是否有对应领域的 allowlist、manifest entry 或 normalized relative path 约束？不允许将用户输入直接拼入 `join()`。
 - [ ] **内容注入**：用户生成的 Markdown/HTML 是否正确使用了 `sanitize-html`/`DOMPurify`？尤其是 `dangerouslySetInnerHTML`。
-- [ ] **IPC 边界**：从 renderer → bun 的 RPC 调用，参数是否经过了校验？Zod schema 是否与实际数据匹配？
+- [ ] **IPC 边界**：从 renderer → bun 的 RPC 调用，参数是否在 handler 边界做了运行时防御或规范化？如果该接口已有 Zod/schema 体系，schema 是否与实际数据匹配？
 - [ ] **敏感数据**：是否有 token、密码、API key 硬编码在代码中？
-- [ ] **文件系统操作**：`atomicWrite` 是否被用于所有持久化写入？是否有裸 `writeFileSync` 导致数据损坏风险？
+- [ ] **文件系统操作**：workspace config、canvas manifest、note markdown、settings 等结构化状态写入是否走 `atomicWrite`？附件、导出、模板缩略图等二进制/用户选择路径写入是否有清晰的路径边界、失败处理和必要的替换策略？
 
-> **本项目特定关注点**：`src/bun/attachments.ts` 的 `assertWorkspaceAttachmentPath` 是路径安全的最后防线，任何新的文件 I/O 路径都**必须**复用它或实现同等校验。
+> **本项目特定关注点**：`src/bun/attachments.ts` 的 `assertWorkspaceAttachmentPath` 是 `attachments/` 目录的最后防线。其他文件 I/O 场景也必须有同等级别的领域约束，但不应错误复用附件专用 helper。
 
 #### 正确性
 
 - [ ] **空的 catch 块**：`catch {}` 除非有注释说明为什么忽略错误且确实安全，否则必须处理或至少 `console.error`。
 - [ ] **竞态条件**：异步操作是否处理了组件卸载后的回调？使用了 `cancelled` flag 或 `AbortController`？
-- [ ] **Undo/Redo 一致性**：任何修改 `nodes`/`edges` 的操作是否在前调用了 `saveSnapshot()`？（参考 `canvasStore.ts` 的模式）
+- [ ] **Undo/Redo 一致性**：离散、可撤销的用户操作是否在第一次修改 `nodes`/`edges` 前创建一次 `saveSnapshot()`？拖拽/resize、selection、hydration、远程 metadata 更新等高频或非用户编辑路径不应每次 mutation 都入 undo stack。
 - [ ] **Null/Undefined 检查**：TypeScript `strict: true` 已启用，但 `(n.data as any).children` 这类绕过类型的模式必须做防御性 `?? []` 降级。
 - [ ] **React Key**：列表渲染的 key 是否稳定且唯一？`noArrayIndexKey` 虽已关闭，但动态列表仍需避免 index key。
 
 #### API & 数据契约
 
-- [ ] **Schema 版本兼容**：修改 `CanvasManifest` / `WorkspaceConfig` 等持久化结构，schema 版本号 (`ghostboard-canvas/v1`) 是否需要升级？
-- [ ] **Electrobun RPC 签名**：renderer 调用的 RPC 方法与 `src/bun/index.ts` 中注册的方法签名一致。
+- [ ] **Schema 版本兼容**：修改 `CanvasManifest` / `WorkspaceConfig` 等持久化结构，schema 版本号（如 `ghostboard-canvas/v1`、`ghostboard-workspace/v1`）是否需要升级？
+- [ ] **Electrobun RPC 签名**：renderer 调用的 RPC 方法与 `src/bun/index.ts` 中注册的方法签名一致；新增危险字段是否在 handler 内校验或规范化。
 
 ---
 
@@ -61,7 +63,7 @@
 #### 性能
 
 - [ ] **不必要的 Re-render**：`useMemo`/`useCallback` 是否正确使用？是否存在"每次渲染都创建新对象/函数"的模式？
-- [ ] **N+1 查询**：`src/bun/search.ts` 的 `scanNotes` 是否在循环中做了不必要的文件读取？
+- [ ] **N+1 查询**：改动搜索索引时，是否保持 manifest 一次遍历 + note 一次扫描，避免同一 note 被重复读取？
 - [ ] **大文件处理**：`saveAttachmentFile` 使用了 `Bun.write(fullPath, sourceFile)` 的流式拷贝，新增文件操作是否遵循此模式？
 - [ ] **Canvas 渲染**：React Flow 的 `nodesWithState` 是通过 `useMemo` 计算的，新增节点数据变换是否也做了记忆化？
 
@@ -125,7 +127,7 @@
 
 **Why**: 如果 `userInput` 包含 `../../etc/passwd`，可能逃逸出 workspace 目录。
 
-**Fix**: 使用 `assertWorkspaceAttachmentPath(wsPath, sanitizedPath)` 或复现其路径约束逻辑。
+**Fix**: 如果这是附件路径，使用 `assertWorkspaceAttachmentPath(wsPath, sanitizedPath)`；如果是其他 workspace 路径，先映射到受控 manifest entry 或 allowlist，再 resolve。
 ```
 
 ---
@@ -149,7 +151,7 @@ commitNodeData: (nodeId, updates) => {
 }
 ```
 
-审查时注意：新增 action 是否正确选择了模式？高频更新的动作不应该触发 `saveSnapshot()`。
+审查时注意：新增 action 是否正确选择了模式？离散用户操作应在 mutation 边界创建一次 snapshot；拖拽、resize、selection、hydration、远程 metadata 刷新等高频或非用户编辑路径不应该每次更新都触发 `saveSnapshot()`。
 
 ### 4.2 类型安全边界
 
@@ -180,12 +182,22 @@ useEffect(() => {
 
 ### 4.4 文件 I/O 安全模式
 
+本项目有多类文件写入，审查时先确认写入场景，再检查对应边界：
+
+- workspace config、canvas manifest、note markdown、settings 等结构化状态：使用 `atomicWrite`，避免半写入文件。
+- `attachments/`：使用 `assertWorkspaceAttachmentPath` 约束相对路径，再按内容类型使用 `Bun.write` 等二进制写入方式。
+- 用户选择的导出路径：路径必须来自受控文件选择流程，文件名需要规范化，不能把任意输入当目标目录。
+- dev-only 模板缩略图写入：必须限制在已注册 template id 和可确认的 repo root 下。
+
 ```typescript
-// ✅ 所有持久化写入必须走 atomicWrite
+// ✅ 结构化状态写入使用 atomicWrite
 await atomicWrite(configPath, JSON.stringify(data, null, 2));
 
-// ✅ 所有文件路径必须经过 assertWorkspaceAttachmentPath
-const { fullPath, relativePath } = assertWorkspaceAttachmentPath(wsPath, input.existingFile);
+// ✅ 附件路径使用 attachments/ 专用边界
+const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
+  wsPath,
+  input.existingFile
+);
 ```
 
 ---
@@ -199,10 +211,18 @@ const { fullPath, relativePath } = assertWorkspaceAttachmentPath(wsPath, input.e
 pre-commit:
   jobs:
     - run: bunx ultracite fix {staged_files}
+      glob:
+        - "**/*.js"
+        - "**/*.jsx"
+        - "**/*.ts"
+        - "**/*.tsx"
+        - "**/*.json"
+        - "**/*.jsonc"
+        - "**/*.css"
       stage_fixed: true
 ```
 
-这意味着提交前 lint 问题是自动修复的，人工审查可以专注于逻辑问题。
+这意味着提交前 staged JS/TS/JSON/CSS 文件的 lint 问题会自动修复，人工审查可以专注于逻辑问题。当前 hook 不覆盖 Markdown；修改 `docs/*.md` 时需要手动检查格式，或另行扩展 lefthook glob。
 
 ### 5.2 审查辅助命令
 
@@ -212,6 +232,12 @@ git diff main...feature-branch
 
 # 查看测试覆盖率变化
 bun run test:coverage
+
+# 只读 lint / 静态规则检查
+bun run check
+
+# 本地自动修复（会改写文件，不作为 CI gate）
+bun run fix
 
 # 在浏览器中查看覆盖率报告
 open coverage/index.html
@@ -267,12 +293,13 @@ bun run type-check
 │              GhostBoard Code Review                  │
 ├─────────────────────────────────────────────────────┤
 │ 🔴 BLOCKERS (必须修)                                 │
-│   □ 路径遍历？有 `assertWorkspaceAttachmentPath`？     │
+│   □ 附件路径用 `assertWorkspaceAttachmentPath`？        │
+│   □ 其他文件路径有 allowlist / manifest 约束？          │
 │   □ 用户输入 sanitize 了？（sanitize-html / DOMPurify） │
-│   □ RPC 参数校验了？（Zod schema）                    │
+│   □ RPC 边界有运行时防御/校验？                         │
 │   □ 空的 catch {} 处理了？                            │
 │   □ 异步操作有 cancelled flag？                       │
-│   □ 修改 nodes/edges 前调了 saveSnapshot()？          │
+│   □ 可撤销操作在边界 saveSnapshot()？                  │
 │   □ `as any` 有防御性降级？                           │
 │                                                      │
 │ 🟡 SUGGESTIONS (建议修)                              │

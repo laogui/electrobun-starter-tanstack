@@ -3,12 +3,20 @@
 > **审计日期**: 2026-05-26
 > **审计范围**: 全部节点组件、编辑器、右键菜单、搜索、侧边栏、聚焦模式、预览层、全局样式
 > **审计方法**: 逐文件代码审查 + PRD 对照
+> **最后核对**: 2026-05-26（标题前的 ✅ 表示已完成；条目正文保持原始建议以便回溯）
+
+## 完成进度速览
+
+- **P0**: 4 项中 3 项 ✅（剩 8.1 编辑器格式工具栏）
+- **P1**: 11 项中 8 项 ✅（剩 2.4 图片标题画布编辑、6.2 Folder 子项 badge、8.2 编辑器图片插入）
+- **P2 / P3**: 大部分体验打磨项尚未启动；**类型安全**（CardContent / FocusedView / StickyNode / FolderNode / GroupNode / FolderView / 7 个 ReadOnly Node）已系统性消除 `: any`
+- **新增**：拖放替换确认对话框 `ReplaceImageConfirmDialog`，paraglide 多语言已补 `replace_image_confirm_*`
 
 ---
 
 ## 一、CardNode — 文本/清单卡片
 
-### 1.1 `CardContent` 全部 props 为 `any` 类型
+### 1.1 `CardContent` 全部 props 为 `any` 类型 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/CardNode.tsx`
 
@@ -32,7 +40,7 @@ export const CardContent = ({ data, isFocused, onChange, readOnly = false }: Car
 
 ---
 
-### 1.2 `data.type === 'image'` 分支是遗留的 Mock 饼图
+### 1.2 `data.type === 'image'` 分支是遗留的 Mock 饼图 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/CardNode.tsx` (约第 30-65 行)
 
@@ -44,7 +52,7 @@ export const CardContent = ({ data, isFocused, onChange, readOnly = false }: Car
 
 ---
 
-### 1.3 Checklist checkbox 颜色硬编码为黑色
+### 1.3 Checklist checkbox 颜色硬编码为黑色 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/CardNode.tsx` (checklist 分支)
 
@@ -84,7 +92,7 @@ const checkboxUnchecked = isDark ? 'border-white/40 group-hover:border-white' : 
 
 ---
 
-### 1.5 画布态空卡片无编辑暗示
+### 1.5 画布态空卡片无编辑暗示 ✅
 
 **问题**: 空卡片只显示 "Untitled"（opacity-40），没有输入框轮廓或占位图标暗示用户「这里可以写」。
 
@@ -94,7 +102,9 @@ const checkboxUnchecked = isDark ? 'border-white/40 group-hover:border-white' : 
 
 ---
 
-### 1.6 EditableCardContent blur 时清除全部 preview 元数据
+### 1.6 EditableCardContent blur 时清除全部 preview 元数据 ✅
+
+> 实际验证：`NotePreview` 已通过 `buildPreview(fallbackMarkdown)` 即时渲染 fallback，无空白闪现。原审计描述失准，无需改动。
 
 **文件**: `src/mainview/components/canvas/nodes/CardNode.tsx` (`handleContentBlur`)
 
@@ -130,7 +140,7 @@ onChange({
 
 ---
 
-### 2.2 拖放新图片会静默覆盖旧图
+### 2.2 拖放新图片会静默覆盖旧图 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/ImageNode.tsx` (`handleDrop`)
 
@@ -142,7 +152,7 @@ onChange({
 
 ---
 
-### 2.3 图片加载失败无重试入口
+### 2.3 图片加载失败无重试入口 ✅
 
 **问题**: 如果 URL 失效或文件损坏，卡片只显示 `ImagePlus` 图标 + "No image"，没有「重新选择」按钮。
 
@@ -208,7 +218,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ## 四、LinkNode — 链接卡片
 
-### 4.1 Unfurl 加载期间无状态反馈
+### 4.1 Unfurl 加载期间无状态反馈 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/LinkNode.tsx`
 
@@ -220,7 +230,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ---
 
-### 4.2 Unfurl 失败后无重试机制
+### 4.2 Unfurl 失败后无重试机制 ✅
 
 **问题**: `unfurlStatus === 'failed'` 只设置了错误信息，但 UI 上没有「重试」按钮。用户只能删除并重新创建链接卡片。
 
@@ -230,7 +240,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ---
 
-### 4.3 imageUrl（Open Graph 图片）在画布态不展示
+### 4.3 imageUrl（Open Graph 图片）在画布态不展示 ✅
 
 **问题**: unfurl 抓取了 `imageUrl`，但 `LinkContent` 在非聚焦模式下完全不渲染它。链接卡片失去了最重要的视觉差异化能力。
 
@@ -240,7 +250,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ---
 
-### 4.4 faviconUrl 被抓取但从未使用
+### 4.4 faviconUrl 被抓取但从未使用 ✅
 
 **问题**: 数据里有 `faviconUrl`，但画布和聚焦模式都用的是 `Globe2` Lucide 图标。
 
@@ -262,7 +272,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ## 五、StickyNode — 便签
 
-### 5.1 长文本溢出无滚动
+### 5.1 长文本溢出无滚动 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/StickyNode.tsx` (`StickyContent`)
 
@@ -278,7 +288,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ---
 
-### 5.2 编辑态无视觉区分
+### 5.2 编辑态无视觉区分 ✅
 
 **问题**: 进入编辑模式后，除了光标出现外没有任何视觉变化（无边框高亮、无阴影变化）。
 
@@ -300,7 +310,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ## 六、FolderNode — 文件夹
 
-### 6.1 三个点图标是纯装饰，没有绑定事件
+### 6.1 三个点图标是纯装饰，没有绑定事件 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/FolderNode.tsx`
 
@@ -338,7 +348,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ---
 
-### 6.4 subtitle 超长被截断无 tooltip
+### 6.4 subtitle 超长被截断无 tooltip ✅
 
 ```tsx
 <p className="mt-2 truncate font-medium text-sm text-white/92">{data.subtitle}</p>
@@ -352,7 +362,7 @@ Array.from({ length: 24 }, (_, index) => index)
 
 ## 七、GroupNode — 分组
 
-### 7.1 拖拽手柄 "⋮⋮" 始终显示
+### 7.1 拖拽手柄 "⋮⋮" 始终显示 ✅
 
 **文件**: `src/mainview/components/canvas/nodes/GroupNode.tsx`
 
@@ -462,7 +472,7 @@ codeBlock: { HTMLAttributes: { class: 'prose-code' } }
 
 ## 九、ContextMenu — 右键菜单
 
-### 9.1 画布右键菜单缺少「新建」入口
+### 9.1 画布右键菜单缺少「新建」入口 ✅
 
 **文件**: `src/mainview/components/canvas/ContextMenu.tsx`
 
@@ -481,7 +491,7 @@ const getCanvasItems = (): MenuItem[] => [
 
 ---
 
-### 9.2 "Move to Library" 未国际化
+### 9.2 "Move to Library" 未国际化 ✅
 
 ```tsx
 { id: 'detach-from-canvas', label: 'Move to Library', icon: BookOpen },
@@ -599,7 +609,9 @@ if ((n.type === 'card' || n.type === 'image') && ...data.detached)
 
 ## 十三、FocusedView — 聚焦模式
 
-### 13.1 `any` 类型 props
+### 13.1 `any` 类型 props ✅
+
+> 同时已扩展到 `StickyNode` / `FolderNode` / `GroupNode` / `FolderView` / 全部 7 个 `XxxNodeReadOnly` —— 渲染层 `: any` 已全部消除。
 
 **文件**: `src/mainview/components/canvas/FocusedView.tsx`
 
@@ -707,7 +719,9 @@ mask-image: linear-gradient(to bottom, black calc(100% - 1.5rem), transparent 10
 
 ---
 
-### 15.3 节点间 shadow 样式不统一
+### 15.3 节点间 shadow 样式不统一 ✅
+
+> `CardNode` / `ImageNode` 已切换到 `shadow-card → hover:shadow-card-hover`，与 `LinkNode` / `AssetNode` 一致；`StickyNode` 保留扁平阴影（设计上不应有 hover 抬起感）。
 
 | 节点类型 | 默认 shadow | Hover shadow |
 |----------|-------------|--------------|
@@ -755,28 +769,28 @@ mask-image: linear-gradient(to bottom, black calc(100% - 1.5rem), transparent 10
 
 ### P0 — 必须立即修复（影响核心可用性）
 
-| # | 问题 | 组件 |
-|---|------|------|
-| 8.1 | 编辑器无格式工具栏 | TiptapEditor |
-| 6.1 | Folder 三点装饰不可点击（交互欺骗） | FolderNode |
-| 9.1 | 画布右键菜单缺少「新建」入口 | ContextMenu |
-| 4.1 | Link unfurl 加载期间无状态反馈 | LinkNode |
+| # | 问题 | 组件 | 状态 |
+|---|------|------|------|
+| 8.1 | 编辑器无格式工具栏 | TiptapEditor | ⏳ |
+| 6.1 | Folder 三点装饰不可点击（交互欺骗） | FolderNode | ✅ |
+| 9.1 | 画布右键菜单缺少「新建」入口 | ContextMenu | ✅ |
+| 4.1 | Link unfurl 加载期间无状态反馈 | LinkNode | ✅ |
 
 ### P1 — 高优先级（影响产品专业度）
 
-| # | 问题 | 组件 |
-|---|------|------|
-| 1.2 | Mock 饼图遗留代码 | CardNode |
-| 1.3 | Checklist checkbox 深色主题不可见 | CardNode |
-| 2.4 | 图片标题无法从画布编辑 | ImageNode |
-| 4.2 | Link unfurl 失败无重试 | LinkNode |
-| 4.3 | Link OG 图片在画布态不展示 | LinkNode |
-| 5.1 | Sticky 长文本溢出无滚动 | StickyNode |
-| 5.2 | Sticky 编辑态无视觉区分 | StickyNode |
-| 6.2 | Folder 无子项数量 badge | FolderNode |
-| 7.1 | Group 拖拽手柄始终显示 | GroupNode |
-| 8.2 | 编辑器不支持图片插入 | TiptapEditor |
-| 9.2 | "Move to Library" 未国际化 | ContextMenu |
+| # | 问题 | 组件 | 状态 |
+|---|------|------|------|
+| 1.2 | Mock 饼图遗留代码 | CardNode | ✅ |
+| 1.3 | Checklist checkbox 深色主题不可见 | CardNode | ✅ |
+| 2.4 | 图片标题无法从画布编辑 | ImageNode | ⏳ |
+| 4.2 | Link unfurl 失败无重试 | LinkNode | ✅ |
+| 4.3 | Link OG 图片在画布态不展示 | LinkNode | ✅ |
+| 5.1 | Sticky 长文本溢出无滚动 | StickyNode | ✅ |
+| 5.2 | Sticky 编辑态无视觉区分 | StickyNode | ✅ |
+| 6.2 | Folder 无子项数量 badge | FolderNode | ⏳ |
+| 7.1 | Group 拖拽手柄始终显示 | GroupNode | ✅ |
+| 8.2 | 编辑器不支持图片插入 | TiptapEditor | ⏳ |
+| 9.2 | "Move to Library" 未国际化 | ContextMenu | ✅ |
 
 ### P2 — 中优先级（体验打磨）
 

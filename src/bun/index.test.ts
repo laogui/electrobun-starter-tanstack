@@ -173,6 +173,7 @@ interface CanvasHandlers {
   createView: AnyHandler;
   deleteNote: AnyHandler;
   deleteView: AnyHandler;
+  exportJson: AnyHandler;
   exportPng: AnyHandler;
   getSettings: AnyHandler;
   listViews: AnyHandler;
@@ -638,6 +639,39 @@ describe('src/bun/index helpers', () => {
     expect(bunWriteMock).toHaveBeenCalledWith(
       '/tmp/exports/My Canvas.png',
       expect.any(Uint8Array)
+    );
+  });
+
+  it('export handlers keep sanitized filenames inside the selected folder', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.exportPng({
+        dataUrl: 'data:image/png;base64,AQID',
+        fileName: '../Unsafe Canvas.png',
+      })
+    ).resolves.toEqual({
+      filePath: '/tmp/exports/Unsafe Canvas.png',
+      success: true,
+    });
+    expect(bunWriteMock).toHaveBeenCalledWith(
+      '/tmp/exports/Unsafe Canvas.png',
+      expect.any(Uint8Array)
+    );
+
+    await expect(
+      canvasHandlers.exportJson({
+        json: '{"ok":true}',
+        fileName: '../../Unsafe Canvas.json',
+      })
+    ).resolves.toEqual({
+      filePath: '/tmp/exports/Unsafe Canvas.json',
+      success: true,
+    });
+    expect(bunWriteMock).toHaveBeenLastCalledWith(
+      '/tmp/exports/Unsafe Canvas.json',
+      '{"ok":true}'
     );
   });
 

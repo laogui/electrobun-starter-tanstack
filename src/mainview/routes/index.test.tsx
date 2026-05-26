@@ -551,6 +551,38 @@ describe('routes/index', () => {
     });
   });
 
+  it('logs dropped file import failures instead of swallowing them', async () => {
+    const importError = new Error('import failed');
+    assetFileMocks.saveAssetFileWithProgressToast.mockRejectedValueOnce(
+      importError
+    );
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drop file' }));
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[canvas] Failed to import dropped file:',
+        importError
+      );
+    });
+    expect(interactionMocks.onCreateNode).not.toHaveBeenCalledWith(
+      'asset',
+      expect.anything()
+    );
+
+    errorSpy.mockRestore();
+  });
+
   it('exports the current canvas as PNG from the toolbar', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options

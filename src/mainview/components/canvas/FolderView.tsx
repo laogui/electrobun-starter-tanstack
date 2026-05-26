@@ -5,14 +5,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { colorToStyle } from '@/lib/colorUtils';
 
+import type { FocusedItem } from '@/store/canvasStore';
+
 import { CanvasContextMenu, type ContextMenuState } from './ContextMenu';
 import { AssetContent } from './nodes/AssetNode';
+import type { CardContentData } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
+import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
 
-interface FolderChild {
-  data: any;
+export interface FolderChild {
+  data: Record<string, unknown>;
   id: string;
   type: string;
 }
@@ -24,7 +28,7 @@ interface ActiveChildMenu {
 
 const FolderChildContent = ({ child }: { child: FolderChild }) => {
   if (child.type === 'image') {
-    return <ImageContent data={child.data} />;
+    return <ImageContent data={child.data as unknown as ImageData} />;
   }
   if (child.type === 'link') {
     return <LinkContent data={child.data} />;
@@ -33,27 +37,41 @@ const FolderChildContent = ({ child }: { child: FolderChild }) => {
     return <AssetContent data={child.data} />;
   }
   if (child.type === 'sticky') {
+    const stickyColor =
+      typeof child.data.color === 'string' ? child.data.color : undefined;
+    const stickyContent =
+      typeof child.data.content === 'string' ? child.data.content : '';
     return (
       <div
         className="flex size-full flex-col p-4"
-        style={colorToStyle(child.data.color)}
+        style={colorToStyle(stickyColor)}
       >
         <div className="wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed">
-          {child.data.content}
+          {stickyContent}
         </div>
       </div>
     );
   }
-  return <CardContent data={child.data} />;
+  return <CardContent data={child.data as unknown as CardContentData} />;
 };
+
+interface FolderViewProps {
+  folder: FocusedItem;
+  onCardClick?: (child: FolderChild, rect: DOMRect) => void;
+  onClose: () => void;
+  onMoveChildOut?: (child: FolderChild, rect: DOMRect) => void;
+}
 
 export const FolderView = ({
   folder,
   onClose,
   onCardClick,
   onMoveChildOut,
-}: any) => {
-  const children = folder.data.children || [];
+}: FolderViewProps) => {
+  const childrenRaw = folder.data.children;
+  const children: FolderChild[] = Array.isArray(childrenRaw)
+    ? (childrenRaw as FolderChild[])
+    : [];
   const count = children.length;
   const cardWidth = 350;
   const cardHeight = 450;
@@ -156,7 +174,7 @@ export const FolderView = ({
       if (action !== 'move-out' || !childId || !childMenu) {
         return;
       }
-      const child = children.find((item: FolderChild) => item.id === childId);
+      const child = children.find((item) => item.id === childId);
       if (!child) {
         return;
       }
@@ -194,7 +212,10 @@ export const FolderView = ({
         initial={{ opacity: 0, y: -10 }}
         transition={{ delay: 0.15 }}
       >
-        {folder.data.subtitle || folder.data.title}
+        {(typeof folder.data.subtitle === 'string'
+          ? folder.data.subtitle
+          : undefined) ||
+          (typeof folder.data.title === 'string' ? folder.data.title : '')}
       </motion.h2>
 
       <div
@@ -218,7 +239,7 @@ export const FolderView = ({
             perspective: 1200,
           }}
         >
-          {children.map((child: any, index: number) => {
+          {children.map((child, index) => {
             const finalCardX =
               sidePadding + index * (cardWidth + gap) + cardWidth / 2;
             const radial = getRadialOffset(index);

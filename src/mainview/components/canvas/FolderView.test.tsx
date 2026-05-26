@@ -56,6 +56,7 @@ describe('folderView', () => {
     render(
       <FolderView
         folder={{
+          id: 'folder-1',
           rect,
           data: {
             title: 'Folder Title',
@@ -104,6 +105,7 @@ describe('folderView', () => {
     render(
       <FolderView
         folder={{
+          id: 'folder-empty',
           rect,
           data: {
             title: 'Only Title',
@@ -163,6 +165,7 @@ describe('folderView', () => {
     render(
       <FolderView
         folder={{
+          id: 'folder-large',
           rect,
           data: {
             title: 'Large Folder',

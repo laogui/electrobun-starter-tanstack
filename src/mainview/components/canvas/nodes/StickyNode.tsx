@@ -39,8 +39,14 @@ const caretRangeFromPoint = (x: number, y: number): Range | null => {
   return null;
 };
 
+export interface StickyData {
+  color?: string;
+  content?: string;
+  isHidden?: boolean;
+}
+
 export interface StickyContentProps {
-  data: any;
+  data: StickyData;
   /** Enables contentEditable on the body text. */
   editing?: boolean;
   /** When true, renders the simplified zoomed-out placeholder. */
@@ -125,7 +131,7 @@ export const StickyContent = ({
   </>
 );
 
-const StickyNode = ({ id, data }: any) => {
+const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
   const { zoom } = useViewport();
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);

@@ -28,7 +28,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 const handleClassName = 'conn-handle nodrag';
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
 
-type AssetNodeRuntimeData = Partial<AssetNodeData> & {
+export type AssetNodeRuntimeData = Partial<AssetNodeData> & {
   isDropTarget?: boolean;
   isHidden?: boolean;
 };

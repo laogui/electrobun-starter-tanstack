@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import {
   ApplicationMenu,
@@ -68,6 +68,46 @@ const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 const SETTINGS_WINDOW_WIDTH = 400;
 const SETTINGS_WINDOW_HEIGHT = 380;
+const UNSAFE_EXPORT_FILE_NAME_CHARS = '<>:"/\\|?*';
+
+function sanitizeExportBaseName(base: string): string {
+  let safe = '';
+  for (const char of base.trim()) {
+    safe +=
+      char.charCodeAt(0) < 32 || UNSAFE_EXPORT_FILE_NAME_CHARS.includes(char)
+        ? '-'
+        : char;
+  }
+  return safe
+    .replace(/^\.+|\.+$/g, '')
+    .trim()
+    .slice(0, 80);
+}
+
+function safeExportFileName(fileName: string, extension: 'json' | 'png') {
+  const normalized = fileName.replaceAll('\\', '/');
+  const leaf =
+    normalized
+      .split('/')
+      .filter((part) => part && part !== '.' && part !== '..')
+      .at(-1) ?? '';
+  const extensionSuffix = `.${extension}`;
+  const base = leaf.toLowerCase().endsWith(extensionSuffix)
+    ? leaf.slice(0, -extensionSuffix.length)
+    : leaf;
+  const safeBase = sanitizeExportBaseName(base) || 'ghostboard-canvas';
+  return `${safeBase}.${extension}`;
+}
+
+function resolveExportPath(selectedFolder: string, fileName: string): string {
+  const folderPath = resolve(selectedFolder);
+  const outputPath = resolve(folderPath, fileName);
+  const folderRelative = relative(folderPath, outputPath);
+  if (folderRelative.startsWith('..') || isAbsolute(folderRelative)) {
+    throw new Error('Export path must stay inside the selected folder.');
+  }
+  return outputPath;
+}
 const FALLBACK_SETTINGS_WINDOW_X = 350;
 const FALLBACK_SETTINGS_WINDOW_Y = 250;
 
@@ -1035,10 +1075,8 @@ async function main() {
             return { canceled: true, success: false };
           }
 
-          const safeFileName = fileName.endsWith('.png')
-            ? fileName
-            : `${fileName}.png`;
-          const outputPath = join(selectedFolder, safeFileName);
+          const safeFileName = safeExportFileName(fileName, 'png');
+          const outputPath = resolveExportPath(selectedFolder, safeFileName);
           const buffer = Buffer.from(match[1]!, 'base64');
           await Bun.write(outputPath, new Uint8Array(buffer));
 
@@ -1058,10 +1096,8 @@ async function main() {
             return { canceled: true, success: false };
           }
 
-          const safeFileName = fileName.endsWith('.json')
-            ? fileName
-            : `${fileName}.json`;
-          const outputPath = join(selectedFolder, safeFileName);
+          const safeFileName = safeExportFileName(fileName, 'json');
+          const outputPath = resolveExportPath(selectedFolder, safeFileName);
           await Bun.write(outputPath, json);
 
           return { filePath: outputPath, success: true };

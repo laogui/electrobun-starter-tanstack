@@ -205,7 +205,9 @@ function CanvasComponent() {
             },
             data: { ...data },
           });
-        } catch {}
+        } catch (error) {
+          console.error('[canvas] Failed to import dropped file:', error);
+        }
       }
     },
     [onCreateNode]

@@ -14,10 +14,17 @@ import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = 'conn-handle nodrag';
 
+export interface GroupData {
+  active?: boolean;
+  color?: string;
+  isHidden?: boolean;
+  label?: string;
+}
+
 export interface GroupContentProps {
   /** Slot for Handles / NodeResizer when wrapped inside a React Flow node. */
   children?: React.ReactNode;
-  data: any;
+  data: GroupData;
   /** Enables contentEditable on the label. */
   editingLabel?: boolean;
   /** Ref forwarded to the contentEditable label element. */
@@ -88,7 +95,15 @@ export const GroupContent = ({
   </motion.div>
 );
 
-const GroupNode = ({ id, data, selected }: any) => {
+const GroupNode = ({
+  id,
+  data,
+  selected,
+}: {
+  id: string;
+  data: GroupData;
+  selected?: boolean;
+}) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
@@ -107,7 +122,7 @@ const GroupNode = ({ id, data, selected }: any) => {
 
   const handleBlur = useCallback(() => {
     const text =
-      labelRef.current?.textContent.trim() || m.default_group_label();
+      labelRef.current?.textContent?.trim() || m.default_group_label();
     if (text !== data.label) {
       onUpdate(id, { label: text });
     }

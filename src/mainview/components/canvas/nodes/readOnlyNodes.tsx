@@ -16,12 +16,19 @@
 import { Handle, Position } from '@xyflow/react';
 import { memo } from 'react';
 
+import type { AssetNodeRuntimeData } from './AssetNode';
 import { AssetContent } from './AssetNode';
+import type { CardContentData } from './CardNode';
 import { CardContent } from './CardNode';
+import type { FolderData } from './FolderNode';
 import { FolderContent } from './FolderNode';
+import type { GroupData } from './GroupNode';
 import { GroupContent } from './GroupNode';
+import type { ImageData } from './ImageNode';
 import { ImageContent } from './ImageNode';
+import type { LinkNodeRuntimeData } from './LinkNode';
 import { LinkContent } from './LinkNode';
+import type { StickyData } from './StickyNode';
 import { StickyContent } from './StickyNode';
 
 const handleClassName = 'conn-handle nodrag';
@@ -57,7 +64,7 @@ function ReadOnlyHandles() {
   );
 }
 
-export const CardNodeReadOnly = memo(({ data }: { data: any }) => (
+export const CardNodeReadOnly = memo(({ data }: { data: CardContentData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
     <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
@@ -67,7 +74,7 @@ export const CardNodeReadOnly = memo(({ data }: { data: any }) => (
 ));
 CardNodeReadOnly.displayName = 'CardNodeReadOnly';
 
-export const ImageNodeReadOnly = memo(({ data }: { data: any }) => (
+export const ImageNodeReadOnly = memo(({ data }: { data: ImageData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
     <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-sm">
@@ -77,27 +84,31 @@ export const ImageNodeReadOnly = memo(({ data }: { data: any }) => (
 ));
 ImageNodeReadOnly.displayName = 'ImageNodeReadOnly';
 
-export const LinkNodeReadOnly = memo(({ data }: { data: any }) => (
-  <div className="size-full">
-    <ReadOnlyHandles />
-    <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
-      <LinkContent data={data} />
+export const LinkNodeReadOnly = memo(
+  ({ data }: { data: LinkNodeRuntimeData }) => (
+    <div className="size-full">
+      <ReadOnlyHandles />
+      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+        <LinkContent data={data} />
+      </div>
     </div>
-  </div>
-));
+  )
+);
 LinkNodeReadOnly.displayName = 'LinkNodeReadOnly';
 
-export const AssetNodeReadOnly = memo(({ data }: { data: any }) => (
-  <div className="size-full">
-    <ReadOnlyHandles />
-    <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
-      <AssetContent data={data} />
+export const AssetNodeReadOnly = memo(
+  ({ data }: { data: AssetNodeRuntimeData }) => (
+    <div className="size-full">
+      <ReadOnlyHandles />
+      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+        <AssetContent data={data} />
+      </div>
     </div>
-  </div>
-));
+  )
+);
 AssetNodeReadOnly.displayName = 'AssetNodeReadOnly';
 
-export const StickyNodeReadOnly = memo(({ data }: { data: any }) => (
+export const StickyNodeReadOnly = memo(({ data }: { data: StickyData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
     <div className="node-visual relative size-full overflow-hidden rounded-sm border border-black/5 shadow-card">
@@ -107,7 +118,7 @@ export const StickyNodeReadOnly = memo(({ data }: { data: any }) => (
 ));
 StickyNodeReadOnly.displayName = 'StickyNodeReadOnly';
 
-export const FolderNodeReadOnly = memo(({ data }: { data: any }) => (
+export const FolderNodeReadOnly = memo(({ data }: { data: FolderData }) => (
   <div className="relative size-full">
     <ReadOnlyHandles />
     <FolderContent data={data} />
@@ -115,7 +126,7 @@ export const FolderNodeReadOnly = memo(({ data }: { data: any }) => (
 ));
 FolderNodeReadOnly.displayName = 'FolderNodeReadOnly';
 
-export const GroupNodeReadOnly = memo(({ data }: { data: any }) => (
+export const GroupNodeReadOnly = memo(({ data }: { data: GroupData }) => (
   <GroupContent data={data}>
     <ReadOnlyHandles />
   </GroupContent>

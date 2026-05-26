@@ -260,6 +260,23 @@ describe('notes', () => {
     expect(doc?.frontmatter.previewVersion).toBe(1);
   });
 
+  it('rejects note paths that escape the content directory', async () => {
+    const { deleteNoteFile, loadNote, saveNote } = await import('./notes');
+    const outsidePath = join(workspaceRoot, 'secret.md');
+    writeFileSync(outsidePath, '---\nid: secret\n---\nSecret');
+
+    await expect(
+      loadNote(workspaceRoot, 'content/../secret.md')
+    ).rejects.toThrow('Note path must stay inside content/.');
+    await expect(
+      saveNote(workspaceRoot, 'content/../secret.md', { id: 'secret' }, 'Body')
+    ).rejects.toThrow('Note path must stay inside content/.');
+    await expect(
+      deleteNoteFile(workspaceRoot, 'content/../secret.md')
+    ).rejects.toThrow('Note path must stay inside content/.');
+    expect(readFileSync(outsidePath, 'utf8')).toContain('Secret');
+  });
+
   it('buildNoteIndex discovers note ids from markdown files', async () => {
     const { buildNoteIndex } = await import('./notes');
     writeFileSync(

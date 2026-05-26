@@ -27,7 +27,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 const handleClassName = 'conn-handle nodrag';
 const DEFAULT_LINK_COLOR = '#FFFFFF';
 
-type LinkNodeRuntimeData = Partial<LinkNodeData> & {
+export type LinkNodeRuntimeData = Partial<LinkNodeData> & {
   isDropTarget?: boolean;
   isHidden?: boolean;
 };

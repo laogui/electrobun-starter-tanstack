@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './workspace';
 
@@ -28,6 +28,41 @@ export interface NoteDocument {
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const NUMERIC_FRONTMATTER_KEYS = new Set(['previewBlocks', 'previewVersion']);
+
+function normalizeManifestPath(filePath: string): string {
+  return normalize(filePath).replaceAll('\\', '/');
+}
+
+function assertWorkspaceNotePath(
+  wsPath: string,
+  filePath: string
+): { fullPath: string; relativePath: string } {
+  if (!filePath.trim()) {
+    throw new Error('Note path is required.');
+  }
+  if (isAbsolute(filePath)) {
+    throw new Error('Note path must be relative.');
+  }
+
+  const relativePath = normalizeManifestPath(filePath);
+  if (
+    relativePath === 'content' ||
+    !relativePath.startsWith('content/') ||
+    relativePath.split('/').includes('..') ||
+    !relativePath.endsWith('.md')
+  ) {
+    throw new Error('Note path must stay inside content/.');
+  }
+
+  const contentRoot = resolve(wsPath, 'content');
+  const fullPath = resolve(wsPath, relativePath);
+  const rootRelative = relative(contentRoot, fullPath);
+  if (rootRelative.startsWith('..') || isAbsolute(rootRelative)) {
+    throw new Error('Note path must stay inside content/.');
+  }
+
+  return { fullPath, relativePath };
+}
 
 // Simple YAML frontmatter parser
 export function parseFrontmatter(content: string): {
@@ -164,7 +199,7 @@ export async function loadNote(
   wsPath: string,
   filePath: string
 ): Promise<NoteDocument | null> {
-  const fullPath = join(wsPath, filePath);
+  const { fullPath, relativePath } = assertWorkspaceNotePath(wsPath, filePath);
   const file = Bun.file(fullPath);
   if (!(await file.exists())) {
     return null;
@@ -174,7 +209,7 @@ export async function loadNote(
   return {
     frontmatter: frontmatter as NoteFrontmatter,
     body,
-    file: filePath,
+    file: relativePath,
   };
 }
 
@@ -185,7 +220,7 @@ export async function saveNote(
   frontmatter: Record<string, unknown>,
   body: string
 ): Promise<void> {
-  const fullPath = join(wsPath, filePath);
+  const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
   const content = `---\n${serializeFrontmatter(frontmatter)}\n---\n${body}`;
   await atomicWrite(fullPath, content);
 }
@@ -225,7 +260,7 @@ export async function deleteNoteFile(
   wsPath: string,
   filePath: string
 ): Promise<boolean> {
-  const fullPath = join(wsPath, filePath);
+  const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
   const file = Bun.file(fullPath);
   if (!(await file.exists())) {
     return false;

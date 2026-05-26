@@ -11,8 +11,19 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const handleClassName = 'conn-handle nodrag';
 
+export interface FolderData {
+  children?: unknown[];
+  color?: string;
+  footer?: string;
+  isDropTarget?: boolean;
+  isHidden?: boolean;
+  subtitle?: string;
+  title?: string;
+  updatedAt?: string;
+}
+
 export interface FolderContentProps {
-  data: any;
+  data: FolderData;
   /** Enables contentEditable on the folder title. */
   editingTitle?: boolean;
   /** When true, hides subtitle/footer and bumps the title to a larger size. */
@@ -139,7 +150,7 @@ export const FolderContent = ({
   );
 };
 
-const FolderNode = ({ id, data }: any) => {
+const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
   const { zoom } = useViewport();
   const [editingTitle, setEditingTitle] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -177,9 +188,9 @@ const FolderNode = ({ id, data }: any) => {
   }, [editingTitle]);
 
   const handleTitleBlur = useCallback(() => {
-    const title = titleRef.current?.textContent?.trim() || data.title;
-    if (title !== data.title) {
-      commitNodeData(id, { title });
+    const next = titleRef.current?.textContent?.trim() || data.title || '';
+    if (next !== data.title) {
+      commitNodeData(id, { title: next });
     }
     setEditingTitle(false);
     setRenamingFolderId(null);
@@ -199,7 +210,7 @@ const FolderNode = ({ id, data }: any) => {
         e.stopPropagation();
         e.nativeEvent.stopImmediatePropagation();
         if (titleRef.current) {
-          titleRef.current.textContent = data.title;
+          titleRef.current.textContent = data.title ?? '';
         }
         setRenamingFolderId(null);
         titleRef.current?.blur();

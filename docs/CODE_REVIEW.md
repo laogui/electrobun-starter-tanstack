@@ -316,4 +316,29 @@ bun run type-check
 
 ---
 
+## 8. 整改执行状态
+
+> 这里记录的是本仓库按本标准推进整改的进度，不替代上面的通用 PR 审查 checklist。通用 checklist 仍应在每次 PR 审查时重新执行。
+
+### 2026-05-26 已完成
+
+- [x] **Note 路径边界**：`loadNote`、`saveNote`、`deleteNoteFile` 增加 `content/*.md` 相对路径约束，拒绝绝对路径、`..` 逃逸和非 Markdown 路径。
+- [x] **导出文件名边界**：`exportPng`、`exportJson` 会清理用户传入文件名，并确认输出路径仍在用户选择的目录内。
+- [x] **空 `catch {}` 处理**：拖拽导入 asset 失败时不再静默吞错，改为记录错误上下文。
+- [x] **回归测试覆盖**：新增 note 路径逃逸、PNG/JSON 导出路径逃逸、拖拽导入失败日志三组测试。
+- [x] **静态检查**：`bun run check` 已通过。
+- [x] **补丁格式检查**：`git diff --check` 已通过。
+
+### 待继续
+
+- [ ] **RPC 边界审计**：逐个检查 renderer → bun handler 的运行时防御、参数规范化和危险字段处理。
+- [ ] **文件 I/O 边界审计**：继续覆盖 note/export 以外的 workspace 路径、附件路径、模板写入和清理逻辑。
+- [ ] **Undo/Redo 审计**：检查 `nodes` / `edges` 修改是否在正确的离散操作边界创建 snapshot，避免漏记或高频污染 undo stack。
+- [ ] **HTML/Markdown 注入审计**：复核所有 `dangerouslySetInnerHTML`、preview 生成和 sanitizer 配置。
+- [ ] **`as any` 类型收敛**：优先处理 `node.data`、folder child、read-only node 等高频边界。
+- [ ] **全量类型检查修复**：`bun run type-check` 当前仍受 `node_modules/electrobun` 类型错误和 `FolderView.test.tsx` fixture 缺 `FocusedItem.id` 影响。
+- [ ] **全量测试修复**：`bun run test` 当前仍受 `src/bun/attachments.test.ts` 的 `Bun.serve is not a function` 测试环境问题，以及 jsdom navigation not implemented 报错影响。
+
+---
+
 *最后更新: 2026-05-26 · 随项目演进持续迭代*

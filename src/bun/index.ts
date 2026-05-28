@@ -33,6 +33,7 @@ import {
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
+import { listAllTags, type TagSummary } from './tags';
 import type {
   TemplateManifest,
   TemplateMeta,
@@ -363,6 +364,10 @@ interface CanvasRPC {
           limit?: number;
         };
         response: SearchResult[];
+      };
+      listTags: {
+        params: Record<string, unknown>;
+        response: TagSummary[];
       };
       listTemplates: {
         params: Record<string, unknown>;
@@ -1170,6 +1175,8 @@ async function main() {
 
         searchCanvas: async ({ query, viewId, limit }) =>
           await searchWorkspace(wsPath, { query, viewId, limit }),
+
+        listTags: async () => await listAllTags(wsPath),
 
         listTemplates: () => listAllTemplates(),
 

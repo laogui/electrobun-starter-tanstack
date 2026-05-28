@@ -3,6 +3,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { useCanvasStore } from '@/store/canvasStore';
+
 import CardNode, { CardContent } from './CardNode';
 
 const updateNodeDataMock = vi.fn();
@@ -226,6 +228,82 @@ describe('CardNode', () => {
 
     expect(screen.getByText('Tagged card')).toBeInTheDocument();
     expect(screen.getByText('Idea')).toBeInTheDocument();
+  });
+
+  it('renders secondary tag chips alongside primary tag on text card preview', () => {
+    render(
+      <CardContent
+        data={{
+          color: '#ffffff',
+          content: 'Body',
+          tag: 'Idea',
+          tagColor: '#ffcc00',
+          tags: ['Alpha', 'Beta'],
+          title: 'Multi-tagged card',
+        }}
+        isFocused={false}
+      />
+    );
+
+    expect(screen.getByText('Idea')).toBeInTheDocument();
+    expect(screen.getByText('Alpha')).toBeInTheDocument();
+    expect(screen.getByText('Beta')).toBeInTheDocument();
+  });
+
+  it('dims the card when activeTagFilter is set and the card lacks the tag', () => {
+    useCanvasStore.setState({ activeTagFilter: 'Work' });
+    const { container } = render(
+      <CardNode
+        data={{
+          color: '#ffffff',
+          content: 'Body',
+          tag: 'Idea',
+          tags: ['Personal'],
+          title: 'Untagged for filter',
+        }}
+        id="card-dim"
+      />
+    );
+    const wrapper = container.querySelector('.group\\/card');
+    expect(wrapper?.className).toContain('opacity-30');
+    useCanvasStore.setState({ activeTagFilter: null });
+  });
+
+  it('does not dim when the card carries the active tag (case-insensitive)', () => {
+    useCanvasStore.setState({ activeTagFilter: 'work' });
+    const { container } = render(
+      <CardNode
+        data={{
+          color: '#ffffff',
+          content: 'Body',
+          tags: ['Work'],
+          title: 'Matches filter',
+        }}
+        id="card-match"
+      />
+    );
+    const wrapper = container.querySelector('.group\\/card');
+    expect(wrapper?.className).toContain('opacity-100');
+    expect(wrapper?.className).not.toContain('opacity-30');
+    useCanvasStore.setState({ activeTagFilter: null });
+  });
+
+  it('renders secondary tag chips on checklist card without a primary tag', () => {
+    render(
+      <CardContent
+        data={{
+          color: '#ffffff',
+          items: [{ checked: false, text: 'Ship it' }],
+          tags: ['Gamma', 'Delta'],
+          title: 'Checklist',
+          type: 'checklist',
+        }}
+        isFocused={false}
+      />
+    );
+
+    expect(screen.getByText('Gamma')).toBeInTheDocument();
+    expect(screen.getByText('Delta')).toBeInTheDocument();
   });
 
   it('updates editable focused content on blur', () => {

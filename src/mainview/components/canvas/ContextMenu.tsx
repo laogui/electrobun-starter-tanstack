@@ -66,6 +66,7 @@ const getCardItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   {
     id: 'delete',

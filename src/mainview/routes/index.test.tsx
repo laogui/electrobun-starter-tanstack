@@ -138,6 +138,12 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   library_untitled: () => 'Untitled',
   library_detached_toast: () => 'This note is not placed on the canvas yet.',
   library_detached_pin_action: () => 'Place on canvas',
+  tags_button_aria: () => 'Tag Filter',
+  tags_sidebar_title: () => 'Tags',
+  tags_sidebar_close: () => 'Close',
+  tags_sidebar_empty: () => 'No tags yet.',
+  tags_sidebar_clear_filter: () => 'Clear filter',
+  tags_sidebar_active_aria: ({ tag }: { tag: string }) => `Filtering by ${tag}`,
 }));
 vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
 vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);

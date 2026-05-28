@@ -111,6 +111,52 @@ describe('notes', () => {
     expect(result.body).toBe('hello');
   });
 
+  it('sanitizeTags trims, drops empties, dedupes (case-insensitive), and enforces limits', async () => {
+    const { sanitizeTags } = await import('./notes');
+
+    expect(sanitizeTags(undefined)).toEqual([]);
+    expect(sanitizeTags(null)).toEqual([]);
+    expect(sanitizeTags(['work', ' work ', 'WORK', ''])).toEqual(['work']);
+    expect(sanitizeTags('alpha, beta ,, alpha , gamma')).toEqual([
+      'alpha',
+      'beta',
+      'gamma',
+    ]);
+
+    const tooLong = 'x'.repeat(64);
+    const [first] = sanitizeTags([tooLong]);
+    expect(first).toHaveLength(32);
+
+    const many = Array.from({ length: 12 }, (_, i) => `tag-${i}`);
+    expect(sanitizeTags(many)).toHaveLength(8);
+  });
+
+  it('cardDataToNote persists sanitized tags[] into frontmatter', async () => {
+    const { cardDataToNote } = await import('./notes');
+
+    const result = cardDataToNote('note-tags', {
+      type: 'text',
+      title: 'With tags',
+      content: '',
+      tags: ['draft', ' draft ', 'review', ''],
+    });
+
+    expect(result.frontmatter.tags).toEqual(['draft', 'review']);
+  });
+
+  it('cardDataToNote omits tags[] when input has no valid entries', async () => {
+    const { cardDataToNote } = await import('./notes');
+
+    const result = cardDataToNote('note-no-tags', {
+      type: 'text',
+      title: 'No tags',
+      content: '',
+      tags: ['', '   '],
+    });
+
+    expect(result.frontmatter).not.toHaveProperty('tags');
+  });
+
   it('cardDataToNote serializes checklist bodies', async () => {
     const { cardDataToNote } = await import('./notes');
 

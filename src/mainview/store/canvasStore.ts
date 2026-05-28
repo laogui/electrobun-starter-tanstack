@@ -144,6 +144,9 @@ export interface CanvasState {
   // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
 
+  /** When set, cards not carrying this tag are dimmed on the canvas. */
+  activeTagFilter: string | null;
+
   // Multi-view
   activeViewId: string;
   addConnection: (
@@ -186,6 +189,8 @@ export interface CanvasState {
 
   // Actions – edge
   editingEdgeId: string | null;
+  /** Card id whose TagEditor should auto-open (driven by context-menu action). */
+  editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
 
   // UI state
@@ -220,12 +225,15 @@ export interface CanvasState {
   saveSnapshot: () => void;
   searchOpen: boolean;
 
+  setActiveTagFilter: (tag: string | null) => void;
+
   // Actions – multi-view
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
+  setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
   // Actions – UI
@@ -238,9 +246,14 @@ export interface CanvasState {
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingFolderId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setViewport: (viewport: CanvasViewport | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
+
+  // Tag filter sidebar (workspace-wide tag list)
+  tagSidebarOpen: boolean;
   toggleLibrary: () => void;
+  toggleTagSidebar: () => void;
 
   undo: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
@@ -272,12 +285,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
+  editingTagNodeId: null,
   renamingFolderId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
   pendingSearchQuery: null,
   pendingSearchTarget: null,
   libraryOpen: false,
+  tagSidebarOpen: false,
+  activeTagFilter: null,
   viewport: null,
 
   setLibraryOpen: (v) => {
@@ -287,6 +303,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   toggleLibrary: () => {
     set((s) => ({ libraryOpen: !s.libraryOpen }));
+  },
+
+  setTagSidebarOpen: (v) => {
+    set((s) => ({
+      tagSidebarOpen: typeof v === 'function' ? v(s.tagSidebarOpen) : v,
+    }));
+  },
+  toggleTagSidebar: () => {
+    set((s) => ({ tagSidebarOpen: !s.tagSidebarOpen }));
+  },
+  setActiveTagFilter: (tag) => {
+    set({ activeTagFilter: tag });
   },
 
   absorbCardIntoFolder: (cardId, folderId) => {
@@ -441,6 +469,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       focusedFolder: null,
       clipboard: [],
       libraryOpen: false,
+      tagSidebarOpen: false,
+      activeTagFilter: null,
       _undoRedo: createUndoRedoState(),
     });
   },
@@ -506,6 +536,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- edge actions -----------------------------------------------------------
   setEditingEdgeId: (id) => {
     set({ editingEdgeId: id });
+  },
+
+  setEditingTagNodeId: (id) => {
+    set({ editingTagNodeId: id });
   },
 
   setRenamingFolderId: (id) => {

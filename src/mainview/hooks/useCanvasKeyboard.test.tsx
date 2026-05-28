@@ -285,6 +285,51 @@ describe('useCanvasKeyboard', () => {
     expect(state.pendingSearchQuery).toBeNull();
   });
 
+  it('does not open search when pressing space (reserved for canvas pan)', () => {
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: ' ' });
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.searchOpen).toBe(false);
+    expect(state.pendingSearchQuery).toBeNull();
+  });
+
+  it('does not open search or preventDefault for Cmd/Ctrl + letter shortcuts', () => {
+    render(<TestComponent />);
+
+    let prevented = false;
+    act(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'q',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      globalThis.dispatchEvent(event);
+      prevented = event.defaultPrevented;
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.searchOpen).toBe(false);
+    expect(state.pendingSearchQuery).toBeNull();
+    expect(prevented).toBe(false);
+  });
+
+  it('does not open search for Alt + letter (accent input on macOS)', () => {
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'q', altKey: true, cancelable: true });
+    });
+
+    const state = useCanvasStore.getState();
+    expect(state.searchOpen).toBe(false);
+    expect(state.pendingSearchQuery).toBeNull();
+  });
+
   it('cleans up the keydown listener on unmount', () => {
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const view = render(<TestComponent />);

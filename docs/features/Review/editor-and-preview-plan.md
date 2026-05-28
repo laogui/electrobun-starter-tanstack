@@ -1,10 +1,14 @@
 # Editor & Preview 技术方案
 
+> ⚠️ **Status: superseded.** focused-view 编辑层已在 v1 上换成 BlockNote
+> （详见 `docs/features/Planned/blocknote-ai-migration-plan.md`）。本文中
+> 关于 tiptap 的所有描述只作为历史参考保留；预览层和 resize 策略仍然有效。
+>
 > 本文档是 `note-data-model-analysis.md` 的落地延伸。
 >
 > 方向已确定：
 >
-> - **编辑层**：focused view 使用 tiptap
+> - ~~**编辑层**：focused view 使用 tiptap~~ → **现状**：focused view 使用 BlockNote，无损 JSON sidecar + Markdown mirror
 > - **预览层**：卡片使用轻量 markdown 渲染（不挂 editor 实例）
 > - **resize 策略**：路线 B —— 一次性预渲染足够多内容，靠 `overflow: hidden` 自然裁剪
 

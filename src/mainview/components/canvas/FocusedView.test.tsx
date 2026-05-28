@@ -63,50 +63,54 @@ vi.mock('@/components/canvas/nodes/LinkNode', () => ({
   ),
 }));
 
-vi.mock('@/components/editor/TiptapEditor', () => ({
-  default: ({
-    markdown,
-    onMarkdownChange,
-    onPreviewUpdate,
-    onTitleChange,
-    title,
-  }: {
-    markdown?: string;
-    onMarkdownChange: (value: string) => void;
-    onPreviewUpdate?: (value: Record<string, unknown>) => void;
-    onTitleChange: (value: string) => void;
-    title?: string;
-  }) => (
+type EditorMockProps = {
+  markdown?: string;
+  onMarkdownChange: (value: string) => void;
+  onPreviewUpdate?: (value: Record<string, unknown>) => void;
+  onTitleChange: (value: string) => void;
+  title?: string;
+};
+
+const EditorMockComponent = ({
+  markdown,
+  onMarkdownChange,
+  onPreviewUpdate,
+  onTitleChange,
+  title,
+}: EditorMockProps) => (
+  <div>
     <div>
-      <div>
-        editor:{title ?? 'untitled'}:{markdown ?? ''}
-      </div>
-      <button
-        onClick={() => {
-          onTitleChange('Updated Title');
-        }}
-        type="button"
-      >
-        mutate title
-      </button>
-      <button
-        onClick={() => {
-          onMarkdownChange('Updated body');
-        }}
-        type="button"
-      >
-        mutate body
-      </button>
-      <button
-        onClick={() => {
-          onPreviewUpdate?.({ previewHtml: '<p>Updated</p>' });
-        }}
-        type="button"
-      >
-        mutate preview
-      </button>
+      editor:{title ?? 'untitled'}:{markdown ?? ''}
     </div>
-  ),
+    <button
+      onClick={() => {
+        onTitleChange('Updated Title');
+      }}
+      type="button"
+    >
+      mutate title
+    </button>
+    <button
+      onClick={() => {
+        onMarkdownChange('Updated body');
+      }}
+      type="button"
+    >
+      mutate body
+    </button>
+    <button
+      onClick={() => {
+        onPreviewUpdate?.({ previewHtml: '<p>Updated</p>' });
+      }}
+      type="button"
+    >
+      mutate preview
+    </button>
+  </div>
+);
+
+vi.mock('@/components/editor/BlockNoteEditor', () => ({
+  default: EditorMockComponent,
 }));
 
 vi.mock('@/components/canvas/nodes/CardNode', () => ({
@@ -156,7 +160,7 @@ describe('focusedView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders text cards with TiptapEditor and propagates edits to store', async () => {
+  it('renders text cards with the block editor and propagates edits to store', async () => {
     const onClose = vi.fn();
 
     render(

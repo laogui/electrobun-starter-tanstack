@@ -15,6 +15,14 @@ import {
   saveAttachmentFile as saveWorkspaceAttachmentFile,
 } from './attachments';
 import {
+  BLOCKNOTE_SCHEMA,
+  contentHash,
+  deleteBlockNoteSidecar,
+  detectExternalMarkdownChange,
+  loadBlockNoteSidecar,
+  saveBlockNoteSidecar,
+} from './blocknote';
+import {
   deleteUnlinkedNotes,
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
@@ -262,6 +270,34 @@ interface CanvasRPC {
           body: string;
         };
         response: { preview?: PreviewArtifacts; success: boolean };
+      };
+      loadBlockNote: {
+        params: { noteId: string };
+        response: {
+          success: boolean;
+          blocks?: unknown[];
+          markdown?: string;
+          frontmatter?: Record<string, unknown>;
+          revision?: number;
+          recoveredFromMarkdown?: boolean;
+          conflict?: boolean;
+          conflictBackupFile?: string;
+        };
+      };
+      saveBlockNote: {
+        params: {
+          noteId: string;
+          frontmatter: Record<string, unknown>;
+          blocks: unknown[];
+          markdown: string;
+          revision?: number;
+        };
+        response: {
+          success: boolean;
+          revision?: number;
+          preview?: PreviewArtifacts;
+          blocknoteFile?: string;
+        };
       };
       createNote: {
         params: { id: string; title: string; displayHint: string };
@@ -1027,6 +1063,141 @@ async function main() {
           return { success: true, preview };
         },
 
+        loadBlockNote: async ({ noteId }) => {
+          const noteIndex = await buildNoteIndex(wsPath);
+          const filePath = noteIndex.get(noteId);
+          if (!filePath) {
+            return { success: false };
+          }
+          const note = await loadNote(wsPath, filePath);
+          if (!note) {
+            return { success: false };
+          }
+
+          const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
+          const currentMarkdownHash = contentHash(note.body);
+
+          const decision = detectExternalMarkdownChange({
+            sidecarExists: sidecar !== null,
+            sidecarCorrupted: sidecar?.corrupted,
+            storedMarkdownHash:
+              typeof note.frontmatter.markdownHash === 'string'
+                ? note.frontmatter.markdownHash
+                : undefined,
+            storedSidecarRevision:
+              typeof note.frontmatter.blocknoteRevision === 'number'
+                ? note.frontmatter.blocknoteRevision
+                : undefined,
+            sidecarRevision: sidecar?.revision,
+            currentMarkdownHash,
+          });
+
+          if (decision === 'use-sidecar' && sidecar) {
+            return {
+              success: true,
+              blocks: sidecar.blocks,
+              markdown: note.body,
+              frontmatter: note.frontmatter,
+              revision: sidecar.revision,
+            };
+          }
+
+          if (decision === 'conflict' && sidecar) {
+            // Stash the sidecar version as a conflict backup so the user can
+            // recover it if they decide to keep the external Markdown edit.
+            const stamp = new Date()
+              .toISOString()
+              .replaceAll(/[:.]/g, '-')
+              .slice(0, 19);
+            const backupRel = filePath.replace(
+              /\.md$/,
+              `.conflict-${stamp}.md`
+            );
+            try {
+              await writeNoteWithPreview(
+                wsPath,
+                backupRel,
+                { ...note.frontmatter, id: `${noteId}-conflict-${stamp}` },
+                note.body
+              );
+            } catch {
+              // Best-effort backup; do not block the load.
+            }
+            return {
+              success: true,
+              blocks: sidecar.blocks,
+              markdown: note.body,
+              frontmatter: note.frontmatter,
+              revision: sidecar.revision,
+              conflict: true,
+              conflictBackupFile: backupRel,
+            };
+          }
+
+          // recover-from-markdown / reimport-markdown: caller imports
+          // from `markdown` and saves once to materialize a sidecar.
+          return {
+            success: true,
+            blocks: undefined,
+            markdown: note.body,
+            frontmatter: note.frontmatter,
+            revision: sidecar?.revision,
+            recoveredFromMarkdown: true,
+          };
+        },
+
+        saveBlockNote: async ({
+          noteId,
+          frontmatter,
+          blocks,
+          markdown,
+          revision,
+        }) => {
+          const noteIndex = await buildNoteIndex(wsPath);
+          const filePath = noteIndex.get(noteId);
+          if (!filePath) {
+            return { success: false };
+          }
+
+          const nextRevision =
+            (typeof revision === 'number' ? revision : 0) + 1;
+          const now = new Date().toISOString();
+
+          // 1) Atomically write JSON sidecar first — it is the source of truth.
+          const { relativePath: sidecarFile, hash: sidecarHash } =
+            await saveBlockNoteSidecar(wsPath, noteId, {
+              blocks,
+              revision: nextRevision,
+              updatedAt: now,
+            });
+
+          // 2) Write markdown mirror + preview, embedding sync metadata.
+          const markdownHash = contentHash(markdown);
+          const preview = await writeNoteWithPreview(
+            wsPath,
+            filePath,
+            {
+              ...frontmatter,
+              id: noteId,
+              editor: 'blocknote',
+              blocknoteFile: sidecarFile,
+              blocknoteSchema: BLOCKNOTE_SCHEMA,
+              blocknoteRevision: nextRevision,
+              blocknoteHash: sidecarHash,
+              markdownHash,
+              updatedAt: now,
+            },
+            markdown
+          );
+
+          return {
+            success: true,
+            revision: nextRevision,
+            preview,
+            blocknoteFile: sidecarFile,
+          };
+        },
+
         createNote: async ({ id, title, displayHint }) => {
           const filePath = await createNote(wsPath, id, title, displayHint);
           return { noteId: id, file: filePath };
@@ -1040,6 +1211,13 @@ async function main() {
           }
 
           const deleted = await deleteNoteFile(wsPath, filePath);
+          // Best-effort sidecar cleanup; ignore failures so we never block
+          // .md deletion on a stale or read-only sidecar.
+          try {
+            deleteBlockNoteSidecar(wsPath, noteId);
+          } catch {
+            // ignore
+          }
           return { success: deleted };
         },
 

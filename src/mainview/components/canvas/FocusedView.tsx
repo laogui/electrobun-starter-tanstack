@@ -12,7 +12,9 @@ import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
 
-const TiptapEditor = lazy(() => import('@/components/editor/TiptapEditor'));
+const BlockNoteEditor = lazy(
+  () => import('@/components/editor/BlockNoteEditor')
+);
 
 const FocusedSkeleton = ({ color }: { color?: unknown }) => {
   const colorValue = typeof color === 'string' ? color : '#FFFFFF';
@@ -83,7 +85,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const isText =
     node.type !== 'image' &&
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
-    FLAGS.tiptapEditor;
+    FLAGS.focusedNoteEditor;
 
   // Notes go fullscreen; other content keeps the original centered modal size.
   const targetWidth = isText
@@ -198,7 +200,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
             <LinkContent data={node.data} isFocused={true} />
           ) : isText ? (
             <Suspense fallback={<FocusedSkeleton color={color} />}>
-              <TiptapEditor
+              <BlockNoteEditor
                 color={color}
                 data={node.data}
                 key={node.id}

@@ -30,7 +30,7 @@
 - **卡片类型**：
   - **图文卡片**：包含图片和文本（如演示中的 Target audience 饼图卡片）。
   - **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。画布上的勾选和添加条目操作不改变交互状态（保持 `idle` 或 `selected`），不触发 `inline-editing`；仅当需要完整编辑时通过聚焦模式处理。
-  - **长文本/文档**：承载长篇幅的文章。在聚焦模式下使用 **Tiptap 编辑器**进行所见即所得的富文本编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用 Markdown 子集。Tiptap 通过 `@tiptap/markdown` 实现 Markdown 与编辑器文档的双向序列化，保证内容以标准 Markdown 格式持久化。
+  - **长文本/文档**：承载长篇幅的文章。在聚焦模式下使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用块。BlockNote 文档以无损 JSON sidecar (`content/.ghostboard/blocknote/<noteId>.json`) 作为编辑态的 canonical source，并同步生成人类可读的 `.md` mirror，保证内容仍可独立阅读、备份和恢复。
   - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。
   - **本地文件卡片 (Asset)**：支持从文件选择器或拖拽导入本地文件，文件内容保存到 `attachments/`，画布上显示文件名、类型、缩略图或 waveform。视频/音频在聚焦模式下可播放，普通文件提供打开原文件入口。当前 PDF 仍按普通文件处理，暂不提供页面级预览。
   - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统会尝试抓取网页标题、描述、站点名、favicon/image 元数据；当前画布 UI 主要展示标题/URL/描述，富媒体卡片样式仍属后续增强。
@@ -44,7 +44,7 @@
 
 ### 2.3 沉浸式聚焦模式 (Focused View / Modal Expansion)
 
-- **功能描述**：当用户需要深度阅读或编辑某一张卡片时，提供无干扰的阅读/编辑环境。聚焦模式下，长文本/文档类卡片使用 **Tiptap 编辑器**进行所见即所得的富文本编辑；图片卡片进入大图浏览模式；Checklist 卡片进入结构化列表编辑模式。
+- **功能描述**：当用户需要深度阅读或编辑某一张卡片时，提供无干扰的阅读/编辑环境。聚焦模式下，长文本/文档类卡片使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑；图片卡片进入大图浏览模式；Checklist 卡片进入结构化列表编辑模式。
 - **交互逻辑**：
   - 选中状态下通过双击、`Enter` 或右键菜单 `Open Focused` 进入聚焦模式。卡片通过 FLIP 动画从画布位置平滑放大至屏幕中央，成为主视图；背景画布被一层半透明遮罩（Overlay/Dimmer）覆盖，屏蔽其他元素的干扰。点击遮罩或按 `Escape` 退回画布，卡片收缩回原位。
   - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，双击进入原地编辑。
@@ -139,7 +139,7 @@
 
 ### 2.9 撤销/重做 (Undo / Redo)
 
-- **功能描述**：对画布上的结构性与离散操作（移动、创建、删除、Resize、拖入文件夹、节点级提交等）提供撤销和重做能力。正文长文编辑不进入画布撤销栈，而是由 Tiptap 自身历史栈处理；标题输入框使用浏览器原生 input undo。
+- **功能描述**：对画布上的结构性与离散操作（移动、创建、删除、Resize、拖入文件夹、节点级提交等）提供撤销和重做能力。正文长文编辑不进入画布撤销栈，而是由 BlockNote（底层 ProseMirror）自身历史栈处理；标题输入框使用浏览器原生 input undo。
 - **交互逻辑**：
   - 非编辑态下，`Cmd+Z` 撤销，`Cmd+Shift+Z` 重做；若焦点位于 `input` / `textarea` / `contenteditable` 中，则快捷键交给当前编辑控件，不由画布 store 接管。
   - 维护一个画布快照历史栈（Snapshot History Stack），每次离散画布操作前保存当前 `{nodes, edges}` 快照；当前实现不记录 diff / command。
@@ -151,7 +151,7 @@
 
 | macOS                   | Windows / Linux           | 行为                                                                            |
 | ----------------------- | ------------------------- | ------------------------------------------------------------------------------- |
-| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 非编辑态下走画布快照栈；若焦点在 `input` / `textarea` / `contenteditable`，则交给当前编辑控件（Tiptap history / 浏览器原生 input undo） |
+| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 非编辑态下走画布快照栈；若焦点在 `input` / `textarea` / `contenteditable`，则交给当前编辑控件（BlockNote / ProseMirror history / 浏览器原生 input undo） |
 | `Cmd+C` / `Cmd+V`       | `Ctrl+C` / `Ctrl+V`       | 复制 / 粘贴卡片                                                                 |
 | `Delete` / `Backspace`  | `Delete` / `Backspace`    | 从当前画布移除选中的节点（不删除 .md 内容文件；永久删除需通过右键菜单二次确认） |
 | `Cmd+K`                 | `Ctrl+K`                  | 打开搜索，命中后 fitView 到画布节点                                             |
@@ -233,7 +233,7 @@
 | UI 框架    | React 19 + TypeScript         |
 | 样式       | Tailwind CSS v4               |
 | 动画       | Framer Motion (motion/react)  |
-| 富文本编辑 | Tiptap (ProseMirror)          |
+| 富文本编辑 | BlockNote (ProseMirror)       |
 | Markdown   | markdown-it + DOMPurify       |
 | 构建工具   | Vite + Bun                    |
 | 桌面运行时 | Electrobun                    |
@@ -606,7 +606,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | 7   | **撤销/重做 (Undo/Redo)** — 快照历史栈            | 中     | ✅ 已完成 |
 | 8   | **便签 (Sticky Note)** — 双击原地编辑，不进入聚焦 | 低     | ✅ 已完成 |
 | 9   | **图片卡片** — 拖拽/粘贴上传，缩略图/原图切换     | 中     | ✅ 已完成 |
-| 9.1 | **Tiptap 富文本编辑器** — 聚焦模式 Markdown 编辑，支持标题/列表/任务/代码块等 | 中     | ✅ 已完成 |
+| 9.1 | **BlockNote 块编辑器** — 聚焦模式块级编辑，JSON sidecar + Markdown mirror，支持标题/列表/任务/代码块等 | 中     | ✅ 已完成（取代旧 Tiptap 方案） |
 | 9.2 | **Markdown 预览渲染** — 画布态 markdown-it + DOMPurify 安全预览 | 低     | ✅ 已完成 |
 
 ### 🟢 P2 — 数据层与增强功能
@@ -703,4 +703,4 @@ updatedAt: 2026-03-31T14:30:00Z
 | Folder Card 子节点强制 `noteId + .md`（M5） | §5.1、§5.6、§5.10 |
 | Folder 是内容集合，不是万能容器；允许 Card/Checklist/Image/Asset/Link，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
 | Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |
-| Tiptap 与画布 undo/redo 栈隔离 | §2.10 |
+| BlockNote 与画布 undo/redo 栈隔离 | §2.10 |

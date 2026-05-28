@@ -153,7 +153,15 @@ export function useCanvasKeyboard({
       // Type-to-search: any unmodified single printable character opens the
       // search dialog and seeds the input. Already past the modal/editing
       // guard above, so this only fires when the canvas itself has focus.
-      if (!searchOpen && e.key.length === 1 && !(e.shiftKey && e.key === ' ')) {
+      // Skip when any non-shift modifier is held so OS / app shortcuts
+      // (Cmd+Q, Cmd+W, Alt+letter accents, …) keep working and we never
+      // swallow them with preventDefault. Space is reserved for React Flow's
+      // pan activation (drag the canvas).
+      if (
+        !(searchOpen || mod || e.altKey) &&
+        e.key.length === 1 &&
+        e.key !== ' '
+      ) {
         e.preventDefault();
         setPendingSearchQuery(e.key);
         setSearchOpen(true);

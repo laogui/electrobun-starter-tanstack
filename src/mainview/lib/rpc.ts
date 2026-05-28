@@ -112,6 +112,53 @@ export async function rpcSaveNote(
   return eb.rpc.request.saveNote({ noteId, frontmatter, body });
 }
 
+export async function rpcLoadBlockNote(noteId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false } as {
+      success: boolean;
+      blocks?: unknown[];
+      markdown?: string;
+      frontmatter?: Record<string, unknown>;
+      revision?: number;
+      recoveredFromMarkdown?: boolean;
+      conflict?: boolean;
+      conflictBackupFile?: string;
+    };
+  }
+  return eb.rpc.request.loadBlockNote({ noteId });
+}
+
+export async function rpcSaveBlockNote(
+  noteId: string,
+  frontmatter: Record<string, unknown>,
+  blocks: unknown[],
+  markdown: string,
+  revision?: number
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false } as {
+      success: boolean;
+      revision?: number;
+      preview?: {
+        blocks: number;
+        excerpt: string;
+        html: string;
+        version: number;
+      };
+      blocknoteFile?: string;
+    };
+  }
+  return eb.rpc.request.saveBlockNote({
+    noteId,
+    frontmatter,
+    blocks,
+    markdown,
+    revision,
+  });
+}
+
 export async function rpcCreateNote(
   id: string,
   title: string,

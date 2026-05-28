@@ -61,6 +61,7 @@ export function useContextMenu({
   const undo = useCanvasStore((s) => s.undo);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
+  const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
   const setRenamingFolderId = useCanvasStore((s) => s.setRenamingFolderId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
@@ -229,6 +230,12 @@ export function useContextMenu({
           }
           break;
         }
+        case 'edit-tag': {
+          if (nodeId) {
+            setEditingTagNodeId(nodeId);
+          }
+          break;
+        }
         case 'toggle-edge-animated': {
           if (nodeId) {
             const { edges } = useCanvasStore.getState();
@@ -290,12 +297,14 @@ export function useContextMenu({
       undo,
       updateEdgeData,
       setEditingEdgeId,
+      setEditingTagNodeId,
       setRenamingFolderId,
       changeNodeColor,
       addFolderChild,
       pasteClipboard,
       saveSnapshot,
       createNode,
+      setEditingTagNodeId,
     ]
   );
 

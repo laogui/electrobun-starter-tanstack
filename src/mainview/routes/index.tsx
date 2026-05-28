@@ -29,6 +29,8 @@ import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
+import { TagSidebar } from '@/components/tags/TagSidebar';
+import { TagSidebarButton } from '@/components/tags/TagSidebarButton';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -769,6 +771,9 @@ function CanvasComponent() {
 
       <LibraryButton />
       <LibraryPopup rfInstance={rfInstance} />
+
+      <TagSidebarButton />
+      <TagSidebar />
 
       <ViewSwitcher
         createMenuOpen={createMenuOpen}

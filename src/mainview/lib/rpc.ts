@@ -339,6 +339,14 @@ export async function rpcSearchCanvas(
   });
 }
 
+export async function rpcListTags() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.listTags({});
+}
+
 export async function rpcListTemplates() {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

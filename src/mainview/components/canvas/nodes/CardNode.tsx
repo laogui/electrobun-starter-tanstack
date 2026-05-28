@@ -4,16 +4,43 @@ import {
   Position,
   useViewport,
 } from '@xyflow/react';
-import { Check, PenLine } from 'lucide-react';
-import { memo, useCallback, useRef, useState } from 'react';
-
+import { Check, PenLine, Tag as TagIcon } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 
 const handleClassName = 'conn-handle nodrag';
+
+interface SecondaryTagChipsProps {
+  isDark: boolean;
+  tags?: string[];
+}
+
+const SecondaryTagChips = ({ isDark, tags }: SecondaryTagChipsProps) => {
+  if (!tags || tags.length === 0) {
+    return null;
+  }
+  return (
+    <>
+      {tags.map((value) => (
+        <span
+          className={cn(
+            'rounded-md px-2 py-0.5 text-xs',
+            isDark ? 'bg-white/15 text-white/85' : 'bg-black/5 text-neutral-700'
+          )}
+          key={value}
+        >
+          {value}
+        </span>
+      ))}
+    </>
+  );
+};
 
 export interface ChecklistItem {
   checked?: boolean;
@@ -33,6 +60,7 @@ export interface CardContentData {
   previewVersion?: number;
   tag?: string;
   tagColor?: string;
+  tags?: string[];
   title?: string;
   /**
    * Discriminator for non-default card variants. Default text cards leave
@@ -45,6 +73,7 @@ export interface CardContentProps {
   data: CardContentData;
   isFocused?: boolean;
   onChange?: (next: Partial<CardContentData>) => void;
+  onEditTagClick?: () => void;
   readOnly?: boolean;
 }
 
@@ -52,6 +81,7 @@ export const CardContent = ({
   data,
   isFocused,
   onChange,
+  onEditTagClick,
   readOnly = false,
 }: CardContentProps) => {
   const [newItem, setNewItem] = useState('');
@@ -66,7 +96,7 @@ export const CardContent = ({
         )}
         style={colorToStyle(data.color)}
       >
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
           {data.tag ? (
             <span
               className="rounded-md px-2 py-1 font-semibold text-xs"
@@ -75,6 +105,7 @@ export const CardContent = ({
               {data.tag}
             </span>
           ) : null}
+          <SecondaryTagChips isDark={isDark} tags={data.tags} />
         </div>
         {data.title ? (
           <h2
@@ -207,14 +238,17 @@ export const CardContent = ({
         className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
         style={colorToStyle(data.color)}
       >
-        {data.tag ? (
-          <div className="mb-3">
-            <span
-              className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
-              style={colorToStyle(data.tagColor)}
-            >
-              {data.tag}
-            </span>
+        {data.tag || (data.tags && data.tags.length > 0) ? (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {data.tag ? (
+              <span
+                className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
+                style={colorToStyle(data.tagColor)}
+              >
+                {data.tag}
+              </span>
+            ) : null}
+            <SecondaryTagChips isDark={isDark} tags={data.tags} />
           </div>
         ) : null}
         <h2
@@ -242,17 +276,30 @@ export const CardContent = ({
     );
   }
 
-  return <EditableCardContent data={data} onChange={onChange} />;
+  return (
+    <EditableCardContent
+      data={data}
+      onChange={onChange}
+      onEditTagClick={onEditTagClick}
+    />
+  );
 };
 
 interface EditableCardContentProps {
   data: CardContentData;
   onChange?: (next: Partial<CardContentData>) => void;
+  onEditTagClick?: () => void;
 }
 
-const EditableCardContent = ({ data, onChange }: EditableCardContentProps) => {
+const EditableCardContent = ({
+  data,
+  onChange,
+  onEditTagClick,
+}: EditableCardContentProps) => {
   const titleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const isDark = isColorDark(data.color);
+  const hasTags = Boolean(data.tag) || (data.tags && data.tags.length > 0);
 
   const handleTitleBlur = useCallback(() => {
     const text = titleRef.current?.textContent ?? '';
@@ -278,12 +325,37 @@ const EditableCardContent = ({ data, onChange }: EditableCardContentProps) => {
 
   return (
     <div
-      className={cn(
-        'flex h-full flex-col p-6',
-        isColorDark(data.color) && 'text-white'
-      )}
+      className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
       style={colorToStyle(data.color)}
     >
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {data.tag ? (
+          <span
+            className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
+            style={colorToStyle(data.tagColor)}
+          >
+            {data.tag}
+          </span>
+        ) : null}
+        <SecondaryTagChips isDark={isDark} tags={data.tags} />
+        {onEditTagClick ? (
+          <button
+            aria-label={m.menu_edit_tag()}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-opacity',
+              isDark
+                ? 'bg-white/10 text-white/70 hover:bg-white/20'
+                : 'bg-black/5 text-neutral-600 hover:bg-black/10',
+              !hasTags && 'opacity-60'
+            )}
+            onClick={onEditTagClick}
+            type="button"
+          >
+            <TagIcon aria-hidden="true" size={10} />
+            {hasTags ? null : <span>{m.menu_edit_tag()}</span>}
+          </button>
+        ) : null}
+      </div>
       <div
         className="mb-4 cursor-text font-bold text-4xl outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
         contentEditable
@@ -312,15 +384,80 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const { zoom } = useViewport();
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
+  const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
+  const activeTagFilter = useCanvasStore((s) => s.activeTagFilter);
   const isZoomedOut = zoom < 0.4;
+
+  const dimmedByFilter = (() => {
+    if (!activeTagFilter) {
+      return false;
+    }
+    const needle = activeTagFilter.toLowerCase();
+    if (data.tag && data.tag.toLowerCase() === needle) {
+      return false;
+    }
+    if (data.tags?.some((t) => t.toLowerCase() === needle)) {
+      return false;
+    }
+    return true;
+  })();
+
+  const [tagEditorOpen, setTagEditorOpen] = useState(false);
+
+  useEffect(() => {
+    if (editingTagNodeId === id) {
+      setTagEditorOpen(true);
+    }
+  }, [editingTagNodeId, id]);
+
+  const handleTagEditorOpenChange = useCallback(
+    (next: boolean) => {
+      setTagEditorOpen(next);
+      if (!next && editingTagNodeId === id) {
+        setEditingTagNodeId(null);
+      }
+    },
+    [editingTagNodeId, id, setEditingTagNodeId]
+  );
+
+  const handleTagChange = useCallback(
+    (next: TagEditorChange) => {
+      commitNodeData(id, next as Record<string, unknown>);
+    },
+    [commitNodeData, id]
+  );
+
+  const openTagEditor = useCallback(() => {
+    setTagEditorOpen(true);
+  }, []);
 
   return (
     <div
       className={cn(
-        'group/card size-full',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+        'group/card size-full transition-opacity',
+        data.isHidden
+          ? 'pointer-events-none opacity-0'
+          : dimmedByFilter
+            ? 'opacity-30'
+            : 'opacity-100'
       )}
     >
+      <TagEditor
+        onChange={handleTagChange}
+        onOpenChange={handleTagEditorOpenChange}
+        open={tagEditorOpen}
+        tag={data.tag}
+        tagColor={data.tagColor}
+        tags={data.tags}
+      >
+        <button
+          aria-hidden="true"
+          className="pointer-events-none absolute top-3 left-3 size-0 opacity-0"
+          tabIndex={-1}
+          type="button"
+        />
+      </TagEditor>
       <NodeResizeControl
         className="border-none! bg-transparent!"
         maxHeight={900}
@@ -423,6 +560,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
             onChange={(newData) => {
               commitNodeData(id, newData);
             }}
+            onEditTagClick={openTagEditor}
           />
         )}
       </div>

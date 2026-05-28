@@ -255,6 +255,13 @@ export function searchCurrentView(
         if (typeof data.tag === 'string' && data.tag) {
           candidates.push({ field: 'tag', value: data.tag });
         }
+        if (Array.isArray(data.tags)) {
+          for (const t of data.tags as unknown[]) {
+            if (typeof t === 'string' && t) {
+              candidates.push({ field: 'tag', value: t });
+            }
+          }
+        }
         if (Array.isArray(data.items)) {
           for (const item of data.items as Record<string, unknown>[]) {
             const text = typeof item.text === 'string' ? item.text : '';

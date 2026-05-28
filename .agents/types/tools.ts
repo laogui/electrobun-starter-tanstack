@@ -67,8 +67,8 @@ export interface ToolParamsMap {
  * Add a new message to the conversation history. To be used for complex requests that can't be solved in a single step, as you may forget what happened!
  */
 export interface AddMessageParams {
-  role: 'user' | 'assistant';
   content: string;
+  role: 'user' | 'assistant';
 }
 
 /**
@@ -123,20 +123,20 @@ export interface AskUserParams {
  * Search for string patterns in the project's files. This tool uses ripgrep (rg), a fast line-oriented search tool. Use this tool only when read_files is not sufficient to find the files you need.
  */
 export interface CodeSearchParams {
-  /** The pattern to search for. */
-  pattern: string;
-  /** Optional ripgrep flags to customize the search (e.g., "-i" for case-insensitive, "-g *.ts -g *.js" for TypeScript and JavaScript files only, "-g !*.test.ts" to exclude Typescript test files,  "-A 3" for 3 lines after match, "-B 2" for 2 lines before match). */
-  flags?: string;
   /** Optional working directory to search within, relative to the project root. Defaults to searching the entire project. */
   cwd?: string;
+  /** Optional ripgrep flags to customize the search (e.g., "-i" for case-insensitive, "-g *.ts -g *.js" for TypeScript and JavaScript files only, "-g !*.test.ts" to exclude Typescript test files,  "-A 3" for 3 lines after match, "-B 2" for 2 lines before match). */
+  flags?: string;
   /** Maximum number of results to return per file. Defaults to 15. There is also a global limit of 250 results across all files. */
   maxResults?: number;
+  /** The pattern to search for. */
+  pattern: string;
 }
 
 /**
  * End your turn, regardless of any new tool results that might be coming. This will allow the user to type another prompt.
  */
-export interface EndTurnParams {}
+export type EndTurnParams = {};
 
 /**
  * Find several files related to a brief natural language description of the files or the name of a function or class you are looking for.
@@ -150,10 +150,10 @@ export interface FindFilesParams {
  * Search for files matching a glob pattern. Returns matching file paths sorted by modification time.
  */
 export interface GlobParams {
-  /** Glob pattern to match files against (e.g., *.js, src/glob/*.ts, glob/test/glob/*.go). */
-  pattern: string;
   /** Optional working directory to search within, relative to project root. If not provided, searches from project root. */
   cwd?: string;
+  /** Glob pattern to match files against (e.g., *.js, src/glob/*.ts, glob/test/glob/*.go). */
+  pattern: string;
 }
 
 /**
@@ -193,12 +193,12 @@ export interface ProposeStrReplaceParams {
  * Propose creating or editing a file without actually applying the changes.
  */
 export interface ProposeWriteFileParams {
-  /** Path to the file relative to the **project root** */
-  path: string;
-  /** What the change is intended to do in only one sentence. */
-  instructions: string;
   /** Edit snippet to apply to the file. */
   content: string;
+  /** What the change is intended to do in only one sentence. */
+  instructions: string;
+  /** Path to the file relative to the **project root** */
+  path: string;
 }
 
 /**
@@ -207,10 +207,10 @@ export interface ProposeWriteFileParams {
 export interface ReadDocsParams {
   /** The library or framework name (e.g., "Next.js", "MongoDB", "React"). Use the official name as it appears in documentation if possible. Only public libraries available in Context7's database are supported, so small or private libraries may not be available. */
   libraryTitle: string;
-  /** Specific topic to focus on (e.g., "routing", "hooks", "authentication") */
-  topic: string;
   /** Optional maximum number of tokens to return. Defaults to 20000. Values less than 10000 are automatically increased to 10000. */
   max_tokens?: number;
+  /** Specific topic to focus on (e.g., "routing", "hooks", "authentication") */
+  topic: string;
 }
 
 /**
@@ -225,10 +225,10 @@ export interface ReadFilesParams {
  * Read one or more directory subtrees (as a blob including subdirectories, file names, and parsed variables within each source file) or return parsed variable names for files. If no paths are provided, returns the entire project tree.
  */
 export interface ReadSubtreeParams {
-  /** List of paths to directories or files. Relative to the project root. If omitted, the entire project tree is used. */
-  paths?: string[];
   /** Maximum token budget for the subtree blob; the tree will be truncated to fit within this budget by first dropping file variables and then removing the most-nested files and directories. */
   maxTokens?: number;
+  /** List of paths to directories or files. Relative to the project root. If omitted, the entire project tree is used. */
+  paths?: string[];
 }
 
 /**
@@ -245,10 +245,10 @@ export interface RunFileChangeHooksParams {
 export interface RunTerminalCommandParams {
   /** CLI command valid for user's OS. */
   command: string;
-  /** Either SYNC (waits, returns output) or BACKGROUND (runs in background). Default SYNC */
-  process_type?: 'SYNC' | 'BACKGROUND';
   /** The working directory to run the command in. Default is the project root. */
   cwd?: string;
+  /** Either SYNC (waits, returns output) or BACKGROUND (runs in background). Default SYNC */
+  process_type?: 'SYNC' | 'BACKGROUND';
   /** Set to -1 for no timeout. Does not apply for BACKGROUND commands. Default 30 */
   timeout_seconds?: number;
 }
@@ -263,7 +263,7 @@ export interface SetMessagesParams {
 /**
  * JSON object to set as the agent output. This completely replaces any previous output. If the agent was spawned, this value will be passed back to its parent. If the agent has an outputSchema defined, the output will be validated against it.
  */
-export interface SetOutputParams {}
+export type SetOutputParams = {};
 
 /**
  * Load a skill's full instructions when relevant to the current task. Skills are loaded on-demand - only load them when you need their specific guidance.
@@ -325,7 +325,7 @@ export interface SuggestFollowupsParams {
 
 This tool explicitly marks the end of your work on the current task.
  */
-export interface TaskCompletedParams {}
+export type TaskCompletedParams = {};
 
 /**
  * Deeply consider complex tasks by brainstorming approaches and tradeoffs step-by-step.
@@ -339,22 +339,22 @@ export interface ThinkDeeplyParams {
  * Search the web for current information using Linkup API.
  */
 export interface WebSearchParams {
-  /** The search query to find relevant web content */
-  query: string;
   /** Search depth - 'standard' for quick results, 'deep' for more comprehensive search. Default is 'standard'. */
   depth?: 'standard' | 'deep';
+  /** The search query to find relevant web content */
+  query: string;
 }
 
 /**
  * Create or edit a file with the given content.
  */
 export interface WriteFileParams {
-  /** Path to the file relative to the **project root** */
-  path: string;
-  /** What the change is intended to do in only one sentence. */
-  instructions: string;
   /** Edit snippet to apply to the file. */
   content: string;
+  /** What the change is intended to do in only one sentence. */
+  instructions: string;
+  /** Path to the file relative to the **project root** */
+  path: string;
 }
 
 /**

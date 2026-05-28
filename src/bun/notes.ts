@@ -332,6 +332,46 @@ export function displayHintToType(hint?: string): string {
   return hint || 'text';
 }
 
+const MAX_TAGS = 8;
+const MAX_TAG_LENGTH = 32;
+
+/**
+ * Normalize a free-form tags value into a clean string[]:
+ * - Coerces to array (strings split on commas)
+ * - Trims whitespace, drops empties
+ * - Caps each tag at MAX_TAG_LENGTH chars
+ * - Dedupes case-insensitively (keeping first occurrence)
+ * - Caps total at MAX_TAGS entries
+ */
+export function sanitizeTags(input: unknown): string[] {
+  const raw: unknown[] = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(',')
+      : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const trimmed = entry.trim().slice(0, MAX_TAG_LENGTH);
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= MAX_TAGS) {
+      break;
+    }
+  }
+  return out;
+}
+
 function normalizeOptionalNumber(
   data: Record<string, unknown>,
   key: string
@@ -377,6 +417,10 @@ export function cardDataToNote(
   }
   if (data.tagColor) {
     frontmatter.tagColor = data.tagColor;
+  }
+  const cleanTags = sanitizeTags(data.tags);
+  if (cleanTags.length > 0) {
+    frontmatter.tags = cleanTags;
   }
   if (data.pieData) {
     frontmatter.pieData = data.pieData;

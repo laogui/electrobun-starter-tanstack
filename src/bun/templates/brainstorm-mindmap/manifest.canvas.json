@@ -1,5 +1,8 @@
 {
   "viewport": { "x": 0, "y": 0, "zoom": 0.7 },
+  "nodeMetadata": {
+    "tpl-bm-center": { "tag": "核心", "tagColor": "#FCA5A5" }
+  },
   "nodes": [
     {
       "id": "bm-center",
@@ -9,8 +12,6 @@
       "data": {
         "noteId": "tpl-bm-center",
         "type": "text",
-        "tag": "核心",
-        "tagColor": "#FCA5A5",
         "color": "#FEF2F2"
       }
     },

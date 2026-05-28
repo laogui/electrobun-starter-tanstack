@@ -92,8 +92,6 @@ describe('notes', () => {
       title: 'Inbox',
       content: 'hello',
       color: '#fff',
-      tag: 'work',
-      tagColor: 'blue',
     });
 
     expect(result.frontmatter).toMatchObject({
@@ -101,14 +99,29 @@ describe('notes', () => {
       title: 'Inbox',
       displayHint: 'note',
       color: '#fff',
-      tag: 'work',
-      tagColor: 'blue',
     });
     expect(result.frontmatter).not.toHaveProperty('previewHtml');
     expect(result.frontmatter).not.toHaveProperty('previewExcerpt');
     expect(result.frontmatter).not.toHaveProperty('previewBlocks');
     expect(result.frontmatter).not.toHaveProperty('previewVersion');
     expect(result.body).toBe('hello');
+  });
+
+  it('cardDataToNote does not persist tag fields (they live in node metadata sidecar)', async () => {
+    const { cardDataToNote } = await import('./notes');
+
+    const result = cardDataToNote('note-tag', {
+      type: 'text',
+      title: 'Tagged',
+      content: '',
+      tag: 'work',
+      tagColor: 'blue',
+      tags: ['draft', 'review'],
+    });
+
+    expect(result.frontmatter).not.toHaveProperty('tag');
+    expect(result.frontmatter).not.toHaveProperty('tagColor');
+    expect(result.frontmatter).not.toHaveProperty('tags');
   });
 
   it('sanitizeTags trims, drops empties, dedupes (case-insensitive), and enforces limits', async () => {
@@ -131,31 +144,7 @@ describe('notes', () => {
     expect(sanitizeTags(many)).toHaveLength(8);
   });
 
-  it('cardDataToNote persists sanitized tags[] into frontmatter', async () => {
-    const { cardDataToNote } = await import('./notes');
 
-    const result = cardDataToNote('note-tags', {
-      type: 'text',
-      title: 'With tags',
-      content: '',
-      tags: ['draft', ' draft ', 'review', ''],
-    });
-
-    expect(result.frontmatter.tags).toEqual(['draft', 'review']);
-  });
-
-  it('cardDataToNote omits tags[] when input has no valid entries', async () => {
-    const { cardDataToNote } = await import('./notes');
-
-    const result = cardDataToNote('note-no-tags', {
-      type: 'text',
-      title: 'No tags',
-      content: '',
-      tags: ['', '   '],
-    });
-
-    expect(result.frontmatter).not.toHaveProperty('tags');
-  });
 
   it('cardDataToNote serializes checklist bodies', async () => {
     const { cardDataToNote } = await import('./notes');

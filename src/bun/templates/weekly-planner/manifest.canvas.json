@@ -1,5 +1,8 @@
 {
   "viewport": { "x": 40, "y": 40, "zoom": 0.7 },
+  "nodeMetadata": {
+    "tpl-wp-review": { "tag": "复盘", "tagColor": "#FED7AA" }
+  },
   "nodes": [
     {
       "id": "wp-sticky-goal",
@@ -159,8 +162,6 @@
       "data": {
         "noteId": "tpl-wp-review",
         "type": "text",
-        "tag": "复盘",
-        "tagColor": "#FED7AA",
         "color": "#FFFBEB"
       }
     }

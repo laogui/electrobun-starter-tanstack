@@ -1,5 +1,8 @@
 {
   "viewport": { "x": 40, "y": 40, "zoom": 0.9 },
+  "nodeMetadata": {
+    "tpl-qs-try": { "tag": "上手", "tagColor": "#A7F3D0" }
+  },
   "nodes": [
     {
       "id": "qs-sticky-welcome",
@@ -19,8 +22,6 @@
       "data": {
         "noteId": "tpl-qs-try",
         "type": "checklist",
-        "tag": "上手",
-        "tagColor": "#A7F3D0",
         "color": "#ECFDF5"
       }
     },

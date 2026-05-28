@@ -3,8 +3,6 @@ id: tpl-demo-3
 title: Prio before launch
 displayHint: checklist
 color: "#EAF2B8"
-tag: Inbox
-tagColor: "#D4E08B"
 ---
 ## Lingering bugs
 - [x] Dragging should not let stickies become too small

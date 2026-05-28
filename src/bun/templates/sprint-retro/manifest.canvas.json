@@ -1,5 +1,8 @@
 {
   "viewport": { "x": 40, "y": 40, "zoom": 0.8 },
+  "nodeMetadata": {
+    "tpl-sr-header": { "tag": "Retro", "tagColor": "#DDD6FE" }
+  },
   "nodes": [
     {
       "id": "sr-card-header",
@@ -9,8 +12,6 @@
       "data": {
         "noteId": "tpl-sr-header",
         "type": "text",
-        "tag": "Retro",
-        "tagColor": "#DDD6FE",
         "color": "#F5F3FF"
       }
     },

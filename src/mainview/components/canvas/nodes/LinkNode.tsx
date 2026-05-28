@@ -13,7 +13,9 @@ import {
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import { colorToStyle } from '@/lib/colorUtils';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
 import {
   getLinkDisplayTitle,
@@ -233,6 +235,11 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
+    id,
+    data as unknown as Record<string, unknown>
+  );
+  const isDark = isColorDark(data.color);
   const isZoomedOut = zoom < 0.4;
 
   // Each (nodeId,url) pair is fetched at most once per session. Store the
@@ -305,10 +312,15 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   return (
     <div
       className={cn(
-        'group/link size-full',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+        'group/link size-full transition-opacity',
+        data.isHidden
+          ? 'pointer-events-none opacity-0'
+          : dimmedByFilter
+            ? 'opacity-30'
+            : 'opacity-100'
       )}
     >
+      {tagEditor}
       <NodeResizeControl
         className="border-none! bg-transparent!"
         maxHeight={420}
@@ -374,7 +386,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         type="source"
       />
 
-      <div className="node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         {isZoomedOut ? (
           <div
             className="flex size-full flex-col justify-center p-5"
@@ -389,6 +401,16 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         ) : (
           <LinkContent data={data} onRetry={handleRetry} />
         )}
+        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+            <NodeTagChips
+              isDark={isDark}
+              tag={tag}
+              tagColor={tagColor}
+              tags={tags}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

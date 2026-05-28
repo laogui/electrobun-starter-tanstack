@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import type { ManifestEdge, ManifestNode } from './manifest';
+import type { NodeMetadata } from './nodeMetadata';
 
 // ---------------------------------------------------------------------------
 // Inline template data — imported at build time so the bundler embeds them
@@ -47,6 +48,14 @@ export interface TemplateNoteContent {
 export interface TemplateManifest {
   edges: ManifestEdge[];
   meta: TemplateMeta;
+  /**
+   * Per-node metadata (tag / tagColor / tags). Keys are placeholder IDs:
+   * for card nodes this matches the placeholder `noteId` and is remapped to
+   * the real noteId at instantiation; for non-card nodes it is the React
+   * Flow `node.id` and is used as-is. Entries are written to the workspace
+   * node-metadata sidecar at template instantiation time.
+   */
+  nodeMetadata?: Record<string, NodeMetadata>;
   nodes: ManifestNode[];
   noteContents?: Record<string, TemplateNoteContent>;
 }
@@ -123,6 +132,7 @@ export function loadTemplate(id: string): TemplateManifest | null {
     nodes: entry.manifest.nodes ?? [],
     edges: entry.manifest.edges ?? [],
     noteContents: entry.manifest.noteContents,
+    nodeMetadata: entry.manifest.nodeMetadata,
   };
 }
 

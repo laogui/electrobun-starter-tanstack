@@ -6,7 +6,9 @@ import {
 } from '@xyflow/react';
 import { memo, useCallback, useRef, useState } from 'react';
 
-import { colorToStyle } from '@/lib/colorUtils';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -133,6 +135,11 @@ export const StickyContent = ({
 
 const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
   const { zoom } = useViewport();
+  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
+    id,
+    data as unknown as Record<string, unknown>
+  );
+  const isDark = isColorDark(data.color);
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = zoom < 0.4;
@@ -183,10 +190,15 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
   return (
     <div
       className={cn(
-        'group/sticky size-full',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+        'group/sticky size-full transition-opacity',
+        data.isHidden
+          ? 'pointer-events-none opacity-0'
+          : dimmedByFilter
+            ? 'opacity-30'
+            : 'opacity-100'
       )}
     >
+      {tagEditor}
       <NodeResizeControl
         className="z-10 border-none! bg-transparent!"
         maxHeight={500}
@@ -261,6 +273,16 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
           onKeyDown={handleKeyDown}
           textRef={textRef}
         />
+        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+          <div className="pointer-events-none absolute right-2 bottom-2 left-2">
+            <NodeTagChips
+              isDark={isDark}
+              tag={tag}
+              tagColor={tagColor}
+              tags={tags}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

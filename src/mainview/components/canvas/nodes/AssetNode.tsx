@@ -18,7 +18,9 @@ import {
 import { memo, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { colorToStyle } from '@/lib/colorUtils';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { AssetKind, AssetNodeData } from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
 import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
@@ -553,19 +555,35 @@ export const AssetContent = ({
   );
 };
 
-const AssetNode = ({ data }: { id: string; data: AssetNodeRuntimeData }) => {
+const AssetNode = ({
+  id,
+  data,
+}: {
+  id: string;
+  data: AssetNodeRuntimeData;
+}) => {
   const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
+    id,
+    data as unknown as Record<string, unknown>
+  );
   const isZoomedOut = zoom < 0.4;
   const asset = resolveAssetData(data);
+  const isDark = isColorDark(asset.color);
 
   return (
     <div
       className={cn(
-        'group/asset size-full',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+        'group/asset size-full transition-opacity',
+        data.isHidden
+          ? 'pointer-events-none opacity-0'
+          : dimmedByFilter
+            ? 'opacity-30'
+            : 'opacity-100'
       )}
     >
+      {tagEditor}
       <NodeResizeControl
         className="border-none! bg-transparent!"
         maxHeight={520}
@@ -631,7 +649,7 @@ const AssetNode = ({ data }: { id: string; data: AssetNodeRuntimeData }) => {
         type="source"
       />
 
-      <div className="node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         {isZoomedOut ? (
           <div
             className="flex size-full flex-col justify-center p-5"
@@ -646,6 +664,16 @@ const AssetNode = ({ data }: { id: string; data: AssetNodeRuntimeData }) => {
         ) : (
           <AssetContent data={data} />
         )}
+        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+            <NodeTagChips
+              isDark={isDark}
+              tag={tag}
+              tagColor={tagColor}
+              tags={tags}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

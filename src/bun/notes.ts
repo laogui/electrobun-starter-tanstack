@@ -12,9 +12,6 @@ export interface NoteFrontmatter {
   previewExcerpt?: string;
   previewHtml?: string;
   previewVersion?: number;
-  tag?: string;
-  tagColor?: string;
-  tags?: string[];
   title?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -411,17 +408,8 @@ export function cardDataToNote(
     updatedAt: now,
   };
 
-  // Optional fields
-  if (data.tag) {
-    frontmatter.tag = data.tag;
-  }
-  if (data.tagColor) {
-    frontmatter.tagColor = data.tagColor;
-  }
-  const cleanTags = sanitizeTags(data.tags);
-  if (cleanTags.length > 0) {
-    frontmatter.tags = cleanTags;
-  }
+  // Optional fields. Tag / tagColor / tags are not persisted here — they
+  // live in the workspace-level node-metadata sidecar (see ADR 0001).
   if (data.pieData) {
     frontmatter.pieData = data.pieData;
   }
@@ -450,7 +438,18 @@ export function cardDataToNote(
  */
 export function noteToCardData(doc: NoteDocument): Record<string, unknown> {
   const { frontmatter, body, file } = doc;
-  const { id, displayHint, ...rest } = frontmatter;
+  const {
+    id,
+    displayHint,
+    // Legacy frontmatter tag fields are intentionally dropped here — they
+    // are migrated into the node-metadata sidecar at workspace init time
+    // (see migrateLegacyTagsFromNotes in workspace.ts) and never flow back
+    // into the renderer's node.data blob.
+    tag: _tag,
+    tagColor: _tagColor,
+    tags: _tags,
+    ...rest
+  } = frontmatter;
   const type = displayHintToType(displayHint);
 
   const data: Record<string, unknown> = {

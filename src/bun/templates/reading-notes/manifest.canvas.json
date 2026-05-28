@@ -1,5 +1,9 @@
 {
   "viewport": { "x": 40, "y": 40, "zoom": 0.8 },
+  "nodeMetadata": {
+    "tpl-rn-summary": { "tag": "要点", "tagColor": "#FCD34D" },
+    "tpl-rn-action": { "tag": "待实践", "tagColor": "#A7F3D0" }
+  },
   "nodes": [
     {
       "id": "rn-image-cover",
@@ -19,8 +23,6 @@
       "data": {
         "noteId": "tpl-rn-summary",
         "type": "text",
-        "tag": "要点",
-        "tagColor": "#FCD34D",
         "color": "#FFFBEB"
       }
     },
@@ -110,8 +112,6 @@
       "data": {
         "noteId": "tpl-rn-action",
         "type": "checklist",
-        "tag": "待实践",
-        "tagColor": "#A7F3D0",
         "color": "#ECFDF5"
       }
     },

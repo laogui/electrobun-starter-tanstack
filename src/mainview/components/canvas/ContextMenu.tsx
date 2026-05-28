@@ -102,6 +102,7 @@ const getFolderItems = (): MenuItem[] => [
 const getStickyItems = (): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -131,6 +132,7 @@ const getImageItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -149,6 +151,7 @@ const getLinkItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -167,6 +170,7 @@ const getAssetItems = (): MenuItem[] => [
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   {
     id: 'delete',
     label: m.menu_delete(),

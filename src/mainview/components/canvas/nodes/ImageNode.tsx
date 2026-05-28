@@ -7,7 +7,9 @@ import {
 import { ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
-import { colorToStyle } from '@/lib/colorUtils';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
@@ -220,6 +222,11 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
+    id,
+    data as unknown as Record<string, unknown>
+  );
+  const isDark = isColorDark(data.color);
   const isZoomedOut = zoom < 0.4;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -348,13 +355,18 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   return (
     <div
       className={cn(
-        'group/image size-full',
-        data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+        'group/image size-full transition-opacity',
+        data.isHidden
+          ? 'pointer-events-none opacity-0'
+          : dimmedByFilter
+            ? 'opacity-30'
+            : 'opacity-100'
       )}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onPaste={handlePaste}
     >
+      {tagEditor}
       <NodeResizeControl
         className="border-none! bg-transparent!"
         maxHeight={900}
@@ -441,7 +453,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       <div
         className={cn(
-          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
+          'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
         {isZoomedOut ? (
@@ -483,6 +495,16 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             </span>
           </div>
         )}
+        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+            <NodeTagChips
+              isDark={isDark}
+              tag={tag}
+              tagColor={tagColor}
+              tags={tags}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

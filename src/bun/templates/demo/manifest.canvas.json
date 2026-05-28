@@ -1,4 +1,8 @@
 {
+  "nodeMetadata": {
+    "tpl-demo-3": { "tag": "Inbox", "tagColor": "#D4E08B" },
+    "tpl-demo-4": { "tag": "Bugs", "tagColor": "#FBCFE8" }
+  },
   "nodes": [
     {
       "id": "demo-card-1",
@@ -36,8 +40,6 @@
       "data": {
         "noteId": "tpl-demo-3",
         "type": "checklist",
-        "tag": "Inbox",
-        "tagColor": "#D4E08B",
         "color": "#EAF2B8"
       }
     },
@@ -122,8 +124,6 @@
       "data": {
         "noteId": "tpl-demo-4",
         "type": "checklist",
-        "tag": "Bugs",
-        "tagColor": "#FBCFE8",
         "color": "#FDF2F8"
       }
     },

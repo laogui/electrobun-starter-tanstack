@@ -3,8 +3,6 @@ id: tpl-demo-4
 title: Bugs
 displayHint: checklist
 color: "#FDF2F8"
-tag: Bugs
-tagColor: "#FBCFE8"
 ---
 ## Alpha feedback
 - [x] Reply to all emails from Feb 14, to get their feedback

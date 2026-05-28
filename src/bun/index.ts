@@ -591,10 +591,23 @@ function createSettingsWindow(
 }
 
 async function main() {
+  // NOTE on accelerators: Electrobun only auto-attaches standard macOS
+  // shortcuts for the text-editing roles (undo, redo, cut, copy, paste,
+  // pasteAndMatchStyle, delete, selectAll). All other roles — including quit,
+  // close, minimize, hide, hideOthers — require an explicit `accelerator`,
+  // otherwise pressing the system shortcut does nothing.
   ApplicationMenu.setApplicationMenu([
     {
       label: 'GhostBoard',
-      submenu: [{ role: 'about' }, { type: 'divider' }, { role: 'quit' }],
+      submenu: [
+        { role: 'about' },
+        { type: 'divider' },
+        { role: 'hide', accelerator: 'CmdOrCtrl+H' },
+        { role: 'hideOthers', accelerator: 'CmdOrCtrl+Alt+H' },
+        { role: 'showAll' },
+        { type: 'divider' },
+        { role: 'quit', accelerator: 'CmdOrCtrl+Q' },
+      ],
     },
     {
       label: 'Edit',
@@ -616,6 +629,13 @@ async function main() {
           action: 'openSearch',
           accelerator: 'CmdOrCtrl+K',
         },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize', accelerator: 'CmdOrCtrl+M' },
+        { role: 'close', accelerator: 'CmdOrCtrl+W' },
       ],
     },
   ]);

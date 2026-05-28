@@ -61,6 +61,19 @@ vi.mock('@/hooks/useTags', () => ({
   useTags: () => ({ data: [] }),
 }));
 
+const setMetadataMock = vi.fn();
+const metadataStore: Record<
+  string,
+  { tag?: string; tagColor?: string; tags?: string[] } | undefined
+> = {};
+vi.mock('@/hooks/useNodeMetadata', () => ({
+  useNodeMetadata: () => ({
+    map: metadataStore,
+    get: (id: string | undefined) => (id ? metadataStore[id] : undefined),
+  }),
+  useSetNodeMetadata: () => ({ mutate: setMetadataMock }),
+}));
+
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -260,13 +273,12 @@ describe('CardNode', () => {
 
   it('dims the card when activeTagFilter is set and the card lacks the tag', () => {
     useCanvasStore.setState({ activeTagFilter: 'Work' });
+    metadataStore['card-dim'] = { tag: 'Idea', tags: ['Personal'] };
     const { container } = render(
       <CardNode
         data={{
           color: '#ffffff',
           content: 'Body',
-          tag: 'Idea',
-          tags: ['Personal'],
           title: 'Untagged for filter',
         }}
         id="card-dim"
@@ -275,16 +287,17 @@ describe('CardNode', () => {
     const wrapper = container.querySelector('.group\\/card');
     expect(wrapper?.className).toContain('opacity-30');
     useCanvasStore.setState({ activeTagFilter: null });
+    metadataStore['card-dim'] = undefined;
   });
 
   it('does not dim when the card carries the active tag (case-insensitive)', () => {
     useCanvasStore.setState({ activeTagFilter: 'work' });
+    metadataStore['card-match'] = { tags: ['Work'] };
     const { container } = render(
       <CardNode
         data={{
           color: '#ffffff',
           content: 'Body',
-          tags: ['Work'],
           title: 'Matches filter',
         }}
         id="card-match"
@@ -294,6 +307,7 @@ describe('CardNode', () => {
     expect(wrapper?.className).toContain('opacity-100');
     expect(wrapper?.className).not.toContain('opacity-30');
     useCanvasStore.setState({ activeTagFilter: null });
+    metadataStore['card-match'] = undefined;
   });
 
   it('renders secondary tag chips on checklist card without a primary tag', () => {

@@ -31,6 +31,18 @@ import { type UnfurlResult, unfurlLink } from './linkPreview';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
+  deleteNodeMetadata,
+  deleteTagEverywhere,
+  listAllTagsFromMetadata,
+  loadAllMetadata,
+  type NodeMetadata,
+  type NodeMetadataMap,
+  renameTagEverywhere,
+  setNodeMetadata,
+  type TagMutationResult,
+  type TagSummary,
+} from './nodeMetadata';
+import {
   buildNoteIndex,
   cardDataToNote,
   createNote,
@@ -41,13 +53,6 @@ import {
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
-import {
-  deleteTagFromAllNotes,
-  listAllTags,
-  renameTagInAllNotes,
-  type TagMutationResult,
-  type TagSummary,
-} from './tags';
 import type {
   TemplateManifest,
   TemplateMeta,
@@ -418,6 +423,18 @@ interface CanvasRPC {
       deleteTag: {
         params: { name: string };
         response: TagMutationResult;
+      };
+      loadNodeMetadata: {
+        params: Record<string, unknown>;
+        response: NodeMetadataMap;
+      };
+      setNodeMetadata: {
+        params: { id: string; metadata: NodeMetadata };
+        response: { success: boolean };
+      };
+      deleteNodeMetadata: {
+        params: { id: string };
+        response: { success: boolean };
       };
       listTemplates: {
         params: Record<string, unknown>;
@@ -1388,12 +1405,24 @@ async function main() {
         searchCanvas: async ({ query, viewId, limit }) =>
           await searchWorkspace(wsPath, { query, viewId, limit }),
 
-        listTags: async () => await listAllTags(wsPath),
+        listTags: async () => await listAllTagsFromMetadata(wsPath),
 
         renameTag: async ({ oldName, newName }) =>
-          await renameTagInAllNotes(wsPath, oldName, newName),
+          await renameTagEverywhere(wsPath, oldName, newName),
 
-        deleteTag: async ({ name }) => await deleteTagFromAllNotes(wsPath, name),
+        deleteTag: async ({ name }) => await deleteTagEverywhere(wsPath, name),
+
+        loadNodeMetadata: async () => await loadAllMetadata(wsPath),
+
+        setNodeMetadata: async ({ id, metadata }) => {
+          await setNodeMetadata(wsPath, id, metadata);
+          return { success: true };
+        },
+
+        deleteNodeMetadata: async ({ id }) => {
+          await deleteNodeMetadata(wsPath, id);
+          return { success: true };
+        },
 
         listTemplates: () => listAllTemplates(),
 

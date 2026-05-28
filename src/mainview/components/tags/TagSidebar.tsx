@@ -95,6 +95,7 @@ function TagSidebarBody() {
       toast(m.toast_tag_renamed({ name: next }));
     }
     queryClient.invalidateQueries({ queryKey: ['tags'] });
+    queryClient.invalidateQueries({ queryKey: ['node-metadata'] });
   }, [
     editingTag,
     editingName,
@@ -118,6 +119,7 @@ function TagSidebarBody() {
       toast(m.toast_tag_deleted({ name: target }));
     }
     queryClient.invalidateQueries({ queryKey: ['tags'] });
+    queryClient.invalidateQueries({ queryKey: ['node-metadata'] });
   }, [pendingDeleteTag, activeFilter, setActiveFilter, queryClient]);
 
   return (

@@ -1,6 +1,10 @@
 import type { Node } from '@xyflow/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  type NodeMetadataMap,
+  useNodeMetadata,
+} from '@/hooks/useNodeMetadata';
 import { rpcSearchCanvas } from '@/lib/rpc';
 import type {
   SearchMatchField,
@@ -39,6 +43,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
 
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
+  const { map: metadataMap } = useNodeMetadata();
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -63,7 +68,8 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
             q,
             useCanvasStore.getState().nodes,
             activeViewId,
-            views.find((v) => v.id === activeViewId)?.name ?? activeViewId
+            views.find((v) => v.id === activeViewId)?.name ?? activeViewId,
+            metadataMap
           );
           setResults(memory.slice(0, limit));
           setFallback(true);
@@ -73,7 +79,8 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
             q,
             useCanvasStore.getState().nodes,
             activeViewId,
-            views.find((v) => v.id === activeViewId)?.name ?? activeViewId
+            views.find((v) => v.id === activeViewId)?.name ?? activeViewId,
+            metadataMap
           );
           setResults(mergeResults(backend, memory).slice(0, limit));
           setFallback(false);
@@ -90,7 +97,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
         }
       }
     },
-    [activeViewId, views, limit]
+    [activeViewId, views, limit, metadataMap]
   );
 
   useEffect(() => {
@@ -172,7 +179,8 @@ export function searchCurrentView(
   query: string,
   nodes: Node[],
   viewId: string,
-  viewName: string
+  viewName: string,
+  metadataMap: NodeMetadataMap = {}
 ): SearchResult[] {
   const q = query.trim().toLowerCase();
   if (!q) {
@@ -182,6 +190,20 @@ export function searchCurrentView(
   for (const node of nodes) {
     const data = (node.data ?? {}) as Record<string, unknown>;
     const candidates: Array<{ field: SearchMatchField; value: string }> = [];
+
+    // Metadata lookup applies to every node type: cards key on noteId,
+    // non-card nodes on the React Flow node id. Either flavor adds tag /
+    // tag-list candidates to the search index.
+    const metaKey = (data.noteId as string | undefined) ?? node.id;
+    const meta = metadataMap[metaKey];
+    if (meta?.tag) {
+      candidates.push({ field: 'tag', value: meta.tag });
+    }
+    if (Array.isArray(meta?.tags)) {
+      for (const t of meta.tags) {
+        candidates.push({ field: 'tag', value: t });
+      }
+    }
 
     switch (node.type) {
       case 'sticky':
@@ -251,16 +273,6 @@ export function searchCurrentView(
         });
         if (typeof data.content === 'string' && data.content) {
           candidates.push({ field: 'body', value: data.content });
-        }
-        if (typeof data.tag === 'string' && data.tag) {
-          candidates.push({ field: 'tag', value: data.tag });
-        }
-        if (Array.isArray(data.tags)) {
-          for (const t of data.tags as unknown[]) {
-            if (typeof t === 'string' && t) {
-              candidates.push({ field: 'tag', value: t });
-            }
-          }
         }
         if (Array.isArray(data.items)) {
           for (const item of data.items as Record<string, unknown>[]) {

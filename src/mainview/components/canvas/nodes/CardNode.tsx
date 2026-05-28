@@ -6,9 +6,13 @@ import {
   useViewport,
 } from '@xyflow/react';
 import { Check, PenLine, Tag as TagIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
+import {
+  useNodeMetadata,
+  useSetNodeMetadata,
+} from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
@@ -394,15 +398,32 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const queryClient = useQueryClient();
   const isZoomedOut = zoom < 0.4;
 
+  // Cards key node metadata by the note's stable id; the React Flow node id
+  // is a fallback for legacy nodes that pre-date the noteId roll-out.
+  const metaKey = (data as { noteId?: string }).noteId ?? id;
+  const { get: getMeta } = useNodeMetadata();
+  const setMetadata = useSetNodeMetadata();
+  const meta = getMeta(metaKey);
+
+  const viewData = useMemo<CardContentData>(
+    () => ({
+      ...data,
+      tag: meta?.tag,
+      tagColor: meta?.tagColor,
+      tags: meta?.tags,
+    }),
+    [data, meta?.tag, meta?.tagColor, meta?.tags]
+  );
+
   const dimmedByFilter = (() => {
     if (!activeTagFilter) {
       return false;
     }
     const needle = activeTagFilter.toLowerCase();
-    if (data.tag && data.tag.toLowerCase() === needle) {
+    if (viewData.tag && viewData.tag.toLowerCase() === needle) {
       return false;
     }
-    if (data.tags?.some((t) => t.toLowerCase() === needle)) {
+    if (viewData.tags?.some((t) => t.toLowerCase() === needle)) {
       return false;
     }
     return true;
@@ -432,9 +453,9 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
 
   const handleTagChange = useCallback(
     (next: TagEditorChange) => {
-      commitNodeData(id, next as Record<string, unknown>);
+      setMetadata.mutate({ id: metaKey, metadata: next });
     },
-    [commitNodeData, id]
+    [metaKey, setMetadata]
   );
 
   const openTagEditor = useCallback(() => {
@@ -457,9 +478,9 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         onOpenChange={handleTagEditorOpenChange}
         open={tagEditorOpen}
         suggestions={tagSuggestions}
-        tag={data.tag}
-        tagColor={data.tagColor}
-        tags={data.tags}
+        tag={viewData.tag}
+        tagColor={viewData.tagColor}
+        tags={viewData.tags}
       >
         <button
           aria-hidden="true"
@@ -547,10 +568,10 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
             )}
             style={colorToStyle(data.color)}
           >
-            {data.tag ? (
+            {viewData.tag ? (
               <div
                 className="mb-4 h-4 w-12 rounded-md"
-                style={colorToStyle(data.tagColor)}
+                style={colorToStyle(viewData.tagColor)}
               />
             ) : null}
             <h2 className="font-bold text-2xl/tight">
@@ -566,7 +587,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
           </div>
         ) : (
           <CardContent
-            data={data}
+            data={viewData}
             onChange={(newData) => {
               commitNodeData(id, newData);
             }}

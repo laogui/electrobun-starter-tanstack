@@ -144,7 +144,9 @@ describe('TagSidebar', () => {
     });
     fireEvent.click(deleteBtn);
 
-    const confirmBtn = await screen.findByRole('button', { name: 'Delete Tag' });
+    const confirmBtn = await screen.findByRole('button', {
+      name: 'Delete Tag',
+    });
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {

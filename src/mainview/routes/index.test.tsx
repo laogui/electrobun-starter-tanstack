@@ -293,6 +293,15 @@ vi.mock('@/hooks/useNodeCreation', () => ({
   }),
 }));
 
+vi.mock('@/hooks/useNodeMetadata', () => ({
+  useNodeMetadata: () => ({
+    map: {},
+    get: () => undefined,
+  }),
+  useSetNodeMetadata: () => ({ mutate: vi.fn() }),
+  useDeleteNodeMetadata: () => ({ mutate: vi.fn() }),
+}));
+
 vi.mock('@/components/canvas/FocusedView', () => ({
   FocusedView: ({ node }: { node: { id: string } }) => (
     <div>Focused {node.id}</div>

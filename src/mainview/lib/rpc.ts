@@ -363,6 +363,38 @@ export async function rpcDeleteTag(name: string) {
   return eb.rpc.request.deleteTag({ name });
 }
 
+export interface NodeMetadata {
+  tag?: string;
+  tagColor?: string;
+  tags?: string[];
+}
+
+export type NodeMetadataMap = Record<string, NodeMetadata>;
+
+export async function rpcLoadNodeMetadata(): Promise<NodeMetadataMap | null> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.loadNodeMetadata({});
+}
+
+export async function rpcSetNodeMetadata(id: string, metadata: NodeMetadata) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.setNodeMetadata({ id, metadata });
+}
+
+export async function rpcDeleteNodeMetadata(id: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.deleteNodeMetadata({ id });
+}
+
 export async function rpcListTemplates() {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

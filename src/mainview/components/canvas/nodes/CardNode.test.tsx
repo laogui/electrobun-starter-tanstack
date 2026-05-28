@@ -57,6 +57,14 @@ vi.mock('@/components/preview/NotePreview', () => ({
   ),
 }));
 
+vi.mock('@/hooks/useTags', () => ({
+  useTags: () => ({ data: [] }),
+}));
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
+
 describe('CardNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Handle,
   NodeResizeControl,
@@ -8,6 +9,7 @@ import { Check, PenLine, Tag as TagIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
+import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
@@ -387,6 +389,9 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
   const activeTagFilter = useCanvasStore((s) => s.activeTagFilter);
+  const { data: tagSummaries } = useTags();
+  const tagSuggestions = (tagSummaries ?? []).map((t) => t.name);
+  const queryClient = useQueryClient();
   const isZoomedOut = zoom < 0.4;
 
   const dimmedByFilter = (() => {
@@ -414,11 +419,15 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const handleTagEditorOpenChange = useCallback(
     (next: boolean) => {
       setTagEditorOpen(next);
-      if (!next && editingTagNodeId === id) {
-        setEditingTagNodeId(null);
+      if (!next) {
+        if (editingTagNodeId === id) {
+          setEditingTagNodeId(null);
+        }
+        // Refresh the workspace tag list so the sidebar reflects any edits.
+        queryClient.invalidateQueries({ queryKey: ['tags'] });
       }
     },
-    [editingTagNodeId, id, setEditingTagNodeId]
+    [editingTagNodeId, id, queryClient, setEditingTagNodeId]
   );
 
   const handleTagChange = useCallback(
@@ -447,6 +456,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         onChange={handleTagChange}
         onOpenChange={handleTagEditorOpenChange}
         open={tagEditorOpen}
+        suggestions={tagSuggestions}
         tag={data.tag}
         tagColor={data.tagColor}
         tags={data.tags}

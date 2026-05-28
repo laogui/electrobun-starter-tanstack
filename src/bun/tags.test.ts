@@ -5,6 +5,8 @@ import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { parseFrontmatter } from './notes';
+
 vi.mock('electrobun/bun', () => ({
   Utils: { paths: { userData: '/mock-user-data' } },
 }));
@@ -18,6 +20,17 @@ const setBunFile = () => {
     write: vi.fn(writeFile),
   });
 };
+
+function readFrontmatter(
+  workspaceRoot: string,
+  relPath: string
+): Record<string, unknown> {
+  const text = readFileSync(
+    join(workspaceRoot, 'content', relPath),
+    'utf8'
+  );
+  return parseFrontmatter(text).frontmatter;
+}
 
 function writeNote(
   workspaceRoot: string,
@@ -130,5 +143,118 @@ describe('listAllTags', () => {
     const { listAllTags } = await import('./tags');
     const result = await listAllTags(workspaceRoot);
     expect(result.map((t) => t.name)).toEqual(['Real']);
+  });
+});
+
+describe('renameTagInAllNotes', () => {
+  let workspaceRoot: string;
+
+  beforeEach(async () => {
+    workspaceRoot = await mkdtemp(join(tmpdir(), 'tags-rename-'));
+    mkdirSync(join(workspaceRoot, 'content'), { recursive: true });
+    setBunFile();
+  });
+
+  it('renames the primary tag case-insensitively across notes', async () => {
+    writeNote(workspaceRoot, 'a.md', { id: 'a', tag: 'Work' });
+    writeNote(workspaceRoot, 'b.md', { id: 'b', tag: 'work' });
+    writeNote(workspaceRoot, 'c.md', { id: 'c', tag: 'Other' });
+
+    const { renameTagInAllNotes } = await import('./tags');
+    const result = await renameTagInAllNotes(workspaceRoot, 'Work', 'Career');
+
+    expect(result.updated).toBe(2);
+    expect(readFrontmatter(workspaceRoot, 'a.md').tag).toBe('Career');
+    expect(readFrontmatter(workspaceRoot, 'b.md').tag).toBe('Career');
+    expect(readFrontmatter(workspaceRoot, 'c.md').tag).toBe('Other');
+  });
+
+  it('renames secondary tags and deduplicates collisions', async () => {
+    writeNote(workspaceRoot, 'a.md', {
+      id: 'a',
+      tags: ['Work', 'Career', 'Inbox'],
+    });
+
+    const { renameTagInAllNotes } = await import('./tags');
+    const result = await renameTagInAllNotes(workspaceRoot, 'Work', 'Career');
+
+    expect(result.updated).toBe(1);
+    expect(readFrontmatter(workspaceRoot, 'a.md').tags).toEqual([
+      'Career',
+      'Inbox',
+    ]);
+  });
+
+  it('is a no-op when old/new normalize to the same key', async () => {
+    writeNote(workspaceRoot, 'a.md', { id: 'a', tag: 'Work' });
+    const { renameTagInAllNotes } = await import('./tags');
+    const result = await renameTagInAllNotes(workspaceRoot, 'Work', 'work');
+    expect(result.updated).toBe(0);
+  });
+
+  it('rejects empty inputs', async () => {
+    writeNote(workspaceRoot, 'a.md', { id: 'a', tag: 'Work' });
+    const { renameTagInAllNotes } = await import('./tags');
+    expect((await renameTagInAllNotes(workspaceRoot, '', 'X')).updated).toBe(0);
+    expect((await renameTagInAllNotes(workspaceRoot, 'Work', '  ')).updated).toBe(0);
+  });
+});
+
+describe('deleteTagFromAllNotes', () => {
+  let workspaceRoot: string;
+
+  beforeEach(async () => {
+    workspaceRoot = await mkdtemp(join(tmpdir(), 'tags-delete-'));
+    mkdirSync(join(workspaceRoot, 'content'), { recursive: true });
+    setBunFile();
+  });
+
+  it('removes primary tag and tagColor case-insensitively', async () => {
+    writeNote(workspaceRoot, 'a.md', {
+      id: 'a',
+      tag: 'Work',
+      tagColor: '#ff0000',
+    });
+    writeNote(workspaceRoot, 'b.md', { id: 'b', tag: 'Other' });
+
+    const { deleteTagFromAllNotes } = await import('./tags');
+    const result = await deleteTagFromAllNotes(workspaceRoot, 'work');
+
+    expect(result.updated).toBe(1);
+    const a = readFrontmatter(workspaceRoot, 'a.md');
+    expect(a.tag).toBeUndefined();
+    expect(a.tagColor).toBeUndefined();
+    expect(readFrontmatter(workspaceRoot, 'b.md').tag).toBe('Other');
+  });
+
+  it('removes the tag from secondary tags[] arrays', async () => {
+    writeNote(workspaceRoot, 'a.md', {
+      id: 'a',
+      tags: ['Inbox', 'Work', 'Urgent'],
+    });
+    writeNote(workspaceRoot, 'b.md', { id: 'b', tags: ['Work'] });
+
+    const { deleteTagFromAllNotes } = await import('./tags');
+    const result = await deleteTagFromAllNotes(workspaceRoot, 'Work');
+
+    expect(result.updated).toBe(2);
+    expect(readFrontmatter(workspaceRoot, 'a.md').tags).toEqual([
+      'Inbox',
+      'Urgent',
+    ]);
+    expect(readFrontmatter(workspaceRoot, 'b.md').tags).toBeUndefined();
+  });
+
+  it('is a no-op when the tag is absent', async () => {
+    writeNote(workspaceRoot, 'a.md', { id: 'a', tag: 'Work' });
+    const { deleteTagFromAllNotes } = await import('./tags');
+    const result = await deleteTagFromAllNotes(workspaceRoot, 'Missing');
+    expect(result.updated).toBe(0);
+  });
+
+  it('rejects empty input', async () => {
+    writeNote(workspaceRoot, 'a.md', { id: 'a', tag: 'Work' });
+    const { deleteTagFromAllNotes } = await import('./tags');
+    expect((await deleteTagFromAllNotes(workspaceRoot, '   ')).updated).toBe(0);
   });
 });

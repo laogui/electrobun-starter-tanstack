@@ -10,23 +10,36 @@ import { renderWithProviders } from '../../../test/renderWithProviders';
 import { TagSidebar } from './TagSidebar';
 
 const { rpcMock } = vi.hoisted(() => ({
-  rpcMock: { rpcListTags: vi.fn() },
+  rpcMock: {
+    rpcListTags: vi.fn(),
+    rpcRenameTag: vi.fn(),
+    rpcDeleteTag: vi.fn(),
+  },
 }));
 
 vi.mock('@/lib/rpc', () => ({
   rpcListTags: rpcMock.rpcListTags,
+  rpcRenameTag: rpcMock.rpcRenameTag,
+  rpcDeleteTag: rpcMock.rpcDeleteTag,
 }));
 
 const ACTIVE_FILTER_RE = /Filtering by Work/;
+const RENAME_WORK_RE = /Rename Work/;
+const RENAME_INBOX_RE = /Rename Inbox/;
+const DELETE_PERSONAL_RE = /Delete Personal/;
 
 describe('TagSidebar', () => {
   beforeEach(() => {
     rpcMock.rpcListTags.mockReset();
+    rpcMock.rpcRenameTag.mockReset();
+    rpcMock.rpcDeleteTag.mockReset();
     rpcMock.rpcListTags.mockResolvedValue([
       { name: 'Work', count: 3 },
       { name: 'Inbox', count: 2 },
       { name: 'Personal', count: 1 },
     ]);
+    rpcMock.rpcRenameTag.mockResolvedValue({ updated: 1 });
+    rpcMock.rpcDeleteTag.mockResolvedValue({ updated: 1 });
     useCanvasStore.getState().reset();
     useCanvasStore.setState({ tagSidebarOpen: true });
   });
@@ -84,5 +97,61 @@ describe('TagSidebar', () => {
     rpcMock.rpcListTags.mockResolvedValue([]);
     renderWithProviders(<TagSidebar />);
     await screen.findByText('No tags yet.');
+  });
+
+  it('renames a tag through rpcRenameTag and updates the active filter', async () => {
+    useCanvasStore.setState({ activeTagFilter: 'Work' });
+    renderWithProviders(<TagSidebar />);
+    const renameBtn = await screen.findByRole('button', {
+      name: RENAME_WORK_RE,
+    });
+    fireEvent.click(renameBtn);
+
+    const input = await screen.findByDisplayValue('Work');
+    fireEvent.change(input, { target: { value: 'Job' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(rpcMock.rpcRenameTag).toHaveBeenCalledWith('Work', 'Job');
+    });
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeTagFilter).toBe('Job');
+    });
+  });
+
+  it('cancels rename on Escape without calling rpc', async () => {
+    renderWithProviders(<TagSidebar />);
+    const renameBtn = await screen.findByRole('button', {
+      name: RENAME_INBOX_RE,
+    });
+    fireEvent.click(renameBtn);
+
+    const input = await screen.findByDisplayValue('Inbox');
+    fireEvent.change(input, { target: { value: 'Mailbox' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Mailbox')).not.toBeInTheDocument();
+    });
+    expect(rpcMock.rpcRenameTag).not.toHaveBeenCalled();
+  });
+
+  it('deletes a tag after confirming and clears the active filter', async () => {
+    useCanvasStore.setState({ activeTagFilter: 'Personal' });
+    renderWithProviders(<TagSidebar />);
+    const deleteBtn = await screen.findByRole('button', {
+      name: DELETE_PERSONAL_RE,
+    });
+    fireEvent.click(deleteBtn);
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Delete Tag' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(rpcMock.rpcDeleteTag).toHaveBeenCalledWith('Personal');
+    });
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeTagFilter).toBeNull();
+    });
   });
 });

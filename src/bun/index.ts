@@ -41,7 +41,13 @@ import {
 import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
-import { listAllTags, type TagSummary } from './tags';
+import {
+  deleteTagFromAllNotes,
+  listAllTags,
+  renameTagInAllNotes,
+  type TagMutationResult,
+  type TagSummary,
+} from './tags';
 import type {
   TemplateManifest,
   TemplateMeta,
@@ -404,6 +410,14 @@ interface CanvasRPC {
       listTags: {
         params: Record<string, unknown>;
         response: TagSummary[];
+      };
+      renameTag: {
+        params: { oldName: string; newName: string };
+        response: TagMutationResult;
+      };
+      deleteTag: {
+        params: { name: string };
+        response: TagMutationResult;
       };
       listTemplates: {
         params: Record<string, unknown>;
@@ -1375,6 +1389,11 @@ async function main() {
           await searchWorkspace(wsPath, { query, viewId, limit }),
 
         listTags: async () => await listAllTags(wsPath),
+
+        renameTag: async ({ oldName, newName }) =>
+          await renameTagInAllNotes(wsPath, oldName, newName),
+
+        deleteTag: async ({ name }) => await deleteTagFromAllNotes(wsPath, name),
 
         listTemplates: () => listAllTemplates(),
 

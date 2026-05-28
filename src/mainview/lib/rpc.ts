@@ -347,6 +347,22 @@ export async function rpcListTags() {
   return eb.rpc.request.listTags({});
 }
 
+export async function rpcRenameTag(oldName: string, newName: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.renameTag({ oldName, newName });
+}
+
+export async function rpcDeleteTag(name: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.deleteTag({ name });
+}
+
 export async function rpcListTemplates() {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

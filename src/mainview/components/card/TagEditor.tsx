@@ -1,7 +1,7 @@
 import { Popover } from '@base-ui/react/popover';
 import { Check, X } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CARD_COLORS, colorToStyle } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
@@ -23,9 +23,40 @@ interface TagEditorProps {
   onChange: (next: TagEditorChange) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  /** Workspace-wide tag names used to populate the autocomplete dropdown. */
+  suggestions?: string[];
   tag?: string;
   tagColor?: string;
   tags?: string[];
+}
+
+const MAX_VISIBLE_SUGGESTIONS = 6;
+
+function filterSuggestions(
+  pool: string[],
+  draft: string,
+  exclude: string[]
+): string[] {
+  const needle = draft.trim().toLowerCase();
+  if (!needle) {
+    return [];
+  }
+  const excluded = new Set(exclude.map((t) => t.toLowerCase()));
+  const out: string[] = [];
+  for (const name of pool) {
+    const lower = name.toLowerCase();
+    if (excluded.has(lower)) {
+      continue;
+    }
+    if (!lower.includes(needle)) {
+      continue;
+    }
+    out.push(name);
+    if (out.length >= MAX_VISIBLE_SUGGESTIONS) {
+      break;
+    }
+  }
+  return out;
 }
 
 function dedupePush(list: string[], value: string): string[] {
@@ -48,14 +79,21 @@ export function TagEditor({
   onChange,
   onOpenChange,
   open,
+  suggestions,
   tag,
   tagColor,
   tags,
 }: TagEditorProps) {
   const safeTags = tags ?? [];
   const [draft, setDraft] = useState('');
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const limitReached = safeTags.length >= MAX_TAGS;
+
+  const filteredSuggestions = useMemo(
+    () => filterSuggestions(suggestions ?? [], draft, safeTags),
+    [suggestions, draft, safeTags]
+  );
 
   useEffect(() => {
     if (open) {
@@ -68,7 +106,17 @@ export function TagEditor({
       };
     }
     setDraft('');
+    setActiveSuggestion(0);
   }, [open]);
+
+  const addTagValue = (value: string) => {
+    const next = dedupePush(safeTags, value);
+    if (next !== safeTags) {
+      onChange({ tags: next });
+    }
+    setDraft('');
+    setActiveSuggestion(0);
+  };
 
   const commitDraft = () => {
     const parts = draft
@@ -86,12 +134,44 @@ export function TagEditor({
       onChange({ tags: next });
     }
     setDraft('');
+    setActiveSuggestion(0);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (filteredSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveSuggestion((prev) => (prev + 1) % filteredSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveSuggestion(
+          (prev) =>
+            (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length
+        );
+        return;
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const picked = filteredSuggestions[activeSuggestion];
+      if (picked) {
+        addTagValue(picked);
+        return;
+      }
+      commitDraft();
+      return;
+    }
+    if (e.key === ',') {
       e.preventDefault();
       commitDraft();
+      return;
+    }
+    if (e.key === 'Escape' && filteredSuggestions.length > 0) {
+      e.preventDefault();
+      setDraft('');
+      setActiveSuggestion(0);
       return;
     }
     if (e.key === 'Backspace' && !draft && safeTags.length > 0) {
@@ -139,6 +219,7 @@ export function TagEditor({
               onBlur={commitDraft}
               onChange={(e) => {
                 setDraft(e.target.value);
+                setActiveSuggestion(0);
               }}
               onKeyDown={handleKeyDown}
               placeholder={m.tag_editor_placeholder()}
@@ -146,6 +227,39 @@ export function TagEditor({
               type="text"
               value={draft}
             />
+            {filteredSuggestions.length > 0 ? (
+              <ul
+                aria-label={m.tag_editor_placeholder()}
+                className="mt-1 max-h-44 overflow-y-auto rounded-md border border-black/5 bg-white py-1 shadow-sm dark:border-white/10 dark:bg-neutral-900"
+              >
+                {filteredSuggestions.map((name, idx) => {
+                  const isActive = idx === activeSuggestion;
+                  return (
+                    <li key={name} role="presentation">
+                      <button
+                        aria-selected={isActive}
+                        className={cn(
+                          'flex w-full items-center px-2 py-1 text-left text-sm',
+                          isActive
+                            ? 'bg-neutral-100 dark:bg-neutral-800'
+                            : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/60'
+                        )}
+                        onClick={() => addTagValue(name)}
+                        onMouseDown={(e) => {
+                          // Prevent input blur (which would otherwise commit
+                          // draft before the click registers).
+                          e.preventDefault();
+                        }}
+                        role="option"
+                        type="button"
+                      >
+                        {name}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
             {limitReached ? (
               <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
                 {m.tag_limit_reached()}

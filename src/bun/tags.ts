@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 
-import { listFilesRecursive, parseFrontmatter } from './notes';
+import {
+  listFilesRecursive,
+  parseFrontmatter,
+  sanitizeTags,
+  saveNote,
+} from './notes';
 
 export interface TagSummary {
   /** Number of notes referencing this tag (case-insensitive match). */
@@ -88,4 +93,136 @@ export async function listAllTags(wsPath: string): Promise<TagSummary[]> {
       }
       return a.name.localeCompare(b.name);
     });
+}
+
+export interface TagMutationResult {
+  /** Number of note files whose contents were rewritten. */
+  updated: number;
+}
+
+type TagMutator = (fm: Record<string, unknown>) => boolean;
+
+async function mutateAllNotes(
+  wsPath: string,
+  mutate: TagMutator
+): Promise<TagMutationResult> {
+  const contentDir = join(wsPath, 'content');
+  let updated = 0;
+  for (const rel of listFilesRecursive(contentDir)) {
+    if (!rel.endsWith('.md')) {
+      continue;
+    }
+    const fullPath = join(contentDir, rel);
+    let text: string;
+    try {
+      text = await Bun.file(fullPath).text();
+    } catch {
+      continue;
+    }
+    const { frontmatter, body } = parseFrontmatter(text);
+    if (!mutate(frontmatter)) {
+      continue;
+    }
+    await saveNote(wsPath, `content/${rel}`, frontmatter, body);
+    updated += 1;
+  }
+  return { updated };
+}
+
+/**
+ * Rename `oldName` to `newName` across every note's `tag` and `tags[]`
+ * frontmatter fields. Matching is case-insensitive. If the new name already
+ * appears alongside the old one on the same note, the duplicate is collapsed.
+ * Returns the number of note files that were rewritten.
+ */
+export async function renameTagInAllNotes(
+  wsPath: string,
+  oldName: string,
+  newName: string
+): Promise<TagMutationResult> {
+  const oldTrim = oldName.trim();
+  const [clean] = sanitizeTags([newName]);
+  if (!(oldTrim && clean)) {
+    return { updated: 0 };
+  }
+  const oldKey = oldTrim.toLowerCase();
+  const newKey = clean.toLowerCase();
+  if (oldKey === newKey) {
+    return { updated: 0 };
+  }
+
+  return mutateAllNotes(wsPath, (fm) => {
+    let changed = false;
+    const primary = typeof fm.tag === 'string' ? fm.tag : '';
+    if (primary && primary.toLowerCase() === oldKey) {
+      fm.tag = clean;
+      changed = true;
+    }
+    if (Array.isArray(fm.tags)) {
+      const next: string[] = [];
+      const seen = new Set<string>();
+      let listChanged = false;
+      for (const entry of fm.tags as unknown[]) {
+        if (typeof entry !== 'string') {
+          continue;
+        }
+        const replaced = entry.toLowerCase() === oldKey ? clean : entry;
+        if (entry !== replaced) {
+          listChanged = true;
+        }
+        const key = replaced.toLowerCase();
+        if (seen.has(key)) {
+          listChanged = true;
+          continue;
+        }
+        seen.add(key);
+        next.push(replaced);
+      }
+      if (listChanged) {
+        fm.tags = next;
+        changed = true;
+      }
+    }
+    return changed;
+  });
+}
+
+/**
+ * Remove `name` from every note's `tag` and `tags[]` frontmatter fields.
+ * When the primary `tag` is removed, the associated `tagColor` is cleared too.
+ * Matching is case-insensitive. Returns the number of note files rewritten.
+ */
+export async function deleteTagFromAllNotes(
+  wsPath: string,
+  name: string
+): Promise<TagMutationResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { updated: 0 };
+  }
+  const key = trimmed.toLowerCase();
+
+  return mutateAllNotes(wsPath, (fm) => {
+    let changed = false;
+    const primary = typeof fm.tag === 'string' ? fm.tag : '';
+    if (primary && primary.toLowerCase() === key) {
+      fm.tag = undefined;
+      fm.tagColor = undefined;
+      changed = true;
+    }
+    if (Array.isArray(fm.tags)) {
+      const next = (fm.tags as unknown[]).filter(
+        (entry) => typeof entry === 'string' && entry.toLowerCase() !== key
+      ) as string[];
+      if (next.length !== (fm.tags as unknown[]).length) {
+        if (next.length === 0) {
+          fm.tags = undefined;
+        } else {
+          fm.tags = next;
+        }
+        changed = true;
+      }
+    }
+    return changed;
+  });
 }

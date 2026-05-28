@@ -11,11 +11,13 @@ function Harness({
   initialTagColor,
   initialTags = [],
   onChangeSpy,
+  suggestions,
 }: {
   initialTag?: string;
   initialTagColor?: string;
   initialTags?: string[];
   onChangeSpy?: (next: TagEditorChange) => void;
+  suggestions?: string[];
 }) {
   const [tag, setTag] = useState(initialTag);
   const [tagColor, setTagColor] = useState(initialTagColor);
@@ -40,6 +42,7 @@ function Harness({
       onChange={apply}
       onOpenChange={setOpen}
       open={open}
+      suggestions={suggestions}
       tag={tag}
       tagColor={tagColor}
       tags={tags}
@@ -127,5 +130,63 @@ describe('TagEditor', () => {
     )[1] as HTMLInputElement;
     expect(multiInput).toBeDisabled();
     expect(screen.getByText('Up to 8 tags')).toBeInTheDocument();
+  });
+
+  it('shows matching suggestions filtered by the draft input', () => {
+    render(
+      <Harness suggestions={['Work', 'Workshop', 'Personal', 'Errand']} />
+    );
+
+    const multiInput = screen.getAllByPlaceholderText(
+      'Add tag…'
+    )[1] as HTMLInputElement;
+    fireEvent.change(multiInput, { target: { value: 'wor' } });
+
+    const options = screen.getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['Work', 'Workshop']);
+  });
+
+  it('hides suggestions for tags already applied', () => {
+    render(
+      <Harness
+        initialTags={['Work']}
+        suggestions={['Work', 'Workshop', 'Personal']}
+      />
+    );
+
+    const multiInput = screen.getAllByPlaceholderText(
+      'Add tag…'
+    )[1] as HTMLInputElement;
+    fireEvent.change(multiInput, { target: { value: 'wor' } });
+
+    const options = screen.getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['Workshop']);
+  });
+
+  it('adds the highlighted suggestion when pressing Enter', () => {
+    const spy = vi.fn();
+    render(<Harness onChangeSpy={spy} suggestions={['Work', 'Workshop']} />);
+
+    const multiInput = screen.getAllByPlaceholderText(
+      'Add tag…'
+    )[1] as HTMLInputElement;
+    fireEvent.change(multiInput, { target: { value: 'wor' } });
+    fireEvent.keyDown(multiInput, { key: 'ArrowDown' });
+    fireEvent.keyDown(multiInput, { key: 'Enter' });
+
+    expect(spy).toHaveBeenLastCalledWith({ tags: ['Workshop'] });
+  });
+
+  it('adds a suggestion when clicked', () => {
+    const spy = vi.fn();
+    render(<Harness onChangeSpy={spy} suggestions={['Work', 'Personal']} />);
+
+    const multiInput = screen.getAllByPlaceholderText(
+      'Add tag…'
+    )[1] as HTMLInputElement;
+    fireEvent.change(multiInput, { target: { value: 'per' } });
+    fireEvent.click(screen.getByRole('option', { name: 'Personal' }));
+
+    expect(spy).toHaveBeenLastCalledWith({ tags: ['Personal'] });
   });
 });

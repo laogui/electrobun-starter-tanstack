@@ -2,10 +2,10 @@
 
 - 状态：Draft
 - 日期：2026-05-29
-- 关联决策：`docs/decisions/0001-json-sot-markdown-mirror.md`
+- 关联决策：`docs/decisions/0002-json-sot-markdown-export.md`
 - 关联计划：
   - `docs/features/Planned/preview-from-blocknote-json.md`
-  - `docs/features/Planned/markdown-write-only.md`
+  - `docs/features/Planned/markdown-write-only.md`（需废弃或改写为 markdown-export-only）
   - `docs/features/Planned/node-metadata-sidecar.md`
 
 ## 1. 背景
@@ -23,11 +23,11 @@ GhostBoard 早期选择 Markdown 作为本地笔记文件格式，初衷是：
 - 画布卡片不是传统文档列表，卡片可拖动、缩放、嵌套到 folder，预览需要的是结构化摘要而不是完整 Markdown 渲染。
 - 当前代码已经形成 `.md` + BlockNote sidecar JSON 的双存储，需要 hash、revision、冲突检测、恢复路径来协调，复杂度持续上升。
 
-因此需要明确：Markdown 是否仍然作为主存储，还是降级为 mirror/export。
+因此需要明确：Markdown 是否仍然作为主存储、同步 mirror，还是只保留为按需导出能力。
 
 ## 2. 结论
 
-**放弃 Markdown 主存储。BlockNote JSON 作为笔记内容的 source of truth，Markdown 降级为只写 mirror/export。**
+**放弃 Markdown 主存储，也放弃自动同步生成 Markdown mirror。BlockNote JSON 作为笔记内容的 source of truth，Markdown 只作为用户主动触发的导出格式。**
 
 这不是放弃本地优先，也不是放弃用户数据可控，而是把“用户可读、可导出”和“应用内部无损编辑模型”分开：
 
@@ -35,10 +35,10 @@ GhostBoard 早期选择 Markdown 作为本地笔记文件格式，初衷是：
 |---|---|
 | 应用内无损编辑 | BlockNote JSON |
 | 卡片预览 | 从 BlockNote JSON 派生 preview model |
-| 本地可见 / 可备份 | 工作区文件夹 + JSON + Markdown mirror |
-| 外部查看 | Markdown mirror |
-| 外部编辑 | 显式“从 Markdown 重新导入”，不自动双向同步 |
-| 导出 / 迁移 | Markdown / JSON export |
+| 本地可见 / 可备份 | 工作区文件夹 + JSON pretty print + 应用内导出 |
+| 外部查看 | 用户主动导出的 `.md` 文件 |
+| 外部编辑 | 不作为核心工作流；如需要，做显式 Markdown import |
+| 导出 / 迁移 | 单篇 Markdown 导出、批量 Markdown 导出、JSON export |
 
 ## 3. 当前问题诊断
 
@@ -116,7 +116,6 @@ workspace/
     settings.json
     node-metadata.json
   content/
-    note-title-abcd1234.md                 # Markdown mirror/export
     .ghostboard/
       blocknote/
         note_abcd1234.json                 # note 内容 SoT
@@ -130,10 +129,10 @@ workspace/
 
 | 写入方 | 负责内容 | 不应负责 |
 |---|---|---|
-| `saveBlockNote` | note blocks、title、markdown mirror、preview | canvas layout |
+| `saveBlockNote` | note blocks、title、preview | canvas layout、Markdown 导出 |
 | `saveManifest` | 节点位置、尺寸、边、folder child 引用 | note 正文 |
 | node metadata sidecar | tags、tagColor、跨节点元数据 | note body |
-| export/import | 显式格式转换 | 自动双向同步 |
+| export/import | 用户主动触发的格式转换 | 自动同步、自动回读 |
 
 ### 4.3 加载优先级
 
@@ -142,9 +141,9 @@ workspace/
   1. 根据 noteId 找 BlockNote JSON
   2. 如果 JSON 存在且 schema 支持，直接加载 JSON
   3. 如果 JSON 缺失/损坏，提示用户选择：
-     - 从 Markdown 重新导入
-     - 查看 Markdown mirror
+     - 从旧 Markdown 重新导入
      - 创建空白 JSON 并保留旧文件
+     - 定位损坏文件用于手动恢复
   4. 不再自动根据 Markdown hash 做双向 reconcile
 ```
 
@@ -154,12 +153,12 @@ workspace/
 
 目标：统一团队和代码注释中的立场。
 
-- [ ] 将 `docs/decisions/0001-json-sot-markdown-mirror.md` 作为唯一架构决策。
-- [ ] 搜索 README、PRD、技术文档中 “Markdown-first”、“Markdown 是主数据” 表述并替换。
+- [ ] 新增 `docs/decisions/0002-json-sot-markdown-export.md`，取代 ADR 0001 中 “Markdown mirror” 的连续同步策略。
+- [ ] 搜索 README、PRD、技术文档中 “Markdown-first”、“Markdown 是主数据”、“Markdown mirror 自动生成” 表述并替换。
 - [ ] 在设置页或 onboarding 中明确说明：
   - GhostBoard 内部使用结构化 JSON 保证无损编辑。
-  - Markdown 文件是可读 mirror/export。
-  - 外部修改 Markdown 不会自动同步回应用。
+  - Markdown 是按需导出格式，不会在每次保存时自动生成。
+  - 外部 Markdown 需要通过显式导入进入应用，不会自动同步。
 
 验收：文档和 UI 文案不再暗示 Markdown 是主源。
 
@@ -195,54 +194,74 @@ workspace/
 
 验收：BlockNote 高级块在卡片预览中不再被 Markdown lossy 投影误伤。
 
-### Phase 3：Markdown 改为只写 mirror
+### Phase 3：停止自动生成 Markdown
 
-目标：删除自动冲突检测和自动回读。
+目标：删除保存链路中的 Markdown mirror 写入，让保存只负责 JSON SoT 和预览缓存。
 
-执行现有计划：`docs/features/Planned/markdown-write-only.md`。
+> `docs/features/Planned/markdown-write-only.md` 需要废弃或改写为 “markdown-export-only”。
 
 关键任务：
 
 - [ ] 删除或废弃 `detectExternalMarkdownChange()`。
-- [ ] 停止写 `markdownHash`。
+- [ ] 停止写 `markdownHash`、`blocknoteHash` 中与 Markdown reconcile 相关的字段。
 - [ ] `loadBlockNote` 默认只加载 sidecar JSON。
+- [ ] `saveBlockNote` 不再调用 `blocksToMarkdownLossy` 生成 `.md`。
+- [ ] `writeNoteWithPreview` 不再承担“写 note markdown 文件”的职责，改名或拆分为 `saveNotePreview`。
 - [ ] `.md` 外部变动不自动导入，不创建 conflict 副本。
-- [ ] 新增显式 RPC：`recoverFromMarkdown(noteId)` / `importMarkdownToBlockNote(noteId)`。
-- [ ] UI 提供二次确认：“将用 Markdown 覆盖当前结构化内容，可能丢失高级块”。
+- [ ] legacy `.md` 只作为一次性迁移或显式 import 的输入。
 
-验收：外部编辑 `.md` 后重开应用，应用仍显示 JSON 内容；只有显式导入才会变化。
+验收：编辑和保存 BlockNote 文档时，工作区不会自动生成或更新 `.md` 文件。
 
-### Phase 4：存储格式收敛
+### Phase 4：Markdown 导出功能
 
-目标：让 note 的主数据文件清晰、稳定、可迁移。
+目标：把 Markdown 从“保存副作用”改成“用户明确选择的导出能力”。
 
-两个可选方向：
+#### 4.1 单篇导出
 
-#### 方案 A：继续 sidecar JSON
+入口建议：
+
+- Focused note 右上角更多菜单：`导出为 Markdown…`
+- 卡片右键菜单：`导出为 Markdown…`
+- 笔记库条目菜单：`导出为 Markdown…`
+
+行为：
+
+- 弹出系统保存对话框，默认文件名来自 note title。
+- 从 BlockNote JSON 当前 blocks 生成 Markdown。
+- 可选附带 YAML frontmatter：`id/title/createdAt/updatedAt/tags`。
+- 附件处理第一版采用相对链接或复制到同级 `attachments/` 目录，二选一需在导出对话框明确。
+
+#### 4.2 批量导出
+
+入口建议：
+
+- 设置页：`导出所有笔记为 Markdown…`
+- 笔记库：多选后 `批量导出 Markdown…`
+- 画布菜单：`导出当前画布笔记为 Markdown…`
+
+范围选项：
+
+| 范围 | 说明 |
+|---|---|
+| 当前文档 | 单篇 note |
+| 当前画布 | 当前 view 中引用的所有 card note |
+| 选中卡片 | 多选节点对应的 notes |
+| 全部笔记 | workspace note index 中所有 notes |
+
+输出结构建议：
 
 ```text
-content/<note>.md
-content/.ghostboard/blocknote/<noteId>.json
-```
-
-优点：兼容当前实现，迁移成本低。  
-缺点：一个 note 分散在两个位置。
-
-#### 方案 B：改为 note bundle
-
-```text
-content/<note-slug>/
-  note.json
-  note.md
+GhostBoard Markdown Export/
+  index.md
+  notes/
+    note-title-a1b2c3d4.md
   attachments/
+    ...
 ```
 
-优点：用户理解更直观，一个笔记一个目录，适合未来附件和导出。  
-缺点：迁移成本更高，路径兼容要做一次大改。
+批量导出必须生成 `index.md`，包含标题、来源画布、导出时间、文档列表和可能的失败项。
 
-建议：**短期采用方案 A，等数据模型稳定后再评估方案 B。**
-
-验收：所有新 note 都有稳定 JSON SoT，Markdown 只是派生物。
+验收：应用保存时不产生 Markdown；只有用户点击导出时才产生 `.md`。
 
 ### Phase 5：清理 legacy 代码与测试
 
@@ -264,10 +283,10 @@ content/<note-slug>/
 
 | 状态 | 行为 |
 |---|---|
-| 有 sidecar JSON | 加载 JSON，Markdown 只作为 mirror |
-| 无 sidecar，有 Markdown | 首次打开时提示或自动一次性导入为 JSON，之后以 JSON 为准 |
+| 有 sidecar JSON | 加载 JSON，不读取 Markdown |
+| 无 sidecar，有旧 Markdown | 首次打开时提示一次性导入为 JSON，之后以 JSON 为准 |
 | sidecar 损坏，有 Markdown | 提示用户从 Markdown 恢复或保留损坏文件 |
-| sidecar 与 Markdown 不一致 | 不自动判冲突，以 JSON 为准，Markdown 变化可通过显式导入处理 |
+| sidecar 与旧 Markdown 不一致 | 不自动判冲突，以 JSON 为准，旧 Markdown 只可显式导入 |
 
 ### 6.2 版本字段
 
@@ -288,54 +307,56 @@ content/<note-slug>/
 }
 ```
 
-frontmatter 只保留用户可读和导出需要的信息：
+导出的 Markdown frontmatter 只保留用户可读和迁移需要的信息：
 
 ```yaml
 ---
 id: note_xxx
 title: Example
-editor: blocknote
-blocknoteFile: content/.ghostboard/blocknote/note_xxx.json
+source: ghostboard
+exportedAt: 2026-05-29T00:00:00.000Z
 updatedAt: 2026-05-29T00:00:00.000Z
 ---
 ```
 
-不再保留 `markdownHash`。
+内部 JSON 不再保留 `markdownHash`。
 
 ## 7. 风险与对策
 
 | 风险 | 对策 |
 |---|---|
-| 用户以为改 `.md` 会同步 | onboarding / 设置页 / 文件头注释说明 mirror 语义 |
-| Markdown mirror 写失败 | 不影响 JSON 保存，toast 或日志提示导出失败 |
-| JSON 损坏 | 提供 Markdown 显式恢复、自动 sidecar backup、schema migration |
+| 用户找不到 `.md` 文件 | onboarding / 设置页说明 Markdown 通过导出生成 |
+| Markdown 导出失败 | 不影响 JSON 保存，导出报告列出失败项 |
+| JSON 损坏 | 提供显式 Markdown import、自动 sidecar backup、schema migration |
 | 预览 serializer 漏块 | unknown block 占位 + schema 测试 fixtures |
-| 迁移期间新旧路径混杂 | 通过 `editor: blocknote` / `blocknoteFile` 判断路径，写测试覆盖 |
-| Git diff 可读性下降 | Markdown mirror 继续保留，JSON pretty print |
+| 迁移期间新旧路径混杂 | 通过 `editor: blocknote` / `blocknoteFile` 判断 legacy 数据，写测试覆盖 |
+| Git diff 可读性下降 | JSON pretty print；需要可读快照时执行批量 Markdown 导出 |
 
 ## 8. 产品表述建议
 
 不要对用户说“我们不用 Markdown 了”。更好的表达是：
 
-> GhostBoard 使用本地文件夹保存你的数据。编辑内容以结构化 JSON 保存，保证画布、富文本和附件不丢失；同时自动生成 Markdown 副本，方便你查看、备份和导出。
+> GhostBoard 使用本地文件夹保存你的数据。编辑内容以结构化 JSON 保存，保证画布、富文本和附件不丢失；当你需要迁移、备份或外部查看时，可以随时导出单篇或全部 Markdown。
 
 对外部编辑的说明：
 
-> Markdown 文件是可读副本。若你在外部修改了 Markdown，可以在 GhostBoard 中手动选择“从 Markdown 重新导入”。自动双向同步不会开启，以避免覆盖你的结构化内容。
+> Markdown 是导出格式，不是自动同步文件。若你需要把外部 Markdown 带回 GhostBoard，请使用显式导入流程，应用不会自动回读外部 `.md`，以避免覆盖结构化内容。
 
 ## 9. 推荐优先级
 
 1. **P0：切断 `saveManifest` 对 BlockNote 正文的重写。** 这是当前最容易造成数据覆盖的边界问题。
 2. **P1：预览从 BlockNote JSON 派生。** 解决卡片预览与编辑器不一致。
-3. **P1：Markdown 只写化。** 删除 hash/reconcile/conflict 复杂度。
-4. **P2：导入/恢复入口。** 给高级用户保留外部 Markdown 工作流。
-5. **P3：评估 note bundle。** 等核心模型稳定后再做路径结构升级。
+3. **P1：停止自动生成 Markdown。** 删除 hash/reconcile/conflict 和保存副作用。
+4. **P1：单篇 Markdown 导出。** 先满足最小可用迁移和分享。
+5. **P2：批量 Markdown 导出。** 支持当前画布、选中卡片、全部笔记。
 
 ## 10. 最终验收标准
 
 - 新建和编辑 BlockNote note 时，JSON 是唯一加载源。
 - 拖动画布、缩放卡片、切换 view、保存 manifest 不会改写 note body。
 - 卡片预览从 JSON blocks 派生，不依赖 lossy Markdown。
-- Markdown 文件仍会生成，但外部修改不会自动影响应用内容。
+- 保存时不会自动生成或更新 Markdown 文件。
+- 用户可以单篇导出 Markdown。
+- 用户可以批量导出当前画布、选中卡片或全部笔记的 Markdown。
 - 用户可以显式从 Markdown 导入，且有二次确认。
-- `bun run test` 覆盖：保存、加载、manifest、preview、Markdown import、legacy migration。
+- `bun run test` 覆盖：保存、加载、manifest、preview、Markdown export/import、legacy migration。

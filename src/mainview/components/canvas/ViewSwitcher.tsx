@@ -118,6 +118,31 @@ export function ViewSwitcher({
     })();
   }, [setViews, setActiveView]);
 
+  // Re-fetch the views list when another window mutates it (e.g. the
+  // Settings window restores a canvas from Trash). We only refresh the
+  // list here — never switch the active view — so the user's current
+  // canvas and unsaved edits are left untouched.
+  useEffect(() => {
+    const handler = () => {
+      (async () => {
+        const data = await rpcListViews();
+        if (data === null) {
+          return;
+        }
+        setViews(
+          (data.views as Array<{ id: string; name: string }>).map((v) => ({
+            id: v.id,
+            name: v.name,
+          }))
+        );
+      })();
+    };
+    globalThis.addEventListener('views-updated', handler);
+    return () => {
+      globalThis.removeEventListener('views-updated', handler);
+    };
+  }, [setViews]);
+
   // Reset rename state whenever the menu closes
   useEffect(() => {
     if (!open) {

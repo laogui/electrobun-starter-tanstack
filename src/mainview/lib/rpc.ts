@@ -45,6 +45,9 @@ async function initElectrobun() {
           openSearch: () => {
             globalThis.dispatchEvent(new CustomEvent('open-search'));
           },
+          viewsUpdated: () => {
+            globalThis.dispatchEvent(new CustomEvent('views-updated'));
+          },
         } as any,
       },
     });

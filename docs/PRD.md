@@ -195,6 +195,29 @@
 - **放回画布**：画布模式 `CreateMenu` 中提供「文库笔记 / Library Note」入口，打开 `DetachedNotesSidebar`，拖入画布时通过 `screenToFlowPosition` + `pinNoteToCanvas()` 赋予真实坐标。
 - **搜索可见性**：detached notes 进入全局搜索；笔记库弹窗里在「游离笔记」分组单独列出（首版仅 `card` / `image`，与 Sidebar 行为对齐）。
 
+### 2.13 标签管理 (Tag Management) ✅
+
+- **功能描述**：为卡片、图片、附件、链接等节点提供标签标注能力，通过标签对画布内容进行分类和快速筛选。
+- **标签模型**：
+  - 每个节点有一个**主标签（Primary Tag）**：带颜色背景的标签，一个节点最多一个。
+  - 每个节点可有**多个次要标签（Secondary Tags）**：灰色/半透明标签，用于补充分类。
+  - 标签数据存储在 `.ghostboard/node-metadata.json` 中，以 `noteId`（Card）或 `nodeId`（非 Card 节点）为键。Card 节点的标签通过 `noteId` 跨画布共享；Image/Asset/Link/Sticky 节点的标签与画布实例绑定。
+  - **约束**：每节点最多 8 个标签，单个标签最长 32 字符。
+- **标签编辑**：
+  - **右键菜单入口**：在 Card/Image/Asset/Link/Sticky 节点上右键 → `Edit Tags`，弹出 `TagEditor` 弹窗。
+  - **TagEditor**：基于 `@base-ui/react` Popover 实现，提供标签输入框、颜色选择器、自动补全（基于 workspace 已有标签列表）、添加/删除/修改标签。
+  - **CardNode 画布态**：卡片标题下方渲染 `NodeTagChips`，展示主标签（带颜色）和次要标签（灰色）。
+  - **Image/Asset/Link/Sticky 节点**：标题区域同样展示 `NodeTagChips`。
+  - 标签修改通过 `useSetNodeMetadata` mutation 乐观更新 React Query 缓存，失败时回滚。
+- **标签侧边栏 (TagSidebar)**：
+  - **入口**：画布右侧的 `TagSidebarButton` 按钮，点击后滑出 `TagSidebar` 面板。
+  - **内容**：列出 workspace 中所有标签，按使用次数降序排列，每个标签显示节点计数。
+  - **筛选**：点击标签设置 `activeTagFilter`，画布上不携带该标签的卡片自动变暗（dimmed），仅突出匹配的卡片。点击已选标签或「Clear filter」按钮清除筛选。
+  - **重命名**：点击铅笔图标进入行内编辑模式，调用 `rpcRenameTag` 重命名 workspace 中所有使用该标签的节点元数据。
+  - **删除**：点击删除图标，弹出 `DeleteTagConfirmDialog` 二次确认，调用 `rpcDeleteTag` 从所有节点元数据中移除该标签。
+  - 标签变更后自动刷新 `['tags']` 查询缓存，侧边栏计数即时更新。
+- **适用节点类型**：`card`、`image`、`asset`、`link`、`sticky`。`folder` 和 `group` 暂不支持标签。
+
 ---
 
 ## 3. 关键动画与动效规范 (Motion Design Specs)
@@ -326,6 +349,7 @@ workspace/
 ├── .ghostboard/                        # 应用元数据（不是用户内容）
 │   ├── workspace.json                  # workspace 内视图列表、activeViewId、trash 记录
 │   ├── settings.json                   # 当前实现的主题、语言、默认布局偏好
+│   ├── node-metadata.json              # 节点标签元数据（tag / tagColor / tags，以 noteId 或 nodeId 为键）
 │   ├── trash/                          # 被软删除的 canvas manifest
 │   └── views/                          # 每个画布一个 manifest
 │       ├── default.canvas.json
@@ -334,6 +358,9 @@ workspace/
 │   ├── who-ghostboard-is-for.md
 │   ├── prio-before-launch.md
 │   ├── alpha-feedback.md
+│   ├── .ghostboard/                    # 内容辅助文件（不污染用户可见目录）
+│   │   └── blocknote/                  # BlockNote JSON sidecar 文件，按 noteId 命名
+│   │       └── note_a1b2c3d4.json
 │   └── great-ideas/                    # 后续迁移目标：文件夹即目录（MVP 阶段 Folder children 内嵌在 manifest 中）
 │       ├── floating-notes.md
 │       └── drop-in-anything.md
@@ -627,6 +654,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | 14.6 | **Per-view Viewport 持久化** — 每个画布的 ReactFlow viewport（x/y/zoom）随 `.canvas.json` 持久化，切换画布/重启后恢复 | 低     | ✅ 已完成 |
 | 14.7 | **活跃画布持久化** — `activeViewId` 写入 `workspace.json`，重启后恢复到上次使用的画布 | 低     | ✅ 已完成 |
 | 14.8 | **Asset / Link 多模态节点** — 本地文件、视频/音频预览、链接创建与 unfurl、Document 类型视图接入 | 高 | ✅ MVP 已完成 / ⚠️ 大文件、PDF、富链接待补 |
+| 14.9 | **标签管理** — TagEditor、TagSidebar、node-metadata.json、标签筛选与重命名/删除 | 中 | ✅ 已完成 |
 
 ### ⚪ P3 — 后续迭代
 
@@ -704,3 +732,5 @@ updatedAt: 2026-03-31T14:30:00Z
 | Folder 是内容集合，不是万能容器；允许 Card/Checklist/Image/Asset/Link，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
 | Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |
 | BlockNote 与画布 undo/redo 栈隔离 | §2.10 |
+| TagEditor + TagSidebar + node-metadata.json | §2.13、§5.3 |
+| BlockNote JSON sidecar (`content/.ghostboard/blocknote/`) | §2.2、§5.3 |

@@ -70,10 +70,12 @@ src/
     manifest.ts                            # canvas manifest 读写 + 原子写入
     notes.ts                               # .md 文件 CRUD + frontmatter 解析/序列化
     attachments.ts                         # attachments/ 附件保存、读取、打开与路径校验
+    blocknote.ts                           # BlockNote JSON sidecar 读写、冲突检测、revision 管理
     thumbnail.ts                           # 图片/视频缩略图与音频 waveform 生成
     linkPreview.ts                         # Link unfurl：抓取网页 title/description/icon/image
     search.ts                              # workspace 搜索索引与匹配评分
     templates.ts                           # 内置模板 registry + manifest/meta 加载
+    nodeMetadata.ts                        # 节点标签元数据（tag / tagColor / tags）持久化、批量重命名/删除标签
     templates/                             # 内置 demo / kanban 模板数据
   mainview/                                # React 渲染端
     main.tsx                               # 挂载 ThemeProvider + RouterProvider
@@ -89,31 +91,45 @@ src/
       preview-test.tsx                     # 临时预览调试路由（待删除）
     store/
       canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布/布局模式/文档选择
-    hooks/
-      useCanvasKeyboard.ts                 # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape
-      useCanvasPersistence.ts              # 自动保存：subscribe store → debounce 2500ms → RPC saveManifest（动态 viewId）
-      useContextMenu.ts                    # 右键菜单状态管理 + action 分发
-      useHelperLines.ts                    # 辅助对齐线（拖拽时的 snap-to 提示）
-      useNodeCreation.ts                   # 节点创建入口（CreateMenu + ContextMenu 共用）
-      useNodeDrag.ts                       # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
-      useSearch.ts                         # SearchDialog 数据源：后端搜索 + 当前画布内存结果合并
-      useTemplates.ts                      # 模板列表/详情 query hooks
-    components/
-      canvas/
-        ContextMenu.tsx                    # 右键菜单 UI（canvas/card/folder/group/sticky/image 六种上下文）
-        CreateMenu.tsx                     # 右下角浮动新建按钮
-        FocusedView.tsx                    # 聚焦模式：FLIP 动画 + overlay
-        FolderView.tsx                     # Folder drill-down：展开子卡片 + 返回动画
-        HelperLines.tsx                    # 对齐辅助线渲染
-        ViewSwitcher.tsx                   # 底部画布切换器：切换/新建/重命名/删除画布
-        nodes/
-          CardNode.tsx                     # 图文/Checklist 卡片节点
-          FolderNode.tsx                   # 堆叠式文件夹节点
-          GroupNode.tsx                    # 开放式分组容器节点
-          ImageNode.tsx                    # 图片卡片节点
-          AssetNode.tsx                    # 本地文件/视频/音频节点
-          LinkNode.tsx                     # URL 链接节点
-          StickyNode.tsx                   # 便签节点
+      hooks/
+        useCanvasKeyboard.ts              # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape
+        useCanvasPersistence.ts           # 自动保存：subscribe store → debounce 2500ms → RPC saveManifest（动态 viewId）
+        useContextMenu.ts                 # 右键菜单状态管理 + action 分发
+        useHelperLines.ts                 # 辅助对齐线（拖拽时的 snap-to 提示）
+        useNodeCreation.ts                # 节点创建入口（CreateMenu + ContextMenu 共用）
+        useNodeDrag.ts                    # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
+        useNodeMetadata.ts                # 节点标签元数据查询 + 乐观更新 mutation
+        useSearch.ts                      # SearchDialog 数据源：后端搜索 + 当前画布内存结果合并
+        useTags.ts                        # workspace 标签聚合查询（TagSidebar 数据源）
+        useTemplates.ts                   # 模板列表/详情 query hooks
+      components/
+        canvas/
+          ContextMenu.tsx                 # 右键菜单 UI（canvas/card/folder/group/sticky/image 六种上下文）
+          CreateMenu.tsx                  # 右下角浮动新建按钮
+          FocusedView.tsx                 # 聚焦模式：FLIP 动画 + overlay
+          FolderView.tsx                  # Folder drill-down：展开子卡片 + 返回动画
+          HelperLines.tsx                 # 对齐辅助线渲染
+          ViewSwitcher.tsx                # 底部画布切换器：切换/新建/重命名/删除画布
+          nodes/
+            CardNode.tsx                  # 图文/Checklist 卡片节点
+            FolderNode.tsx                # 堆叠式文件夹节点
+            GroupNode.tsx                 # 开放式分组容器节点
+            ImageNode.tsx                 # 图片卡片节点
+            AssetNode.tsx                 # 本地文件/视频/音频节点
+            LinkNode.tsx                  # URL 链接节点
+            StickyNode.tsx                # 便签节点
+        card/
+          NodeTagChips.tsx                # 节点标签展示组件（主标签 + 次要标签 chips）
+          TagEditor.tsx                   # 标签编辑 Popover（输入/颜色/自动补全）
+          useNodeTagEditing.tsx           # 标签编辑 Hook（状态管理 + RPC 调用）
+        editor/
+          BlockNoteEditor.tsx             # BlockNote 块编辑器（聚焦模式使用）
+          blocknoteAttachments.ts         # BlockNote 附件上传/URL 解析
+          useBlockNoteSaver.ts            # BlockNote 保存逻辑（debounce + revision 管理）
+        tags/
+          DeleteTagConfirmDialog.tsx      # 删除标签二次确认弹窗
+          TagSidebar.tsx                  # 标签侧边栏（列表/筛选/重命名/删除）
+          TagSidebarButton.tsx            # 标签侧边栏触发按钮
       search/
         SearchDialog.tsx                   # 全局搜索弹窗
       settings/
@@ -310,6 +326,38 @@ interface WorkspaceSettings {
   theme: 'light' | 'dark' | 'system';
   locale: 'en' | 'zh';
 }
+
+// ─── 标签/元数据层：.ghostboard/node-metadata.json ───
+interface NodeMetadata {
+  tag?: string;       // 主标签（带颜色）
+  tagColor?: string;  // 主标签颜色 hex
+  tags?: string[];    // 次要标签
+}
+
+type NodeMetadataMap = Record<string, NodeMetadata>; // key = noteId (Card) 或 nodeId (非 Card)
+
+interface NodeMetadataDocument {
+  entries: NodeMetadataMap;
+  schema: 'ghostboard-node-metadata/v1';
+}
+
+interface TagSummary {
+  count: number;
+  name: string;
+}
+
+interface TagMutationResult {
+  updated: number;
+}
+
+// ─── BlockNote 编辑器层：content/.ghostboard/blocknote/<noteId>.json ───
+interface BlockNoteSidecar {
+  blocks: unknown[];
+  noteId: string;
+  revision: number;
+  schema: string;
+  updatedAt: string;
+}
 ```
 
 ### 3.3 displayHint 与 data.type 映射
@@ -343,7 +391,7 @@ interface WorkspaceSettings {
 ```
 CanvasState
 ├── 核心数据: nodes, edges
-├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter, searchOpen, libraryOpen
+├── UI 状态: focusedNode, focusedFolder, createMenuOpen, clipboard, nodeIdCounter, searchOpen, libraryOpen, tagSidebarOpen, activeTagFilter, editingTagNodeId
 ├── 搜索: pendingSearchTarget
 ├── 多画布: activeViewId, views[]
 ├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData, commitNodeData, commitEdgeData
@@ -474,13 +522,17 @@ workspace/
 ├── .ghostboard/
 │   ├── workspace.json              # activeViewId + views 列表
 │   ├── settings.json               # theme / locale（当前实现）
+│   ├── node-metadata.json          # 节点标签元数据（tag / tagColor / tags，以 noteId 或 nodeId 为键）
 │   ├── trash/                      # soft-deleted canvas manifests
 │   └── views/
 │       └── default.canvas.json     # 画布 manifest（节点/边/viewport）
 ├── content/
 │   ├── who-ghostboard-is-for.md    # 笔记文件（frontmatter + markdown body）
 │   ├── prio-before-launch.md
-│   └── alpha-feedback.md
+│   ├── alpha-feedback.md
+│   └── .ghostboard/                # 内容辅助文件
+│       └── blocknote/              # BlockNote JSON sidecar（按 noteId 命名）
+│           └── note_a1b2c3d4.json
 └── attachments/
     ├── a1b2c3d4-chart.png          # 图片/文件附件
     ├── a1b2c3d4-chart-thumbnail.jpg
@@ -696,6 +748,60 @@ type CanvasRPC = {
         params: { query: string; viewId?: string; limit?: number };
         response: { query: string; results: SearchResult[] };
       };
+      // ── BlockNote editor ──
+      loadBlockNote: {
+        params: { noteId: string };
+        response: {
+          success: boolean;
+          blocks?: unknown[];
+          markdown?: string;
+          frontmatter?: Record<string, unknown>;
+          revision?: number;
+          recoveredFromMarkdown?: boolean;
+          conflict?: boolean;
+          conflictBackupFile?: string;
+        };
+      };
+      saveBlockNote: {
+        params: {
+          noteId: string;
+          frontmatter: Record<string, unknown>;
+          blocks: unknown[];
+          markdown: string;
+          revision?: number;
+        };
+        response: {
+          success: boolean;
+          revision?: number;
+          preview?: PreviewArtifacts;
+          blocknoteFile?: string;
+        };
+      };
+      // ── Tags & Node Metadata ──
+      listTags: {
+        params: Record<string, unknown>;
+        response: TagSummary[];
+      };
+      renameTag: {
+        params: { oldName: string; newName: string };
+        response: TagMutationResult;
+      };
+      deleteTag: {
+        params: { name: string };
+        response: TagMutationResult;
+      };
+      loadNodeMetadata: {
+        params: Record<string, unknown>;
+        response: NodeMetadataMap;
+      };
+      setNodeMetadata: {
+        params: { id: string; metadata: NodeMetadata };
+        response: { success: boolean };
+      };
+      deleteNodeMetadata: {
+        params: { id: string };
+        response: { success: boolean };
+      };
       // ── Attachments / assets / links ──
       saveAttachment: {
         params: { dataUrl: string; suggestedName?: string };
@@ -841,7 +947,56 @@ Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card c
 
 当前 Folder children 仍不是独立子画布：不持久化内部自由坐标，不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
 
-### 7.7 MVP 不做
+### 7.7 BlockNote JSON Sidecar
+
+BlockNote 编辑器将文档结构保存为 JSON sidecar 文件（`content/.ghostboard/blocknote/<noteId>.json`），同时将渲染后的 Markdown 写入 `.md` 文件作为 mirror。两者通过 frontmatter 中的 `markdownHash` 和 `blocknoteRevision` 字段建立关联。
+
+**保存流程**：
+1. 编辑器失焦或 debounce 到期 → `useBlockNoteSaver` 调用 `rpcSaveBlockNote(noteId, frontmatter, blocks, markdown, revision)`
+2. Bun 端 `saveBlockNote` handler：写入 sidecar JSON → 更新 `.md` frontmatter（`markdownHash` + `blocknoteRevision`）→ 写入 `.md` markdown body
+3. 若同时写入 preview（HTML），通过 `writeNoteWithPreview` 处理
+
+**加载与冲突检测**（`loadBlockNote` handler）：
+1. 读取 `.md` 文件 → 获取 frontmatter（含 `markdownHash`、`blocknoteRevision`）
+2. 尝试读取 sidecar JSON → 获取 `revision`
+3. `detectExternalMarkdownChange()` 判断：
+   - **无 sidecar** → 从 Markdown 初始化编辑器（`recoveredFromMarkdown: true`）
+   - **sidecar 存在且 hash 匹配** → 正常加载 sidecar blocks
+   - **sidecar 存在但 hash 不匹配**（冲突）→ 将外部修改的 Markdown 备份为 `.conflict-{timestamp}.md`，加载 sidecar blocks，标记 `conflict: true`
+
+### 7.8 标签系统与 Node Metadata
+
+标签数据存储在 `.ghostboard/node-metadata.json`，独立于 manifest 和 Markdown frontmatter。这是一个 key-value 映射文件，key 为 `noteId`（Card 节点）或 `nodeId`（非 Card 节点：Image/Asset/Link/Sticky），value 包含 `tag`、`tagColor`、`tags` 字段。
+
+**存储文件格式**：
+```json
+{
+  "schema": "ghostboard-node-metadata/v1",
+  "entries": {
+    "note_a1b2c3d4": { "tag": "Inbox", "tagColor": "#EAF2B8", "tags": ["design", "ux"] },
+    "node_img_7f3a": { "tag": "Reference", "tagColor": "#A3E635" }
+  }
+}
+```
+
+**内存管理**：Bun 端 `nodeMetadata.ts` 维护 `Map<wsPath, WorkspaceState>`，包含 `entries` 内存缓存 + `flushTimer`（500ms debounce）。所有读写操作先更新内存，再 debounce 写入磁盘。
+
+**批量操作**：
+- `renameTagEverywhere(oldName, newName)` — 遍历所有 entries，将匹配的 `tag` 和 `tags[]` 中的值替换为新名称
+- `deleteTagEverywhere(name)` — 从所有 entries 中移除匹配的主标签和次要标签
+- `listAllTagsFromMetadata()` — 聚合所有标签名称并计数，按次数降序返回 `TagSummary[]`
+
+**前端集成**：
+- `useNodeMetadata()` — React Query 查询，缓存 5 分钟，返回 `map` 和 `get(id)` 方法
+- `useSetNodeMetadata()` — 乐观更新 mutation：`onMutate` 立即 patch 缓存，`onError` 回滚，`onSettled` 刷新 `['tags']` 查询
+- `useDeleteNodeMetadata()` — 类似乐观更新模式
+- `useTags()` — 聚合标签列表查询，缓存 1 分钟
+
+**画布上的标签筛选**：`activeTagFilter` 设置后，所有不携带该标签的节点通过 CSS 变暗（dimmed），仅匹配节点保持正常显示。清除筛选恢复全部节点。
+
+**约束**：每节点最多 8 个标签，单个标签最长 32 字符。`tag`（主标签）和 `tags`（次要标签）可共存；主标签带颜色，次要标签为灰色 chip。
+
+### 7.9 MVP 不做
 
 - ❌ 文件系统 watcher（外部编辑同步）
 - ❌ 多 workspace 管理 / 欢迎页
@@ -913,6 +1068,11 @@ Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card c
 | Link unfurl SSRF                 | 当前阻止 localhost / 私网字面 IP / 非 http(s) scheme；DNS 解析后的私网 IP 防护待补               |
 | Asset data URL 超限              | `saveAttachment` 对 data URL 有大小限制；大文件应走 `saveAttachmentFile`，UI 接入待补            |
 | Template thumbnail 缺失          | 模板列表 fallback 到占位样式；P5 需要接入 meta.thumbnail 和实际 thumbnail 文件                   |
+| BlockNote sidecar 损坏/缺失      | 检测 corruption 标志，回退从 Markdown 初始化编辑器；`recoveredFromMarkdown: true` 通知 UI         |
+| BlockNote 外部 Markdown 冲突     | 检测到 hash 不匹配时，将外部修改备份为 `.conflict-{timestamp}.md`，加载 sidecar；UI 标记 `conflict: true` |
+| 标签数量/长度超限                | TagEditor 阻止添加超过 8 个标签或超过 32 字符；后端 `nodeMetadata.ts` 同样校验                     |
+| node-metadata.json 损坏          | 加载时校验 schema 和类型，损坏时返回空 map，下次保存覆盖                                          |
+| 标签重命名/删除冲突              | 后端 `renameTagEverywhere` / `deleteTagEverywhere` 遍历所有 entries 原子操作；前端乐观更新后 refresh tags 查询 |
 
 ---
 

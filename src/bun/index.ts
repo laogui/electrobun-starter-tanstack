@@ -460,6 +460,7 @@ interface CanvasRPC {
     messages: {
       openSearch: Record<never, unknown>;
       settingsUpdated: { theme: string; locale: string };
+      viewsUpdated: Record<never, unknown>;
     };
   };
 }
@@ -597,6 +598,11 @@ function createSettingsWindow(
         listTrash: async () => await listTrash(wsPath),
         restoreTrash: async ({ trashId }) => {
           const result = await restoreView(wsPath, trashId);
+          if (result.success) {
+            // Notify the main window so its view switcher shows the
+            // restored canvas immediately, without requiring a restart.
+            mainRpc?.send?.viewsUpdated({});
+          }
           return { success: result.success };
         },
         purgeTrash: async ({ trashId }) => await purgeTrash(wsPath, trashId),

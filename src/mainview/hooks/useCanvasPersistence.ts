@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const LAYOUT_DEBOUNCE_MS = 2500;

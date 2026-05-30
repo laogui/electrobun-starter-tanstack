@@ -2,7 +2,7 @@ import type { Node, NodeChange } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
-import { sanitizeForPersistence } from '@/lib/sanitize';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 
 function createNode(overrides?: Partial<Node>): Node {
   return {

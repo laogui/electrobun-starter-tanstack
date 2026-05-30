@@ -15,8 +15,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSearch } from '@/hooks/useSearch';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
 import type { SearchResult } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 

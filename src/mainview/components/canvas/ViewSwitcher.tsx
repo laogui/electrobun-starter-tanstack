@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   isRpcAvailable,
@@ -40,7 +41,6 @@ import {
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';

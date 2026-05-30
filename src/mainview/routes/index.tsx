@@ -50,9 +50,9 @@ import {
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { createLinkNodeData, extractLinkUrl } from '@/lib/contentTypes';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,

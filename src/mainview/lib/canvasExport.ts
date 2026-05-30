@@ -7,8 +7,8 @@ import type {
 } from '@xyflow/react';
 import { getViewportForBounds } from '@xyflow/react';
 import { toBlob } from 'html-to-image';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { rpcExportJson, rpcExportPng } from '@/lib/rpc';
-import { sanitizeForPersistence } from '@/lib/sanitize';
 
 export const CANVAS_EXPORT_SCHEMA = 'ghostboard-canvas-export/v1' as const;
 

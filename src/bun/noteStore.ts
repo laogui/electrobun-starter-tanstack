@@ -2,6 +2,7 @@ import { join } from 'node:path';
 
 import {
   blocknoteSidecarDir,
+  isValidSidecarNoteId,
   loadBlockNoteSidecar,
   type SidecarPreview,
   saveBlockNoteSidecar,
@@ -136,7 +137,13 @@ export async function loadNoteRecord(
   noteId: string,
   markdownFile?: string
 ): Promise<NoteRecord | null> {
-  const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
+  // Only probe the sidecar store for ids that are valid sidecar filenames.
+  // A legacy `.md` with a hand-edited / imported id (e.g. `my note`, `a/b`)
+  // must not throw — it falls through to the markdown fallback below so a
+  // single bad note can't break listNoteRecords / search / export.
+  const sidecar = isValidSidecarNoteId(noteId)
+    ? await loadBlockNoteSidecar(wsPath, noteId)
+    : null;
   if (sidecar && !sidecar.corrupted) {
     return {
       noteId,

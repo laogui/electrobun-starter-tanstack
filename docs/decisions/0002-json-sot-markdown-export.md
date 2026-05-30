@@ -3,7 +3,7 @@
 - 状态：Accepted
 - 日期：2026-05-29
 - 取代：`docs/decisions/0001-json-sot-markdown-mirror.md` 中 “每次保存同步写 Markdown mirror” 的策略
-- 相关方案：`docs/markdown-storage-remediation-plan.md`、`docs/markdown-storage-remediation-plan.v0.2-addendum.md`
+- 实施状态：核心 P0/P1 已落地（saveManifest 切断、preview from JSON、sidecar 成为 note 记录、停止写 `.md`、单篇 + 当前画布 Markdown 导出）。原整改总方案与 v0.2 增订已实施后移除，残留 P2/可选项见 `docs/features/Planned/markdown-export-followups.md`
 
 > 实施补充（来自 v0.2 增订 A7）：note 自身属性（`title`、`color`、`createdAt`、
 > `updatedAt`、`editor`、`blocknoteFile`、`preview`）落在 note sidecar JSON；

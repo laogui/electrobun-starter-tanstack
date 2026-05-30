@@ -9,6 +9,15 @@ export const BLOCKNOTE_SCHEMA = 'ghostboard-blocknote/v1';
 
 const NOTE_ID_RE = /^[A-Za-z0-9_-]+$/;
 
+/**
+ * True when `noteId` is safe to use as a sidecar filename (no spaces, slashes,
+ * or traversal). Lets callers probe the sidecar store without risking a throw
+ * from {@link blocknoteSidecarRelativePath} on hand-edited / imported ids.
+ */
+export function isValidSidecarNoteId(noteId: string): boolean {
+  return NOTE_ID_RE.test(noteId);
+}
+
 /** Card preview cached inside the note sidecar (derived from blocks). */
 export interface SidecarPreview {
   blocks: number;

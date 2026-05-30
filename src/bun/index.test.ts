@@ -773,6 +773,93 @@ describe('src/bun/index helpers', () => {
     expect(sidecar.preview).toBeDefined();
   });
 
+  it('saveBlockNote retires a lingering markdown mirror for a pre-v0.2 sidecar', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    // Mirror-era sidecar: exists, but has no `preview` field (pre-v0.2).
+    bunFileMock.mockImplementation((p: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          p.endsWith('/content/.ghostboard/blocknote/note_mig.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_mig',
+        revision: 2,
+        blocks: [{ type: 'paragraph' }],
+      }),
+      text: vi.fn(),
+    }));
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_mig',
+          {
+            noteId: 'note_mig',
+            hasSidecar: true,
+            markdownFile: 'content/old-mirror.md',
+          },
+        ],
+      ])
+    );
+
+    const result = await canvasHandlers.saveBlockNote({
+      noteId: 'note_mig',
+      frontmatter: { id: 'note_mig', title: 'Migrated' },
+      blocks: [
+        {
+          type: 'paragraph',
+          props: {},
+          content: [{ type: 'text', text: 'x', styles: {} }],
+          children: [],
+        },
+      ],
+      markdown: 'x',
+      revision: 2,
+    });
+
+    expect(result).toMatchObject({ success: true, revision: 3 });
+    // The stale `.md` mirror is retired.
+    expect(noteMocks.deleteNoteFile).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/old-mirror.md'
+    );
+  });
+
+  it('saveBlockNote skips the mirror scan once the sidecar has a preview', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    // v0.2 sidecar already migrated: has a `preview` field.
+    bunFileMock.mockImplementation((p: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          p.endsWith('/content/.ghostboard/blocknote/note_v2.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_v2',
+        revision: 4,
+        blocks: [{ type: 'paragraph' }],
+        preview: { html: '', excerpt: '', blocks: 0, version: 1 },
+      }),
+      text: vi.fn(),
+    }));
+
+    await canvasHandlers.saveBlockNote({
+      noteId: 'note_v2',
+      frontmatter: { id: 'note_v2', title: 'Already migrated' },
+      blocks: [],
+      markdown: '',
+      revision: 4,
+    });
+
+    // No index scan, no mirror deletion on a steady-state save.
+    expect(noteStoreMocks.buildNoteIndex).not.toHaveBeenCalled();
+    expect(noteMocks.deleteNoteFile).not.toHaveBeenCalled();
+  });
+
   it('loadBlockNote returns sidecar blocks without any markdown reconcile', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -1082,6 +1169,70 @@ describe('src/bun/index helpers', () => {
     expect(indexCall).toBeDefined();
     expect(String(indexCall?.[1])).toContain('# GhostBoard Markdown Export');
     expect(String(indexCall?.[1])).toContain('Documents: 2');
+  });
+
+  it('exportNoteMarkdown refuses a corrupted sidecar instead of writing an empty file', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_corrupt',
+      source: 'sidecar',
+      title: '',
+      displayHint: 'note',
+      color: '',
+      revision: 3,
+      blocks: [],
+      preview: null,
+      corrupted: true,
+    });
+
+    const result = (await canvasHandlers.exportNoteMarkdown({
+      noteId: 'note_corrupt',
+    })) as { success: boolean };
+
+    expect(result).toEqual({ success: false });
+    // No folder picker, no file written.
+    expect(openFileDialogMock).not.toHaveBeenCalled();
+    const wroteMd = bunWriteMock.mock.calls.some((call: unknown[]) =>
+      String(call[0]).endsWith('.md')
+    );
+    expect(wroteMd).toBe(false);
+  });
+
+  it('exportNotesMarkdown counts corrupted notes as failures, not exports', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/exports']);
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_bad',
+      source: 'sidecar',
+      title: '',
+      displayHint: 'note',
+      color: '',
+      revision: 1,
+      blocks: [],
+      preview: null,
+      corrupted: true,
+    });
+
+    const result = (await canvasHandlers.exportNotesMarkdown({
+      scope: 'selected',
+      noteIds: ['note_bad'],
+    })) as { success: boolean; exported?: number; failed?: number };
+
+    expect(result.success).toBe(true);
+    expect(result.exported).toBe(0);
+    expect(result.failed).toBe(1);
+    // No per-note file written for the corrupted note.
+    const wroteNote = bunWriteMock.mock.calls.some((call: unknown[]) =>
+      String(call[0]).includes('/notes/')
+    );
+    expect(wroteNote).toBe(false);
+    // index.md still records the failure.
+    const indexCall = bunWriteMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).endsWith('/index.md')
+    );
+    expect(String(indexCall?.[1])).toContain('corrupted sidecar');
   });
 
   it('loadAttachment returns null for missing file and data url for existing file', async () => {

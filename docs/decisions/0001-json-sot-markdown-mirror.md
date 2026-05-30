@@ -8,7 +8,7 @@
 > ⚠️ 已被 ADR 0002 取代：本 ADR 仍保留“每次 save 同步写 Markdown mirror”的设计。
 > ADR 0002 决定 **不再自动写 Markdown mirror**，Markdown 仅作为用户主动触发的导出格式。
 > JSON 作为 SoT 的核心结论不变；下文中关于“每次 save 同步写出 `.md`”“四态冲突判定”
-> 的部分以 ADR 0002 与 `docs/markdown-storage-remediation-plan.md` 为准。
+> 的部分以 ADR 0002 与 `docs/features/Planned/markdown-export-followups.md` 为准。
 
 ## 上下文
 
@@ -69,9 +69,9 @@
 
 详见：
 
-- `docs/features/Planned/node-metadata-sidecar.md`（Phase 1 — tag/node 元数据 sidecar，正在实施）
-- `docs/features/Planned/preview-from-blocknote-json.md`（Phase 2 — preview 改从 JSON 派生）
-- `docs/features/Planned/markdown-write-only.md`（Phase 3 — 删除冲突检测，markdown 变只写）
+- `docs/features/Review/node-metadata-sidecar.md`（Phase 1 — tag/node 元数据 sidecar，已完成）
+- `docs/features/Review/preview-from-blocknote-json.md`（Phase 2 — preview 改从 JSON 派生，已完成）
+- `docs/features/Review/markdown-write-only.md`（Phase 3 — 删除冲突检测，markdown 变只写，已被 ADR 0002 取代实现）
 
 ## 参考
 

@@ -1343,9 +1343,15 @@ async function main() {
             }
           );
 
-          // Migration: the first sidecar save retires any lingering legacy
-          // `.md` for this note so the workspace stops carrying stale mirrors.
-          if (!existing) {
+          // Migration: retire any lingering legacy `.md` mirror once the note
+          // is a v0.2 JSON record. This covers both brand-new notes (no
+          // sidecar) AND mirror-era notes that already had a sidecar + `.md`
+          // pair. A pre-v0.2 / mirror-era sidecar has no `preview` field, so
+          // the check runs at most once per note — after this save the sidecar
+          // carries a preview and later saves skip the index scan.
+          const needsMirrorCleanup =
+            !existing || existing.preview === undefined;
+          if (needsMirrorCleanup) {
             const markdownFile = (await buildNoteIndex(wsPath)).get(
               noteId
             )?.markdownFile;
@@ -1458,7 +1464,9 @@ async function main() {
             noteId,
             noteIndex.get(noteId)?.markdownFile
           );
-          if (!record) {
+          // A corrupted sidecar with no markdown fallback would serialise to an
+          // empty file — refuse rather than silently "export" empty content.
+          if (!record || record.corrupted) {
             return { success: false };
           }
           const exported = buildNoteMarkdown(record, {
@@ -1530,6 +1538,10 @@ async function main() {
               );
               if (!record) {
                 failures.push({ noteId: id, reason: 'note record not found' });
+                continue;
+              }
+              if (record.corrupted) {
+                failures.push({ noteId: id, reason: 'corrupted sidecar' });
                 continue;
               }
               const exported = buildNoteMarkdown(record, {

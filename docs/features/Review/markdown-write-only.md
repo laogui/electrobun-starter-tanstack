@@ -1,11 +1,11 @@
 # Markdown 变只写（Plan C — Phase 3）
 
-> ⚠️ 已废弃 / 改写：本文原方案（保留 `.md` mirror、只是停止回读）已被
-> `docs/decisions/0002-json-sot-markdown-export.md` 与
-> `docs/markdown-storage-remediation-plan.md` 取代为 **markdown-export-only**：
+> ⚠️ 已完成 / 改写（归档）：本文原方案（保留 `.md` mirror、只是停止回读）已被
+> `docs/decisions/0002-json-sot-markdown-export.md` 取代为 **markdown-export-only** 并实施：
 > 保存时不再生成或更新任何 `.md`，note 内容与元数据全部落 sidecar JSON，
 > Markdown 仅由用户主动“导出”生成。下文中“`saveBlockNote` 仍写两份（JSON + markdown export）”
-> 等表述以新方案为准（不再写 `.md` mirror）。本文保留作历史记录。
+> 等表述以新方案为准（不再写 `.md` mirror）。残留待办见
+> `docs/features/Planned/markdown-export-followups.md`。本文保留作历史记录。
 
 > 落地 ADR 0001 第三步：删除 Markdown body 的回读 / 冲突检测 / 自动恢复路径，Markdown 降级为单向 export。
 

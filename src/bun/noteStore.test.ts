@@ -262,4 +262,33 @@ describe('noteStore', () => {
       expect(wrote).toBe(false);
     });
   });
+
+  describe('invalid note ids', () => {
+    it('loadNoteRecord falls back to markdown for an invalid sidecar id (no throw)', async () => {
+      const { loadNoteRecord } = await import('./noteStore');
+      writeMarkdown(
+        ws,
+        'spacey.md',
+        '---\nid: my note\ntitle: Spacey\n---\nbody'
+      );
+      const record = await loadNoteRecord(ws, 'my note', 'content/spacey.md');
+      expect(record?.source).toBe('markdown');
+      expect(record?.title).toBe('Spacey');
+    });
+
+    it('listNoteRecords tolerates a legacy note with an invalid id', async () => {
+      const { listNoteRecords } = await import('./noteStore');
+      writeSidecar(ws, 'note_ok', { revision: 1, title: 'OK', blocks: [] });
+      writeMarkdown(
+        ws,
+        'slashy.md',
+        '---\nid: bad/id\ntitle: Slashy\n---\nbody'
+      );
+
+      const records = await listNoteRecords(ws); // must not throw
+      const ids = records.map((r) => r.noteId);
+      expect(ids).toContain('note_ok');
+      expect(ids).toContain('bad/id');
+    });
+  });
 });

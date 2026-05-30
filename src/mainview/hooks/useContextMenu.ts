@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import { rpcExportNoteMarkdown, rpcExportNotesMarkdown } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
@@ -125,6 +126,23 @@ export function useContextMenu({
         }
         case 'reset-zoom': {
           rfInstance.current?.zoomTo(1, { duration: 300 });
+          break;
+        }
+        case 'export-canvas-markdown': {
+          const { activeViewId } = useCanvasStore.getState();
+          rpcExportNotesMarkdown('view', { viewId: activeViewId })
+            .then((res) => {
+              if (res?.success) {
+                toast(
+                  m.toast_markdown_exported_count({
+                    count: res.exported ?? 0,
+                  })
+                );
+              } else if (!res?.canceled) {
+                toast(m.toast_export_failed());
+              }
+            })
+            .catch(() => toast(m.toast_export_failed()));
           break;
         }
         case 'focus': {
@@ -271,6 +289,26 @@ export function useContextMenu({
           }
           break;
         }
+        case 'export-markdown': {
+          if (nodeId) {
+            const { nodes } = useCanvasStore.getState();
+            const node = nodes.find((n) => n.id === nodeId);
+            const noteId = (node?.data as { noteId?: unknown } | undefined)
+              ?.noteId;
+            if (typeof noteId === 'string' && noteId) {
+              rpcExportNoteMarkdown(noteId)
+                .then((res) => {
+                  if (res?.success) {
+                    toast(m.toast_markdown_exported());
+                  } else if (!res?.canceled) {
+                    toast(m.toast_export_failed());
+                  }
+                })
+                .catch(() => toast(m.toast_export_failed()));
+            }
+          }
+          break;
+        }
         case 'delete-edge': {
           if (nodeId) {
             deleteEdge(nodeId);
@@ -304,7 +342,6 @@ export function useContextMenu({
       pasteClipboard,
       saveSnapshot,
       createNode,
-      setEditingTagNodeId,
     ]
   );
 

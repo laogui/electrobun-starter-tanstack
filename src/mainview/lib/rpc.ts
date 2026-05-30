@@ -125,8 +125,6 @@ export async function rpcLoadBlockNote(noteId: string) {
       frontmatter?: Record<string, unknown>;
       revision?: number;
       recoveredFromMarkdown?: boolean;
-      conflict?: boolean;
-      conflictBackupFile?: string;
     };
   }
   return eb.rpc.request.loadBlockNote({ noteId });
@@ -269,6 +267,40 @@ export async function rpcExportJson(json: string, fileName: string) {
     return null;
   }
   return eb.rpc.request.exportJson({ json, fileName });
+}
+
+export async function rpcExportNoteMarkdown(
+  noteId: string,
+  options?: { includeFrontmatter?: boolean }
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.exportNoteMarkdown({
+    noteId,
+    includeFrontmatter: options?.includeFrontmatter,
+  });
+}
+
+export async function rpcExportNotesMarkdown(
+  scope: 'all' | 'selected' | 'view',
+  options?: {
+    viewId?: string;
+    noteIds?: string[];
+    includeFrontmatter?: boolean;
+  }
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.exportNotesMarkdown({
+    scope,
+    viewId: options?.viewId,
+    noteIds: options?.noteIds,
+    includeFrontmatter: options?.includeFrontmatter,
+  });
 }
 
 export async function rpcGetSettings() {

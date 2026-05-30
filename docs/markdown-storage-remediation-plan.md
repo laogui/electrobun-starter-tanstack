@@ -153,12 +153,9 @@ workspace/
 
 目标：统一团队和代码注释中的立场。
 
-- [ ] 新增 `docs/decisions/0002-json-sot-markdown-export.md`，取代 ADR 0001 中 “Markdown mirror” 的连续同步策略。
-- [ ] 搜索 README、PRD、技术文档中 “Markdown-first”、“Markdown 是主数据”、“Markdown mirror 自动生成” 表述并替换。
-- [ ] 在设置页或 onboarding 中明确说明：
-  - GhostBoard 内部使用结构化 JSON 保证无损编辑。
-  - Markdown 是按需导出格式，不会在每次保存时自动生成。
-  - 外部 Markdown 需要通过显式导入进入应用，不会自动同步。
+- [x] 新增 `docs/decisions/0002-json-sot-markdown-export.md`，取代 ADR 0001 中 “Markdown mirror” 的连续同步策略。（已标记 Accepted；ADR 0001 标记 Superseded）
+- [x] `docs/features/Planned/markdown-write-only.md` 改写为 markdown-export-only（加废弃说明，指向 ADR 0002）。
+- [x] 设置页文案：导出对话框/设置项明确 “Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入”。（见 Phase 4 设置页 Export 区块）
 
 验收：文档和 UI 文案不再暗示 Markdown 是主源。
 

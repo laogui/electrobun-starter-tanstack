@@ -16,9 +16,9 @@ interface UseBlockNoteSaverOptions {
   debounceMs?: number;
   enabled?: boolean;
   /**
-   * Frontmatter shared with the .md mirror. Sync metadata fields
-   * (editor, blocknoteFile, blocknoteRevision, blocknoteHash, markdownHash)
-   * are appended by the Bun handler — do not set them here.
+   * Note metadata (title / color / displayHint / createdAt) persisted into the
+   * BlockNote sidecar note record by the Bun handler. The handler owns
+   * revision / preview — do not set them here.
    */
   frontmatter: Record<string, unknown>;
   /** Canvas nodeId the focused editor is editing. */

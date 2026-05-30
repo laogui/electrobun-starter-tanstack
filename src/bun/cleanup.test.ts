@@ -206,4 +206,60 @@ describe('cleanup', () => {
     expect(result.deleted).toEqual([]);
     expect(result.skipped).toEqual(['content/orphan.md']);
   });
+
+  it('scans and deletes orphaned BlockNote sidecars', async () => {
+    const { scanUnlinkedNotes, deleteUnlinkedNotes } = await import(
+      './cleanup'
+    );
+    const blocknoteDir = join(
+      workspaceRoot,
+      'content',
+      '.ghostboard',
+      'blocknote'
+    );
+    mkdirSync(blocknoteDir, { recursive: true });
+    // Referenced by manifest node n1 → must be kept.
+    writeFileSync(
+      join(blocknoteDir, 'keep-note.json'),
+      JSON.stringify({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'keep-note',
+        revision: 1,
+        title: 'Keep',
+        blocks: [],
+      })
+    );
+    // Not referenced by any view → orphan.
+    writeFileSync(
+      join(blocknoteDir, 'orphan-side.json'),
+      JSON.stringify({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'orphan-side',
+        revision: 1,
+        title: 'Orphan Side',
+        blocks: [],
+      })
+    );
+
+    const scan = await scanUnlinkedNotes(workspaceRoot);
+    const files = scan.map((entry) => entry.file);
+    expect(files).toContain('content/.ghostboard/blocknote/orphan-side.json');
+    expect(files).not.toContain('content/.ghostboard/blocknote/keep-note.json');
+    const orphanSide = scan.find((entry) => entry.noteId === 'orphan-side');
+    expect(orphanSide?.title).toBe('Orphan Side');
+
+    const del = await deleteUnlinkedNotes(workspaceRoot, [
+      'content/.ghostboard/blocknote/orphan-side.json',
+      'content/.ghostboard/blocknote/keep-note.json', // referenced → skipped
+    ]);
+    expect(del.deleted).toEqual([
+      'content/.ghostboard/blocknote/orphan-side.json',
+    ]);
+    expect(del.skipped).toEqual([
+      'content/.ghostboard/blocknote/keep-note.json',
+    ]);
+    expect(moveToTrashMock).toHaveBeenCalledWith(
+      join(blocknoteDir, 'orphan-side.json')
+    );
+  });
 });

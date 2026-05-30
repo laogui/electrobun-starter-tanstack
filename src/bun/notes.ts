@@ -169,28 +169,6 @@ export function listFilesRecursive(dir: string, prefix = ''): string[] {
   return results;
 }
 
-/** Build a noteId → file path index from the content directory. */
-export async function buildNoteIndex(
-  wsPath: string
-): Promise<Map<string, string>> {
-  const contentDir = join(wsPath, 'content');
-  const index = new Map<string, string>();
-
-  for (const relPath of listFilesRecursive(contentDir)) {
-    if (!relPath.endsWith('.md')) {
-      continue;
-    }
-    const fullPath = join(contentDir, relPath);
-    const file = Bun.file(fullPath);
-    const text = await file.text();
-    const { frontmatter } = parseFrontmatter(text);
-    if (frontmatter.id && typeof frontmatter.id === 'string') {
-      index.set(frontmatter.id, `content/${relPath}`);
-    }
-  }
-  return index;
-}
-
 /** Load a note by its file path (workspace-relative). */
 export async function loadNote(
   wsPath: string,

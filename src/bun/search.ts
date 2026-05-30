@@ -1,7 +1,6 @@
-import { join } from 'node:path';
-
+import { blocksToPlainText } from './blocknotePreview';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
-import { listFilesRecursive, parseFrontmatter } from './notes';
+import { listNoteRecords } from './noteStore';
 import { loadWorkspaceConfig } from './workspace';
 
 // ---------------------------------------------------------------------------
@@ -397,69 +396,72 @@ async function scanNotes(
   noteIdToNodes: Map<string, NodeRef[]>,
   results: SearchResult[]
 ) {
-  const contentDir = join(wsPath, 'content');
-  const files = listFilesRecursive(contentDir);
+  // Enumerate note records from the note store (sidecar JSON is the source of
+  // truth; legacy `.md` notes are still discovered for matching).
+  const records = await listNoteRecords(wsPath);
 
-  for (const rel of files) {
-    if (!rel.endsWith('.md')) {
-      continue;
-    }
-    let text = '';
-    try {
-      text = await Bun.file(join(contentDir, rel)).text();
-    } catch (error) {
-      console.warn(`[search] Failed to read ${rel}:`, error);
-      continue;
-    }
-    const { frontmatter, body } = parseFrontmatter(text);
-    const noteId = asString(frontmatter.id);
-    if (!noteId) {
-      continue;
-    }
-    const refs = noteIdToNodes.get(noteId);
+  for (const record of records) {
+    const refs = noteIdToNodes.get(record.noteId);
     if (!refs || refs.length === 0) {
       // Note exists but is not referenced by any manifest; skip — there is
       // nowhere to navigate to.
       continue;
     }
 
-    const title = asString(frontmatter.title);
-    const tag = asString(frontmatter.tag);
-    const tags = Array.isArray(frontmatter.tags)
-      ? (frontmatter.tags as unknown[]).map(asString).filter(Boolean)
-      : [];
-
-    const cleanBody = cleanMarkdown(body);
+    const title = record.title;
+    // Tags live in node-metadata for sidecar notes; legacy markdown still
+    // carries them in frontmatter.
+    let tag = '';
+    let tags: string[] = [];
+    let bodyText = '';
+    if (record.source === 'markdown' && record.markdownDoc) {
+      const fm = record.markdownDoc.frontmatter;
+      tag = asString(fm.tag);
+      tags = Array.isArray(fm.tags)
+        ? (fm.tags as unknown[]).map(asString).filter(Boolean)
+        : [];
+      bodyText = cleanMarkdown(record.markdownDoc.body);
+    } else {
+      bodyText = blocksToPlainText(record.blocks);
+    }
 
     const titleIdx = indexOfCi(title, queryLower);
     const tagIdx = indexOfCi(tag, queryLower);
     const tagsIdx = tags.findIndex((t) => indexOfCi(t, queryLower) !== -1);
-    const bodyIdx = indexOfCi(cleanBody, queryLower);
+    const bodyIdx = indexOfCi(bodyText, queryLower);
 
     for (const ref of refs) {
       if (titleIdx !== -1 && title) {
-        pushNoteResult(results, ref, noteId, title, title, 'title', titleIdx);
+        pushNoteResult(
+          results,
+          ref,
+          record.noteId,
+          title,
+          title,
+          'title',
+          titleIdx
+        );
       }
       if (tagIdx !== -1 && tag) {
-        pushNoteResult(results, ref, noteId, title, tag, 'tag', tagIdx);
+        pushNoteResult(results, ref, record.noteId, title, tag, 'tag', tagIdx);
       } else if (tagsIdx !== -1 && tags[tagsIdx]) {
         pushNoteResult(
           results,
           ref,
-          noteId,
+          record.noteId,
           title,
           tags[tagsIdx],
           'tag',
           indexOfCi(tags[tagsIdx], queryLower)
         );
       }
-      if (bodyIdx !== -1 && cleanBody) {
+      if (bodyIdx !== -1 && bodyText) {
         pushNoteResult(
           results,
           ref,
-          noteId,
+          record.noteId,
           title,
-          buildExcerpt(cleanBody, bodyIdx),
+          buildExcerpt(bodyText, bodyIdx),
           'body',
           bodyIdx
         );

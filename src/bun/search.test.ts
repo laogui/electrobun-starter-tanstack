@@ -388,6 +388,77 @@ describe('search', () => {
     expect(bodyHits[0]?.excerpt).toContain('ramen');
   });
 
+  it('matches BlockNote sidecar notes by title and flattened block text', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'n1',
+              type: 'card',
+              position: { x: 0, y: 0 },
+              data: { noteId: 'note_side' },
+            },
+          ],
+        },
+      },
+    });
+    // Write a JSON sidecar note with no backing `.md`.
+    mkdirSync(join(workspaceRoot, 'content', '.ghostboard', 'blocknote'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(
+        workspaceRoot,
+        'content',
+        '.ghostboard',
+        'blocknote',
+        'note_side.json'
+      ),
+      JSON.stringify({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_side',
+        revision: 1,
+        title: 'Recipes',
+        displayHint: 'note',
+        blocks: [
+          {
+            type: 'paragraph',
+            props: {},
+            content: [
+              {
+                type: 'text',
+                text: 'Today I made gyoza dumplings.',
+                styles: {},
+              },
+            ],
+            children: [],
+          },
+        ],
+      })
+    );
+
+    const { searchWorkspace } = await import('./search');
+
+    const bodyResults = await searchWorkspace(workspaceRoot, {
+      query: 'gyoza',
+    });
+    const bodyHit = bodyResults.find((r) => r.matchField === 'body');
+    expect(bodyHit?.noteId).toBe('note_side');
+    expect(bodyHit?.excerpt).toContain('gyoza');
+
+    const titleResults = await searchWorkspace(workspaceRoot, {
+      query: 'recipes',
+    });
+    expect(
+      titleResults.some(
+        (r) => r.matchField === 'title' && r.noteId === 'note_side'
+      )
+    ).toBe(true);
+  });
+
   it('cleans markdown noise (code blocks, link URLs) so they do not match', async () => {
     writeWorkspace(workspaceRoot, {
       activeViewId: 'v1',

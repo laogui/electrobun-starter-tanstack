@@ -83,7 +83,16 @@ const noteMocks = {
 };
 
 const previewMocks = {
+  buildNotePreviewFromBlocks: vi.fn(),
   writeNoteWithPreview: vi.fn(),
+};
+
+const noteStoreMocks = {
+  buildNoteIndex: vi.fn(),
+  listNoteRecords: vi.fn(),
+  loadNoteRecord: vi.fn(),
+  mergeNoteMeta: vi.fn(),
+  noteRecordToCardData: vi.fn(),
 };
 
 const workspaceMocks = {
@@ -122,9 +131,27 @@ vi.mock('./notes', () => ({
 }));
 
 vi.mock('./preview', () => ({
+  buildNotePreviewFromBlocks: (
+    ...args: Parameters<typeof previewMocks.buildNotePreviewFromBlocks>
+  ) => previewMocks.buildNotePreviewFromBlocks(...args),
   writeNoteWithPreview: (
     ...args: Parameters<typeof previewMocks.writeNoteWithPreview>
   ) => previewMocks.writeNoteWithPreview(...args),
+}));
+
+vi.mock('./noteStore', () => ({
+  buildNoteIndex: (...args: Parameters<typeof noteStoreMocks.buildNoteIndex>) =>
+    noteStoreMocks.buildNoteIndex(...args),
+  listNoteRecords: (
+    ...args: Parameters<typeof noteStoreMocks.listNoteRecords>
+  ) => noteStoreMocks.listNoteRecords(...args),
+  loadNoteRecord: (...args: Parameters<typeof noteStoreMocks.loadNoteRecord>) =>
+    noteStoreMocks.loadNoteRecord(...args),
+  mergeNoteMeta: (...args: Parameters<typeof noteStoreMocks.mergeNoteMeta>) =>
+    noteStoreMocks.mergeNoteMeta(...args),
+  noteRecordToCardData: (
+    ...args: Parameters<typeof noteStoreMocks.noteRecordToCardData>
+  ) => noteStoreMocks.noteRecordToCardData(...args),
 }));
 
 vi.mock('./workspace', () => ({
@@ -174,15 +201,19 @@ interface CanvasHandlers {
   deleteNote: AnyHandler;
   deleteView: AnyHandler;
   exportJson: AnyHandler;
+  exportNoteMarkdown: AnyHandler;
+  exportNotesMarkdown: AnyHandler;
   exportPng: AnyHandler;
   getSettings: AnyHandler;
   listViews: AnyHandler;
   loadAttachment: AnyHandler;
+  loadBlockNote: AnyHandler;
   loadCanvas: AnyHandler;
   openAttachment: AnyHandler;
   openSettings: AnyHandler;
   renameView: AnyHandler;
   saveAttachment: AnyHandler;
+  saveBlockNote: AnyHandler;
   saveManifest: AnyHandler;
   saveNote: AnyHandler;
 }
@@ -243,6 +274,18 @@ beforeEach(() => {
     blocks: 1,
     version: 1,
   });
+  previewMocks.buildNotePreviewFromBlocks.mockReturnValue({
+    html: '<p>Blocks</p>',
+    excerpt: 'Blocks',
+    blocks: 1,
+    version: 1,
+  });
+  // Note store defaults: empty workspace, no-op meta merge.
+  noteStoreMocks.buildNoteIndex.mockResolvedValue(new Map());
+  noteStoreMocks.listNoteRecords.mockResolvedValue([]);
+  noteStoreMocks.loadNoteRecord.mockResolvedValue(null);
+  noteStoreMocks.mergeNoteMeta.mockResolvedValue(false);
+  noteStoreMocks.noteRecordToCardData.mockReturnValue({});
   bunFileMock.mockReturnValue({
     exists: vi.fn().mockResolvedValue(false),
     json: vi.fn(),
@@ -469,8 +512,17 @@ describe('src/bun/index helpers', () => {
   it('saveManifest writes card notes through preview generation', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
-    noteMocks.buildNoteIndex.mockResolvedValueOnce(
-      new Map([['note-1', 'content/note-1.md']])
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note-1',
+          {
+            noteId: 'note-1',
+            hasSidecar: false,
+            markdownFile: 'content/note-1.md',
+          },
+        ],
+      ])
     );
     noteMocks.loadNote.mockResolvedValueOnce({
       file: 'content/note-1.md',
@@ -538,6 +590,94 @@ describe('src/bun/index helpers', () => {
     );
   });
 
+  it('saveManifest merges metadata into sidecar-backed notes without touching the body', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    // The note already has a BlockNote sidecar → JSON is the SoT, so
+    // saveManifest must only merge metadata (never write Markdown).
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note-1',
+          {
+            noteId: 'note-1',
+            hasSidecar: true,
+            markdownFile: 'content/note-1.md',
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'card-1',
+            type: 'card',
+            position: { x: 10, y: 20 },
+            data: {
+              noteId: 'note-1',
+              title: 'Old title',
+              type: 'text',
+              color: '#fca5a5', // changed on canvas
+              content: 'stale lossy markdown projection',
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: true });
+
+    // No markdown body write at all.
+    expect(previewMocks.writeNoteWithPreview).not.toHaveBeenCalled();
+    expect(noteMocks.cardDataToNote).not.toHaveBeenCalled();
+
+    // Metadata merged into the sidecar.
+    expect(noteStoreMocks.mergeNoteMeta).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'note-1',
+      { title: 'Old title', color: '#fca5a5' }
+    );
+  });
+
+  it('saveManifest omits the file reference for sidecar-only notes', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    // Sidecar exists, no legacy `.md` → the manifest reference carries no file.
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([['note-1', { noteId: 'note-1', hasSidecar: true }]])
+    );
+
+    await canvasHandlers.saveManifest({
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'card-1',
+          type: 'card',
+          position: { x: 99, y: 99 },
+          data: {
+            noteId: 'note-1',
+            title: 'Same',
+            color: '#FFFFFF',
+            type: 'text',
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    expect(previewMocks.writeNoteWithPreview).not.toHaveBeenCalled();
+    expect(noteStoreMocks.mergeNoteMeta).toHaveBeenCalled();
+    const manifest = manifestMocks.saveManifest.mock.calls.at(-1)?.[2] as {
+      nodes: Array<{ data: Record<string, unknown> }>;
+    };
+    expect(manifest.nodes[0]?.data).toEqual({ noteId: 'note-1', type: 'text' });
+    expect(manifest.nodes[0]?.data).not.toHaveProperty('file');
+  });
+
   it('saveNote returns generated preview metadata', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -547,8 +687,17 @@ describe('src/bun/index helpers', () => {
       blocks: 1,
       version: 1,
     };
-    noteMocks.buildNoteIndex.mockResolvedValueOnce(
-      new Map([['note-1', 'content/note-1.md']])
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note-1',
+          {
+            noteId: 'note-1',
+            hasSidecar: false,
+            markdownFile: 'content/note-1.md',
+          },
+        ],
+      ])
     );
     previewMocks.writeNoteWithPreview.mockResolvedValueOnce(preview);
 
@@ -570,6 +719,126 @@ describe('src/bun/index helpers', () => {
       }),
       'Updated'
     );
+  });
+
+  it('saveBlockNote writes only the JSON sidecar (no markdown) with metadata + preview', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    const blocks = [
+      {
+        type: 'paragraph',
+        props: {},
+        content: [{ type: 'text', text: 'hi', styles: {} }],
+        children: [],
+      },
+    ];
+
+    const result = await canvasHandlers.saveBlockNote({
+      noteId: 'note_x',
+      frontmatter: {
+        id: 'note_x',
+        title: 'My Note',
+        color: '#abc',
+        displayHint: 'note',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      blocks,
+      markdown: 'hi',
+      revision: 4,
+    });
+
+    expect(result).toMatchObject({ success: true, revision: 5 });
+    // No markdown file is written.
+    expect(previewMocks.writeNoteWithPreview).not.toHaveBeenCalled();
+
+    // The note record is persisted as a JSON sidecar via atomicWrite.
+    const sidecarCall = workspaceMocks.atomicWrite.mock.calls.find((call) =>
+      String(call[0]).endsWith('/content/.ghostboard/blocknote/note_x.json')
+    );
+    expect(sidecarCall).toBeDefined();
+    const sidecar = JSON.parse(String(sidecarCall?.[1])) as {
+      blocks: unknown[];
+      preview: unknown;
+    } & Record<string, unknown>;
+    expect(sidecar).toMatchObject({
+      schema: 'ghostboard-blocknote/v1',
+      noteId: 'note_x',
+      revision: 5,
+      title: 'My Note',
+      color: '#abc',
+      displayHint: 'note',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(sidecar.blocks).toHaveLength(1);
+    expect(sidecar.preview).toBeDefined();
+  });
+
+  it('loadBlockNote returns sidecar blocks without any markdown reconcile', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    bunFileMock.mockImplementation((p: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          p.endsWith('/content/.ghostboard/blocknote/note_y.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_y',
+        revision: 9,
+        blocks: [{ type: 'paragraph' }],
+      }),
+      text: vi.fn(),
+    }));
+
+    const result = (await canvasHandlers.loadBlockNote({
+      noteId: 'note_y',
+    })) as {
+      success: boolean;
+      blocks?: unknown[];
+      revision?: number;
+      recoveredFromMarkdown?: boolean;
+    };
+
+    expect(result.success).toBe(true);
+    expect(result.revision).toBe(9);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.recoveredFromMarkdown).toBeUndefined();
+    // No conflict backup / markdown reconcile ever runs.
+    expect(previewMocks.writeNoteWithPreview).not.toHaveBeenCalled();
+  });
+
+  it('loadBlockNote offers a one-time markdown import when no sidecar exists', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    // Default Bun.file → sidecar does not exist. Legacy markdown is indexed.
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_z',
+          { noteId: 'note_z', hasSidecar: false, markdownFile: 'content/z.md' },
+        ],
+      ])
+    );
+    noteMocks.loadNote.mockResolvedValueOnce({
+      file: 'content/z.md',
+      frontmatter: { id: 'note_z' },
+      body: 'legacy body',
+    });
+
+    const result = (await canvasHandlers.loadBlockNote({
+      noteId: 'note_z',
+    })) as {
+      success: boolean;
+      blocks?: unknown[];
+      markdown?: string;
+      recoveredFromMarkdown?: boolean;
+    };
+
+    expect(result.success).toBe(true);
+    expect(result.recoveredFromMarkdown).toBe(true);
+    expect(result.markdown).toBe('legacy body');
+    expect(result.blocks).toBeUndefined();
   });
 
   it('saveAttachment maps image extensions and rejects invalid data urls', async () => {
@@ -693,6 +962,126 @@ describe('src/bun/index helpers', () => {
         fileName: 'Wrong type',
       })
     ).rejects.toThrow('Invalid PNG data URL');
+  });
+
+  it('exportNoteMarkdown writes a single .md from the note record', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/exports']);
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_md1',
+      source: 'sidecar',
+      title: 'Trip Plan',
+      displayHint: 'note',
+      color: '',
+      revision: 2,
+      blocks: [
+        {
+          type: 'paragraph',
+          props: {},
+          content: [{ type: 'text', text: 'pack bags', styles: {} }],
+          children: [],
+        },
+      ],
+      preview: null,
+      corrupted: false,
+    });
+
+    const result = (await canvasHandlers.exportNoteMarkdown({
+      noteId: 'note_md1',
+    })) as { success: boolean; filePath?: string };
+
+    expect(result.success).toBe(true);
+    expect(result.filePath).toBe('/tmp/exports/trip-plan-note_md1.md');
+    const writeCall = bunWriteMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).endsWith('/trip-plan-note_md1.md')
+    );
+    expect(writeCall).toBeDefined();
+    expect(String(writeCall?.[1])).toContain('pack bags');
+    expect(String(writeCall?.[1])).toContain('id: note_md1');
+  });
+
+  it('exportNoteMarkdown reports cancel and missing notes', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    // Missing note record → not found.
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce(null);
+    await expect(
+      canvasHandlers.exportNoteMarkdown({ noteId: 'gone' })
+    ).resolves.toEqual({ success: false });
+
+    // User cancels the folder picker.
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_md2',
+      source: 'sidecar',
+      title: 'X',
+      displayHint: 'note',
+      color: '',
+      revision: 1,
+      blocks: [],
+      preview: null,
+      corrupted: false,
+    });
+    openFileDialogMock.mockResolvedValueOnce([]);
+    await expect(
+      canvasHandlers.exportNoteMarkdown({ noteId: 'note_md2' })
+    ).resolves.toEqual({ canceled: true, success: false });
+  });
+
+  it('exportNotesMarkdown (all) writes a bundle with notes and index.md', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/exports']);
+    noteStoreMocks.listNoteRecords.mockResolvedValueOnce([
+      { noteId: 'note_a1' },
+      { noteId: 'note_b2' },
+    ]);
+    noteStoreMocks.loadNoteRecord.mockImplementation(
+      (_ws: string, noteId: string) =>
+        Promise.resolve({
+          noteId,
+          source: 'sidecar',
+          title: noteId === 'note_a1' ? 'Alpha' : 'Beta',
+          displayHint: 'note',
+          color: '',
+          revision: 1,
+          blocks: [
+            {
+              type: 'paragraph',
+              props: {},
+              content: [{ type: 'text', text: noteId, styles: {} }],
+              children: [],
+            },
+          ],
+          preview: null,
+          corrupted: false,
+        })
+    );
+
+    const result = (await canvasHandlers.exportNotesMarkdown({
+      scope: 'all',
+    })) as { success: boolean; exported?: number; filePath?: string };
+
+    expect(result.success).toBe(true);
+    expect(result.exported).toBe(2);
+    expect(result.filePath).toBe('/tmp/exports/GhostBoard Markdown Export');
+
+    const writtenPaths = bunWriteMock.mock.calls.map((call: unknown[]) =>
+      String(call[0])
+    );
+    expect(
+      writtenPaths.some((p: string) => p.endsWith('/notes/alpha-note_a1.md'))
+    ).toBe(true);
+    expect(
+      writtenPaths.some((p: string) => p.endsWith('/notes/beta-note_b2.md'))
+    ).toBe(true);
+    const indexCall = bunWriteMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).endsWith('/index.md')
+    );
+    expect(indexCall).toBeDefined();
+    expect(String(indexCall?.[1])).toContain('# GhostBoard Markdown Export');
+    expect(String(indexCall?.[1])).toContain('Documents: 2');
   });
 
   it('loadAttachment returns null for missing file and data url for existing file', async () => {
@@ -883,8 +1272,17 @@ describe('src/bun/index helpers', () => {
   it('saveManifest reuses an existing note file for folder children with a noteId', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
-    noteMocks.buildNoteIndex.mockResolvedValueOnce(
-      new Map([['note_existing', 'content/existing.md']])
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_existing',
+          {
+            noteId: 'note_existing',
+            hasSidecar: false,
+            markdownFile: 'content/existing.md',
+          },
+        ],
+      ])
     );
     noteMocks.loadNote.mockResolvedValueOnce({
       file: 'content/existing.md',
@@ -1005,15 +1403,30 @@ describe('src/bun/index helpers', () => {
       ],
       edges: [],
     });
-    noteMocks.buildNoteIndex.mockResolvedValueOnce(
-      new Map([['note_abc', 'content/note_abc.md']])
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_abc',
+          {
+            noteId: 'note_abc',
+            hasSidecar: false,
+            markdownFile: 'content/note_abc.md',
+          },
+        ],
+      ])
     );
-    noteMocks.loadNote.mockResolvedValueOnce({
-      file: 'content/note_abc.md',
-      frontmatter: { id: 'note_abc', title: 'Hydrated' },
-      body: 'hydrated body',
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_abc',
+      source: 'markdown',
+      title: 'Hydrated',
+      displayHint: 'note',
+      color: '',
+      revision: 0,
+      blocks: null,
+      preview: null,
+      corrupted: false,
     });
-    noteMocks.noteToCardData.mockReturnValueOnce({
+    noteStoreMocks.noteRecordToCardData.mockReturnValueOnce({
       type: 'text',
       title: 'Hydrated',
       content: 'hydrated body',
@@ -1024,7 +1437,7 @@ describe('src/bun/index helpers', () => {
     const folder = (result as { nodes: Record<string, any>[] }).nodes[0];
     expect(folder).toBeDefined();
     const child = folder?.data.children[0];
-    expect(noteMocks.noteToCardData).toHaveBeenCalled();
+    expect(noteStoreMocks.noteRecordToCardData).toHaveBeenCalled();
     expect(child.data.title).toBe('Hydrated');
     expect(child.data.content).toBe('hydrated body');
     expect(child.data.noteId).toBe('note_abc');

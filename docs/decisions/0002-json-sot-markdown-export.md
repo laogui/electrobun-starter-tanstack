@@ -1,9 +1,14 @@
 # ADR 0002 — JSON 是 source of truth，Markdown 是按需导出格式
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-05-29
 - 取代：`docs/decisions/0001-json-sot-markdown-mirror.md` 中 “每次保存同步写 Markdown mirror” 的策略
-- 相关方案：`docs/markdown-storage-remediation-plan.md`
+- 相关方案：`docs/markdown-storage-remediation-plan.md`、`docs/markdown-storage-remediation-plan.v0.2-addendum.md`
+
+> 实施补充（来自 v0.2 增订 A7）：note 自身属性（`title`、`color`、`createdAt`、
+> `updatedAt`、`editor`、`blocknoteFile`、`preview`）落在 note sidecar JSON；
+> `tag`/`tagColor`/`tags` 落在 `node-metadata.json`；`position`/尺寸/`parentId`
+> 落在 canvas manifest。编辑模型按 A2 声明为单窗口编辑，`revision` 作为写入保护。
 
 ## 上下文
 

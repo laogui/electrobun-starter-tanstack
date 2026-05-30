@@ -1,9 +1,14 @@
 # ADR 0001 — JSON 是 source of truth，Markdown 是 mirror
 
-- 状态：Accepted
+- 状态：Superseded（被 `docs/decisions/0002-json-sot-markdown-export.md` 取代）
 - 日期：2026-05-28
 - 决策者：项目维护者
 - 取代：本仓库 README / PRD / `blocknote-ai-migration-plan.md` 中所有"Markdown 是主数据"或"Markdown-first"的表述
+
+> ⚠️ 已被 ADR 0002 取代：本 ADR 仍保留“每次 save 同步写 Markdown mirror”的设计。
+> ADR 0002 决定 **不再自动写 Markdown mirror**，Markdown 仅作为用户主动触发的导出格式。
+> JSON 作为 SoT 的核心结论不变；下文中关于“每次 save 同步写出 `.md`”“四态冲突判定”
+> 的部分以 ADR 0002 与 `docs/markdown-storage-remediation-plan.md` 为准。
 
 ## 上下文
 

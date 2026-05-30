@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
+import { blocknoteSidecarDir } from './blocknote';
 import { loadManifest, type ManifestNode } from './manifest';
 import { listFilesRecursive, parseFrontmatter } from './notes';
 import { loadWorkspaceConfig } from './workspace';
@@ -22,6 +23,9 @@ export interface DeleteUnlinkedResult {
 }
 
 const CONTENT_PATH_RE = /^content\/[^/][^\\]*\.md$/;
+const SIDECAR_PATH_RE =
+  /^content\/\.ghostboard\/blocknote\/[A-Za-z0-9_-]+\.json$/;
+const JSON_EXT_RE = /\.json$/;
 
 function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
   const data = (node.data ?? {}) as Record<string, unknown>;
@@ -127,15 +131,83 @@ export async function scanUnlinkedNotes(
     });
   }
 
+  // Orphaned BlockNote sidecars (JSON notes whose card was removed from every
+  // view). Notes already surfaced via a legacy `.md` are skipped to avoid
+  // double-listing during migration.
+  const seenNoteIds = new Set(
+    entries
+      .map((entry) => entry.noteId)
+      .filter((id): id is string => Boolean(id))
+  );
+  const sidecarDir = blocknoteSidecarDir(wsPath);
+  for (const rel of listFilesRecursive(sidecarDir)) {
+    if (!rel.endsWith('.json') || rel.includes('/')) {
+      continue;
+    }
+    const noteId = rel.replace(JSON_EXT_RE, '');
+    if (referenced.has(noteId) || seenNoteIds.has(noteId)) {
+      continue;
+    }
+    const fullPath = join(sidecarDir, rel);
+    let title = '';
+    try {
+      const parsed = (await Bun.file(fullPath).json()) as { title?: unknown };
+      title = typeof parsed.title === 'string' ? parsed.title : '';
+    } catch {
+      // Unreadable / corrupted sidecar — still report it for cleanup.
+    }
+    let size = 0;
+    let modifiedAt = 0;
+    try {
+      const s = statSync(fullPath);
+      size = s.size;
+      modifiedAt = s.mtimeMs;
+    } catch {
+      // ignore — leave as 0
+    }
+    entries.push({
+      file: `content/.ghostboard/blocknote/${rel}`,
+      hasFrontmatterId: true,
+      modifiedAt,
+      noteId,
+      size,
+      title,
+    });
+  }
+
   entries.sort((a, b) => a.file.localeCompare(b.file));
   return entries;
+}
+
+/**
+ * Resolve the noteId backing a cleanup target so deletion can re-validate it
+ * against the live reference set. Markdown reads its frontmatter id; sidecars
+ * derive the id from the filename.
+ */
+async function noteIdForCleanupPath(
+  fullPath: string,
+  rel: string
+): Promise<string | null> {
+  if (SIDECAR_PATH_RE.test(rel)) {
+    return rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? null;
+  }
+  try {
+    const text = await Bun.file(fullPath).text();
+    const { frontmatter } = parseFrontmatter(text);
+    return typeof frontmatter.id === 'string' && frontmatter.id
+      ? frontmatter.id
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Move the listed unlinked files to the system Trash via Electrobun's
  * `Utils.moveToTrash`. Re-validates against the current reference set so
  * files that became referenced after a stale scan are not touched. Paths
- * must live under `content/` and end in `.md`.
+ * must be a `content/*.md` note or a `content/.ghostboard/blocknote/*.json`
+ * sidecar.
  */
 export async function deleteUnlinkedNotes(
   wsPath: string,
@@ -146,7 +218,8 @@ export async function deleteUnlinkedNotes(
   const skipped: string[] = [];
 
   for (const rel of files) {
-    if (!CONTENT_PATH_RE.test(rel) || rel.includes('..')) {
+    const isAllowed = CONTENT_PATH_RE.test(rel) || SIDECAR_PATH_RE.test(rel);
+    if (!isAllowed || rel.includes('..')) {
       skipped.push(rel);
       continue;
     }
@@ -155,19 +228,10 @@ export async function deleteUnlinkedNotes(
       skipped.push(rel);
       continue;
     }
-    try {
-      const text = await Bun.file(fullPath).text();
-      const { frontmatter } = parseFrontmatter(text);
-      const noteId =
-        typeof frontmatter.id === 'string' && frontmatter.id
-          ? frontmatter.id
-          : null;
-      if (noteId && referenced.has(noteId)) {
-        skipped.push(rel);
-        continue;
-      }
-    } catch {
-      // Read failures fall through to the moveToTrash attempt below.
+    const noteId = await noteIdForCleanupPath(fullPath, rel);
+    if (noteId && referenced.has(noteId)) {
+      skipped.push(rel);
+      continue;
     }
     try {
       const ok = Utils.moveToTrash(fullPath);

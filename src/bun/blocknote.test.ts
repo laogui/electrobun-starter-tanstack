@@ -51,12 +51,10 @@ beforeAll(() => {
 
 import {
   BLOCKNOTE_SCHEMA,
+  blocknoteSidecarExists,
   blocknoteSidecarRelativePath,
-  contentHash,
   deleteBlockNoteSidecar,
-  detectExternalMarkdownChange,
   loadBlockNoteSidecar,
-  readMarkdownBodyHash,
   saveBlockNoteSidecar,
 } from './blocknote';
 
@@ -137,70 +135,35 @@ describe('blocknote sidecar I/O', () => {
     expect(deleteBlockNoteSidecar(wsPath, 'note_del')).toBe(false);
   });
 
-  it('readMarkdownBodyHash strips frontmatter before hashing', async () => {
-    writeFileSync(
-      join(wsPath, 'content', 'note.md'),
-      '---\nid: x\n---\nbody text\n'
-    );
-    const hash = await readMarkdownBodyHash(wsPath, 'content/note.md');
-    expect(hash).toBe(contentHash('body text\n'));
-  });
-});
-
-describe('detectExternalMarkdownChange', () => {
-  it('returns recover-from-markdown when sidecar missing', () => {
-    expect(
-      detectExternalMarkdownChange({
-        sidecarExists: false,
-        currentMarkdownHash: 'h',
-      })
-    ).toBe('recover-from-markdown');
-  });
-
-  it('returns recover-from-markdown when sidecar corrupted', () => {
-    expect(
-      detectExternalMarkdownChange({
-        sidecarExists: true,
-        sidecarCorrupted: true,
-        currentMarkdownHash: 'h',
-      })
-    ).toBe('recover-from-markdown');
+  it('round-trips note metadata and preview as the note record', async () => {
+    await saveBlockNoteSidecar(wsPath, 'note_meta', {
+      blocks: [{ type: 'paragraph' }],
+      revision: 2,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-02-02T00:00:00.000Z',
+      title: 'Meta Note',
+      displayHint: 'note',
+      color: '#fca5a5',
+      preview: { html: '<p>x</p>', excerpt: 'x', blocks: 1, version: 1 },
+    });
+    const loaded = await loadBlockNoteSidecar(wsPath, 'note_meta');
+    expect(loaded).toMatchObject({
+      revision: 2,
+      title: 'Meta Note',
+      displayHint: 'note',
+      color: '#fca5a5',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(loaded?.preview?.html).toBe('<p>x</p>');
   });
 
-  it('returns use-sidecar when nothing changed', () => {
-    expect(
-      detectExternalMarkdownChange({
-        sidecarExists: true,
-        storedMarkdownHash: 'h',
-        storedSidecarRevision: 5,
-        sidecarRevision: 5,
-        currentMarkdownHash: 'h',
-      })
-    ).toBe('use-sidecar');
-  });
-
-  it('returns reimport-markdown when only markdown changed', () => {
-    expect(
-      detectExternalMarkdownChange({
-        sidecarExists: true,
-        storedMarkdownHash: 'h',
-        storedSidecarRevision: 5,
-        sidecarRevision: 5,
-        currentMarkdownHash: 'other',
-      })
-    ).toBe('reimport-markdown');
-  });
-
-  it('returns conflict when both markdown and sidecar diverged', () => {
-    expect(
-      detectExternalMarkdownChange({
-        sidecarExists: true,
-        storedMarkdownHash: 'h',
-        storedSidecarRevision: 5,
-        sidecarRevision: 6,
-        currentMarkdownHash: 'other',
-      })
-    ).toBe('conflict');
+  it('blocknoteSidecarExists reflects whether a sidecar is present', async () => {
+    expect(await blocknoteSidecarExists(wsPath, 'note_exists')).toBe(false);
+    await saveBlockNoteSidecar(wsPath, 'note_exists', {
+      blocks: [],
+      revision: 1,
+    });
+    expect(await blocknoteSidecarExists(wsPath, 'note_exists')).toBe(true);
   });
 });
 

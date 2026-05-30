@@ -81,4 +81,35 @@ describe('preview generation', () => {
       })
     );
   });
+
+  it('writeNoteWithPreview derives the preview from blocks when provided', async () => {
+    const { writeNoteWithPreview } = await import('./preview');
+
+    const preview = await writeNoteWithPreview(
+      '/workspace',
+      'content/note.md',
+      { id: 'note-1', title: 'Note' },
+      'stale lossy markdown body',
+      [
+        {
+          type: 'heading',
+          props: { level: 1 },
+          content: [{ type: 'text', text: 'FromBlocks', styles: {} }],
+          children: [],
+        },
+      ]
+    );
+
+    const frontmatter = noteMocks.saveNote.mock.calls[0]?.[2] as Record<
+      string,
+      unknown
+    >;
+    const body = noteMocks.saveNote.mock.calls[0]?.[3] as string;
+
+    // Preview HTML comes from the blocks, not the markdown body.
+    expect(String(frontmatter.previewHtml)).toContain('<h1>FromBlocks</h1>');
+    expect(preview.excerpt).toBe('FromBlocks');
+    // The markdown body is still written verbatim (mirror behaviour).
+    expect(body).toBe('stale lossy markdown body');
+  });
 });

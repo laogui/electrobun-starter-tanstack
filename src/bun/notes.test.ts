@@ -144,8 +144,6 @@ describe('notes', () => {
     expect(sanitizeTags(many)).toHaveLength(8);
   });
 
-
-
   it('cardDataToNote serializes checklist bodies', async () => {
     const { cardDataToNote } = await import('./notes');
 
@@ -310,24 +308,6 @@ describe('notes', () => {
       deleteNoteFile(workspaceRoot, 'content/../secret.md')
     ).rejects.toThrow('Note path must stay inside content/.');
     expect(readFileSync(outsidePath, 'utf8')).toContain('Secret');
-  });
-
-  it('buildNoteIndex discovers note ids from markdown files', async () => {
-    const { buildNoteIndex } = await import('./notes');
-    writeFileSync(
-      join(workspaceRoot, 'content', 'first.md'),
-      '---\nid: first\ntitle: First\n---\nHello'
-    );
-    mkdirSync(join(workspaceRoot, 'content', 'nested'), { recursive: true });
-    writeFileSync(
-      join(workspaceRoot, 'content', 'nested', 'second.md'),
-      '---\nid: second\ntitle: Second\n---\nWorld'
-    );
-
-    const index = await buildNoteIndex(workspaceRoot);
-
-    expect(index.get('first')).toBe('content/first.md');
-    expect(index.get('second')).toBe('content/nested/second.md');
   });
 
   it('deleteNoteFile removes an existing note and returns false for missing files', async () => {

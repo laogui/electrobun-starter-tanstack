@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 
 import {
   ApplicationMenu,
@@ -15,10 +15,7 @@ import {
   saveAttachmentFile as saveWorkspaceAttachmentFile,
 } from './attachments';
 import {
-  BLOCKNOTE_SCHEMA,
-  contentHash,
   deleteBlockNoteSidecar,
-  detectExternalMarkdownChange,
   loadBlockNoteSidecar,
   saveBlockNoteSidecar,
 } from './blocknote';
@@ -30,6 +27,11 @@ import {
 import { type UnfurlResult, unfurlLink } from './linkPreview';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
+import {
+  buildIndexMarkdown,
+  buildNoteMarkdown,
+  type ExportedNote,
+} from './markdownExport';
 import {
   deleteNodeMetadata,
   deleteTagEverywhere,
@@ -44,13 +46,18 @@ import {
 } from './nodeMetadata';
 import {
   buildNoteIndex,
-  cardDataToNote,
-  createNote,
-  deleteNoteFile,
-  loadNote,
-  noteToCardData,
-} from './notes';
-import { type PreviewArtifacts, writeNoteWithPreview } from './preview';
+  listNoteRecords,
+  loadNoteRecord,
+  mergeNoteMeta,
+  type NoteLocation,
+  noteRecordToCardData,
+} from './noteStore';
+import { cardDataToNote, createNote, deleteNoteFile, loadNote } from './notes';
+import {
+  buildNotePreviewFromBlocks,
+  type PreviewArtifacts,
+  writeNoteWithPreview,
+} from './preview';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
 import type {
@@ -127,6 +134,66 @@ function resolveExportPath(selectedFolder: string, fileName: string): string {
     throw new Error('Export path must stay inside the selected folder.');
   }
   return outputPath;
+}
+
+const EXPORT_ATTACHMENT_RE = /^attachments\/[^/\\]+$/;
+const EXPORT_DIR_NAME = 'GhostBoard Markdown Export';
+
+/** Copy referenced workspace attachments into an export directory (flat). */
+async function copyExportAttachments(
+  wsPath: string,
+  attachments: Iterable<string>,
+  destDir: string
+): Promise<void> {
+  for (const rel of attachments) {
+    if (!EXPORT_ATTACHMENT_RE.test(rel) || rel.includes('..')) {
+      continue;
+    }
+    try {
+      await Bun.write(
+        join(destDir, basename(rel)),
+        Bun.file(resolve(wsPath, rel))
+      );
+    } catch (error) {
+      console.warn(`[export] Failed to copy attachment ${rel}:`, error);
+    }
+  }
+}
+
+/** Collect every noteId referenced by a canvas manifest (cards + folder kids). */
+function collectViewNoteIds(manifest: CanvasManifest | null): string[] {
+  const ids = new Set<string>();
+  for (const node of manifest?.nodes ?? []) {
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    if (typeof data.noteId === 'string' && data.noteId) {
+      ids.add(data.noteId);
+    }
+    const children = data.children;
+    if (!Array.isArray(children)) {
+      continue;
+    }
+    for (const child of children) {
+      const c = (child ?? {}) as Record<string, unknown>;
+      if (typeof c.noteId === 'string' && c.noteId) {
+        ids.add(c.noteId);
+      }
+      const childData = c.data as Record<string, unknown> | undefined;
+      if (typeof childData?.noteId === 'string' && childData.noteId) {
+        ids.add(childData.noteId);
+      }
+    }
+  }
+  return [...ids];
+}
+
+async function pickExportFolder(): Promise<string | null> {
+  const selected = await Utils.openFileDialog({
+    allowsMultipleSelection: false,
+    canChooseDirectory: true,
+    canChooseFiles: false,
+    startingFolder: '~/Desktop',
+  });
+  return selected.find(Boolean) ?? null;
 }
 const FALLBACK_SETTINGS_WINDOW_X = 350;
 const FALLBACK_SETTINGS_WINDOW_Y = 250;
@@ -255,6 +322,69 @@ export function getSettingsViewUrl(mainViewUrl: string): string {
     : SETTINGS_VIEW_URL;
 }
 
+const asNoteString = (value: unknown, fallback: string): string =>
+  typeof value === 'string' ? value : fallback;
+
+/**
+ * Persist a manifest card's note during `saveManifest`.
+ *
+ * Discriminator (ADR 0002 v0.2 A6): a note that already has a BlockNote
+ * sidecar is JSON-backed — `saveManifest` only merges note metadata (title /
+ * color) into the sidecar and never touches blocks or writes Markdown. Legacy
+ * (no-sidecar) checklist / plain-text cards keep the markdown-body round-trip
+ * until their next focused-view edit migrates them to a sidecar.
+ */
+async function persistManifestCardNote(
+  wsPath: string,
+  location: NoteLocation,
+  noteId: string,
+  cardData: Record<string, unknown>
+): Promise<void> {
+  if (location.hasSidecar) {
+    // JSON is the source of truth — merge metadata only, never the body.
+    await mergeNoteMeta(wsPath, noteId, {
+      title: typeof cardData.title === 'string' ? cardData.title : undefined,
+      color: typeof cardData.color === 'string' ? cardData.color : undefined,
+    });
+    return;
+  }
+
+  // Legacy markdown note: derive frontmatter + body from node data and
+  // regenerate the markdown preview. Skipped if there is no backing file.
+  if (!location.markdownFile) {
+    return;
+  }
+  const existingDoc = await loadNote(wsPath, location.markdownFile);
+  const { frontmatter, body } = cardDataToNote(
+    noteId,
+    cardData,
+    existingDoc?.frontmatter
+  );
+  await writeNoteWithPreview(wsPath, location.markdownFile, frontmatter, body);
+}
+
+/**
+ * Hydrate a manifest card's `data` blob from its note record (sidecar JSON
+ * first, legacy `.md` fallback). Returns `null` when the note cannot be found
+ * so the caller can warn and keep the thin manifest reference.
+ */
+async function hydrateCardNoteData(
+  wsPath: string,
+  noteIndex: Map<string, NoteLocation>,
+  noteId: string,
+  existingData: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  const markdownFile =
+    asNoteString(existingData.file, '') ||
+    noteIndex.get(noteId)?.markdownFile ||
+    undefined;
+  const record = await loadNoteRecord(wsPath, noteId, markdownFile);
+  if (!record) {
+    return null;
+  }
+  return { ...existingData, ...noteRecordToCardData(record), noteId };
+}
+
 interface CanvasRPC {
   bun: {
     requests: {
@@ -292,8 +422,6 @@ interface CanvasRPC {
           frontmatter?: Record<string, unknown>;
           revision?: number;
           recoveredFromMarkdown?: boolean;
-          conflict?: boolean;
-          conflictBackupFile?: string;
         };
       };
       saveBlockNote: {
@@ -357,6 +485,25 @@ interface CanvasRPC {
       exportJson: {
         params: { fileName: string; json: string };
         response: { canceled?: boolean; filePath?: string; success: boolean };
+      };
+      exportNoteMarkdown: {
+        params: { noteId: string; includeFrontmatter?: boolean };
+        response: { canceled?: boolean; filePath?: string; success: boolean };
+      };
+      exportNotesMarkdown: {
+        params: {
+          scope: 'all' | 'selected' | 'view';
+          viewId?: string;
+          noteIds?: string[];
+          includeFrontmatter?: boolean;
+        };
+        response: {
+          canceled?: boolean;
+          exported?: number;
+          failed?: number;
+          filePath?: string;
+          success: boolean;
+        };
       };
       openSettings: {
         params: Record<string, unknown>;
@@ -737,25 +884,17 @@ async function main() {
 
               // Hydrate card nodes that have a noteId reference
               if (node.type === 'card' && node.data.noteId) {
-                const filePath =
-                  (node.data.file as string) ||
-                  noteIndex.get(node.data.noteId as string);
-                if (filePath) {
-                  const doc = await loadNote(wsPath, filePath);
-                  if (doc) {
-                    const hydrated = noteToCardData(doc);
-                    return {
-                      ...node,
-                      data: {
-                        ...node.data,
-                        ...hydrated,
-                        noteId: node.data.noteId,
-                      },
-                    };
-                  }
+                const hydrated = await hydrateCardNoteData(
+                  wsPath,
+                  noteIndex,
+                  node.data.noteId as string,
+                  node.data
+                );
+                if (hydrated) {
+                  return { ...node, data: hydrated };
                 }
                 console.warn(
-                  `[persistence] Note file not found for noteId=${node.data.noteId}`
+                  `[persistence] Note record not found for noteId=${node.data.noteId}`
                 );
               }
 
@@ -806,27 +945,22 @@ async function main() {
                         data: { ...childData, noteId: newNoteId },
                       };
                     }
-                    const filePath =
-                      (childData.file as string | undefined) ??
-                      noteIndex.get(existingNoteId);
-                    if (filePath) {
-                      const doc = await loadNote(wsPath, filePath);
-                      if (doc) {
-                        const hydrated = noteToCardData(doc);
-                        return {
-                          ...child,
-                          noteId: existingNoteId,
-                          data: {
-                            ...childData,
-                            ...hydrated,
-                            noteId: existingNoteId,
-                          },
-                        };
-                      }
-                      console.warn(
-                        `[persistence] Missing note file for folder-child noteId=${existingNoteId}`
-                      );
+                    const hydrated = await hydrateCardNoteData(
+                      wsPath,
+                      noteIndex,
+                      existingNoteId,
+                      childData
+                    );
+                    if (hydrated) {
+                      return {
+                        ...child,
+                        noteId: existingNoteId,
+                        data: hydrated,
+                      };
                     }
+                    console.warn(
+                      `[persistence] Missing note record for folder-child noteId=${existingNoteId}`
+                    );
                     return {
                       ...child,
                       noteId: existingNoteId,
@@ -860,14 +994,45 @@ async function main() {
             return { success: false };
           }
 
-          // Build note index so we can find existing .md files
+          // Build note index (sidecars + legacy markdown) so we can find
+          // existing notes and decide sidecar vs legacy handling.
           const noteIndex = await buildNoteIndex(wsPath);
 
-          // Phase 1: Serially pre-allocate file paths for new card notes
+          // Resolve (or allocate) a note location for a card. Brand-new notes
+          // get a legacy markdown stub which migrates to a sidecar on their
+          // first focused-view edit.
+          const resolveCardLocation = async (
+            noteId: string,
+            title: unknown,
+            type: unknown
+          ): Promise<NoteLocation> => {
+            const existing = noteIndex.get(noteId);
+            if (existing) {
+              return existing;
+            }
+            const markdownFile = await createNote(
+              wsPath,
+              noteId,
+              String(title || ''),
+              String(type || 'note')
+            );
+            const loc: NoteLocation = {
+              noteId,
+              hasSidecar: false,
+              markdownFile,
+            };
+            noteIndex.set(noteId, loc);
+            return loc;
+          };
+
+          // Phase 1: Serially pre-allocate note locations for new card notes
           // (both top-level cards AND folder card-children) to avoid
           // concurrent createNote calls producing conflicting paths.
-          const nodePathMap = new Map<number, string>();
-          const folderChildPathMap = new Map<number, Map<number, string>>();
+          const nodeLocMap = new Map<number, NoteLocation>();
+          const folderChildLocMap = new Map<
+            number,
+            Map<number, NoteLocation>
+          >();
           for (const [idx, node] of nodes.entries()) {
             if (node.type === 'card') {
               const noteId =
@@ -875,19 +1040,14 @@ async function main() {
                 `note_${crypto.randomUUID().slice(0, 8)}`;
               // Attach noteId so phase 2 can read it back
               node.data.noteId = noteId;
-              const existingFile = noteIndex.get(noteId);
-              if (existingFile) {
-                nodePathMap.set(idx, existingFile);
-              } else {
-                const filePath = await createNote(
-                  wsPath,
+              nodeLocMap.set(
+                idx,
+                await resolveCardLocation(
                   noteId,
-                  String(node.data.title || ''),
-                  String(node.data.type || 'note')
-                );
-                noteIndex.set(noteId, filePath);
-                nodePathMap.set(idx, filePath);
-              }
+                  node.data.title,
+                  node.data.type
+                )
+              );
               continue;
             }
             if (node.type === 'folder') {
@@ -897,7 +1057,7 @@ async function main() {
                 noteId?: string;
                 type?: string;
               }>;
-              const childMap = new Map<number, string>();
+              const childMap = new Map<number, NoteLocation>();
               for (const [cidx, child] of children.entries()) {
                 if (child.type !== 'card') {
                   continue;
@@ -911,22 +1071,17 @@ async function main() {
                 child.noteId = noteId;
                 childData.noteId = noteId;
                 child.data = childData;
-                const existingFile = noteIndex.get(noteId);
-                if (existingFile) {
-                  childMap.set(cidx, existingFile);
-                } else {
-                  const filePath = await createNote(
-                    wsPath,
+                childMap.set(
+                  cidx,
+                  await resolveCardLocation(
                     noteId,
-                    String(childData.title || ''),
-                    String(childData.type || 'note')
-                  );
-                  noteIndex.set(noteId, filePath);
-                  childMap.set(cidx, filePath);
-                }
+                    childData.title,
+                    childData.type
+                  )
+                );
               }
               if (childMap.size > 0) {
-                folderChildPathMap.set(idx, childMap);
+                folderChildLocMap.set(idx, childMap);
               }
             }
           }
@@ -974,7 +1129,7 @@ async function main() {
                   noteId?: string;
                   type?: string;
                 }>;
-                const childPathMap = folderChildPathMap.get(idx);
+                const childLocMap = folderChildLocMap.get(idx);
                 const serializedChildren = await Promise.all(
                   rawChildren.map(async (child, cidx) => {
                     if (child.type === 'asset') {
@@ -1000,31 +1155,22 @@ async function main() {
                     if (child.type !== 'card') {
                       return child;
                     }
-                    const filePath = childPathMap?.get(cidx);
+                    const location = childLocMap?.get(cidx);
                     const noteId = child.noteId as string | undefined;
-                    if (!(filePath && noteId)) {
+                    if (!(location && noteId)) {
                       return child;
                     }
                     const childData = (child.data ?? {}) as Record<
                       string,
                       unknown
                     >;
-                    // Read existing frontmatter to preserve createdAt
-                    let existingFm: Record<string, unknown> | undefined;
-                    const existingDoc = await loadNote(wsPath, filePath);
-                    if (existingDoc) {
-                      existingFm = existingDoc.frontmatter;
-                    }
-                    const { frontmatter, body } = cardDataToNote(
-                      noteId,
-                      childData,
-                      existingFm
-                    );
-                    await writeNoteWithPreview(
+                    // Persist note content (sidecar-aware): sidecar-backed
+                    // notes merge metadata only; legacy cards round-trip md.
+                    await persistManifestCardNote(
                       wsPath,
-                      filePath,
-                      frontmatter,
-                      body
+                      location,
+                      noteId,
+                      childData
                     );
                     return {
                       id: child.id,
@@ -1032,7 +1178,9 @@ async function main() {
                       type: 'card' as const,
                       data: {
                         noteId,
-                        file: filePath,
+                        ...(location.markdownFile
+                          ? { file: location.markdownFile }
+                          : {}),
                         type: childData.type,
                       },
                     };
@@ -1058,24 +1206,16 @@ async function main() {
               }
 
               const noteId = node.data.noteId as string;
-              const filePath = nodePathMap.get(idx)!;
+              const location = nodeLocMap.get(idx)!;
 
-              // Read existing frontmatter to preserve createdAt
-              let existingFm: Record<string, unknown> | undefined;
-              const doc = await loadNote(wsPath, filePath);
-              if (doc) {
-                existingFm = doc.frontmatter;
-              }
-
-              // Convert node data to frontmatter + body
-              const { frontmatter, body } = cardDataToNote(
+              // Persist note content (sidecar-aware): sidecar-backed notes merge
+              // metadata only; legacy cards round-trip markdown.
+              await persistManifestCardNote(
+                wsPath,
+                location,
                 noteId,
-                node.data,
-                existingFm
+                node.data
               );
-
-              // Write .md file and keep markdown preview metadata in sync.
-              await writeNoteWithPreview(wsPath, filePath, frontmatter, body);
 
               // Return manifest-only node: strip content fields, keep reference
               return {
@@ -1087,7 +1227,9 @@ async function main() {
                 ...(node.extent ? { extent: node.extent } : {}),
                 data: {
                   noteId,
-                  file: filePath,
+                  ...(location.markdownFile
+                    ? { file: location.markdownFile }
+                    : {}),
                   type: node.data.type, // keep for quick component selection
                   ...(node.data.detached ? { detached: true } : {}),
                 },
@@ -1107,150 +1249,114 @@ async function main() {
         },
 
         saveNote: async ({ noteId, frontmatter, body }) => {
+          // Legacy markdown save path (checklist / plain-text cards). JSON
+          // notes go through saveBlockNote; this only writes to an existing
+          // `.md` and never creates one.
           const noteIndex = await buildNoteIndex(wsPath);
-          const filePath = noteIndex.get(noteId);
-          if (!filePath) {
+          const markdownFile = noteIndex.get(noteId)?.markdownFile;
+          if (!markdownFile) {
             return { success: false };
           }
-
           const preview = await writeNoteWithPreview(
             wsPath,
-            filePath,
-            {
-              ...frontmatter,
-              updatedAt: new Date().toISOString(),
-            },
+            markdownFile,
+            { ...frontmatter, updatedAt: new Date().toISOString() },
             body
           );
           return { success: true, preview };
         },
 
         loadBlockNote: async ({ noteId }) => {
-          const noteIndex = await buildNoteIndex(wsPath);
-          const filePath = noteIndex.get(noteId);
-          if (!filePath) {
-            return { success: false };
-          }
-          const note = await loadNote(wsPath, filePath);
-          if (!note) {
-            return { success: false };
-          }
-
+          // Sidecar JSON is the only source of truth — no Markdown reconcile.
           const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
-          const currentMarkdownHash = contentHash(note.body);
-
-          const decision = detectExternalMarkdownChange({
-            sidecarExists: sidecar !== null,
-            sidecarCorrupted: sidecar?.corrupted,
-            storedMarkdownHash:
-              typeof note.frontmatter.markdownHash === 'string'
-                ? note.frontmatter.markdownHash
-                : undefined,
-            storedSidecarRevision:
-              typeof note.frontmatter.blocknoteRevision === 'number'
-                ? note.frontmatter.blocknoteRevision
-                : undefined,
-            sidecarRevision: sidecar?.revision,
-            currentMarkdownHash,
-          });
-
-          if (decision === 'use-sidecar' && sidecar) {
+          if (sidecar && !sidecar.corrupted) {
             return {
               success: true,
               blocks: sidecar.blocks,
-              markdown: note.body,
-              frontmatter: note.frontmatter,
               revision: sidecar.revision,
             };
           }
 
-          if (decision === 'conflict' && sidecar) {
-            // Stash the sidecar version as a conflict backup so the user can
-            // recover it if they decide to keep the external Markdown edit.
-            const stamp = new Date()
-              .toISOString()
-              .replaceAll(/[:.]/g, '-')
-              .slice(0, 19);
-            const backupRel = filePath.replace(
-              /\.md$/,
-              `.conflict-${stamp}.md`
-            );
-            try {
-              await writeNoteWithPreview(
-                wsPath,
-                backupRel,
-                { ...note.frontmatter, id: `${noteId}-conflict-${stamp}` },
-                note.body
-              );
-            } catch {
-              // Best-effort backup; do not block the load.
+          // No valid sidecar — offer a one-time import from a legacy `.md`.
+          const noteIndex = await buildNoteIndex(wsPath);
+          const markdownFile = noteIndex.get(noteId)?.markdownFile;
+          if (markdownFile) {
+            const note = await loadNote(wsPath, markdownFile);
+            if (note) {
+              return {
+                success: true,
+                blocks: undefined,
+                markdown: note.body,
+                frontmatter: note.frontmatter,
+                revision: sidecar?.revision,
+                recoveredFromMarkdown: true,
+              };
             }
-            return {
-              success: true,
-              blocks: sidecar.blocks,
-              markdown: note.body,
-              frontmatter: note.frontmatter,
-              revision: sidecar.revision,
-              conflict: true,
-              conflictBackupFile: backupRel,
-            };
           }
 
-          // recover-from-markdown / reimport-markdown: caller imports
-          // from `markdown` and saves once to materialize a sidecar.
+          // Brand-new / empty note — start blank; first save creates a sidecar.
           return {
             success: true,
-            blocks: undefined,
-            markdown: note.body,
-            frontmatter: note.frontmatter,
-            revision: sidecar?.revision,
-            recoveredFromMarkdown: true,
+            blocks: [],
+            revision: sidecar?.revision ?? 0,
           };
         },
 
-        saveBlockNote: async ({
-          noteId,
-          frontmatter,
-          blocks,
-          markdown,
-          revision,
-        }) => {
-          const noteIndex = await buildNoteIndex(wsPath);
-          const filePath = noteIndex.get(noteId);
-          if (!filePath) {
-            return { success: false };
-          }
-
+        saveBlockNote: async ({ noteId, frontmatter, blocks, revision }) => {
+          // JSON sidecar is the only thing written. No Markdown mirror, no
+          // hashes (ADR 0002). Note metadata (title/color/createdAt) and the
+          // derived preview live in the sidecar alongside the blocks.
+          const existing = await loadBlockNoteSidecar(wsPath, noteId);
           const nextRevision =
-            (typeof revision === 'number' ? revision : 0) + 1;
+            (typeof revision === 'number'
+              ? revision
+              : (existing?.revision ?? 0)) + 1;
           const now = new Date().toISOString();
+          const preview = buildNotePreviewFromBlocks(blocks);
+          const createdAt =
+            existing?.createdAt ??
+            (typeof frontmatter.createdAt === 'string'
+              ? frontmatter.createdAt
+              : now);
 
-          // 1) Atomically write JSON sidecar first — it is the source of truth.
-          const { relativePath: sidecarFile, hash: sidecarHash } =
-            await saveBlockNoteSidecar(wsPath, noteId, {
+          const { relativePath: sidecarFile } = await saveBlockNoteSidecar(
+            wsPath,
+            noteId,
+            {
               blocks,
               revision: nextRevision,
+              createdAt,
               updatedAt: now,
-            });
-
-          // 2) Write markdown mirror + preview, embedding sync metadata.
-          const markdownHash = contentHash(markdown);
-          const preview = await writeNoteWithPreview(
-            wsPath,
-            filePath,
-            {
-              ...frontmatter,
-              id: noteId,
-              editor: 'blocknote',
-              blocknoteFile: sidecarFile,
-              blocknoteSchema: BLOCKNOTE_SCHEMA,
-              blocknoteRevision: nextRevision,
-              blocknoteHash: sidecarHash,
-              markdownHash,
-              updatedAt: now,
-            },
-            markdown
+              title:
+                typeof frontmatter.title === 'string'
+                  ? frontmatter.title
+                  : (existing?.title ?? ''),
+              displayHint:
+                typeof frontmatter.displayHint === 'string'
+                  ? frontmatter.displayHint
+                  : (existing?.displayHint ?? 'note'),
+              color:
+                typeof frontmatter.color === 'string'
+                  ? frontmatter.color
+                  : (existing?.color ?? ''),
+              preview,
+            }
           );
+
+          // Migration: the first sidecar save retires any lingering legacy
+          // `.md` for this note so the workspace stops carrying stale mirrors.
+          if (!existing) {
+            const markdownFile = (await buildNoteIndex(wsPath)).get(
+              noteId
+            )?.markdownFile;
+            if (markdownFile) {
+              try {
+                await deleteNoteFile(wsPath, markdownFile);
+              } catch {
+                // Best-effort; the sidecar is already the source of truth.
+              }
+            }
+          }
 
           return {
             success: true,
@@ -1267,16 +1373,18 @@ async function main() {
 
         deleteNote: async ({ noteId }) => {
           const noteIndex = await buildNoteIndex(wsPath);
-          const filePath = noteIndex.get(noteId);
-          if (!filePath) {
-            return { success: false };
-          }
+          const location = noteIndex.get(noteId);
 
-          const deleted = await deleteNoteFile(wsPath, filePath);
+          let deleted = false;
+          if (location?.markdownFile) {
+            deleted = await deleteNoteFile(wsPath, location.markdownFile);
+          }
           // Best-effort sidecar cleanup; ignore failures so we never block
-          // .md deletion on a stale or read-only sidecar.
+          // deletion on a stale or read-only sidecar.
           try {
-            deleteBlockNoteSidecar(wsPath, noteId);
+            if (deleteBlockNoteSidecar(wsPath, noteId)) {
+              deleted = true;
+            }
           } catch {
             // ignore
           }
@@ -1341,6 +1449,127 @@ async function main() {
           await Bun.write(outputPath, json);
 
           return { filePath: outputPath, success: true };
+        },
+
+        exportNoteMarkdown: async ({ noteId, includeFrontmatter }) => {
+          const noteIndex = await buildNoteIndex(wsPath);
+          const record = await loadNoteRecord(
+            wsPath,
+            noteId,
+            noteIndex.get(noteId)?.markdownFile
+          );
+          if (!record) {
+            return { success: false };
+          }
+          const exported = buildNoteMarkdown(record, {
+            includeFrontmatter,
+            attachmentLinkPrefix: 'attachments/',
+            exportedAt: new Date().toISOString(),
+          });
+
+          const folder = await pickExportFolder();
+          if (!folder) {
+            return { canceled: true, success: false };
+          }
+
+          const outputPath = resolveExportPath(folder, exported.fileName);
+          await Bun.write(outputPath, exported.markdown);
+          if (exported.attachments.length > 0) {
+            await copyExportAttachments(
+              wsPath,
+              exported.attachments,
+              resolve(folder, 'attachments')
+            );
+          }
+          return { filePath: outputPath, success: true };
+        },
+
+        exportNotesMarkdown: async ({
+          scope,
+          viewId,
+          noteIds,
+          includeFrontmatter,
+        }) => {
+          // Resolve the set of notes to export based on the requested scope.
+          let ids: string[] = [];
+          let source = 'All notes';
+          if (scope === 'selected') {
+            ids = Array.isArray(noteIds) ? noteIds : [];
+            source = `${ids.length} selected note(s)`;
+          } else if (scope === 'view' && viewId) {
+            const config = await loadWorkspaceConfig(wsPath);
+            const view = config.views.find((v) => v.id === viewId);
+            if (view) {
+              ids = collectViewNoteIds(await loadManifest(wsPath, view.file));
+              source = `Canvas: ${view.name}`;
+            }
+          } else {
+            const records = await listNoteRecords(wsPath);
+            ids = records.map((record) => record.noteId);
+          }
+
+          const folder = await pickExportFolder();
+          if (!folder) {
+            return { canceled: true, exported: 0, failed: 0, success: false };
+          }
+
+          const exportDir = resolve(folder, EXPORT_DIR_NAME);
+          const notesDir = join(exportDir, 'notes');
+          const attachmentsDir = join(exportDir, 'attachments');
+          const exportedAt = new Date().toISOString();
+          const noteIndex = await buildNoteIndex(wsPath);
+          const exportedNotes: ExportedNote[] = [];
+          const failures: Array<{ noteId: string; reason: string }> = [];
+
+          for (const id of ids) {
+            try {
+              const record = await loadNoteRecord(
+                wsPath,
+                id,
+                noteIndex.get(id)?.markdownFile
+              );
+              if (!record) {
+                failures.push({ noteId: id, reason: 'note record not found' });
+                continue;
+              }
+              const exported = buildNoteMarkdown(record, {
+                includeFrontmatter,
+                attachmentLinkPrefix: '../attachments/',
+                exportedAt,
+              });
+              await Bun.write(
+                join(notesDir, exported.fileName),
+                exported.markdown
+              );
+              if (exported.attachments.length > 0) {
+                await copyExportAttachments(
+                  wsPath,
+                  exported.attachments,
+                  attachmentsDir
+                );
+              }
+              exportedNotes.push(exported);
+            } catch (error) {
+              failures.push({ noteId: id, reason: String(error) });
+            }
+          }
+
+          await Bun.write(
+            join(exportDir, 'index.md'),
+            buildIndexMarkdown({
+              notes: exportedNotes,
+              exportedAt,
+              source,
+              failures,
+            })
+          );
+
+          return {
+            filePath: exportDir,
+            exported: exportedNotes.length,
+            failed: failures.length,
+            success: true,
+          };
         },
 
         openSettings: () => {

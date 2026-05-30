@@ -2,24 +2,49 @@ import { createHash } from 'node:crypto';
 import { existsSync, unlinkSync } from 'node:fs';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
-import { parseFrontmatter } from './notes';
 import { atomicWrite } from './workspace';
 
 /** Schema version for the BlockNote JSON sidecar file. */
 export const BLOCKNOTE_SCHEMA = 'ghostboard-blocknote/v1';
 
+const NOTE_ID_RE = /^[A-Za-z0-9_-]+$/;
+
+/** Card preview cached inside the note sidecar (derived from blocks). */
+export interface SidecarPreview {
+  blocks: number;
+  excerpt: string;
+  html: string;
+  version: number;
+}
+
+/**
+ * BlockNote sidecar = the note record source of truth (ADR 0002 / v0.2 A7).
+ * Besides the editor `blocks`, it carries the note's own properties (title,
+ * color, displayHint, timestamps) and a derived card preview. Tag metadata
+ * lives in `node-metadata.json`; layout lives in the canvas manifest.
+ */
 export interface BlockNoteSidecar {
   blocks: unknown[];
+  color?: string;
+  createdAt?: string;
+  displayHint?: string;
   noteId: string;
+  preview?: SidecarPreview;
   revision: number;
   schema: string;
+  title?: string;
   updatedAt: string;
 }
 
 export interface BlockNoteSidecarLoadResult {
   blocks: unknown[];
+  color?: string;
   corrupted?: boolean;
+  createdAt?: string;
+  displayHint?: string;
+  preview?: SidecarPreview;
   revision: number;
+  title?: string;
   updatedAt?: string;
 }
 
@@ -29,7 +54,7 @@ export interface BlockNoteSidecarLoadResult {
  * not pollute the user-visible content/ listing.
  */
 export function blocknoteSidecarRelativePath(noteId: string): string {
-  if (!/^[A-Za-z0-9_-]+$/.test(noteId)) {
+  if (!NOTE_ID_RE.test(noteId)) {
     throw new Error('Invalid noteId for BlockNote sidecar path.');
   }
   return `content/.ghostboard/blocknote/${noteId}.json`;
@@ -90,22 +115,40 @@ export async function loadBlockNoteSidecar(
     if (parsed.schema !== BLOCKNOTE_SCHEMA || !Array.isArray(parsed.blocks)) {
       return { blocks: [], revision: 0, corrupted: true };
     }
+    const asStr = (value: unknown): string | undefined =>
+      typeof value === 'string' ? value : undefined;
     return {
       blocks: parsed.blocks,
       revision: typeof parsed.revision === 'number' ? parsed.revision : 0,
-      updatedAt:
-        typeof parsed.updatedAt === 'string' ? parsed.updatedAt : undefined,
+      updatedAt: asStr(parsed.updatedAt),
+      createdAt: asStr(parsed.createdAt),
+      title: asStr(parsed.title),
+      displayHint: asStr(parsed.displayHint),
+      color: asStr(parsed.color),
+      preview:
+        parsed.preview && typeof parsed.preview === 'object'
+          ? (parsed.preview as SidecarPreview)
+          : undefined,
     };
   } catch {
     return { blocks: [], revision: 0, corrupted: true };
   }
 }
 
-/** Atomically write the sidecar JSON. */
+/** Atomically write the sidecar JSON (the full note record). */
 export async function saveBlockNoteSidecar(
   wsPath: string,
   noteId: string,
-  payload: { blocks: unknown[]; revision: number; updatedAt?: string }
+  payload: {
+    blocks: unknown[];
+    revision: number;
+    updatedAt?: string;
+    createdAt?: string;
+    title?: string;
+    displayHint?: string;
+    color?: string;
+    preview?: SidecarPreview;
+  }
 ): Promise<{ relativePath: string; hash: string }> {
   const relativePath = blocknoteSidecarRelativePath(noteId);
   const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
@@ -113,12 +156,31 @@ export async function saveBlockNoteSidecar(
     schema: BLOCKNOTE_SCHEMA,
     noteId,
     revision: payload.revision,
+    createdAt: payload.createdAt,
     updatedAt: payload.updatedAt ?? new Date().toISOString(),
+    title: payload.title,
+    displayHint: payload.displayHint,
+    color: payload.color,
+    preview: payload.preview,
     blocks: payload.blocks,
   };
   const serialized = JSON.stringify(sidecar, null, 2);
   await atomicWrite(fullPath, serialized);
   return { relativePath, hash: contentHash(serialized) };
+}
+
+/**
+ * Returns true when a BlockNote sidecar currently exists for the note. Used by
+ * `saveManifest` to decide whether a card is already a JSON-backed note (in
+ * which case its `.md` body must not be rewritten) or a legacy markdown card.
+ */
+export async function blocknoteSidecarExists(
+  wsPath: string,
+  noteId: string
+): Promise<boolean> {
+  const relativePath = blocknoteSidecarRelativePath(noteId);
+  const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
+  return await Bun.file(fullPath).exists();
 }
 
 /** Delete the sidecar for a note. Returns true if a file was removed. */
@@ -133,70 +195,6 @@ export function deleteBlockNoteSidecar(
   }
   unlinkSync(fullPath);
   return true;
-}
-
-/**
- * Compute the hash of the markdown body inside a note file. If the file
- * does not exist we return null so callers can treat that as "no prior state".
- */
-export async function readMarkdownBodyHash(
-  wsPath: string,
-  filePath: string
-): Promise<string | null> {
-  const fullPath = resolve(wsPath, filePath);
-  if (!fullPath.startsWith(resolve(wsPath, 'content'))) {
-    throw new Error('Note path must stay inside content/.');
-  }
-  const file = Bun.file(fullPath);
-  if (!(await file.exists())) {
-    return null;
-  }
-  const text = await file.text();
-  const { body } = parseFrontmatter(text);
-  return contentHash(body);
-}
-
-/**
- * Decide what happens when a note is loaded. Compares stored hashes against
- * the current Markdown body and sidecar revision.
- *
- * Returns:
- *   - 'use-sidecar': sidecar is the source of truth, markdown unchanged.
- *   - 'reimport-markdown': markdown was edited externally, re-import blocks.
- *   - 'conflict': both sidecar and markdown moved independently since last save.
- *   - 'recover-from-markdown': sidecar is missing/corrupted.
- */
-export type ExternalChangeDecision =
-  | 'use-sidecar'
-  | 'reimport-markdown'
-  | 'conflict'
-  | 'recover-from-markdown';
-
-export function detectExternalMarkdownChange(input: {
-  sidecarExists: boolean;
-  sidecarCorrupted?: boolean;
-  storedMarkdownHash?: string;
-  storedSidecarRevision?: number;
-  sidecarRevision?: number;
-  currentMarkdownHash: string;
-}): ExternalChangeDecision {
-  if (!input.sidecarExists || input.sidecarCorrupted) {
-    return 'recover-from-markdown';
-  }
-  const markdownChanged =
-    typeof input.storedMarkdownHash === 'string' &&
-    input.storedMarkdownHash !== input.currentMarkdownHash;
-  const sidecarChanged =
-    typeof input.storedSidecarRevision === 'number' &&
-    typeof input.sidecarRevision === 'number' &&
-    input.storedSidecarRevision !== input.sidecarRevision;
-  if (markdownChanged && sidecarChanged) {
-    return 'conflict';
-  }
-  if (markdownChanged) {
-    return 'reimport-markdown';
-  }
-  return 'use-sidecar';
 }
 
 export function blocknoteSidecarDir(wsPath: string): string {

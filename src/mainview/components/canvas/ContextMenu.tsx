@@ -2,6 +2,7 @@ import {
   BookOpen,
   ClipboardPaste,
   Copy,
+  FileDown,
   FilePlus,
   FolderOpen,
   LogOut,
@@ -55,6 +56,11 @@ const getCanvasItems = (): MenuItem[] => [
   { id: 'new-group', label: m.menu_new_group(), icon: Sparkles },
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
+  {
+    id: 'export-canvas-markdown',
+    label: m.menu_export_canvas_markdown(),
+    icon: FileDown,
+  },
 ];
 
 const getCardItems = (): MenuItem[] => [
@@ -68,6 +74,7 @@ const getCardItems = (): MenuItem[] => [
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
+  { id: 'export-markdown', label: m.menu_export_markdown(), icon: FileDown },
   {
     id: 'delete',
     label: m.menu_delete(),

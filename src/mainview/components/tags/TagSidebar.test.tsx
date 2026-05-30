@@ -52,7 +52,25 @@ describe('TagSidebar', () => {
   it('renders nothing when tagSidebarOpen is false', () => {
     useCanvasStore.setState({ tagSidebarOpen: false });
     renderWithProviders(<TagSidebar />);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('complementary', { name: 'Tags' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders as a non-modal complementary region when open', async () => {
+    renderWithProviders(<TagSidebar />);
+    const aside = await screen.findByRole('complementary', { name: 'Tags' });
+    expect(aside).toBeInTheDocument();
+    expect(aside.getAttribute('aria-modal')).toBeNull();
+  });
+
+  it('closes the palette when Escape is pressed', async () => {
+    renderWithProviders(<TagSidebar />);
+    await screen.findByText('Work');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(useCanvasStore.getState().tagSidebarOpen).toBe(false);
+    });
   });
 
   it('lists tags from the rpc response with counts', async () => {
@@ -67,30 +85,67 @@ describe('TagSidebar', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
-  it('clicking a tag sets activeTagFilter in the store', async () => {
+  it('clicking a tag adds it to activeTagFilters in the store', async () => {
     renderWithProviders(<TagSidebar />);
     const btn = await screen.findByRole('button', { name: 'Work' });
     fireEvent.click(btn);
-    expect(useCanvasStore.getState().activeTagFilter).toBe('Work');
+    expect(useCanvasStore.getState().activeTagFilters).toEqual(['Work']);
   });
 
-  it('clicking the active tag again clears the filter', async () => {
-    useCanvasStore.setState({ activeTagFilter: 'Work' });
+  it('clicking a second tag adds it (multi-select, OR semantics)', async () => {
+    renderWithProviders(<TagSidebar />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Work' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inbox' }));
+    expect(useCanvasStore.getState().activeTagFilters).toEqual([
+      'Work',
+      'Inbox',
+    ]);
+  });
+
+  it('clicking an active tag again removes only that tag (toggle)', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work', 'Inbox'] });
     renderWithProviders(<TagSidebar />);
     const btn = await screen.findByRole('button', { name: ACTIVE_FILTER_RE });
     fireEvent.click(btn);
-    expect(useCanvasStore.getState().activeTagFilter).toBeNull();
+    expect(useCanvasStore.getState().activeTagFilters).toEqual(['Inbox']);
   });
 
-  it('renders the clear-filter button only when a filter is active', async () => {
+  it('renders the clear button only when at least one filter is active', async () => {
     renderWithProviders(<TagSidebar />);
     await screen.findByText('Work');
-    expect(screen.queryByText('Clear filter')).not.toBeInTheDocument();
+    expect(screen.queryByText('Clear')).not.toBeInTheDocument();
 
-    useCanvasStore.setState({ activeTagFilter: 'Work' });
-    await screen.findByText('Clear filter');
-    fireEvent.click(screen.getByText('Clear filter'));
-    expect(useCanvasStore.getState().activeTagFilter).toBeNull();
+    useCanvasStore.setState({ activeTagFilters: ['Work'] });
+    const clearBtn = await screen.findByText('Clear');
+    fireEvent.click(clearBtn);
+    expect(useCanvasStore.getState().activeTagFilters).toEqual([]);
+  });
+
+  it('shows the selected-count badge in the footer', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work', 'Inbox'] });
+    renderWithProviders(<TagSidebar />);
+    await screen.findByText('2 selected');
+  });
+
+  it('closing via X button clears every active filter', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work', 'Inbox'] });
+    renderWithProviders(<TagSidebar />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+    await waitFor(() => {
+      expect(useCanvasStore.getState().tagSidebarOpen).toBe(false);
+    });
+    expect(useCanvasStore.getState().activeTagFilters).toEqual([]);
+  });
+
+  it('closing via Escape clears every active filter', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work'] });
+    renderWithProviders(<TagSidebar />);
+    await screen.findByText('Work');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(useCanvasStore.getState().tagSidebarOpen).toBe(false);
+    });
+    expect(useCanvasStore.getState().activeTagFilters).toEqual([]);
   });
 
   it('shows empty state when rpc returns no tags', async () => {
@@ -99,8 +154,8 @@ describe('TagSidebar', () => {
     await screen.findByText('No tags yet.');
   });
 
-  it('renames a tag through rpcRenameTag and updates the active filter', async () => {
-    useCanvasStore.setState({ activeTagFilter: 'Work' });
+  it('renames a tag through rpcRenameTag and updates the active filter list', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work', 'Inbox'] });
     renderWithProviders(<TagSidebar />);
     const renameBtn = await screen.findByRole('button', {
       name: RENAME_WORK_RE,
@@ -115,7 +170,10 @@ describe('TagSidebar', () => {
       expect(rpcMock.rpcRenameTag).toHaveBeenCalledWith('Work', 'Job');
     });
     await waitFor(() => {
-      expect(useCanvasStore.getState().activeTagFilter).toBe('Job');
+      expect(useCanvasStore.getState().activeTagFilters).toEqual([
+        'Job',
+        'Inbox',
+      ]);
     });
   });
 
@@ -136,8 +194,8 @@ describe('TagSidebar', () => {
     expect(rpcMock.rpcRenameTag).not.toHaveBeenCalled();
   });
 
-  it('deletes a tag after confirming and clears the active filter', async () => {
-    useCanvasStore.setState({ activeTagFilter: 'Personal' });
+  it('deletes a tag and removes it from the active filter list', async () => {
+    useCanvasStore.setState({ activeTagFilters: ['Personal', 'Work'] });
     renderWithProviders(<TagSidebar />);
     const deleteBtn = await screen.findByRole('button', {
       name: DELETE_PERSONAL_RE,
@@ -153,7 +211,7 @@ describe('TagSidebar', () => {
       expect(rpcMock.rpcDeleteTag).toHaveBeenCalledWith('Personal');
     });
     await waitFor(() => {
-      expect(useCanvasStore.getState().activeTagFilter).toBeNull();
+      expect(useCanvasStore.getState().activeTagFilters).toEqual(['Work']);
     });
   });
 });

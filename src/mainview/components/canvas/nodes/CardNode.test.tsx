@@ -271,8 +271,8 @@ describe('CardNode', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument();
   });
 
-  it('dims the card when activeTagFilter is set and the card lacks the tag', () => {
-    useCanvasStore.setState({ activeTagFilter: 'Work' });
+  it('dims the card when active tag filters are set and the card lacks every one', () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work'] });
     metadataStore['card-dim'] = { tag: 'Idea', tags: ['Personal'] };
     const { container } = render(
       <CardNode
@@ -286,12 +286,12 @@ describe('CardNode', () => {
     );
     const wrapper = container.querySelector('.group\\/card');
     expect(wrapper?.className).toContain('opacity-30');
-    useCanvasStore.setState({ activeTagFilter: null });
+    useCanvasStore.setState({ activeTagFilters: [] });
     metadataStore['card-dim'] = undefined;
   });
 
-  it('does not dim when the card carries the active tag (case-insensitive)', () => {
-    useCanvasStore.setState({ activeTagFilter: 'work' });
+  it('does not dim when the card carries an active tag (case-insensitive)', () => {
+    useCanvasStore.setState({ activeTagFilters: ['work'] });
     metadataStore['card-match'] = { tags: ['Work'] };
     const { container } = render(
       <CardNode
@@ -306,8 +306,28 @@ describe('CardNode', () => {
     const wrapper = container.querySelector('.group\\/card');
     expect(wrapper?.className).toContain('opacity-100');
     expect(wrapper?.className).not.toContain('opacity-30');
-    useCanvasStore.setState({ activeTagFilter: null });
+    useCanvasStore.setState({ activeTagFilters: [] });
     metadataStore['card-match'] = undefined;
+  });
+
+  it('does not dim when at least one of multiple active filters matches (OR)', () => {
+    useCanvasStore.setState({ activeTagFilters: ['Work', 'Idea'] });
+    metadataStore['card-or'] = { tag: 'Idea' };
+    const { container } = render(
+      <CardNode
+        data={{
+          color: '#ffffff',
+          content: 'Body',
+          title: 'Carries idea only',
+        }}
+        id="card-or"
+      />
+    );
+    const wrapper = container.querySelector('.group\\/card');
+    expect(wrapper?.className).toContain('opacity-100');
+    expect(wrapper?.className).not.toContain('opacity-30');
+    useCanvasStore.setState({ activeTagFilters: [] });
+    metadataStore['card-or'] = undefined;
   });
 
   it('renders secondary tag chips on checklist card without a primary tag', () => {

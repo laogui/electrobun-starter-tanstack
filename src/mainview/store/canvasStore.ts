@@ -144,8 +144,13 @@ export interface CanvasState {
   // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
 
-  /** When set, cards not carrying this tag are dimmed on the canvas. */
-  activeTagFilter: string | null;
+  /**
+   * Active tag filters (OR semantics, case-insensitive). When non-empty,
+   * cards that do not carry at least one of these tags are dimmed on the
+   * canvas. Closing the tag sidebar clears this list — see
+   * {@link setTagSidebarOpen}.
+   */
+  activeTagFilters: string[];
 
   // Multi-view
   activeViewId: string;
@@ -159,6 +164,8 @@ export interface CanvasState {
   canRedo: () => boolean;
   canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
+  /** Drop every active tag filter. */
+  clearTagFilters: () => void;
   clipboard: Node[];
   /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
   commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
@@ -225,7 +232,8 @@ export interface CanvasState {
   saveSnapshot: () => void;
   searchOpen: boolean;
 
-  setActiveTagFilter: (tag: string | null) => void;
+  /** Replace the entire active-tag-filters list. */
+  setActiveTagFilters: (tags: string[]) => void;
 
   // Actions – multi-view
   setActiveView: (viewId: string) => void;
@@ -253,6 +261,8 @@ export interface CanvasState {
   // Tag filter sidebar (workspace-wide tag list)
   tagSidebarOpen: boolean;
   toggleLibrary: () => void;
+  /** Toggle a single tag in/out of the active filters (case-insensitive). */
+  toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
 
   undo: () => void;
@@ -293,7 +303,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   pendingSearchTarget: null,
   libraryOpen: false,
   tagSidebarOpen: false,
-  activeTagFilter: null,
+  activeTagFilters: [],
   viewport: null,
 
   setLibraryOpen: (v) => {
@@ -305,16 +315,42 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({ libraryOpen: !s.libraryOpen }));
   },
 
+  // Closing the tag sidebar always clears active filters — the sidebar is
+  // the *only* surface for managing them, so leaving them set while the
+  // panel is hidden creates an invisible "why are my cards dimmed?" trap.
   setTagSidebarOpen: (v) => {
-    set((s) => ({
-      tagSidebarOpen: typeof v === 'function' ? v(s.tagSidebarOpen) : v,
-    }));
+    set((s) => {
+      const next = typeof v === 'function' ? v(s.tagSidebarOpen) : v;
+      if (next === s.tagSidebarOpen) {
+        return s;
+      }
+      return {
+        tagSidebarOpen: next,
+        activeTagFilters: next ? s.activeTagFilters : [],
+      };
+    });
   },
   toggleTagSidebar: () => {
-    set((s) => ({ tagSidebarOpen: !s.tagSidebarOpen }));
+    get().setTagSidebarOpen(!get().tagSidebarOpen);
   },
-  setActiveTagFilter: (tag) => {
-    set({ activeTagFilter: tag });
+  setActiveTagFilters: (tags) => {
+    set({ activeTagFilters: tags });
+  },
+  toggleTagFilter: (tag) => {
+    const needle = tag.toLowerCase();
+    set((s) => {
+      const present = s.activeTagFilters.some(
+        (t) => t.toLowerCase() === needle
+      );
+      return {
+        activeTagFilters: present
+          ? s.activeTagFilters.filter((t) => t.toLowerCase() !== needle)
+          : [...s.activeTagFilters, tag],
+      };
+    });
+  },
+  clearTagFilters: () => {
+    set({ activeTagFilters: [] });
   },
 
   absorbCardIntoFolder: (cardId, folderId) => {
@@ -470,7 +506,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       clipboard: [],
       libraryOpen: false,
       tagSidebarOpen: false,
-      activeTagFilter: null,
+      activeTagFilters: [],
       _undoRedo: createUndoRedoState(),
     });
   },

@@ -9,10 +9,7 @@ import { Check, PenLine, Tag as TagIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
-import {
-  useNodeMetadata,
-  useSetNodeMetadata,
-} from '@/hooks/useNodeMetadata';
+import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
@@ -392,7 +389,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
-  const activeTagFilter = useCanvasStore((s) => s.activeTagFilter);
+  const activeTagFilters = useCanvasStore((s) => s.activeTagFilters);
   const { data: tagSummaries } = useTags();
   const tagSuggestions = (tagSummaries ?? []).map((t) => t.name);
   const queryClient = useQueryClient();
@@ -415,18 +412,20 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
     [data, meta?.tag, meta?.tagColor, meta?.tags]
   );
 
+  // OR semantics: a card is "in scope" if it carries at least one of the
+  // active filter tags. An empty filter list means no filtering at all.
   const dimmedByFilter = (() => {
-    if (!activeTagFilter) {
+    if (activeTagFilters.length === 0) {
       return false;
     }
-    const needle = activeTagFilter.toLowerCase();
-    if (viewData.tag && viewData.tag.toLowerCase() === needle) {
-      return false;
+    const haystack = new Set<string>();
+    if (viewData.tag) {
+      haystack.add(viewData.tag.toLowerCase());
     }
-    if (viewData.tags?.some((t) => t.toLowerCase() === needle)) {
-      return false;
+    for (const t of viewData.tags ?? []) {
+      haystack.add(t.toLowerCase());
     }
-    return true;
+    return !activeTagFilters.some((f) => haystack.has(f.toLowerCase()));
   })();
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);

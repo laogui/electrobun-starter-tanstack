@@ -2,24 +2,21 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
-import {
-  useNodeMetadata,
-  useSetNodeMetadata,
-} from '@/hooks/useNodeMetadata';
+import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface UseNodeTagEditingResult {
+  /** True when active tag filters exist and this node carries none of them. */
+  dimmedByFilter: boolean;
+  /** Imperative opener — wire to a hover button if the node wants one. */
+  openTagEditor: () => void;
   /** Primary tag chip (display name + tag color). */
   tag: string | undefined;
   tagColor: string | undefined;
-  tags: string[] | undefined;
-  /** True when activeTagFilter is set and this node lacks the tag. */
-  dimmedByFilter: boolean;
   /** Mount this once anywhere in JSX — it renders an invisible popover anchor. */
   tagEditor: React.ReactElement;
-  /** Imperative opener — wire to a hover button if the node wants one. */
-  openTagEditor: () => void;
+  tags: string[] | undefined;
 }
 
 /**
@@ -34,7 +31,7 @@ export function useNodeTagEditing(
 ): UseNodeTagEditingResult {
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
-  const activeTagFilter = useCanvasStore((s) => s.activeTagFilter);
+  const activeTagFilters = useCanvasStore((s) => s.activeTagFilters);
   const queryClient = useQueryClient();
   const { data: tagSummaries } = useTags();
   const suggestions = (tagSummaries ?? []).map((t) => t.name);
@@ -48,18 +45,20 @@ export function useNodeTagEditing(
   const tagColor = meta?.tagColor;
   const tags = meta?.tags;
 
+  // OR semantics: a card is "in scope" if it carries at least one of the
+  // active filter tags. An empty filter list means no filtering at all.
   const dimmedByFilter = (() => {
-    if (!activeTagFilter) {
+    if (activeTagFilters.length === 0) {
       return false;
     }
-    const needle = activeTagFilter.toLowerCase();
-    if (tag && tag.toLowerCase() === needle) {
-      return false;
+    const haystack = new Set<string>();
+    if (tag) {
+      haystack.add(tag.toLowerCase());
     }
-    if (tags?.some((t) => t.toLowerCase() === needle)) {
-      return false;
+    for (const t of tags ?? []) {
+      haystack.add(t.toLowerCase());
     }
-    return true;
+    return !activeTagFilters.some((f) => haystack.has(f.toLowerCase()));
   })();
 
   const [open, setOpen] = useState(false);

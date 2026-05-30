@@ -12,13 +12,14 @@ import * as m from '../../../paraglide/messages.js';
  */
 export function TagSidebarButton() {
   const toggle = useCanvasStore((s) => s.toggleTagSidebar);
-  const activeFilter = useCanvasStore((s) => s.activeTagFilter);
+  const activeCount = useCanvasStore((s) => s.activeTagFilters.length);
+  const hasFilters = activeCount > 0;
   return (
     <button
       aria-label={m.tags_button_aria()}
       className={cn(
         'absolute z-30 flex size-9 items-center justify-center rounded-lg border border-black/5 bg-white/80 text-neutral-700 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-neutral-900 dark:border-white/5 dark:bg-neutral-800/80 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:hover:text-white',
-        activeFilter && 'text-primary dark:text-primary'
+        hasFilters && 'text-primary dark:text-primary'
       )}
       onClick={() => {
         toggle();
@@ -31,7 +32,7 @@ export function TagSidebarButton() {
       type="button"
     >
       <TagIcon size={16} strokeWidth={1.8} />
-      {activeFilter ? (
+      {hasFilters ? (
         <span
           aria-hidden
           className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary"

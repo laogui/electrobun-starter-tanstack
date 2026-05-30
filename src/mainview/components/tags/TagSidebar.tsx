@@ -14,10 +14,13 @@ import * as m from '../../../paraglide/messages.js';
 import { DeleteTagConfirmDialog } from './DeleteTagConfirmDialog';
 
 /**
- * Right-side panel listing every tag in the workspace with note counts.
- * Clicking a tag sets `activeTagFilter` on the canvas store, which dims any
- * card that does not carry the tag. Clicking the active tag again clears
- * the filter; the dedicated "Clear filter" button does the same.
+ * Right-side, non-modal tool palette listing every tag in the workspace with
+ * note counts. Clicking a tag toggles it in the canvas store's
+ * `activeTagFilters` list (OR semantics), which dims any card that does not
+ * carry at least one of the selected tags. The panel does not block canvas
+ * interaction — users can pan/zoom while it is open and watch the filter
+ * update live. Closing the panel (X, Esc, or re-clicking the FAB) clears
+ * every active filter, so a dimmed canvas always has a visible source.
  */
 export function TagSidebar() {
   const open = useCanvasStore((s) => s.tagSidebarOpen);
@@ -26,9 +29,15 @@ export function TagSidebar() {
 
 function TagSidebarBody() {
   const setOpen = useCanvasStore((s) => s.setTagSidebarOpen);
-  const activeFilter = useCanvasStore((s) => s.activeTagFilter);
-  const setActiveFilter = useCanvasStore((s) => s.setActiveTagFilter);
+  const activeFilters = useCanvasStore((s) => s.activeTagFilters);
+  const setActiveFilters = useCanvasStore((s) => s.setActiveTagFilters);
+  const toggleFilter = useCanvasStore((s) => s.toggleTagFilter);
+  const clearFilters = useCanvasStore((s) => s.clearTagFilters);
   const queryClient = useQueryClient();
+
+  // Lower-case set for cheap O(1) "is this tag selected?" lookups inside the
+  // render loop without rebuilding it for every row.
+  const activeSet = new Set(activeFilters.map((t) => t.toLowerCase()));
 
   const { data: tags = [], isLoading } = useTags();
 
@@ -48,20 +57,35 @@ function TagSidebarBody() {
     setOpen(false);
   }, [setOpen]);
 
-  const handleTagClick = useCallback(
-    (tag: string) => {
-      if (activeFilter && activeFilter.toLowerCase() === tag.toLowerCase()) {
-        setActiveFilter(null);
+  // Escape closes the palette when no inline rename is in progress and no
+  // confirm dialog is open, mirroring the dismissal model of other side
+  // tools without trapping focus or blocking the canvas.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') {
         return;
       }
-      setActiveFilter(tag);
+      if (editingTag !== null || pendingDeleteTag !== null) {
+        return;
+      }
+      close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [close, editingTag, pendingDeleteTag]);
+
+  const handleTagClick = useCallback(
+    (tag: string) => {
+      toggleFilter(tag);
     },
-    [activeFilter, setActiveFilter]
+    [toggleFilter]
   );
 
   const clearFilter = useCallback(() => {
-    setActiveFilter(null);
-  }, [setActiveFilter]);
+    clearFilters();
+  }, [clearFilters]);
 
   const startRename = useCallback((tag: string) => {
     setEditingTag(tag);
@@ -86,11 +110,13 @@ function TagSidebarBody() {
     cancelRename();
     const result = await rpcRenameTag(oldName, next);
     if (result && result.updated > 0) {
-      if (
-        activeFilter &&
-        activeFilter.toLowerCase() === oldName.toLowerCase()
-      ) {
-        setActiveFilter(next);
+      // If the old tag was an active filter, swap it for the new name in
+      // place so the filter survives the rename.
+      const needle = oldName.toLowerCase();
+      if (activeFilters.some((t) => t.toLowerCase() === needle)) {
+        setActiveFilters(
+          activeFilters.map((t) => (t.toLowerCase() === needle ? next : t))
+        );
       }
       toast(m.toast_tag_renamed({ name: next }));
     }
@@ -100,8 +126,8 @@ function TagSidebarBody() {
     editingTag,
     editingName,
     cancelRename,
-    activeFilter,
-    setActiveFilter,
+    activeFilters,
+    setActiveFilters,
     queryClient,
   ]);
 
@@ -113,46 +139,42 @@ function TagSidebarBody() {
     }
     const result = await rpcDeleteTag(target);
     if (result && result.updated > 0) {
-      if (activeFilter && activeFilter.toLowerCase() === target.toLowerCase()) {
-        setActiveFilter(null);
+      const needle = target.toLowerCase();
+      if (activeFilters.some((t) => t.toLowerCase() === needle)) {
+        setActiveFilters(
+          activeFilters.filter((t) => t.toLowerCase() !== needle)
+        );
       }
       toast(m.toast_tag_deleted({ name: target }));
     }
     queryClient.invalidateQueries({ queryKey: ['tags'] });
     queryClient.invalidateQueries({ queryKey: ['node-metadata'] });
-  }, [pendingDeleteTag, activeFilter, setActiveFilter, queryClient]);
+  }, [pendingDeleteTag, activeFilters, setActiveFilters, queryClient]);
 
   return (
-    <motion.div
-      animate={{ opacity: 1 }}
-      aria-modal
-      className="fixed inset-0 z-50"
-      exit={{ opacity: 0 }}
-      initial={{ opacity: 0 }}
-      role="dialog"
-      transition={{ duration: 0.18 }}
-    >
-      <motion.button
-        aria-label={m.tags_sidebar_close()}
-        className="absolute inset-0 cursor-default bg-black/20"
-        onClick={close}
-        type="button"
-      />
+    <>
       <motion.aside
-        animate={{ x: 0 }}
-        className="absolute top-0 right-0 flex h-full w-[280px] flex-col border-border/60 border-l bg-white shadow-2xl dark:bg-neutral-900"
-        exit={{ x: 320 }}
-        initial={{ x: 320 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        animate={{ x: 0, opacity: 1 }}
+        aria-label={m.tags_sidebar_title()}
+        className="fixed right-0 bottom-0 z-30 flex w-[280px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
+        exit={{ x: 300, opacity: 0 }}
+        initial={{ x: 300, opacity: 0 }}
+        style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 350 }}
       >
-        <header className="flex items-center gap-2 border-border/60 border-b px-4 py-3">
-          <TagIcon aria-hidden className="text-muted-foreground" size={14} />
-          <h2 className="flex-1 font-semibold text-[13px] text-foreground">
+        <header className="flex items-center gap-2 border-black/5 border-b px-4 py-3 dark:border-white/5">
+          <TagIcon
+            aria-hidden
+            className="text-muted-foreground"
+            size={14}
+            strokeWidth={1.8}
+          />
+          <h2 className="flex-1 font-semibold text-[13px] text-gray-800 dark:text-gray-100">
             {m.tags_sidebar_title()}
           </h2>
           <button
             aria-label={m.tags_sidebar_close()}
-            className="rounded p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+            className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
             onClick={close}
             type="button"
           >
@@ -160,31 +182,36 @@ function TagSidebarBody() {
           </button>
         </header>
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto p-2">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1.5">
           {(() => {
             if (isLoading) {
               return null;
             }
             if (tags.length === 0) {
               return (
-                <div className="px-3 py-8 text-center text-muted-foreground text-sm">
-                  {m.tags_sidebar_empty()}
+                <div className="flex flex-col items-center gap-2 px-3 py-12 text-center text-muted-foreground">
+                  <TagIcon
+                    aria-hidden
+                    className="opacity-40"
+                    size={28}
+                    strokeWidth={1.2}
+                  />
+                  <p className="text-xs">{m.tags_sidebar_empty()}</p>
                 </div>
               );
             }
             return tags.map((t) => {
-              const isActive =
-                activeFilter?.toLowerCase() === t.name.toLowerCase();
+              const isActive = activeSet.has(t.name.toLowerCase());
               const isEditing = editingTag === t.name;
 
               if (isEditing) {
                 return (
                   <div
-                    className="flex items-center gap-1 rounded-md px-2 py-1"
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1"
                     key={t.name}
                   >
                     <input
-                      className="min-w-0 flex-1 rounded-md border border-border bg-white px-2 py-1 text-[13px] outline-none focus:border-primary dark:bg-neutral-800"
+                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-none focus:border-primary dark:border-white/10 dark:bg-neutral-800"
                       onChange={(e) => {
                         setEditingName(e.target.value);
                       }}
@@ -201,7 +228,7 @@ function TagSidebarBody() {
                     />
                     <button
                       aria-label={m.tags_sidebar_rename_confirm()}
-                      className="rounded p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
+                      className="flex size-6 items-center justify-center rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
                       onClick={confirmRename}
                       type="button"
                     >
@@ -209,7 +236,7 @@ function TagSidebarBody() {
                     </button>
                     <button
                       aria-label={m.tags_sidebar_rename_cancel()}
-                      className="rounded p-1 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
+                      className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
                       onClick={cancelRename}
                       type="button"
                     >
@@ -222,13 +249,19 @@ function TagSidebarBody() {
               return (
                 <div
                   className={cn(
-                    'group flex items-center gap-1 rounded-md text-[13px] transition-colors',
+                    'group relative flex items-center gap-1 rounded-md text-[13px] transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-primary/10 text-primary dark:bg-primary/15'
                       : 'text-foreground hover:bg-black/5 dark:hover:bg-white/10'
                   )}
                   key={t.name}
                 >
+                  {isActive ? (
+                    <span
+                      aria-hidden
+                      className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-sm bg-primary"
+                    />
+                  ) : null}
                   <button
                     aria-label={
                       isActive
@@ -236,17 +269,30 @@ function TagSidebarBody() {
                         : t.name
                     }
                     aria-pressed={isActive}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left"
                     onClick={() => handleTagClick(t.name)}
                     type="button"
                   >
-                    <span className="truncate">{t.name}</span>
+                    {isActive ? (
+                      <Check
+                        aria-hidden
+                        className="shrink-0 text-primary"
+                        size={12}
+                        strokeWidth={2.5}
+                      />
+                    ) : null}
+                    <span
+                      className={cn(
+                        'min-w-0 flex-1 truncate',
+                        isActive && 'font-medium'
+                      )}
+                    >
+                      {t.name}
+                    </span>
                     <span
                       className={cn(
                         'shrink-0 text-xs tabular-nums',
-                        isActive
-                          ? 'text-primary-foreground/80'
-                          : 'text-muted-foreground'
+                        isActive ? 'text-primary/70' : 'text-muted-foreground'
                       )}
                     >
                       {t.count}
@@ -256,9 +302,9 @@ function TagSidebarBody() {
                     <button
                       aria-label={m.tags_sidebar_rename_aria({ tag: t.name })}
                       className={cn(
-                        'rounded p-1 transition-colors',
+                        'flex size-6 items-center justify-center rounded transition-colors',
                         isActive
-                          ? 'text-primary-foreground/80 hover:bg-white/15'
+                          ? 'text-primary/70 hover:bg-primary/15 hover:text-primary'
                           : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
                       )}
                       onClick={(e) => {
@@ -272,9 +318,9 @@ function TagSidebarBody() {
                     <button
                       aria-label={m.tags_sidebar_delete_aria({ tag: t.name })}
                       className={cn(
-                        'rounded p-1 transition-colors',
+                        'flex size-6 items-center justify-center rounded transition-colors',
                         isActive
-                          ? 'text-primary-foreground/80 hover:bg-white/15'
+                          ? 'text-primary/70 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20'
                           : 'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20'
                       )}
                       onClick={(e) => {
@@ -292,13 +338,19 @@ function TagSidebarBody() {
           })()}
         </div>
 
-        {activeFilter ? (
-          <footer className="border-border/60 border-t p-2">
+        {activeFilters.length > 0 ? (
+          <footer className="flex items-center gap-2 border-black/5 border-t bg-primary/5 px-3 py-2 dark:border-white/5 dark:bg-primary/10">
+            <span className="flex-1 truncate text-[12px] text-muted-foreground">
+              {m.tags_sidebar_selected_count({
+                count: String(activeFilters.length),
+              })}
+            </span>
             <button
-              className="w-full rounded-md px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
               onClick={clearFilter}
               type="button"
             >
+              <X size={12} />
               {m.tags_sidebar_clear_filter()}
             </button>
           </footer>
@@ -313,6 +365,6 @@ function TagSidebarBody() {
         open={pendingDeleteTag !== null}
         tagName={pendingDeleteTag ?? ''}
       />
-    </motion.div>
+    </>
   );
 }

@@ -157,6 +157,8 @@ describe('CardNode', () => {
     );
 
     fireEvent.click(screen.getByText('Ship it'));
+    expect(screen.getByText('Ship it').closest('.nodrag')).not.toBeNull();
+    expect(screen.getByText('Ship it').closest('.nopan')).not.toBeNull();
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         items: [
@@ -166,10 +168,14 @@ describe('CardNode', () => {
       })
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Add item...'), {
+    const input = screen.getByPlaceholderText('Add item...');
+    expect(input).toHaveClass('nodrag');
+    expect(input).toHaveClass('nopan');
+
+    fireEvent.change(input, {
       target: { value: 'New line' },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('Add item...'), {
+    fireEvent.keyDown(input, {
       key: 'Enter',
     });
 

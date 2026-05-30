@@ -132,7 +132,7 @@ export const CardContent = ({
             ) : (
               <div
                 className={cn(
-                  'group flex items-start gap-3 py-1',
+                  'nodrag nopan group flex items-start gap-3 py-1',
                   readOnly ? '' : 'cursor-pointer'
                 )}
                 key={i}
@@ -199,7 +199,7 @@ export const CardContent = ({
               />
               <input
                 className={cn(
-                  'w-full border-none bg-transparent text-sm outline-none',
+                  'nodrag nopan w-full border-none bg-transparent text-sm outline-none',
                   isDark ? 'placeholder-white/40' : 'placeholder-gray-500'
                 )}
                 onChange={(e) => {
@@ -345,7 +345,7 @@ const EditableCardContent = ({
           <button
             aria-label={m.menu_edit_tag()}
             className={cn(
-              'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-opacity',
+              'nodrag nopan inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-opacity',
               isDark
                 ? 'bg-white/10 text-white/70 hover:bg-white/20'
                 : 'bg-black/5 text-neutral-600 hover:bg-black/10',
@@ -360,7 +360,7 @@ const EditableCardContent = ({
         ) : null}
       </div>
       <div
-        className="mb-4 cursor-text font-bold text-4xl outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
+        className="nodrag nopan mb-4 cursor-text font-bold text-4xl outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
         contentEditable
         data-placeholder="Untitled"
         onBlur={handleTitleBlur}
@@ -370,7 +370,7 @@ const EditableCardContent = ({
         {data.title}
       </div>
       <div
-        className="custom-scrollbar flex-1 cursor-text overflow-y-auto whitespace-pre-wrap text-lg/relaxed outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
+        className="nodrag nopan custom-scrollbar flex-1 cursor-text overflow-y-auto whitespace-pre-wrap text-lg/relaxed outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
         contentEditable
         data-placeholder="Write something..."
         onBlur={handleContentBlur}

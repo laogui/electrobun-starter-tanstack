@@ -38,6 +38,10 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
+import {
+  useEditableInteractionLock,
+  useSpacePanMode,
+} from '@/hooks/useSpacePanMode';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
@@ -165,6 +169,8 @@ function CanvasComponent() {
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const { screenToFlowPosition } = useReactFlow();
+  const spacePanActive = useSpacePanMode();
+  const editableInteractionLocked = useEditableInteractionLock();
 
   const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } =
     useNodeDrag();
@@ -664,6 +670,7 @@ function CanvasComponent() {
         maxZoom={4}
         minZoom={0.1}
         nodes={nodesWithState}
+        nodesDraggable={!(spacePanActive || editableInteractionLocked)}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
         onConnectEnd={onConnectEnd}
@@ -690,7 +697,7 @@ function CanvasComponent() {
         panOnScroll={true}
         proOptions={{ hideAttribution: true }}
         selectionMode={SelectionMode.Partial}
-        selectionOnDrag={true}
+        selectionOnDrag={!editableInteractionLocked}
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >

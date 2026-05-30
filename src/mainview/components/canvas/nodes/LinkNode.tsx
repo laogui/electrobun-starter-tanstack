@@ -209,7 +209,7 @@ export const LinkContent = ({
         )}
         {link.unfurlStatus === 'failed' ? (
           <button
-            className="mt-2 flex items-center gap-1.5 text-neutral-400 text-xs transition-colors hover:text-neutral-600 dark:hover:text-neutral-200"
+            className="nodrag nopan mt-2 flex items-center gap-1.5 text-neutral-400 text-xs transition-colors hover:text-neutral-600 dark:hover:text-neutral-200"
             onClick={(e) => {
               e.stopPropagation();
               onRetry?.();

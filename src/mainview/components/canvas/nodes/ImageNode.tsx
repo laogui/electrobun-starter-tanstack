@@ -197,6 +197,7 @@ export const ImageContent = ({
           <h3
             className={cn(
               'truncate font-semibold leading-tight outline-none',
+              onTitleChange && !isFocused && 'nodrag nopan',
               isFocused ? 'text-xl' : 'text-sm',
               !(data.title || editingTitle) && 'opacity-40',
               editingTitle &&

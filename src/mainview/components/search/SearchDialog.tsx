@@ -43,9 +43,11 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const lastResultSignatureRef = useRef('');
   const [activeIndex, setActiveIndex] = useState(0);
 
   const { query, setQuery, results, isLoading, error, fallback } = useSearch();
+  const trimmedQuery = query.trim();
 
   // Reset state when dialog closes
   useEffect(() => {
@@ -67,8 +69,15 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   // Reset active index when results change
   useEffect(() => {
+    const signature = `${trimmedQuery}\n${results
+      .map((result) => result.id)
+      .join('\n')}`;
+    if (lastResultSignatureRef.current === signature) {
+      return;
+    }
+    lastResultSignatureRef.current = signature;
     setActiveIndex(0);
-  }, []);
+  }, [results, trimmedQuery]);
 
   // Focus input on open
   useEffect(() => {
@@ -231,9 +240,18 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
               </div>
             ) : null}
 
-            {!error && query.trim() && results.length === 0 && !isLoading ? (
+            {!error && trimmedQuery && results.length === 0 && !isLoading ? (
               <div className="px-4 py-10 text-center text-gray-400 text-sm dark:text-gray-500">
                 No matches
+              </div>
+            ) : null}
+
+            {!error && trimmedQuery && results.length > 0 ? (
+              <div className="border-gray-100 border-b px-4 py-2 text-gray-500 text-xs dark:border-neutral-800 dark:text-gray-400">
+                {results.length === 1
+                  ? '1 result'
+                  : `${results.length} results`}{' '}
+                for "{trimmedQuery}"
               </div>
             ) : null}
 

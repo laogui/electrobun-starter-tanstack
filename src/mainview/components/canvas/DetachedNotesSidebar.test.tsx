@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
@@ -49,5 +49,59 @@ describe('DetachedNotesSidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close sidebar' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists detached links and assets and pins them back to the canvas', () => {
+    const pinNoteToCanvas = vi.fn();
+    act(() => {
+      useCanvasStore.setState({
+        nodes: [
+          {
+            id: 'link-1',
+            type: 'link',
+            position: { x: 0, y: 0 },
+            data: {
+              color: '#FFFFFF',
+              detached: true,
+              title: 'Docs',
+              url: 'https://example.com/docs',
+            },
+          },
+          {
+            id: 'asset-1',
+            type: 'asset',
+            position: { x: 0, y: 0 },
+            data: {
+              attachmentFile: 'attachments/file_abc.pdf',
+              color: '#FFFFFF',
+              detached: true,
+              fileName: 'report.pdf',
+              kind: 'file',
+              mimeType: 'application/pdf',
+              title: 'Report',
+            },
+          },
+        ] as any,
+        pinNoteToCanvas,
+      });
+    });
+
+    render(<DetachedNotesSidebar onClose={vi.fn()} />);
+
+    expect(screen.getByText('Docs')).toBeInTheDocument();
+    expect(screen.getByText('https://example.com/docs')).toBeInTheDocument();
+    expect(screen.getByText('Report')).toBeInTheDocument();
+    expect(screen.getByText('application/pdf')).toBeInTheDocument();
+
+    const docsItem = screen.getByText('Docs').closest('li');
+    expect(docsItem).not.toBeNull();
+    fireEvent.click(
+      within(docsItem!).getByRole('button', { name: 'Pin to canvas' })
+    );
+
+    expect(pinNoteToCanvas).toHaveBeenCalledWith(
+      'link-1',
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })
+    );
   });
 });

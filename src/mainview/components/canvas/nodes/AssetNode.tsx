@@ -168,6 +168,36 @@ function isPlayableMedia(asset: AssetNodeData): boolean {
   return asset.kind === 'video' || asset.kind === 'audio';
 }
 
+function isPdfPreview(asset: AssetNodeData): boolean {
+  return asset.kind === 'file' && asset.mimeType === 'application/pdf';
+}
+
+function isTextPreview(asset: AssetNodeData): boolean {
+  return asset.kind === 'file' && asset.mimeType.startsWith('text/');
+}
+
+function decodeTextDataUrl(dataUrl: string): string {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0) {
+    return '';
+  }
+  const metadata = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  if (metadata.includes(';base64')) {
+    if (typeof globalThis.atob !== 'function') {
+      return '';
+    }
+    const binary = globalThis.atob(payload);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return payload;
+  }
+}
+
 function VideoThumbnail({
   asset,
   title,
@@ -362,6 +392,9 @@ export const AssetContent = ({
   const label = getAssetLabel(asset);
   const canOpen = Boolean(asset.attachmentFile && !asset.missing);
   const playableMedia = isPlayableMedia(asset);
+  const pdfPreview = isPdfPreview(asset);
+  const textPreview = isTextPreview(asset);
+  const previewableFile = pdfPreview || textPreview;
   const [mediaSrc, setMediaSrc] = useState<string | null>(
     asset.previewUrl ?? null
   );
@@ -381,7 +414,12 @@ export const AssetContent = ({
 
   useEffect(() => {
     if (
-      !(isFocused && playableMedia && asset.attachmentFile && !asset.missing)
+      !(
+        isFocused &&
+        (playableMedia || previewableFile) &&
+        asset.attachmentFile &&
+        !asset.missing
+      )
     ) {
       return;
     }
@@ -427,6 +465,7 @@ export const AssetContent = ({
     asset.previewUrl,
     isFocused,
     playableMedia,
+    previewableFile,
   ]);
 
   if (isFocused) {
@@ -478,6 +517,28 @@ export const AssetContent = ({
               <h1 className="text-balance font-bold text-4xl leading-tight tracking-normal">
                 {title}
               </h1>
+              {pdfPreview && !asset.missing ? (
+                <div className="mt-8">
+                  {mediaState ??
+                    (mediaSrc ? (
+                      <iframe
+                        className="h-[52vh] min-h-96 w-full rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10"
+                        src={mediaSrc}
+                        title={`${title} PDF preview`}
+                      />
+                    ) : null)}
+                </div>
+              ) : null}
+              {textPreview && !asset.missing ? (
+                <div className="mt-8">
+                  {mediaState ??
+                    (mediaSrc ? (
+                      <pre className="max-h-[52vh] min-h-80 overflow-auto whitespace-pre-wrap rounded-2xl border border-black/10 bg-neutral-50 p-5 font-mono text-neutral-700 text-sm leading-relaxed shadow-inner dark:border-white/10 dark:bg-black/20 dark:text-neutral-200">
+                        {decodeTextDataUrl(mediaSrc)}
+                      </pre>
+                    ) : null)}
+                </div>
+              ) : null}
               {asset.kind === 'video' ? (
                 <div className="mt-8">
                   {mediaState ??

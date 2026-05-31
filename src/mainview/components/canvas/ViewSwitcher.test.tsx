@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,6 +85,14 @@ vi.mock('../../../paraglide/messages.js', () => ({
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
   templates_browse_all: () => 'Browse all templates…',
+  template_quick_start_name: () => 'Quick Start',
+  template_weekly_planner_name: () => 'Weekly Planner',
+  template_kanban_name: () => 'Kanban Board',
+  template_sprint_retro_name: () => 'Sprint Retro',
+  template_brainstorm_mindmap_name: () => 'Brainstorm Mindmap',
+  template_eisenhower_matrix_name: () => 'Eisenhower Matrix',
+  template_reading_notes_name: () => 'Reading Notes',
+  template_demo_name: () => 'Demo Canvas',
 }));
 
 const resetStore = () => {
@@ -261,9 +275,30 @@ describe('viewSwitcher', () => {
       ).toBe(true);
       expect(useCanvasStore.getState().activeViewId).toBe('view-2');
     });
+    expect(await screen.findByDisplayValue('Canvas 3')).toBeInTheDocument();
   });
 
-  it('creates a canvas from template via the submenu', async () => {
+  it('keeps every view when rapid blank canvas creates resolve from the same render', async () => {
+    let resolveFirst:
+      | ((value: { id: string; name: string }) => void)
+      | undefined;
+    let resolveSecond:
+      | ((value: { id: string; name: string }) => void)
+      | undefined;
+    rpcMocks.rpcCreateView
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          })
+      );
+
     renderViewSwitcher();
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
@@ -271,12 +306,62 @@ describe('viewSwitcher', () => {
 
     fireEvent.click(screen.getByText('Default Canvas'));
     fireEvent.click(screen.getByText('New Canvas'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Kanban Board' }));
+    const blankCanvasItem = screen.getByRole('menuitem', {
+      name: 'Blank Canvas',
+    });
+    fireEvent.click(blankCanvasItem);
+    fireEvent.click(blankCanvasItem);
+
+    await act(async () => {
+      resolveFirst?.({ id: 'view-a', name: 'Canvas 3' });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(
+        useCanvasStore
+          .getState()
+          .views.some((view: { id: string }) => view.id === 'view-a')
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      resolveSecond?.({ id: 'view-b', name: 'Canvas 3' });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      const viewIds = useCanvasStore
+        .getState()
+        .views.map((view: { id: string }) => view.id);
+      expect(viewIds).toEqual(
+        expect.arrayContaining(['default', 'focus', 'view-a', 'view-b'])
+      );
+    });
+  });
+
+  it('creates a canvas from any quick template via the submenu', async () => {
+    renderViewSwitcher();
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByText('New Canvas'));
+    expect(
+      screen.getByRole('menuitem', { name: 'Quick Start' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Weekly Planner' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Brainstorm Mindmap' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Quick Start' }));
 
     await waitFor(() => {
       expect(rpcMocks.rpcCreateViewFromTemplate).toHaveBeenCalledWith(
         'Canvas 3',
-        'kanban'
+        'quick-start'
       );
       expect(
         useCanvasStore

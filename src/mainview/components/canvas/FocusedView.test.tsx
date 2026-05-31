@@ -7,6 +7,13 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 
 const commitFolderChildDataMock = vi.fn();
 const commitNodeDataMock = vi.fn();
+const setFocusedNodeMock = vi.fn();
+let nodesMock: Array<{
+  data: Record<string, unknown>;
+  id: string;
+  position: { x: number; y: number };
+  type?: string;
+}> = [];
 const updateFolderChildDataMock = vi.fn();
 const updateNodeDataMock = vi.fn();
 
@@ -15,6 +22,8 @@ vi.mock('@/store/canvasStore', () => ({
     selector: (state: {
       commitFolderChildData: typeof commitFolderChildDataMock;
       commitNodeData: typeof commitNodeDataMock;
+      nodes: typeof nodesMock;
+      setFocusedNode: typeof setFocusedNodeMock;
       updateFolderChildData: typeof updateFolderChildDataMock;
       updateNodeData: typeof updateNodeDataMock;
     }) => unknown
@@ -22,6 +31,8 @@ vi.mock('@/store/canvasStore', () => ({
     selector({
       commitFolderChildData: commitFolderChildDataMock,
       commitNodeData: commitNodeDataMock,
+      nodes: nodesMock,
+      setFocusedNode: setFocusedNodeMock,
       updateFolderChildData: updateFolderChildDataMock,
       updateNodeData: updateNodeDataMock,
     }),
@@ -53,23 +64,33 @@ vi.mock('@/components/canvas/nodes/LinkNode', () => ({
   LinkContent: ({
     data,
     isFocused,
+    onUrlChange,
   }: {
     data: { title?: string; url?: string };
     isFocused?: boolean;
+    onUrlChange?: (url: string) => void;
   }) => (
     <div>
       {`link:${isFocused ? 'focused' : 'card'}:${data.title ?? 'untitled'}:${data.url ?? 'none'}`}
+      <button
+        onClick={() => {
+          onUrlChange?.('https://new.example/');
+        }}
+        type="button"
+      >
+        mutate url
+      </button>
     </div>
   ),
 }));
 
-type EditorMockProps = {
+interface EditorMockProps {
   markdown?: string;
   onMarkdownChange: (value: string) => void;
   onPreviewUpdate?: (value: Record<string, unknown>) => void;
   onTitleChange: (value: string) => void;
   title?: string;
-};
+}
 
 const EditorMockComponent = ({
   markdown,
@@ -153,6 +174,8 @@ describe('focusedView', () => {
   afterEach(() => {
     commitFolderChildDataMock.mockReset();
     commitNodeDataMock.mockReset();
+    setFocusedNodeMock.mockReset();
+    nodesMock = [];
     updateFolderChildDataMock.mockReset();
     updateNodeDataMock.mockReset();
     document.body.style.overflow = '';
@@ -326,5 +349,113 @@ describe('focusedView', () => {
     expect(
       screen.getByText('link:focused:Example:https://example.com/')
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'mutate url' }));
+
+    expect(commitNodeDataMock).toHaveBeenCalledWith('link-1', {
+      description: undefined,
+      faviconUrl: undefined,
+      imageUrl: undefined,
+      siteName: undefined,
+      title: 'new.example',
+      unfurlError: undefined,
+      unfurlStatus: 'idle',
+      url: 'https://new.example/',
+    });
+  });
+
+  it('navigates to adjacent focused items on the same canvas', () => {
+    nodesMock = [
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'First', content: '', color: '#FFFFFF' },
+      },
+      {
+        id: 'link-1',
+        type: 'link',
+        position: { x: 200, y: 0 },
+        data: {
+          title: 'Example',
+          url: 'https://example.com/',
+          color: '#ffffff',
+        },
+      },
+    ];
+
+    render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: {
+            title: 'First',
+            content: '',
+            color: '#FFFFFF',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+
+    expect(setFocusedNodeMock).toHaveBeenCalledWith({
+      id: 'link-1',
+      type: 'link',
+      data: {
+        title: 'Example',
+        url: 'https://example.com/',
+        color: '#ffffff',
+      },
+      rect: expect.any(DOMRect),
+    });
+  });
+
+  it('uses the registered node size when navigating to an unmounted canvas item', () => {
+    nodesMock = [
+      {
+        id: 'link-1',
+        type: 'link',
+        position: { x: 0, y: 0 },
+        data: {
+          title: 'Example',
+          url: 'https://example.com/',
+          color: '#ffffff',
+        },
+      },
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 240, y: 0 },
+        data: { title: 'Card', content: '', color: '#FFFFFF' },
+      },
+    ];
+
+    render(
+      <FocusedView
+        node={{
+          id: 'link-1',
+          type: 'link',
+          data: {
+            title: 'Example',
+            url: 'https://example.com/',
+            color: '#ffffff',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+
+    const focusedItem = setFocusedNodeMock.mock.calls.at(-1)?.[0];
+    expect(focusedItem).toMatchObject({ id: 'card-1' });
+    expect(focusedItem?.rect).toBeInstanceOf(DOMRect);
+    expect(focusedItem?.rect.width).toBe(350);
+    expect(focusedItem?.rect.height).toBe(450);
   });
 });

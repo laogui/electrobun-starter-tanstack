@@ -44,6 +44,10 @@ const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
 }));
 
+const nodeMetadataMocks = vi.hoisted(() => ({
+  map: {},
+}));
+
 vi.mock('@/lib/rpc', () => ({
   isRpcAvailable: rpcMocks.isRpcAvailable,
   loadCanvas: rpcMocks.loadCanvas,
@@ -99,10 +103,15 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_open_focused: () => 'Open focused',
   menu_copy: () => 'Copy',
   menu_change_color: () => 'Change color',
+  menu_edit_tag: () => 'Edit Tag',
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
   menu_new_card_inside: () => 'New child',
+  menu_move_out: () => 'Move Out',
+  menu_move_to_library: () => 'Move to Library',
+  menu_export_markdown: () => 'Export as Markdown',
+  menu_export_canvas_markdown: () => 'Export Canvas as Markdown',
   menu_edit_label: () => 'Edit label',
   menu_toggle_animation: () => 'Toggle animation',
   menu_toggle_straight: () => 'Toggle Straight',
@@ -120,6 +129,14 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
   templates_browse_all: () => 'Browse all templates…',
+  template_quick_start_name: () => 'Quick Start',
+  template_weekly_planner_name: () => 'Weekly Planner',
+  template_kanban_name: () => 'Kanban Board',
+  template_sprint_retro_name: () => 'Sprint Retro',
+  template_brainstorm_mindmap_name: () => 'Brainstorm Mindmap',
+  template_eisenhower_matrix_name: () => 'Eisenhower Matrix',
+  template_reading_notes_name: () => 'Reading Notes',
+  template_demo_name: () => 'Demo Canvas',
   library_button_aria: () => 'Note Library',
   search_button_aria: () => 'Search',
   library_title: () => 'Note Library',
@@ -295,7 +312,7 @@ vi.mock('@/hooks/useNodeCreation', () => ({
 
 vi.mock('@/hooks/useNodeMetadata', () => ({
   useNodeMetadata: () => ({
-    map: {},
+    map: nodeMetadataMocks.map,
     get: () => undefined,
   }),
   useSetNodeMetadata: () => ({ mutate: vi.fn() }),

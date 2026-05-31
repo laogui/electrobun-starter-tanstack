@@ -75,16 +75,24 @@ describe('buildLibrary', () => {
     expect(groups[0]!.items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
   });
 
-  it('skips detached entries that are not card / image', () => {
+  it('includes detached asset and link entries', () => {
     const nodes: Node[] = [
       makeNode('asset-1', 'asset', {
         fileName: 'doc.pdf',
         detached: true,
       }),
+      makeNode('link-1', 'link', {
+        url: 'https://example.com',
+        detached: true,
+      }),
     ];
     const { groups, totalItems } = buildLibrary(nodes, '', 'name');
-    expect(totalItems).toBe(0);
-    expect(groups).toHaveLength(0);
+    expect(totalItems).toBe(2);
+    expect(groups[0]?.kind).toBe('detached');
+    expect(groups[0]?.items.map((item) => item.title)).toEqual([
+      'doc.pdf',
+      'https://example.com',
+    ]);
   });
 
   it('falls back to fileName / url for empty titles on asset / link', () => {

@@ -11,6 +11,7 @@ interface DetachedEntry {
   nodeId: string;
   preview: string;
   title: string;
+  type?: string;
 }
 
 const SIDEBAR_WIDTH = 300;
@@ -20,10 +21,19 @@ function getString(data: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
-function makePreview(data: Record<string, unknown>): string {
+function makePreview(
+  data: Record<string, unknown>,
+  type: string | undefined
+): string {
   const excerpt = getString(data, 'previewExcerpt');
   if (excerpt.trim().length > 0) {
     return excerpt.trim();
+  }
+  if (type === 'link') {
+    return getString(data, 'url');
+  }
+  if (type === 'asset') {
+    return getString(data, 'mimeType') || getString(data, 'fileName');
   }
   const content = getString(data, 'content');
   if (content.trim().length === 0) {
@@ -47,7 +57,10 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
     const out: DetachedEntry[] = [];
     for (const n of nodes) {
       if (
-        (n.type === 'card' || n.type === 'image') &&
+        (n.type === 'card' ||
+          n.type === 'image' ||
+          n.type === 'link' ||
+          n.type === 'asset') &&
         (n.data as Record<string, unknown>).detached
       ) {
         const data = n.data as Record<string, unknown>;
@@ -55,7 +68,8 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
           id: `node:${n.id}`,
           nodeId: n.id,
           title: getString(data, 'title') || 'Untitled',
-          preview: makePreview(data),
+          preview: makePreview(data, n.type),
+          type: n.type,
         });
       }
     }
@@ -86,6 +100,8 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
     ? getString(selectedData, 'imageUrl')
     : '';
   const isImageSelection = selectedNode?.type === 'image';
+  const isLinkSelection = selectedNode?.type === 'link';
+  const isAssetSelection = selectedNode?.type === 'asset';
 
   const handlePin = useCallback(
     (nodeId: string) => {
@@ -187,6 +203,48 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                     className="mx-auto h-auto max-w-full rounded-lg"
                     src={selectedImageUrl}
                   />
+                ) : isLinkSelection ? (
+                  <div className="space-y-4 rounded-xl border border-black/5 bg-white p-5 text-sm shadow-sm dark:border-white/10 dark:bg-white/5">
+                    <div>
+                      <p className="font-medium text-gray-500 text-xs uppercase tracking-normal dark:text-gray-400">
+                        URL
+                      </p>
+                      <p className="mt-1 break-all text-gray-800 dark:text-gray-100">
+                        {selectedData ? getString(selectedData, 'url') : ''}
+                      </p>
+                    </div>
+                    {selectedData && getString(selectedData, 'description') ? (
+                      <p className="text-gray-600 leading-relaxed dark:text-gray-300">
+                        {getString(selectedData, 'description')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : isAssetSelection ? (
+                  <div className="space-y-4 rounded-xl border border-black/5 bg-white p-5 text-sm shadow-sm dark:border-white/10 dark:bg-white/5">
+                    <div>
+                      <p className="font-medium text-gray-500 text-xs uppercase tracking-normal dark:text-gray-400">
+                        Type
+                      </p>
+                      <p className="mt-1 break-all text-gray-800 dark:text-gray-100">
+                        {selectedData
+                          ? getString(selectedData, 'mimeType') ||
+                            'application/octet-stream'
+                          : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-500 text-xs uppercase tracking-normal dark:text-gray-400">
+                        File
+                      </p>
+                      <p className="mt-1 break-all font-mono text-gray-700 dark:text-gray-200">
+                        {selectedData
+                          ? getString(selectedData, 'attachmentFile') ||
+                            getString(selectedData, 'fileName') ||
+                            'Unsaved attachment'
+                          : ''}
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <NotePreview
                     excerpt={selectedData?.previewExcerpt}
@@ -275,7 +333,9 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                       </p>
                     ) : (
                       <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
-                        Empty note
+                        {entry.type === 'asset'
+                          ? 'No file metadata'
+                          : 'Empty note'}
                       </p>
                     )}
                   </li>

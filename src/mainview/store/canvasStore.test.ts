@@ -843,7 +843,7 @@ describe('canvasStore — addFolderChild', () => {
       nodes: [
         makeNode('folder', {
           type: 'folder',
-          data: { title: '0 items', subtitle: '', children: [] },
+          data: { title: 'Research', subtitle: '', children: [] },
         }),
       ],
     });
@@ -857,7 +857,7 @@ describe('canvasStore — addFolderChild', () => {
     }>;
 
     expect(children).toHaveLength(1);
-    expect(data.title).toBe('1 items');
+    expect(data.title).toBe('Research');
     expect(children[0]!.noteId).toMatch(NOTE_ID_REGEX);
     expect(children[0]!.data.noteId).toBe(children[0]!.noteId);
   });
@@ -1268,7 +1268,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
       focusedFolder: {
         id: 'folder',
         data: {
-          title: '2 items',
+          title: 'Research',
           subtitle: '',
           children: [
             {
@@ -1296,7 +1296,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
           type: 'folder',
           position: { x: 100, y: 120 },
           data: {
-            title: '2 items',
+            title: 'Research',
             subtitle: '',
             children: [
               {
@@ -1334,7 +1334,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
     const folder = state.nodes.find((node) => node.id === 'folder');
     const restored = state.nodes.find((node) => node.id === 'child-card');
 
-    expect(folder?.data.title).toBe('1 items');
+    expect(folder?.data.title).toBe('Research');
     expect(folder?.data.children).toEqual([
       expect.objectContaining({ id: 'child-image' }),
     ]);
@@ -1354,7 +1354,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
       false
     );
     expect(state.focusedFolder?.data).toMatchObject({
-      title: '1 items',
+      title: 'Research',
       children: [expect.objectContaining({ id: 'child-image' })],
     });
     expect(state.canUndo()).toBe(true);
@@ -1367,7 +1367,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
           type: 'folder',
           position: { x: 100, y: 120 },
           data: {
-            title: '1 items',
+            title: 'Research',
             subtitle: '',
             children: [
               {
@@ -1410,7 +1410,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
     expect(
       state.nodes.find((node) => node.id === 'folder')?.data
     ).toMatchObject({
-      title: '0 items',
+      title: 'Research',
       children: [],
     });
   });
@@ -1422,7 +1422,7 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
           type: 'folder',
           position: { x: 100, y: 120 },
           data: {
-            title: '1 items',
+            title: 'Research',
             subtitle: '',
             children: [
               {
@@ -1587,5 +1587,50 @@ describe('canvasStore — detachNoteFromCanvas', () => {
       .getState()
       .nodes.find((n) => n.id === 'group-1')!;
     expect((node.data as any).detached).toBeUndefined();
+  });
+
+  it('detaches link and asset nodes into the library', () => {
+    const nodes: Node[] = [
+      {
+        id: 'link-1',
+        type: 'link',
+        position: { x: 100, y: 100 },
+        data: {
+          color: '#FFFFFF',
+          title: 'Docs',
+          url: 'https://example.com/docs',
+        },
+      },
+      {
+        id: 'asset-1',
+        type: 'asset',
+        position: { x: 300, y: 100 },
+        data: {
+          attachmentFile: 'attachments/file_abc.pdf',
+          color: '#FFFFFF',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          title: 'Report',
+        },
+      },
+    ];
+    useCanvasStore.setState({
+      nodes,
+      edges: [{ id: 'e1', source: 'link-1', target: 'asset-1' }],
+      _hydrated: true,
+    });
+
+    useCanvasStore.getState().detachNoteFromCanvas('link-1');
+    useCanvasStore.getState().detachNoteFromCanvas('asset-1');
+
+    const state = useCanvasStore.getState();
+    expect(
+      (state.nodes.find((n) => n.id === 'link-1')?.data as any).detached
+    ).toBe(true);
+    expect(
+      (state.nodes.find((n) => n.id === 'asset-1')?.data as any).detached
+    ).toBe(true);
+    expect(state.edges).toHaveLength(0);
   });
 });

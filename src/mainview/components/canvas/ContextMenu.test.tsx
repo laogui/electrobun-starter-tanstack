@@ -192,6 +192,13 @@ describe('canvasContextMenu', () => {
       />
     );
 
+    expect(
+      screen.getByRole('button', { name: 'Edit URL' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Move to Library' })
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
 
     expect(onAction).toHaveBeenCalledWith('focus', 'link-1');
@@ -209,6 +216,10 @@ describe('canvasContextMenu', () => {
         onClose={onClose}
       />
     );
+
+    expect(
+      screen.getByRole('button', { name: 'Move to Library' })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
 

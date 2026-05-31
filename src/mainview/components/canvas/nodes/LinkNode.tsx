@@ -11,7 +11,14 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type FormEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
@@ -86,17 +93,42 @@ function LinkFaviconBadge({ faviconUrl }: { faviconUrl?: string }) {
 export const LinkContent = ({
   data,
   isFocused = false,
+  onUrlChange,
   onRetry,
 }: {
   data: LinkNodeRuntimeData;
   isFocused?: boolean;
   onRetry?: () => void;
+  onUrlChange?: (url: string) => void;
 }) => {
   const link = resolveLinkData(data);
   const host = getLinkHost(link.url);
   const title = getLinkDisplayTitle(link);
   const openableUrl = getOpenableUrl(link.url);
   const description = link.description?.trim();
+  const [draftUrl, setDraftUrl] = useState(link.url);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftUrl(link.url);
+    setUrlError(null);
+  }, [link.url]);
+
+  const handleUrlSubmit = useCallback(
+    (event: FormEvent) => {
+      event.preventDefault();
+      const normalized = normalizeLinkUrl(draftUrl);
+      if (!normalized) {
+        setUrlError('Enter a valid http(s) URL.');
+        return;
+      }
+      setUrlError(null);
+      if (normalized !== link.url) {
+        onUrlChange?.(normalized);
+      }
+    },
+    [draftUrl, link.url, onUrlChange]
+  );
 
   if (isFocused) {
     return (
@@ -144,11 +176,40 @@ export const LinkContent = ({
                   {description}
                 </p>
               ) : null}
-              <div className="mt-8 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
-                <p className="break-all font-mono text-neutral-600 text-sm dark:text-neutral-300">
-                  {link.url || 'No URL'}
-                </p>
-              </div>
+              {onUrlChange ? (
+                <form
+                  className="mt-8 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20"
+                  onSubmit={handleUrlSubmit}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      aria-label="Link URL"
+                      className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-none transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
+                      onChange={(event) => {
+                        setDraftUrl(event.target.value);
+                      }}
+                      value={draftUrl}
+                    />
+                    <button
+                      className="nodrag nopan shrink-0 rounded-lg bg-neutral-950 px-3 py-2 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
+                      type="submit"
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                  {urlError ? (
+                    <p className="mt-2 text-red-600 text-xs dark:text-red-300">
+                      {urlError}
+                    </p>
+                  ) : null}
+                </form>
+              ) : (
+                <div className="mt-8 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
+                  <p className="break-all font-mono text-neutral-700 text-sm dark:text-neutral-100">
+                    {link.url || 'No URL'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -66,6 +66,7 @@ describe('FolderNode', () => {
     render(
       <FolderNode
         data={{
+          children: [{ id: 'a' }, { id: 'b' }],
           subtitle: '12 children',
           title: 'Research',
         }}
@@ -74,6 +75,7 @@ describe('FolderNode', () => {
     );
 
     expect(screen.getByText('Research')).toBeInTheDocument();
+    expect(screen.getByText('2 items')).toBeInTheDocument();
     expect(screen.getByText('12 children')).toBeInTheDocument();
     expect(screen.getByTestId('handle-left')).toBeInTheDocument();
   });

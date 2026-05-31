@@ -53,6 +53,9 @@ export const FolderContent = ({
   onTitleKeyDown,
 }: FolderContentProps) => {
   const footerText = data.footer ?? data.updatedAt;
+  const childCount = Array.isArray(data.children) ? data.children.length : 0;
+  const childCountLabel =
+    childCount === 1 ? '1 item' : childCount > 1 ? `${childCount} items` : '';
 
   return (
     <div
@@ -130,14 +133,21 @@ export const FolderContent = ({
                 </p>
               )}
             </div>
-            <button
-              aria-label="Folder menu"
-              className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-white/80 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-all hover:scale-110 hover:bg-white/20"
-              onClick={onMenuClick}
-              type="button"
-            >
-              <span className="-mt-0.5 text-lg leading-none">⋮</span>
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {childCountLabel ? (
+                <span className="rounded-full border border-white/55 bg-white/16 px-2.5 py-1 font-semibold text-[11px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+                  {childCountLabel}
+                </span>
+              ) : null}
+              <button
+                aria-label="Folder menu"
+                className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-white/80 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-all hover:scale-110 hover:bg-white/20"
+                onClick={onMenuClick}
+                type="button"
+              >
+                <span className="-mt-0.5 text-lg leading-none">⋮</span>
+              </button>
+            </div>
           </div>
           {isZoomedOut || !footerText ? null : (
             <p className="relative mt-auto truncate text-sm text-white/92 leading-none">

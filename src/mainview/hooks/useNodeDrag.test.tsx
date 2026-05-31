@@ -362,7 +362,7 @@ describe('useNodeDrag', () => {
     expect(state.nodes.find((node) => node.id === 'card-1')).toBeUndefined();
     expect(state.nodes.find((node) => node.id === 'folder-1')).toMatchObject({
       data: {
-        title: '1 items',
+        title: 'Folder',
         children: [
           {
             id: 'card-1',

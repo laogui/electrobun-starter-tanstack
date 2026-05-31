@@ -1,8 +1,11 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 import { AssetContent } from './nodes/AssetNode';
@@ -42,11 +45,87 @@ interface FocusedViewProps {
   onClose: () => void;
 }
 
+interface FolderChildEntry {
+  data: Record<string, unknown>;
+  id: string;
+  type?: string;
+}
+
+interface NodeWithLayout {
+  data?: unknown;
+  height?: number;
+  id: string;
+  measured?: { width?: number; height?: number };
+  position?: { x: number; y: number };
+  style?: { height?: number | string; width?: number | string };
+  type?: string;
+  width?: number;
+}
+
+const DEFAULT_NAV_RECT_WIDTH = 320;
+const DEFAULT_NAV_RECT_HEIGHT = 180;
+
+function numericSize(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return;
+}
+
+function createRect(
+  left: number,
+  top: number,
+  width: number,
+  height: number
+): DOMRect {
+  return new DOMRect(left, top, width, height);
+}
+
+function rectForNode(node: NodeWithLayout): DOMRect {
+  const registeredSize = node.type
+    ? findSpecByNodeType(node.type)?.size
+    : undefined;
+  const width =
+    node.measured?.width ??
+    node.width ??
+    numericSize(node.style?.width) ??
+    registeredSize?.width ??
+    DEFAULT_NAV_RECT_WIDTH;
+  const height =
+    node.measured?.height ??
+    node.height ??
+    numericSize(node.style?.height) ??
+    registeredSize?.height ??
+    DEFAULT_NAV_RECT_HEIGHT;
+  return createRect(
+    node.position?.x ?? 0,
+    node.position?.y ?? 0,
+    width,
+    height
+  );
+}
+
+function domRectForItem(item: FocusedItem): DOMRect {
+  const el =
+    typeof document === 'undefined'
+      ? null
+      : (document.querySelector(
+          `[data-id="${item.id}"]`
+        ) as HTMLElement | null);
+  return el?.getBoundingClientRect() ?? item.rect;
+}
+
 export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateFolderChildData = useCanvasStore((s) => s.updateFolderChildData);
   const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const folderId =
     typeof node.folderId === 'string' ? node.folderId : undefined;
   const noteIdRaw = node.data.noteId;
@@ -80,6 +159,83 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       commitNodeData(node.id, updates);
     },
     [commitFolderChildData, commitNodeData, folderId, node.id]
+  );
+
+  const handleLinkUrlChange = useCallback(
+    (url: string) => {
+      commitFocusedData({
+        url,
+        title: getLinkHost(url) || url,
+        description: undefined,
+        faviconUrl: undefined,
+        imageUrl: undefined,
+        siteName: undefined,
+        unfurlError: undefined,
+        unfurlStatus: 'idle',
+      });
+    },
+    [commitFocusedData]
+  );
+
+  const focusableItems = useMemo<FocusedItem[]>(() => {
+    if (folderId) {
+      const folder = nodes.find((candidate) => candidate.id === folderId);
+      const children = (
+        ((folder?.data as Record<string, unknown> | undefined)?.children ??
+          []) as FolderChildEntry[]
+      ).filter((child) => isFocusableNode(child.type));
+      return children.map((child) => ({
+        id: child.id,
+        folderId,
+        type: child.type,
+        data: child.data,
+        rect: node.rect,
+      }));
+    }
+
+    return nodes
+      .filter(
+        (candidate) =>
+          isFocusableNode(candidate.type) &&
+          !(candidate.data as Record<string, unknown> | undefined)?.detached
+      )
+      .map((candidate) => ({
+        id: candidate.id,
+        type: candidate.type,
+        data: candidate.data as Record<string, unknown>,
+        rect: rectForNode(candidate as NodeWithLayout),
+      }));
+  }, [folderId, node.rect, nodes]);
+
+  const currentIndex = focusableItems.findIndex(
+    (item) => item.id === node.id && item.folderId === folderId
+  );
+  const previousItem =
+    currentIndex > 0 ? focusableItems[currentIndex - 1] : undefined;
+  const nextItem =
+    currentIndex >= 0 && currentIndex < focusableItems.length - 1
+      ? focusableItems[currentIndex + 1]
+      : undefined;
+
+  const handleNavigate = useCallback(
+    (item: FocusedItem) => {
+      const latestNode = item.folderId
+        ? null
+        : nodes.find((candidate) => candidate.id === item.id);
+      const latestItem = latestNode
+        ? {
+            id: latestNode.id,
+            type: latestNode.type,
+            data: latestNode.data as Record<string, unknown>,
+            rect: rectForNode(latestNode as NodeWithLayout),
+          }
+        : item;
+      setFocusedNode({
+        ...latestItem,
+        rect: domRectForItem(latestItem),
+      });
+    },
+    [nodes, setFocusedNode]
   );
 
   const isText =
@@ -153,6 +309,54 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         <ArrowLeft size={24} />
       </motion.button>
 
+      {previousItem ? (
+        <motion.button
+          animate={{ opacity: 1, x: 0 }}
+          aria-label="Previous item"
+          className="absolute top-1/2 left-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
+          exit={{ opacity: 0, x: -20 }}
+          initial={{ opacity: 0, x: -20 }}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleNavigate(previousItem);
+          }}
+          transition={{
+            type: 'spring',
+            damping: 20,
+            stiffness: 300,
+            delay: 0.15,
+          }}
+          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <ChevronLeft size={24} />
+        </motion.button>
+      ) : null}
+
+      {nextItem ? (
+        <motion.button
+          animate={{ opacity: 1, x: 0 }}
+          aria-label="Next item"
+          className="absolute top-1/2 right-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
+          exit={{ opacity: 0, x: 20 }}
+          initial={{ opacity: 0, x: 20 }}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleNavigate(nextItem);
+          }}
+          transition={{
+            type: 'spring',
+            damping: 20,
+            stiffness: 300,
+            delay: 0.15,
+          }}
+          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <ChevronRight size={24} />
+        </motion.button>
+      ) : null}
+
       <motion.div
         animate={{
           x: 0,
@@ -197,7 +401,11 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
           ) : node.type === 'asset' ? (
             <AssetContent data={node.data} isFocused={true} />
           ) : node.type === 'link' ? (
-            <LinkContent data={node.data} isFocused={true} />
+            <LinkContent
+              data={node.data}
+              isFocused={true}
+              onUrlChange={handleLinkUrlChange}
+            />
           ) : isText ? (
             <Suspense fallback={<FocusedSkeleton color={color} />}>
               <BlockNoteEditor

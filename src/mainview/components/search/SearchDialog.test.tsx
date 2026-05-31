@@ -153,6 +153,19 @@ describe('searchDialog', () => {
     expect(screen.getByText('No matches')).toBeInTheDocument();
   });
 
+  it('shows the result count for non-empty searches', () => {
+    setSearch({
+      query: 'hello',
+      results: [
+        makeResult({ id: 'r1', title: 'First' }),
+        makeResult({ id: 'r2', title: 'Second', nodeId: 'n2' }),
+      ],
+    });
+    render(<SearchDialog />);
+
+    expect(screen.getByText('2 results for "hello"')).toBeInTheDocument();
+  });
+
   it('renders an error message when the search hook reports an error', () => {
     setSearch({ query: 'foo', error: 'boom' });
     render(<SearchDialog />);
@@ -189,6 +202,43 @@ describe('searchDialog interactions', () => {
       'aria-selected',
       'true'
     );
+  });
+
+  it('resets active selection when results change', async () => {
+    const { ref, setCenter } = buildRfInstance();
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'n1',
+          type: 'card',
+          position: { x: 100, y: 50 },
+          data: {},
+        } as any,
+      ],
+    });
+    setSearch({
+      query: 'h',
+      results: [
+        makeResult({ id: 'r1', title: 'First' }),
+        makeResult({ id: 'r2', title: 'Second', nodeId: 'n2' }),
+      ],
+    });
+    const { rerender } = render(<SearchDialog rfInstance={ref} />);
+    const input = screen.getByLabelText('Search query');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    setSearch({ query: 'first', results: [makeResult({ id: 'r1' })] });
+    rerender(<SearchDialog rfInstance={ref} />);
+    fireEvent.keyDown(screen.getByLabelText('Search query'), { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(setCenter).toHaveBeenCalledTimes(1);
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
   });
 
   it('Enter on a same-view result selects the node, locates it, and closes', async () => {

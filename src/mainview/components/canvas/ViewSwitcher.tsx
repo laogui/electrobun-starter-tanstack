@@ -2,6 +2,8 @@ import { Menu } from '@base-ui/react/menu';
 import { Link as RouterLink } from '@tanstack/react-router';
 import {
   BookOpen,
+  Brain,
+  CalendarDays,
   Check,
   ChevronRight,
   ChevronUp,
@@ -10,6 +12,7 @@ import {
   FileImage,
   FileJson,
   Folder,
+  Grid2X2,
   Group,
   ImageIcon,
   Kanban,
@@ -19,6 +22,8 @@ import {
   NotebookPen,
   Pencil,
   Plus,
+  Rocket,
+  RotateCcw,
   StickyNote,
   Trash2,
   X,
@@ -61,6 +66,49 @@ const getCreateMenuItems = () => [
   { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
   { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
   { id: 'file', label: m.menu_file(), icon: File, enabled: true },
+];
+
+const getQuickTemplateItems = () => [
+  {
+    id: 'quick-start',
+    label: m.template_quick_start_name(),
+    icon: Rocket,
+  },
+  {
+    id: 'weekly-planner',
+    label: m.template_weekly_planner_name(),
+    icon: CalendarDays,
+  },
+  {
+    id: 'kanban',
+    label: m.template_kanban_name(),
+    icon: Kanban,
+  },
+  {
+    id: 'brainstorm-mindmap',
+    label: m.template_brainstorm_mindmap_name(),
+    icon: Brain,
+  },
+  {
+    id: 'reading-notes',
+    label: m.template_reading_notes_name(),
+    icon: BookOpen,
+  },
+  {
+    id: 'sprint-retro',
+    label: m.template_sprint_retro_name(),
+    icon: RotateCcw,
+  },
+  {
+    id: 'eisenhower-matrix',
+    label: m.template_eisenhower_matrix_name(),
+    icon: Grid2X2,
+  },
+  {
+    id: 'demo',
+    label: m.template_demo_name(),
+    icon: Layers,
+  },
 ];
 
 export function ViewSwitcher({
@@ -159,9 +207,9 @@ export function ViewSwitcher({
   }, [editingId]);
 
   const handleSwitchView = useCallback(
-    async (viewId: string) => {
+    async (viewId: string, options?: { keepOpen?: boolean }) => {
       if (viewId === activeViewId) {
-        setOpen(false);
+        setOpen(options?.keepOpen ?? false);
         return;
       }
 
@@ -182,13 +230,33 @@ export function ViewSwitcher({
 
       // Clear store & set new view ID; index.tsx's effect will load + hydrate
       setActiveView(viewId);
-      setOpen(false);
+      setOpen(options?.keepOpen ?? false);
     },
     [activeViewId, setActiveView]
   );
 
+  const beginInlineRename = useCallback(
+    (view: { id: string; name: string }) => {
+      setOpen(true);
+      setEditingId(view.id);
+      setEditingName(view.name);
+    },
+    []
+  );
+
+  const appendCreatedView = useCallback(
+    (view: { id: string; name: string }) => {
+      const latestViews = useCanvasStore.getState().views;
+      if (latestViews.some((existing) => existing.id === view.id)) {
+        return;
+      }
+      setViews([...latestViews, view]);
+    },
+    [setViews]
+  );
+
   const handleCreate = useCallback(async () => {
-    const name = `Canvas ${String(views.length + 1)}`;
+    const name = `Canvas ${String(useCanvasStore.getState().views.length + 1)}`;
     const result = (await rpcCreateView(name)) as {
       id: string;
       name: string;
@@ -197,14 +265,14 @@ export function ViewSwitcher({
       return;
     }
 
-    const newViews = [...views, { id: result.id, name: result.name }];
-    setViews(newViews);
-    await handleSwitchView(result.id);
-  }, [views, setViews, handleSwitchView]);
+    appendCreatedView({ id: result.id, name: result.name });
+    await handleSwitchView(result.id, { keepOpen: true });
+    beginInlineRename(result);
+  }, [appendCreatedView, handleSwitchView, beginInlineRename]);
 
   const handleCreateFromTemplate = useCallback(
     async (templateId: string) => {
-      const name = `Canvas ${String(views.length + 1)}`;
+      const name = `Canvas ${String(useCanvasStore.getState().views.length + 1)}`;
       const result = (await rpcCreateViewFromTemplate(name, templateId)) as {
         id: string;
         name: string;
@@ -213,11 +281,11 @@ export function ViewSwitcher({
         return;
       }
 
-      const newViews = [...views, { id: result.id, name: result.name }];
-      setViews(newViews);
-      await handleSwitchView(result.id);
+      appendCreatedView({ id: result.id, name: result.name });
+      await handleSwitchView(result.id, { keepOpen: true });
+      beginInlineRename(result);
     },
-    [views, setViews, handleSwitchView]
+    [appendCreatedView, handleSwitchView, beginInlineRename]
   );
 
   const handleRestore = useCallback(
@@ -685,6 +753,7 @@ export function ViewSwitcher({
                     <Menu.Popup className="min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
                       <Menu.Item
                         className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                        closeOnClick={false}
                         onClick={handleCreate}
                       >
                         <Plus size={16} />
@@ -697,13 +766,17 @@ export function ViewSwitcher({
                         {m.view_from_template()}
                       </div>
 
-                      <Menu.Item
-                        className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
-                        onClick={() => handleCreateFromTemplate('kanban')}
-                      >
-                        <Kanban size={16} />
-                        Kanban Board
-                      </Menu.Item>
+                      {getQuickTemplateItems().map((template) => (
+                        <Menu.Item
+                          className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                          closeOnClick={false}
+                          key={template.id}
+                          onClick={() => handleCreateFromTemplate(template.id)}
+                        >
+                          <template.icon size={16} />
+                          {template.label}
+                        </Menu.Item>
+                      ))}
 
                       <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 

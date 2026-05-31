@@ -34,6 +34,16 @@ vi.mock('@/store/canvasStore', () => ({
   ) => selector({ saveSnapshot: vi.fn() }),
 }));
 
+vi.mock('@/components/card/useNodeTagEditing', () => ({
+  useNodeTagEditing: () => ({
+    dimmedByFilter: false,
+    tag: undefined,
+    tagColor: undefined,
+    tagEditor: null,
+    tags: [],
+  }),
+}));
+
 vi.mock('@/lib/rpc', () => ({
   rpcLoadAttachment: rpcLoadAttachmentMock,
   rpcOpenAttachment: rpcOpenAttachmentMock,
@@ -212,6 +222,61 @@ describe('AssetContent', () => {
     expect(
       await screen.findByLabelText('Demo audio audio player')
     ).toHaveAttribute('src', 'data:audio/mpeg;base64,AAAA');
+  });
+
+  it('loads focused text files into an inline preview', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:text/plain;base64,SGVsbG8gZnJvbSBmaWxl',
+    });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/text_abc.txt',
+          color: '#ffffff',
+          fileName: 'notes.txt',
+          kind: 'file',
+          mimeType: 'text/plain',
+          size: 18,
+          title: 'Notes',
+        }}
+        isFocused
+      />
+    );
+
+    await waitFor(() => {
+      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+        'attachments/text_abc.txt'
+      );
+    });
+    expect(await screen.findByText('Hello from file')).toBeInTheDocument();
+  });
+
+  it('loads focused PDFs into an inline preview frame', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:application/pdf;base64,JVBERi0xLjQ=',
+    });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/pdf_abc.pdf',
+          color: '#ffffff',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          size: 2048,
+          title: 'Report',
+        }}
+        isFocused
+      />
+    );
+
+    const frame = await screen.findByTitle('Report PDF preview');
+    expect(frame).toHaveAttribute(
+      'src',
+      'data:application/pdf;base64,JVBERi0xLjQ='
+    );
   });
 });
 

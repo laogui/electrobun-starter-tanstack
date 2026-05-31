@@ -61,7 +61,7 @@ export const initialNodes: Node[] = [
     id: 'node-init0004',
     position: { x: 900, y: 600 },
     data: {
-      title: '3 items',
+      title: 'Ideas',
       subtitle: 'The really great ideas to implement',
       children: [
         {
@@ -163,7 +163,7 @@ export const initialNodes: Node[] = [
     id: 'node-init0009',
     position: { x: 1300, y: 600 },
     data: {
-      title: '5 items',
+      title: 'Bug reports',
       subtitle: 'The critical bug reports to fix asap',
       children: [
         {

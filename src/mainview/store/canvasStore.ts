@@ -402,7 +402,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             data: {
               ...n.data,
               children,
-              title: `${children.length} items`,
             },
           };
         }),
@@ -433,7 +432,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           data: {
             ...n.data,
             children,
-            title: `${children.length} items`,
           },
         };
       }),
@@ -919,7 +917,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ];
         return {
           ...n,
-          data: { ...n.data, children, title: `${children.length} items` },
+          data: { ...n.data, children },
         };
       }),
     }));
@@ -954,7 +952,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const nextFolderData = {
         ...folder.data,
         children: remainingChildren,
-        title: `${remainingChildren.length} items`,
       };
       const existingIds = new Set(s.nodes.map((node) => node.id));
       const restoredNodeId = existingIds.has(child.id)
@@ -1004,11 +1001,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         if (n.id !== nodeId) {
           return n;
         }
+        const spec = n.type ? findSpecByNodeType(n.type) : null;
         const { detached: _, ...cleanData } = n.data as Record<string, unknown>;
         return {
           ...n,
           position,
-          style: n.style ?? { width: CARD_W, height: CARD_H },
+          style:
+            n.style ??
+            (spec
+              ? { width: spec.size.width, height: spec.size.height }
+              : { width: CARD_W, height: CARD_H }),
           data: cleanData,
         };
       }),
@@ -1017,7 +1019,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   detachNoteFromCanvas: (nodeId) => {
     const node = get().nodes.find((n) => n.id === nodeId);
-    if (!node || (node.type !== 'card' && node.type !== 'image')) {
+    if (
+      !(
+        node &&
+        (node.type === 'card' ||
+          node.type === 'image' ||
+          node.type === 'link' ||
+          node.type === 'asset')
+      )
+    ) {
       return;
     }
     get().saveSnapshot();

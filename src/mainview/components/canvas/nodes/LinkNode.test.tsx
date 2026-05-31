@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import LinkNode, { LinkContent } from './LinkNode';
@@ -28,6 +28,16 @@ vi.mock('@/store/canvasStore', () => ({
       updateNodeData: (id: string, updates: Record<string, unknown>) => void;
     }) => unknown
   ) => selector({ saveSnapshot: vi.fn(), updateNodeData: vi.fn() }),
+}));
+
+vi.mock('@/components/card/useNodeTagEditing', () => ({
+  useNodeTagEditing: () => ({
+    dimmedByFilter: false,
+    tag: undefined,
+    tagColor: undefined,
+    tagEditor: null,
+    tags: [],
+  }),
 }));
 
 vi.mock('@/lib/rpc', () => ({
@@ -66,6 +76,47 @@ describe('LinkContent', () => {
     expect(link).toHaveAttribute('href', 'https://example.com/docs');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('commits a normalized URL from focused edit mode', () => {
+    const onUrlChange = vi.fn();
+    render(
+      <LinkContent
+        data={{
+          color: '#ffffff',
+          title: 'Example docs',
+          url: 'https://example.com/docs',
+        }}
+        isFocused
+        onUrlChange={onUrlChange}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Link URL'), {
+      target: { value: 'example.org/new' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save URL' }));
+
+    expect(onUrlChange).toHaveBeenCalledWith('https://example.org/new');
+  });
+
+  it('shows a read-only focused URL when no change handler is available', () => {
+    render(
+      <LinkContent
+        data={{
+          color: '#ffffff',
+          title: 'Example docs',
+          url: 'https://example.com/docs',
+        }}
+        isFocused
+      />
+    );
+
+    expect(screen.queryByLabelText('Link URL')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Save URL' })
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText('https://example.com/docs')).not.toHaveLength(0);
   });
 });
 

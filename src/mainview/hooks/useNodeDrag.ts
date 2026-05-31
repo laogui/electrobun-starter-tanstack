@@ -262,7 +262,6 @@ export function useNodeDrag() {
                   data: {
                     ...n.data,
                     children,
-                    title: `${children.length} items`,
                   },
                 };
               });

@@ -182,11 +182,7 @@ export function buildLibrary(
       data,
     });
     if (data.detached) {
-      // Library detached pane follows DetachedNotesSidebar: card / image only.
-      if (
-        (node.type === 'card' || node.type === 'image') &&
-        matchesQuery(item, normalizedQuery)
-      ) {
+      if (matchesQuery(item, normalizedQuery)) {
         detachedItems.push(item);
       }
       continue;

@@ -145,7 +145,8 @@ export function useContextMenu({
             .catch(() => toast(m.toast_export_failed()));
           break;
         }
-        case 'focus': {
+        case 'focus':
+        case 'edit-url': {
           if (nodeId) {
             const el = document.querySelector(`[data-id="${nodeId}"]`);
             const rect = el?.getBoundingClientRect();

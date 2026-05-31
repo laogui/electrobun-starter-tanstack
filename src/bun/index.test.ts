@@ -1420,6 +1420,45 @@ describe('src/bun/index helpers', () => {
     );
   });
 
+  it('saveManifest persists transient image data urls before stripping runtime imageUrl', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      'feedface-abcd-0000-0000-000000000000'
+    );
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'image-1',
+            type: 'image',
+            position: { x: 10, y: 20 },
+            data: {
+              color: '#fff',
+              imageUrl: 'data:image/png;base64,AQID',
+              title: 'Unsaved upload',
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: true });
+
+    const manifest = manifestMocks.saveManifest.mock.calls.at(-1)?.[2] as {
+      nodes: Array<{ data: Record<string, unknown> }>;
+    };
+    const imageData = manifest.nodes[0]?.data;
+
+    expect(bunWriteMock).toHaveBeenCalledWith(
+      '/tmp/workspace/attachments/img_feedface.png',
+      expect.any(Uint8Array)
+    );
+    expect(imageData).not.toHaveProperty('imageUrl');
+    expect(imageData?.imageFile).toBe('attachments/img_feedface.png');
+  });
+
   it('saveManifest reuses an existing note file for folder children with a noteId', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();

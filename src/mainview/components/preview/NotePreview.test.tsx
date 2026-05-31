@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const rpcLoadAttachmentMock = vi.fn();
+
+vi.mock('@/lib/rpc', () => ({
+  rpcLoadAttachment: (...args: unknown[]) => rpcLoadAttachmentMock(...args),
+}));
 
 import { NotePreview } from './NotePreview';
 
 describe('NotePreview', () => {
+  beforeEach(() => {
+    rpcLoadAttachmentMock.mockReset();
+  });
+
   it('sanitizes stored preview html before rendering', () => {
     const { container } = render(
       <NotePreview
@@ -38,5 +48,26 @@ describe('NotePreview', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Done')).toBeInTheDocument();
     expect(container.querySelector('.note-checkbox-checked')).not.toBeNull();
+  });
+
+  it('rehydrates workspace attachment image sources in stored preview html', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,AAA',
+    });
+
+    const { container } = render(
+      <NotePreview
+        html={
+          '<p><img loading="lazy" src="attachments/foo.png" alt="Local"></p>'
+        }
+      />
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        'data:image/png;base64,AAA'
+      );
+    });
+    expect(rpcLoadAttachmentMock).toHaveBeenCalledWith('attachments/foo.png');
   });
 });

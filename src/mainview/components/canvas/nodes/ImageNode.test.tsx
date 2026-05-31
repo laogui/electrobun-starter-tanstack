@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ImageNode, { ImageContent } from './ImageNode';
 
@@ -83,14 +83,28 @@ vi.mock('@/lib/rpc', () => ({
   rpcSaveAttachment: (...args: unknown[]) => rpcSaveAttachmentMock(...args),
 }));
 
+vi.mock('@/components/card/useNodeTagEditing', () => ({
+  useNodeTagEditing: () => ({
+    dimmedByFilter: false,
+    tag: undefined,
+    tagColor: undefined,
+    tagEditor: null,
+    tags: [],
+  }),
+}));
+
 describe('ImageNode', () => {
   vi.stubGlobal('FileReader', FileReaderMock as unknown as typeof FileReader);
+
+  beforeEach(() => {
+    rpcLoadAttachmentMock.mockResolvedValue(null);
+    rpcSaveAttachmentMock.mockResolvedValue({ filePath: '/tmp/image.png' });
+  });
 
   afterEach(() => {
     updateNodeDataMock.mockReset();
     rpcLoadAttachmentMock.mockReset();
     rpcSaveAttachmentMock.mockReset();
-    rpcSaveAttachmentMock.mockResolvedValue({ filePath: '/tmp/image.png' });
     useViewportMock.mockReset();
     useViewportMock.mockReturnValue({ zoom: 1 });
     document.body.className = '';
@@ -118,6 +132,30 @@ describe('ImageNode', () => {
 
     expect(screen.getByRole('img', { name: 'Cover' })).toBeInTheDocument();
     expect(screen.getByText('Cover')).toBeInTheDocument();
+  });
+
+  it('rehydrates workspace-relative image URLs before rendering', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,full',
+    });
+
+    render(
+      <ImageContent
+        data={{
+          color: '#fff',
+          imageUrl: 'attachments/foo.png',
+          title: 'Workspace image',
+        }}
+        isFocused={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('img', { name: 'Workspace image' })
+      ).toHaveAttribute('src', 'data:image/png;base64,full');
+    });
+    expect(rpcLoadAttachmentMock).toHaveBeenCalledWith('attachments/foo.png');
   });
 
   it('renders add-image actions and zoomed-out image preview', () => {
@@ -148,6 +186,28 @@ describe('ImageNode', () => {
     expect(
       document.querySelector('img[src="https://example.com/z.png"]')
     ).not.toBeNull();
+  });
+
+  it('renders persisted image nodes that only have attachment files and a hydrated thumbnail', () => {
+    render(
+      <ImageNode
+        data={{
+          color: '#fff',
+          imageFile: 'attachments/full.jpg',
+          thumbnailFile: 'attachments/thumb.jpg',
+          thumbnailUrl: 'data:image/jpeg;base64,thumb',
+          title: 'Persisted image',
+        }}
+        id="image-persisted"
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
+    ).toBeNull();
+    expect(
+      screen.getByRole('img', { name: 'Persisted image' })
+    ).toHaveAttribute('src', 'data:image/jpeg;base64,thumb');
   });
 
   it('falls back to the thumbnail when focused original image loading fails', async () => {
@@ -268,7 +328,7 @@ describe('ImageNode', () => {
       <ImageNode
         data={{
           color: '#fff',
-          imageFile: '/old/file.png',
+          imageFile: undefined,
           imageUrl: '',
           title: '',
         }}
@@ -328,7 +388,7 @@ describe('ImageNode', () => {
       <ImageNode
         data={{
           color: '#fff',
-          imageFile: '/old/file.png',
+          imageFile: undefined,
           imageUrl: '',
           title: 'Saved',
         }}

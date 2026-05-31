@@ -21,6 +21,9 @@ const MAX_PREVIEW_BLOCKS = 30;
 const MAX_DEPTH = 4;
 const EXCERPT_LIMIT = 160;
 const SAFE_LINK_PROTOCOL_RE = /^(?:https?:|mailto:)/i;
+const SAFE_IMAGE_PROTOCOL_RE = /^https?:\/\//i;
+const URI_PROTOCOL_RE = /^[a-z][a-z\d+.-]*:/i;
+const QUERY_OR_HASH_RE = /[?#]/;
 const HTML_ESCAPE_RE = /[&<>"']/g;
 const HTML_ESCAPES: Record<string, string> = {
   '&': '&amp;',
@@ -57,6 +60,8 @@ const LIST_TYPES = new Set([
 
 interface Budget {
   count: number;
+  hiddenImageCount: number;
+  renderedImage: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +162,54 @@ function renderMediaPlaceholder(
   return `<p>${badge(name ? `${base}: ${name}` : base)}</p>`;
 }
 
+function isWorkspaceAttachmentUrl(value: string): boolean {
+  const [path = ''] = value
+    .trim()
+    .replaceAll('\\', '/')
+    .split(QUERY_OR_HASH_RE, 1);
+  if (!path || URI_PROTOCOL_RE.test(path) || path.startsWith('//')) {
+    return false;
+  }
+  const segments = path.split('/').filter(Boolean);
+  const attachmentIndex = segments.indexOf('attachments');
+  if (attachmentIndex < 0) {
+    return false;
+  }
+  const prefix = segments.slice(0, attachmentIndex);
+  if (!prefix.every((segment) => segment === '.' || segment === '..')) {
+    return false;
+  }
+  const attachmentSegments = segments.slice(attachmentIndex);
+  return (
+    attachmentSegments.length > 1 &&
+    attachmentSegments.every((segment) => segment !== '.' && segment !== '..')
+  );
+}
+
+function isSafePreviewImageUrl(value: string): boolean {
+  const url = value.trim();
+  return SAFE_IMAGE_PROTOCOL_RE.test(url) || isWorkspaceAttachmentUrl(url);
+}
+
+function renderImagePreview(
+  props: Record<string, unknown> | null,
+  budget: Budget
+): string {
+  if (budget.renderedImage) {
+    budget.hiddenImageCount += 1;
+    return '';
+  }
+
+  const url = asString(props?.url);
+  if (!(url && isSafePreviewImageUrl(url))) {
+    return renderMediaPlaceholder('image', props);
+  }
+
+  budget.renderedImage = true;
+  const label = asString(props?.caption) || asString(props?.name);
+  return `<p><img loading="lazy" src="${escapeHtml(url.trim())}" alt="${escapeHtml(label)}"></p>`;
+}
+
 function renderListItem(
   block: Record<string, unknown>,
   type: string,
@@ -180,7 +233,7 @@ function renderBlock(
   block: Record<string, unknown>,
   type: string,
   _depth: number,
-  _budget: Budget
+  budget: Budget
 ): string {
   const props = asRecord(block.props);
   switch (type) {
@@ -202,6 +255,7 @@ function renderBlock(
     case 'table':
       return badge('Table');
     case 'image':
+      return renderImagePreview(props, budget);
     case 'video':
     case 'audio':
     case 'file':
@@ -335,8 +389,16 @@ export const buildBlockNotePreview = (
   if (!Array.isArray(blocks) || blocks.length === 0) {
     return { html: '', excerpt: '', blocks: 0, version: PREVIEW_VERSION };
   }
-  const budget: Budget = { count: 0 };
-  const dirtyHtml = renderBlocks(blocks, 0, budget);
+  const budget: Budget = {
+    count: 0,
+    hiddenImageCount: 0,
+    renderedImage: false,
+  };
+  const bodyHtml = renderBlocks(blocks, 0, budget);
+  const dirtyHtml =
+    budget.hiddenImageCount > 0
+      ? `${bodyHtml}<p>${badge(`+${budget.hiddenImageCount} images`)}</p>`
+      : bodyHtml;
   const html = options.sanitizeHtml?.(dirtyHtml) ?? dirtyHtml;
   return {
     html,

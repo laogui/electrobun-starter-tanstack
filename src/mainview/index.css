@@ -93,9 +93,12 @@ body.resizing-nwse * {
 }
 
 .note-preview :where(img) {
-  width: auto;
+  display: block;
+  width: 100%;
+  height: 8rem;
   max-height: 8rem;
   object-fit: cover;
+  object-position: center;
   border-radius: 6px;
 }
 

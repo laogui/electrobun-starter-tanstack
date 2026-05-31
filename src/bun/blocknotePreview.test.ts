@@ -144,6 +144,32 @@ describe('buildBlockNotePreview', () => {
     expect(preview.html).not.toContain('<script>');
   });
 
+  it('renders the first image block as a preview image', () => {
+    const preview = buildBlockNotePreview([
+      {
+        type: 'image',
+        props: { caption: 'System diagram', url: 'attachments/diagram.png' },
+        content: undefined,
+        children: [],
+      },
+      {
+        type: 'image',
+        props: {
+          caption: 'Second diagram',
+          url: 'https://example.com/two.png',
+        },
+        content: undefined,
+        children: [],
+      },
+    ]);
+
+    expect(preview.html).toContain(
+      '<img loading="lazy" src="attachments/diagram.png" alt="System diagram"'
+    );
+    expect(preview.html).toContain('+1 images');
+    expect(preview.html).not.toContain('https://example.com/two.png');
+  });
+
   it('emits stable placeholders for media and unknown blocks', () => {
     const preview = buildBlockNotePreview([
       {

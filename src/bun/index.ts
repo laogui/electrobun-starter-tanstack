@@ -8,6 +8,7 @@ import {
   Utils,
 } from 'electrobun/bun';
 import {
+  assertWorkspaceAttachmentPath,
   attachmentExists,
   loadAttachment as loadWorkspaceAttachment,
   openAttachment as openWorkspaceAttachment,
@@ -243,6 +244,42 @@ function stripAttachmentRuntimeData(
     ...restData
   } = data;
   return restData;
+}
+
+const IMAGE_DATA_URL_RE = /^data:image\//i;
+
+async function serializeImageDataForManifest(
+  wsPath: string,
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const { imageUrl, thumbnailUrl: _thumbnailUrl, ...restData } = data;
+  const nextData: Record<string, unknown> = { ...restData };
+
+  if (typeof nextData.imageFile === 'string' && nextData.imageFile.trim()) {
+    return nextData;
+  }
+
+  if (typeof imageUrl !== 'string' || !imageUrl.trim()) {
+    return nextData;
+  }
+
+  if (IMAGE_DATA_URL_RE.test(imageUrl)) {
+    const saved = await saveWorkspaceAttachment(wsPath, {
+      dataUrl: imageUrl,
+      kind: 'image',
+    });
+    nextData.imageFile = saved.filePath;
+    return nextData;
+  }
+
+  try {
+    const { relativePath } = assertWorkspaceAttachmentPath(wsPath, imageUrl);
+    nextData.imageFile = relativePath;
+  } catch {
+    // Non-workspace URLs are runtime-only for image nodes and are not persisted.
+  }
+
+  return nextData;
 }
 
 async function hydrateAssetData(
@@ -1092,11 +1129,6 @@ async function main() {
               // Image nodes: strip imageUrl / thumbnailUrl (large base64),
               // keep imageFile / thumbnailFile references.
               if (node.type === 'image') {
-                const {
-                  imageUrl: _imageUrl,
-                  thumbnailUrl: _thumbnailUrl,
-                  ...restData
-                } = node.data;
                 return {
                   id: node.id,
                   type: node.type,
@@ -1104,7 +1136,7 @@ async function main() {
                   ...(node.style ? { style: node.style } : {}),
                   ...(node.parentId ? { parentId: node.parentId } : {}),
                   ...(node.extent ? { extent: node.extent } : {}),
-                  data: restData,
+                  data: await serializeImageDataForManifest(wsPath, node.data),
                 };
               }
 
@@ -1145,12 +1177,13 @@ async function main() {
                         string,
                         unknown
                       >;
-                      const {
-                        imageUrl: _imageUrl,
-                        thumbnailUrl: _thumbnailUrl,
-                        ...rest
-                      } = childData;
-                      return { ...child, data: rest };
+                      return {
+                        ...child,
+                        data: await serializeImageDataForManifest(
+                          wsPath,
+                          childData
+                        ),
+                      };
                     }
                     if (child.type !== 'card') {
                       return child;

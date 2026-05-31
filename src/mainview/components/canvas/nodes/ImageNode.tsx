@@ -13,6 +13,7 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
+import { toWorkspaceAttachmentPath } from '@/lib/workspaceAttachmentPaths';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
@@ -23,7 +24,7 @@ const FILE_EXT_RE = /\.[^.]+$/;
 export interface ImageData {
   color: string;
   imageFile?: string;
-  imageUrl: string;
+  imageUrl?: string;
   isDropTarget?: boolean;
   isHidden?: boolean;
   thumbnailFile?: string;
@@ -98,29 +99,31 @@ export const ImageContent = ({
   // avoid keeping the original full-resolution bitmap in memory just to draw
   // a card preview. The focused / lightbox view falls back to the original
   // and lazy-loads it from the workspace attachment when needed.
-  const [lazyImageUrl, setLazyImageUrl] = useState<string | null>(null);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
   const [lazyLoadFailed, setLazyLoadFailed] = useState(false);
+  const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
+  const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);
+  const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
+  const attachmentToLoad =
+    workspaceImagePath ||
+    (directImageUrl || (data.thumbnailUrl && !isFocused)
+      ? undefined
+      : data.imageFile);
 
   useEffect(() => {
-    setLazyImageUrl(null);
+    setResolvedImageUrl(null);
     setLazyLoadFailed(false);
-    if (!isFocused) {
-      return;
-    }
-    if (data.imageUrl) {
-      return;
-    }
-    if (!data.imageFile) {
+    if (!attachmentToLoad) {
       return;
     }
     let cancelled = false;
-    rpcLoadAttachment(data.imageFile)
+    rpcLoadAttachment(attachmentToLoad)
       .then((result) => {
         if (cancelled) {
           return;
         }
         if (result?.dataUrl) {
-          setLazyImageUrl(result.dataUrl);
+          setResolvedImageUrl(result.dataUrl);
           return;
         }
         setLazyLoadFailed(true);
@@ -133,16 +136,15 @@ export const ImageContent = ({
     return () => {
       cancelled = true;
     };
-  }, [data.imageFile, data.imageUrl, isFocused]);
+  }, [attachmentToLoad]);
 
-  const focusedSrc = data.imageUrl || lazyImageUrl || data.thumbnailUrl;
-  const previewSrc = data.thumbnailUrl || data.imageUrl;
+  const focusedSrc = directImageUrl || resolvedImageUrl || data.thumbnailUrl;
+  const previewSrc = data.thumbnailUrl || directImageUrl || resolvedImageUrl;
   const displaySrc = isFocused ? focusedSrc : previewSrc;
   const isLazyLoading =
-    isFocused &&
-    !data.imageUrl &&
-    !!data.imageFile &&
-    !lazyImageUrl &&
+    !!attachmentToLoad &&
+    (isFocused || !displaySrc) &&
+    !resolvedImageUrl &&
     !lazyLoadFailed;
 
   if (!(displaySrc || isLazyLoading)) {
@@ -230,6 +232,13 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const isDark = isColorDark(data.color);
   const isZoomedOut = zoom < 0.4;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
+  const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);
+  const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
+  const previewImageUrl = data.thumbnailUrl || directImageUrl;
+  const hasImage = Boolean(
+    rawImageUrl || data.imageFile || data.thumbnailFile || data.thumbnailUrl
+  );
 
   const handleFile = useCallback(
     (file: File) => {
@@ -296,13 +305,13 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
   const acceptOrConfirm = useCallback(
     (file: File) => {
-      if (data.imageUrl) {
+      if (hasImage) {
         setPendingReplaceFile(file);
         return;
       }
       handleFile(file);
     },
-    [data.imageUrl, handleFile]
+    [handleFile, hasImage]
   );
 
   const handleDrop = useCallback(
@@ -462,18 +471,18 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             className="flex size-full items-center justify-center"
             style={colorToStyle(data.color)}
           >
-            {data.imageUrl ? (
+            {previewImageUrl ? (
               <img
                 alt=""
                 className="pointer-events-none size-full object-cover"
                 draggable={false}
-                src={data.imageUrl}
+                src={previewImageUrl}
               />
             ) : (
               <ImagePlus className="text-gray-300" size={32} />
             )}
           </div>
-        ) : data.imageUrl ? (
+        ) : hasImage ? (
           <ImageContent
             data={data}
             onTitleChange={(title) => commitNodeData(id, { title })}

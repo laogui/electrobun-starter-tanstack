@@ -26,7 +26,7 @@ const sanitizeMarkdownHtml = (dirtyHtml: string): string =>
  * When `blocks` is provided (BlockNote save path) the preview is derived from
  * the structured blocks — faithful to the editor, no Markdown lossiness. When
  * omitted (legacy markdown / checklist path) the preview falls back to parsing
- * the Markdown `body`. See `docs/features/Review/preview-from-blocknote-json.md`.
+ * the Markdown `body`.
  */
 export async function writeNoteWithPreview(
   wsPath: string,

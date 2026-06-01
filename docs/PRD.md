@@ -3,7 +3,6 @@
 > **相关文档**
 >
 > - [技术规范文档](./tech-spec.md) — 架构、技术栈、目录结构、状态管理、渲染动画、性能预算、数据持久化、RPC 协议、编码约定
-> - 笔记库弹窗（替代旧文档模式）：[Planned/笔记库弹窗-替代文档模式.md](./features/Planned/笔记库弹窗-替代文档模式.md)
 
 ## 1. 产品概述
 
@@ -87,7 +86,7 @@
     - 文件夹内的卡片从堆叠状态平滑展开（散开）到当前的临时图层上，供用户浏览或编辑。MVP 采用确定性的自动排布（横向 strip 或 grid），排列顺序按 `children` 数组索引（即拖入先后顺序），不提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
       - 在此模式下，画布上的其他非同组元素不可见或不可交互。
   - **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
-  - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Checklist` / `Image` / `Asset` / `Link`。这些类型都被视为"内容条目"，可在 Folder drill-down 和笔记库弹窗中被浏览、聚焦或编辑。
+  - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Checklist` / `Image` / `Asset` / `Link`。这些类型都被视为"内容条目"，可在 Folder drill-down 中被浏览、聚焦或编辑。
   - **不允许收纳的节点类型**：Folder 不收纳 `Folder` / `Group` / `Sticky`。`Folder` 嵌套会把资料夹变成递归信息架构；`Group` 带空间布局语义；`Sticky` 是画布上的临时注释，默认保留在画布层。若未来需要便签归档，应作为独立功能评估，不改变 Folder 的基本定位。
   - **成员来源**：Folder 的成员通过以下方式产生：
     1. **在 Folder 内直接新建**：在 Folder drill-down 视图中通过顶部工具栏或右键菜单的 `New Card` 新建卡片，直接追加到该 Folder 的 `children` 数组。
@@ -130,7 +129,7 @@
   - 输入关键词后 debounce 调用 Bun 侧 `searchCanvas`；当前画布内存状态会与后端结果合并，降低未落盘编辑被漏搜的概率。
   - 点击搜索结果项，若命中当前画布节点或连线，则选中并平移缩放至对应位置；若命中其他画布，则先切换 `activeViewId`，待目标 manifest hydrate 后再定位。
   - **排序规则（MVP）**：标题/名称匹配优先于正文匹配，再按基础相关性评分和更新时间排序。后续可引入更完整的字段权重与索引。
-  - **Detached notes 的可见性**：用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索。画布模式通过 `CreateMenu` 中的「Library Note / 文库笔记」入口打开 `DetachedNotesSidebar` 浏览这些游离笔记，拖入画布时通过 `pinNoteToCanvas` 赋予真实坐标。
+  - **Detached notes 的可见性**：用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索。画布侧提供游离笔记管理入口，可将 detached notes 拖回画布并赋予真实坐标。
 - **当前限制 / 待办**：
   - 后端搜索目前主要索引 manifest 顶层节点；Folder `children` 中的 Card/Asset/Link/Image 仍可能漏搜，需作为 P0 补齐。
   - 纯粹存在于 `content/*.md`、但没有任何 manifest 引用的 Markdown 文件不会作为一等搜索结果返回；它们目前通过设置页的 Unlinked Files 清理工具暴露，而不是通过搜索面板暴露。
@@ -175,24 +174,22 @@
 
 **状态优先级规则**：`dragging` 与 `connecting` 高于双击/编辑判定；`focused` 和 `folder-drill-down` 为全屏模态上下文，会冻结背景画布；`inline-editing` 期间不响应框选与节点拖拽。
 
-### 2.12 笔记库弹窗 (Library Popup) — 已替代旧文档模式 🚧
-
-> **状态**：旧的「画布 / 文档」双布局模式（`LayoutSwitcher` + `DocumentView` 三栏）已整体下线；替代方案是更轻量的「笔记库弹窗」，详细规格见 [`Planned/笔记库弹窗-替代文档模式.md`](./features/Planned/笔记库弹窗-替代文档模式.md)。本节只保留与画布主交互相关的最小总述。
+### 2.12 笔记库弹窗 (Library Popup) ✅
 
 - **入口**：画布左上角「📚 笔记库」按钮（与 React Flow Controls 同侧），点击后弹出覆盖式弹窗。
 - **职责**：浏览当前画布上的所有 `Card` / `Image` / `Asset` / `Link`（按 Folder 分组 + 未分组 + 游离笔记），点击卡片即关闭弹窗 → `fitView` 飞到目标节点 → 自动打开 FocusedView。
+- **能力**：支持搜索筛选、排序切换（最近编辑/名称/创建时间）、`Escape` / 点击遮罩关闭。
 - **角色边界**：与既有入口互补：
   - `Cmd/Ctrl+K` `SearchDialog`：关键词驱动，「我知道我要什么」，跨画布跳转。
   - 笔记库弹窗：浏览驱动，「我想看看我有什么」，仅限当前画布。
   - `DetachedNotesSidebar`：游离笔记的快捷管理与拖回画布。
-- **不在首版**：弹窗内编辑、跨画布汇总、拖拽排序、批量操作；编辑统一走 FocusedView。
 
 #### Detached notes（游离笔记池）
 
-- **概念**：detached notes 是**有正式 `.md` 文件 + `noteId`、但尚未放置到任何画布**的笔记。它们存在于笔记库中永远可被找回，替代了早期 PRD 描述的「零引用隐性丢失」风险下的 `unplaced notes` 概念。
+- **概念**：detached notes 是**有正式 `.md` 文件 + `noteId`、但尚未放置到任何画布**的笔记。它们存在于笔记库中永远可被找回。
 - **数据形态**：`position: {x:0, y:0}` 占位，`data.detached: true` 标记；不在画布上渲染。
-- **创建路径**：画布模式右键菜单 > 「移出到笔记库」 → `detachNoteFromCanvas()` 保留 `.md` 和 `noteId`，但清理画布实例坐标和 edges。
-- **放回画布**：画布模式 `CreateMenu` 中提供「文库笔记 / Library Note」入口，打开 `DetachedNotesSidebar`，拖入画布时通过 `screenToFlowPosition` + `pinNoteToCanvas()` 赋予真实坐标。
+- **创建路径**：画布上右键菜单 > 「移出到笔记库」 → `detachNoteFromCanvas()` 保留 `.md` 和 `noteId`，但清理画布实例坐标和 edges。
+- **放回画布**：笔记库弹窗的「游离笔记」分组中，点击 detached 卡片会弹出 toast 提示 +「放到画布」按钮，点击后 `pinNoteToCanvas()` 将笔记放到视口中心并打开 FocusedView。画布侧 `CreateMenu` 也提供「文库笔记 / Library Note」入口打开 `DetachedNotesSidebar` 进行拖拽放回。
 - **搜索可见性**：detached notes 进入全局搜索；笔记库弹窗里在「游离笔记」分组单独列出（首版仅 `card` / `image`，与 Sidebar 行为对齐）。
 
 ### 2.13 标签管理 (Tag Management) ✅
@@ -277,7 +274,7 @@
    > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式，仅在 GhostBoard 内可见。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会将内嵌内容写入独立 `.md` 并把 manifest 吐到引用形式。
 2. **内容与布局解耦** —— 内容级属性（标题、标签、创建时间）存 frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
-4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留，直到用户显式执行永久删除或在设置页 Unlinked Files 清理工具中删除。删除 Folder 时，其 Card/Asset/Link 等 children 会被转换为 detached 节点留在笔记库，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 `.md` 会被清理，Image/Asset 仍遵循附件模式。
+4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，内容文件保留，直到用户显式执行永久删除或在设置页 Unlinked Files 清理工具中删除。删除 Folder 时，其 Card/Asset/Link 等 children 会被转换为 detached 节点，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 `.md` 会被清理，Image/Asset 仍遵循附件模式。
 
 ### 5.2 配置文件与偏好
 
@@ -563,7 +560,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | ID 分离            | `noteId`（内容）+ `nodeId`（画布实例）                                          | 同一笔记可在多画布/同画布多次出现                                          |
 | 布局存储           | Per-view manifest，不放 frontmatter                                             | 布局和内容解耦，避免单文件热点                                             |
 | 内容树结构         | 统一 `content/` 目录                                                            | 避免 `notes/` + `folders/` 双根混乱                                        |
-| 内容生命周期       | 删 `node` 只删实例；零引用 `note` 保留为 **detached note**（见 §2.12）                             | 避免误删共享内容，也避免内容文件无入口可找回                               |
+| 内容生命周期       | 删 `node` 只删实例；零引用 `note` 保留为 **detached note**，可在笔记库中找回                             | 避免误删共享内容，也避免内容文件无入口可找回                               |
 | Folder 范围        | Folder 是内容集合，不是万能容器；可收纳 Card/Checklist/Image/Asset/Link，不收纳 Folder/Group/Sticky | 保持 Folder 的资料夹语义，避免递归层级、空间布局和临时便签混进同一个模型 |
 | Folder Card 子节点  | 与顶层 Card 对等：独立 `.md` + `noteId`；manifest 仅保留 `{ id, noteId, type, data: { noteId, file, type } }` 引用（M5 ✅）       | 外部编辑器可见、可跨画布复用 noteId；消除早期「仅画布内可见」降级定位       |
 | Folder Image 子节点 | 继续使用 `attachments/` + `imageFile` 指针，不分配 `noteId`                                       | Image 没有文本正文概念，附件模式已足够；保持与顶层 Image 节点一致                                 |
@@ -646,10 +643,8 @@ updatedAt: 2026-03-31T14:30:00Z
 | 13   | **Group 嵌套** — 多级 parentId + 防循环                            | 中     | ✅ 已完成 |
 | 13.1 | **画布标题栏模糊** — 顶部工具栏背景模糊效果                          | 低     | ✅ 已完成 |
 | 14   | **画布导出 PNG/JSON**                                              | 低     | ✅ 已完成 |
-| 14.1 | **~~文档模式（Document Layout）~~** — 已下线，替代方案：笔记库弹窗（§2.12）       | —     | ⛔ 已移除 |
 | 14.2 | **Folder Card 子节点迁移 noteId + 独立 .md**（M5）                     | 中     | ✅ 已完成 |
 | 14.3 | **设置窗口（theme / locale / trash / unlinked cleanup）**            | 低     | ✅ 已完成 |
-| 14.4 | **~~文档模式 i18n~~** — 已随 §2.12 下线                              | —     | ⛔ 已移除 |
 | 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮子菜单、`/templates` 列表、`/templates/$templateId` 只读预览、基于模板创建新画布 | 高     | ✅ MVP 已完成 / ⚠️ P5 收尾待补 |
 | 14.6 | **Per-view Viewport 持久化** — 每个画布的 ReactFlow viewport（x/y/zoom）随 `.canvas.json` 持久化，切换画布/重启后恢复 | 低     | ✅ 已完成 |
 | 14.7 | **活跃画布持久化** — `activeViewId` 写入 `workspace.json`，重启后恢复到上次使用的画布 | 低     | ✅ 已完成 |
@@ -692,7 +687,6 @@ updatedAt: 2026-03-31T14:30:00Z
 
 | ID | 题目 | 背景与选项 | 状态 |
 | --- | --- | --- | --- |
-| OD-1 | **Document Workspace 信息架构** | 当前实现是 canvas-derived：从 active canvas manifest 派生 All/Folders/Types。早期 PRD 目标是 filesystem-first：直接浏览 `content/**/*.md` 文件树。选项：① 接受当前方向并将功能命名为 Canvas Document Mode；② 回到 filesystem-first，新增真实文件树、目录 CRUD、文件移动/重命名、引用保护和 Add to Canvas。 | 待决 |
 | OD-2 | **搜索范围** | 当前搜索 MVP 覆盖画布可定位对象和其 Markdown 正文，但 Folder children 与未被 manifest 引用的 `.md` 仍可能漏搜。选项：① 只承诺 canvas-addressable 搜索；② 搜索整个 workspace 文档库；③ 搜索结果区分 placed / detached / unlinked。 | 待决 |
 | OD-3 | **多 Workspace 管理** | 当前固定打开默认 workspace；多 workspace 需要欢迎页、recentWorkspaces、activeWorkspace、workspace switch、app-level config。 | 待实现 |
 | OD-4 | **app-level vs workspace-level settings** | 当前设置在 `.ghostboard/settings.json`；多 workspace 目标需要 `~/.ghostboard/app-config.json`。需要决定 theme/locale/trash cleanup 等设置的归属。 | 待决 |
@@ -700,15 +694,7 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ### 8.2 产品体验未决策
 
-| ID | 题目 | 背景与选项 | 状态 |
-| --- | --- | --- | --- |
-| ~~OD-6~~ | ~~Sticky 在文档模式的曝光~~ | 随旧文档模式下线；Sticky 仍仅在画布渲染。 | ⛔ 已关闭 |
-| ~~OD-8~~ | ~~layoutMode 的作用域~~ | 旧文档模式整体下线，不再需要 per-view layoutMode 持久化。 | ⛔ 已关闭 |
-| ~~OD-9~~ | ~~模式切换时的 viewport / 编辑态细节~~ | 不再有「模式切换」概念。 | ⛔ 已关闭 |
-| ~~OD-10~~ | ~~导出 PNG/SVG 在文档模式的语义~~ | 画布模式导出语义即唯一语义。 | ⛔ 已关闭 |
-| ~~OD-11~~ | ~~Image / Asset / Link 在文档模式的编辑性~~ | 这些类型的编辑统一收敛到 FocusedView。 | ⛔ 已关闭 |
-| ~~OD-12~~ | ~~Checklist 在文档模式的形态~~ | Checklist 仅在画布/FocusedView 内编辑，沿用结构化 `data.items`。 | ⛔ 已关闭 |
-| ~~OD-13~~ | ~~左栏 ARIA tree role 规范~~ | LeftRail 随文档模式下线，无需 ARIA tree 规范。 | ⛔ 已关闭 |
+> 暂无。
 
 ### 8.3 已知待办
 
@@ -727,7 +713,6 @@ updatedAt: 2026-03-31T14:30:00Z
 
 | 决策摘要 | 落地位置 |
 | --- | --- |
-| 双布局（画布 + 文档）整体下线，替代方案为笔记库弹窗 | §2.12、[`Planned/笔记库弹窗-替代文档模式.md`](./features/Planned/笔记库弹窗-替代文档模式.md) |
 | Folder Card 子节点强制 `noteId + .md`（M5） | §5.1、§5.6、§5.10 |
 | Folder 是内容集合，不是万能容器；允许 Card/Checklist/Image/Asset/Link，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
 | Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |

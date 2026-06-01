@@ -23,7 +23,8 @@ interface UseNodeTagEditingResult {
  * Shared TagEditor wiring for any canvas node type that supports tags. Looks
  * up metadata by `data.noteId` (cards) or React Flow `nodeId` (non-card).
  * Writes go through the `useSetNodeMetadata` mutation, never into the node's
- * own `data` blob — see ADR 0001.
+ * own `data` blob — tag metadata lives in the workspace-level
+ * node-metadata sidecar.
  */
 export function useNodeTagEditing(
   nodeId: string,

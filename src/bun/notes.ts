@@ -387,7 +387,7 @@ export function cardDataToNote(
   };
 
   // Optional fields. Tag / tagColor / tags are not persisted here — they
-  // live in the workspace-level node-metadata sidecar (see ADR 0001).
+  // live in the workspace-level node-metadata sidecar.
   if (data.pieData) {
     frontmatter.pieData = data.pieData;
   }

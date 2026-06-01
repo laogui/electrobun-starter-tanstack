@@ -72,32 +72,47 @@ export function LibraryCard({ item, onClick }: LibraryCardProps) {
   );
   const title =
     item.title.trim().length > 0 ? item.title : m.library_untitled();
+  // Only treat hex colors as renderable; semantic tokens (e.g. group "blue")
+  // don't apply to focusable library items but guard anyway.
+  const hexColor =
+    typeof item.color === 'string' && item.color.startsWith('#')
+      ? item.color
+      : undefined;
+  const hasColor = Boolean(hexColor);
   return (
     <button
       className={cn(
-        'group relative flex w-[152px] flex-col gap-1.5 overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-3 text-left transition-all hover:bg-accent/50 hover:shadow-md'
+        'group relative flex h-[108px] flex-col gap-2 overflow-hidden rounded-xl border border-gray-200/80 bg-white p-3 text-left transition-all',
+        'hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]',
+        'dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/70'
       )}
       onClick={() => onClick(item)}
       type="button"
     >
-      {item.color ? (
+      {hasColor ? (
         <span
           aria-hidden
-          className="absolute inset-x-0 top-0 h-[3px]"
-          style={{ backgroundColor: item.color }}
+          className="absolute inset-y-0 left-0 w-[3px] rounded-l-xl"
+          style={{ backgroundColor: hexColor }}
         />
       ) : null}
-      <Icon
+      <span
         aria-hidden
-        className="text-muted-foreground"
-        size={14}
-        strokeWidth={1.6}
-      />
-      <span className="line-clamp-2 font-medium text-[13px] text-foreground leading-snug">
+        className={cn(
+          'flex size-7 items-center justify-center rounded-md text-gray-600 transition-colors dark:text-neutral-300',
+          hasColor
+            ? 'group-hover:opacity-90'
+            : 'bg-gray-100 group-hover:bg-gray-200/70 dark:bg-neutral-800 dark:group-hover:bg-neutral-700'
+        )}
+        style={hasColor ? { backgroundColor: `${hexColor}66` } : undefined}
+      >
+        <Icon aria-hidden size={14} strokeWidth={1.75} />
+      </span>
+      <span className="line-clamp-2 font-medium text-[13px] text-gray-900 leading-snug dark:text-gray-100">
         {title}
       </span>
       {relative ? (
-        <span className="mt-auto text-[11px] text-muted-foreground">
+        <span className="mt-auto text-[11px] text-gray-400 dark:text-neutral-500">
           {relative}
         </span>
       ) : null}

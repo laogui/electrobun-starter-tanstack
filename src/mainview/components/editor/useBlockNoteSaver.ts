@@ -58,8 +58,8 @@ export interface BlockNoteSavePayload {
 
 /**
  * Debounced saver for BlockNote documents. Mirrors the Tiptap useNoteSaver
- * lifecycle (blur / hidden / unmount flush) but persists both a JSON sidecar
- * and a Markdown mirror through `rpcSaveBlockNote`.
+ * lifecycle (blur / hidden / unmount flush) but persists only the JSON
+ * sidecar through `rpcSaveBlockNote`.
  */
 export function useBlockNoteSaver({
   debounceMs = DEFAULT_DEBOUNCE_MS,

@@ -1,5 +1,5 @@
 import type { ReactFlowInstance } from '@xyflow/react';
-import { Folder, Search, X } from 'lucide-react';
+import { ChevronDown, Folder, Library, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -126,7 +126,7 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
           />
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
-            className="relative flex max-h-[70vh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-neutral-900"
+            className="relative flex max-h-[72vh] w-full max-w-[820px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(15,23,42,0.25)] ring-1 ring-black/[0.04] dark:bg-neutral-900 dark:shadow-[0_24px_64px_-16px_rgba(0,0,0,0.6)] dark:ring-white/[0.06]"
             exit={{ opacity: 0, scale: 0.96 }}
             initial={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
@@ -167,40 +167,59 @@ function LibraryHeader({
   sort,
 }: LibraryHeaderProps) {
   return (
-    <div className="flex items-center gap-2 border-border/60 border-b px-4 py-3">
-      <h2 className="font-semibold text-[13px] text-foreground">
-        📚 {m.library_title()}
-      </h2>
-      <div className="ml-2 flex flex-1 items-center gap-2 rounded-md bg-muted/50 px-2">
-        <Search aria-hidden className="text-muted-foreground" size={14} />
+    <div className="flex items-center gap-3 border-gray-100 border-b px-5 py-4 dark:border-neutral-800">
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="flex size-7 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300"
+        >
+          <Library size={15} strokeWidth={1.75} />
+        </span>
+        <h2 className="font-semibold text-[15px] text-gray-900 tracking-tight dark:text-gray-100">
+          {m.library_title()}
+        </h2>
+      </div>
+      <div className="ml-2 flex h-9 flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 transition-colors focus-within:border-gray-300 focus-within:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:focus-within:border-neutral-600 dark:focus-within:bg-neutral-800">
+        <Search
+          aria-hidden
+          className="text-gray-400 dark:text-neutral-500"
+          size={15}
+        />
         <input
           aria-label={m.library_search_placeholder()}
-          className="h-8 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
+          className="h-full flex-1 bg-transparent text-[13px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-neutral-500"
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={m.library_search_placeholder()}
           type="text"
           value={query}
         />
       </div>
-      <select
-        aria-label={m.library_sort_label()}
-        className="h-8 rounded-md border border-border/60 bg-transparent px-2 text-[12px] outline-none"
-        onChange={(e) => onSortChange(e.target.value as LibrarySortKey)}
-        value={sort}
-      >
-        {SORT_OPTIONS.map((opt) => (
-          <option key={opt.key} value={opt.key}>
-            {opt.label()}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          aria-label={m.library_sort_label()}
+          className="h-9 appearance-none rounded-lg border border-gray-200 bg-white py-0 pr-8 pl-3 text-[12px] text-gray-700 outline-none transition-colors hover:border-gray-300 focus:border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:focus:border-neutral-600 dark:hover:border-neutral-600"
+          onChange={(e) => onSortChange(e.target.value as LibrarySortKey)}
+          value={sort}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>
+              {opt.label()}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-gray-400 dark:text-neutral-500"
+          size={13}
+        />
+      </div>
       <button
         aria-label={m.library_close()}
-        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex size-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
         onClick={onClose}
         type="button"
       >
-        <X size={14} />
+        <X size={15} />
       </button>
     </div>
   );
@@ -221,7 +240,7 @@ function LibraryBody({
 }: LibraryBodyProps) {
   if (totalItems === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 py-10 text-center text-muted-foreground text-sm">
+      <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-gray-400 text-sm dark:text-neutral-500">
         {query.trim().length > 0
           ? m.library_empty_search({ query: query.trim() })
           : m.library_empty()}
@@ -229,7 +248,7 @@ function LibraryBody({
     );
   }
   return (
-    <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
+    <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-5">
       {groups.map((group) => (
         <LibraryGroupSection
           group={group}
@@ -249,13 +268,24 @@ interface LibraryGroupSectionProps {
 function LibraryGroupSection({ group, onItemClick }: LibraryGroupSectionProps) {
   const heading = headingFor(group);
   return (
-    <section className="mb-5 last:mb-0">
-      <div className="mb-2 flex items-center gap-1.5 px-1 font-medium text-muted-foreground text-xs">
-        {group.kind === 'folder' ? <Folder aria-hidden size={12} /> : null}
-        <span>{heading}</span>
-        <span className="text-muted-foreground/70">({group.items.length})</span>
+    <section className="mb-7 last:mb-0">
+      <div className="mb-3 flex items-center gap-2 px-0.5">
+        {group.kind === 'folder' ? (
+          <Folder
+            aria-hidden
+            className="text-gray-400 dark:text-neutral-500"
+            size={13}
+            strokeWidth={1.75}
+          />
+        ) : null}
+        <h3 className="font-semibold text-[12px] text-gray-700 uppercase tracking-wider dark:text-neutral-300">
+          {heading}
+        </h3>
+        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-[10px] text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+          {group.items.length}
+        </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(152px,1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3">
         {group.items.map((item) => (
           <LibraryCard item={item} key={item.id} onClick={onItemClick} />
         ))}

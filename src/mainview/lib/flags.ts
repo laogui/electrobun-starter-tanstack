@@ -9,5 +9,4 @@
 export const FLAGS = {
   markdownPreview: true,
   focusedNoteEditor: true,
-  blocknoteMarkdownMirror: true,
 } as const;

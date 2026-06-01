@@ -132,8 +132,16 @@ describe('searchCurrentView', () => {
         noteId: 'note-sprint',
       }),
     ];
-    const meta: NodeMetadataMap = { 'note-sprint': { tags: ['Planning', 'Engineering'] } };
-    const results = searchCurrentView('engineering', nodes, 'v1', 'View 1', meta);
+    const meta: NodeMetadataMap = {
+      'note-sprint': { tags: ['Planning', 'Engineering'] },
+    };
+    const results = searchCurrentView(
+      'engineering',
+      nodes,
+      'v1',
+      'View 1',
+      meta
+    );
     const tagHit = results.find((r) => r.matchField === 'tag');
     expect(tagHit).toBeDefined();
   });
@@ -176,7 +184,13 @@ describe('searchCurrentView', () => {
     const meta: NodeMetadataMap = {
       'unrelated-id': { tag: 'Irrelevant' },
     };
-    const results = searchCurrentView('irrelevant', nodes, 'v1', 'View 1', meta);
+    const results = searchCurrentView(
+      'irrelevant',
+      nodes,
+      'v1',
+      'View 1',
+      meta
+    );
     expect(results.find((r) => r.matchField === 'tag')).toBeUndefined();
   });
 });

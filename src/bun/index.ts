@@ -38,6 +38,7 @@ import {
   deleteTagEverywhere,
   listAllTagsFromMetadata,
   loadAllMetadata,
+  migrateLegacyTagsFromNotes,
   type NodeMetadata,
   type NodeMetadataMap,
   renameTagEverywhere,
@@ -875,6 +876,7 @@ async function main() {
 
   const wsPath = initWorkspace();
   await seedFirstRunIfNeeded(wsPath);
+  await migrateLegacyTagsFromNotes(wsPath);
   await loadSettings(wsPath);
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);

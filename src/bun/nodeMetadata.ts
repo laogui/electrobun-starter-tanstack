@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 
+import { listFilesRecursive, loadNote } from './notes';
 import { atomicWrite } from './workspace';
 
 export interface NodeMetadata {
@@ -301,6 +302,77 @@ export async function listAllTagsFromMetadata(
       }
       return a.name.localeCompare(b.name);
     });
+}
+
+/**
+ * Check every `.md` file under `content/` for legacy frontmatter
+ * `tag` / `tagColor` / `tags` fields and migrate them into the
+ * node-metadata sidecar. Idempotent — entries that already exist in the
+ * sidecar are left untouched. Run once at workspace init after seeding so
+ * existing workspaces with old-format frontmatter tags get picked up.
+ */
+export async function migrateLegacyTagsFromNotes(
+  wsPath: string
+): Promise<void> {
+  await loadAllMetadata(wsPath);
+  const s = getState(wsPath);
+  const contentDir = join(wsPath, 'content');
+  const files = listFilesRecursive(contentDir);
+  let dirty = false;
+
+  for (const rel of files) {
+    if (!rel.endsWith('.md')) {
+      continue;
+    }
+    const doc = await loadNote(wsPath, `content/${rel}`);
+    if (!doc?.frontmatter?.id) {
+      continue;
+    }
+    const noteId = doc.frontmatter.id as string;
+    if (s.entries[noteId]) {
+      continue;
+    }
+
+    const fmTag = doc.frontmatter.tag as string | undefined;
+    const fmTagColor = doc.frontmatter.tagColor as string | undefined;
+    const fmTags = doc.frontmatter.tags as string[] | undefined;
+
+    const hasTag = typeof fmTag === 'string' && fmTag.trim().length > 0;
+    const hasTagColor =
+      typeof fmTagColor === 'string' && fmTagColor.trim().length > 0;
+    const hasTags =
+      Array.isArray(fmTags) &&
+      fmTags.filter((t) => typeof t === 'string' && t.trim().length > 0)
+        .length > 0;
+
+    if (!(hasTag || hasTagColor || hasTags)) {
+      continue;
+    }
+
+    const meta: NodeMetadata = {};
+    if (hasTag) {
+      meta.tag = fmTag!.trim().slice(0, MAX_TAG_LENGTH);
+    }
+    if (hasTagColor) {
+      meta.tagColor = fmTagColor!.trim();
+    }
+    if (hasTags) {
+      const clean = fmTags!
+        .filter((t): t is string => typeof t === 'string')
+        .map((t) => t.trim().slice(0, MAX_TAG_LENGTH))
+        .filter(Boolean);
+      if (clean.length > 0) {
+        meta.tags = [...new Set(clean)];
+      }
+    }
+
+    s.entries[noteId] = meta;
+    dirty = true;
+  }
+
+  if (dirty) {
+    scheduleFlush(wsPath);
+  }
 }
 
 /**

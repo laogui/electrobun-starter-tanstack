@@ -1,6 +1,8 @@
 import type { Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
+import type { NodeMetadataMap } from '@/hooks/useNodeMetadata';
+
 import { searchCurrentView } from './useSearch';
 
 function makeNode(
@@ -107,5 +109,74 @@ describe('searchCurrentView', () => {
     const results = searchCurrentView('standalone', nodes, 'v1', 'View 1');
     expect(results).toHaveLength(1);
     expect(results[0]?.matchField).toBe('title');
+  });
+
+  it('matches primary tag from metadata map (card keyed on noteId)', () => {
+    const nodes = [
+      makeNode('card-1', 'note', {
+        title: 'Quarterly goals',
+        noteId: 'note-work',
+      }),
+    ];
+    const meta: NodeMetadataMap = { 'note-work': { tag: 'Work' } };
+    const results = searchCurrentView('work', nodes, 'v1', 'View 1', meta);
+    const tagHit = results.find((r) => r.matchField === 'tag');
+    expect(tagHit).toBeDefined();
+    expect(tagHit?.kind).toBe('card');
+  });
+
+  it('matches tags[] array from metadata map (card keyed on noteId)', () => {
+    const nodes = [
+      makeNode('card-1', 'note', {
+        title: 'Sprint planning',
+        noteId: 'note-sprint',
+      }),
+    ];
+    const meta: NodeMetadataMap = { 'note-sprint': { tags: ['Planning', 'Engineering'] } };
+    const results = searchCurrentView('engineering', nodes, 'v1', 'View 1', meta);
+    const tagHit = results.find((r) => r.matchField === 'tag');
+    expect(tagHit).toBeDefined();
+  });
+
+  it('matches metadata tags for non-card nodes keyed on nodeId', () => {
+    const nodes = [
+      makeNode('sticky-1', 'sticky', {
+        content: 'Reminder: deploy at 5pm',
+      }),
+    ];
+    const meta: NodeMetadataMap = { 'sticky-1': { tags: ['urgent'] } };
+    const results = searchCurrentView('urgent', nodes, 'v1', 'View 1', meta);
+    const tagHit = results.find((r) => r.matchField === 'tag');
+    expect(tagHit).toBeDefined();
+    expect(tagHit?.kind).toBe('sticky');
+  });
+
+  it('matches primary tag and tags[] array case-insensitively', () => {
+    const nodes = [
+      makeNode('card-1', 'note', {
+        title: 'Travel notes',
+        noteId: 'note-travel',
+      }),
+    ];
+    const meta: NodeMetadataMap = {
+      'note-travel': { tag: 'Travel', tags: ['Japan', 'Kyoto'] },
+    };
+    const results = searchCurrentView('japan', nodes, 'v1', 'View 1', meta);
+    const tagHit = results.find((r) => r.matchField === 'tag');
+    expect(tagHit).toBeDefined();
+  });
+
+  it('ignores nodes without matching ids in the metadata map', () => {
+    const nodes = [
+      makeNode('card-1', 'note', {
+        title: 'Untagged note',
+        noteId: 'note-no-tag',
+      }),
+    ];
+    const meta: NodeMetadataMap = {
+      'unrelated-id': { tag: 'Irrelevant' },
+    };
+    const results = searchCurrentView('irrelevant', nodes, 'v1', 'View 1', meta);
+    expect(results.find((r) => r.matchField === 'tag')).toBeUndefined();
   });
 });

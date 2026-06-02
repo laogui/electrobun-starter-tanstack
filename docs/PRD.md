@@ -708,6 +708,15 @@ updatedAt: 2026-03-31T14:30:00Z
 | TODO-6 | **模板库 P5 收尾** | 补模板数量，接入 thumbnail，删除 `preview-test` 路由，决定从模板创建的画布命名规则，考虑 URL query 同步与 i18n metadata。 | P1 |
 | TODO-7 | **Multi-workspace** | 欢迎页、创建/打开/切换 workspace、recent list、app config、settings 迁移策略。 | P2 |
 | TODO-8 | **独立 saveNote debounce** | 当前正文修改主要经 manifest 保存链路写回；若后续编辑场景变重，需要独立内容保存队列。 | P2 |
+| TODO-9 | **ContextMenu 多选批量操作** | 当 `selectedNodes.length > 1` 时显示批量菜单：Delete N items / Copy N items / Change color。当前右键菜单只对单个节点生效，多选后批量改色/批量删除/批量复制无法走右键流程。来源：原 UX 审计 8.2.1。 | P2 |
+| TODO-10 | **FocusedView 遮罩关闭保存确认** | 检测 BlockNote 是否有未 flush 的修改，有则弹出 "Discard changes?" 确认。当前点击黑色遮罩直接 `onClose()`（[FocusedView.tsx#L291](./../src/mainview/components/canvas/FocusedView.tsx)），debounce 未到期的编辑可能丢失。来源：原 UX 审计 8.5.3。 | P2 |
+| TODO-11 | **FocusedView 上一条/下一条快捷键** | 现已有 `<`/`>` 按钮（[FocusedView.tsx#L312-L358](./../src/mainview/components/canvas/FocusedView.tsx)），缺 `Cmd+←` / `Cmd+→` 键盘绑定。来源：原 UX 审计 8.5.1。 | P2 |
+| TODO-12 | **FocusedView 卡片位置面包屑** | 在返回按钮旁显示 `{FolderName} > {CardTitle}`，让聚焦中的卡片有归属感（尤其是 Folder child）。来源：原 UX 审计 8.5.2。 | P3 |
+| TODO-13 | **ContextMenu「复制为 Markdown」** | 卡片右键新增 "Copy as Markdown"，把标题 + 正文写入剪贴板。当前只有 `export-markdown`（导出为文件），无快速复制到剪贴板的入口。来源：原 UX 审计 8.2.2。 | P3 |
+| TODO-14 | **SearchDialog 搜索历史** | 用 `localStorage` 保存最近 5–10 条查询，打开搜索时显示 "Recent searches"。来源：原 UX 审计 8.3.2。 | P3 |
+| TODO-15 | **SearchDialog 按类型筛选 chips** | 在搜索框下方加 `All / Notes / Folders / Links / Images` chips，支持「只搜某类」。来源：原 UX 审计 8.3.3。 | P3 |
+| TODO-16 | **BlockNote 字数/词数统计** | 聚焦模式编辑器底部或工具栏展示字数/词数；可考虑选区统计。来源：原 UX 审计 8.1。 | P3 |
+| TODO-17 | **BlockNote 查找替换** | 当前 BlockNote 无内置 find/replace；接入或自研一个轻量查找替换面板，至少支持 `Cmd+F` 高亮匹配。来源：原 UX 审计 8.1。 | P3 |
 
 ### 8.4 已落地的关键决策映射（供回查）
 

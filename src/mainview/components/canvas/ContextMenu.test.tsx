@@ -25,6 +25,14 @@ vi.mock('@/store/canvasStore', () => ({
 }));
 
 vi.mock('../../../paraglide/messages.js', () => ({
+  menu_note: () => 'Note',
+  menu_checklist: () => 'Checklist',
+  menu_sticky: () => 'Sticky',
+  menu_image: () => 'Image',
+  menu_link: () => 'Link',
+  menu_folder: () => 'Folder',
+  menu_group: () => 'Group',
+  menu_file: () => 'File',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',

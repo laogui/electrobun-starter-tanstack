@@ -89,6 +89,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_checklist: () => 'Checklist',
   menu_sticky: () => 'Sticky',
   menu_image: () => 'Image',
+  menu_link: () => 'Link',
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',

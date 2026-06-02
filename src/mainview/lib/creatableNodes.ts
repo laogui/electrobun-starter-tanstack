@@ -1,3 +1,15 @@
+import {
+  File,
+  Folder,
+  Group,
+  ImageIcon,
+  Link as LinkIcon,
+  ListChecks,
+  NotebookPen,
+  StickyNote,
+} from 'lucide-react';
+import type { ElementType } from 'react';
+import * as m from '../../paraglide/messages.js';
 import type { CreatableCanvasNodeKind } from './contentTypes';
 
 /**
@@ -24,6 +36,78 @@ export const CREATABLE_KIND_BY_ACTION = {
 
 /** Canonical (prefix-free) creation action id. */
 export type CreateActionId = keyof typeof CREATABLE_KIND_BY_ACTION;
+
+export type CreatableMenuLabelStyle = 'short' | 'new';
+
+export interface CreatableMenuItem {
+  enabled: true;
+  icon: ElementType;
+  id: CreateActionId;
+  label: string;
+}
+
+interface CreatableMenuDefinition {
+  icon: ElementType;
+  id: CreateActionId;
+  labels: Record<CreatableMenuLabelStyle, () => string>;
+}
+
+const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
+  {
+    id: 'note',
+    icon: StickyNote,
+    labels: { short: () => m.menu_note(), new: () => m.menu_new_note() },
+  },
+  {
+    id: 'checklist',
+    icon: ListChecks,
+    labels: {
+      short: () => m.menu_checklist(),
+      new: () => m.menu_new_checklist(),
+    },
+  },
+  {
+    id: 'sticky',
+    icon: NotebookPen,
+    labels: { short: () => m.menu_sticky(), new: () => m.menu_new_sticky() },
+  },
+  {
+    id: 'image',
+    icon: ImageIcon,
+    labels: { short: () => m.menu_image(), new: () => m.menu_new_image() },
+  },
+  {
+    id: 'link',
+    icon: LinkIcon,
+    labels: { short: () => m.menu_link(), new: () => m.menu_new_link() },
+  },
+  {
+    id: 'folder',
+    icon: Folder,
+    labels: { short: () => m.menu_folder(), new: () => m.menu_new_folder() },
+  },
+  {
+    id: 'group',
+    icon: Group,
+    labels: { short: () => m.menu_group(), new: () => m.menu_new_group() },
+  },
+  {
+    id: 'file',
+    icon: File,
+    labels: { short: () => m.menu_file(), new: () => m.menu_new_file() },
+  },
+];
+
+export function getCreatableMenuItems(
+  labelStyle: CreatableMenuLabelStyle
+): CreatableMenuItem[] {
+  return CREATABLE_MENU_DEFINITIONS.map((item) => ({
+    enabled: true,
+    icon: item.icon,
+    id: item.id,
+    label: item.labels[labelStyle](),
+  }));
+}
 
 const NEW_ACTION_PREFIX = /^new-/;
 

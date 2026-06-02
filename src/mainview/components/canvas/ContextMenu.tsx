@@ -2,10 +2,13 @@ import {
   BookOpen,
   ClipboardPaste,
   Copy,
+  File,
   FileDown,
   FilePlus,
   FolderOpen,
+  ImageIcon,
   Link2,
+  ListChecks,
   LogOut,
   Maximize2,
   Palette,
@@ -52,9 +55,13 @@ type ContextMenuState = {
 
 const getCanvasItems = (): MenuItem[] => [
   { id: 'new-note', label: m.menu_new_note(), icon: PenLine },
+  { id: 'new-checklist', label: m.menu_new_checklist(), icon: ListChecks },
   { id: 'new-sticky', label: m.menu_new_sticky(), icon: PenLine },
+  { id: 'new-image', label: m.menu_new_image(), icon: ImageIcon },
+  { id: 'new-link', label: m.menu_new_link(), icon: Link2 },
   { id: 'new-folder', label: m.menu_new_folder(), icon: FolderOpen },
   { id: 'new-group', label: m.menu_new_group(), icon: Sparkles },
+  { id: 'new-file', label: m.menu_new_file(), icon: File },
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
   {

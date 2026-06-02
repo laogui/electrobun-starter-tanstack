@@ -29,8 +29,10 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',
   menu_new_image: () => 'New image',
+  menu_new_link: () => 'New link',
   menu_new_folder: () => 'New folder',
   menu_new_group: () => 'New group',
+  menu_new_file: () => 'New file',
   menu_paste: () => 'Paste',
   menu_reset_zoom: () => 'Reset zoom',
   menu_open_focused: () => 'Open focused',
@@ -88,9 +90,15 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    expect(screen.getAllByRole('button')).toHaveLength(7);
+    expect(screen.getAllByRole('button')).toHaveLength(11);
     expect(
       screen.getByRole('button', { name: NEW_NOTE_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'New link' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'New file' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })

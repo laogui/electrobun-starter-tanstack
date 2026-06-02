@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import { resolveCreatableKind } from '@/lib/creatableNodes';
 import {
   isRpcAvailable,
   rpcCreateView,
@@ -579,17 +580,7 @@ export function ViewSwitcher({
                         disabled={!item.enabled}
                         key={item.id}
                         onClick={() => {
-                          const map: Record<string, CreatableCanvasNodeKind> = {
-                            note: 'card',
-                            checklist: 'checklist',
-                            sticky: 'sticky',
-                            image: 'image',
-                            link: 'link',
-                            folder: 'folder',
-                            group: 'group',
-                            file: 'asset',
-                          };
-                          const type = map[item.id];
+                          const type = resolveCreatableKind(item.id);
                           if (type) {
                             if (type === 'link') {
                               setLinkFormOpen(true);

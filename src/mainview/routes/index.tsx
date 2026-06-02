@@ -25,6 +25,7 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LibraryButton } from '@/components/canvas/LibraryButton';
+import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
@@ -51,7 +52,12 @@ import {
 } from '@/lib/canvasExport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
-import { createLinkNodeData, extractLinkUrl } from '@/lib/contentTypes';
+import {
+  type CreatableCanvasNodeKind,
+  createLinkNodeData,
+  extractLinkUrl,
+} from '@/lib/contentTypes';
+import type { CanvasCreateRequest } from '@/lib/creatableNodes';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import {
   type ConnectionStartState,
@@ -221,6 +227,61 @@ function CanvasComponent() {
     [onCreateNode]
   );
 
+  const [linkPrompt, setLinkPrompt] = useState<{
+    anchorCenter?: { x: number; y: number };
+    screen?: { x: number; y: number };
+  } | null>(null);
+  const assetFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingAssetAnchorRef = useRef<{ x: number; y: number } | undefined>(
+    undefined
+  );
+
+  // Unified create entry point shared with the canvas right-click menu. Plain
+  // kinds are created immediately; `link` opens the URL popover and `asset`
+  // opens the file picker, mirroring the bottom create menu's special flows.
+  const requestCreate = useCallback(
+    (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
+      if (kind === 'link') {
+        setLinkPrompt({
+          anchorCenter: request?.anchorCenter,
+          screen: request?.screen,
+        });
+        return;
+      }
+      if (kind === 'asset') {
+        pendingAssetAnchorRef.current = request?.anchorCenter;
+        assetFileInputRef.current?.click();
+        return;
+      }
+      onCreateNode(
+        kind,
+        request?.anchorCenter
+          ? { anchorCenter: request.anchorCenter }
+          : undefined
+      );
+    },
+    [onCreateNode]
+  );
+
+  const onAssetFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) {
+        return;
+      }
+      const anchor =
+        pendingAssetAnchorRef.current ??
+        screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        });
+      pendingAssetAnchorRef.current = undefined;
+      createAssetsFromFiles([file], anchor);
+    },
+    [createAssetsFromFiles, screenToFlowPosition]
+  );
+
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
   const savedViewport = useCanvasStore((s) => s.viewport);
@@ -284,7 +345,11 @@ function CanvasComponent() {
     onNodeContextMenu,
     onEdgeContextMenu,
     handleContextMenuAction,
-  } = useContextMenu({ onDeleteNodes: requestDeleteNodes, rfInstance });
+  } = useContextMenu({
+    onDeleteNodes: requestDeleteNodes,
+    onRequestCreate: requestCreate,
+    rfInstance,
+  });
 
   useCanvasPersistence();
 
@@ -798,6 +863,31 @@ function CanvasComponent() {
         }}
       />
       <SearchDialog rfInstance={rfInstance} />
+
+      <input
+        className="hidden"
+        onChange={onAssetFileInputChange}
+        ref={assetFileInputRef}
+        type="file"
+      />
+
+      {linkPrompt ? (
+        <LinkCreatePopover
+          onClose={() => {
+            setLinkPrompt(null);
+          }}
+          onCreate={(data) => {
+            onCreateNode('link', {
+              ...(linkPrompt.anchorCenter
+                ? { anchorCenter: linkPrompt.anchorCenter }
+                : {}),
+              data: { ...data },
+            });
+            setLinkPrompt(null);
+          }}
+          screen={linkPrompt.screen}
+        />
+      ) : null}
     </div>
   );
 }

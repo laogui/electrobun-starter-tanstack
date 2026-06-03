@@ -5,7 +5,7 @@ import {
   FileDown,
   FilePlus,
   FolderOpen,
-  Link2,
+  Link as LinkIcon,
   LogOut,
   Maximize2,
   Palette,
@@ -19,6 +19,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 
+import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -51,10 +52,11 @@ type ContextMenuState = {
 } | null;
 
 const getCanvasItems = (): MenuItem[] => [
-  { id: 'new-note', label: m.menu_new_note(), icon: PenLine },
-  { id: 'new-sticky', label: m.menu_new_sticky(), icon: PenLine },
-  { id: 'new-folder', label: m.menu_new_folder(), icon: FolderOpen },
-  { id: 'new-group', label: m.menu_new_group(), icon: Sparkles },
+  ...getCreatableMenuItems('new').map((item) => ({
+    id: `new-${item.id}`,
+    label: item.label,
+    icon: item.icon,
+  })),
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
   {
@@ -157,7 +159,7 @@ const getLinkItems = (): MenuItem[] => [
     icon: Maximize2,
     shortcut: 'Enter',
   },
-  { id: 'edit-url', label: 'Edit URL', icon: Link2 },
+  { id: 'edit-url', label: 'Edit URL', icon: LinkIcon },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },

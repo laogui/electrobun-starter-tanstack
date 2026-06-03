@@ -8,23 +8,15 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
-  File,
   FileImage,
   FileJson,
-  Folder,
   Grid2X2,
-  Group,
-  ImageIcon,
   Kanban,
   Layers,
-  Link as LinkIcon,
-  ListChecks,
-  NotebookPen,
   Pencil,
   Plus,
   Rocket,
   RotateCcw,
-  StickyNote,
   Trash2,
   X,
 } from 'lucide-react';
@@ -35,6 +27,10 @@ import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import {
+  getCreatableMenuItems,
+  resolveCreatableKind,
+} from '@/lib/creatableNodes';
 import {
   isRpcAvailable,
   rpcCreateView,
@@ -51,22 +47,6 @@ import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
 import { DeleteViewConfirmDialog } from './DeleteViewConfirmDialog';
 import { LinkCreateForm } from './LinkCreateForm';
-
-const getCreateMenuItems = () => [
-  { id: 'note', label: m.menu_note(), icon: StickyNote, enabled: true },
-  {
-    id: 'checklist',
-    label: m.menu_checklist(),
-    icon: ListChecks,
-    enabled: true,
-  },
-  { id: 'sticky', label: m.menu_sticky(), icon: NotebookPen, enabled: true },
-  { id: 'image', label: m.menu_image(), icon: ImageIcon, enabled: true },
-  { id: 'link', label: 'Link', icon: LinkIcon, enabled: true },
-  { id: 'folder', label: m.menu_folder(), icon: Folder, enabled: true },
-  { id: 'group', label: m.menu_group(), icon: Group, enabled: true },
-  { id: 'file', label: m.menu_file(), icon: File, enabled: true },
-];
 
 const getQuickTemplateItems = () => [
   {
@@ -420,6 +400,8 @@ export function ViewSwitcher({
     [onCreateNode, setCreateMenuOpen]
   );
 
+  const createMenuItems = getCreatableMenuItems('short');
+
   return (
     <>
       <input
@@ -563,10 +545,10 @@ export function ViewSwitcher({
                 sideOffset={12}
               >
                 <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
-                  {getCreateMenuItems().map((item, index) => {
+                  {createMenuItems.map((item, index) => {
                     const isLast =
                       !onOpenNoteLibrary &&
-                      index === getCreateMenuItems().length - 1;
+                      index === createMenuItems.length - 1;
                     return (
                       <Menu.Item
                         aria-label={item.label}
@@ -579,17 +561,7 @@ export function ViewSwitcher({
                         disabled={!item.enabled}
                         key={item.id}
                         onClick={() => {
-                          const map: Record<string, CreatableCanvasNodeKind> = {
-                            note: 'card',
-                            checklist: 'checklist',
-                            sticky: 'sticky',
-                            image: 'image',
-                            link: 'link',
-                            folder: 'folder',
-                            group: 'group',
-                            file: 'asset',
-                          };
-                          const type = map[item.id];
+                          const type = resolveCreatableKind(item.id);
                           if (type) {
                             if (type === 'link') {
                               setLinkFormOpen(true);

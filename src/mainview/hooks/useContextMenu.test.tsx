@@ -730,4 +730,83 @@ describe('useContextMenu', () => {
     expect(storeActions.updateEdgeData).not.toHaveBeenCalled();
     expect(storeActions.saveSnapshot).not.toHaveBeenCalled();
   });
+
+  it('routes link/asset/image creation through onRequestCreate when provided', () => {
+    const onRequestCreate = vi.fn();
+
+    const RoutingHarness = () => {
+      const { onPaneContextMenu, handleContextMenuAction } = useContextMenu({
+        onRequestCreate,
+        rfInstance: rfInstance as never,
+      });
+      return (
+        <div>
+          <button
+            onClick={() => {
+              onPaneContextMenu({
+                preventDefault: vi.fn(),
+                clientX: 210,
+                clientY: 180,
+              } as unknown as MouseEvent);
+            }}
+            type="button"
+          >
+            routing-pane
+          </button>
+          <button
+            onClick={() => {
+              handleContextMenuAction('new-link');
+            }}
+            type="button"
+          >
+            routing-new-link
+          </button>
+          <button
+            onClick={() => {
+              handleContextMenuAction('new-file');
+            }}
+            type="button"
+          >
+            routing-new-file
+          </button>
+          <button
+            onClick={() => {
+              handleContextMenuAction('new-image');
+            }}
+            type="button"
+          >
+            routing-new-image
+          </button>
+        </div>
+      );
+    };
+
+    render(<RoutingHarness />);
+
+    const expectedAnchor = {
+      x: (210 - viewport.x) / viewport.zoom,
+      y: (180 - viewport.y) / viewport.zoom,
+    };
+    const expectedScreen = { x: 210, y: 180 };
+
+    fireEvent.click(screen.getByRole('button', { name: 'routing-pane' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'routing-new-link' }));
+    expect(onRequestCreate).toHaveBeenCalledWith('link', {
+      anchorCenter: expectedAnchor,
+      screen: expectedScreen,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'routing-new-file' }));
+    expect(onRequestCreate).toHaveBeenCalledWith('asset', {
+      anchorCenter: expectedAnchor,
+      screen: expectedScreen,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'routing-new-image' }));
+    expect(onRequestCreate).toHaveBeenCalledWith('image', {
+      anchorCenter: expectedAnchor,
+      screen: expectedScreen,
+    });
+  });
 });

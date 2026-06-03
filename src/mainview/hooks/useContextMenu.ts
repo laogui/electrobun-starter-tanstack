@@ -4,6 +4,10 @@ import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import {
+  type CanvasCreateRequest,
+  resolveCreatableKind,
+} from '@/lib/creatableNodes';
 import { rpcExportNoteMarkdown, rpcExportNotesMarkdown } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -11,17 +15,17 @@ import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   onDeleteNodes?: (ids: string[]) => void;
+  /**
+   * Routes a create action to the shared creation flow (handles the `link` URL
+   * prompt and `asset` file picker). When omitted, plain kinds fall back to a
+   * direct store `createNode` so the hook stays usable standalone.
+   */
+  onRequestCreate?: (
+    kind: CreatableCanvasNodeKind,
+    request: CanvasCreateRequest
+  ) => void;
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
-
-const NEW_NODE_ACTIONS: Record<string, CreatableCanvasNodeKind> = {
-  'new-note': 'card',
-  'new-folder': 'folder',
-  'new-checklist': 'checklist',
-  'new-sticky': 'sticky',
-  'new-group': 'group',
-  'new-image': 'image',
-};
 
 type NodeContextTarget =
   | 'asset'
@@ -53,6 +57,7 @@ function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {
 
 export function useContextMenu({
   onDeleteNodes,
+  onRequestCreate,
   rfInstance,
 }: UseContextMenuOptions) {
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
@@ -110,12 +115,21 @@ export function useContextMenu({
         };
       };
 
-      const newType = NEW_NODE_ACTIONS[action];
+      const newType = resolveCreatableKind(action);
       if (newType) {
         const anchorCenter = contextMenu
           ? screenToFlow(contextMenu.x, contextMenu.y)
           : undefined;
-        createNode(newType, rfInstance.current, { anchorCenter });
+        if (onRequestCreate) {
+          onRequestCreate(newType, {
+            anchorCenter,
+            screen: contextMenu
+              ? { x: contextMenu.x, y: contextMenu.y }
+              : undefined,
+          });
+        } else {
+          createNode(newType, rfInstance.current, { anchorCenter });
+        }
         return;
       }
 
@@ -343,6 +357,7 @@ export function useContextMenu({
       pasteClipboard,
       saveSnapshot,
       createNode,
+      onRequestCreate,
     ]
   );
 

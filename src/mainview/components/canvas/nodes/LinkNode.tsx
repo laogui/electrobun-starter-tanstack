@@ -1,9 +1,4 @@
-import {
-  Handle,
-  NodeResizeControl,
-  Position,
-  useViewport,
-} from '@xyflow/react';
+import { Handle, Position, useViewport } from '@xyflow/react';
 import {
   ExternalLink,
   Globe2,
@@ -32,6 +27,8 @@ import {
 import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import { ResizeHandle } from './_shared/ResizeHandle';
 
 const handleClassName = 'conn-handle nodrag';
 const DEFAULT_LINK_COLOR = '#FFFFFF';
@@ -387,45 +384,14 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
       )}
     >
       {tagEditor}
-      <NodeResizeControl
-        className="border-none! bg-transparent!"
+      <ResizeHandle
+        hoverClassName="group-hover/link:opacity-100"
         maxHeight={420}
         maxWidth={640}
         minHeight={150}
         minWidth={240}
-        onResizeEnd={() => {
-          document.body.classList.remove('resizing-nwse');
-        }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-          saveSnapshot();
-        }}
-        position="bottom-right"
-        style={{ padding: 0 }}
-      >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/link:opacity-100">
-          <svg
-            height="16"
-            viewBox="0 0 16 16"
-            width="16"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Resize</title>
-            <g fill="none" fillRule="evenodd">
-              <path
-                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
-                fill="#1B2536"
-                fillOpacity="0.5"
-              />
-              <path
-                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
-                fill="#FFF"
-                fillOpacity="0.7"
-              />
-            </g>
-          </svg>
-        </div>
-      </NodeResizeControl>
+        onResizeStart={saveSnapshot}
+      />
 
       <Handle
         className={handleClassName}

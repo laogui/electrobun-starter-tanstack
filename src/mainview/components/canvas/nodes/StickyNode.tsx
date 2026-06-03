@@ -77,10 +77,18 @@ export const StickyContent = ({
   <>
     {isZoomedOut ? (
       <div className="size-full p-3" style={colorToStyle(data.color)}>
-        <div className="mt-1 space-y-2 opacity-30">
-          <div className="h-2 w-full rounded-full bg-current" />
-          <div className="h-2 w-4/6 rounded-full bg-current" />
-        </div>
+        {data.content ? (
+          <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
+            {data.content.length > 16
+              ? `${data.content.slice(0, 16)}…`
+              : data.content}
+          </p>
+        ) : (
+          <div className="mt-1 space-y-2 opacity-30">
+            <div className="h-2 w-full rounded-full bg-current" />
+            <div className="h-2 w-4/6 rounded-full bg-current" />
+          </div>
+        )}
       </div>
     ) : (
       <div

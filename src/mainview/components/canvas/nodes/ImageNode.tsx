@@ -1,10 +1,5 @@
-import {
-  Handle,
-  NodeResizeControl,
-  Position,
-  useViewport,
-} from '@xyflow/react';
-import { ImagePlus, Loader2, RefreshCw } from 'lucide-react';
+import { Handle, Position, useViewport } from '@xyflow/react';
+import { AlertTriangle, ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -19,6 +14,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
+import { ResizeHandle } from './_shared/ResizeHandle';
 
 const handleClassName = 'conn-handle nodrag';
 const FILE_EXT_RE = /\.[^.]+$/;
@@ -150,18 +146,18 @@ export const ImageContent = ({
     !lazyLoadFailed;
 
   if (!(displaySrc || isLazyLoading)) {
-    return (
-      <div
-        className="flex size-full flex-col items-center justify-center gap-3"
-        style={colorToStyle(data.color)}
-      >
-        <ImagePlus className="text-gray-300" size={isFocused ? 64 : 40} />
-        <span className="text-gray-400 text-sm">
-          {lazyLoadFailed ? 'Failed to load image' : 'No image'}
-        </span>
-        {lazyLoadFailed ? (
+    // The image was expected (it had a source) but failed to resolve — surface
+    // a red "missing" treatment mirroring AssetNode rather than the neutral
+    // empty state, so a broken/deleted attachment is obvious at a glance.
+    if (lazyLoadFailed) {
+      return (
+        <div className="flex size-full flex-col items-center justify-center gap-3 border border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
+          <div className="flex items-center gap-2 font-medium text-sm">
+            <AlertTriangle size={isFocused ? 20 : 16} />
+            Missing image
+          </div>
           <button
-            className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-neutral-600 text-xs shadow-sm transition-colors hover:bg-white dark:border-white/10 dark:bg-white/10 dark:text-neutral-200 dark:hover:bg-white/20"
+            className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-red-300/60 bg-white/70 px-3 py-1.5 text-red-700 text-xs shadow-sm transition-colors hover:bg-white dark:border-red-400/30 dark:bg-white/10 dark:text-red-200 dark:hover:bg-white/20"
             onClick={(e) => {
               e.stopPropagation();
               setLazyLoadFailed(false);
@@ -171,7 +167,16 @@ export const ImageContent = ({
             <RefreshCw size={12} />
             Retry
           </button>
-        ) : null}
+        </div>
+      );
+    }
+    return (
+      <div
+        className="flex size-full flex-col items-center justify-center gap-3"
+        style={colorToStyle(data.color)}
+      >
+        <ImagePlus className="text-gray-300" size={isFocused ? 64 : 40} />
+        <span className="text-gray-400 text-sm">No image</span>
       </div>
     );
   }
@@ -380,45 +385,14 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       onPaste={handlePaste}
     >
       {tagEditor}
-      <NodeResizeControl
-        className="border-none! bg-transparent!"
+      <ResizeHandle
+        hoverClassName="group-hover/image:opacity-100"
         maxHeight={900}
         maxWidth={800}
         minHeight={150}
         minWidth={150}
-        onResizeEnd={() => {
-          document.body.classList.remove('resizing-nwse');
-        }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-          saveSnapshot();
-        }}
-        position="bottom-right"
-        style={{ padding: 0 }}
-      >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/image:opacity-100">
-          <svg
-            height="16"
-            viewBox="0 0 16 16"
-            width="16"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Resize</title>
-            <g fill="none" fillRule="evenodd">
-              <path
-                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
-                fill="#1B2536"
-                fillOpacity="0.5"
-              />
-              <path
-                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
-                fill="#FFF"
-                fillOpacity="0.7"
-              />
-            </g>
-          </svg>
-        </div>
-      </NodeResizeControl>
+        onResizeStart={saveSnapshot}
+      />
 
       <Handle
         className={handleClassName}

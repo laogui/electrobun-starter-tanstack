@@ -53,6 +53,16 @@ vi.mock('@/store/canvasStore', () => ({
     }),
 }));
 
+vi.mock('@/components/card/useNodeTagEditing', () => ({
+  useNodeTagEditing: () => ({
+    dimmedByFilter: false,
+    tag: undefined,
+    tagColor: undefined,
+    tagEditor: null,
+    tags: [],
+  }),
+}));
+
 describe('StickyNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();

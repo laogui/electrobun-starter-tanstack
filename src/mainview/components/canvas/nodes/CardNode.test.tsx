@@ -354,36 +354,28 @@ describe('CardNode', () => {
     expect(screen.getByText('Delta')).toBeInTheDocument();
   });
 
-  it('updates editable focused content on blur', () => {
-    const onChange = vi.fn();
-
+  it('renders a focused text card as a read-only preview (editing moved to BlockNote)', () => {
+    // Inline contentEditable editing (the former EditableCardContent) was
+    // removed: focused text cards open the BlockNote editor instead, so the
+    // CardContent surface itself stays a non-editable preview.
     render(
       <CardContent
         data={{
           color: '#ffffff',
           content: 'Original body',
+          previewHtml: '<p>Original body</p>',
           title: 'Original title',
         }}
         isFocused={true}
-        onChange={onChange}
       />
     );
 
-    const title = screen.getByText('Original title');
-    const content = screen.getByText('Original body');
-
-    title.textContent = 'Renamed title';
-    fireEvent.blur(title);
-    expect(onChange).toHaveBeenCalledWith({ title: 'Renamed title' });
-
-    content.textContent = 'Updated body';
-    fireEvent.blur(content);
-    expect(onChange).toHaveBeenCalledWith({
-      content: 'Updated body',
-      previewBlocks: undefined,
-      previewExcerpt: undefined,
-      previewHtml: undefined,
-      previewVersion: undefined,
-    });
+    expect(screen.getByText('Original title')).toBeInTheDocument();
+    expect(screen.getByTestId('note-preview')).toHaveTextContent(
+      '<p>Original body</p>'
+    );
+    expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(
+      0
+    );
   });
 });

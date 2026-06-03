@@ -1,21 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  Handle,
-  NodeResizeControl,
-  Position,
-  useViewport,
-} from '@xyflow/react';
-import { Check, PenLine, Tag as TagIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Handle, Position, useViewport } from '@xyflow/react';
+import { Check, PenLine } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
 import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
-import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
-import * as m from '../../../../paraglide/messages.js';
+import { ResizeHandle } from './_shared/ResizeHandle';
 
 const handleClassName = 'conn-handle nodrag';
 
@@ -76,7 +70,6 @@ export interface CardContentProps {
   data: CardContentData;
   isFocused?: boolean;
   onChange?: (next: Partial<CardContentData>) => void;
-  onEditTagClick?: () => void;
   readOnly?: boolean;
 }
 
@@ -84,7 +77,6 @@ export const CardContent = ({
   data,
   isFocused,
   onChange,
-  onEditTagClick,
   readOnly = false,
 }: CardContentProps) => {
   const [newItem, setNewItem] = useState('');
@@ -229,156 +221,54 @@ export const CardContent = ({
 
   // Default text card — editable only in focused (expanded) view.
   // readOnly forces the non-editable preview regardless of focus.
-  if (!isFocused || readOnly) {
-    const isEmpty = !(
-      data.title ||
-      data.content ||
-      data.previewExcerpt ||
-      data.previewHtml
-    );
-    return (
-      <div
-        className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
-        style={colorToStyle(data.color)}
-      >
-        {data.tag || (data.tags && data.tags.length > 0) ? (
-          <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            {data.tag ? (
-              <span
-                className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
-                style={colorToStyle(data.tagColor)}
-              >
-                {data.tag}
-              </span>
-            ) : null}
-            <SecondaryTagChips isDark={isDark} tags={data.tags} />
-          </div>
-        ) : null}
-        <h2
-          className={cn(
-            'mb-4 flex items-center gap-2 font-bold text-xl',
-            !data.title && 'opacity-40'
-          )}
-        >
-          {data.title || 'Untitled'}
-          {isEmpty && !readOnly ? (
-            <PenLine
-              aria-hidden="true"
-              className="shrink-0 opacity-60"
-              size={16}
-            />
-          ) : null}
-        </h2>
-        <NotePreview
-          className={cn(isDark && 'prose-invert text-white')}
-          excerpt={data.previewExcerpt}
-          fallback={data.content}
-          html={data.previewHtml}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <EditableCardContent
-      data={data}
-      onChange={onChange}
-      onEditTagClick={onEditTagClick}
-    />
+  // Default text card. Always renders the read-only preview — rich-text
+  // editing happens exclusively through the BlockNote editor in the focused
+  // view, so the card surface itself never needs its own contentEditable.
+  const isEmpty = !(
+    data.title ||
+    data.content ||
+    data.previewExcerpt ||
+    data.previewHtml
   );
-};
-
-interface EditableCardContentProps {
-  data: CardContentData;
-  onChange?: (next: Partial<CardContentData>) => void;
-  onEditTagClick?: () => void;
-}
-
-const EditableCardContent = ({
-  data,
-  onChange,
-  onEditTagClick,
-}: EditableCardContentProps) => {
-  const titleRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const isDark = isColorDark(data.color);
-  const hasTags = Boolean(data.tag) || (data.tags && data.tags.length > 0);
-
-  const handleTitleBlur = useCallback(() => {
-    const text = titleRef.current?.textContent ?? '';
-    if (text !== data.title && onChange) {
-      onChange({ title: text });
-    }
-  }, [data.title, onChange]);
-
-  const handleContentBlur = useCallback(() => {
-    const text = contentRef.current
-      ? editableElementToText(contentRef.current)
-      : '';
-    if (text !== data.content && onChange) {
-      onChange({
-        content: text,
-        previewBlocks: undefined,
-        previewExcerpt: undefined,
-        previewHtml: undefined,
-        previewVersion: undefined,
-      });
-    }
-  }, [data.content, onChange]);
-
   return (
     <div
       className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
       style={colorToStyle(data.color)}
     >
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {data.tag ? (
-          <span
-            className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
-            style={colorToStyle(data.tagColor)}
-          >
-            {data.tag}
-          </span>
-        ) : null}
-        <SecondaryTagChips isDark={isDark} tags={data.tags} />
-        {onEditTagClick ? (
-          <button
-            aria-label={m.menu_edit_tag()}
-            className={cn(
-              'nodrag nopan inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-opacity',
-              isDark
-                ? 'bg-white/10 text-white/70 hover:bg-white/20'
-                : 'bg-black/5 text-neutral-600 hover:bg-black/10',
-              !hasTags && 'opacity-60'
-            )}
-            onClick={onEditTagClick}
-            type="button"
-          >
-            <TagIcon aria-hidden="true" size={10} />
-            {hasTags ? null : <span>{m.menu_edit_tag()}</span>}
-          </button>
-        ) : null}
-      </div>
-      <div
-        className="nodrag nopan mb-4 cursor-text font-bold text-4xl outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
-        contentEditable
-        data-placeholder="Untitled"
-        onBlur={handleTitleBlur}
-        ref={titleRef}
-        suppressContentEditableWarning
+      {data.tag || (data.tags && data.tags.length > 0) ? (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {data.tag ? (
+            <span
+              className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
+              style={colorToStyle(data.tagColor)}
+            >
+              {data.tag}
+            </span>
+          ) : null}
+          <SecondaryTagChips isDark={isDark} tags={data.tags} />
+        </div>
+      ) : null}
+      <h2
+        className={cn(
+          'mb-4 flex items-center gap-2 font-bold text-xl',
+          !data.title && 'opacity-40'
+        )}
       >
-        {data.title}
-      </div>
-      <div
-        className="nodrag nopan custom-scrollbar flex-1 cursor-text overflow-y-auto whitespace-pre-wrap text-lg/relaxed outline-none empty:before:opacity-40 empty:before:content-[attr(data-placeholder)]"
-        contentEditable
-        data-placeholder="Write something..."
-        onBlur={handleContentBlur}
-        ref={contentRef}
-        suppressContentEditableWarning
-      >
-        {data.content}
-      </div>
+        {data.title || 'Untitled'}
+        {isEmpty && !readOnly ? (
+          <PenLine
+            aria-hidden="true"
+            className="shrink-0 opacity-60"
+            size={16}
+          />
+        ) : null}
+      </h2>
+      <NotePreview
+        className={cn(isDark && 'prose-invert text-white')}
+        excerpt={data.previewExcerpt}
+        fallback={data.content}
+        html={data.previewHtml}
+      />
     </div>
   );
 };
@@ -457,10 +347,6 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
     [metaKey, setMetadata]
   );
 
-  const openTagEditor = useCallback(() => {
-    setTagEditorOpen(true);
-  }, []);
-
   return (
     <div
       className={cn(
@@ -488,45 +374,14 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
           type="button"
         />
       </TagEditor>
-      <NodeResizeControl
-        className="border-none! bg-transparent!"
+      <ResizeHandle
+        hoverClassName="group-hover/card:opacity-100"
         maxHeight={900}
         maxWidth={800}
         minHeight={300}
         minWidth={250}
-        onResizeEnd={() => {
-          document.body.classList.remove('resizing-nwse');
-        }}
-        onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
-          saveSnapshot();
-        }}
-        position="bottom-right"
-        style={{ padding: 0 }}
-      >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/card:opacity-100">
-          <svg
-            height="16"
-            viewBox="0 0 16 16"
-            width="16"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Resize</title>
-            <g fill="none" fillRule="evenodd">
-              <path
-                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
-                fill="#1B2536"
-                fillOpacity="0.5"
-              />
-              <path
-                d="M13.146 6.146a.5.5 0 0 1 .708.708l-7 7a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-11 11a.5.5 0 0 1-.708-.708zm0 8a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708-.708z"
-                fill="#FFF"
-                fillOpacity="0.7"
-              />
-            </g>
-          </svg>
-        </div>
-      </NodeResizeControl>
+        onResizeStart={saveSnapshot}
+      />
 
       <Handle
         className={handleClassName}
@@ -590,7 +445,6 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
             onChange={(newData) => {
               commitNodeData(id, newData);
             }}
-            onEditTagClick={openTagEditor}
           />
         )}
       </div>

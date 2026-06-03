@@ -144,7 +144,10 @@ export const LinkContent = ({
                 <p className="truncate font-medium text-neutral-500 text-sm dark:text-neutral-400">
                   {host || 'Link'}
                 </p>
-                <p className="truncate text-neutral-400 text-xs dark:text-neutral-500">
+                <p
+                  className="truncate text-neutral-400 text-xs dark:text-neutral-500"
+                  title={link.url || undefined}
+                >
                   {link.url}
                 </p>
               </div>
@@ -284,7 +287,9 @@ export const LinkContent = ({
         <div className="mt-auto min-w-0 pt-4">
           <div className="flex min-w-0 items-center gap-2 rounded-xl border border-black/8 bg-white/55 px-3 py-2 text-neutral-500 dark:border-white/10 dark:bg-white/8 dark:text-neutral-300">
             <LinkIcon className="shrink-0" size={14} />
-            <span className="truncate text-xs">{host || link.url}</span>
+            <span className="truncate text-xs" title={link.url || undefined}>
+              {host || link.url}
+            </span>
           </div>
         </div>
       </div>

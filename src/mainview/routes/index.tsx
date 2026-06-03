@@ -587,15 +587,28 @@ function CanvasComponent() {
     () =>
       nodes
         .filter((node) => !(node.data as Record<string, unknown>).detached)
-        .map((node) => ({
-          ...node,
-          data: {
-            ...node.data,
-            isHidden:
-              focusedNode?.id === node.id || focusedFolder?.id === node.id,
-            isDropTarget: dropTargetId === node.id,
-          },
-        })),
+        .map((node) => {
+          const locked = Boolean(
+            (node.data as { locked?: unknown }).locked
+          );
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              isHidden:
+                focusedNode?.id === node.id || focusedFolder?.id === node.id,
+              isDropTarget: dropTargetId === node.id,
+            },
+            ...(locked
+              ? {
+                  draggable: false,
+                  connectable: false,
+                  deletable: false,
+                  className: `${node.className ?? ''} is-locked`.trim(),
+                }
+              : {}),
+          };
+        }),
     [nodes, focusedNode, focusedFolder, dropTargetId]
   );
 

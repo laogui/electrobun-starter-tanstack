@@ -38,19 +38,19 @@
 
 ---
 
-## Phase 0 · 死代码 + i18n 清扫（0.5 天）
+## Phase 0 · 死代码 + i18n 清扫（0.5 天）✅ 已完成
 
-> **可以今天 merge 的小修复**。是后续所有 PR 的"清场"。
+> **已完成（2026-06-03）**。可以今天 merge 的小修复，是后续所有 PR 的"清场"。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| K2 | `label: 'Link'` → `label: m.menu_link()` | `src/mainview/components/canvas/ViewSwitcher.tsx:65` + `messages/*.json` |
-| K4 | "No matches" / `placeholder` 走 paraglide | `src/mainview/components/search/SearchDialog.tsx:220, 245` + `messages/*.json` |
-| K5 | 两条 `toast.error('File ...')` 走 paraglide | `src/mainview/components/canvas/nodes/AssetNode.tsx:406, 411` + `messages/*.json` |
-| K1 | 给 truncate 文件名加 `title={...}` | `AssetNode.tsx:490`、`LinkNode.tsx:144` |
-| L3 | `createImageThumbnail` 失败 → `toast.error(...)` | `src/mainview/components/canvas/nodes/ImageNode.tsx:290` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | K2 | `label: 'Link'` → `label: m.menu_link()` | `src/mainview/components/canvas/ViewSwitcher.tsx:65` + `messages/*.json` |
+| ✅ 已完成 | K4 | "No matches" / `placeholder` 走 paraglide | `src/mainview/components/search/SearchDialog.tsx:220, 245` + `messages/*.json` |
+| ✅ 已完成 | K5 | 两条 `toast.error('File ...')` 走 paraglide | `src/mainview/components/canvas/nodes/AssetNode.tsx:406, 411` + `messages/*.json` |
+| ✅ 已完成 | K1 | 给 truncate 文件名加 `title={...}` | `AssetNode.tsx:490`、`LinkNode.tsx:144` |
+| ✅ 已完成 | L3 | `createImageThumbnail` 失败 → `toast.error(...)` | `src/mainview/components/canvas/nodes/ImageNode.tsx:290` |
 
 ### 验收
 - `bun run check && bun run test` 全绿。

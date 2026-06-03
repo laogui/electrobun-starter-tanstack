@@ -27,6 +27,8 @@ import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../../../paraglide/messages.js';
+
 const handleClassName = 'conn-handle nodrag';
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
 
@@ -395,6 +397,7 @@ export const AssetContent = ({
   const pdfPreview = isPdfPreview(asset);
   const textPreview = isTextPreview(asset);
   const previewableFile = pdfPreview || textPreview;
+  const attachmentLabel = asset.attachmentFile ?? 'Unsaved attachment';
   const [mediaSrc, setMediaSrc] = useState<string | null>(
     asset.previewUrl ?? null
   );
@@ -403,12 +406,12 @@ export const AssetContent = ({
 
   const handleOpen = useCallback(async () => {
     if (!asset.attachmentFile) {
-      toast.error('File has not been saved yet.');
+      toast.error(m.toast_asset_file_unsaved());
       return;
     }
     const result = await rpcOpenAttachment(asset.attachmentFile);
     if (!result.success) {
-      toast.error('File could not be opened.');
+      toast.error(m.toast_asset_file_open_failed());
     }
   }, [asset.attachmentFile]);
 
@@ -490,8 +493,11 @@ export const AssetContent = ({
                 <p className="truncate font-medium text-neutral-500 text-sm dark:text-neutral-400">
                   {label}
                 </p>
-                <p className="truncate text-neutral-400 text-xs dark:text-neutral-500">
-                  {asset.attachmentFile ?? 'Unsaved attachment'}
+                <p
+                  className="truncate text-neutral-400 text-xs dark:text-neutral-500"
+                  title={attachmentLabel}
+                >
+                  {attachmentLabel}
                 </p>
               </div>
             </div>

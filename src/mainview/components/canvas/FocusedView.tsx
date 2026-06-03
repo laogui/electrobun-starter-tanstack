@@ -8,12 +8,40 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../../paraglide/messages.js';
 import { AssetContent } from './nodes/AssetNode';
 import type { CardContentData } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
 import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
+
+// Word/character counts derived from markdown body. Stripping fenced code,
+// link/image syntax, and inline formatting keeps the visible counts closer to
+// what users perceive as content.
+const WORD_SPLIT_RE = /\s+/;
+function countMarkdown(markdown: string): { words: number; chars: number } {
+  const plain = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#>*_~-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = plain ? plain.split(WORD_SPLIT_RE).filter(Boolean).length : 0;
+  return { words, chars: plain.length };
+}
+
+const WordCountBadge = ({ markdown }: { markdown: string }) => {
+  const counts = useMemo(() => countMarkdown(markdown), [markdown]);
+  return (
+    <div className="pointer-events-none absolute right-6 bottom-6 rounded-full bg-black/30 px-3 py-1 text-white/80 text-xs backdrop-blur-md">
+      {m.focused_word_count({ words: counts.words, chars: counts.chars })}
+    </div>
+  );
+};
 
 const BlockNoteEditor = lazy(
   () => import('@/components/editor/BlockNoteEditor')
@@ -282,6 +310,30 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, []);
 
+  // Cmd/Ctrl + ←/→ navigate to the previous / next focusable item. Mirrors the
+  // on-screen chevron buttons; modifier-gated so plain ←/→ stay available to
+  // any focused input or editor inside the modal.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) {
+        return;
+      }
+      if (event.key === 'ArrowLeft' && previousItem) {
+        event.preventDefault();
+        handleNavigate(previousItem);
+        return;
+      }
+      if (event.key === 'ArrowRight' && nextItem) {
+        event.preventDefault();
+        handleNavigate(nextItem);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+    };
+  }, [handleNavigate, nextItem, previousItem]);
+
   return (
     <motion.div
       animate={{ opacity: 1 }}
@@ -430,6 +482,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 }}
                 title={title}
               />
+              <WordCountBadge markdown={content ?? ''} />
             </Suspense>
           ) : (
             <CardContent

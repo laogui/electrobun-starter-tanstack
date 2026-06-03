@@ -6,6 +6,7 @@ import {
   FilePlus,
   FolderOpen,
   Link as LinkIcon,
+  Lock,
   LogOut,
   Maximize2,
   Palette,
@@ -14,6 +15,7 @@ import {
   Spline,
   Tag,
   Trash2,
+  Unlock,
   ZoomIn,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -66,7 +68,13 @@ const getCanvasItems = (): MenuItem[] => [
   },
 ];
 
-const getCardItems = (): MenuItem[] => [
+const lockItem = (locked: boolean): MenuItem => ({
+  id: 'toggle-lock',
+  label: locked ? m.menu_unlock() : m.menu_lock(),
+  icon: locked ? Unlock : Lock,
+});
+
+const getCardItems = (locked: boolean): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -74,8 +82,10 @@ const getCardItems = (): MenuItem[] => [
     shortcut: 'Enter',
   },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
+  { id: 'copy-as-markdown', label: m.menu_copy_as_markdown(), icon: Copy },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   { id: 'export-markdown', label: m.menu_export_markdown(), icon: FileDown },
   {
@@ -91,7 +101,7 @@ const getFolderChildItems = (): MenuItem[] => [
   { id: 'move-out', label: m.menu_move_out(), icon: LogOut },
 ];
 
-const getFolderItems = (): MenuItem[] => [
+const getFolderItems = (locked: boolean): MenuItem[] => [
   {
     id: 'open-folder',
     label: m.menu_open(),
@@ -100,6 +110,7 @@ const getFolderItems = (): MenuItem[] => [
   },
   { id: 'rename', label: m.menu_rename(), icon: PenLine },
   { id: 'new-child', label: m.menu_new_card_inside(), icon: FilePlus },
+  lockItem(locked),
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -109,10 +120,11 @@ const getFolderItems = (): MenuItem[] => [
   },
 ];
 
-const getStickyItems = (): MenuItem[] => [
+const getStickyItems = (locked: boolean): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -122,8 +134,9 @@ const getStickyItems = (): MenuItem[] => [
   },
 ];
 
-const getGroupItems = (): MenuItem[] => [
+const getGroupItems = (locked: boolean): MenuItem[] => [
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  lockItem(locked),
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -133,7 +146,7 @@ const getGroupItems = (): MenuItem[] => [
   },
 ];
 
-const getImageItems = (): MenuItem[] => [
+const getImageItems = (locked: boolean): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -143,6 +156,7 @@ const getImageItems = (): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -152,7 +166,7 @@ const getImageItems = (): MenuItem[] => [
   },
 ];
 
-const getLinkItems = (): MenuItem[] => [
+const getLinkItems = (locked: boolean): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -163,6 +177,7 @@ const getLinkItems = (): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   {
     id: 'delete',
@@ -173,7 +188,7 @@ const getLinkItems = (): MenuItem[] => [
   },
 ];
 
-const getAssetItems = (): MenuItem[] => [
+const getAssetItems = (locked: boolean): MenuItem[] => [
   {
     id: 'focus',
     label: m.menu_open_focused(),
@@ -183,6 +198,7 @@ const getAssetItems = (): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   {
     id: 'delete',
@@ -208,6 +224,7 @@ const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
       pathType === 'bezier' ? m.menu_toggle_straight() : m.menu_toggle_curved(),
     icon: Spline,
   },
+  { id: 'cycle-edge-color', label: m.menu_edge_color(), icon: Palette },
   {
     id: 'delete-edge',
     label: m.menu_delete_edge(),
@@ -237,6 +254,13 @@ export function CanvasContextMenu({
     const pathType = (edge?.data as { pathType?: unknown } | undefined)
       ?.pathType;
     return pathType === 'smoothstep' ? 'smoothstep' : 'bezier';
+  });
+  const nodeLocked = useCanvasStore((state) => {
+    if (!menu?.nodeId) {
+      return false;
+    }
+    const node = state.nodes.find((item) => item.id === menu.nodeId);
+    return Boolean((node?.data as { locked?: unknown } | undefined)?.locked);
   });
 
   useEffect(() => {
@@ -271,13 +295,13 @@ export function CanvasContextMenu({
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
     'folder-child': getFolderChildItems,
-    folder: getFolderItems,
-    group: getGroupItems,
-    sticky: getStickyItems,
-    image: getImageItems,
-    link: getLinkItems,
-    asset: getAssetItems,
-    card: getCardItems,
+    folder: () => getFolderItems(nodeLocked),
+    group: () => getGroupItems(nodeLocked),
+    sticky: () => getStickyItems(nodeLocked),
+    image: () => getImageItems(nodeLocked),
+    link: () => getLinkItems(nodeLocked),
+    asset: () => getAssetItems(nodeLocked),
+    card: () => getCardItems(nodeLocked),
     canvas: getCanvasItems,
   };
 

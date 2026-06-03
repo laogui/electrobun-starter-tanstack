@@ -2,6 +2,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import type { ReactFlowInstance } from '@xyflow/react';
 import {
   ArrowRight,
+  Clock,
   FileText,
   Folder,
   Group,
@@ -11,14 +12,64 @@ import {
   Paperclip,
   Search,
   StickyNote,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSearch } from '@/hooks/useSearch';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
-import type { SearchResult } from '@/lib/searchTypes';
+import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../../paraglide/messages.js';
+
+const SEARCH_HISTORY_STORAGE_KEY = 'ghostboard:search-history';
+const SEARCH_HISTORY_MAX = 8;
+
+type SearchFilter = 'all' | 'notes' | 'folders' | 'links' | 'images';
+
+const FILTER_KIND_MAP: Record<
+  Exclude<SearchFilter, 'all'>,
+  SearchResultKind[]
+> = {
+  notes: ['note', 'card'],
+  folders: ['folder'],
+  links: ['link'],
+  images: ['image'],
+};
+
+function readHistory(): string[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(entries: string[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      SEARCH_HISTORY_STORAGE_KEY,
+      JSON.stringify(entries.slice(0, SEARCH_HISTORY_MAX))
+    );
+  } catch {
+    // Storage may be unavailable (private mode, quota). History is best-effort.
+  }
+}
 
 interface SearchDialogProps {
   /**
@@ -45,15 +96,48 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const lastResultSignatureRef = useRef('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [filter, setFilter] = useState<SearchFilter>('all');
+  const [history, setHistory] = useState<string[]>(() => readHistory());
 
   const { query, setQuery, results, isLoading, error, fallback } = useSearch();
   const trimmedQuery = query.trim();
+
+  // Filter results client-side by node kind. Backend continues to return the
+  // full set; chips toggle visibility only.
+  const filteredResults = useMemo(() => {
+    if (filter === 'all') {
+      return results;
+    }
+    const kinds = new Set<SearchResultKind>(FILTER_KIND_MAP[filter]);
+    return results.filter((r) => kinds.has(r.kind));
+  }, [filter, results]);
+
+  const recordHistory = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+    setHistory((prev) => {
+      const next = [
+        trimmed,
+        ...prev.filter((entry) => entry !== trimmed),
+      ].slice(0, SEARCH_HISTORY_MAX);
+      writeHistory(next);
+      return next;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    writeHistory([]);
+  }, []);
 
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
       setQuery('');
       setActiveIndex(0);
+      setFilter('all');
     }
   }, [open, setQuery]);
 
@@ -140,6 +224,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   const handleSelect = useCallback(
     async (result: SearchResult) => {
+      recordHistory(trimmedQuery);
       setOpen(false);
 
       if (result.kind === 'view' || result.viewId !== activeViewId) {
@@ -167,17 +252,19 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       setActiveView,
       setPendingSearchTarget,
       locateInCurrentView,
+      recordHistory,
+      trimmedQuery,
     ]
   );
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (results.length === 0) {
+      if (filteredResults.length === 0) {
         return;
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, filteredResults.length - 1));
         return;
       }
       if (e.key === 'ArrowUp') {
@@ -187,14 +274,23 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const item = results[activeIndex];
+        const item = filteredResults[activeIndex];
         if (item) {
           handleSelect(item);
         }
       }
     },
-    [results, activeIndex, handleSelect]
+    [filteredResults, activeIndex, handleSelect]
   );
+
+  const showHistory = !trimmedQuery && history.length > 0;
+  const filterChips: { id: SearchFilter; label: string }[] = [
+    { id: 'all', label: m.search_filter_all() },
+    { id: 'notes', label: m.search_filter_notes() },
+    { id: 'folders', label: m.search_filter_folders() },
+    { id: 'links', label: m.search_filter_links() },
+    { id: 'images', label: m.search_filter_images() },
+  ];
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
@@ -217,7 +313,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
                 setQuery(e.target.value);
               }}
               onKeyDown={onKeyDown}
-              placeholder="Search notes, stickies, folders, views…"
+              placeholder={m.search_dialog_placeholder()}
               ref={inputRef}
               type="text"
               value={query}
@@ -225,6 +321,31 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
             {isLoading ? (
               <span className="text-gray-400 text-xs">…</span>
             ) : null}
+          </div>
+
+          <div
+            aria-label="Filter results by type"
+            className="flex items-center gap-1.5 border-gray-100 border-b px-3 py-2 dark:border-neutral-800"
+            role="tablist"
+          >
+            {filterChips.map((chip) => (
+              <button
+                aria-selected={filter === chip.id}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                  filter === chip.id
+                    ? 'bg-blue-500/10 font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-200'
+                    : 'text-gray-500 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5'
+                }`}
+                key={chip.id}
+                onClick={() => {
+                  setFilter(chip.id);
+                }}
+                role="tab"
+                type="button"
+              >
+                {chip.label}
+              </button>
+            ))}
           </div>
 
           <div
@@ -240,22 +361,74 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
               </div>
             ) : null}
 
-            {!error && trimmedQuery && results.length === 0 && !isLoading ? (
+            {!error && showHistory ? (
+              <>
+                <div className="flex items-center justify-between border-gray-100 border-b px-4 py-2 text-gray-500 text-xs dark:border-neutral-800 dark:text-gray-400">
+                  <span className="flex items-center gap-1.5">
+                    <Clock aria-hidden size={12} />
+                    {m.search_recent_title()}
+                  </span>
+                  <button
+                    className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                    onClick={clearHistory}
+                    type="button"
+                  >
+                    {m.search_recent_clear()}
+                  </button>
+                </div>
+                {history.map((entry) => (
+                  <button
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-gray-700 text-sm hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
+                    key={entry}
+                    onClick={() => {
+                      setQuery(entry);
+                      inputRef.current?.focus();
+                    }}
+                    type="button"
+                  >
+                    <Clock
+                      aria-hidden
+                      className="shrink-0 text-gray-400 dark:text-gray-500"
+                      size={14}
+                    />
+                    <span className="flex-1 truncate">{entry}</span>
+                    <X
+                      aria-label="Remove from history"
+                      className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHistory((prev) => {
+                          const next = prev.filter((v) => v !== entry);
+                          writeHistory(next);
+                          return next;
+                        });
+                      }}
+                      size={14}
+                    />
+                  </button>
+                ))}
+              </>
+            ) : null}
+
+            {!error &&
+            trimmedQuery &&
+            filteredResults.length === 0 &&
+            !isLoading ? (
               <div className="px-4 py-10 text-center text-gray-400 text-sm dark:text-gray-500">
-                No matches
+                {m.search_no_matches()}
               </div>
             ) : null}
 
-            {!error && trimmedQuery && results.length > 0 ? (
+            {!error && trimmedQuery && filteredResults.length > 0 ? (
               <div className="border-gray-100 border-b px-4 py-2 text-gray-500 text-xs dark:border-neutral-800 dark:text-gray-400">
-                {results.length === 1
+                {filteredResults.length === 1
                   ? '1 result'
-                  : `${results.length} results`}{' '}
+                  : `${filteredResults.length} results`}{' '}
                 for "{trimmedQuery}"
               </div>
             ) : null}
 
-            {results.map((r, idx) => (
+            {filteredResults.map((r, idx) => (
               <ResultRow
                 active={idx === activeIndex}
                 key={r.id}

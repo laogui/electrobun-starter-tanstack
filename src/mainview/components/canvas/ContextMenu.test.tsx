@@ -17,6 +17,7 @@ const edgeStoreState = {
       data: { pathType: 'bezier' },
     },
   ],
+  nodes: [] as Array<{ id: string; data?: Record<string, unknown> }>,
 };
 
 vi.mock('@/store/canvasStore', () => ({
@@ -60,6 +61,10 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_move_to_library: () => 'Move to Library',
   menu_export_markdown: () => 'Export as Markdown',
   menu_export_canvas_markdown: () => 'Export Canvas as Markdown',
+  menu_copy_as_markdown: () => 'Copy as Markdown',
+  menu_lock: () => 'Lock',
+  menu_unlock: () => 'Unlock',
+  menu_edge_color: () => 'Cycle Color',
 }));
 
 describe('canvasContextMenu', () => {

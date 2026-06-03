@@ -28,6 +28,8 @@ function LabeledEdgeComponent({
   const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'bezier';
   const reverseVisualDirection =
     (data?.reverseVisualDirection as boolean) ?? false;
+  const customColor =
+    typeof data?.color === 'string' ? (data.color as string) : undefined;
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const commitEdgeData = useCanvasStore((s) => s.commitEdgeData);
@@ -103,7 +105,7 @@ function LabeledEdgeComponent({
         className={cn(
           'transition-[stroke-width] duration-150',
           animated && 'react-flow__edge-animated-dash',
-          selected && 'stroke-blue-500!'
+          selected && !customColor && 'stroke-blue-500!'
         )}
         id={id}
         markerEnd={markerEnd}
@@ -111,7 +113,9 @@ function LabeledEdgeComponent({
         path={edgePath}
         style={{
           strokeWidth: selected ? 2.5 : 1.5,
-          stroke: selected ? undefined : 'var(--xy-edge-stroke, #b1b1b7)',
+          stroke: selected
+            ? (customColor ?? undefined)
+            : (customColor ?? 'var(--xy-edge-stroke, #b1b1b7)'),
         }}
       />
       <EdgeLabelRenderer>

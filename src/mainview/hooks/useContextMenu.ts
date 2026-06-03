@@ -75,6 +75,7 @@ export function useContextMenu({
   const createNode = useCanvasStore((s) => s.createNode);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
+  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -324,12 +325,68 @@ export function useContextMenu({
           }
           break;
         }
+        case 'copy-as-markdown': {
+          if (nodeId) {
+            const { nodes } = useCanvasStore.getState();
+            const node = nodes.find((n) => n.id === nodeId);
+            const data = (node?.data ?? {}) as {
+              title?: unknown;
+              content?: unknown;
+            };
+            const title = typeof data.title === 'string' ? data.title : '';
+            const body = typeof data.content === 'string' ? data.content : '';
+            const markdown = title ? `# ${title}\n\n${body}` : body;
+            if (markdown) {
+              navigator.clipboard
+                .writeText(markdown)
+                .then(() => toast(m.toast_markdown_copied()))
+                .catch(() => toast(m.toast_export_failed()));
+            }
+          }
+          break;
+        }
         case 'delete-edge': {
           if (nodeId) {
             deleteEdge(nodeId);
             toast(m.toast_edge_deleted(), {
               action: { label: m.toast_undo(), onClick: () => undo() },
             });
+          }
+          break;
+        }
+        case 'toggle-lock': {
+          if (nodeId) {
+            const { nodes } = useCanvasStore.getState();
+            const node = nodes.find((n) => n.id === nodeId);
+            const current = Boolean(
+              (node?.data as { locked?: unknown } | undefined)?.locked
+            );
+            commitNodeData(nodeId, { locked: !current });
+          }
+          break;
+        }
+        case 'cycle-edge-color': {
+          if (nodeId) {
+            const { edges } = useCanvasStore.getState();
+            const edge = edges.find((e) => e.id === nodeId);
+            if (edge) {
+              const rawColor = (edge.data as { color?: unknown } | undefined)
+                ?.color;
+              const current =
+                typeof rawColor === 'string' ? rawColor : undefined;
+              const palette: (string | undefined)[] = [
+                undefined,
+                '#ef4444',
+                '#f97316',
+                '#10b981',
+                '#3b82f6',
+                '#a855f7',
+              ];
+              const idx = palette.indexOf(current);
+              const next = palette[(idx + 1 + palette.length) % palette.length];
+              saveSnapshot();
+              updateEdgeData(nodeId, { color: next });
+            }
           }
           break;
         }
@@ -357,6 +414,7 @@ export function useContextMenu({
       pasteClipboard,
       saveSnapshot,
       createNode,
+      commitNodeData,
       onRequestCreate,
     ]
   );

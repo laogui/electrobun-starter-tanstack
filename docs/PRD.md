@@ -662,13 +662,13 @@ updatedAt: 2026-03-31T14:30:00Z
 | ---  | ---------------------------- | ------ | --------- |
 | 15   | **多画布视图切换**           | 中     | ✅ 已完成 |
 | 16   | **多 workspace 管理**        | 中     | ❌ 待实现 |
-| 17   | **节点锁定**                 | 低     | ❌ 待实现 |
+| 17   | **节点锁定**                 | 低     | ✅ 已完成（节点右键 Lock/Unlock，data.locked 持久化，锁定时禁用 drag/connect/delete 并显示右上角锁定徽章） |
 | 18   | **框选 (Marquee Selection)** | 低     | ✅ 已完成（React Flow 内置框选 + 自定义选框样式） |
 | 19   | **导入 JSON / .md**          | 低     | ❌ 待实现 |
 | 20   | **移动端适配**               | 高     | ❌ 待实现 |
 | 21   | **Group 拖拽推开**           | 中     | ✅ 已完成 |
-| 22   | **`extent: "parent"` 约束**  | 低     | ❌ 待实现 |
-| 23   | **Edge 颜色/样式**           | 低     | ❌ 待实现 |
+| 22   | **`extent: "parent"` 约束**  | 低     | ✅ 已完成（createNode / useNodeDrag / clipboard paste / initialNodes 均已在写入 parentId 时附带 extent: 'parent'，normalizeCanvasParenting 保留） |
+| 23   | **Edge 颜色/样式**           | 低     | ✅ 已完成（边右键菜单 Cycle Color，LabeledEdge 读取 data.color） |
 | 23.1 | **桌面应用图标** — 多尺寸 icns/ico | 低     | ✅ 已完成 |
 
 ### 🔮 远期

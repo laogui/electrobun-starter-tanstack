@@ -6,6 +6,7 @@ import {
 } from '@xyflow/react';
 import { ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { toWorkspaceAttachmentPath } from '@/lib/workspaceAttachmentPaths';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../../../paraglide/messages.js';
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
 
 const handleClassName = 'conn-handle nodrag';
@@ -289,6 +291,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
           }
         } catch (error) {
           console.error('[ImageNode] Failed to save thumbnail:', error);
+          toast.error(m.toast_image_thumbnail_failed());
         }
       });
       reader.readAsDataURL(file);

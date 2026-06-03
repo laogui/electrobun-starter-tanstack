@@ -55,6 +55,11 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('../../../../paraglide/messages.js', () => ({
+  toast_asset_file_open_failed: () => 'Localized file open failed',
+  toast_asset_file_unsaved: () => 'Localized file unsaved',
+}));
+
 describe('formatFileSize', () => {
   it('formats byte counts for asset metadata', () => {
     expect(formatFileSize(512)).toBe('512 B');
@@ -91,6 +96,51 @@ describe('AssetContent', () => {
     expect(screen.getByText('report.pdf')).toBeInTheDocument();
     expect(screen.getByText('application/pdf')).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+  });
+
+  it('provides a title for the truncated focused attachment path', () => {
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/report.pdf',
+          color: '#ffffff',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/octet-stream',
+          title: 'Report',
+        }}
+        isFocused
+      />
+    );
+
+    expect(screen.getByText('attachments/report.pdf')).toHaveAttribute(
+      'title',
+      'attachments/report.pdf'
+    );
+  });
+
+  it('uses localized copy when opening an attachment fails', async () => {
+    rpcOpenAttachmentMock.mockResolvedValueOnce({ success: false });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/draft.txt',
+          color: '#ffffff',
+          fileName: 'draft.txt',
+          kind: 'file',
+          mimeType: 'application/octet-stream',
+          title: 'Draft',
+        }}
+        isFocused
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: OPEN_FILE_RE }));
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith('Localized file open failed');
+    });
   });
 
   it('opens saved attachments from focused view', async () => {

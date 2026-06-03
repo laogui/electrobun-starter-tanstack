@@ -261,7 +261,7 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card'
+          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
         onClick={handleClick}
       >

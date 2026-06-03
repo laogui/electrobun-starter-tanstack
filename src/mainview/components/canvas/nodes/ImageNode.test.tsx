@@ -8,6 +8,8 @@ import ImageNode, { ImageContent } from './ImageNode';
 const updateNodeDataMock = vi.fn();
 const rpcLoadAttachmentMock = vi.fn();
 const rpcSaveAttachmentMock = vi.fn();
+const createImageThumbnailMock = vi.hoisted(() => vi.fn());
+const toastErrorMock = vi.hoisted(() => vi.fn());
 const useViewportMock = vi.fn(() => ({ zoom: 1 }));
 
 const CLICK_TO_ADD_IMAGE_RE = /click to add image/i;
@@ -83,6 +85,11 @@ vi.mock('@/lib/rpc', () => ({
   rpcSaveAttachment: (...args: unknown[]) => rpcSaveAttachmentMock(...args),
 }));
 
+vi.mock('@/lib/thumbnail', () => ({
+  createImageThumbnail: (...args: unknown[]) =>
+    createImageThumbnailMock(...args),
+}));
+
 vi.mock('@/components/card/useNodeTagEditing', () => ({
   useNodeTagEditing: () => ({
     dimmedByFilter: false,
@@ -93,18 +100,35 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
   }),
 }));
 
+vi.mock('sonner', () => ({
+  toast: {
+    error: toastErrorMock,
+  },
+}));
+
+vi.mock('../../../../paraglide/messages.js', () => ({
+  replace_image_confirm_action: () => 'Replace',
+  replace_image_confirm_body: () => 'The current image will be replaced.',
+  replace_image_confirm_cancel: () => 'Cancel',
+  replace_image_confirm_title: () => 'Replace image?',
+  toast_image_thumbnail_failed: () => 'Localized thumbnail failed',
+}));
+
 describe('ImageNode', () => {
   vi.stubGlobal('FileReader', FileReaderMock as unknown as typeof FileReader);
 
   beforeEach(() => {
     rpcLoadAttachmentMock.mockResolvedValue(null);
     rpcSaveAttachmentMock.mockResolvedValue({ filePath: '/tmp/image.png' });
+    createImageThumbnailMock.mockResolvedValue(null);
   });
 
   afterEach(() => {
     updateNodeDataMock.mockReset();
     rpcLoadAttachmentMock.mockReset();
     rpcSaveAttachmentMock.mockReset();
+    createImageThumbnailMock.mockReset();
+    toastErrorMock.mockReset();
     useViewportMock.mockReset();
     useViewportMock.mockReturnValue({ zoom: 1 });
     document.body.className = '';
@@ -415,6 +439,43 @@ describe('ImageNode', () => {
 
     expect(updateNodeDataMock).not.toHaveBeenCalledWith('image-5', {
       imageFile: expect.anything(),
+    });
+  });
+
+  it('shows a toast when thumbnail creation fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    createImageThumbnailMock.mockRejectedValueOnce(
+      new Error('thumbnail failed')
+    );
+
+    render(
+      <ImageNode
+        data={{
+          color: '#fff',
+          imageFile: undefined,
+          imageUrl: '',
+          title: '',
+        }}
+        id="image-6"
+      />
+    );
+
+    const root = screen
+      .getByRole('button', { name: CLICK_TO_ADD_IMAGE_RE })
+      .closest('[class~="group/image"]') as HTMLElement;
+
+    fireEvent.drop(root, {
+      dataTransfer: {
+        files: [new File(['image'], 'thumb-fail.png', { type: 'image/png' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[ImageNode] Failed to save thumbnail:',
+        expect.any(Error)
+      );
+      expect(toastErrorMock).toHaveBeenCalledWith('Localized thumbnail failed');
     });
   });
 });

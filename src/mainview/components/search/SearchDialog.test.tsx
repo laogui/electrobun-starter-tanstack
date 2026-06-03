@@ -31,6 +31,18 @@ vi.mock('@/lib/rpc', () => ({
   rpcSaveManifest: rpcMocks.rpcSaveManifest,
 }));
 
+vi.mock('../../../paraglide/messages.js', () => ({
+  search_dialog_placeholder: () => 'Localized search placeholder',
+  search_no_matches: () => 'Localized no matches',
+  search_recent_title: () => 'Recent searches',
+  search_recent_clear: () => 'Clear',
+  search_filter_all: () => 'All',
+  search_filter_notes: () => 'Notes',
+  search_filter_folders: () => 'Folders',
+  search_filter_links: () => 'Links',
+  search_filter_images: () => 'Images',
+}));
+
 import { SearchDialog } from './SearchDialog';
 
 const SEARCH_FAILED_RE = /Search failed: boom/;
@@ -137,7 +149,10 @@ describe('searchDialog', () => {
 
   it('renders the search input and listbox when open', () => {
     render(<SearchDialog />);
-    expect(screen.getByLabelText('Search query')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search query')).toHaveAttribute(
+      'placeholder',
+      'Localized search placeholder'
+    );
     expect(screen.getByTestId('search-results')).toBeInTheDocument();
   });
 
@@ -150,7 +165,7 @@ describe('searchDialog', () => {
   it('renders the empty state when the query has no matches', () => {
     setSearch({ query: 'nothing', results: [] });
     render(<SearchDialog />);
-    expect(screen.getByText('No matches')).toBeInTheDocument();
+    expect(screen.getByText('Localized no matches')).toBeInTheDocument();
   });
 
   it('shows the result count for non-empty searches', () => {

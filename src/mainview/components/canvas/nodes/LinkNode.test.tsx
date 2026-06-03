@@ -118,6 +118,28 @@ describe('LinkContent', () => {
     ).not.toBeInTheDocument();
     expect(screen.getAllByText('https://example.com/docs')).not.toHaveLength(0);
   });
+
+  it('provides a title for the truncated focused URL', () => {
+    render(
+      <LinkContent
+        data={{
+          color: '#ffffff',
+          title: 'Example docs',
+          url: 'https://example.com/docs',
+        }}
+        isFocused
+      />
+    );
+
+    expect(
+      screen
+        .getAllByText('https://example.com/docs')
+        .some(
+          (element) =>
+            element.getAttribute('title') === 'https://example.com/docs'
+        )
+    ).toBe(true);
+  });
 });
 
 describe('LinkNode', () => {

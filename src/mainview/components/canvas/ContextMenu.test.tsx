@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
-const COPY_RE = /copy/i;
+const COPY_RE = /^copy ⌘c$/i;
 const NEW_NOTE_RE = /new note/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {

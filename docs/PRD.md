@@ -56,6 +56,7 @@
   - 每个卡片提供四个方向（上/右/下/左）的连接点。
   - 连线默认为 `smoothstep`（平滑折线）样式，支持 `animated` 流动动画。
   - 连线可添加文本标签，用于标注关系类型。
+  - **连线颜色**：右键菜单 `Cycle Color` 在默认色与红/橙/绿/蓝/紫之间循环，颜色写入 `edge.data.color` 并随 manifest 持久化；选中态仍以加粗描边表达。
   - **双向绘制与连接预览**：拖拽连线时，画布实时渲染一条跟随光标的**自定义连接预览线**（`ConnectionPreviewLine`），以虚线或半透明样式提示当前拖拽路径。释放时若命中目标卡片的 Handle，则建立正式 Edge；若未命中，则预览线消失，不创建无效连接。
   - **端点边界（MVP）**：仅当前画布上可见的节点实例暴露 Handle；被收纳进 Folder 的子卡片在 drill-down 中只用于浏览与聚焦，不作为独立 Edge 端点。
   - **Folder 兼容规则（MVP）**：Folder 本体可作为一个摘要节点被连线，但系统不会在 drill-down 时自动把该连线映射到某个子卡片；需要表达外部关系时，应连到 Folder 封面节点本身。
@@ -100,10 +101,11 @@
 
 - **功能描述**：右键菜单是画布上的高频操作入口，避免用户频繁依赖顶部工具栏或记忆快捷键。
 - **交互逻辑**：
-  - **画布空白处右键**：提供新建卡片（`note` / `checklist` / `image` / `sticky`）、粘贴、新建 Group、重置缩放到 100% 等操作。
-  - **卡片上右键**：提供复制、从当前画布移除、改颜色、锁定/解锁、打开聚焦模式等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
-  - **Folder 上右键**：提供打开 Folder、重命名显示标签、在该 Folder 内新建卡片等操作。**注**：M5 之后 Folder 子卡片在 `content/` 下为扁平的 `.md` 文件（见 §5.3），因此不再提供「在系统文件管理器中显示目录」入口；如需查看子笔记文件，请在 workspace 的 `content/` 根目录下按 `noteId` / 标题查找。Folder drill-down 视图中的子卡片菜单需额外提供 `Extract to Canvas`。
-  - **连线上右键**：提供删除连线、编辑标签、修改样式/颜色。即使 Edge 在 MVP 早期未完全实现，菜单结构仍需提前定义，避免后续交互再重构。
+  - **画布空白处右键**：提供新建卡片（`note` / `checklist` / `image` / `sticky`）、粘贴、新建 Group、重置缩放到 100%、导出画布为 Markdown 等操作。
+  - **卡片上右键**：提供聚焦打开、复制、Copy as Markdown（标题 + 正文写入剪贴板）、改颜色、编辑标签、锁定/解锁、移到笔记库、导出为 Markdown、删除等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
+  - **Sticky / Image / Asset / Link / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点（含 Sticky / Image / Asset / Link / Folder / Group）的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。
+  - **Folder 上右键**：提供打开 Folder、重命名显示标签、在该 Folder 内新建卡片、锁定/解锁、删除等操作。**注**：M5 之后 Folder 子卡片在 `content/` 下为扁平的 `.md` 文件（见 §5.3），因此不再提供「在系统文件管理器中显示目录」入口；如需查看子笔记文件，请在 workspace 的 `content/` 根目录下按 `noteId` / 标题查找。Folder drill-down 视图中的子卡片菜单需额外提供 `Extract to Canvas`。
+  - **连线上右键**：提供编辑标签、切换动画、切换曲线/折线、`Cycle Color` 循环切换连线颜色、删除连线等操作。
 
 ### 2.7 多画布视图 (Multi-Canvas Views) ✅
 
@@ -129,6 +131,8 @@
   - 输入关键词后 debounce 调用 Bun 侧 `searchCanvas`；当前画布内存状态会与后端结果合并，降低未落盘编辑被漏搜的概率。
   - 点击搜索结果项，若命中当前画布节点或连线，则选中并平移缩放至对应位置；若命中其他画布，则先切换 `activeViewId`，待目标 manifest hydrate 后再定位。
   - **排序规则（MVP）**：标题/名称匹配优先于正文匹配，再按基础相关性评分和更新时间排序。后续可引入更完整的字段权重与索引。
+  - **类型筛选 chips**：搜索框下方提供 `All / Notes / Folders / Links / Images` 切换按钮，仅在前端对 `result.kind` 做客户端过滤，不重发查询。`Notes` 同时覆盖 `note` 与 `card` 两种 kind。
+  - **搜索历史**：查询输入为空时显示「Recent searches」分组，列出 `localStorage` 中保存的最近 8 条查询（`ghostboard:search-history` 键），点击回填到输入框；提供 `Clear` 一键清空与单条删除入口。历史只在用户实际选中结果时落盘，避免误触污染。
   - **Detached notes 的可见性**：用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索。画布侧提供游离笔记管理入口，可将 detached notes 拖回画布并赋予真实坐标。
 - **当前限制 / 待办**：
   - 后端搜索目前主要索引 manifest 顶层节点；Folder `children` 中的 Card/Asset/Link/Image 仍可能漏搜，需作为 P0 补齐。
@@ -157,6 +161,7 @@
 | `Cmd+A`                 | `Ctrl+A`                  | 全选当前上下文中的节点                                                          |
 | `Cmd+N`                 | `Ctrl+N`                  | 打开新建卡片菜单                                                                |
 | `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式                                                          |
+| `Cmd+←` / `Cmd+→`       | `Ctrl+←` / `Ctrl+→`       | 聚焦模式下切换到上一条 / 下一条可聚焦项（与 FocusedView 左右两侧的 `<` / `>` 按钮一致） |
 | `Escape`                | `Escape`                  | 关闭聚焦/文件夹视图、退出搜索/菜单                                              |
 
 ### 2.11 交互状态机 (Interaction State Machine)
@@ -549,14 +554,14 @@ updatedAt: 2026-03-31T14:30:00Z
   - **Markdown**：单篇笔记导出（卡片右键 →「导出为 Markdown…」）、当前画布批量导出（画布右键 →「导出画布为 Markdown…」）。
     - 导出内容包含 frontmatter + 正文 + 附件收集 + `index.md`。
     - RPC `exportNoteMarkdown` / `exportNotesMarkdown` 已实现，`scope` 支持 `'view'`（当前画布）/ `'all'`（全部画布）/ `'selected'`（自选）。
-    - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-9）。
+    - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-23）。
   - **JSON**：导出完整画布数据（manifest + 关联的 .md 内容），可用于备份或迁移。
   - **PNG/SVG**：将当前画布视口导出为图片（用于分享或演示）。
 - **导入**：
   - 支持导入此前导出的 JSON 文件以恢复画布。
   - 支持拖拽图片文件到画布上自动创建图片卡片。
   - 支持直接将 `.md` 文件拖入画布创建笔记卡片。
-  - ⚠️ 显式「从 Markdown 重新导入」（解析外部 .md → blocks → 写 sidecar，覆盖当前内容）尚未实现（见 TODO-10）。
+  - ⚠️ 显式「从 Markdown 重新导入」（解析外部 .md → blocks → 写 sidecar，覆盖当前内容）尚未实现（见 TODO-24）。
 
 ### 5.10 关键架构决策
 
@@ -715,21 +720,16 @@ updatedAt: 2026-03-31T14:30:00Z
 | TODO-8 | **独立 saveNote debounce** | 当前正文修改主要经 manifest 保存链路写回；若后续编辑场景变重，需要独立内容保存队列。 | P2 |
 | TODO-9 | **ContextMenu 多选批量操作** | 当 `selectedNodes.length > 1` 时显示批量菜单：Delete N items / Copy N items / Change color。当前右键菜单只对单个节点生效，多选后批量改色/批量删除/批量复制无法走右键流程。来源：原 UX 审计 8.2.1。 | P2 |
 | TODO-10 | **FocusedView 遮罩关闭保存确认** | 检测 BlockNote 是否有未 flush 的修改，有则弹出 "Discard changes?" 确认。当前点击黑色遮罩直接 `onClose()`（[FocusedView.tsx#L291](./../src/mainview/components/canvas/FocusedView.tsx)），debounce 未到期的编辑可能丢失。来源：原 UX 审计 8.5.3。 | P2 |
-| TODO-11 | **FocusedView 上一条/下一条快捷键** | 现已有 `<`/`>` 按钮（[FocusedView.tsx#L312-L358](./../src/mainview/components/canvas/FocusedView.tsx)），缺 `Cmd+←` / `Cmd+→` 键盘绑定。来源：原 UX 审计 8.5.1。 | P2 |
 | TODO-12 | **FocusedView 卡片位置面包屑** | 在返回按钮旁显示 `{FolderName} > {CardTitle}`，让聚焦中的卡片有归属感（尤其是 Folder child）。来源：原 UX 审计 8.5.2。 | P3 |
-| TODO-13 | **ContextMenu「复制为 Markdown」** | 卡片右键新增 "Copy as Markdown"，把标题 + 正文写入剪贴板。当前只有 `export-markdown`（导出为文件），无快速复制到剪贴板的入口。来源：原 UX 审计 8.2.2。 | P3 |
-| TODO-14 | **SearchDialog 搜索历史** | 用 `localStorage` 保存最近 5–10 条查询，打开搜索时显示 "Recent searches"。来源：原 UX 审计 8.3.2。 | P3 |
-| TODO-15 | **SearchDialog 按类型筛选 chips** | 在搜索框下方加 `All / Notes / Folders / Links / Images` chips，支持「只搜某类」。来源：原 UX 审计 8.3.3。 | P3 |
-| TODO-16 | **BlockNote 字数/词数统计** | 聚焦模式编辑器底部或工具栏展示字数/词数；可考虑选区统计。来源：原 UX 审计 8.1。 | P3 |
+| TODO-16b | **BlockNote 选区字数统计** | FocusedView 当前已展示整篇正文字数/字符数（基于 markdown 文本剥离格式后统计）。后续可在 BlockNote 选区变化时给出选中文本的字数统计。来源：原 UX 审计 8.1。 | P3 |
 | TODO-17 | **BlockNote 查找替换** | 当前 BlockNote 无内置 find/replace；接入或自研一个轻量查找替换面板，至少支持 `Cmd+F` 高亮匹配。来源：原 UX 审计 8.1。 | P3 |
-| TODO-9 | **Markdown 批量导出 UI 入口** | 设置页添加「导出所有笔记为 Markdown…」按钮；画布多选后提供「批量导出选中」入口。RPC `exportNotesMarkdown` 已支持 `scope: 'all' \| 'selected'`，只缺前端入口。注意：设置窗口是独立 `BrowserView`，需在 settings RPC 通道暴露导出接口或由设置页向主窗口发消息触发。 | P2 |
-| TODO-10 | **显式「从 Markdown 重新导入」** | 新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。当前只有 legacy `.md`（无 sidecar）的自动一次性导入，缺少显式入口。 | P1 |
-| TODO-11 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
-| TODO-12 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
+| TODO-23 | **Markdown 批量导出 UI 入口** | 设置页添加「导出所有笔记为 Markdown…」按钮；画布多选后提供「批量导出选中」入口。RPC `exportNotesMarkdown` 已支持 `scope: 'all' \| 'selected'`，只缺前端入口。注意：设置窗口是独立 `BrowserView`，需在 settings RPC 通道暴露导出接口或由设置页向主窗口发消息触发。 | P2 |
+| TODO-24 | **显式「从 Markdown 重新导入」** | 新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。当前只有 legacy `.md`（无 sidecar）的自动一次性导入，缺少显式入口。 | P1 |
+| TODO-25 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
+| TODO-26 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
 | TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（1749 行），每加一个功能都要改这个文件。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`。来源：原架构审计。 | P2 |
 | TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（905 行）。建议提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit` 等自定义 hooks。来源：原架构审计。 | P2 |
 | TODO-20 | **深色主题覆盖不完整** | Group label 文字颜色、部分 placeholder 文本颜色缺少 `dark:` variant。需逐组件审查深色主题适配。来源：原架构审计。 | P2 |
-| TODO-21 | **Shadow 一致性** | StickyNode 缺少 `hover:shadow-card-hover` 和 `transition-shadow`，与 CardNode/ImageNode/AssetNode/LinkNode 不一致。需产品确认设计意图后决定是否对齐。来源：原架构审计。 | P2 |
 | TODO-22 | **Onboarding 引导流程** | 首次打开应用 seed 了 `quick-start` 模板，但没有任何浮层引导。建议在首次启动时显示 3-4 步引导浮层：1.「拖拽平移画布」2.「双击卡片进入编辑」3.「右键创建新内容」4.「Cmd+K 搜索」。来源：原架构审计。 | P2 |
 
 ### 8.4 已落地的关键决策映射（供回查）

@@ -1,0 +1,17 @@
+name: electrobun-starter-tanstack
+icon: null
+processes:
+  bun:dev:
+    command: bun run dev:hmr
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  bun:start:
+    command: bun run start
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}

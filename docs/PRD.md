@@ -546,12 +546,17 @@ updatedAt: 2026-03-31T14:30:00Z
 ### 5.9 导入/导出 (Import / Export)
 
 - **导出**：
+  - **Markdown**：单篇笔记导出（卡片右键 →「导出为 Markdown…」）、当前画布批量导出（画布右键 →「导出画布为 Markdown…」）。
+    - 导出内容包含 frontmatter + 正文 + 附件收集 + `index.md`。
+    - RPC `exportNoteMarkdown` / `exportNotesMarkdown` 已实现，`scope` 支持 `'view'`（当前画布）/ `'all'`（全部画布）/ `'selected'`（自选）。
+    - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-9）。
   - **JSON**：导出完整画布数据（manifest + 关联的 .md 内容），可用于备份或迁移。
   - **PNG/SVG**：将当前画布视口导出为图片（用于分享或演示）。
 - **导入**：
   - 支持导入此前导出的 JSON 文件以恢复画布。
   - 支持拖拽图片文件到画布上自动创建图片卡片。
   - 支持直接将 `.md` 文件拖入画布创建笔记卡片。
+  - ⚠️ 显式「从 Markdown 重新导入」（解析外部 .md → blocks → 写 sidecar，覆盖当前内容）尚未实现（见 TODO-10）。
 
 ### 5.10 关键架构决策
 
@@ -708,6 +713,10 @@ updatedAt: 2026-03-31T14:30:00Z
 | TODO-6 | **模板库 P5 收尾** | 补模板数量，接入 thumbnail，删除 `preview-test` 路由，决定从模板创建的画布命名规则，考虑 URL query 同步与 i18n metadata。 | P1 |
 | TODO-7 | **Multi-workspace** | 欢迎页、创建/打开/切换 workspace、recent list、app config、settings 迁移策略。 | P2 |
 | TODO-8 | **独立 saveNote debounce** | 当前正文修改主要经 manifest 保存链路写回；若后续编辑场景变重，需要独立内容保存队列。 | P2 |
+| TODO-9 | **Markdown 批量导出 UI 入口** | 设置页添加「导出所有笔记为 Markdown…」按钮；画布多选后提供「批量导出选中」入口。RPC `exportNotesMarkdown` 已支持 `scope: 'all' \| 'selected'`，只缺前端入口。注意：设置窗口是独立 `BrowserView`，需在 settings RPC 通道暴露导出接口或由设置页向主窗口发消息触发。 | P2 |
+| TODO-10 | **显式「从 Markdown 重新导入」** | 新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。当前只有 legacy `.md`（无 sidecar）的自动一次性导入，缺少显式入口。 | P1 |
+| TODO-11 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
+| TODO-12 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
 
 ### 8.4 已落地的关键决策映射（供回查）
 

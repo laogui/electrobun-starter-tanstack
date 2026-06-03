@@ -726,6 +726,11 @@ updatedAt: 2026-03-31T14:30:00Z
 | TODO-10 | **显式「从 Markdown 重新导入」** | 新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。当前只有 legacy `.md`（无 sidecar）的自动一次性导入，缺少显式入口。 | P1 |
 | TODO-11 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
 | TODO-12 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
+| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（1749 行），每加一个功能都要改这个文件。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`。来源：原架构审计。 | P2 |
+| TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（905 行）。建议提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit` 等自定义 hooks。来源：原架构审计。 | P2 |
+| TODO-20 | **深色主题覆盖不完整** | Group label 文字颜色、部分 placeholder 文本颜色缺少 `dark:` variant。需逐组件审查深色主题适配。来源：原架构审计。 | P2 |
+| TODO-21 | **Shadow 一致性** | StickyNode 缺少 `hover:shadow-card-hover` 和 `transition-shadow`，与 CardNode/ImageNode/AssetNode/LinkNode 不一致。需产品确认设计意图后决定是否对齐。来源：原架构审计。 | P2 |
+| TODO-22 | **Onboarding 引导流程** | 首次打开应用 seed 了 `quick-start` 模板，但没有任何浮层引导。建议在首次启动时显示 3-4 步引导浮层：1.「拖拽平移画布」2.「双击卡片进入编辑」3.「右键创建新内容」4.「Cmd+K 搜索」。来源：原架构审计。 | P2 |
 
 ### 8.4 已落地的关键决策映射（供回查）
 

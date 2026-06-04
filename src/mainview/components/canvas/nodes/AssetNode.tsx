@@ -1,4 +1,4 @@
-import { Handle, Position, useViewport } from '@xyflow/react';
+import { useViewport } from '@xyflow/react';
 import {
   AlertTriangle,
   ExternalLink,
@@ -23,9 +23,9 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
+import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
-const handleClassName = 'conn-handle nodrag';
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
 
 export type AssetNodeRuntimeData = Partial<AssetNodeData> & {
@@ -405,8 +405,13 @@ export const AssetContent = ({
       toast.error(m.toast_asset_file_unsaved());
       return;
     }
-    const result = await rpcOpenAttachment(asset.attachmentFile);
-    if (!result.success) {
+    try {
+      const result = await rpcOpenAttachment(asset.attachmentFile);
+      if (!result.success) {
+        toast.error(m.toast_asset_file_open_failed());
+      }
+    } catch (error) {
+      console.error('[AssetNode] Failed to open attachment:', error);
       toast.error(m.toast_asset_file_open_failed());
     }
   }, [asset.attachmentFile]);
@@ -657,30 +662,7 @@ const AssetNode = ({
         onResizeStart={saveSnapshot}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         {isZoomedOut ? (

@@ -1,4 +1,4 @@
-import { Handle, Position, useViewport } from '@xyflow/react';
+import { useViewport } from '@xyflow/react';
 import {
   ExternalLink,
   Globe2,
@@ -394,30 +394,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         onResizeStart={saveSnapshot}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         {isZoomedOut ? (

@@ -114,16 +114,12 @@ export function useNodeDrag() {
           .getIntersectingNodes(node)
           .find((n) => n.type === 'group');
         targetGroupId = group?.id ?? null;
-        setNodes((nds) => {
-          const folder = findOverlappingFolder(node, nds);
-          targetFolderId = folder?.id || null;
-          setDropTargetId(targetFolderId);
-          return nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
-              : n
-          );
-        });
+        const folder = findOverlappingFolder(
+          node,
+          useCanvasStore.getState().nodes
+        );
+        targetFolderId = folder?.id || null;
+        setDropTargetId(targetFolderId);
       }
       // Folders can go into groups but NOT into other folders
       else if (node.type === 'folder') {
@@ -132,35 +128,29 @@ export function useNodeDrag() {
           .find((n) => n.type === 'group');
         targetGroupId = group?.id ?? null;
         setDropTargetId(null);
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
-              : n
-          )
-        );
       }
       // Groups cannot go into anything
       else if (node.type === 'group') {
         setDropTargetId(null);
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: false } }
-              : n
-          )
-        );
       }
 
       setActiveGroupId(targetGroupId);
 
-      // --- Repulsion: push all overlapping nodes away ---
+      // --- Combined: group highlighting + repulsion in single setNodes ---
       // Exempt all potential drop-target containers so the dragged node can
       // approach and enter them without pushing them away.
       setNodes((nds) => {
+        // First pass: apply group highlighting
+        const highlighted = nds.map((n) =>
+          n.type === 'group'
+            ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
+            : n
+        );
+
+        // Second pass: prepare nodes for repulsion with live drag positions
         const exemptIds = new Set<string>();
         const hasReportedDraggedNodes = draggedNodes.length > 0;
-        const nodesForRepulsion = nds.map((n) => {
+        const nodesForRepulsion = highlighted.map((n) => {
           const draggedNode = liveDraggedNodes.get(n.id);
           if (!draggedNode) {
             return n;
@@ -177,7 +167,7 @@ export function useNodeDrag() {
 
         const draggingIds = hasReportedDraggedNodes
           ? new Set(liveDraggedNodes.keys())
-          : new Set(nds.filter((n) => n.selected).map((n) => n.id));
+          : new Set(highlighted.filter((n) => n.selected).map((n) => n.id));
         if (!draggingIds.has(node.id)) {
           draggingIds.add(node.id);
         }
@@ -186,7 +176,7 @@ export function useNodeDrag() {
         // (e.g. card/image but not sticky) are exempt from folder repulsion.
         if (isContentNode(node)) {
           const canEnterFolder = canAbsorbIntoFolder(node);
-          for (const n of nds) {
+          for (const n of highlighted) {
             if (n.type === 'group') {
               exemptIds.add(n.id);
             } else if (n.type === 'folder' && canEnterFolder) {
@@ -196,7 +186,7 @@ export function useNodeDrag() {
         }
         // Folders can enter any group
         else if (node.type === 'folder') {
-          for (const n of nds) {
+          for (const n of highlighted) {
             if (n.type === 'group') {
               exemptIds.add(n.id);
             }

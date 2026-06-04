@@ -1,13 +1,12 @@
-import { Handle, Position, useViewport } from '@xyflow/react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useViewport } from '@xyflow/react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-
-const handleClassName = 'conn-handle nodrag';
 
 export interface FolderData {
   children?: unknown[];
@@ -136,52 +135,54 @@ function folderSurfaces(color: string | undefined): FolderSurfaces | null {
   };
 }
 
+const THUMB_STACK_TRANSFORMS = [
+  'translateX(0) rotate(0deg)',
+  'translateX(-7%) rotate(-5deg)',
+  'translateX(7%) rotate(5deg)',
+];
+
 /** Up to three child previews fanned out as papers peeking from the folder. */
-const FolderThumbStack = ({ previews }: { previews: FolderChildPreview[] }) => {
-  const transforms = [
-    'translateX(0) rotate(0deg)',
-    'translateX(-7%) rotate(-5deg)',
-    'translateX(7%) rotate(5deg)',
-  ];
-  return (
-    <div className="absolute inset-x-[13%] top-[18%] h-[30%]">
-      {previews
-        .slice(0, 3)
-        .map((preview, index) => ({ preview, index }))
-        .reverse()
-        .map(({ preview, index }) => (
-          <div
-            className="absolute inset-0 overflow-hidden rounded-xl border border-white/70 bg-white shadow-[0_8px_16px_rgba(40,22,116,0.22)] dark:border-white/15 dark:bg-neutral-800"
-            key={index}
-            style={{ transform: transforms[index], zIndex: 10 - index }}
-          >
-            {preview.imageUrl ? (
-              <img
-                alt=""
-                className="size-full object-cover"
-                draggable={false}
-                src={preview.imageUrl}
-              />
-            ) : (
-              <div
-                className={cn(
-                  'size-full p-2',
-                  isColorDark(preview.color) && 'text-white'
-                )}
-                style={colorToStyle(preview.color ?? '#FFFFFF')}
-              >
-                <div className="space-y-1.5 opacity-25">
-                  <div className="h-1.5 w-3/4 rounded-full bg-current" />
-                  <div className="h-1.5 w-full rounded-full bg-current" />
-                  <div className="h-1.5 w-2/3 rounded-full bg-current" />
-                </div>
+const FolderThumbStack = ({ previews }: { previews: FolderChildPreview[] }) => (
+  <div className="absolute inset-x-[13%] top-[18%] h-[30%]">
+    {previews
+      .slice(0, 3)
+      .map((preview, index) => ({ preview, index }))
+      .reverse()
+      .map(({ preview, index }) => (
+        <div
+          className="absolute inset-0 overflow-hidden rounded-xl border border-white/70 bg-white shadow-[0_8px_16px_rgba(40,22,116,0.22)] dark:border-white/15 dark:bg-neutral-800"
+          key={index}
+          style={{
+            transform: THUMB_STACK_TRANSFORMS[index],
+            zIndex: 10 - index,
+          }}
+        >
+          {preview.imageUrl ? (
+            <img
+              alt=""
+              className="size-full object-cover"
+              draggable={false}
+              src={preview.imageUrl}
+            />
+          ) : (
+            <div
+              className={cn(
+                'size-full p-2',
+                isColorDark(preview.color) && 'text-white'
+              )}
+              style={colorToStyle(preview.color ?? '#FFFFFF')}
+            >
+              <div className="space-y-1.5 opacity-25">
+                <div className="h-1.5 w-3/4 rounded-full bg-current" />
+                <div className="h-1.5 w-full rounded-full bg-current" />
+                <div className="h-1.5 w-2/3 rounded-full bg-current" />
               </div>
-            )}
-          </div>
-        ))}
-    </div>
-  );
-};
+            </div>
+          )}
+        </div>
+      ))}
+  </div>
+);
 
 /**
  * Pure presentational folder visual: stacked layers + main cover (signature
@@ -202,8 +203,11 @@ export const FolderContent = ({
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
   const childCountLabel =
     childCount === 1 ? '1 item' : childCount > 1 ? `${childCount} items` : '';
-  const surfaces = folderSurfaces(data.color);
-  const previews = toFolderChildPreviews(data.children);
+  const surfaces = useMemo(() => folderSurfaces(data.color), [data.color]);
+  const previews = useMemo(
+    () => toFolderChildPreviews(data.children),
+    [data.children]
+  );
 
   return (
     <div
@@ -444,30 +448,7 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
         onResizeStart={saveSnapshot}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       <FolderContent
         data={data}

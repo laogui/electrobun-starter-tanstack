@@ -1,9 +1,4 @@
-import {
-  Handle,
-  NodeResizeControl,
-  Position,
-  useViewport,
-} from '@xyflow/react';
+import { NodeResizeControl, useViewport } from '@xyflow/react';
 import { memo, useCallback, useRef, useState } from 'react';
 
 import { NodeTagChips } from '@/components/card/NodeTagChips';
@@ -242,30 +237,7 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
         </div>
       </NodeResizeControl>
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       <div
         className={cn(

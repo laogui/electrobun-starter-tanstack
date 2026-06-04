@@ -1,9 +1,4 @@
-import {
-  Handle,
-  NodeResizer,
-  Position,
-  useUpdateNodeInternals,
-} from '@xyflow/react';
+import { NodeResizer, useUpdateNodeInternals } from '@xyflow/react';
 import { motion } from 'motion/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
@@ -11,8 +6,7 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
-
-const handleClassName = 'conn-handle nodrag';
+import { NodeHandles } from './_shared/NodeHandles';
 
 export interface GroupData {
   active?: boolean;
@@ -153,30 +147,7 @@ const GroupNode = ({
         onResizeStart={() => saveSnapshot()}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
     </GroupContent>
   );
 };

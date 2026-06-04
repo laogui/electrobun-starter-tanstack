@@ -541,6 +541,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           '[canvasStore] Failed to delete folder child note:',
           error
         );
+        toast.error('Failed to delete note file');
       });
     }
   },
@@ -1128,12 +1129,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   createNode: (type, rfInstance, options) => {
     const spec = buildNewNodeSpec(type);
 
-    const viewport = rfInstance?.getViewport();
-    const zoom = viewport?.zoom ?? 1;
-    const viewportCenter = {
-      x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
-      y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
-    };
+    // Use React Flow's screenToFlowPosition API instead of manual calculation
+    // to avoid direct window dimension coupling
+    const viewportCenter = rfInstance?.screenToFlowPosition
+      ? rfInstance.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        })
+      : { x: 0, y: 0 };
     const center = options?.anchorCenter ?? viewportCenter;
     const anchor = options?.anchor ?? {
       x: center.x - spec.size.width / 2,

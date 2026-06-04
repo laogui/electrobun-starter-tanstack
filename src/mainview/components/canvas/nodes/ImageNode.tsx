@@ -1,4 +1,4 @@
-import { Handle, Position, useViewport } from '@xyflow/react';
+import { useViewport } from '@xyflow/react';
 import { AlertTriangle, ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -16,7 +16,6 @@ import * as m from '../../../../paraglide/messages.js';
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
-const handleClassName = 'conn-handle nodrag';
 const FILE_EXT_RE = /\.[^.]+$/;
 
 export interface ImageData {
@@ -298,6 +297,10 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
           console.error('[ImageNode] Failed to save thumbnail:', error);
           toast.error(m.toast_image_thumbnail_failed());
         }
+      });
+      reader.addEventListener('error', () => {
+        console.error('[ImageNode] FileReader error:', reader.error);
+        toast.error('Failed to read image file');
       });
       reader.readAsDataURL(file);
     },

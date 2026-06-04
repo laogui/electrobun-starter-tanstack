@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Handle, Position, useViewport } from '@xyflow/react';
+import { useViewport } from '@xyflow/react';
 import { Check, PenLine } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
@@ -9,9 +9,8 @@ import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-
-const handleClassName = 'conn-handle nodrag';
 
 interface SecondaryTagChipsProps {
   isDark: boolean;
@@ -304,7 +303,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
 
   // OR semantics: a card is "in scope" if it carries at least one of the
   // active filter tags. An empty filter list means no filtering at all.
-  const dimmedByFilter = (() => {
+  const dimmedByFilter = useMemo(() => {
     if (activeTagFilters.length === 0) {
       return false;
     }
@@ -316,7 +315,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
       haystack.add(t.toLowerCase());
     }
     return !activeTagFilters.some((f) => haystack.has(f.toLowerCase()));
-  })();
+  }, [activeTagFilters, viewData.tag, viewData.tags]);
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
 
@@ -384,30 +383,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         onResizeStart={saveSnapshot}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       {/* Visual wrapper — keeps Handle positions stable */}
       <div

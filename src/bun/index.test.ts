@@ -77,6 +77,7 @@ const noteMocks = {
   cardDataToNote: vi.fn(),
   createNote: vi.fn(),
   deleteNoteFile: vi.fn(),
+  listFilesRecursive: vi.fn(),
   loadNote: vi.fn(),
   noteToCardData: vi.fn(),
   saveNote: vi.fn(),
@@ -122,6 +123,9 @@ vi.mock('./notes', () => ({
     noteMocks.createNote(...args),
   deleteNoteFile: (...args: Parameters<typeof noteMocks.deleteNoteFile>) =>
     noteMocks.deleteNoteFile(...args),
+  listFilesRecursive: (
+    ...args: Parameters<typeof noteMocks.listFilesRecursive>
+  ) => noteMocks.listFilesRecursive(...args),
   loadNote: (...args: Parameters<typeof noteMocks.loadNote>) =>
     noteMocks.loadNote(...args),
   noteToCardData: (...args: Parameters<typeof noteMocks.noteToCardData>) =>
@@ -286,6 +290,7 @@ beforeEach(() => {
   noteStoreMocks.loadNoteRecord.mockResolvedValue(null);
   noteStoreMocks.mergeNoteMeta.mockResolvedValue(false);
   noteStoreMocks.noteRecordToCardData.mockReturnValue({});
+  noteMocks.listFilesRecursive.mockReturnValue([]);
   bunFileMock.mockReturnValue({
     exists: vi.fn().mockResolvedValue(false),
     json: vi.fn(),

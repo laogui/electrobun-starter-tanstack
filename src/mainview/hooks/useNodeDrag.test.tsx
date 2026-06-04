@@ -93,13 +93,23 @@ vi.mock('@/lib/collision', () => ({
   applyRepulsion: applyRepulsionMock,
 }));
 
-vi.mock('@/store/canvasStore', () => ({
-  useCanvasStore: (selector: (state: Record<string, unknown>) => unknown) =>
+vi.mock('@/store/canvasStore', () => {
+  const useCanvasStore = (
+    selector: (state: Record<string, unknown>) => unknown
+  ) =>
     selector({
       setNodes: setNodesMock,
       saveSnapshot: saveSnapshotMock,
-    }),
-}));
+    });
+
+  useCanvasStore.getState = () => ({
+    nodes: state.nodes,
+    setNodes: setNodesMock,
+    saveSnapshot: saveSnapshotMock,
+  });
+
+  return { useCanvasStore };
+});
 
 const Harness = () => {
   const {

@@ -28,9 +28,9 @@ import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
-const handleClassName = 'conn-handle nodrag';
 const DEFAULT_LINK_COLOR = '#FFFFFF';
 
 export type LinkNodeRuntimeData = Partial<LinkNodeData> & {

@@ -14,6 +14,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
+import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
 const FILE_EXT_RE = /\.[^.]+$/;
@@ -398,30 +399,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         onResizeStart={saveSnapshot}
       />
 
-      <Handle
-        className={handleClassName}
-        id="top"
-        position={Position.Top}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="right"
-        position={Position.Right}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="bottom"
-        position={Position.Bottom}
-        type="source"
-      />
-      <Handle
-        className={handleClassName}
-        id="left"
-        position={Position.Left}
-        type="source"
-      />
+      <NodeHandles />
 
       <input
         accept="image/*"

@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('electrobun/bun', () => ({
+  Utils: {
+    openPath: vi.fn(),
+  },
+}));
 
 import { assertWorkspaceAttachmentPath } from './attachments';
 

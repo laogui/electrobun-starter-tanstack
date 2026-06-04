@@ -1128,6 +1128,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   createNode: (type, rfInstance, options) => {
     const spec = buildNewNodeSpec(type);
+    const viewport = rfInstance?.getViewport();
+    const zoom = viewport?.zoom ?? 1;
 
     // Use React Flow's screenToFlowPosition API instead of manual calculation
     // to avoid direct window dimension coupling
@@ -1136,7 +1138,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           x: window.innerWidth / 2,
           y: window.innerHeight / 2,
         })
-      : { x: 0, y: 0 };
+      : {
+          x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
+          y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
+        };
     const center = options?.anchorCenter ?? viewportCenter;
     const anchor = options?.anchor ?? {
       x: center.x - spec.size.width / 2,

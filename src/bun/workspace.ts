@@ -6,10 +6,7 @@ import { Utils } from 'electrobun/bun';
 
 import type { CanvasManifest } from './manifest';
 import { saveManifest } from './manifest';
-import {
-  flushNodeMetadata,
-  setNodeMetadata,
-} from './nodeMetadata';
+import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
 import { createNote, saveNote } from './notes';
 import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
@@ -409,7 +406,9 @@ async function populateViewFromTemplate(
   // are remapped to their real noteIds; non-card keys (node.id) flow through
   // unchanged.
   if (template.nodeMetadata) {
-    for (const [placeholderKey, meta] of Object.entries(template.nodeMetadata)) {
+    for (const [placeholderKey, meta] of Object.entries(
+      template.nodeMetadata
+    )) {
       const realKey = noteIdMap.get(placeholderKey) ?? placeholderKey;
       await setNodeMetadata(wsPath, realKey, meta);
     }

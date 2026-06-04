@@ -196,6 +196,8 @@ vi.mock('@xyflow/react', async () => {
       onDragOver,
       onDrop,
       onNodeDoubleClick,
+      snapGrid,
+      snapToGrid,
       children,
     }: {
       children: React.ReactNode;
@@ -215,8 +217,10 @@ vi.mock('@xyflow/react', async () => {
         event: MouseEvent,
         node: { id: string; type?: string; data: Record<string, unknown> }
       ) => void;
+      snapGrid?: [number, number];
+      snapToGrid?: boolean;
     }) => {
-      reactFlowMocks.props({ connectionLineComponent });
+      reactFlowMocks.props({ connectionLineComponent, snapGrid, snapToGrid });
       onInit?.({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }) });
       return (
         <div>
@@ -474,6 +478,23 @@ describe('routes/index', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Focused loaded-1')).toBeInTheDocument();
+    });
+  });
+
+  it('enables 24px snap-to-grid dragging', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(reactFlowMocks.props).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snapGrid: [24, 24],
+          snapToGrid: true,
+        })
+      );
     });
   });
 

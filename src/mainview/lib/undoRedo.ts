@@ -1,8 +1,10 @@
 import type { Edge, Node } from '@xyflow/react';
+import type { CanvasViewport } from '@/store/canvasStore';
 
 export interface CanvasSnapshot {
   edges: Edge[];
   nodes: Node[];
+  viewport?: CanvasViewport | null;
 }
 
 const MAX_HISTORY = 50;

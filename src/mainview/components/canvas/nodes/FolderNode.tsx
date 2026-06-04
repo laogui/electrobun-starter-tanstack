@@ -440,6 +440,7 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
         maxWidth={600}
         minHeight={250}
         minWidth={250}
+        nodeId={id}
         onResizeStart={saveSnapshot}
       />
 

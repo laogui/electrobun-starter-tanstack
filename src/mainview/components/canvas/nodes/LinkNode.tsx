@@ -390,6 +390,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         maxWidth={640}
         minHeight={150}
         minWidth={240}
+        nodeId={id}
         onResizeStart={saveSnapshot}
       />
 

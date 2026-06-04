@@ -391,6 +391,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         maxWidth={800}
         minHeight={150}
         minWidth={150}
+        nodeId={id}
         onResizeStart={saveSnapshot}
       />
 

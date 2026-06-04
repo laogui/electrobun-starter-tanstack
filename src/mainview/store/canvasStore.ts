@@ -20,10 +20,13 @@ import {
   GROUP_COLORS,
   STICKY_COLORS,
 } from '@/lib/canvasConstants';
-import { isFolderChildNode } from '@/lib/canvasNodePredicates';
+import {
+  isFolderChildNode,
+  isGroupChildNode,
+} from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
-import { buildAbsoluteRects } from '@/lib/collision';
+import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import { rpcDeleteNote } from '@/lib/rpc';
@@ -80,6 +83,87 @@ interface FolderChildEntry {
   id: string;
   noteId?: string;
   type?: string;
+}
+
+const GROUP_SELECTION_PADDING = 24;
+const DUPLICATE_OFFSET = 30;
+
+function cleanNodeForClipboard(node: Node): Node {
+  const { isHidden, isDropTarget, ...cleanData } = node.data as any;
+  return { ...node, data: cleanData };
+}
+
+function cleanEdgeForClipboard(edge: Edge): Edge {
+  const { selected: _selected, ...clean } = edge as Edge & {
+    selected?: boolean;
+  };
+  return clean as Edge;
+}
+
+function getInternalEdgesForNodes(edges: Edge[], nodeIds: Set<string>): Edge[] {
+  return edges
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map(cleanEdgeForClipboard);
+}
+
+function nodeZIndex(node: Node): number {
+  return typeof node.zIndex === 'number' ? node.zIndex : 0;
+}
+
+function buildPastedClipboard(
+  clipboard: Node[],
+  clipboardEdges: Edge[],
+  currentNodes: Node[],
+  offset: number
+): { edges: Edge[]; nodes: Node[] } {
+  const existingIds = new Set(currentNodes.map((n) => n.id));
+  const clipboardIds = new Set(clipboard.map((n) => n.id));
+
+  const idMap = new Map<string, string>(
+    clipboard.map((n) => [n.id, `paste-${nanoid(8)}`])
+  );
+
+  const nodes = clipboard.map((n) => {
+    const newId = idMap.get(n.id)!;
+    const { parentId, extent, ...rest } = n as any;
+    const remappedParentId =
+      parentId != null
+        ? clipboardIds.has(parentId)
+          ? idMap.get(parentId)
+          : existingIds.has(parentId)
+            ? parentId
+            : null
+        : null;
+
+    return {
+      ...rest,
+      ...(remappedParentId != null
+        ? { parentId: remappedParentId, extent }
+        : {}),
+      id: newId,
+      position: { x: n.position.x + offset, y: n.position.y + offset },
+      selected: true,
+    } as Node;
+  });
+
+  const edges = clipboardEdges.flatMap((edge) => {
+    const source = idMap.get(edge.source);
+    const target = idMap.get(edge.target);
+    if (!(source && target)) {
+      return [];
+    }
+    const rest = cleanEdgeForClipboard(edge);
+    return [
+      {
+        ...rest,
+        id: `paste-edge-${nanoid(8)}`,
+        source,
+        target,
+      } as Edge,
+    ];
+  });
+
+  return { edges, nodes };
 }
 
 function uniqueDetachedNodeId(
@@ -161,12 +245,15 @@ export interface CanvasState {
   addFolderChild: (folderId: string) => void;
   applyEdgesChange: (changes: EdgeChange[]) => void;
   applyNodesChange: (changes: NodeChange[]) => void;
+  bringNodesForward: (ids: string[]) => void;
+  bringNodesToFront: (ids: string[]) => void;
   canRedo: () => boolean;
   canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
   /** Drop every active tag filter. */
   clearTagFilters: () => void;
   clipboard: Node[];
+  clipboardEdges: Edge[];
   /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
   commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   commitFolderChildData: (
@@ -188,10 +275,13 @@ export interface CanvasState {
     rfInstance: ReactFlowInstance<any, any> | null,
     options?: CreateNodeOptions
   ) => void;
+  cutSelected: () => void;
   deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
   deleteNodes: (ids: string[]) => void;
+  deselectAll: () => void;
   detachNoteFromCanvas: (nodeId: string) => void;
+  duplicateSelected: (offset?: number) => void;
   edges: Edge[];
 
   // Actions – edge
@@ -202,6 +292,7 @@ export interface CanvasState {
 
   // UI state
   focusedNode: FocusedItem | null;
+  groupSelected: () => void;
   hydrate: (
     nodes: Node[],
     edges: Edge[],
@@ -231,6 +322,9 @@ export interface CanvasState {
   reset: () => void;
   saveSnapshot: () => void;
   searchOpen: boolean;
+  selectNodeInDirection: (direction: 'down' | 'left' | 'right' | 'up') => void;
+  sendNodesBackward: (ids: string[]) => void;
+  sendNodesToBack: (ids: string[]) => void;
 
   /** Replace the entire active-tag-filters list. */
   setActiveTagFilters: (tags: string[]) => void;
@@ -261,11 +355,13 @@ export interface CanvasState {
   // Tag filter sidebar (workspace-wide tag list)
   tagSidebarOpen: boolean;
   toggleLibrary: () => void;
+  toggleNodeLocked: (nodeId: string) => void;
   /** Toggle a single tag in/out of the active filters (case-insensitive). */
   toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
-
   undo: () => void;
+
+  ungroupSelected: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   updateFolderChildData: (
     folderId: string,
@@ -292,6 +388,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   focusedFolder: null,
   createMenuOpen: false,
   clipboard: [],
+  clipboardEdges: [],
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
@@ -502,6 +599,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       focusedNode: null,
       focusedFolder: null,
       clipboard: [],
+      clipboardEdges: [],
       libraryOpen: false,
       tagSidebarOpen: false,
       activeTagFilters: [],
@@ -613,6 +711,293 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().updateEdgeData(edgeId, updates);
   },
 
+  toggleNodeLocked: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) {
+      return;
+    }
+    const current = Boolean(
+      (node.data as { locked?: unknown } | undefined)?.locked
+    );
+    get().commitNodeData(nodeId, { locked: !current });
+  },
+
+  bringNodesToFront: (ids) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) {
+      return;
+    }
+    const { nodes } = get();
+    const targets = nodes.filter((node) => idSet.has(node.id));
+    if (targets.length === 0) {
+      return;
+    }
+    const maxZ = Math.max(0, ...nodes.map(nodeZIndex));
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((node) => {
+        const index = targets.findIndex((target) => target.id === node.id);
+        return index === -1 ? node : { ...node, zIndex: maxZ + index + 1 };
+      }),
+    }));
+  },
+
+  sendNodesToBack: (ids) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) {
+      return;
+    }
+    const { nodes } = get();
+    const targets = nodes.filter((node) => idSet.has(node.id));
+    if (targets.length === 0) {
+      return;
+    }
+    const minZ = Math.min(0, ...nodes.map(nodeZIndex));
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((node) => {
+        const index = targets.findIndex((target) => target.id === node.id);
+        return index === -1
+          ? node
+          : { ...node, zIndex: minZ - targets.length + index };
+      }),
+    }));
+  },
+
+  bringNodesForward: (ids) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) {
+      return;
+    }
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((node) =>
+        idSet.has(node.id) ? { ...node, zIndex: nodeZIndex(node) + 1 } : node
+      ),
+    }));
+  },
+
+  sendNodesBackward: (ids) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) {
+      return;
+    }
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((node) =>
+        idSet.has(node.id) ? { ...node, zIndex: nodeZIndex(node) - 1 } : node
+      ),
+    }));
+  },
+
+  deselectAll: () => {
+    set((s) => ({
+      edges: s.edges.map((edge) =>
+        edge.selected ? { ...edge, selected: false } : edge
+      ),
+      nodes: s.nodes.map((node) =>
+        node.selected ? { ...node, selected: false } : node
+      ),
+    }));
+  },
+
+  selectNodeInDirection: (direction) => {
+    const { nodes } = get();
+    const selectableNodes = nodes.filter(
+      (node) => !(node.data as Record<string, unknown>).detached
+    );
+    if (selectableNodes.length === 0) {
+      return;
+    }
+    const absoluteRects = buildAbsoluteRects(selectableNodes);
+    const centerOf = (node: Node) => {
+      const rect = absoluteRects.get(node.id);
+      if (rect) {
+        return {
+          x: (rect.left + rect.right) / 2,
+          y: (rect.top + rect.bottom) / 2,
+        };
+      }
+      const size = getNodeSize(node);
+      return {
+        x: node.position.x + size.width / 2,
+        y: node.position.y + size.height / 2,
+      };
+    };
+
+    const current =
+      selectableNodes.find((node) => node.selected) ?? selectableNodes[0]!;
+    const currentCenter = centerOf(current);
+    const candidates = selectableNodes
+      .filter((node) => node.id !== current.id)
+      .map((node) => {
+        const center = centerOf(node);
+        const dx = center.x - currentCenter.x;
+        const dy = center.y - currentCenter.y;
+        const primary =
+          direction === 'right'
+            ? dx
+            : direction === 'left'
+              ? -dx
+              : direction === 'down'
+                ? dy
+                : -dy;
+        const secondary =
+          direction === 'left' || direction === 'right'
+            ? Math.abs(dy)
+            : Math.abs(dx);
+        return { node, primary, secondary };
+      })
+      .filter((candidate) => candidate.primary > 0)
+      .sort(
+        (a, b) =>
+          a.primary - b.primary ||
+          a.secondary - b.secondary ||
+          a.node.id.localeCompare(b.node.id)
+      );
+
+    const target = candidates[0]?.node ?? current;
+    set((s) => ({
+      nodes: s.nodes.map((node) => ({
+        ...node,
+        selected: node.id === target.id,
+      })),
+    }));
+  },
+
+  groupSelected: () => {
+    const { nodes } = get();
+    const selected = nodes.filter(
+      (node) => node.selected && isGroupChildNode(node.type)
+    );
+    if (selected.length === 0) {
+      return;
+    }
+    const absoluteRects = buildAbsoluteRects(nodes);
+    const rects = selected
+      .map((node) => absoluteRects.get(node.id))
+      .filter((rect) => rect !== undefined);
+    if (rects.length === 0) {
+      return;
+    }
+
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const right = Math.max(...rects.map((rect) => rect.right));
+    const bottom = Math.max(...rects.map((rect) => rect.bottom));
+    const groupPosition = {
+      x: left - GROUP_SELECTION_PADDING,
+      y: top - GROUP_SELECTION_PADDING,
+    };
+    const groupWidth = right - left + GROUP_SELECTION_PADDING * 2;
+    const groupHeight = bottom - top + GROUP_SELECTION_PADDING * 2;
+    const groupSpec = buildNewNodeSpec('group');
+    const groupId = get().nextNodeId();
+    const groupNode: Node = {
+      ...groupSpec.base,
+      id: groupId,
+      position: groupPosition,
+      selected: true,
+      style: {
+        ...groupSpec.base.style,
+        width: groupWidth,
+        height: groupHeight,
+      },
+    };
+    const selectedIds = new Set(selected.map((node) => node.id));
+
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: sortNodesByParent([
+        ...s.nodes.map((node) => {
+          if (!selectedIds.has(node.id)) {
+            return { ...node, selected: false };
+          }
+          const rect = absoluteRects.get(node.id);
+          const { parentId: _parentId, extent: _extent, ...rest } = node as any;
+          return {
+            ...rest,
+            parentId: groupId,
+            extent: 'parent' as const,
+            position: {
+              x: (rect?.left ?? node.position.x) - groupPosition.x,
+              y: (rect?.top ?? node.position.y) - groupPosition.y,
+            },
+            selected: false,
+          } as Node;
+        }),
+        groupNode,
+      ]),
+    }));
+  },
+
+  ungroupSelected: () => {
+    const { nodes } = get();
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const selected = nodes.filter((node) => node.selected);
+    const selectedGroupIds = new Set(
+      selected.filter((node) => node.type === 'group').map((node) => node.id)
+    );
+    const selectedChildIds = new Set(
+      selected
+        .filter((node) => {
+          const parent = node.parentId ? byId.get(node.parentId) : null;
+          return parent?.type === 'group';
+        })
+        .map((node) => node.id)
+    );
+
+    if (selectedGroupIds.size === 0 && selectedChildIds.size === 0) {
+      return;
+    }
+
+    const absoluteRects = buildAbsoluteRects(nodes);
+    get().saveSnapshot();
+    set((s) => {
+      const detachIds = new Set(selectedChildIds);
+      for (const node of s.nodes) {
+        if (node.parentId && selectedGroupIds.has(node.parentId)) {
+          detachIds.add(node.id);
+        }
+      }
+      return {
+        edges: s.edges.filter(
+          (edge) =>
+            !(
+              selectedGroupIds.has(edge.source) ||
+              selectedGroupIds.has(edge.target)
+            )
+        ),
+        nodes: sortNodesByParent(
+          s.nodes.flatMap((node) => {
+            if (selectedGroupIds.has(node.id)) {
+              return [];
+            }
+            if (!detachIds.has(node.id)) {
+              return [{ ...node, selected: false }];
+            }
+            const rect = absoluteRects.get(node.id);
+            const {
+              parentId: _parentId,
+              extent: _extent,
+              ...rest
+            } = node as any;
+            return [
+              {
+                ...rest,
+                position: {
+                  x: rect?.left ?? node.position.x,
+                  y: rect?.top ?? node.position.y,
+                },
+                selected: true,
+              } as Node,
+            ];
+          })
+        ),
+      };
+    });
+  },
+
   // -- UI actions -----------------------------------------------------------
   setFocusedNode: (v) => {
     set({ focusedNode: v });
@@ -674,63 +1059,67 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       if (selected.length === 0) {
         return s;
       }
+      const selectedIds = new Set(selected.map((n) => n.id));
       return {
-        clipboard: selected.map((n) => {
-          const { isHidden, isDropTarget, ...cleanData } = n.data as any;
-          return { ...n, data: cleanData };
-        }),
+        clipboard: selected.map(cleanNodeForClipboard),
+        clipboardEdges: getInternalEdgesForNodes(s.edges, selectedIds),
       };
     });
   },
 
   pasteClipboard: (offset = 30) => {
-    const { clipboard, nodes: currentNodes } = get();
+    const { clipboard, clipboardEdges, nodes: currentNodes } = get();
     if (clipboard.length === 0) {
       return;
     }
     get().saveSnapshot();
-    const existingIds = new Set(currentNodes.map((n) => n.id));
-    const clipboardIds = new Set(clipboard.map((n) => n.id));
-
-    // Build old-id → new-id mapping for all clipboard nodes upfront,
-    // so children can reference the correct new parent id.
-    const idMap = new Map<string, string>(
-      clipboard.map((n) => [n.id, `paste-${nanoid(8)}`])
+    const pasted = buildPastedClipboard(
+      clipboard,
+      clipboardEdges,
+      currentNodes,
+      offset
     );
-
-    const newNodes = clipboard.map((n) => {
-      const newId = idMap.get(n.id)!;
-      const { parentId, extent, ...rest } = n as any;
-
-      // Remap parentId when the parent was also copied (clipboard-internal link).
-      // Fall back to keeping the original parent when it exists in the current view
-      // (cross-view paste onto an already-present group).
-      // Drop the relationship entirely when neither condition holds.
-      const remappedParentId =
-        parentId != null
-          ? clipboardIds.has(parentId)
-            ? idMap.get(parentId)
-            : existingIds.has(parentId)
-              ? parentId
-              : null
-          : null;
-
-      return {
-        ...rest,
-        ...(remappedParentId != null
-          ? { parentId: remappedParentId, extent }
-          : {}),
-        id: newId,
-        position: { x: n.position.x + offset, y: n.position.y + offset },
-        selected: true,
-      };
-    });
     set((s) => ({
+      edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
         ...s.nodes.map((n) => ({ ...n, selected: false })),
-        ...newNodes,
+        ...pasted.nodes,
       ]),
     }));
+  },
+
+  duplicateSelected: (offset = DUPLICATE_OFFSET) => {
+    const { edges, nodes } = get();
+    const selected = nodes.filter((node) => node.selected);
+    if (selected.length === 0) {
+      return;
+    }
+    const selectedIds = new Set(selected.map((node) => node.id));
+    const pasted = buildPastedClipboard(
+      selected.map(cleanNodeForClipboard),
+      getInternalEdgesForNodes(edges, selectedIds),
+      nodes,
+      offset
+    );
+    get().saveSnapshot();
+    set((s) => ({
+      edges: [...s.edges, ...pasted.edges],
+      nodes: sortNodesByParent([
+        ...s.nodes.map((node) => ({ ...node, selected: false })),
+        ...pasted.nodes,
+      ]),
+    }));
+  },
+
+  cutSelected: () => {
+    const selectedIds = get()
+      .nodes.filter((node) => node.selected)
+      .map((node) => node.id);
+    if (selectedIds.length === 0) {
+      return;
+    }
+    get().copySelected();
+    get().deleteNodes(selectedIds);
   },
 
   // -- node CRUD ------------------------------------------------------------
@@ -1048,34 +1437,36 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- undo / redo ----------------------------------------------------------
   saveSnapshot: () => {
-    const { nodes, edges, _undoRedo } = get();
+    const { nodes, edges, viewport, _undoRedo } = get();
     set({
-      _undoRedo: pushSnapshot(_undoRedo, { nodes, edges }),
+      _undoRedo: pushSnapshot(_undoRedo, { nodes, edges, viewport }),
     });
   },
 
   undo: () => {
-    const { nodes, edges, _undoRedo } = get();
-    const result = undoSnapshot(_undoRedo, { nodes, edges });
+    const { nodes, edges, viewport, _undoRedo } = get();
+    const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });
     if (!result) {
       return;
     }
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
+      viewport: result.snapshot.viewport ?? null,
       _undoRedo: result.state,
     });
   },
 
   redo: () => {
-    const { nodes, edges, _undoRedo } = get();
-    const result = redoSnapshot(_undoRedo, { nodes, edges });
+    const { nodes, edges, viewport, _undoRedo } = get();
+    const result = redoSnapshot(_undoRedo, { nodes, edges, viewport });
     if (!result) {
       return;
     }
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
+      viewport: result.snapshot.viewport ?? null,
       _undoRedo: result.state,
     });
   },

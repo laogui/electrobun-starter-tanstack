@@ -19,7 +19,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
@@ -245,6 +245,8 @@ export function CanvasContextMenu({
   onAction: (action: string, nodeId?: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndexRef = useRef(0);
   const edgePathType = useCanvasStore((state) => {
     if (menu?.target !== 'edge' || !menu.edgeId) {
       return 'bezier';
@@ -263,35 +265,6 @@ export function CanvasContextMenu({
     return Boolean((node?.data as { locked?: unknown } | undefined)?.locked);
   });
 
-  useEffect(() => {
-    if (!menu) {
-      return;
-    }
-    const handleClick = (e: PointerEvent) => {
-      // Ignore right/middle clicks — let the contextmenu event reposition the
-      // menu instead of closing-then-reopening (which races with React updates
-      // and makes the first right-click appear unresponsive).
-      const button = e.button ?? 0;
-      if (button !== 0) {
-        return;
-      }
-      if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('pointerdown', handleClick, true);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('pointerdown', handleClick, true);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [menu, onClose]);
-
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
     'folder-child': getFolderChildItems,
@@ -307,6 +280,83 @@ export function CanvasContextMenu({
 
   const items = menu ? (itemGetters[menu.target] ?? getCanvasItems)() : [];
 
+  const focusItem = useCallback(
+    (index: number) => {
+      if (items.length === 0) {
+        return;
+      }
+      const next = (index + items.length) % items.length;
+      activeIndexRef.current = next;
+      itemRefs.current[next]?.focus();
+    },
+    [items.length]
+  );
+
+  useEffect(() => {
+    if (!menu) {
+      return;
+    }
+    activeIndexRef.current = 0;
+    itemRefs.current[0]?.focus();
+
+    const handleClick = (e: PointerEvent) => {
+      // Ignore right/middle clicks — let the contextmenu event reposition the
+      // menu instead of closing-then-reopening (which races with React updates
+      // and makes the first right-click appear unresponsive).
+      const button = e.button ?? 0;
+      if (button !== 0) {
+        return;
+      }
+      if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
+        onClose();
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusItem(activeIndexRef.current + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusItem(activeIndexRef.current - 1);
+        return;
+      }
+      if (e.key === 'Home') {
+        e.preventDefault();
+        focusItem(0);
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        focusItem(items.length - 1);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ') {
+        const active = document.activeElement;
+        const index = itemRefs.current.indexOf(active as HTMLButtonElement);
+        if (index !== -1) {
+          e.preventDefault();
+          const item = items[index];
+          if (item) {
+            onAction(item.id, menu.nodeId ?? menu.edgeId);
+            onClose();
+          }
+        }
+      }
+    };
+    document.addEventListener('pointerdown', handleClick, true);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handleClick, true);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [focusItem, items, menu, onAction, onClose]);
+
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
   const y = menu
     ? Math.min(menu.y, window.innerHeight - items.length * 40 - 16)
@@ -317,6 +367,7 @@ export function CanvasContextMenu({
       {menu ? (
         <motion.div
           animate={{ opacity: 1, scale: 1, y: 0 }}
+          aria-label="Canvas context menu"
           className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
           initial={{ opacity: 0, scale: 0.95, y: -4 }}
@@ -330,10 +381,11 @@ export function CanvasContextMenu({
             e.stopPropagation();
           }}
           ref={ref}
+          role="menu"
           style={{ left: x, top: y }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
         >
-          {items.map((item) => (
+          {items.map((item, index) => (
             <button
               className={cn(
                 'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
@@ -345,6 +397,9 @@ export function CanvasContextMenu({
               onClick={() => {
                 onAction(item.id, menu.nodeId ?? menu.edgeId);
                 onClose();
+              }}
+              ref={(element) => {
+                itemRefs.current[index] = element;
               }}
               type="button"
             >

@@ -1,4 +1,4 @@
-import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
+import type { Connection, Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NODE_ID_REGEX = /^node-/;
@@ -18,6 +18,7 @@ import { CANVAS_NODE_SPECS } from '@/lib/canvasNodeRegistry';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const PASTE_ID_RE = /^paste-/;
+const PASTE_EDGE_ID_RE = /^paste-edge-/;
 
 const { rpcDeleteNoteMock } = vi.hoisted(() => ({
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
@@ -37,6 +38,7 @@ function resetStore() {
   useCanvasStore.getState().reset();
   useCanvasStore.setState({
     clipboard: [],
+    clipboardEdges: [],
     createMenuOpen: false,
     editingEdgeId: null,
   });
@@ -152,6 +154,116 @@ describe('canvasStore — node operations', () => {
 
     expect(node.data.title).toBe('Updated');
     expect(node.data.content).toBe('');
+  });
+
+  it('toggleNodeLocked flips locked state through a semantic action', () => {
+    useCanvasStore.setState({ nodes: [makeNode('a', { data: {} })] });
+
+    useCanvasStore.getState().toggleNodeLocked('a');
+    expect(useCanvasStore.getState().nodes[0]?.data.locked).toBe(true);
+
+    useCanvasStore.getState().toggleNodeLocked('a');
+    expect(useCanvasStore.getState().nodes[0]?.data.locked).toBe(false);
+  });
+
+  it('z-order actions update node zIndex values', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('back', { zIndex: 0 }),
+        makeNode('middle', { selected: true, zIndex: 1 }),
+        makeNode('front', { zIndex: 2 }),
+      ],
+    });
+
+    useCanvasStore.getState().bringNodesToFront(['middle']);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'middle')
+    ).toMatchObject({ zIndex: 3 });
+
+    useCanvasStore.getState().sendNodesToBack(['middle']);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'middle')
+    ).toMatchObject({ zIndex: -1 });
+
+    useCanvasStore.getState().bringNodesForward(['middle']);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'middle')
+    ).toMatchObject({ zIndex: 0 });
+
+    useCanvasStore.getState().sendNodesBackward(['middle']);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'middle')
+    ).toMatchObject({ zIndex: -1 });
+  });
+
+  it('groupSelected creates a group parent around selected nodes', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          ...makeNode('a', {
+            position: { x: 100, y: 120 },
+            style: { width: 100, height: 80 },
+          }),
+          selected: true,
+        },
+        {
+          ...makeNode('b', {
+            position: { x: 260, y: 200 },
+            style: { width: 120, height: 100 },
+          }),
+          selected: true,
+        },
+        makeNode('c', { position: { x: 500, y: 500 } }),
+      ],
+    });
+
+    useCanvasStore.getState().groupSelected();
+    const state = useCanvasStore.getState();
+    const group = state.nodes.find((node) => node.type === 'group');
+
+    expect(group).toBeDefined();
+    expect(group?.selected).toBe(true);
+    expect(group?.position).toEqual({ x: 76, y: 96 });
+    expect(group?.style).toMatchObject({ width: 328, height: 228 });
+    expect(state.nodes.find((node) => node.id === 'a')).toMatchObject({
+      parentId: group?.id,
+      position: { x: 24, y: 24 },
+      selected: false,
+    });
+    expect(state.nodes.find((node) => node.id === 'b')).toMatchObject({
+      parentId: group?.id,
+      position: { x: 184, y: 104 },
+      selected: false,
+    });
+  });
+
+  it('ungroupSelected removes selected groups and restores absolute child positions', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('group-1', {
+          type: 'group',
+          position: { x: 50, y: 60 },
+          selected: true,
+          style: { width: 300, height: 200 },
+        }),
+        makeNode('child-1', {
+          parentId: 'group-1',
+          extent: 'parent' as const,
+          position: { x: 20, y: 30 },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().ungroupSelected();
+    const state = useCanvasStore.getState();
+
+    expect(state.nodes.some((node) => node.id === 'group-1')).toBe(false);
+    expect(state.nodes[0]).toMatchObject({
+      id: 'child-1',
+      position: { x: 70, y: 90 },
+      selected: true,
+    });
+    expect(state.nodes[0]?.parentId).toBeUndefined();
   });
 
   it('hydrate sets nodes and marks store as hydrated', () => {
@@ -270,6 +382,26 @@ describe('canvasStore — clipboard', () => {
     expect(useCanvasStore.getState().clipboard[0]?.id).toBe('a');
   });
 
+  it('copySelected copies edges whose endpoints are both selected', () => {
+    useCanvasStore.setState({
+      nodes: [
+        { ...makeNode('a'), selected: true } as Node,
+        { ...makeNode('b'), selected: true } as Node,
+        { ...makeNode('c'), selected: false } as Node,
+      ],
+      edges: [
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'a', target: 'c' },
+      ],
+    });
+
+    useCanvasStore.getState().copySelected();
+
+    expect(useCanvasStore.getState().clipboardEdges).toEqual([
+      { id: 'e1', source: 'a', target: 'b' },
+    ]);
+  });
+
   it('copySelected does nothing when no nodes are selected', () => {
     useCanvasStore.setState({
       nodes: [makeNode('a'), makeNode('b')],
@@ -296,6 +428,72 @@ describe('canvasStore — clipboard', () => {
     expect(pasted.position.x).toBe(40); // 10 + 30 offset
     expect(pasted.position.y).toBe(50); // 20 + 30 offset
     expect(pasted.selected).toBe(true);
+  });
+
+  it('pasteClipboard remaps copied internal edges', () => {
+    useCanvasStore.setState({
+      nodes: [],
+      clipboard: [
+        makeNode('a', { position: { x: 10, y: 20 } }),
+        makeNode('b', { position: { x: 100, y: 120 } }),
+      ],
+      clipboardEdges: [
+        {
+          id: 'e1',
+          source: 'a',
+          target: 'b',
+          type: 'labeledEdge',
+          data: { label: 'depends on' },
+        } as Edge,
+      ],
+    });
+
+    useCanvasStore.getState().pasteClipboard();
+    const state = useCanvasStore.getState();
+    const pastedIds = state.nodes.map((node) => node.id);
+
+    expect(state.edges).toHaveLength(1);
+    expect(state.edges[0]?.id).toMatch(PASTE_EDGE_ID_RE);
+    expect(state.edges[0]?.source).toBe(pastedIds[0]);
+    expect(state.edges[0]?.target).toBe(pastedIds[1]);
+    expect(state.edges[0]?.data).toEqual({ label: 'depends on' });
+  });
+
+  it('duplicateSelected duplicates selected nodes and their internal edges', () => {
+    useCanvasStore.setState({
+      nodes: [
+        { ...makeNode('a', { position: { x: 0, y: 0 } }), selected: true },
+        { ...makeNode('b', { position: { x: 100, y: 100 } }), selected: true },
+      ],
+      edges: [{ id: 'e1', source: 'a', target: 'b' }],
+    });
+
+    useCanvasStore.getState().duplicateSelected();
+    const state = useCanvasStore.getState();
+
+    expect(state.nodes).toHaveLength(4);
+    expect(state.edges).toHaveLength(2);
+    expect(state.nodes.filter((node) => node.selected)).toHaveLength(2);
+    expect(state.edges[1]?.source).not.toBe('a');
+    expect(state.edges[1]?.target).not.toBe('b');
+  });
+
+  it('cutSelected copies selected nodes then deletes them from the canvas', () => {
+    useCanvasStore.setState({
+      nodes: [
+        { ...makeNode('a'), selected: true },
+        { ...makeNode('b'), selected: false },
+      ],
+      edges: [{ id: 'e1', source: 'a', target: 'b' }],
+    });
+
+    useCanvasStore.getState().cutSelected();
+    const state = useCanvasStore.getState();
+
+    expect(state.clipboard).toHaveLength(1);
+    expect(state.clipboard[0]?.id).toBe('a');
+    expect(state.nodes.map((node) => node.id)).toEqual(['b']);
+    expect(state.edges).toHaveLength(0);
   });
 
   it('pasteClipboard does nothing with empty clipboard', () => {
@@ -329,6 +527,30 @@ describe('canvasStore — undo/redo', () => {
 
     useCanvasStore.getState().redo();
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
+  });
+
+  it('undo and redo restore viewport snapshots', () => {
+    useCanvasStore.setState({
+      nodes: [makeNode('a')],
+      edges: [],
+      viewport: { x: 10, y: 20, zoom: 1 },
+    });
+    useCanvasStore.getState().saveSnapshot();
+    useCanvasStore.getState().setViewport({ x: 100, y: 200, zoom: 2 });
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().viewport).toEqual({
+      x: 10,
+      y: 20,
+      zoom: 1,
+    });
+
+    useCanvasStore.getState().redo();
+    expect(useCanvasStore.getState().viewport).toEqual({
+      x: 100,
+      y: 200,
+      zoom: 2,
+    });
   });
 
   it('undo does nothing when past is empty', () => {

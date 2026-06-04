@@ -125,6 +125,33 @@ describe('canvasContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('supports keyboard navigation and activation', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'canvas' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    const menu = screen.getByRole('menu', { name: 'Canvas context menu' });
+    const first = screen.getByRole('button', { name: NEW_NOTE_RE });
+    const second = screen.getByRole('button', { name: 'New checklist' });
+
+    expect(menu).toBeInTheDocument();
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(second);
+
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(onAction).toHaveBeenCalledWith('new-checklist', undefined);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('closes when clicking outside the menu', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();

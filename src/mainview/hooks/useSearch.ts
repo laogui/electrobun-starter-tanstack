@@ -1,10 +1,7 @@
 import type { Node } from '@xyflow/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  type NodeMetadataMap,
-  useNodeMetadata,
-} from '@/hooks/useNodeMetadata';
+import { type NodeMetadataMap, useNodeMetadata } from '@/hooks/useNodeMetadata';
 import { rpcSearchCanvas } from '@/lib/rpc';
 import type {
   SearchMatchField,

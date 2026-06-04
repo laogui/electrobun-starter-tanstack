@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, render } from '@testing-library/react';
+import type { ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
@@ -20,6 +21,15 @@ vi.mock('../../paraglide/messages.js', () => ({
 
 const TestComponent = () => {
   useCanvasKeyboard();
+  return <div>keyboard</div>;
+};
+
+const TestComponentWithViewport = ({
+  rfInstance,
+}: {
+  rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
+}) => {
+  useCanvasKeyboard({ rfInstance });
   return <div>keyboard</div>;
 };
 
@@ -91,6 +101,56 @@ describe('useCanvasKeyboard', () => {
     dispatchKeyboard({ key: 'v', metaKey: true, cancelable: true });
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
     expect(useCanvasStore.getState().nodes[1]?.id).toMatch(PASTE_ID_RE);
+  });
+
+  it('cuts selected nodes with Cmd+X', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Cut' },
+          selected: true,
+        },
+        {
+          id: 'node-2',
+          type: 'card',
+          position: { x: 100, y: 0 },
+          data: { title: 'Keep' },
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({ key: 'x', metaKey: true, cancelable: true });
+
+    const state = useCanvasStore.getState();
+    expect(state.clipboard).toHaveLength(1);
+    expect(state.clipboard[0]?.id).toBe('node-1');
+    expect(state.nodes.map((node) => node.id)).toEqual(['node-2']);
+  });
+
+  it('duplicates selected nodes with Cmd+D', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 10, y: 20 },
+          data: { title: 'Original' },
+          selected: true,
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({ key: 'd', metaKey: true, cancelable: true });
+
+    const state = useCanvasStore.getState();
+    expect(state.nodes).toHaveLength(2);
+    expect(state.nodes[1]?.id).toMatch(PASTE_ID_RE);
+    expect(state.nodes[1]?.selected).toBe(true);
   });
 
   it('calls undo and redo with the correct shortcuts', () => {
@@ -192,6 +252,133 @@ describe('useCanvasKeyboard', () => {
 
     dispatchKeyboard({ key: 'n', metaKey: true, cancelable: true });
     expect(useCanvasStore.getState().createMenuOpen).toBe(true);
+  });
+
+  it('deselects all nodes with Cmd+Shift+A', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: true,
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({
+      key: 'A',
+      metaKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+
+    expect(useCanvasStore.getState().nodes[0]?.selected).toBe(false);
+  });
+
+  it('groups and ungroups selected nodes with modifier shortcuts', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 100, y: 100 },
+          data: {},
+          selected: true,
+          style: { width: 100, height: 100 },
+        },
+        {
+          id: 'node-2',
+          type: 'card',
+          position: { x: 240, y: 100 },
+          data: {},
+          selected: true,
+          style: { width: 100, height: 100 },
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({ key: 'g', metaKey: true, cancelable: true });
+
+    const group = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.type === 'group');
+    expect(group).toBeDefined();
+    expect(group?.selected).toBe(true);
+
+    dispatchKeyboard({
+      key: 'G',
+      metaKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+
+    expect(
+      useCanvasStore.getState().nodes.some((node) => node.type === 'group')
+    ).toBe(false);
+    expect(useCanvasStore.getState().nodes.every((node) => node.selected)).toBe(
+      true
+    );
+  });
+
+  it('uses zoom keyboard shortcuts when a React Flow instance is provided', () => {
+    const rf = {
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+      zoomTo: vi.fn(),
+    } as unknown as ReactFlowInstance<any, any>;
+    const rfInstance = { current: rf };
+
+    render(<TestComponentWithViewport rfInstance={rfInstance} />);
+
+    dispatchKeyboard({ key: '=', metaKey: true, cancelable: true });
+    dispatchKeyboard({ key: '-', metaKey: true, cancelable: true });
+    dispatchKeyboard({ key: '0', metaKey: true, cancelable: true });
+
+    expect(rf.zoomIn).toHaveBeenCalledWith({ duration: 180 });
+    expect(rf.zoomOut).toHaveBeenCalledWith({ duration: 180 });
+    expect(rf.zoomTo).toHaveBeenCalledWith(1, { duration: 180 });
+  });
+
+  it('selects the nearest node in the arrow direction', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'left',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: true,
+        },
+        {
+          id: 'right',
+          type: 'card',
+          position: { x: 200, y: 0 },
+          data: {},
+        },
+        {
+          id: 'down',
+          type: 'card',
+          position: { x: 0, y: 200 },
+          data: {},
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({ key: 'ArrowRight', cancelable: true });
+
+    expect(
+      useCanvasStore.getState().nodes.find((node) => node.id === 'right')
+        ?.selected
+    ).toBe(true);
+    expect(
+      useCanvasStore.getState().nodes.find((node) => node.id === 'left')
+        ?.selected
+    ).toBe(false);
   });
 
   it('handles escape and enter for focused cards and folders', () => {

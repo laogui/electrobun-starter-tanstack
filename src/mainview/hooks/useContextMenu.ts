@@ -75,7 +75,7 @@ export function useContextMenu({
   const createNode = useCanvasStore((s) => s.createNode);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
-  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
+  const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -198,7 +198,7 @@ export function useContextMenu({
         }
         case 'copy': {
           if (nodeId) {
-            const { nodes } = useCanvasStore.getState();
+            const { edges, nodes } = useCanvasStore.getState();
             const selected = nodes.filter((n) => n.selected);
             // If the right-clicked node is part of a multi-selection, copy all selected
             const targetNodes =
@@ -206,12 +206,24 @@ export function useContextMenu({
                 ? selected
                 : nodes.filter((n) => n.id === nodeId);
             if (targetNodes.length > 0) {
+              const targetIds = new Set(targetNodes.map((node) => node.id));
               useCanvasStore.setState({
                 clipboard: targetNodes.map((n) => {
                   const { isHidden, isDropTarget, ...cleanData } =
                     n.data as any;
                   return { ...n, data: cleanData };
                 }),
+                clipboardEdges: edges
+                  .filter(
+                    (edge) =>
+                      targetIds.has(edge.source) && targetIds.has(edge.target)
+                  )
+                  .map((edge) => {
+                    const { selected: _selected, ...clean } = edge as Edge & {
+                      selected?: boolean;
+                    };
+                    return clean;
+                  }),
               });
             }
           }
@@ -356,12 +368,7 @@ export function useContextMenu({
         }
         case 'toggle-lock': {
           if (nodeId) {
-            const { nodes } = useCanvasStore.getState();
-            const node = nodes.find((n) => n.id === nodeId);
-            const current = Boolean(
-              (node?.data as { locked?: unknown } | undefined)?.locked
-            );
-            commitNodeData(nodeId, { locked: !current });
+            toggleNodeLocked(nodeId);
           }
           break;
         }
@@ -414,7 +421,7 @@ export function useContextMenu({
       pasteClipboard,
       saveSnapshot,
       createNode,
-      commitNodeData,
+      toggleNodeLocked,
       onRequestCreate,
     ]
   );

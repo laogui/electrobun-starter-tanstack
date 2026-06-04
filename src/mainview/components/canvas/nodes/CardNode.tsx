@@ -380,6 +380,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         maxWidth={800}
         minHeight={300}
         minWidth={250}
+        nodeId={id}
         onResizeStart={saveSnapshot}
       />
 

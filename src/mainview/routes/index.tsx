@@ -77,6 +77,7 @@ const CANVAS_BG_DARK = '#141414';
 /** 背景网格点颜色 */
 const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
+const CANVAS_GRID_SIZE = 24;
 
 /** 小地图背景色 */
 const MINIMAP_BG_LIGHT = 'rgba(255, 255, 255, 0.92)';
@@ -477,7 +478,7 @@ function CanvasComponent() {
     };
   }, [hydrate, hydrated, activeViewId]);
 
-  useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes });
+  useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes, rfInstance });
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -588,9 +589,7 @@ function CanvasComponent() {
       nodes
         .filter((node) => !(node.data as Record<string, unknown>).detached)
         .map((node) => {
-          const locked = Boolean(
-            (node.data as { locked?: unknown }).locked
-          );
+          const locked = Boolean((node.data as { locked?: unknown }).locked);
           return {
             ...node,
             data: {
@@ -776,12 +775,14 @@ function CanvasComponent() {
         proOptions={{ hideAttribution: true }}
         selectionMode={SelectionMode.Partial}
         selectionOnDrag={!editableInteractionLocked}
+        snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
+        snapToGrid
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >
         <Background
           color={gridColor}
-          gap={24}
+          gap={CANVAS_GRID_SIZE}
           size={1.5}
           variant={BackgroundVariant.Dots}
         />

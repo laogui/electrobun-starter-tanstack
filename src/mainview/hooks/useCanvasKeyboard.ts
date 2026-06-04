@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import type { ReactFlowInstance } from '@xyflow/react';
+import { type MutableRefObject, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { useCanvasStore } from '@/store/canvasStore';
@@ -7,10 +8,12 @@ import * as m from '../../paraglide/messages.js';
 
 interface UseCanvasKeyboardOptions {
   onDeleteNodes?: (ids: string[]) => void;
+  rfInstance?: MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
 export function useCanvasKeyboard({
   onDeleteNodes,
+  rfInstance,
 }: UseCanvasKeyboardOptions = {}) {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
@@ -19,8 +22,14 @@ export function useCanvasKeyboard({
   const setNodes = useCanvasStore((s) => s.setNodes);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const copySelected = useCanvasStore((s) => s.copySelected);
+  const cutSelected = useCanvasStore((s) => s.cutSelected);
+  const deselectAll = useCanvasStore((s) => s.deselectAll);
+  const duplicateSelected = useCanvasStore((s) => s.duplicateSelected);
+  const groupSelected = useCanvasStore((s) => s.groupSelected);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
+  const selectNodeInDirection = useCanvasStore((s) => s.selectNodeInDirection);
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
+  const ungroupSelected = useCanvasStore((s) => s.ungroupSelected);
   const undo = useCanvasStore((s) => s.undo);
   const redo = useCanvasStore((s) => s.redo);
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
@@ -40,9 +49,10 @@ export function useCanvasKeyboard({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
 
       // Cmd/Ctrl+K: toggle search dialog (works even while editing/inside modals)
-      if (mod && (e.key === 'k' || e.key === 'K')) {
+      if (mod && key === 'k') {
         e.preventDefault();
         setSearchOpen((prev) => !prev);
         return;
@@ -64,7 +74,7 @@ export function useCanvasKeyboard({
         return;
       }
 
-      if (mod && e.key === 'z') {
+      if (mod && key === 'z') {
         if (isEditing()) {
           return;
         }
@@ -78,6 +88,24 @@ export function useCanvasKeyboard({
       }
 
       if (isModal() || isEditing()) {
+        return;
+      }
+
+      if (mod && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        rfInstance?.current?.zoomIn?.({ duration: 180 });
+        return;
+      }
+
+      if (mod && e.key === '-') {
+        e.preventDefault();
+        rfInstance?.current?.zoomOut?.({ duration: 180 });
+        return;
+      }
+
+      if (mod && e.key === '0') {
+        e.preventDefault();
+        rfInstance?.current?.zoomTo?.(1, { duration: 180 });
         return;
       }
 
@@ -100,18 +128,56 @@ export function useCanvasKeyboard({
         return;
       }
 
-      if (mod && e.key === 'a') {
+      if (mod && key === 'a') {
         e.preventDefault();
+        if (e.shiftKey) {
+          deselectAll();
+          return;
+        }
         setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
         return;
       }
 
-      if (mod && e.key === 'c') {
+      if (mod && key === 'c') {
+        e.preventDefault();
         copySelected();
         return;
       }
 
-      if (mod && e.key === 'v') {
+      if (mod && key === 'x') {
+        e.preventDefault();
+        if (onDeleteNodes) {
+          const selectedIds = useCanvasStore
+            .getState()
+            .nodes.filter((n) => n.selected)
+            .map((n) => n.id);
+          if (selectedIds.length > 0) {
+            copySelected();
+            onDeleteNodes(selectedIds);
+          }
+        } else {
+          cutSelected();
+        }
+        return;
+      }
+
+      if (mod && key === 'd') {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+
+      if (mod && key === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          ungroupSelected();
+        } else {
+          groupSelected();
+        }
+        return;
+      }
+
+      if (mod && key === 'v') {
         if (useCanvasStore.getState().clipboard.length > 0) {
           e.preventDefault();
           pasteClipboard();
@@ -119,9 +185,25 @@ export function useCanvasKeyboard({
         return;
       }
 
-      if (mod && e.key === 'n') {
+      if (mod && key === 'n') {
         e.preventDefault();
         setCreateMenuOpen((prev) => !prev);
+        return;
+      }
+
+      if (
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowDown' ||
+        e.key === 'ArrowLeft'
+      ) {
+        e.preventDefault();
+        const direction = e.key.replace('Arrow', '').toLowerCase() as
+          | 'down'
+          | 'left'
+          | 'right'
+          | 'up';
+        selectNodeInDirection(direction);
         return;
       }
 
@@ -187,13 +269,20 @@ export function useCanvasKeyboard({
     setNodes,
     deleteNodes,
     copySelected,
+    cutSelected,
+    deselectAll,
+    duplicateSelected,
+    groupSelected,
     pasteClipboard,
+    selectNodeInDirection,
     setCreateMenuOpen,
+    ungroupSelected,
     setSearchOpen,
     searchOpen,
     setPendingSearchQuery,
     onDeleteNodes,
     undo,
     redo,
+    rfInstance,
   ]);
 }

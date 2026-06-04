@@ -653,6 +653,7 @@ const AssetNode = ({
         maxWidth={680}
         minHeight={170}
         minWidth={240}
+        nodeId={id}
         onResizeStart={saveSnapshot}
       />
 

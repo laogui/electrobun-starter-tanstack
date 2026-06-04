@@ -33,11 +33,20 @@ export type CreatableCanvasNodeKind = CanvasNodeKind;
 /** Sub-kind for `asset` nodes. PDFs flow through `file` plus `mimeType`. */
 export type AssetKind = 'video' | 'audio' | 'file';
 
+/** Compact summary of an archive's contents shown on the canvas card without
+ *  expanding the file. Limited to the first few entries so the manifest blob
+ *  stays small. */
+export interface ArchiveSummary {
+  entryCount: number;
+  topFiles: string[];
+}
+
 /** Persisted shape of an `asset` node's data. Runtime-only fields live in the
  *  optional `previewUrl` / `thumbnailUrl` slots and must be stripped before
  *  writing to manifest (see `sanitize.ts`). */
 export interface AssetNodeData {
   // Persisted attachment references (relative paths inside workspace).
+  archiveSummary?: ArchiveSummary;
   attachmentFile?: string;
 
   color: string;
@@ -48,12 +57,15 @@ export interface AssetNodeData {
 
   // Runtime-only hydrated URLs / status. NEVER persist these.
   missing?: boolean;
+  // Persisted text excerpt for `text/*` / JSON / markdown asset previews.
+  // Capped at ~500 chars by the bun-side excerpt generator so manifest blobs
+  // stay small.
+  previewExcerpt?: string;
   previewUrl?: string;
   size?: number;
   thumbnailFile?: string;
   thumbnailUrl?: string;
   title: string;
-
   // Optional small metadata.
   waveform?: number[];
 }

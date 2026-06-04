@@ -16,7 +16,11 @@ import { toast } from 'sonner';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
-import type { AssetKind, AssetNodeData } from '@/lib/contentTypes';
+import type {
+  ArchiveSummary,
+  AssetKind,
+  AssetNodeData,
+} from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
 import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
@@ -33,6 +37,23 @@ export type AssetNodeRuntimeData = Partial<AssetNodeData> & {
   isHidden?: boolean;
 };
 
+function resolveArchiveSummary(value: unknown): ArchiveSummary | undefined {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  const candidate = value as Partial<ArchiveSummary>;
+  if (typeof candidate.entryCount !== 'number') {
+    return;
+  }
+  if (!Array.isArray(candidate.topFiles)) {
+    return;
+  }
+  const topFiles = candidate.topFiles.filter(
+    (entry): entry is string => typeof entry === 'string'
+  );
+  return { entryCount: candidate.entryCount, topFiles };
+}
+
 function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
   const kind: AssetKind =
     data.kind === 'video' || data.kind === 'audio' || data.kind === 'file'
@@ -45,6 +66,7 @@ function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
   const fileName = typeof data.fileName === 'string' ? data.fileName : '';
   const title = typeof data.title === 'string' ? data.title : fileName;
   return {
+    archiveSummary: resolveArchiveSummary(data.archiveSummary),
     attachmentFile:
       typeof data.attachmentFile === 'string' ? data.attachmentFile : undefined,
     color: typeof data.color === 'string' ? data.color : DEFAULT_ASSET_COLOR,
@@ -53,6 +75,8 @@ function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
     kind,
     mimeType,
     missing: data.missing === true,
+    previewExcerpt:
+      typeof data.previewExcerpt === 'string' ? data.previewExcerpt : undefined,
     previewUrl:
       typeof data.previewUrl === 'string' ? data.previewUrl : undefined,
     size: typeof data.size === 'number' ? data.size : undefined,
@@ -273,6 +297,154 @@ function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
   );
 }
 
+function isImageAsFile(asset: AssetNodeData): boolean {
+  // The renderer's createImageThumbnail flow tags `kind: 'file'` for any
+  // non-video/audio MIME. When that file is actually an image, hydrate it as
+  // an inline preview rather than the generic file card.
+  return asset.kind === 'file' && asset.mimeType.startsWith('image/');
+}
+
+function isPdfAsFile(asset: AssetNodeData): boolean {
+  return asset.kind === 'file' && asset.mimeType === 'application/pdf';
+}
+
+function isArchiveAsFile(asset: AssetNodeData): boolean {
+  return (
+    asset.kind === 'file' &&
+    (asset.mimeType === 'application/zip' ||
+      asset.mimeType === 'application/x-zip-compressed' ||
+      asset.mimeType.endsWith('+zip'))
+  );
+}
+
+function isTextAsFile(asset: AssetNodeData): boolean {
+  if (asset.kind !== 'file') {
+    return false;
+  }
+  if (asset.mimeType.startsWith('text/')) {
+    return true;
+  }
+  return (
+    asset.mimeType === 'application/json' ||
+    asset.mimeType === 'application/ld+json' ||
+    asset.mimeType === 'application/xml'
+  );
+}
+
+function ImageAsFileThumbnail({
+  asset,
+  title,
+}: {
+  asset: AssetNodeData;
+  title: string;
+}) {
+  return (
+    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-black/10 bg-neutral-100 dark:border-white/10 dark:bg-black/30">
+      {asset.thumbnailUrl ? (
+        <img
+          alt={`${title} thumbnail`}
+          className="size-full object-cover"
+          src={asset.thumbnailUrl}
+        />
+      ) : (
+        <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.85_0.04_220/.4),transparent_55%),oklch(0.96_0.01_220)] text-neutral-500 dark:bg-[radial-gradient(circle_at_50%_35%,oklch(0.55_0.07_220/.45),transparent_55%),oklch(0.22_0.02_240)] dark:text-neutral-300">
+          <FileQuestion className="opacity-70" size={36} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
+  // No bun-side raster preview yet (see Phase 2 roadmap). Show a styled
+  // placeholder that still differentiates a PDF from generic file cards on
+  // the canvas while keeping the dependency footprint zero.
+  return (
+    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-rose-100 shadow-inner dark:border-rose-900/40 dark:from-rose-950/40 dark:via-neutral-900 dark:to-rose-950/30">
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="flex flex-col items-center gap-2 text-rose-700 dark:text-rose-300">
+          <div className="grid size-12 place-items-center rounded-xl border border-rose-300 bg-white/80 shadow-sm dark:border-rose-800/60 dark:bg-rose-950/60">
+            <FileText size={26} />
+          </div>
+          <span className="font-semibold text-[11px] uppercase tracking-wider">
+            {asset.mimeType === 'application/pdf' ? 'PDF document' : 'Document'}
+          </span>
+        </div>
+      </div>
+      <div className="absolute top-2 right-2 rounded-md bg-rose-600/90 px-2 py-0.5 font-bold text-[10px] text-white uppercase tracking-wider shadow-sm">
+        PDF
+      </div>
+    </div>
+  );
+}
+
+function TextThumbnail({ asset }: { asset: AssetNodeData }) {
+  // The bun-side excerpt is already trimmed and whitespace-normalized; the
+  // gradient mask hides the truncation seam without needing a CSS truncate
+  // that would lose newlines.
+  const excerpt = asset.previewExcerpt?.trim() ?? '';
+  const hasExcerpt = excerpt.length > 0;
+  return (
+    <div className="relative mb-4 max-h-32 overflow-hidden rounded-2xl border border-black/10 bg-neutral-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20">
+      {hasExcerpt ? (
+        <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-neutral-700 leading-relaxed dark:text-neutral-200">
+          {excerpt}
+        </pre>
+      ) : (
+        <div className="flex items-center gap-2 text-neutral-500 text-xs dark:text-neutral-400">
+          <FileText size={14} />
+          <span>{asset.mimeType || 'Text document'}</span>
+        </div>
+      )}
+      {hasExcerpt ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-neutral-50 to-transparent dark:from-black/40"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
+  const summary = asset.archiveSummary;
+  const entryCount = summary?.entryCount ?? 0;
+  const topFiles = summary?.topFiles ?? [];
+  const hiddenCount = Math.max(0, entryCount - topFiles.length);
+  const countLabel = entryCount > 0 ? `${entryCount} items` : 'Archive';
+
+  return (
+    <div className="mb-4 rounded-2xl border border-black/10 bg-amber-50/60 p-3 shadow-inner dark:border-white/10 dark:bg-amber-400/10">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+          <FileArchive size={15} />
+          <span className="font-semibold text-[11px] uppercase tracking-wider">
+            {countLabel}
+          </span>
+        </div>
+      </div>
+      {topFiles.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {topFiles.map((name, index) => (
+            <li
+              className="truncate rounded-md bg-white/70 px-2 py-1 font-mono text-[11px] text-neutral-700 dark:bg-black/30 dark:text-neutral-200"
+              key={`archive-entry-${index}`}
+              title={name}
+            >
+              {name}
+            </li>
+          ))}
+          {hiddenCount > 0 ? (
+            <li className="px-2 text-[11px] text-neutral-500 dark:text-neutral-400">
+              +{hiddenCount} more
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function AssetThumbnail({
   asset,
   title,
@@ -280,11 +452,26 @@ function AssetThumbnail({
   asset: AssetNodeData;
   title: string;
 }) {
+  if (asset.missing) {
+    return null;
+  }
   if (asset.kind === 'video') {
     return <VideoThumbnail asset={asset} title={title} />;
   }
   if (asset.kind === 'audio') {
     return <AudioThumbnail asset={asset} />;
+  }
+  if (isImageAsFile(asset)) {
+    return <ImageAsFileThumbnail asset={asset} title={title} />;
+  }
+  if (isPdfAsFile(asset)) {
+    return <PdfThumbnail asset={asset} />;
+  }
+  if (isArchiveAsFile(asset)) {
+    return <ArchiveThumbnail asset={asset} />;
+  }
+  if (isTextAsFile(asset)) {
+    return <TextThumbnail asset={asset} />;
   }
   return null;
 }

@@ -71,7 +71,7 @@ src/
     notes.ts                               # .md 文件 CRUD + frontmatter 解析/序列化
     attachments.ts                         # attachments/ 附件保存、读取、打开与路径校验
     blocknote.ts                           # BlockNote JSON sidecar 读写、冲突检测、revision 管理
-    thumbnail.ts                           # 图片/视频缩略图与音频 waveform 生成
+    thumbnail.ts                           # 文本 excerpt / archive summary 元数据生成（saveAttachment 后调用）
     linkPreview.ts                         # Link unfurl：抓取网页 title/description/icon/image
     search.ts                              # workspace 搜索索引与匹配评分
     templates.ts                           # 内置模板 registry + manifest/meta 加载

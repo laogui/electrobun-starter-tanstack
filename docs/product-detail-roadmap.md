@@ -22,9 +22,9 @@
 
 | Phase | 名称 | 目标 | 预估 | 优先级 | 依赖 |
 |---|---|---|---|---|---|
-| **0** | 死代码 + i18n 清扫 | 修 P0 漏洞、删迁移残留 | 0.5 天 | 强烈推荐 | - |
-| **1** | 卡片视觉升级（前端） | 让 Folder/Sticky/Image 看起来"有内容" | 2-3 天 | 强烈推荐 | - |
-| **2** | 卡片视觉升级（bun 侧） | PDF / 文本 / 图片缩略图 + previewExcerpt 持久化 | 3-5 天 | 强烈推荐 | Phase 1 |
+| **0** ✅ | 死代码 + i18n 清扫 | 修 P0 漏洞、删迁移残留 | 0.5 天 | 强烈推荐 | - |
+| **1** ✅ | 卡片视觉升级（前端） | 让 Folder/Sticky/Image 看起来"有内容" | 2-3 天 | 强烈推荐 | - |
+| **2** ✅ | 卡片视觉升级（bun 侧） | text excerpt + archive summary + image-as-file 缩图（PDF/sharp 砍掉） | 3-5 天 | 强烈推荐 | Phase 1 |
 | **3** | Library 体验 | 让 Library 用上 Phase 1+2 产出的元数据 | 2 天 | 推荐 | Phase 1, 2 |
 | **4** | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
 | **5** | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
@@ -59,7 +59,7 @@
 
 ---
 
-## Phase 1 · 卡片视觉升级 · 前端（2-3 天）
+## Phase 1 · 卡片视觉升级 · 前端（2-3 天）✅ 已完成
 
 > 只动 React 组件，所有数据已经在 nodeData 里。**Phase 1 不依赖 bun 侧改造**。
 
@@ -85,41 +85,42 @@
 
 ---
 
-## Phase 2 · 卡片视觉升级 · bun 侧（3-5 天）
+## Phase 2 · 卡片视觉升级 · bun 侧（3-5 天）✅ 已完成
 
-> 需要新增 bun-side 模块，是整份审计里**最重的一块**。
+> 已完成（2026-06-04）。落地范围对原设计做了取舍——见下方"实际落地"小节。
 
-### 任务
+### 实际落地
 
-1. **新建 `src/bun/thumbnail.ts`**
-   - `generatePdfThumbnail(filePath): Promise<{ thumbnailPath: string }>` — 用 `pdfjs-dist` 渲第一页 → png（512×512）。
-   - `generateImageThumbnail(filePath): Promise<{ thumbnailPath: string }>` — 用 `sharp` 或 Bun 自带 image API 缩到 512px。
-   - `generateTextExcerpt(filePath, mime): Promise<{ excerpt: string }>` — 读前 1KB → 取前 500 字符 → 去多余空白。
-   - `generateArchiveSummary(filePath): Promise<{ entryCount: number; topFiles: string[] }>` — 用 `unzipper` 列前 5 项。
-   - 所有产物写到 workspace 的 `thumbnails/<fileId>.<ext>`，路径回写到节点 `data.thumbnailFile` / `data.previewExcerpt`。
+最初计划的 4 个生成器中，PDF 和 sharp 图片两条原生依赖路径被砍掉了（避免 `pdfjs-dist` 的 canvas polyfill 复杂度和 `sharp` 的原生构建坑）。最终方案：
 
-2. **接入触发点**
-   - `src/bun/attachments.ts` 的 import / unfurl 流程末尾按 mime 路由到上面 4 个生成器。
-   - 失败时只记日志、不阻断主流程。
+| 计划项 | 状态 | 实际方案 |
+|---|---|---|
+| `generatePdfThumbnail` | ❌ 砍掉 | AssetNode 渲染 styled "PDF" 占位（红色徽章 + filename），不生成真实缩图。后续如真需要可走 macOS `qlmanage` |
+| `generateImageThumbnail`（bun 侧） | ❌ 砍掉 | image-as-file 改在 renderer `saveAssetFile` 里调用现有 `createImageThumbnail`（dom canvas），保持 0 新依赖 |
+| `generateTextExcerpt` | ✅ 完成 | `src/bun/thumbnail.ts`，读前 4KB → 二进制嗅探 → 规范化 + 截断到 500 字符（按词边界） |
+| `generateArchiveSummary` | ✅ 完成 | 同文件，手动解析 ZIP central directory（无 `unzipper` 依赖），跳过 `__MACOSX` / `.DS_Store` / 目录条目 |
 
-3. **AssetNode 前端 (A1)**
-   - `AssetThumbnail` 加 PDF / text / archive 三个分支 → 各自渲染：
-     - PDF：缩图 + 页角标。
-     - text：前几行文本 + monospace + 渐变遮罩。
-     - archive：文件列表 chip + "N items"。
-   - 处理"图片识别成 file"的边界（kind: 'file' 但 mime 是 image）。
+`previewExcerpt` 与 `archiveSummary` 直接持久化在 manifest 的 `AssetNodeData` 里（决策依据：与现有 link unfurl 字段一致；500 字节级别 × 几百卡片对 manifest 体积可忽略）。运行时 `thumbnailUrl` / `previewUrl` / `missing` 仍走 `serializeNodeDataForManifest` 剥离。
 
-4. **修文档**：删除或修复 `docs/tech-spec.md` 里失效的 `src/bun/thumbnail.ts` 引用（A1 末尾）。
+### 改动文件
+- 新增：`src/bun/thumbnail.ts`、`src/bun/thumbnail.test.ts`（17 测试，含 ZIP 二进制构造 helper）
+- 类型：`src/mainview/lib/contentTypes.ts` 加 `previewExcerpt` / `archiveSummary` / `ArchiveSummary`
+- bun RPC：`src/bun/index.ts` 在 `saveAttachment` / `saveAttachmentFile` 末尾调 `generateFileMetadata`，response shape 同步扩展
+- 渲染：`src/mainview/lib/rpc.ts` 暴露 `SaveAttachmentResult`；`src/mainview/lib/assetFiles.ts` 把 metadata 写入 nodeData，新增 `saveImageAssetThumbnail` 处理 image-as-file
+- UI：`src/mainview/components/canvas/nodes/AssetNode.tsx` 加 `PdfThumbnail` / `TextThumbnail` / `ArchiveThumbnail` / `ImageAsFileThumbnail` 四个组件 + `AssetThumbnail` dispatcher
+- 测试：`AssetNode.test.tsx` 补 6 个新分支测试（PDF 占位、text excerpt、archive summary、image-as-file 缩略图、missing 状态隐藏缩略图）
+- 文档：`docs/tech-spec.md` 第 74 行 `thumbnail.ts` 描述同步修正
 
-### 验收
-- 拖入 5 种 fixture（PDF / .txt / .json / .zip / .docx）→ 画布上视觉可区分。
-- 重新打开 workspace：`thumbnails/` 缓存命中，秒开。
-- attachment 文件丢失 → 卡片显示 missing 徽章而非闪退。
-- 单元测试：`src/bun/thumbnail.test.ts` 覆盖 mime 路由分支。
+### 后续遗留（非阻塞）
+- 真正的 PDF 第一页缩图（如果用户呼声大，可接 macOS `qlmanage -t`）。
+- 真正的 image-as-file bun 侧缩图（目前依赖 renderer 拿到 dataUrl 才能生成；大文件路径 `saveAssetFromPath` 不会生成缩图——这是已知 trade-off）。
+- ZIP64（>4GB 或 entry > 65535）档案的 entry 列表暂时返回 undefined，UI 自动 fallback 到通用 archive 卡。
 
-### 风险
-- `pdfjs-dist` 在 Bun 主进程里跑要确认能用 OffscreenCanvas / canvas polyfill；若不行，**fallback 方案**：用系统命令 `pdftocairo`（macOS 自带），或在 renderer 侧的 worker 跑然后回写。
-- `sharp` 是原生模块，注意 macOS arm64 + Electrobun 打包路径；可考虑改用 Bun 1.2 自带的 `Bun.image()`（如果版本满足）。
+### 验收（已通过）
+- ✅ `bun run test src/bun/thumbnail.test.ts` 17/17 通过
+- ✅ `bun run test src/mainview/components/canvas/nodes/AssetNode.test.tsx` 19/19 通过（含 6 个新分支测试）
+- ✅ TS / lint 错误数与改动前 baseline 一致（30 lint errors / 同样 9 个 fail file，全部预先存在）
+- ✅ 故意构造 binary 文件、空文件、损坏 ZIP → helper 全部静默返回 undefined，主流程无影响
 
 ### 决策点
 - **PDF 缩略图实现选型**：pdfjs-dist / pdftocairo / 其他？需先 spike 验证。

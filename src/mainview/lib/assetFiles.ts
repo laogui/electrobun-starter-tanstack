@@ -6,6 +6,7 @@ import {
 import { rpcSaveAttachment, rpcSaveAttachmentFile } from '@/lib/rpc';
 import {
   createAudioWaveform,
+  createImageThumbnail,
   createVideoThumbnail,
   summarizeWaveform,
 } from '@/lib/thumbnail';
@@ -92,6 +93,40 @@ async function saveVideoThumbnail(
   }
 }
 
+const FILE_EXT_RE = /\.[^.]+$/;
+
+/**
+ * Best-effort image thumbnail generation for `kind: 'file'` assets whose MIME
+ * is `image/*`. Reuses the renderer's `createImageThumbnail` helper so the
+ * canvas card can render an inline preview without holding the original
+ * full-resolution bitmap in memory. Returns both the persisted attachment
+ * path and the in-memory data URL for instant rendering.
+ */
+async function saveImageAssetThumbnail(
+  imageDataUrl: string,
+  suggestedName: string
+): Promise<{ thumbnailFile?: string; thumbnailUrl?: string }> {
+  try {
+    const thumbnailDataUrl = await createImageThumbnail(imageDataUrl);
+    const previewUrl = thumbnailDataUrl ?? imageDataUrl;
+    if (!previewUrl) {
+      return {};
+    }
+    const baseName = suggestedName.replace(FILE_EXT_RE, '') || 'image';
+    const saved = await rpcSaveAttachment(previewUrl, undefined, {
+      kind: 'image',
+      mimeType: 'image/jpeg',
+      suggestedName: `${baseName}-thumbnail.jpg`,
+    });
+    return {
+      thumbnailFile: saved?.filePath,
+      thumbnailUrl: previewUrl,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function saveAssetFile(
   file: File,
   options?: SaveAssetFileOptions
@@ -127,6 +162,7 @@ export async function saveAssetFile(
   });
   reportProgress(0.9, 'Saving attachment');
   let thumbnailFile: string | undefined;
+  let imageThumbnailUrl: string | undefined;
   if (classified.kind === 'video') {
     reportProgress(0.92, 'Saving thumbnail');
     thumbnailFile = await saveVideoThumbnail(
@@ -136,6 +172,15 @@ export async function saveAssetFile(
     reportProgress(0.96, 'Saving thumbnail');
   } else if (classified.kind === 'audio') {
     reportProgress(0.94, 'Reading waveform');
+  } else if (classified.mimeType.startsWith('image/')) {
+    // Image-as-file edge case: the asset path captured an `image/*` MIME but
+    // classifyFile keeps it under `kind: 'file'`. Generate a thumbnail so the
+    // canvas card shows the picture instead of a generic file glyph.
+    reportProgress(0.92, 'Saving thumbnail');
+    const imageThumb = await saveImageAssetThumbnail(dataUrl, file.name);
+    thumbnailFile = imageThumb.thumbnailFile;
+    imageThumbnailUrl = imageThumb.thumbnailUrl;
+    reportProgress(0.96, 'Saving thumbnail');
   }
 
   const duration = videoMetadata.duration ?? audioMetadata.duration;
@@ -144,14 +189,21 @@ export async function saveAssetFile(
     attachmentFile: result?.filePath,
   });
   reportProgress(1, 'Added to canvas');
+  const thumbnailUrl = videoMetadata.thumbnailUrl ?? imageThumbnailUrl;
   return {
     ...data,
     ...(duration ? { duration } : {}),
     ...(thumbnailFile ? { thumbnailFile } : {}),
-    ...(videoMetadata.thumbnailUrl
-      ? { thumbnailUrl: videoMetadata.thumbnailUrl }
-      : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
     ...(waveform && waveform.length > 0 ? { waveform } : {}),
+    // Bun-side metadata: text excerpt for `text/*` / json / md, archive
+    // summary for zip. Both are best-effort and may be absent.
+    ...(result?.previewExcerpt
+      ? { previewExcerpt: result.previewExcerpt }
+      : {}),
+    ...(result?.archiveSummary
+      ? { archiveSummary: result.archiveSummary }
+      : {}),
   };
 }
 
@@ -182,8 +234,17 @@ export async function saveAssetFromPath(
     mimeType: classified.mimeType,
     suggestedName: input.fileName,
   });
-  return createAssetNodeData(
+  const base = createAssetNodeData(
     { name: input.fileName, type: input.mimeType, size: input.size },
     { attachmentFile: result?.filePath }
   );
+  return {
+    ...base,
+    ...(result?.previewExcerpt
+      ? { previewExcerpt: result.previewExcerpt }
+      : {}),
+    ...(result?.archiveSummary
+      ? { archiveSummary: result.archiveSummary }
+      : {}),
+  };
 }

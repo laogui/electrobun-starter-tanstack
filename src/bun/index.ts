@@ -72,6 +72,7 @@ import {
   loadTemplate,
   writeTemplateThumbnail,
 } from './templates';
+import { generateFileMetadata } from './thumbnail';
 import {
   addView,
   addViewFromTemplate,
@@ -493,7 +494,11 @@ interface CanvasRPC {
           mimeType?: string;
           suggestedName?: string;
         };
-        response: { filePath: string };
+        response: {
+          archiveSummary?: { entryCount: number; topFiles: string[] };
+          filePath: string;
+          previewExcerpt?: string;
+        };
       };
       saveAttachmentFile: {
         params: {
@@ -502,7 +507,11 @@ interface CanvasRPC {
           mimeType?: string;
           suggestedName?: string;
         };
-        response: { filePath: string };
+        response: {
+          archiveSummary?: { entryCount: number; topFiles: string[] };
+          filePath: string;
+          previewExcerpt?: string;
+        };
       };
       loadAttachment: {
         params: { filePath: string };
@@ -1432,11 +1441,34 @@ async function main() {
           return { success: deleted };
         },
 
-        saveAttachment: async (params) =>
-          saveWorkspaceAttachment(wsPath, params),
+        saveAttachment: async (params) => {
+          const saved = await saveWorkspaceAttachment(wsPath, params);
+          // Generate any text excerpt / archive summary the renderer can show
+          // on the canvas card. Failures are swallowed inside the helper so
+          // the save itself never blocks on metadata.
+          const { fullPath } = assertWorkspaceAttachmentPath(
+            wsPath,
+            saved.filePath
+          );
+          const metadata = await generateFileMetadata(
+            fullPath,
+            params.mimeType ?? ''
+          );
+          return { ...saved, ...metadata };
+        },
 
-        saveAttachmentFile: async (params) =>
-          saveWorkspaceAttachmentFile(wsPath, params),
+        saveAttachmentFile: async (params) => {
+          const saved = await saveWorkspaceAttachmentFile(wsPath, params);
+          const { fullPath } = assertWorkspaceAttachmentPath(
+            wsPath,
+            saved.filePath
+          );
+          const metadata = await generateFileMetadata(
+            fullPath,
+            params.mimeType ?? ''
+          );
+          return { ...saved, ...metadata };
+        },
 
         loadAttachment: async ({ filePath }) =>
           loadWorkspaceAttachment(wsPath, filePath),

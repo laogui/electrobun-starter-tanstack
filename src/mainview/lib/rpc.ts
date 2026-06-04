@@ -180,6 +180,12 @@ export async function rpcDeleteNote(noteId: string) {
   return eb.rpc.request.deleteNote({ noteId });
 }
 
+export interface SaveAttachmentResult {
+  archiveSummary?: { entryCount: number; topFiles: string[] };
+  filePath: string;
+  previewExcerpt?: string;
+}
+
 export async function rpcSaveAttachment(
   dataUrl: string,
   existingFile?: string,
@@ -188,7 +194,7 @@ export async function rpcSaveAttachment(
     mimeType?: string;
     suggestedName?: string;
   }
-) {
+): Promise<SaveAttachmentResult | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;
@@ -209,7 +215,7 @@ export async function rpcSaveAttachmentFile(
     mimeType?: string;
     suggestedName?: string;
   }
-) {
+): Promise<SaveAttachmentResult | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;

@@ -328,6 +328,141 @@ describe('AssetContent', () => {
       'data:application/pdf;base64,JVBERi0xLjQ='
     );
   });
+
+  it('renders the PDF placeholder badge on the canvas card', () => {
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/pdf_abc.pdf',
+          color: '#ffffff',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          title: 'Report',
+        }}
+      />
+    );
+
+    // The card-mode renderer shows a styled "PDF" badge in addition to the
+    // generic asset label so PDF cards are visually distinct on the canvas.
+    const badges = screen.getAllByText('PDF');
+    expect(badges.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('PDF document')).toBeInTheDocument();
+  });
+
+  it('renders a text excerpt preview when previewExcerpt is set', () => {
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/text_abc.txt',
+          color: '#ffffff',
+          fileName: 'notes.txt',
+          kind: 'file',
+          mimeType: 'text/plain',
+          previewExcerpt: 'A short preview of the text file contents.',
+          title: 'notes.txt',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText('A short preview of the text file contents.')
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to a placeholder when text excerpt is missing', () => {
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/text_abc.txt',
+          color: '#ffffff',
+          fileName: 'notes.txt',
+          kind: 'file',
+          mimeType: 'text/plain',
+          title: 'notes.txt',
+        }}
+      />
+    );
+
+    // No excerpt yet, but the canvas card still routes to the text branch and
+    // surfaces the MIME type as the lightweight placeholder.
+    expect(screen.getAllByText('text/plain').length).toBeGreaterThan(0);
+  });
+
+  it('renders an archive summary on the canvas card', () => {
+    render(
+      <AssetContent
+        data={{
+          archiveSummary: {
+            entryCount: 7,
+            topFiles: [
+              'README.md',
+              'src/index.ts',
+              'src/lib.ts',
+              'docs/intro.md',
+              'docs/guide.md',
+            ],
+          },
+          attachmentFile: 'attachments/zip_abc.zip',
+          color: '#ffffff',
+          fileName: 'project.zip',
+          kind: 'file',
+          mimeType: 'application/zip',
+          title: 'project.zip',
+        }}
+      />
+    );
+
+    expect(screen.getByText('7 items')).toBeInTheDocument();
+    expect(screen.getByText('README.md')).toBeInTheDocument();
+    expect(screen.getByText('src/index.ts')).toBeInTheDocument();
+    expect(screen.getByText('+2 more')).toBeInTheDocument();
+  });
+
+  it('renders an image-as-file thumbnail when the MIME is image/*', () => {
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/file_abc.png',
+          color: '#ffffff',
+          fileName: 'screenshot.png',
+          kind: 'file',
+          mimeType: 'image/png',
+          thumbnailUrl: 'data:image/jpeg;base64,thumb',
+          title: 'screenshot.png',
+        }}
+      />
+    );
+
+    // Image-as-file assets render an inline preview rather than the generic
+    // file glyph, so the renderer's createImageThumbnail output is visible.
+    expect(screen.getByAltText('screenshot.png thumbnail')).toHaveAttribute(
+      'src',
+      'data:image/jpeg;base64,thumb'
+    );
+  });
+
+  it('hides the canvas thumbnail when the attachment is missing', () => {
+    render(
+      <AssetContent
+        data={{
+          archiveSummary: { entryCount: 3, topFiles: ['a.txt'] },
+          attachmentFile: 'attachments/zip_abc.zip',
+          color: '#ffffff',
+          fileName: 'project.zip',
+          kind: 'file',
+          mimeType: 'application/zip',
+          missing: true,
+          title: 'project.zip',
+        }}
+      />
+    );
+
+    // Missing assets must not render any preview surface — only the generic
+    // missing badge appears.
+    expect(screen.queryByText('3 items')).not.toBeInTheDocument();
+    expect(screen.queryByText('a.txt')).not.toBeInTheDocument();
+  });
 });
 
 describe('AssetNode', () => {

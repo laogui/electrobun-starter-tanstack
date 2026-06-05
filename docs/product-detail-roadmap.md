@@ -29,7 +29,7 @@
 | **4** ✅ | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
 | **5** ✅ | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
 | **6** | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
-| **7** | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
+| **7** ✅ | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
 | **8** | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
 | **9** | 性能 pass | useViewport context + unfurl 视口限流 | 1-2 天 | 推荐 | - |
 | **10** | 视觉 / a11y 收尾 | shadow 统一 + dark + focus ring + onboarding | 2-3 天 | 推荐 | - |
@@ -247,21 +247,43 @@
 
 ---
 
-## Phase 7 · FocusedView 完善（2 天）
+## Phase 7 · FocusedView 完善（2 天）✅ 已完成
+
+> 已完成（2026-06-06）。四个任务全部落地，无新 npm 依赖。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| C1 | 右上加 X 按钮 + 兜底 ESC handler（document level） | `FocusedView.tsx:294-310` |
-| C3 | 顶栏左侧元信息条：`createdAt` · `updatedAt` · 字数（用 BlockNote `getDocumentText` 算）· 当前 view 名 | `FocusedView.tsx` |
-| C4 | 图片 focused 模式接 `react-zoom-pan-pinch` 或自写 wheel/drag handler | `ImageNode.tsx:35-221` |
-| C5 | exit 前若节点不在视口 → 调 `inst.setCenter(node.x, node.y, { duration: 0 })` | `FocusedView.tsx:369-375` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | C1 | 右上加 X 按钮 + 兜底 ESC handler（document capture phase） | `FocusedView.tsx` |
+| ✅ 已完成 | C3 | 顶栏左侧元信息条：createdAt · updatedAt · 字数 · 当前 view 名 | `FocusedView.tsx`、新建 `src/mainview/lib/formatRelative.ts` |
+| ✅ 已完成 | C4 | 图片 focused 模式自写 wheel/drag handler（zoom 1-5x，双击重置） | 新建 `useImageZoomPan.ts`、`ImageZoomPan.tsx` |
+| ✅ 已完成 | C5 | exit 前若节点不在视口 → `inst.setCenter(node.x, node.y, { duration: 0 })` | `FocusedView.tsx` |
 
-### 验收
-- 滚出视口的卡片关闭动画顺滑。
-- 图片支持滚轮缩放、双击重置。
-- 元信息在亮/暗主题下都可读。
+### 实际落地
+
+| 计划项 | 状态 | 实际方案 |
+|---|---|---|
+| C1 X 关闭按钮 | ✅ 完成 | 右上角 `motion.button`（X icon），与 SaveIndicator 共用 top-right flex 容器；ESC 用 capture-phase `document.addEventListener('keydown', handler, true)` 兜底，与 `useCanvasKeyboard` bubble-phase 互不冲突（幂等） |
+| C3 元信息条 | ✅ 完成 | `top-20 left-8` pill bar（位于 back 按钮下方），`hidden min-[500px]:flex` 避免小屏拥挤；抽 `formatRelativeTime(string|number)` 共享工具（LibraryCard 同步改用）；WordCountBadge 从右下角移除，字数信息合并到元信息条 |
+| C4 图片缩放 | ✅ 完成 | 自定义 `useImageZoomPan` hook（~120 行）：wheel 缩放向光标位置、pointer 拖拽平移、双击重置；`clampPan` 限制平移不超出图像边界；`ImageZoomPan` 包装组件带 1.5s 自动隐藏的缩放百分比指示器；无新依赖 |
+| C5 退出居中 | ✅ 完成 | FocusedView 直接调 `useReactFlow()`（已确认在 ReactFlowProvider 内）；`handleClose` 统一所有关闭路径（backdrop / ArrowLeft / X / ESC）；folder child 回退到父 folder 节点定位 |
+
+### 改动文件
+- 新增：`src/mainview/lib/formatRelative.ts`（从 LibraryCard 抽取，扩展支持 string | number 输入）
+- 新增：`src/mainview/hooks/useImageZoomPan.ts`（自定义缩放/平移 hook，导出 `clampPan` 和 `useImageZoomPan`）
+- 新增：`src/mainview/hooks/useImageZoomPan.test.ts`（5 个 clampPan 边界测试）
+- 新增：`src/mainview/components/canvas/ImageZoomPan.tsx`（包装组件 + 缩放百分比指示器）
+- 改：`src/mainview/components/canvas/FocusedView.tsx`（C1: X 按钮 + ESC；C3: 元信息条 + 删 WordCountBadge；C4: 接入 ImageZoomPan；C5: useReactFlow + handleClose）
+- 改：`src/mainview/components/canvas/FocusedView.test.tsx`（新增 `@xyflow/react` mock、views/activeViewId mock、5 个新测试：ESC 关闭、元信息条渲染、元信息条隐藏、退出居中、可见时不居中）
+- 改：`src/mainview/components/library/LibraryCard.tsx`（改用共享 `formatRelativeTime`）
+- i18n：`messages/en.json` + `messages/zh.json` 新增 `focused_close` / `focused_created_at` / `focused_updated_at`
+
+### 验收（已通过）
+- ✅ `bun run test` 全绿：92 文件 / 868 测试通过（含 5 个新 FocusedView 测试 + 5 个 useImageZoomPan 测试）
+- ✅ `tsgo --noEmit -p tsconfig.json` 剩余 27 个错误全部位于 `node_modules/electrobun`（预存）；项目源码 0 错误
+- ✅ `ultracite check` 对 6 个改动文件 0 error
+- ✅ ESC 关闭、X 按钮关闭、元信息条亮/暗主题可读、图片缩放平移双击重置、退出时自动居中
 
 ---
 

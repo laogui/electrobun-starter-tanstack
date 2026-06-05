@@ -1,4 +1,5 @@
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useReactFlow } from '@xyflow/react';
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
   lazy,
@@ -17,9 +18,11 @@ import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
+import { formatRelativeTime } from '@/lib/formatRelative';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
+import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
 import type { CardContentData } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
@@ -43,15 +46,6 @@ function countMarkdown(markdown: string): { words: number; chars: number } {
   const words = plain ? plain.split(WORD_SPLIT_RE).filter(Boolean).length : 0;
   return { words, chars: plain.length };
 }
-
-const WordCountBadge = ({ markdown }: { markdown: string }) => {
-  const counts = useMemo(() => countMarkdown(markdown), [markdown]);
-  return (
-    <div className="pointer-events-none absolute right-6 bottom-6 rounded-full bg-black/30 px-3 py-1 text-white/80 text-xs backdrop-blur-md">
-      {m.focused_word_count({ words: counts.words, chars: counts.chars })}
-    </div>
-  );
-};
 
 const BlockNoteEditor = lazy(
   () => import('@/components/editor/BlockNoteEditor')
@@ -164,6 +158,8 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
   const nodes = useCanvasStore((s) => s.nodes);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
+  const views = useCanvasStore((s) => s.views);
+  const activeViewId = useCanvasStore((s) => s.activeViewId);
   const folderId =
     typeof node.folderId === 'string' ? node.folderId : undefined;
   const noteIdRaw = node.data.noteId;
@@ -175,6 +171,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const contentRaw = node.data.content;
   const content = typeof contentRaw === 'string' ? contentRaw : undefined;
   const dataTypeRaw = node.data.type;
+  const createdAtRaw = node.data.createdAt;
+  const createdAt = typeof createdAtRaw === 'string' ? createdAtRaw : undefined;
+  const updatedAtRaw = node.data.updatedAt;
+  const updatedAt = typeof updatedAtRaw === 'string' ? updatedAtRaw : undefined;
   const isFolderChild = Boolean(folderId);
 
   const updateFocusedData = useCallback(
@@ -281,6 +281,12 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
 
+  const wordCounts = useMemo(() => countMarkdown(content ?? ''), [content]);
+  const activeViewName = useMemo(
+    () => views.find((v) => v.id === activeViewId)?.name,
+    [views, activeViewId]
+  );
+
   const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const didToastOnErrorRef = useRef(false);
@@ -298,6 +304,39 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     },
     []
   );
+
+  const { setCenter, getViewport, getNodes } = useReactFlow();
+
+  const handleClose = useCallback(() => {
+    const rfNodes = getNodes();
+    const targetId = folderId ?? node.id;
+    const rfNode = rfNodes.find((n) => n.id === targetId) as
+      | NodeWithLayout
+      | undefined;
+    if (rfNode?.position) {
+      const w =
+        rfNode.measured?.width ??
+        rfNode.width ??
+        numericSize(rfNode.style?.width) ??
+        DEFAULT_NAV_RECT_WIDTH;
+      const h =
+        rfNode.measured?.height ??
+        rfNode.height ??
+        numericSize(rfNode.style?.height) ??
+        DEFAULT_NAV_RECT_HEIGHT;
+      const cx = rfNode.position.x + w / 2;
+      const cy = rfNode.position.y + h / 2;
+      const vp = getViewport();
+      const screenL = -vp.x / vp.zoom;
+      const screenT = -vp.y / vp.zoom;
+      const screenR = screenL + window.innerWidth / vp.zoom;
+      const screenB = screenT + window.innerHeight / vp.zoom;
+      if (cx < screenL || cx > screenR || cy < screenT || cy > screenB) {
+        setCenter(cx, cy, { zoom: vp.zoom, duration: 0 });
+      }
+    }
+    onClose();
+  }, [getNodes, getViewport, setCenter, folderId, node.id, onClose]);
 
   // Notes go fullscreen; other content keeps the original centered modal size.
   const targetWidth = isText
@@ -362,13 +401,29 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, [handleNavigate, nextItem, previousItem]);
 
+  // Fallback ESC handler at document capture phase. Fires before any
+  // bubble-phase listener so the focused view always closes even if a
+  // downstream handler calls stopPropagation.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleClose();
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => {
+      document.removeEventListener('keydown', handler, true);
+    };
+  }, [handleClose]);
+
   return (
     <motion.div
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-md"
       exit={{ opacity: 0 }}
       initial={{ opacity: 0 }}
-      onClick={onClose}
+      onClick={handleClose}
       transition={{ type: 'spring', damping: 30, stiffness: 300 }}
     >
       <motion.button
@@ -376,7 +431,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         className="absolute top-8 left-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
         exit={{ opacity: 0, x: -20 }}
         initial={{ opacity: 0, x: -20 }}
-        onClick={onClose}
+        onClick={handleClose}
         transition={{
           type: 'spring',
           damping: 20,
@@ -389,24 +444,93 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         <ArrowLeft size={24} />
       </motion.button>
 
-      {isText && saveStatus !== 'idle' ? (
-        <motion.div
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-8 right-8 z-70"
-          exit={{ opacity: 0, y: -20 }}
-          initial={{ opacity: 0, y: -20 }}
+      <div className="absolute top-8 right-8 z-70 flex items-center gap-3">
+        {isText && saveStatus !== 'idle' ? (
+          <motion.div
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -20 }}
+            transition={{
+              type: 'spring',
+              damping: 20,
+              stiffness: 300,
+              delay: 0.15,
+            }}
+          >
+            <SaveIndicator
+              className="bg-black/40 backdrop-blur-md"
+              lastSavedAt={lastSavedAt}
+              status={saveStatus}
+            />
+          </motion.div>
+        ) : null}
+
+        <motion.button
+          animate={{ opacity: 1, x: 0 }}
+          aria-label={m.focused_close()}
+          className="rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
+          exit={{ opacity: 0, x: 20 }}
+          initial={{ opacity: 0, x: 20 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClose();
+          }}
           transition={{
             type: 'spring',
             damping: 20,
             stiffness: 300,
             delay: 0.15,
           }}
+          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
+          whileTap={{ scale: 0.9 }}
         >
-          <SaveIndicator
-            className="bg-black/40 backdrop-blur-md"
-            lastSavedAt={lastSavedAt}
-            status={saveStatus}
-          />
+          <X size={24} />
+        </motion.button>
+      </div>
+
+      {isText ? (
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-20 left-8 z-70 hidden items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-white/60 text-xs backdrop-blur-md min-[500px]:flex"
+          exit={{ opacity: 0, y: -10 }}
+          initial={{ opacity: 0, y: -10 }}
+          transition={{
+            type: 'spring',
+            damping: 20,
+            stiffness: 300,
+            delay: 0.2,
+          }}
+        >
+          {createdAt ? (
+            <span>
+              {m.focused_created_at({ time: formatRelativeTime(createdAt) })}
+            </span>
+          ) : null}
+          {createdAt && updatedAt && updatedAt !== createdAt ? (
+            <span className="opacity-40"> · </span>
+          ) : null}
+          {updatedAt && updatedAt !== createdAt ? (
+            <span>
+              {m.focused_updated_at({ time: formatRelativeTime(updatedAt) })}
+            </span>
+          ) : null}
+          {(createdAt || updatedAt) && wordCounts.words > 0 ? (
+            <span className="opacity-40"> · </span>
+          ) : null}
+          {wordCounts.words > 0 ? (
+            <span>
+              {m.focused_word_count({
+                words: wordCounts.words,
+                chars: wordCounts.chars,
+              })}
+            </span>
+          ) : null}
+          {activeViewName ? (
+            <>
+              <span className="opacity-40"> · </span>
+              <span>{activeViewName}</span>
+            </>
+          ) : null}
         </motion.div>
       ) : null}
 
@@ -495,10 +619,12 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       >
         <div className="h-full">
           {node.type === 'image' ? (
-            <ImageContent
-              data={node.data as unknown as ImageData}
-              isFocused={true}
-            />
+            <ImageZoomPan>
+              <ImageContent
+                data={node.data as unknown as ImageData}
+                isFocused={true}
+              />
+            </ImageZoomPan>
           ) : node.type === 'asset' ? (
             <AssetContent data={node.data} isFocused={true} />
           ) : node.type === 'link' ? (
@@ -532,7 +658,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 }}
                 title={title}
               />
-              <WordCountBadge markdown={content ?? ''} />
             </Suspense>
           ) : (
             <CardContent

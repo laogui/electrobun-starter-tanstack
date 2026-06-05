@@ -11,30 +11,51 @@ const setFocusedNodeMock = vi.fn();
 let nodesMock: Array<{
   data: Record<string, unknown>;
   id: string;
+  measured?: { width?: number; height?: number };
   position: { x: number; y: number };
   type?: string;
+  width?: number;
+  height?: number;
 }> = [];
 const updateFolderChildDataMock = vi.fn();
 const updateNodeDataMock = vi.fn();
+let viewsMock: Array<{ id: string; name: string }> = [];
+let activeViewIdMock = 'default';
+
+const setCenterMock = vi.fn();
+const getViewportMock = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
+const getNodesMock = vi.fn(() => nodesMock);
+
+vi.mock('@xyflow/react', () => ({
+  useReactFlow: () => ({
+    getNodes: getNodesMock,
+    getViewport: getViewportMock,
+    setCenter: setCenterMock,
+  }),
+}));
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
     selector: (state: {
+      activeViewId: string;
       commitFolderChildData: typeof commitFolderChildDataMock;
       commitNodeData: typeof commitNodeDataMock;
       nodes: typeof nodesMock;
       setFocusedNode: typeof setFocusedNodeMock;
       updateFolderChildData: typeof updateFolderChildDataMock;
       updateNodeData: typeof updateNodeDataMock;
+      views: typeof viewsMock;
     }) => unknown
   ) =>
     selector({
+      activeViewId: activeViewIdMock,
       commitFolderChildData: commitFolderChildDataMock,
       commitNodeData: commitNodeDataMock,
       nodes: nodesMock,
       setFocusedNode: setFocusedNodeMock,
       updateFolderChildData: updateFolderChildDataMock,
       updateNodeData: updateNodeDataMock,
+      views: viewsMock,
     }),
 }));
 
@@ -158,6 +179,14 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
   ),
 }));
 
+vi.mock('@/components/canvas/ImageZoomPan', () => ({
+  ImageZoomPan: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+const CLOSE_BUTTON = /close/i;
+
 const rect = {
   x: 10,
   y: 20,
@@ -175,7 +204,12 @@ describe('focusedView', () => {
     commitFolderChildDataMock.mockReset();
     commitNodeDataMock.mockReset();
     setFocusedNodeMock.mockReset();
+    setCenterMock.mockReset();
+    getViewportMock.mockReset();
+    getViewportMock.mockReturnValue({ x: 0, y: 0, zoom: 1 });
     nodesMock = [];
+    viewsMock = [];
+    activeViewIdMock = 'default';
     updateFolderChildDataMock.mockReset();
     updateNodeDataMock.mockReset();
     document.body.style.overflow = '';
@@ -275,7 +309,7 @@ describe('focusedView', () => {
     expect(updateNodeDataMock).not.toHaveBeenCalled();
   });
 
-  it('renders image nodes and closes from overlay/back button', () => {
+  it('renders image nodes and closes from close button', () => {
     const onClose = vi.fn();
 
     render(
@@ -298,11 +332,7 @@ describe('focusedView', () => {
       screen.getByText('image:Cover:https://example.com/img.png')
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button'));
-    fireEvent.click(
-      screen.getByText('image:Cover:https://example.com/img.png').closest('div')
-        ?.parentElement?.parentElement!
-    );
+    fireEvent.click(screen.getByRole('button', { name: CLOSE_BUTTON }));
 
     expect(onClose).toHaveBeenCalled();
   });
@@ -457,5 +487,141 @@ describe('focusedView', () => {
     expect(focusedItem?.rect).toBeInstanceOf(DOMRect);
     expect(focusedItem?.rect.width).toBe(350);
     expect(focusedItem?.rect.height).toBe(450);
+  });
+
+  it('closes on ESC keydown via capture-phase handler', async () => {
+    const onClose = vi.fn();
+    render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: { title: 'Alpha', content: 'Body' },
+          rect,
+        }}
+        onClose={onClose}
+      />
+    );
+
+    expect(await screen.findByText('editor:Alpha:Body')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renders metadata bar for text notes with timestamps', async () => {
+    render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: {
+            title: 'Meta',
+            content: 'Hello world',
+            createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+            updatedAt: new Date(Date.now() - 3_600_000).toISOString(),
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      await screen.findByText('editor:Meta:Hello world')
+    ).toBeInTheDocument();
+    const container = document.querySelector('.min-\\[500px\\]\\:flex');
+    expect(container).toBeTruthy();
+    expect(container?.textContent).toContain('Created');
+    expect(container?.textContent).toContain('Updated');
+  });
+
+  it('does not render metadata bar for image nodes', () => {
+    render(
+      <FocusedView
+        node={{
+          id: 'image-1',
+          type: 'image',
+          data: {
+            title: 'Cover',
+            imageUrl: 'https://example.com/img.png',
+            createdAt: new Date().toISOString(),
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText('image:Cover:https://example.com/img.png')
+    ).toBeInTheDocument();
+    const container = document.querySelector('.min-\\[500px\\]\\:flex');
+    expect(container).toBeNull();
+  });
+
+  it('calls setCenter when closing and node is off-screen', () => {
+    nodesMock = [
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 5000, y: 5000 },
+        data: { title: 'Far', content: '' },
+        measured: { width: 320, height: 180 },
+      },
+    ];
+    getViewportMock.mockReturnValue({ x: 0, y: 0, zoom: 1 });
+
+    const onClose = vi.fn();
+    render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: { title: 'Far', content: '' },
+          rect,
+        }}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: CLOSE_BUTTON }));
+
+    expect(setCenterMock).toHaveBeenCalledWith(5160, 5090, {
+      zoom: 1,
+      duration: 0,
+    });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not call setCenter when closing and node is visible', () => {
+    nodesMock = [
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 100, y: 100 },
+        data: { title: 'Near', content: '' },
+        measured: { width: 320, height: 180 },
+      },
+    ];
+    getViewportMock.mockReturnValue({ x: 0, y: 0, zoom: 1 });
+
+    const onClose = vi.fn();
+    render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: { title: 'Near', content: '' },
+          rect,
+        }}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: CLOSE_BUTTON }));
+
+    expect(setCenterMock).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });

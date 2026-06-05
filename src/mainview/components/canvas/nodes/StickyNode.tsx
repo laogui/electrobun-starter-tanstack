@@ -8,7 +8,7 @@ import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
-const handleClassName = 'conn-handle nodrag';
+import { NodeHandles } from './_shared/NodeHandles';
 
 type CaretPositionFromPoint = (
   x: number,

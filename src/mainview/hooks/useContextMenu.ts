@@ -374,7 +374,8 @@ export function useContextMenu({
         }
         case 'cycle-edge-color': {
           if (nodeId) {
-            const edge = findEdge(nodeId);
+            const { edges } = useCanvasStore.getState();
+            const edge = edges.find((e) => e.id === nodeId);
             if (edge) {
               const rawColor = (edge.data as { color?: unknown } | undefined)
                 ?.color;

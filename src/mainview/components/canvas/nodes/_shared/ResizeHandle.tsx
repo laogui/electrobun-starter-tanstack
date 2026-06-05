@@ -38,7 +38,7 @@ export const ResizeHandle = ({
   const setNodes = useCanvasStore((s) => s.setNodes);
 
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
+    (event: KeyboardEvent<HTMLButtonElement>) => {
       const widthDelta =
         event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
       const heightDelta =

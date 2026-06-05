@@ -41,6 +41,13 @@ vi.mock('../../../paraglide/messages.js', () => ({
   search_filter_folders: () => 'Folders',
   search_filter_links: () => 'Links',
   search_filter_images: () => 'Images',
+  search_recent_cards: () => 'Recent cards',
+  search_jump_to_canvas: () => 'Jump to canvas',
+  search_tip_navigate: () => 'Navigate',
+  search_tip_select: () => 'Select',
+  search_tip_create: () => 'New card',
+  search_group_collapse: () => 'Collapse group',
+  search_group_expand: () => 'Expand group',
 }));
 
 import { SearchDialog } from './SearchDialog';
@@ -359,6 +366,98 @@ describe('searchDialog interactions', () => {
     expect(
       useCanvasStore.getState().edges.find((e) => e.id === 'e1')?.selected
     ).toBe(true);
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('highlights the query term inside result rows (E1)', () => {
+    setSearch({
+      query: 'tan',
+      results: [makeResult({ title: 'tango', excerpt: 'a tan line' })],
+    });
+    render(<SearchDialog />);
+    const option = screen.getByRole('option');
+    const marks = option.querySelectorAll('mark');
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    expect(
+      [...marks].every((mark) => mark.textContent?.toLowerCase() === 'tan')
+    ).toBe(true);
+  });
+
+  it('groups results by canvas and collapses a group header (E2)', () => {
+    setSearch({
+      query: 'h',
+      results: [
+        makeResult({ id: 'r1', title: 'First' }),
+        makeResult({
+          id: 'node:other:n2:title',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: 'n2',
+          title: 'Second',
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+    // Two group headers, one per canvas.
+    const collapseButtons = screen.getAllByLabelText('Collapse group');
+    expect(collapseButtons).toHaveLength(2);
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+
+    // Collapsing the first canvas hides its row.
+    fireEvent.click(collapseButtons[0]!);
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(screen.getByLabelText('Expand group')).toBeInTheDocument();
+  });
+
+  it('skips collapsed rows during keyboard navigation (E2)', () => {
+    setSearch({
+      query: 'h',
+      results: [
+        makeResult({ id: 'r1', title: 'First' }),
+        makeResult({
+          id: 'node:other:n2:title',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: 'n2',
+          title: 'Second',
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+    fireEvent.click(screen.getAllByLabelText('Collapse group')[0]!);
+    // Only the Other Canvas row remains and becomes the active option.
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('shows recent cards and canvases in the empty state (E3)', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'n1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Recent Card', updatedAt: 100 },
+        } as any,
+      ],
+    });
+    setSearch({ query: '' });
+    render(<SearchDialog />);
+    expect(screen.getByText('Recent cards')).toBeInTheDocument();
+    expect(screen.getByText('Recent Card')).toBeInTheDocument();
+    expect(screen.getByText('Jump to canvas')).toBeInTheDocument();
+    // The non-active canvas is offered as a jump target.
+    expect(screen.getByText('Other Canvas')).toBeInTheDocument();
+  });
+
+  it('jumps to a canvas from the empty state (E3)', async () => {
+    setSearch({ query: '' });
+    render(<SearchDialog />);
+    fireEvent.click(screen.getByText('Other Canvas'));
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeViewId).toBe('other');
+    });
     expect(useCanvasStore.getState().searchOpen).toBe(false);
   });
 

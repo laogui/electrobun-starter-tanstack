@@ -5,6 +5,8 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const DEFAULT_DEBOUNCE_MS = 800;
 
+export type BlockNoteSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 interface PreviewResponse {
   blocks: number;
   excerpt: string;
@@ -30,6 +32,12 @@ interface UseBlockNoteSaverOptions {
    * so previews flow back through `updateFolderChildData`.
    */
   onPreviewUpdate?: (updates: Record<string, unknown>) => void;
+  /**
+   * Optional callback invoked whenever the save lifecycle transitions between
+   * `idle` / `saving` / `saved` / `error`. Used by the focused editor to
+   * render a SaveIndicator without having to poll the hook's internals.
+   */
+  onSaveStatusChange?: (status: BlockNoteSaveStatus) => void;
 }
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -68,10 +76,12 @@ export function useBlockNoteSaver({
   nodeId,
   noteId,
   onPreviewUpdate,
+  onSaveStatusChange,
 }: UseBlockNoteSaverOptions) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const updateNodeDataRef = useRef(updateNodeData);
   const onPreviewUpdateRef = useRef(onPreviewUpdate);
+  const onSaveStatusChangeRef = useRef(onSaveStatusChange);
   const frontmatterRef = useRef(frontmatter);
   const noteIdRef = useRef(noteId);
   const enabledRef = useRef(enabled);
@@ -81,6 +91,16 @@ export function useBlockNoteSaver({
   const changeVersionRef = useRef(0);
   const saveRequestRef = useRef(0);
   const revisionRef = useRef<number | undefined>(undefined);
+  const lastSavedAtRef = useRef<Date | null>(null);
+  const statusRef = useRef<BlockNoteSaveStatus>('idle');
+
+  const setStatus = useCallback((next: BlockNoteSaveStatus) => {
+    if (statusRef.current === next) {
+      return;
+    }
+    statusRef.current = next;
+    onSaveStatusChangeRef.current?.(next);
+  }, []);
 
   useEffect(() => {
     updateNodeDataRef.current = updateNodeData;
@@ -88,6 +108,9 @@ export function useBlockNoteSaver({
   useEffect(() => {
     onPreviewUpdateRef.current = onPreviewUpdate;
   }, [onPreviewUpdate]);
+  useEffect(() => {
+    onSaveStatusChangeRef.current = onSaveStatusChange;
+  }, [onSaveStatusChange]);
   useEffect(() => {
     frontmatterRef.current = frontmatter;
   }, [frontmatter]);
@@ -114,6 +137,8 @@ export function useBlockNoteSaver({
       const requestId = saveRequestRef.current + 1;
       saveRequestRef.current = requestId;
 
+      setStatus('saving');
+
       try {
         const response = await rpcSaveBlockNote(
           currentNoteId,
@@ -126,9 +151,13 @@ export function useBlockNoteSaver({
         if (
           requestId !== saveRequestRef.current ||
           changeVersion !== changeVersionRef.current ||
-          latestPayloadRef.current !== payload ||
-          !response.success
+          latestPayloadRef.current !== payload
         ) {
+          return;
+        }
+
+        if (!response.success) {
+          setStatus('error');
           return;
         }
 
@@ -143,19 +172,32 @@ export function useBlockNoteSaver({
           response.revision,
           response.preview
         );
-        if (onPreviewUpdateRef.current) {
-          onPreviewUpdateRef.current(updates);
-        } else {
-          updateNodeDataRef.current(nodeId, updates);
+        try {
+          if (onPreviewUpdateRef.current) {
+            onPreviewUpdateRef.current(updates);
+          } else {
+            updateNodeDataRef.current(nodeId, updates);
+          }
+        } catch (updateError) {
+          console.error(
+            '[blocknote] Failed to apply preview updates:',
+            updateError
+          );
         }
+
+        lastSavedAtRef.current = new Date();
+        setStatus('saved');
       } catch (error) {
-        // Failures are surfaced via console; the editor keeps working
-        // against in-memory state. We intentionally don't toast here to
-        // avoid noisy retries during transient RPC blips.
+        if (
+          requestId === saveRequestRef.current &&
+          changeVersion === changeVersionRef.current
+        ) {
+          setStatus('error');
+        }
         console.error('[blocknote] Failed to save note:', error);
       }
     },
-    [nodeId]
+    [nodeId, setStatus]
   );
 
   const flushNow = useCallback(
@@ -229,5 +271,11 @@ export function useBlockNoteSaver({
     [flushNow]
   );
 
-  return { flushNow, saveDebounced, setInitialRevision };
+  return {
+    flushNow,
+    saveDebounced,
+    setInitialRevision,
+    status: statusRef.current,
+    lastSavedAt: lastSavedAtRef.current,
+  };
 }

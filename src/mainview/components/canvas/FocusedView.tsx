@@ -1,7 +1,17 @@
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
-import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
-
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { toast } from 'sonner';
+import { SaveIndicator } from '@/components/editor/SaveIndicator';
+import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -271,6 +281,24 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
 
+  const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const didToastOnErrorRef = useRef(false);
+
+  const handleSaveStatusChange = useCallback(
+    (status: BlockNoteSaveStatus, savedAt: Date | null) => {
+      setSaveStatus(status);
+      if (status === 'saved') {
+        setLastSavedAt(savedAt);
+        didToastOnErrorRef.current = false;
+      } else if (status === 'error' && !didToastOnErrorRef.current) {
+        didToastOnErrorRef.current = true;
+        toast.error(m.toast_save_failed());
+      }
+    },
+    []
+  );
+
   // Notes go fullscreen; other content keeps the original centered modal size.
   const targetWidth = isText
     ? window.innerWidth
@@ -360,6 +388,27 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       >
         <ArrowLeft size={24} />
       </motion.button>
+
+      {isText && saveStatus !== 'idle' ? (
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-8 right-8 z-70"
+          exit={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -20 }}
+          transition={{
+            type: 'spring',
+            damping: 20,
+            stiffness: 300,
+            delay: 0.15,
+          }}
+        >
+          <SaveIndicator
+            className="bg-black/40 backdrop-blur-md"
+            lastSavedAt={lastSavedAt}
+            status={saveStatus}
+          />
+        </motion.div>
+      ) : null}
 
       {previousItem ? (
         <motion.button
@@ -477,6 +526,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                   });
                 }}
                 onPreviewUpdate={isFolderChild ? updateFocusedData : undefined}
+                onSaveStatusChange={handleSaveStatusChange}
                 onTitleChange={(nextTitle) => {
                   updateFocusedData({ title: nextTitle });
                 }}

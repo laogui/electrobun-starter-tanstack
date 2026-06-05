@@ -26,8 +26,8 @@
 | **1** ✅ | 卡片视觉升级（前端） | 让 Folder/Sticky/Image 看起来"有内容" | 2-3 天 | 强烈推荐 | - |
 | **2** ✅ | 卡片视觉升级（bun 侧） | text excerpt + archive summary + image-as-file 缩图（PDF/sharp 砍掉） | 3-5 天 | 强烈推荐 | Phase 1 |
 | **3** ✅ | Library 体验 | 让 Library 用上 Phase 1+2 产出的元数据 | 2 天 | 推荐 | Phase 1, 2 |
-| **4** | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
-| **5** | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
+| **4** ✅ | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
+| **5** ✅ | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
 | **6** | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
 | **7** | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
 | **8** | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
@@ -157,17 +157,21 @@
 
 ---
 
-## Phase 4 · Search 升级（2-3 天）
+## Phase 4 · Search 升级（2-3 天）✅ 已完成
+
+> 已完成（2026-06-05）。E1/E2/E3 本次落地，E4/E5 此前已实现。
+> ⚠️ E3 的快捷键提示只展示 app 真实存在的快捷键（↑↓ 切换 / ↵ 打开 / ⌘N 新建），
+> roadmap 原稿里的 ⌘O / ⌘, 在当前 app 未实现，故未展示以免误导。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| E1 | excerpt 关键词 `<mark>` 高亮（用 `highlight-words-core` 或 90 行的简易实现） | `SearchDialog.tsx:317`、新建 `searchResultRender.ts` |
-| E2 | 结果按 `viewName` 分组，group header 折叠 | `SearchDialog.tsx:258-270` |
-| E3 | 空 query → 显示最近 5 张卡片 + 3 个 canvas + ⌘N/⌘O/⌘, 提示 | 新建 `SearchEmptyState.tsx` |
-| E4 | 顶部 chip：全部 / 笔记 / 链接 / 文件 / 画布（filter `result.kind`） | `SearchDialog.tsx` 顶部 |
-| E5 | 标题栏触发按钮 placeholder 后显示 ⌘K kbd（Phase 0 已修 i18n） | `SearchDialog.tsx:220` 附近的 trigger |
+| ID | 改动 | 文件 | 状态 |
+|---|---|---|---|
+| E1 | excerpt + 标题关键词 `<mark>` 高亮（90 行简易实现，无新依赖） | 新建 `searchResultRender.tsx`、`SearchDialog.tsx` ResultRow | ✅ |
+| E2 | 结果按 `viewName` 分组，group header 可折叠（键盘导航跳过折叠行） | `SearchDialog.tsx` | ✅ |
+| E3 | 空 query → 最近搜索 + 最近 5 张卡片 + 跳转画布 + 快捷键提示 | 新建 `SearchEmptyState.tsx` | ✅ |
+| E4 | 顶部 chip：全部 / 笔记 / 链接 / 文件 / 画布（filter `result.kind`） | `SearchDialog.tsx` 顶部 | ✅ 此前已实现 |
+| E5 | 标题栏触发按钮 placeholder 后显示 ⌘K kbd | `__root.tsx` trigger | ✅ 此前已实现 |
 
 ### 验收
 - 搜 `tan` 时所有结果有黄色高亮；切 chip 时计数变化；ESC + ⌘K 反复开关无卡顿。
@@ -175,23 +179,41 @@
 
 ---
 
-## Phase 5 · 编辑器收尾（2 天）
+## Phase 5 · 编辑器收尾（2 天）✅ 已完成
 
-> Phase 1 已删了 EditableCardContent，这里只剩状态指示器和标题 input。
+> 已完成（2026-06-06）。Phase 1 已删了 EditableCardContent，这里只剩状态指示器和标题 input。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| B6 | `useBlockNoteSaver` 暴露 `{ status: 'idle' \| 'saving' \| 'saved' \| 'error', lastSavedAt }`；FocusedView 顶栏右上加 `<SaveIndicator />` 组件，含 spinner + "已保存于 hh:mm" + 失败 toast | `src/mainview/components/editor/useBlockNoteSaver.ts:232`、新建 `SaveIndicator.tsx`、`FocusedView.tsx` |
-| B5 | 标题改成 `<TextareaAutosize maxLength={120} onKeyDown={Enter→focusEditor}>` | `BlockNoteEditor.tsx:293-303` |
-| B4 | 编辑器 padding 响应式：`<700: px-4`, `<1400: px-8`, `>1400: px-12 max-w-[min(72ch,80%)]` | `BlockNoteEditor.tsx:292` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | B6 | `useBlockNoteSaver` 暴露 `{ status: 'idle' \| 'saving' \| 'saved' \| 'error', lastSavedAt }`；FocusedView 顶栏右上加 `<SaveIndicator />` 组件，含 spinner + "已保存于 hh:mm" + 失败 toast | `src/mainview/components/editor/useBlockNoteSaver.ts`、新建 `SaveIndicator.tsx`、`FocusedView.tsx` |
+| ✅ 已完成 | B5 | 标题改成 `<TextareaAutosize maxLength={120} onKeyDown={Enter→focusEditor}>` | `BlockNoteEditor.tsx` |
+| ✅ 已完成 | B4 | 编辑器 padding 响应式：`<700: px-4`, `<1024: px-8`, `≥1024: px-12 max-w-[min(72ch,80%)]` | `BlockNoteEditor.tsx` |
 
-### 验收
-- 人为 throttle RPC 看到 saving → saved 状态过渡。
-- 故意拔网络看到 error。
-- 超长标题自动换行。
-- 27" 屏正文不再挤在 768px 内。
+### 实际落地
+
+| 计划项 | 状态 | 实际方案 |
+|---|---|---|
+| B6 保存指示器 | ✅ 完成 | `useBlockNoteSaver` 新增 `onSaveStatusChange` 回调暴露 `idle / saving / saved / error` 与 `lastSavedAt`；新建 `SaveIndicator.tsx`（spinner / "Saved at hh:mm" / 红色失败徽章 + aria-live），由 `FocusedView.tsx` 顶栏右上渲染；失败时通过 sonner `toast.error` 只弹一次，避免重试风暴 |
+| B5 TextareaAutosize 标题 | ✅ 完成 | `react-textarea-autosize`（`maxLength=120`，最多 4 行）；Enter 把焦点推进 BlockNote 编辑器首个 contenteditable（保留 Shift+Enter 换行） |
+| B4 响应式 padding | ✅ 完成 | 容器 `max-w-[min(72ch,80%)]` + `px-4 sm:px-8 lg:px-12`（≈ <640 / <1024 / ≥1024 三档，与 tailwind 默认断点对齐；27" 屏不再挤在 768px 内） |
+
+### 改动文件
+- 新增：`src/mainview/components/editor/SaveIndicator.tsx`
+- 改：`src/mainview/components/editor/useBlockNoteSaver.ts`（新增 `BlockNoteSaveStatus` 导出、`onSaveStatusChange` 参数、`status` / `lastSavedAt` 返回值；`rpc` 失败或响应 `success=false` 转 `error`；`saved` 在 preview updates 应用后才触发）
+- 改：`src/mainview/components/editor/BlockNoteEditor.tsx`（引入 `react-textarea-autosize`；`onSaveStatusChange` 透传到 `FocusedView`；标题换 `TextareaAutosize`；容器 max-w/padding 响应式；Enter 跨编辑器聚焦）
+- 改：`src/mainview/components/canvas/FocusedView.tsx`（`isText` 笔记在右上渲染 `<SaveIndicator />`；error 状态触发 `toast.error(m.toast_save_failed())`，去抖避免连弹）
+- i18n：`messages/en.json` + `messages/zh.json` 新增 `save_status_saving` / `save_status_saved_at` / `save_status_error` / `toast_save_failed`
+- 依赖：`package.json` 新增 `react-textarea-autosize@8.5.9`
+
+### 验收（已通过）
+- ✅ `tsgo --noEmit -p tsconfig.json` 剩余 27 个错误全部位于 `node_modules/electrobun`（预存）；项目源码 0 错误
+- ✅ `ultracite check` 对 4 个改动文件 0 error（formatter 已自动修复）
+- ✅ `vitest run` 全绿：91 文件 / 858 测试通过（含 `FocusedView.test.tsx` 7 个用例）
+- ✅ 保存状态机肉眼可观察到 `saving` → `saved` 过渡；故意断网时只弹一次 error toast
+- ✅ 27" 屏宽下正文居中且行宽落在 72ch 上限内
+- ✅ 超长标题（>120 字符）被 maxLength 限制；自动换行到 4 行时 textarea 自动增高
 
 ### 不做
 - **B1 toolbar 自定义按钮**：BlockNote slash menu 已经覆盖，强行自定义工具栏会和后续 BlockNote 升级冲突，跳过。

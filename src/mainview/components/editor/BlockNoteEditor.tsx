@@ -6,6 +6,7 @@ import { useCreateBlockNote } from '@blocknote/react';
 import 'overlayscrollbars/overlayscrollbars.css';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -16,7 +17,12 @@ import {
   resolveBlockNoteFileUrl,
   uploadBlockNoteFile,
 } from './blocknoteAttachments';
-import { useBlockNoteSaver } from './useBlockNoteSaver';
+import {
+  type BlockNoteSaveStatus,
+  useBlockNoteSaver,
+} from './useBlockNoteSaver';
+
+const TITLE_MAX_LENGTH = 120;
 
 interface BlockNoteEditorProps {
   color?: unknown;
@@ -26,6 +32,10 @@ interface BlockNoteEditorProps {
   noteId?: unknown;
   onMarkdownChange: (markdown: string) => void;
   onPreviewUpdate?: (updates: Record<string, unknown>) => void;
+  onSaveStatusChange?: (
+    status: BlockNoteSaveStatus,
+    lastSavedAt: Date | null
+  ) => void;
   onTitleChange: (title: string) => void;
   title?: unknown;
 }
@@ -47,6 +57,7 @@ export default function BlockNoteEditor({
   noteId,
   onMarkdownChange,
   onPreviewUpdate,
+  onSaveStatusChange,
   onTitleChange,
   title,
 }: BlockNoteEditorProps) {
@@ -54,7 +65,10 @@ export default function BlockNoteEditor({
   const [titleValue, setTitleValue] = useState(toText(title));
   const [initial, setInitial] = useState<InitialContent | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const latestMarkdownRef = useRef(initialMarkdown);
+  const onSaveStatusChangeRef = useRef(onSaveStatusChange);
 
   const colorValue = typeof color === 'string' ? color : '#FFFFFF';
   const isDark = isColorDark(colorValue);
@@ -67,12 +81,28 @@ export default function BlockNoteEditor({
     [data, noteId, titleValue]
   );
 
+  useEffect(() => {
+    onSaveStatusChangeRef.current = onSaveStatusChange;
+  }, [onSaveStatusChange]);
+
+  const handleSaveStatusChange = useCallback((status: BlockNoteSaveStatus) => {
+    setSaveStatus(status);
+    if (status === 'saved') {
+      const now = new Date();
+      setLastSavedAt(now);
+      onSaveStatusChangeRef.current?.(status, now);
+    } else {
+      onSaveStatusChangeRef.current?.(status, null);
+    }
+  }, []);
+
   const { flushNow, saveDebounced, setInitialRevision } = useBlockNoteSaver({
     enabled: typeof noteId === 'string',
     frontmatter,
     nodeId,
     noteId: typeof noteId === 'string' ? noteId : undefined,
     onPreviewUpdate,
+    onSaveStatusChange: handleSaveStatusChange,
   });
 
   // Load sidecar (or signal markdown-import fallback) once per noteId. We do
@@ -171,6 +201,8 @@ export default function BlockNoteEditor({
   );
 }
 
+export type { BlockNoteSaveStatus };
+
 interface BlockNoteSurfaceProps {
   color: string;
   flushNow: () => void;
@@ -215,6 +247,8 @@ function BlockNoteSurface({
     uploadFile: uploadBlockNoteFile,
     resolveFileUrl: resolveBlockNoteFileUrl,
   });
+
+  const editorRootRef = useRef<HTMLDivElement | null>(null);
 
   // If we recovered from markdown (no sidecar yet), import the markdown body
   // once the editor mounts.
@@ -262,12 +296,44 @@ function BlockNoteSurface({
     flushNow();
   }, [flushNow, onTitleBlur]);
 
+  // Enter in the title field moves focus into the editor body; Shift+Enter
+  // keeps the native line-break behaviour of the autosizing textarea.
+  const handleTitleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        const editable = editorRootRef.current?.querySelector<HTMLElement>(
+          '.bn-editor[contenteditable="true"], .bn-editor'
+        );
+        if (editable) {
+          editable.focus();
+          // Place caret at the start of the document so typing continues the
+          // first block instead of selecting the whole editor.
+          const range = document.createRange();
+          const selection = window.getSelection();
+          if (editable.firstChild && selection) {
+            range.setStart(editable.firstChild, 0);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      }
+    },
+    []
+  );
+
+  const titlePlaceholderStyle = isDark
+    ? 'placeholder:text-white/40'
+    : 'placeholder:text-gray-600/60';
+
   return (
     <div
       className={cn(
         'flex h-full w-full flex-col',
         isDark ? 'text-white' : 'text-gray-900'
       )}
+      ref={editorRootRef}
       style={colorToStyle(color)}
     >
       {loadFailed ? (
@@ -289,15 +355,19 @@ function BlockNoteSurface({
           overflow: { x: 'hidden' },
         }}
       >
-        <div className="mx-auto w-full max-w-3xl px-8 py-12 sm:px-12">
-          <input
+        <div className="mx-auto w-full max-w-[min(72ch,80%)] px-4 py-12 sm:px-8 lg:px-12">
+          <TextareaAutosize
             aria-label="Note title"
             className={cn(
-              'mb-6 w-full border-none bg-transparent font-bold text-4xl tracking-normal outline-none placeholder:opacity-40',
-              isDark ? 'placeholder:text-white' : 'placeholder:text-gray-600'
+              'mb-6 block w-full resize-none border-none bg-transparent font-bold text-4xl leading-tight tracking-normal outline-none',
+              titlePlaceholderStyle
             )}
+            maxLength={TITLE_MAX_LENGTH}
+            maxRows={4}
+            minRows={1}
             onBlur={handleBlur}
             onChange={(event) => onTitleChange(event.target.value)}
+            onKeyDown={handleTitleKeyDown}
             placeholder="Untitled"
             value={title}
           />

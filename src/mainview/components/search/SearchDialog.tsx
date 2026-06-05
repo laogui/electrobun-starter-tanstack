@@ -1,31 +1,23 @@
 import { Dialog } from '@base-ui/react/dialog';
-import type { ReactFlowInstance } from '@xyflow/react';
-import {
-  ArrowRight,
-  Clock,
-  FileText,
-  Folder,
-  Group,
-  ImageIcon,
-  Layers,
-  Link2,
-  Paperclip,
-  Search,
-  StickyNote,
-  X,
-} from 'lucide-react';
+import type { Node, ReactFlowInstance } from '@xyflow/react';
+import { ArrowRight, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSearch } from '@/hooks/useSearch';
+import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
 import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
+import { iconFor } from './resultIcon';
+import { type RecentCard, SearchEmptyState } from './SearchEmptyState';
+import { highlightMatches } from './searchResultRender';
 
 const SEARCH_HISTORY_STORAGE_KEY = 'ghostboard:search-history';
 const SEARCH_HISTORY_MAX = 8;
+const RECENT_CARDS_MAX = 5;
 
 type SearchFilter = 'all' | 'notes' | 'folders' | 'links' | 'images';
 
@@ -38,6 +30,12 @@ const FILTER_KIND_MAP: Record<
   links: ['link'],
   images: ['image'],
 };
+
+interface ResultGroup {
+  results: SearchResult[];
+  viewId: string;
+  viewName: string;
+}
 
 function readHistory(): string[] {
   if (typeof window === 'undefined') {
@@ -71,6 +69,39 @@ function writeHistory(entries: string[]) {
   }
 }
 
+function contentNodeKind(type: string | undefined): SearchResultKind {
+  switch (type) {
+    case 'sticky':
+      return 'sticky';
+    case 'image':
+      return 'image';
+    case 'asset':
+      return 'asset';
+    case 'link':
+      return 'link';
+    default:
+      return 'card';
+  }
+}
+
+function contentNodeTitle(node: Node): string {
+  const data = (node.data ?? {}) as Record<string, unknown>;
+  const title = typeof data.title === 'string' ? data.title.trim() : '';
+  if (title) {
+    return title;
+  }
+  if (node.type === 'asset' && typeof data.fileName === 'string') {
+    return data.fileName;
+  }
+  if (node.type === 'link' && typeof data.url === 'string') {
+    return data.url;
+  }
+  if (node.type === 'sticky' && typeof data.content === 'string') {
+    return data.content.slice(0, 80);
+  }
+  return '';
+}
+
 interface SearchDialogProps {
   /**
    * ReactFlow instance used to pan / zoom to a result. When absent (e.g. tests
@@ -91,6 +122,8 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
   const setEdges = useCanvasStore((s) => s.setEdges);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const views = useCanvasStore((s) => s.views);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -98,6 +131,9 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [filter, setFilter] = useState<SearchFilter>('all');
   const [history, setHistory] = useState<string[]>(() => readHistory());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const { query, setQuery, results, isLoading, error, fallback } = useSearch();
   const trimmedQuery = query.trim();
@@ -111,6 +147,58 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     const kinds = new Set<SearchResultKind>(FILTER_KIND_MAP[filter]);
     return results.filter((r) => kinds.has(r.kind));
   }, [filter, results]);
+
+  // Group results by source canvas, preserving score order of first appearance
+  // (roadmap E2). Groups can be collapsed via their header.
+  const groups = useMemo<ResultGroup[]>(() => {
+    const order: string[] = [];
+    const byView = new Map<string, ResultGroup>();
+    for (const r of filteredResults) {
+      let group = byView.get(r.viewId);
+      if (!group) {
+        group = { viewId: r.viewId, viewName: r.viewName, results: [] };
+        byView.set(r.viewId, group);
+        order.push(r.viewId);
+      }
+      group.results.push(r);
+    }
+    return order.map((id) => byView.get(id) as ResultGroup);
+  }, [filteredResults]);
+
+  // Flat list of currently navigable rows (skips collapsed groups). activeIndex
+  // and keyboard navigation operate over this list.
+  const visibleResults = useMemo<SearchResult[]>(() => {
+    const out: SearchResult[] = [];
+    for (const group of groups) {
+      if (collapsedGroups.has(group.viewId)) {
+        continue;
+      }
+      out.push(...group.results);
+    }
+    return out;
+  }, [groups, collapsedGroups]);
+
+  const recentCards = useMemo<RecentCard[]>(
+    () =>
+      nodes
+        .filter((n) => isCanvasContentNode(n.type))
+        .map((n) => ({
+          node: n,
+          updatedAt:
+            typeof (n.data as Record<string, unknown> | undefined)
+              ?.updatedAt === 'number'
+              ? ((n.data as Record<string, unknown>).updatedAt as number)
+              : 0,
+        }))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, RECENT_CARDS_MAX)
+        .map(({ node }) => ({
+          id: node.id,
+          kind: contentNodeKind(node.type),
+          title: contentNodeTitle(node),
+        })),
+    [nodes]
+  );
 
   const recordHistory = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -132,12 +220,33 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     writeHistory([]);
   }, []);
 
+  const removeHistory = useCallback((entry: string) => {
+    setHistory((prev) => {
+      const next = prev.filter((v) => v !== entry);
+      writeHistory(next);
+      return next;
+    });
+  }, []);
+
+  const toggleGroup = useCallback((viewId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(viewId)) {
+        next.delete(viewId);
+      } else {
+        next.add(viewId);
+      }
+      return next;
+    });
+  }, []);
+
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
       setQuery('');
       setActiveIndex(0);
       setFilter('all');
+      setCollapsedGroups(new Set());
     }
   }, [open, setQuery]);
 
@@ -163,6 +272,11 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     setActiveIndex(0);
   }, [results, trimmedQuery]);
 
+  // Keep the active row within bounds when collapsing groups shrinks the list.
+  useEffect(() => {
+    setActiveIndex((i) => Math.min(i, Math.max(0, visibleResults.length - 1)));
+  }, [visibleResults.length]);
+
   // Focus input on open
   useEffect(() => {
     if (!open) {
@@ -178,9 +292,9 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   // Scroll active row into view
   useEffect(() => {
-    const el = listRef.current?.children[activeIndex] as
-      | HTMLElement
-      | undefined;
+    const el = listRef.current?.querySelector(
+      `[data-result-index="${activeIndex}"]`
+    ) as HTMLElement | null;
     el?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex]);
 
@@ -229,8 +343,8 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
       if (result.kind === 'view' || result.viewId !== activeViewId) {
         if (await isRpcAvailable()) {
-          const { nodes, edges } = useCanvasStore.getState();
-          const sanitized = sanitizeForPersistence(nodes, edges);
+          const { nodes: liveNodes, edges } = useCanvasStore.getState();
+          const sanitized = sanitizeForPersistence(liveNodes, edges);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
         }
         if (result.kind !== 'view') {
@@ -257,14 +371,55 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     ]
   );
 
+  const currentViewName = useMemo(
+    () => views.find((v) => v.id === activeViewId)?.name ?? activeViewId,
+    [views, activeViewId]
+  );
+
+  const handlePickCard = useCallback(
+    (card: RecentCard) => {
+      const node = nodes.find((n) => n.id === card.id);
+      handleSelect({
+        id: `recent:${activeViewId}:${card.id}`,
+        kind: card.kind,
+        viewId: activeViewId,
+        viewName: currentViewName,
+        nodeId: card.id,
+        title: card.title,
+        excerpt: '',
+        matchField: 'title',
+        score: 0,
+        position: node?.position,
+      });
+    },
+    [nodes, activeViewId, currentViewName, handleSelect]
+  );
+
+  const handlePickCanvas = useCallback(
+    (viewId: string) => {
+      const view = views.find((v) => v.id === viewId);
+      handleSelect({
+        id: `view:${viewId}`,
+        kind: 'view',
+        viewId,
+        viewName: view?.name ?? viewId,
+        title: view?.name ?? viewId,
+        excerpt: '',
+        matchField: 'viewName',
+        score: 0,
+      });
+    },
+    [views, handleSelect]
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (filteredResults.length === 0) {
+      if (visibleResults.length === 0) {
         return;
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, filteredResults.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, visibleResults.length - 1));
         return;
       }
       if (e.key === 'ArrowUp') {
@@ -274,16 +429,15 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const item = filteredResults[activeIndex];
+        const item = visibleResults[activeIndex];
         if (item) {
           handleSelect(item);
         }
       }
     },
-    [filteredResults, activeIndex, handleSelect]
+    [visibleResults, activeIndex, handleSelect]
   );
 
-  const showHistory = !trimmedQuery && history.length > 0;
   const filterChips: { id: SearchFilter; label: string }[] = [
     { id: 'all', label: m.search_filter_all() },
     { id: 'notes', label: m.search_filter_notes() },
@@ -291,6 +445,10 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     { id: 'links', label: m.search_filter_links() },
     { id: 'images', label: m.search_filter_images() },
   ];
+
+  // Running counter assigning each visible row its flat navigation index while
+  // rendering grouped output.
+  let visibleCursor = 0;
 
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
@@ -361,54 +519,22 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
               </div>
             ) : null}
 
-            {!error && showHistory ? (
-              <>
-                <div className="flex items-center justify-between border-gray-100 border-b px-4 py-2 text-gray-500 text-xs dark:border-neutral-800 dark:text-gray-400">
-                  <span className="flex items-center gap-1.5">
-                    <Clock aria-hidden size={12} />
-                    {m.search_recent_title()}
-                  </span>
-                  <button
-                    className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                    onClick={clearHistory}
-                    type="button"
-                  >
-                    {m.search_recent_clear()}
-                  </button>
-                </div>
-                {history.map((entry) => (
-                  <button
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-gray-700 text-sm hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
-                    key={entry}
-                    onClick={() => {
-                      setQuery(entry);
-                      inputRef.current?.focus();
-                    }}
-                    type="button"
-                  >
-                    <Clock
-                      aria-hidden
-                      className="shrink-0 text-gray-400 dark:text-gray-500"
-                      size={14}
-                    />
-                    <span className="flex-1 truncate">{entry}</span>
-                    <X
-                      aria-label="Remove from history"
-                      className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setHistory((prev) => {
-                          const next = prev.filter((v) => v !== entry);
-                          writeHistory(next);
-                          return next;
-                        });
-                      }}
-                      size={14}
-                    />
-                  </button>
-                ))}
-              </>
-            ) : null}
+            {error || trimmedQuery ? null : (
+              <SearchEmptyState
+                activeViewId={activeViewId}
+                canvases={views}
+                history={history}
+                onClearHistory={clearHistory}
+                onPickCanvas={handlePickCanvas}
+                onPickCard={handlePickCard}
+                onPickHistory={(entry) => {
+                  setQuery(entry);
+                  inputRef.current?.focus();
+                }}
+                onRemoveHistory={removeHistory}
+                recentCards={recentCards}
+              />
+            )}
 
             {!error &&
             trimmedQuery &&
@@ -428,19 +554,60 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
               </div>
             ) : null}
 
-            {filteredResults.map((r, idx) => (
-              <ResultRow
-                active={idx === activeIndex}
-                key={r.id}
-                onClick={() => {
-                  handleSelect(r);
-                }}
-                onMouseEnter={() => {
-                  setActiveIndex(idx);
-                }}
-                result={r}
-              />
-            ))}
+            {!error && trimmedQuery
+              ? groups.map((group) => {
+                  const collapsed = collapsedGroups.has(group.viewId);
+                  return (
+                    <div key={group.viewId}>
+                      <button
+                        aria-expanded={!collapsed}
+                        aria-label={
+                          collapsed
+                            ? m.search_group_expand()
+                            : m.search_group_collapse()
+                        }
+                        className="flex w-full items-center gap-1.5 bg-gray-50/60 px-4 py-1.5 text-gray-500 text-xs hover:bg-black/5 dark:bg-neutral-900/40 dark:text-gray-400 dark:hover:bg-white/5"
+                        onClick={() => {
+                          toggleGroup(group.viewId);
+                        }}
+                        type="button"
+                      >
+                        {collapsed ? (
+                          <ChevronRight aria-hidden size={12} />
+                        ) : (
+                          <ChevronDown aria-hidden size={12} />
+                        )}
+                        <span className="truncate font-medium">
+                          {group.viewName}
+                        </span>
+                        <span className="text-gray-400 dark:text-gray-500">
+                          {group.results.length}
+                        </span>
+                      </button>
+                      {collapsed
+                        ? null
+                        : group.results.map((r) => {
+                            const index = visibleCursor++;
+                            return (
+                              <ResultRow
+                                active={index === activeIndex}
+                                index={index}
+                                key={r.id}
+                                onClick={() => {
+                                  handleSelect(r);
+                                }}
+                                onMouseEnter={() => {
+                                  setActiveIndex(index);
+                                }}
+                                query={trimmedQuery}
+                                result={r}
+                              />
+                            );
+                          })}
+                    </div>
+                  );
+                })
+              : null}
           </div>
 
           {fallback ? (
@@ -457,15 +624,20 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 function ResultRow({
   result,
   active,
+  index,
+  query,
   onClick,
   onMouseEnter,
 }: {
   result: SearchResult;
   active: boolean;
+  index: number;
+  query: string;
   onClick: () => void;
   onMouseEnter: () => void;
 }) {
   const Icon = useMemo(() => iconFor(result.kind), [result.kind]);
+  const title = result.title || 'Untitled';
   return (
     <button
       aria-selected={active}
@@ -474,6 +646,7 @@ function ResultRow({
           ? 'bg-blue-50 text-blue-900 dark:bg-blue-500/10 dark:text-blue-100'
           : 'text-gray-800 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
       }`}
+      data-result-index={index}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       role="option"
@@ -485,9 +658,11 @@ function ResultRow({
         size={18}
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{result.title || 'Untitled'}</div>
+        <div className="truncate font-medium">
+          {highlightMatches(title, query)}
+        </div>
         <div className="truncate text-gray-500 text-xs dark:text-gray-400">
-          {result.excerpt}
+          {highlightMatches(result.excerpt, query)}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 text-gray-400 text-xs dark:text-gray-500">
@@ -543,25 +718,4 @@ function edgeMidpoint(
     x: (srcCenter.x + tgtCenter.x) / 2,
     y: (srcCenter.y + tgtCenter.y) / 2,
   };
-}
-
-function iconFor(kind: SearchResult['kind']) {
-  switch (kind) {
-    case 'sticky':
-      return StickyNote;
-    case 'folder':
-      return Folder;
-    case 'group':
-      return Group;
-    case 'image':
-      return ImageIcon;
-    case 'asset':
-      return Paperclip;
-    case 'link':
-      return Link2;
-    case 'view':
-      return Layers;
-    default:
-      return FileText;
-  }
 }

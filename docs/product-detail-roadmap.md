@@ -25,7 +25,7 @@
 | **0** ✅ | 死代码 + i18n 清扫 | 修 P0 漏洞、删迁移残留 | 0.5 天 | 强烈推荐 | - |
 | **1** ✅ | 卡片视觉升级（前端） | 让 Folder/Sticky/Image 看起来"有内容" | 2-3 天 | 强烈推荐 | - |
 | **2** ✅ | 卡片视觉升级（bun 侧） | text excerpt + archive summary + image-as-file 缩图（PDF/sharp 砍掉） | 3-5 天 | 强烈推荐 | Phase 1 |
-| **3** | Library 体验 | 让 Library 用上 Phase 1+2 产出的元数据 | 2 天 | 推荐 | Phase 1, 2 |
+| **3** ✅ | Library 体验 | 让 Library 用上 Phase 1+2 产出的元数据 | 2 天 | 推荐 | Phase 1, 2 |
 | **4** | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
 | **5** | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
 | **6** | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
@@ -128,23 +128,32 @@
 
 ---
 
-## Phase 3 · Library 体验（2 天）
+## Phase 3 · Library 体验（2 天）✅ 已完成
 
-> 全部依赖 Phase 2 输出的 `thumbnailFile` / `previewExcerpt` 字段，所以放在 Phase 2 之后。
+> 已完成（2026-06-05）。全部依赖 Phase 2 输出的 `thumbnailUrl` / `previewExcerpt` 字段。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| D1 | LibraryCard 顶部加 16:9 thumbnail 区（image / asset → thumbnailUrl；link → imageUrl；text → 2-3 行 excerpt） | `src/mainview/components/library/LibraryCard.tsx` |
-| D2 | LibraryPopup 加 ↑↓ / Enter / ⌘F 键盘交互；维护 `focusedIndex` state | `src/mainview/components/library/LibraryPopup.tsx` |
-| D3 | 排序选择器换成项目里的 base-ui `Select.tsx` | `LibraryPopup.tsx:198-209` |
-| D4 | 空搜索时加"清空搜索"按钮 + 推荐近期访问 | `LibraryPopup.tsx:244-246` |
-| D5 | `LibraryHeader` 显示 `totalItems`（"127 items"） | `LibraryPopup.tsx:162-225` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | D1 | LibraryCard 顶部加 16:9 thumbnail 区（image / asset → `thumbnailUrl`/`previewUrl`；link → `imageUrl`，回退 `faviconUrl`；text → 3 行 excerpt） | `src/mainview/components/library/LibraryCard.tsx` |
+| ✅ 已完成 | D2 | LibraryPopup 加 ↑↓ / Enter / ⌘F 键盘交互；维护 `focusedIndex` state（焦点环 + scrollIntoView，鼠标 focus 回灌同步） | `src/mainview/components/library/LibraryPopup.tsx` |
+| ✅ 已完成 | D3 | 排序选择器换成项目里的 base-ui `Select.tsx` | `LibraryPopup.tsx` LibraryHeader |
+| ✅ 已完成 | D4 | 空搜索（有 query 但无匹配）时加"清空搜索"按钮 + "最近访问"推荐网格 | `LibraryPopup.tsx` LibraryBody |
+| ✅ 已完成 | D5 | `LibraryHeader` 标题下显示 `totalItems`（"127 items"） | `LibraryPopup.tsx` LibraryHeader |
 
-### 验收
-- 键盘操作 demo（光标穿过整个库无鼠标），thumbnail 在所有 5 种 kind 都正确渲染。
-- D2 的 ⌘F 与 macOS 系统级 ⌘F 不冲突（弹窗内才生效）。
+### 实际落地
+
+- **D1**：抽 `resolveThumb()` 把节点数据映射成 `image | favicon | excerpt | none` 四态。image/asset 优先 `thumbnailUrl`（运行时 hydrate），asset 文本回退 `previewExcerpt`；link 优先 OG `imageUrl`，回退居中 favicon；text 卡走 `previewExcerpt`/`content` 3 行截断。无可渲染内容时退回原 icon 布局（`min-h-[108px]`）。
+- **D2**：`focusedIndex` + `flatItems`（跨 group 拍平）+ `indexById` map。键盘处理挂在最外层 `role="dialog"` 容器（事件冒泡），↑↓ 线性移动、Enter 打开、⌘F/Ctrl+F 聚焦搜索框。`LibraryCard` 收到 `isFocused` 时 `focus({preventScroll}) + scrollIntoView('nearest')`，并通过 `onFocus` 回灌 index 保持鼠标/Tab 同步。query 变化时在 `handleQueryChange` 里重置选择（避开 biome exhaustive-deps）。
+- **D3**：复用 `@/components/ui/Select`（base-ui），label 仍走 paraglide 函数。
+- **D4**：第二个 `useLibraryData({ sort: 'recent' })`（忽略 query）拍平 + 按 `updatedAt` 取前 6 条做推荐；推荐卡仅鼠标可点（不参与键盘 nav，属边缘态取舍）。
+- **D5**：新增 i18n `library_item_count` / `library_clear_search` / `library_recent_heading`（en + zh），重新 `paraglide-js compile`。
+
+### 验收（已通过）
+- ✅ `bun run test` 全绿（90 files / 849 tests），含 `LibraryPopup.test.tsx` 新增 5 个分支测试（D5 计数、D1 缩略图+excerpt、D2 方向键+Enter、D2 ⌘F、D4 清空+推荐）。
+- ✅ `ultracite check` 对改动文件 0 error；`tsgo --noEmit` 对 library 目录 0 error（仅 `node_modules/electrobun` 预存报错）。
+- ✅ D2 的 ⌘F 仅在弹窗 keydown 内 `preventDefault`，不影响系统级。
 
 ---
 

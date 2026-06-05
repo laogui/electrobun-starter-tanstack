@@ -134,4 +134,121 @@ describe('LibraryPopup', () => {
       expect.objectContaining({ nodeId: 'folder-1' })
     );
   });
+
+  it('shows the total item count in the header (D5)', () => {
+    seedNodes([
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'One' },
+      } as unknown as Node,
+      {
+        id: 'card-2',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Two' },
+      } as unknown as Node,
+    ]);
+    render(<Harness />);
+
+    expect(screen.getByText('2 items')).toBeInTheDocument();
+  });
+
+  it('renders an image thumbnail and a text excerpt (D1)', () => {
+    seedNodes([
+      {
+        id: 'img-1',
+        type: 'image',
+        position: { x: 0, y: 0 },
+        data: { title: 'Shot', thumbnailUrl: 'data:image/png;base64,AAAA' },
+      } as unknown as Node,
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Notes', previewExcerpt: 'A short preview excerpt' },
+      } as unknown as Node,
+    ]);
+    render(<Harness />);
+
+    const thumb = document.querySelector(
+      'img[src="data:image/png;base64,AAAA"]'
+    );
+    expect(thumb).not.toBeNull();
+    expect(screen.getByText('A short preview excerpt')).toBeInTheDocument();
+  });
+
+  it('navigates with arrow keys and opens the focused card on Enter (D2)', () => {
+    seedNodes([
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Alpha', updatedAt: 200 },
+      } as unknown as Node,
+      {
+        id: 'card-2',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Bravo', updatedAt: 100 },
+      } as unknown as Node,
+    ]);
+    render(<Harness />);
+
+    const dialog = screen.getByRole('dialog');
+    // First ArrowDown selects index 0, second selects index 1.
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+
+    expect(useCanvasStore.getState().libraryOpen).toBe(false);
+    expect(canvasFocusMock.openFocusedById).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeId: 'card-2' })
+    );
+  });
+
+  it('focuses the search input with Cmd+F (D2)', () => {
+    seedNodes([
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Alpha' },
+      } as unknown as Node,
+    ]);
+    render(<Harness />);
+
+    const search = screen.getByLabelText('Search notes…');
+    fireEvent.keyDown(screen.getByRole('dialog'), {
+      key: 'f',
+      metaKey: true,
+    });
+
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('offers a clear-search button and recent recommendations when a query has no matches (D4)', () => {
+    seedNodes([
+      {
+        id: 'card-1',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Roadmap', updatedAt: 100 },
+      } as unknown as Node,
+    ]);
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('Search notes…'), {
+      target: { value: 'zzzznomatch' },
+    });
+
+    expect(screen.getByText('Clear search')).toBeInTheDocument();
+    expect(screen.getByText('Recent')).toBeInTheDocument();
+    // The recent recommendation surfaces the existing card despite the query.
+    expect(screen.getByText('Roadmap')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Clear search'));
+    expect(screen.queryByText('Clear search')).not.toBeInTheDocument();
+  });
 });

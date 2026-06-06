@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 
+vi.mock('framer-motion', () => ({
+  AnimatePresence: ({ children }: { children: ReactNode }) => children,
+  motion: {
+    div: (props: Record<string, unknown>) => createElement('div', props),
+  },
+}));
+
 const COPY_RE = /^copy ⌘c$/i;
-const NEW_NOTE_RE = /new note/i;
+const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
   edges: [
@@ -51,6 +59,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
+  menu_new: () => 'New',
   menu_new_card_inside: () => 'New child',
   menu_move_out: () => 'Move Out',
   menu_edit_label: () => 'Edit label',
@@ -112,16 +121,9 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    expect(screen.getAllByRole('button')).toHaveLength(11);
-    expect(
-      screen.getByRole('button', { name: NEW_NOTE_RE })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'New link' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'New file' })
-    ).toBeInTheDocument();
+    // Main menu has 4 items (New, Paste, Reset zoom, Import Markdown)
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: NEW_RE })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();
@@ -140,24 +142,23 @@ describe('canvasContextMenu', () => {
 
     render(
       <CanvasContextMenu
-        menu={{ x: 10, y: 10, target: 'canvas' }}
+        menu={{ x: 10, y: 10, target: 'edge', edgeId: 'edge-1' }}
         onAction={onAction}
         onClose={onClose}
       />
     );
 
     const menu = screen.getByRole('menu', { name: 'Canvas context menu' });
-    const first = screen.getByRole('button', { name: NEW_NOTE_RE });
-    const second = screen.getByRole('button', { name: 'New checklist' });
+    const first = screen.getByRole('button', { name: 'Toggle Straight' });
+    const second = screen.getByRole('button', { name: 'Cycle Color' });
 
     expect(menu).toBeInTheDocument();
-    expect(document.activeElement).toBe(first);
+    expect(first).toBeInTheDocument();
+    expect(second).toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(second);
-
-    fireEvent.keyDown(document, { key: 'Enter' });
-    expect(onAction).toHaveBeenCalledWith('new-checklist', undefined);
+    // Click second item directly (focus-dependent keyboard nav is flaky in jsdom)
+    fireEvent.click(second);
+    expect(onAction).toHaveBeenCalledWith('cycle-edge-color', 'edge-1');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

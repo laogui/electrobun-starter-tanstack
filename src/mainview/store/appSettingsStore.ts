@@ -1,0 +1,51 @@
+import { create } from 'zustand';
+
+import {
+  type AppSettings,
+  DEFAULT_SETTINGS,
+  type ThemeSetting,
+} from '@/settingsClient';
+
+/**
+ * App-level settings store. Kept separate from `canvasStore` because these
+ * settings live across all canvases, persist outside React Flow, and are
+ * mutated by the settings window via a webview-to-webview RPC message
+ * (`settings-updated`).
+ *
+ * Components that care about a specific field (FocusedView for
+ * `autoSaveInterval`, routes/index.tsx for `canvasBackground`, …) subscribe
+ * directly so they only re-render when their slice changes.
+ */
+export interface AppSettingsState extends AppSettings {
+  /**
+   * Replace the entire settings record. Used by `__root.tsx` after loading
+   * the initial settings or after a `settings-updated` push.
+   */
+  applySettings: (settings: Partial<AppSettings>) => void;
+  /**
+   * Update a single field. Used internally by listeners; the actual
+   * persistence still flows through the settings window.
+   */
+  setField: <K extends keyof AppSettings>(
+    key: K,
+    value: AppSettings[K]
+  ) => void;
+  /** Convenience setter for the theme — keeps the legacy 'system' branch. */
+  setTheme: (theme: ThemeSetting) => void;
+}
+
+export const useAppSettingsStore = create<AppSettingsState>((set) => ({
+  ...DEFAULT_SETTINGS,
+  applySettings: (next) => {
+    set((prev) => ({
+      ...prev,
+      ...next,
+    }));
+  },
+  setField: (key, value) => {
+    set((prev) => ({ ...prev, [key]: value }));
+  },
+  setTheme: (theme) => {
+    set({ theme });
+  },
+}));

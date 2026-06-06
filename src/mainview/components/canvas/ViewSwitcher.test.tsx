@@ -93,6 +93,11 @@ vi.mock('../../../paraglide/messages.js', () => ({
     `Canvas "${name}" restored`,
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_undo: () => 'Undo',
+  view_node_count_one: () => '1 node',
+  view_node_count_other: ({ count }: { count: number }) => `${count} nodes`,
+  view_rename_empty: () => 'Name cannot be empty',
+  view_rename_too_long: () => 'Name is too long',
+  view_rename_duplicate: () => 'A view with this name already exists',
   templates_browse_all: () => 'Browse all templates…',
   template_quick_start_name: () => 'Quick Start',
   template_weekly_planner_name: () => 'Weekly Planner',
@@ -661,5 +666,71 @@ describe('viewSwitcher', () => {
         'Keyboard Rename'
       );
     });
+  });
+
+  it('shows node count label in the trigger (F1)', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'n1', type: 'card', position: { x: 0, y: 0 }, data: {} },
+        { id: 'n2', type: 'card', position: { x: 10, y: 10 }, data: {} },
+      ],
+    });
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText('· 2 nodes')).toBeInTheDocument();
+  });
+
+  it('shows single-node label when only one node exists (F1)', async () => {
+    useCanvasStore.setState({
+      nodes: [{ id: 'n1', type: 'card', position: { x: 0, y: 0 }, data: {} }],
+    });
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText('· 1 node')).toBeInTheDocument();
+  });
+
+  it('blocks rename when name exceeds max length (F2)', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    const input = screen.getByDisplayValue('Focus Mode');
+    const longName = 'a'.repeat(81);
+    fireEvent.change(input, { target: { value: longName } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rename' }));
+
+    expect(rpcMocks.rpcRenameView).not.toHaveBeenCalled();
+    expect(screen.getByText('Name is too long')).toBeInTheDocument();
+  });
+
+  it('blocks rename when name duplicates an existing view (F2)', async () => {
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Focus Mode' }));
+    const input = screen.getByDisplayValue('Focus Mode');
+    fireEvent.change(input, { target: { value: 'Default Canvas' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rename' }));
+
+    expect(rpcMocks.rpcRenameView).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('A view with this name already exists')
+    ).toBeInTheDocument();
   });
 });

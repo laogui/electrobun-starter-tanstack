@@ -98,13 +98,24 @@ const noteStoreMocks = {
 
 const workspaceMocks = {
   addView: vi.fn(),
+  addViewFromTemplate: vi.fn(),
   atomicWrite: vi.fn(),
+  clearAllTrash: vi.fn(),
+  getDefaultWorkspacePath: vi.fn(() => '/tmp/workspace-default'),
   initWorkspace: vi.fn(() => '/tmp/workspace'),
+  listTrash: vi.fn(async () => []),
   loadWorkspaceConfig: vi.fn(),
+  purgeTrash: vi.fn(async () => ({ success: true })),
   removeView: vi.fn(),
   renameView: vi.fn(),
   restoreView: vi.fn(),
   seedFirstRunIfNeeded: vi.fn(async () => undefined),
+  setActiveViewId: vi.fn(async () => true),
+};
+
+const userPrefsMocks = {
+  loadUserPrefs: vi.fn(async () => ({})),
+  saveUserPrefs: vi.fn(async () => undefined),
 };
 
 vi.mock('./manifest', () => ({
@@ -161,13 +172,25 @@ vi.mock('./noteStore', () => ({
 vi.mock('./workspace', () => ({
   addView: (...args: Parameters<typeof workspaceMocks.addView>) =>
     workspaceMocks.addView(...args),
+  addViewFromTemplate: (
+    ...args: Parameters<typeof workspaceMocks.addViewFromTemplate>
+  ) => workspaceMocks.addViewFromTemplate(...args),
   atomicWrite: (...args: Parameters<typeof workspaceMocks.atomicWrite>) =>
     workspaceMocks.atomicWrite(...args),
+  clearAllTrash: (...args: Parameters<typeof workspaceMocks.clearAllTrash>) =>
+    workspaceMocks.clearAllTrash(...args),
+  getDefaultWorkspacePath: (
+    ...args: Parameters<typeof workspaceMocks.getDefaultWorkspacePath>
+  ) => workspaceMocks.getDefaultWorkspacePath(...args),
   initWorkspace: (...args: Parameters<typeof workspaceMocks.initWorkspace>) =>
     workspaceMocks.initWorkspace(...args),
+  listTrash: (...args: Parameters<typeof workspaceMocks.listTrash>) =>
+    workspaceMocks.listTrash(...args),
   loadWorkspaceConfig: (
     ...args: Parameters<typeof workspaceMocks.loadWorkspaceConfig>
   ) => workspaceMocks.loadWorkspaceConfig(...args),
+  purgeTrash: (...args: Parameters<typeof workspaceMocks.purgeTrash>) =>
+    workspaceMocks.purgeTrash(...args),
   removeView: (...args: Parameters<typeof workspaceMocks.removeView>) =>
     workspaceMocks.removeView(...args),
   renameView: (...args: Parameters<typeof workspaceMocks.renameView>) =>
@@ -177,6 +200,16 @@ vi.mock('./workspace', () => ({
   seedFirstRunIfNeeded: (
     ...args: Parameters<typeof workspaceMocks.seedFirstRunIfNeeded>
   ) => workspaceMocks.seedFirstRunIfNeeded(...args),
+  setActiveViewId: (
+    ...args: Parameters<typeof workspaceMocks.setActiveViewId>
+  ) => workspaceMocks.setActiveViewId(...args),
+}));
+
+vi.mock('./userprefs', () => ({
+  loadUserPrefs: (...args: Parameters<typeof userPrefsMocks.loadUserPrefs>) =>
+    userPrefsMocks.loadUserPrefs(...args),
+  saveUserPrefs: (...args: Parameters<typeof userPrefsMocks.saveUserPrefs>) =>
+    userPrefsMocks.saveUserPrefs(...args),
 }));
 
 const bunFileMock = vi.fn();
@@ -364,11 +397,24 @@ describe('src/bun/index helpers', () => {
     await persistSettings({
       theme: 'dark',
       locale: 'zh',
+      fontFamily: 'system',
+      canvasBackground: 'default',
+      autoSaveInterval: 800,
     });
 
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
       '/workspace-c/.ghostboard/settings.json',
-      JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
+      JSON.stringify(
+        {
+          theme: 'dark',
+          locale: 'zh',
+          fontFamily: 'system',
+          canvasBackground: 'default',
+          autoSaveInterval: 800,
+        },
+        null,
+        2
+      )
     );
   });
 
@@ -465,11 +511,17 @@ describe('src/bun/index helpers', () => {
     expect(browserWindowMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         title: 'Settings',
+        url: expect.stringContaining('settingsview'),
+        rpc: expect.objectContaining({
+          send: expect.objectContaining({
+            settingsUpdated: expect.any(Function),
+          }),
+        }),
         frame: {
-          width: 400,
-          height: 380,
-          x: 450,
-          y: 360,
+          width: 720,
+          height: 560,
+          x: 290,
+          y: 270,
         },
       })
     );
@@ -490,11 +542,9 @@ describe('src/bun/index helpers', () => {
     const canvasHandlers = getCanvasHandlers();
     expect(canvasHandlers.openSettings()).toEqual({ success: true });
 
+    const { DEFAULT_SETTINGS } = await loadIndexModule();
     const settingsHandlers = getSettingsHandlers();
-    expect(settingsHandlers.getSettings()).toEqual({
-      theme: 'system',
-      locale: 'en',
-    });
+    expect(settingsHandlers.getSettings()).toEqual(DEFAULT_SETTINGS);
 
     await expect(
       settingsHandlers.saveSettings({
@@ -506,9 +556,14 @@ describe('src/bun/index helpers', () => {
     });
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
       '/workspace-settings/.ghostboard/settings.json',
-      JSON.stringify({ theme: 'dark', locale: 'zh' }, null, 2)
+      JSON.stringify(
+        { ...DEFAULT_SETTINGS, theme: 'dark', locale: 'zh' },
+        null,
+        2
+      )
     );
     expect(settingsUpdatedMock).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
       theme: 'dark',
       locale: 'zh',
     });

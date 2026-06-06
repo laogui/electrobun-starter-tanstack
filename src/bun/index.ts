@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 
 import {
@@ -82,10 +83,13 @@ import {
   writeTemplateThumbnail,
 } from './templates';
 import { generateFileMetadata } from './thumbnail';
+import { loadUserPrefs, saveUserPrefs } from './userprefs';
 import {
   addView,
   addViewFromTemplate,
   atomicWrite,
+  clearAllTrash,
+  getDefaultWorkspacePath,
   initWorkspace,
   listTrash,
   loadWorkspaceConfig,
@@ -105,8 +109,8 @@ const SETTINGS_VIEW_URL = 'views://settingsview/index.html';
 const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
-const SETTINGS_WINDOW_WIDTH = 400;
-const SETTINGS_WINDOW_HEIGHT = 380;
+const SETTINGS_WINDOW_WIDTH = 720;
+const SETTINGS_WINDOW_HEIGHT = 560;
 const UNSAFE_EXPORT_FILE_NAME_CHARS = '<>:"/\\|?*';
 
 function sanitizeExportBaseName(base: string): string {
@@ -582,10 +586,7 @@ interface CanvasRPC {
       };
       getSettings: {
         params: Record<string, unknown>;
-        response: {
-          theme: string;
-          locale: string;
-        };
+        response: AppSettings;
       };
       listViews: {
         params: Record<string, unknown>;
@@ -677,48 +678,104 @@ interface CanvasRPC {
     requests: Record<string, { params: unknown; response: unknown }>;
     messages: {
       openSearch: Record<never, unknown>;
-      settingsUpdated: { theme: string; locale: string };
+      settingsUpdated: AppSettings;
       viewsUpdated: Record<never, unknown>;
     };
   };
 }
 
+interface AppInfoResponse {
+  channel: string;
+  hash: string;
+  identifier: string;
+  name: string;
+  version: string;
+}
+
+interface UpdateCheckResponse {
+  currentHash: string;
+  error?: string;
+  hash: string;
+  updateAvailable: boolean;
+  version: string;
+}
+
+interface WorkspaceInfoResponse {
+  isDefault: boolean;
+  path: string;
+}
+
+interface ExportArchiveResponse {
+  canceled?: boolean;
+  filePath?: string;
+  size?: number;
+  success: boolean;
+}
+
+interface SwitchWorkspaceResponse {
+  canceled?: boolean;
+  path?: string;
+  success: boolean;
+}
+
 interface SettingsRPC {
   bun: {
     requests: {
+      checkForUpdate: {
+        params: Record<string, unknown>;
+        response: UpdateCheckResponse;
+      };
+      clearAllTrash: {
+        params: Record<string, unknown>;
+        response: { purged: number; success: boolean };
+      };
+      deleteUnlinkedNotes: {
+        params: { files: string[] };
+        response: { deleted: string[]; skipped: string[] };
+      };
+      exportWorkspaceArchive: {
+        params: Record<string, unknown>;
+        response: ExportArchiveResponse;
+      };
+      getAppInfo: {
+        params: Record<string, unknown>;
+        response: AppInfoResponse;
+      };
       getSettings: {
         params: Record<string, unknown>;
-        response: {
-          theme: string;
-          locale: string;
-        };
+        response: AppSettings;
       };
-      saveSettings: {
-        params: {
-          theme: string;
-          locale: string;
-        };
-        response: { success: boolean };
+      getWorkspaceInfo: {
+        params: Record<string, unknown>;
+        response: WorkspaceInfoResponse;
       };
       listTrash: {
         params: Record<string, unknown>;
         response: TrashEntry[];
       };
-      restoreTrash: {
-        params: { trashId: string };
+      openWorkspaceFolder: {
+        params: Record<string, unknown>;
         response: { success: boolean };
       };
       purgeTrash: {
         params: { trashId: string };
         response: { success: boolean };
       };
+      restoreTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      saveSettings: {
+        params: AppSettings;
+        response: { success: boolean };
+      };
       scanUnlinkedNotes: {
         params: Record<string, unknown>;
         response: { entries: UnlinkedFileEntry[] };
       };
-      deleteUnlinkedNotes: {
-        params: { files: string[] };
-        response: { deleted: string[]; skipped: string[] };
+      switchWorkspace: {
+        params: Record<string, unknown>;
+        response: SwitchWorkspaceResponse;
       };
     };
     messages: Record<never, unknown>;
@@ -731,7 +788,19 @@ interface SettingsRPC {
   };
 }
 
+const FONT_FAMILY_VALUES = ['system', 'serif', 'mono'] as const;
+type FontFamilySetting = (typeof FONT_FAMILY_VALUES)[number];
+
+const CANVAS_BACKGROUND_VALUES = ['default', 'paper', 'mono'] as const;
+type CanvasBackgroundSetting = (typeof CANVAS_BACKGROUND_VALUES)[number];
+
+const AUTO_SAVE_INTERVAL_VALUES = [500, 800, 2000, 5000] as const;
+type AutoSaveIntervalSetting = (typeof AUTO_SAVE_INTERVAL_VALUES)[number];
+
 interface AppSettings {
+  autoSaveInterval: AutoSaveIntervalSetting;
+  canvasBackground: CanvasBackgroundSetting;
+  fontFamily: FontFamilySetting;
   locale: string;
   theme: string;
 }
@@ -739,7 +808,34 @@ interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   locale: 'en',
+  fontFamily: 'system',
+  canvasBackground: 'default',
+  autoSaveInterval: 800,
 };
+
+function includes<T extends string | number>(
+  values: readonly T[],
+  value: unknown
+): value is T {
+  return values.includes(value as T);
+}
+
+function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
+  return {
+    theme: typeof raw.theme === 'string' ? raw.theme : DEFAULT_SETTINGS.theme,
+    locale:
+      typeof raw.locale === 'string' ? raw.locale : DEFAULT_SETTINGS.locale,
+    fontFamily: includes(FONT_FAMILY_VALUES, raw.fontFamily)
+      ? raw.fontFamily
+      : DEFAULT_SETTINGS.fontFamily,
+    canvasBackground: includes(CANVAS_BACKGROUND_VALUES, raw.canvasBackground)
+      ? raw.canvasBackground
+      : DEFAULT_SETTINGS.canvasBackground,
+    autoSaveInterval: includes(AUTO_SAVE_INTERVAL_VALUES, raw.autoSaveInterval)
+      ? raw.autoSaveInterval
+      : DEFAULT_SETTINGS.autoSaveInterval,
+  };
+}
 
 // Cached in memory, backed by settings.json on disk
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -759,18 +855,22 @@ export async function loadSettings(wsPath: string): Promise<AppSettings> {
   const file = Bun.file(settingsFilePath);
   if (await file.exists()) {
     try {
-      cachedSettings = { ...DEFAULT_SETTINGS, ...(await file.json()) };
+      const raw = (await file.json()) as Partial<AppSettings>;
+      cachedSettings = normalizeAppSettings({ ...DEFAULT_SETTINGS, ...raw });
     } catch {
       cachedSettings = { ...DEFAULT_SETTINGS };
     }
+  } else {
+    cachedSettings = { ...DEFAULT_SETTINGS };
   }
   return cachedSettings;
 }
 
 export async function persistSettings(settings: AppSettings) {
-  cachedSettings = settings;
+  const normalized = normalizeAppSettings(settings);
+  cachedSettings = normalized;
   if (settingsFilePath) {
-    await atomicWrite(settingsFilePath, JSON.stringify(settings, null, 2));
+    await atomicWrite(settingsFilePath, JSON.stringify(normalized, null, 2));
   }
 }
 
@@ -798,6 +898,149 @@ function getCenteredSettingsWindowFrame(parentWindow: BrowserWindow | null) {
   };
 }
 
+async function getAppInfoData(): Promise<AppInfoResponse> {
+  try {
+    // Updater.getLocallocalInfo returns the full version.json shape
+    // (version + hash + channel + name + identifier) — Updater.localInfo
+    // only exposes a subset, so we use the lower-level call here.
+    const info = await (
+      Updater as unknown as {
+        getLocallocalInfo: () => Promise<{
+          channel: string;
+          hash: string;
+          identifier: string;
+          name: string;
+          version: string;
+        }>;
+      }
+    ).getLocallocalInfo();
+    return {
+      version: info.version,
+      hash: info.hash,
+      channel: info.channel,
+      name: info.name,
+      identifier: info.identifier,
+    };
+  } catch (error) {
+    console.warn('[settings] Failed to read app info:', error);
+    return {
+      version: '0.0.0',
+      hash: '',
+      channel: 'dev',
+      name: 'GhostBoard',
+      identifier: 'dev.ghostboard',
+    };
+  }
+}
+
+async function checkForUpdateImpl(): Promise<UpdateCheckResponse> {
+  try {
+    const localHash = await Updater.localInfo.hash().catch(() => '');
+    const result = await Updater.checkForUpdate();
+    return {
+      currentHash: localHash,
+      hash: result.hash ?? '',
+      version: result.version ?? '',
+      updateAvailable: Boolean(result.updateAvailable),
+    };
+  } catch (error) {
+    return {
+      currentHash: '',
+      hash: '',
+      version: '',
+      updateAvailable: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Pick a destination folder + filename for the workspace archive, then shell
+ * out to `zip -r` to create the archive. Returns the resulting path / size or
+ * `canceled: true` if the user dismissed the picker.
+ */
+async function exportWorkspaceArchiveImpl(
+  wsPath: string
+): Promise<ExportArchiveResponse> {
+  if (!existsSync(wsPath)) {
+    return { success: false };
+  }
+  const selectedFolders = await Utils.openFileDialog({
+    allowedFileTypes: '*',
+    allowsMultipleSelection: false,
+    canChooseDirectory: true,
+    canChooseFiles: false,
+    startingFolder: '~/Desktop',
+  });
+  const selectedFolder = selectedFolders.find(Boolean);
+  if (!selectedFolder) {
+    return { canceled: true, success: false };
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const archiveName = `ghostboard-workspace-${stamp}.zip`;
+  const outputPath = resolve(selectedFolder, archiveName);
+  if (resolve(wsPath).startsWith(resolve(selectedFolder))) {
+    // Refuse to write the archive inside the workspace we're zipping; this
+    // would create a self-referential archive and could grow without bound.
+    return { success: false };
+  }
+  const parentDir = resolve(wsPath, '..');
+  const leaf = basename(resolve(wsPath));
+  try {
+    const proc = Bun.spawn(['zip', '-r', '-q', outputPath, leaf], {
+      cwd: parentDir,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      console.warn('[settings] zip exited with', exitCode, stderr);
+      return { success: false };
+    }
+    const file = Bun.file(outputPath);
+    const size = await file.size;
+    return { success: true, filePath: outputPath, size };
+  } catch (error) {
+    console.warn('[settings] Failed to spawn zip:', error);
+    return { success: false };
+  }
+}
+
+/**
+ * Prompt the user to pick a new workspace directory. The new path is
+ * persisted to `<userData>/userprefs.json`; the renderer is expected to show
+ * a "restart required" toast — switching wsPath in-process would require
+ * tearing down every open RPC handler, manifest cache, and file watcher, so
+ * we keep the pivot to a restart boundary.
+ */
+async function switchWorkspaceImpl(): Promise<SwitchWorkspaceResponse> {
+  const selectedFolders = await Utils.openFileDialog({
+    allowedFileTypes: '*',
+    allowsMultipleSelection: false,
+    canChooseDirectory: true,
+    canChooseFiles: false,
+    startingFolder: '~/',
+  });
+  const selectedFolder = selectedFolders.find(Boolean);
+  if (!selectedFolder) {
+    return { canceled: true, success: false };
+  }
+  const target = resolve(selectedFolder);
+  // Initialize the workspace dirs eagerly so a brand-new folder boots into a
+  // valid layout on next launch.
+  try {
+    initWorkspace(target);
+  } catch (error) {
+    console.warn('[settings] Failed to init new workspace:', error);
+    return { success: false };
+  }
+  const prefs = await loadUserPrefs();
+  prefs.workspacePath = target;
+  await saveUserPrefs(prefs);
+  return { success: true, path: target };
+}
+
 function createSettingsWindow(
   parentWindow: BrowserWindow | null,
   wsPath: string
@@ -807,10 +1050,11 @@ function createSettingsWindow(
     handlers: {
       requests: {
         getSettings: () => cachedSettings,
-        saveSettings: async ({ theme, locale }) => {
-          await persistSettings({ theme, locale });
-          // Push update to main window so theme/locale apply immediately.
-          mainRpc?.send?.settingsUpdated({ theme, locale });
+        saveSettings: async (settings) => {
+          await persistSettings(settings);
+          // Push update to main window so all settings (theme/locale/font/
+          // canvas background/auto-save) apply immediately.
+          mainRpc?.send?.settingsUpdated(cachedSettings);
           return { success: true };
         },
         listTrash: async () => await listTrash(wsPath),
@@ -824,12 +1068,28 @@ function createSettingsWindow(
           return { success: result.success };
         },
         purgeTrash: async ({ trashId }) => await purgeTrash(wsPath, trashId),
+        clearAllTrash: async () => await clearAllTrash(wsPath),
         scanUnlinkedNotes: async () => {
           const entries = await scanUnlinkedNotes(wsPath);
           return { entries };
         },
         deleteUnlinkedNotes: async ({ files }) =>
           await deleteUnlinkedNotes(wsPath, files),
+        getWorkspaceInfo: async () => {
+          const defaultPath = getDefaultWorkspacePath();
+          return {
+            path: wsPath,
+            isDefault: resolve(wsPath) === resolve(defaultPath),
+          };
+        },
+        openWorkspaceFolder: () => {
+          Utils.showItemInFolder(wsPath);
+          return { success: true };
+        },
+        switchWorkspace: () => switchWorkspaceImpl(),
+        exportWorkspaceArchive: () => exportWorkspaceArchiveImpl(wsPath),
+        getAppInfo: () => getAppInfoData(),
+        checkForUpdate: () => checkForUpdateImpl(),
       },
       messages: {},
     },
@@ -907,7 +1167,14 @@ async function main() {
     }
   });
 
-  const wsPath = initWorkspace();
+  // Resolve workspace path from user prefs first; fall back to the default
+  // when prefs are missing or point at a path that no longer exists.
+  const prefs = await loadUserPrefs();
+  const preferredPath =
+    prefs.workspacePath && existsSync(prefs.workspacePath)
+      ? prefs.workspacePath
+      : undefined;
+  const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
   await migrateLegacyTagsFromNotes(wsPath);
   await loadSettings(wsPath);

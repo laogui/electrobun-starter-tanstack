@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type AppSettings,
+  DEFAULT_SETTINGS,
   type SettingsClient,
   TRASH_UPDATED_EVENT,
   type TrashEntry,
@@ -15,6 +16,7 @@ import {
 import { applyTheme, normalizeSettings, SettingsApp } from './SettingsApp';
 
 interface ClientOverrides {
+  clearAllTrash?: () => Promise<{ purged: number; success: boolean }>;
   deleteUnlinkedNotes?: (
     files: string[]
   ) => Promise<{ deleted: string[]; skipped: string[] }>;
@@ -37,6 +39,10 @@ const createClient = (
   purgeTrash: vi.fn(
     overrides.purgeTrash ?? (() => Promise.resolve({ success: true }))
   ),
+  clearAllTrash: vi.fn(
+    overrides.clearAllTrash ??
+      (() => Promise.resolve({ success: true, purged: 0 }))
+  ),
   scanUnlinkedNotes: vi.fn(
     overrides.scanUnlinkedNotes ?? (() => Promise.resolve([]))
   ),
@@ -44,6 +50,30 @@ const createClient = (
     overrides.deleteUnlinkedNotes ??
       (() => Promise.resolve({ deleted: [], skipped: [] }))
   ),
+  getWorkspaceInfo: vi.fn().mockResolvedValue({
+    path: '/tmp/workspace',
+    isDefault: true,
+  }),
+  openWorkspaceFolder: vi.fn().mockResolvedValue({ success: true }),
+  switchWorkspace: vi
+    .fn()
+    .mockResolvedValue({ canceled: true, success: false }),
+  exportWorkspaceArchive: vi
+    .fn()
+    .mockResolvedValue({ canceled: true, success: false }),
+  getAppInfo: vi.fn().mockResolvedValue({
+    version: '1.0.0',
+    hash: 'abcdef0123456789',
+    channel: 'dev',
+    name: 'GhostBoard',
+    identifier: 'dev.ghostboard',
+  }),
+  checkForUpdate: vi.fn().mockResolvedValue({
+    currentHash: 'abcdef0123456789',
+    hash: 'abcdef0123456789',
+    version: '1.0.0',
+    updateAvailable: false,
+  }),
 });
 
 describe('SettingsApp helpers', () => {
@@ -61,10 +91,7 @@ describe('SettingsApp helpers', () => {
         locale: 'fr' as never,
         theme: 'sepia' as never,
       })
-    ).toEqual({
-      theme: 'system',
-      locale: 'en',
-    });
+    ).toEqual(DEFAULT_SETTINGS);
   });
 
   it('applies explicit and system theme classes', () => {
@@ -101,6 +128,7 @@ describe('SettingsApp', () => {
 
   it('loads settings into localized Tailwind/Base UI controls', async () => {
     const client = createClient({
+      ...DEFAULT_SETTINGS,
       theme: 'dark',
       locale: 'zh',
     });
@@ -120,6 +148,7 @@ describe('SettingsApp', () => {
 
   it('saves when a setting changes', async () => {
     const client = createClient({
+      ...DEFAULT_SETTINGS,
       theme: 'system',
       locale: 'en',
     });
@@ -133,6 +162,7 @@ describe('SettingsApp', () => {
 
     await waitFor(() => {
       expect(client.saveSettings).toHaveBeenCalledWith({
+        ...DEFAULT_SETTINGS,
         theme: 'dark',
         locale: 'en',
       });
@@ -142,6 +172,7 @@ describe('SettingsApp', () => {
 
 describe('SettingsApp trash section', () => {
   const baseSettings: AppSettings = {
+    ...DEFAULT_SETTINGS,
     theme: 'light',
     locale: 'en',
   };
@@ -162,9 +193,20 @@ describe('SettingsApp trash section', () => {
     document.title = '';
   });
 
+  /**
+   * Trash + cleanup live inside the Workspace panel after the Phase 8
+   * sidebar refactor. Switch to that panel before asserting on trash UI.
+   */
+  const openWorkspace = async () => {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Workspace' }));
+    return user;
+  };
+
   it('shows the empty state when trash is empty', async () => {
     const client = createClient(baseSettings);
     render(<SettingsApp client={client} />);
+    await openWorkspace();
 
     expect(
       await screen.findByRole('heading', { name: 'Deleted Canvases' })
@@ -181,10 +223,10 @@ describe('SettingsApp trash section', () => {
     });
 
     render(<SettingsApp client={client} />);
+    const user = await openWorkspace();
 
     expect(await screen.findByText('My Canvas')).toBeVisible();
 
-    const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Restore My Canvas' }));
 
     await waitFor(() => {
@@ -204,8 +246,8 @@ describe('SettingsApp trash section', () => {
     });
 
     render(<SettingsApp client={client} />);
+    const user = await openWorkspace();
 
-    const user = userEvent.setup();
     await user.click(
       await screen.findByRole('button', {
         name: 'Permanently delete My Canvas',
@@ -231,8 +273,8 @@ describe('SettingsApp trash section', () => {
     });
 
     render(<SettingsApp client={client} />);
+    const user = await openWorkspace();
 
-    const user = userEvent.setup();
     await user.click(
       await screen.findByRole('button', { name: 'Restore My Canvas' })
     );
@@ -248,6 +290,7 @@ describe('SettingsApp trash section', () => {
     const client = createClient(baseSettings, { listTrash });
 
     render(<SettingsApp client={client} />);
+    await openWorkspace();
 
     expect(await screen.findByText('No deleted canvases.')).toBeVisible();
 
@@ -255,5 +298,30 @@ describe('SettingsApp trash section', () => {
 
     expect(await screen.findByText('My Canvas')).toBeVisible();
     expect(listTrash).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears all trash entries after second confirmation', async () => {
+    const client = createClient(baseSettings, {
+      listTrash: vi
+        .fn<() => Promise<TrashEntry[]>>()
+        .mockResolvedValueOnce([trashEntry])
+        .mockResolvedValueOnce([]),
+      clearAllTrash: vi.fn().mockResolvedValue({ success: true, purged: 1 }),
+    });
+
+    render(<SettingsApp client={client} />);
+    const user = await openWorkspace();
+
+    await user.click(await screen.findByRole('button', { name: 'Empty all' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete Forever' })
+    );
+
+    await waitFor(() => {
+      expect(client.clearAllTrash).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('No deleted canvases.')).toBeVisible();
+    });
   });
 });

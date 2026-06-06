@@ -290,6 +290,39 @@ export async function listTrash(wsPath: string): Promise<TrashEntry[]> {
 }
 
 /**
+ * Permanently remove every trash entry in a single pass. Returns the number
+ * of trash entries that were purged (regardless of whether the underlying
+ * manifest file still existed on disk).
+ */
+export async function clearAllTrash(
+  wsPath: string
+): Promise<{ purged: number; success: boolean }> {
+  const config = await loadWorkspaceConfig(wsPath);
+  const trash = config.trash ?? [];
+  if (trash.length === 0) {
+    return { success: true, purged: 0 };
+  }
+  for (const entry of trash) {
+    const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
+    if (!existsSync(trashPath)) {
+      continue;
+    }
+    try {
+      Utils.moveToTrash(trashPath);
+    } catch (err) {
+      console.warn(
+        '[workspace] Failed to move trashed manifest to system Trash:',
+        err
+      );
+    }
+  }
+  const purged = trash.length;
+  config.trash = [];
+  await saveWorkspaceConfig(wsPath, config);
+  return { success: true, purged };
+}
+
+/**
  * Permanently remove a trash entry: drop it from `workspace.json` and move
  * the manifest file to the system Trash via Electrobun's `Utils.moveToTrash`.
  */

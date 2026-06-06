@@ -48,6 +48,13 @@ import * as m from '../../../paraglide/messages.js';
 import { DeleteViewConfirmDialog } from './DeleteViewConfirmDialog';
 import { LinkCreateForm } from './LinkCreateForm';
 
+/**
+ * Max length for canvas (view) names. Aligned with the audit's F2 spec —
+ * 80 characters is enough for descriptive names but still fits the menu
+ * row without ellipsis-soup.
+ */
+const VIEW_NAME_MAX_LENGTH = 80;
+
 const getQuickTemplateItems = () => [
   {
     id: 'quick-start',
@@ -367,25 +374,59 @@ export function ViewSwitcher({
     [views]
   );
 
+  // F2: same-name + length validation. Trim once and reuse so the UI and the
+  // commit path both see the same canonical form.
+  const editingNameTrimmed = editingName.trim();
+  const renameValidationError = (() => {
+    if (editingId === null) {
+      return null;
+    }
+    if (editingNameTrimmed === '') {
+      return m.view_rename_empty();
+    }
+    if (editingNameTrimmed.length > VIEW_NAME_MAX_LENGTH) {
+      return m.view_rename_too_long();
+    }
+    const collision = views.find(
+      (v) =>
+        v.id !== editingId &&
+        v.name.trim().toLowerCase() === editingNameTrimmed.toLowerCase()
+    );
+    if (collision) {
+      return m.view_rename_duplicate();
+    }
+    return null;
+  })();
+
   const handleRenameConfirm = useCallback(async () => {
-    if (editingId === null || editingName.trim() === '') {
+    if (editingId === null || editingNameTrimmed === '') {
       setEditingId(null);
       return;
     }
-    await rpcRenameView(editingId, editingName.trim());
+    // Block confirm if duplicate / too-long; the inline banner already tells
+    // the user what's wrong, and `rpcRenameView` would happily clobber.
+    if (renameValidationError) {
+      return;
+    }
+    await rpcRenameView(editingId, editingNameTrimmed);
     setViews(
       views.map((v) =>
-        v.id === editingId ? { ...v, name: editingName.trim() } : v
+        v.id === editingId ? { ...v, name: editingNameTrimmed } : v
       )
     );
     setEditingId(null);
-  }, [editingId, editingName, views, setViews]);
+  }, [editingId, editingNameTrimmed, renameValidationError, views, setViews]);
 
   const handleRenameCancel = useCallback(() => {
     setEditingId(null);
   }, []);
 
   const activeView = views.find((v) => v.id === activeViewId);
+  const activeViewNodeCount = useCanvasStore((s) => s.nodes.length);
+  const activeViewNodeCountLabel =
+    activeViewNodeCount === 1
+      ? m.view_node_count_one()
+      : m.view_node_count_other({ count: activeViewNodeCount });
 
   const handleAssetFile = useCallback(
     async (file: File) => {
@@ -452,8 +493,14 @@ export function ViewSwitcher({
             render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
             <Layers className="text-gray-500 dark:text-gray-400" size={16} />
-            <span className="max-w-30 truncate text-gray-700 dark:text-gray-200">
-              {activeView?.name ?? 'Canvas'}
+            <span className="flex max-w-50 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
+              <span className="truncate">{activeView?.name ?? 'Canvas'}</span>
+              <span
+                className="shrink-0 font-normal text-[11px] text-gray-400 dark:text-gray-500"
+                title={activeViewNodeCountLabel}
+              >
+                · {activeViewNodeCountLabel}
+              </span>
             </span>
             <motion.span
               animate={{ rotate: open ? 180 : 0 }}
@@ -621,41 +668,59 @@ export function ViewSwitcher({
                   : 'border-gray-100 border-b dark:border-neutral-700';
 
                 if (editingId === view.id) {
+                  const hasError = renameValidationError !== null;
                   return (
                     <div
-                      className={`flex items-center gap-2 px-4 py-3 ${rowBorder}`}
+                      className={`flex flex-col gap-1 px-4 py-3 ${rowBorder}`}
                       key={view.id}
                     >
-                      <input
-                        className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-                        onChange={(e) => {
-                          setEditingName(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleRenameConfirm();
-                          }
-                        }}
-                        ref={inputRef}
-                        type="text"
-                        value={editingName}
-                      />
-                      <button
-                        aria-label="Confirm rename"
-                        className="rounded-sm p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
-                        onClick={handleRenameConfirm}
-                        type="button"
-                      >
-                        <Check size={14} />
-                      </button>
-                      <button
-                        aria-label="Cancel rename"
-                        className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
-                        onClick={handleRenameCancel}
-                        type="button"
-                      >
-                        <X size={14} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <input
+                          aria-invalid={hasError}
+                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:bg-neutral-700 dark:text-white ${
+                            hasError
+                              ? 'border-red-400 dark:border-red-500'
+                              : 'border-gray-200 dark:border-neutral-600'
+                          }`}
+                          maxLength={VIEW_NAME_MAX_LENGTH}
+                          onChange={(e) => {
+                            setEditingName(e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleRenameConfirm();
+                            }
+                          }}
+                          ref={inputRef}
+                          type="text"
+                          value={editingName}
+                        />
+                        <button
+                          aria-label="Confirm rename"
+                          className="rounded-sm p-1 text-green-600 transition-opacity hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/30"
+                          disabled={hasError}
+                          onClick={handleRenameConfirm}
+                          type="button"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          aria-label="Cancel rename"
+                          className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
+                          onClick={handleRenameCancel}
+                          type="button"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      {hasError ? (
+                        <p
+                          className="px-1 text-[11px] text-red-500 dark:text-red-400"
+                          role="alert"
+                        >
+                          {renameValidationError}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 }

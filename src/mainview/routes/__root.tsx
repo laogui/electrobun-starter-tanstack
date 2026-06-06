@@ -10,14 +10,37 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
 import { Search, Settings } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
+import type { AppSettings, FontFamilySetting } from '@/settingsClient';
+import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
 import { setLocale } from '../../paraglide/runtime.js';
+
+/**
+ * Map font preference → font-family stack applied via inline style on
+ * `<html>`. `system` falls through to the global Inter stack defined in
+ * `index.css` (we simply remove the override).
+ */
+const FONT_FAMILY_STACKS: Record<FontFamilySetting, string | null> = {
+  system: null,
+  serif:
+    "'Iowan Old Style', 'Apple Garamond', Baskerville, 'Times New Roman', 'Droid Serif', Times, serif",
+  mono: "ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', Menlo, monospace",
+};
+
+function applyFontFamily(font: FontFamilySetting) {
+  const stack = FONT_FAMILY_STACKS[font];
+  if (stack) {
+    document.documentElement.style.setProperty('font-family', stack);
+  } else {
+    document.documentElement.style.removeProperty('font-family');
+  }
+}
 
 const isMac =
   typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
@@ -37,7 +60,22 @@ function RootDocument() {
   const titlebarRef = useTitlebarHeightVar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
+  const applyAppSettings = useAppSettingsStore((s) => s.applySettings);
   const showSearchBox = pathname === '/';
+
+  // Centralized settings application: theme via better-themes, locale via
+  // paraglide, fontFamily via inline style on <html>, and the rest stored
+  // in `useAppSettingsStore` so nested components (FocusedView,
+  // routes/index.tsx) can subscribe to specific slices without prop drilling.
+  const applyAll = useCallback(
+    (settings: AppSettings) => {
+      setTheme(settings.theme);
+      setLocale(settings.locale as 'en' | 'zh');
+      applyFontFamily(settings.fontFamily);
+      applyAppSettings(settings);
+    },
+    [applyAppSettings, setTheme]
+  );
 
   // Pull persisted settings on mount
   useEffect(() => {
@@ -45,23 +83,28 @@ function RootDocument() {
       if (!s) {
         return;
       }
-      setTheme(s.theme);
-      setLocale(s.locale as 'en' | 'zh');
+      applyAll(s as AppSettings);
     });
-  }, [setTheme]);
+  }, [applyAll]);
 
   // Listen for live pushes from the settings window
   useEffect(() => {
     const handler = (e: Event) => {
-      const { theme, locale } = (e as CustomEvent).detail;
-      setTheme(theme);
-      setLocale(locale as 'en' | 'zh');
+      const detail = (e as CustomEvent).detail as Partial<AppSettings>;
+      if (!detail) {
+        return;
+      }
+      // Defensive merge: the settings window always pushes the full payload,
+      // but typing as Partial lets older builds (or tests dispatching the
+      // event manually) ship subsets without crashing.
+      const current = useAppSettingsStore.getState();
+      applyAll({ ...current, ...detail });
     };
     globalThis.addEventListener('settings-updated', handler);
     return () => {
       globalThis.removeEventListener('settings-updated', handler);
     };
-  }, [setTheme]);
+  }, [applyAll]);
 
   return (
     <>

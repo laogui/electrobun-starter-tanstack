@@ -12,6 +12,7 @@ import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
+import { useAppSettingsStore } from '@/store/appSettingsStore';
 
 import {
   resolveBlockNoteFileUrl,
@@ -65,8 +66,8 @@ export default function BlockNoteEditor({
   const [titleValue, setTitleValue] = useState(toText(title));
   const [initial, setInitial] = useState<InitialContent | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
+  const [, setLastSavedAt] = useState<Date | null>(null);
   const latestMarkdownRef = useRef(initialMarkdown);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
 
@@ -96,7 +97,11 @@ export default function BlockNoteEditor({
     }
   }, []);
 
+  const autoSaveInterval = useAppSettingsStore((s) => s.autoSaveInterval);
+  const debounceMs = Math.round(autoSaveInterval * 1000);
+
   const { flushNow, saveDebounced, setInitialRevision } = useBlockNoteSaver({
+    debounceMs,
     enabled: typeof noteId === 'string',
     frontmatter,
     nodeId,

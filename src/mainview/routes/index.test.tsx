@@ -110,6 +110,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
+  menu_new: () => 'New',
   menu_new_card_inside: () => 'New child',
   menu_move_out: () => 'Move Out',
   menu_move_to_library: () => 'Move to Library',
@@ -177,6 +178,11 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   tags_sidebar_empty: () => 'No tags yet.',
   tags_sidebar_clear_filter: () => 'Clear filter',
   tags_sidebar_active_aria: ({ tag }: { tag: string }) => `Filtering by ${tag}`,
+  view_node_count_one: () => '1 node',
+  view_node_count_other: ({ count }: { count: number }) => `${count} nodes`,
+  view_rename_empty: () => 'Name cannot be empty',
+  view_rename_too_long: () => 'Name is too long',
+  view_rename_duplicate: () => 'A view with this name already exists',
 }));
 vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
 vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);
@@ -518,9 +524,7 @@ describe('routes/index', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
 
-    expect(
-      screen.getByRole('button', { name: NEW_NOTE_RE })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^new$/i })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();

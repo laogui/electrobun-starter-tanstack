@@ -63,6 +63,8 @@ import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
+import type { CanvasBackgroundSetting } from '@/settingsClient';
+import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
@@ -70,8 +72,12 @@ import * as m from '../../paraglide/messages.js';
 // ─── 画布颜色 ────────────────────────────────────────────────────────────────
 // 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
 
-/** 画布主背景色 */
-const CANVAS_BG_LIGHT = '#EFF3F4';
+/** 画布主背景色 (light theme presets — selected via Settings → General). */
+const CANVAS_BG_LIGHT_PRESETS = {
+  default: '#EFF3F4',
+  paper: '#F6F0E4', // warm beige
+  mono: '#F4F4F4', // neutral gray
+} as const satisfies Record<CanvasBackgroundSetting, string>;
 const CANVAS_BG_DARK = '#141414';
 
 /** 背景网格点颜色 */
@@ -738,7 +744,11 @@ function CanvasComponent() {
 
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
-  const canvasBackground = isDarkTheme ? CANVAS_BG_DARK : CANVAS_BG_LIGHT;
+  const canvasBackgroundPreset = useAppSettingsStore((s) => s.canvasBackground);
+  const canvasBackground = isDarkTheme
+    ? CANVAS_BG_DARK
+    : (CANVAS_BG_LIGHT_PRESETS[canvasBackgroundPreset] ??
+      CANVAS_BG_LIGHT_PRESETS.default);
   const gridColor = isDarkTheme ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
   const miniMapBackground = isDarkTheme ? MINIMAP_BG_DARK : MINIMAP_BG_LIGHT;
   const miniMapBorder = isDarkTheme

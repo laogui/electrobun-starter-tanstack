@@ -239,6 +239,33 @@ export async function rpcOpenAttachment(filePath: string) {
   return eb.rpc.request.openAttachment({ filePath });
 }
 
+export async function rpcRevealAttachment(filePath: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.revealAttachment({ filePath });
+}
+
+export async function rpcOpenExternalUrl(url: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.openExternalUrl({ url });
+}
+
+export async function rpcImportMarkdownFiles(): Promise<{
+  canceled?: boolean;
+  notes: Array<{ noteId: string; title: string }>;
+}> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { canceled: true, notes: [] };
+  }
+  return eb.rpc.request.importMarkdownFiles({});
+}
+
 export interface UnfurlLinkResult {
   description?: string;
   faviconUrl?: string;

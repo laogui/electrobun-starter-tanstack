@@ -3,18 +3,32 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
-import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import {
+  type CreatableCanvasNodeKind,
+  normalizeLinkUrl,
+} from '@/lib/contentTypes';
 import {
   type CanvasCreateRequest,
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
-import { rpcExportNoteMarkdown, rpcExportNotesMarkdown } from '@/lib/rpc';
+import {
+  rpcExportNoteMarkdown,
+  rpcExportNotesMarkdown,
+  rpcOpenExternalUrl,
+  rpcRevealAttachment,
+} from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
 
 interface UseContextMenuOptions {
   onDeleteNodes?: (ids: string[]) => void;
+  /**
+   * Opens the native file picker so the caller can replace the underlying
+   * file of an image or asset node. `kind` selects the accept filter; the
+   * caller wires the chosen file back into the node's `data`.
+   */
+  onReplaceNodeFile?: (nodeId: string, kind: 'image' | 'asset') => void;
   /**
    * Routes a create action to the shared creation flow (handles the `link` URL
    * prompt and `asset` file picker). When omitted, plain kinds fall back to a
@@ -57,6 +71,7 @@ function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {
 
 export function useContextMenu({
   onDeleteNodes,
+  onReplaceNodeFile,
   onRequestCreate,
   rfInstance,
 }: UseContextMenuOptions) {
@@ -66,9 +81,11 @@ export function useContextMenu({
   const deleteEdge = useCanvasStore((s) => s.deleteEdge);
   const undo = useCanvasStore((s) => s.undo);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
   const setRenamingFolderId = useCanvasStore((s) => s.setRenamingFolderId);
+  const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
@@ -86,10 +103,15 @@ export function useContextMenu({
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
     e.preventDefault();
+    // Right-clicking a node that is part of a multi-selection swaps the menu
+    // for the batch variant so the user can act on every selected node.
+    const selected = useCanvasStore.getState().nodes.filter((n) => n.selected);
+    const isMulti =
+      selected.length > 1 && selected.some((n) => n.id === node.id);
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      target: nodeContextMenuTarget(node.type),
+      target: isMulti ? 'multi' : nodeContextMenuTarget(node.type),
       nodeId: node.id,
     });
   }, []);
@@ -105,7 +127,7 @@ export function useContextMenu({
   }, []);
 
   const handleContextMenuAction = useCallback(
-    (action: string, nodeId?: string) => {
+    async (action: string, nodeId?: string) => {
       const viewport = rfInstance.current?.getViewport();
 
       const screenToFlow = (sx: number, sy: number) => {
@@ -253,7 +275,16 @@ export function useContextMenu({
         }
         case 'change-color': {
           if (nodeId) {
-            changeNodeColor(nodeId);
+            const selected = useCanvasStore
+              .getState()
+              .nodes.filter((n) => n.selected);
+            const ids =
+              selected.length > 1 && selected.some((n) => n.id === nodeId)
+                ? selected.map((n) => n.id)
+                : [nodeId];
+            for (const id of ids) {
+              changeNodeColor(id);
+            }
           }
           break;
         }
@@ -372,6 +403,107 @@ export function useContextMenu({
           }
           break;
         }
+        case 'open-link': {
+          if (nodeId) {
+            const node = useCanvasStore
+              .getState()
+              .nodes.find((n) => n.id === nodeId);
+            const url = (node?.data as { url?: unknown } | undefined)?.url;
+            if (typeof url === 'string' && url) {
+              const safe = normalizeLinkUrl(url) ?? url;
+              const res = await rpcOpenExternalUrl(safe);
+              if (!res?.success) {
+                toast(m.toast_open_link_failed());
+              }
+            }
+          }
+          break;
+        }
+        case 'copy-url': {
+          if (nodeId) {
+            const node = useCanvasStore
+              .getState()
+              .nodes.find((n) => n.id === nodeId);
+            const url = (node?.data as { url?: unknown } | undefined)?.url;
+            if (typeof url === 'string' && url) {
+              navigator.clipboard
+                .writeText(url)
+                .then(() => toast(m.toast_copied()))
+                .catch(() => {
+                  /* clipboard denied — ignore */
+                });
+            }
+          }
+          break;
+        }
+        case 'refetch-link': {
+          if (nodeId) {
+            updateNodeData(nodeId, {
+              unfurlStatus: 'idle',
+              unfurlError: undefined,
+            });
+          }
+          break;
+        }
+        case 'copy-image-address': {
+          if (nodeId) {
+            const node = useCanvasStore
+              .getState()
+              .nodes.find((n) => n.id === nodeId);
+            const data = (node?.data ?? {}) as { imageUrl?: unknown };
+            const addr = typeof data.imageUrl === 'string' ? data.imageUrl : '';
+            if (addr) {
+              navigator.clipboard
+                .writeText(addr)
+                .then(() => toast(m.toast_copied()))
+                .catch(() => {
+                  /* clipboard denied — ignore */
+                });
+            }
+          }
+          break;
+        }
+        case 'reveal-in-finder': {
+          if (nodeId) {
+            const node = useCanvasStore
+              .getState()
+              .nodes.find((n) => n.id === nodeId);
+            const data = (node?.data ?? {}) as {
+              attachmentFile?: unknown;
+              imageFile?: unknown;
+            };
+            const rel =
+              (typeof data.attachmentFile === 'string' &&
+                data.attachmentFile) ||
+              (typeof data.imageFile === 'string' && data.imageFile) ||
+              '';
+            if (rel) {
+              const res = await rpcRevealAttachment(rel);
+              if (!res?.success) {
+                toast(m.toast_reveal_failed());
+              }
+            }
+          }
+          break;
+        }
+        case 'replace-image': {
+          if (nodeId && onReplaceNodeFile) {
+            onReplaceNodeFile(nodeId, 'image');
+          }
+          break;
+        }
+        case 'replace-file': {
+          if (nodeId && onReplaceNodeFile) {
+            onReplaceNodeFile(nodeId, 'asset');
+          }
+          break;
+        }
+        case 'rename-asset': {
+          if (nodeId) {
+            setRenamingNodeId(nodeId);
+          }
+          break;
+        }
         case 'cycle-edge-color': {
           if (nodeId) {
             const { edges } = useCanvasStore.getState();
@@ -408,14 +540,17 @@ export function useContextMenu({
       setFocusedNode,
       setFocusedFolder,
       onDeleteNodes,
+      onReplaceNodeFile,
       deleteNodes,
       deleteEdge,
       detachNoteFromCanvas,
       undo,
       updateEdgeData,
+      updateNodeData,
       setEditingEdgeId,
       setEditingTagNodeId,
       setRenamingFolderId,
+      setRenamingNodeId,
       changeNodeColor,
       addFolderChild,
       pasteClipboard,

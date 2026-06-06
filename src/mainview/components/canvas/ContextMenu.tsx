@@ -2,15 +2,18 @@ import {
   BookOpen,
   ClipboardPaste,
   Copy,
+  ExternalLink,
   FileDown,
   FilePlus,
   FolderOpen,
+  Image as ImageIcon,
   Link as LinkIcon,
   Lock,
   LogOut,
   Maximize2,
   Palette,
   PenLine,
+  RefreshCw,
   Sparkles,
   Spline,
   Tag,
@@ -48,6 +51,7 @@ type ContextMenuState = {
     | 'folder'
     | 'group'
     | 'sticky'
+    | 'multi'
     | 'edge';
   nodeId?: string;
   edgeId?: string;
@@ -153,6 +157,17 @@ const getImageItems = (locked: boolean): MenuItem[] => [
     icon: Maximize2,
     shortcut: 'Enter',
   },
+  { id: 'replace-image', label: m.menu_replace_image(), icon: ImageIcon },
+  {
+    id: 'copy-image-address',
+    label: m.menu_copy_image_address(),
+    icon: Copy,
+  },
+  {
+    id: 'reveal-in-finder',
+    label: m.menu_reveal_in_finder(),
+    icon: FolderOpen,
+  },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
@@ -173,12 +188,28 @@ const getLinkItems = (locked: boolean): MenuItem[] => [
     icon: Maximize2,
     shortcut: 'Enter',
   },
+  { id: 'open-link', label: m.menu_open_link(), icon: ExternalLink },
+  { id: 'copy-url', label: m.menu_copy_url(), icon: LinkIcon },
+  { id: 'refetch-link', label: m.menu_refetch_link(), icon: RefreshCw },
   { id: 'edit-url', label: 'Edit URL', icon: LinkIcon },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
   lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
+];
+
+const getMultiItems = (): MenuItem[] => [
+  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   {
     id: 'delete',
     label: m.menu_delete(),
@@ -195,6 +226,13 @@ const getAssetItems = (locked: boolean): MenuItem[] => [
     icon: Maximize2,
     shortcut: 'Enter',
   },
+  {
+    id: 'reveal-in-finder',
+    label: m.menu_reveal_in_finder(),
+    icon: FolderOpen,
+  },
+  { id: 'replace-file', label: m.menu_replace_file(), icon: FilePlus },
+  { id: 'rename-asset', label: m.menu_rename_asset(), icon: PenLine },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
@@ -275,6 +313,7 @@ export function CanvasContextMenu({
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
+    multi: getMultiItems,
     canvas: getCanvasItems,
   };
 

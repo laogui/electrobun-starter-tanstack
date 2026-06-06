@@ -12,7 +12,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { useTheme } from 'better-themes';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -236,6 +236,54 @@ function CanvasComponent() {
   const pendingAssetAnchorRef = useRef<{ x: number; y: number } | undefined>(
     undefined
   );
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const replaceTargetRef = useRef<{
+    nodeId: string;
+    kind: 'image' | 'asset';
+  } | null>(null);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+
+  const onReplaceNodeFile = useCallback(
+    (nodeId: string, kind: 'image' | 'asset') => {
+      replaceTargetRef.current = { nodeId, kind };
+      const input = replaceFileInputRef.current;
+      if (!input) {
+        return;
+      }
+      input.accept = kind === 'image' ? 'image/*' : '';
+      input.click();
+    },
+    []
+  );
+
+  const onReplaceFileInputChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      const target = replaceTargetRef.current;
+      replaceTargetRef.current = null;
+      if (!(file && target)) {
+        return;
+      }
+      try {
+        const saved = await saveAssetFileWithProgressToast(file);
+        if (target.kind === 'image') {
+          updateNodeData(target.nodeId, {
+            imageFile: saved.attachmentFile,
+            imageUrl: undefined,
+            thumbnailFile: saved.thumbnailFile,
+            thumbnailUrl: saved.thumbnailUrl,
+          });
+        } else {
+          updateNodeData(target.nodeId, { ...saved });
+        }
+      } catch (error) {
+        console.error('[canvas] replace file failed:', error);
+        toast.error(m.toast_replace_failed());
+      }
+    },
+    [updateNodeData]
+  );
 
   // Unified create entry point shared with the canvas right-click menu. Plain
   // kinds are created immediately; `link` opens the URL popover and `asset`
@@ -348,6 +396,7 @@ function CanvasComponent() {
     handleContextMenuAction,
   } = useContextMenu({
     onDeleteNodes: requestDeleteNodes,
+    onReplaceNodeFile,
     onRequestCreate: requestCreate,
     rfInstance,
   });
@@ -611,8 +660,32 @@ function CanvasComponent() {
     [nodes, focusedNode, focusedFolder, dropTargetId]
   );
 
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragDepthRef = useRef(0);
+
+  const onDragEnterWindow = useCallback((e: React.DragEvent) => {
+    const types = Array.from(e.dataTransfer?.types ?? []);
+    // Only react to OS file drags — internal drags (library notes / detached
+    // chips) leave 'Files' off the dataTransfer types list.
+    if (!types.includes('Files')) {
+      return;
+    }
+    dragDepthRef.current += 1;
+    setIsDraggingFile(true);
+  }, []);
+
+  const onDragLeaveWindow = useCallback(() => {
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDraggingFile(false);
+    }
+  }, []);
+
   const onDropCanvas = useCallback(
     (e: React.DragEvent | DragEvent) => {
+      // Reset overlay state on drop regardless of payload.
+      dragDepthRef.current = 0;
+      setIsDraggingFile(false);
       const dataTransfer = (e as React.DragEvent).dataTransfer;
       const position = screenToFlowPosition({
         x: (e as React.DragEvent).clientX,
@@ -733,7 +806,11 @@ function CanvasComponent() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]">
+    <div
+      className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]"
+      onDragEnter={onDragEnterWindow}
+      onDragLeave={onDragLeaveWindow}
+    >
       <ReactFlow
         connectionLineComponent={ConnectionPreviewLine}
         connectionMode={ConnectionMode.Loose}
@@ -884,6 +961,12 @@ function CanvasComponent() {
         ref={assetFileInputRef}
         type="file"
       />
+      <input
+        className="hidden"
+        onChange={onReplaceFileInputChange}
+        ref={replaceFileInputRef}
+        type="file"
+      />
 
       {linkPrompt ? (
         <LinkCreatePopover
@@ -902,6 +985,21 @@ function CanvasComponent() {
           screen={linkPrompt.screen}
         />
       ) : null}
+
+      <AnimatePresence>
+        {isDraggingFile ? (
+          <motion.div
+            animate={{ opacity: 1 }}
+            className="pointer-events-none fixed inset-0 z-[200] flex items-center justify-center bg-blue-500/10 backdrop-blur-[2px]"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+          >
+            <div className="rounded-2xl border-2 border-blue-400 border-dashed bg-white/90 px-8 py-6 font-medium text-blue-600 text-lg shadow-xl dark:bg-neutral-900/90 dark:text-blue-300">
+              {m.drop_to_add()}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

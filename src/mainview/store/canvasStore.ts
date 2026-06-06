@@ -319,6 +319,8 @@ export interface CanvasState {
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
   renamingFolderId: string | null;
+  /** Asset/image card id whose displayName is in inline-rename mode. */
+  renamingNodeId: string | null;
   reset: () => void;
   saveSnapshot: () => void;
   searchOpen: boolean;
@@ -347,6 +349,7 @@ export interface CanvasState {
   setPendingSearchQuery: (query: string | null) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingFolderId: (id: string | null) => void;
+  setRenamingNodeId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setViewport: (viewport: CanvasViewport | null) => void;
@@ -394,6 +397,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   editingEdgeId: null,
   editingTagNodeId: null,
   renamingFolderId: null,
+  renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
   pendingSearchQuery: null,
@@ -677,6 +681,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setRenamingFolderId: (id) => {
     set({ renamingFolderId: id });
+  },
+
+  setRenamingNodeId: (id) => {
+    set({ renamingNodeId: id });
   },
 
   updateEdgeData: (edgeId, updates) => {

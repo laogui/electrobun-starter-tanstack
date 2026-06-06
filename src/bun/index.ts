@@ -12,6 +12,7 @@ import {
   attachmentExists,
   loadAttachment as loadWorkspaceAttachment,
   openAttachment as openWorkspaceAttachment,
+  revealAttachment as revealWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
   saveAttachmentFile as saveWorkspaceAttachmentFile,
 } from './attachments';
@@ -54,7 +55,15 @@ import {
   type NoteLocation,
   noteRecordToCardData,
 } from './noteStore';
-import { cardDataToNote, createNote, deleteNoteFile, loadNote } from './notes';
+import {
+  cardDataToNote,
+  createNote,
+  deleteNoteFile,
+  deriveMarkdownTitle,
+  loadNote,
+  parseFrontmatter,
+  saveNote,
+} from './notes';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -520,6 +529,21 @@ interface CanvasRPC {
       openAttachment: {
         params: { filePath: string };
         response: { success: boolean };
+      };
+      revealAttachment: {
+        params: { filePath: string };
+        response: { success: boolean };
+      };
+      openExternalUrl: {
+        params: { url: string };
+        response: { success: boolean };
+      };
+      importMarkdownFiles: {
+        params: Record<string, unknown>;
+        response: {
+          canceled?: boolean;
+          notes: Array<{ noteId: string; title: string }>;
+        };
       };
       unfurlLink: {
         params: { url: string };
@@ -1475,6 +1499,70 @@ async function main() {
 
         openAttachment: async ({ filePath }) =>
           openWorkspaceAttachment(wsPath, filePath),
+
+        revealAttachment: async ({ filePath }) =>
+          revealWorkspaceAttachment(wsPath, filePath),
+
+        openExternalUrl: ({ url }) => {
+          // Restrict to common safe schemes. file:// / javascript: / custom
+          // app schemes never leave this gate so a malicious link node cannot
+          // pivot through the bun process.
+          let parsed: URL;
+          try {
+            parsed = new URL(url);
+          } catch {
+            return { success: false };
+          }
+          if (
+            parsed.protocol !== 'http:' &&
+            parsed.protocol !== 'https:' &&
+            parsed.protocol !== 'mailto:'
+          ) {
+            return { success: false };
+          }
+          return { success: Utils.openExternal(url) };
+        },
+
+        importMarkdownFiles: async () => {
+          const selected = await Utils.openFileDialog({
+            allowedFileTypes: 'md',
+            allowsMultipleSelection: true,
+            canChooseDirectory: false,
+            canChooseFiles: true,
+            startingFolder: '~/Desktop',
+          });
+          const paths = selected.filter(Boolean);
+          if (paths.length === 0) {
+            return { canceled: true, notes: [] };
+          }
+          const notes: Array<{ noteId: string; title: string }> = [];
+          for (const path of paths) {
+            try {
+              const file = Bun.file(path);
+              if (!(await file.exists())) {
+                continue;
+              }
+              const raw = await file.text();
+              const { frontmatter, body } = parseFrontmatter(raw);
+              const title = deriveMarkdownTitle(frontmatter, body, path);
+              const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
+              const filePath = await createNote(wsPath, noteId, title, 'text');
+              await saveNote(
+                wsPath,
+                filePath,
+                { ...frontmatter, id: noteId, title, displayHint: 'text' },
+                body
+              );
+              notes.push({ noteId, title });
+            } catch (error) {
+              console.warn(
+                `[import] Failed to import markdown file ${path}:`,
+                error
+              );
+            }
+          }
+          return { notes };
+        },
 
         unfurlLink: async ({ url }) => unfurlLink(url),
 

@@ -14,6 +14,27 @@ export function LinkCreateForm({
 
   useEffect(() => {
     inputRef.current?.focus();
+    let cancelled = false;
+    // Prefill from the system clipboard when it holds a parseable URL.
+    // Browser/Electrobun may reject readText outside a user gesture or in
+    // insecure contexts; failures are swallowed so the form stays usable.
+    navigator.clipboard
+      ?.readText?.()
+      .then((text) => {
+        if (cancelled) {
+          return;
+        }
+        const trimmed = text.trim();
+        if (trimmed && createLinkNodeData(trimmed)) {
+          setValue((prev) => (prev ? prev : trimmed));
+        }
+      })
+      .catch(() => {
+        /* clipboard permission denied — ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

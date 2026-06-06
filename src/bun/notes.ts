@@ -200,6 +200,30 @@ export async function saveNote(
   await atomicWrite(fullPath, content);
 }
 
+const HEADING_RE = /^#\s+(.+)$/m;
+const MD_EXTENSION_RE = /\.md$/i;
+
+/**
+ * Pick a display title for an imported markdown file. Frontmatter `title`
+ * wins; otherwise the first `# Heading`; otherwise the file's base name.
+ */
+export function deriveMarkdownTitle(
+  frontmatter: Record<string, unknown>,
+  body: string,
+  fileName: string
+): string {
+  const fmTitle = frontmatter.title;
+  if (typeof fmTitle === 'string' && fmTitle.trim()) {
+    return fmTitle.trim();
+  }
+  const heading = HEADING_RE.exec(body)?.[1]?.trim();
+  if (heading) {
+    return heading;
+  }
+  const base = fileName.split('/').pop()?.replace(MD_EXTENSION_RE, '') ?? '';
+  return base.trim() || 'Untitled';
+}
+
 /** Create a new note file. Returns the workspace-relative file path. */
 export async function createNote(
   wsPath: string,

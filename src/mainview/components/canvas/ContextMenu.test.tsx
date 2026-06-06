@@ -65,6 +65,15 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_lock: () => 'Lock',
   menu_unlock: () => 'Unlock',
   menu_edge_color: () => 'Cycle Color',
+  menu_open_link: () => 'Open Link',
+  menu_copy_url: () => 'Copy URL',
+  menu_refetch_link: () => 'Refetch Preview',
+  menu_copy_image_address: () => 'Copy Image Address',
+  menu_replace_image: () => 'Replace Image',
+  menu_replace_file: () => 'Replace File',
+  menu_reveal_in_finder: () => 'Reveal in Finder',
+  menu_rename_asset: () => 'Rename',
+  menu_import_markdown: () => 'Import Markdown',
 }));
 
 describe('canvasContextMenu', () => {

@@ -10,7 +10,7 @@ import {
   Loader2,
   Play,
 } from 'lucide-react';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { NodeTagChips } from '@/components/card/NodeTagChips';
@@ -819,6 +819,9 @@ const AssetNode = ({
 }) => {
   const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
+  const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
     id,
     data as unknown as Record<string, unknown>
@@ -826,6 +829,40 @@ const AssetNode = ({
   const isZoomedOut = zoom < 0.4;
   const asset = resolveAssetData(data);
   const isDark = isColorDark(asset.color);
+
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameDraft, setRenameDraft] = useState(asset.title || asset.fileName);
+
+  useEffect(() => {
+    if (isRenaming) {
+      setRenameDraft(asset.title || asset.fileName);
+      // Autofocus + select after mount.
+      requestAnimationFrame(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      });
+    }
+  }, [isRenaming, asset.title, asset.fileName]);
+
+  const commitRename = useCallback(() => {
+    const next = renameDraft.trim();
+    if (next && next !== asset.title) {
+      saveSnapshot();
+      updateNodeData(id, { title: next });
+    }
+    setRenamingNodeId(null);
+  }, [
+    renameDraft,
+    asset.title,
+    saveSnapshot,
+    updateNodeData,
+    id,
+    setRenamingNodeId,
+  ]);
+
+  const cancelRename = useCallback(() => {
+    setRenamingNodeId(null);
+  }, [setRenamingNodeId]);
 
   return (
     <div
@@ -866,6 +903,32 @@ const AssetNode = ({
         ) : (
           <AssetContent data={data} />
         )}
+        {isRenaming && !isZoomedOut ? (
+          <div
+            className="absolute inset-x-5 bottom-16 z-10"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <input
+              aria-label="Rename asset"
+              className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+              onBlur={commitRename}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitRename();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelRename();
+                }
+              }}
+              ref={renameInputRef}
+              type="text"
+              value={renameDraft}
+            />
+          </div>
+        ) : null}
         {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
           <div className="pointer-events-none absolute right-3 bottom-3 left-3">
             <NodeTagChips

@@ -239,6 +239,19 @@ export async function openAttachment(
   return { success: Utils.openPath(fullPath) };
 }
 
+export async function revealAttachment(
+  wsPath: string,
+  filePath: string
+): Promise<{ success: boolean }> {
+  const { fullPath } = assertWorkspaceAttachmentPath(wsPath, filePath);
+  const file = Bun.file(fullPath);
+  if (!(await file.exists())) {
+    return { success: false };
+  }
+  Utils.showItemInFolder(fullPath);
+  return { success: true };
+}
+
 /**
  * Copy a file from an absolute OS path into `attachments/` without round-
  * tripping through a base64 data URL. Used for imports that already have a

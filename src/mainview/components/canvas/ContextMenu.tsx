@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  ChevronRight,
   ClipboardPaste,
   Copy,
   ExternalLink,
@@ -13,6 +14,7 @@ import {
   Maximize2,
   Palette,
   PenLine,
+  Plus,
   RefreshCw,
   Sparkles,
   Spline,
@@ -22,7 +24,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
@@ -36,6 +38,7 @@ interface MenuItem {
   id: string;
   label: string;
   shortcut?: string;
+  submenu?: MenuItem[];
 }
 
 type ContextMenuState = {
@@ -58,11 +61,16 @@ type ContextMenuState = {
 } | null;
 
 const getCanvasItems = (): MenuItem[] => [
-  ...getCreatableMenuItems('new').map((item) => ({
-    id: `new-${item.id}`,
-    label: item.label,
-    icon: item.icon,
-  })),
+  {
+    id: 'new',
+    label: m.menu_new(),
+    icon: Plus,
+    submenu: getCreatableMenuItems('short').map((item) => ({
+      id: `new-${item.id}`,
+      label: item.label,
+      icon: item.icon,
+    })),
+  },
   { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
   {
@@ -283,8 +291,13 @@ export function CanvasContextMenu({
   onAction: (action: string, nodeId?: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const submenuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const submenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndexRef = useRef(0);
+  const submenuActiveIndexRef = useRef(0);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const edgePathType = useCanvasStore((state) => {
     if (menu?.target !== 'edge' || !menu.edgeId) {
       return 'bezier';
@@ -318,6 +331,9 @@ export function CanvasContextMenu({
   };
 
   const items = menu ? (itemGetters[menu.target] ?? getCanvasItems)() : [];
+  const submenuItems = openSubmenu
+    ? items.find((item) => item.id === openSubmenu)?.submenu
+    : undefined;
 
   const focusItem = useCallback(
     (index: number) => {
@@ -331,29 +347,109 @@ export function CanvasContextMenu({
     [items.length]
   );
 
+  const focusSubmenuItem = useCallback(
+    (index: number) => {
+      if (!submenuItems || submenuItems.length === 0) {
+        return;
+      }
+      const next = (index + submenuItems.length) % submenuItems.length;
+      submenuActiveIndexRef.current = next;
+      submenuItemRefs.current[next]?.focus();
+    },
+    [submenuItems]
+  );
+
+  const openSubmenuFor = useCallback((id: string) => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setOpenSubmenu(id);
+    submenuActiveIndexRef.current = 0;
+  }, []);
+
+  const scheduleCloseSubmenu = useCallback(() => {
+    closeTimerRef.current = setTimeout(() => {
+      setOpenSubmenu(null);
+    }, 100);
+  }, []);
+
+  const cancelCloseSubmenu = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!menu) {
       return;
     }
     activeIndexRef.current = 0;
+    setOpenSubmenu(null);
     itemRefs.current[0]?.focus();
+  }, [menu]);
+
+  useEffect(() => {
+    if (!menu) {
+      return;
+    }
 
     const handleClick = (e: PointerEvent) => {
-      // Ignore right/middle clicks — let the contextmenu event reposition the
-      // menu instead of closing-then-reopening (which races with React updates
-      // and makes the first right-click appear unresponsive).
       const button = e.button ?? 0;
       if (button !== 0) {
         return;
       }
-      if (ref.current && !ref.current.contains(e.target as HTMLElement)) {
+      const target = e.target as HTMLElement;
+      const inMenu = ref.current?.contains(target) ?? false;
+      const inSubmenu = submenuRef.current?.contains(target) ?? false;
+      if (!(inMenu || inSubmenu)) {
         onClose();
       }
     };
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (openSubmenu) {
+          e.preventDefault();
+          setOpenSubmenu(null);
+          itemRefs.current[activeIndexRef.current]?.focus();
+          return;
+        }
         onClose();
         return;
+      }
+      if (openSubmenu && submenuItems) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          focusSubmenuItem(submenuActiveIndexRef.current + 1);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          focusSubmenuItem(submenuActiveIndexRef.current - 1);
+          return;
+        }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setOpenSubmenu(null);
+          itemRefs.current[activeIndexRef.current]?.focus();
+          return;
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          const active = document.activeElement;
+          const index = submenuItemRefs.current.indexOf(
+            active as HTMLButtonElement
+          );
+          if (index !== -1) {
+            e.preventDefault();
+            const item = submenuItems[index];
+            if (item) {
+              onAction(item.id, menu.nodeId ?? menu.edgeId);
+              onClose();
+            }
+          }
+          return;
+        }
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -375,6 +471,17 @@ export function CanvasContextMenu({
         focusItem(items.length - 1);
         return;
       }
+      if (e.key === 'ArrowRight') {
+        const activeItem = items[activeIndexRef.current];
+        if (activeItem?.submenu) {
+          e.preventDefault();
+          openSubmenuFor(activeItem.id);
+          setTimeout(() => {
+            focusSubmenuItem(0);
+          }, 0);
+        }
+        return;
+      }
       if (e.key === 'Enter' || e.key === ' ') {
         const active = document.activeElement;
         const index = itemRefs.current.indexOf(active as HTMLButtonElement);
@@ -382,8 +489,15 @@ export function CanvasContextMenu({
           e.preventDefault();
           const item = items[index];
           if (item) {
-            onAction(item.id, menu.nodeId ?? menu.edgeId);
-            onClose();
+            if (item.submenu) {
+              openSubmenuFor(item.id);
+              setTimeout(() => {
+                focusSubmenuItem(0);
+              }, 0);
+            } else {
+              onAction(item.id, menu.nodeId ?? menu.edgeId);
+              onClose();
+            }
           }
         }
       }
@@ -394,71 +508,169 @@ export function CanvasContextMenu({
       document.removeEventListener('pointerdown', handleClick, true);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [focusItem, items, menu, onAction, onClose]);
+  }, [
+    focusItem,
+    focusSubmenuItem,
+    items,
+    menu,
+    onAction,
+    onClose,
+    openSubmenu,
+    openSubmenuFor,
+    submenuItems,
+  ]);
 
   const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
   const y = menu
     ? Math.min(menu.y, window.innerHeight - items.length * 40 - 16)
     : 0;
 
+  const submenuParentIndex = openSubmenu
+    ? items.findIndex((item) => item.id === openSubmenu)
+    : -1;
+  const submenuParentEl =
+    submenuParentIndex >= 0 ? itemRefs.current[submenuParentIndex] : null;
+  const submenuWidth = 180;
+  const parentRect = submenuParentEl?.getBoundingClientRect();
+  const submenuOpensRight = parentRect
+    ? parentRect.right + submenuWidth + 8 <= window.innerWidth
+    : true;
+  const submenuX = parentRect
+    ? submenuOpensRight
+      ? parentRect.right + 4
+      : parentRect.left - submenuWidth - 4
+    : 0;
+  const submenuY = parentRect
+    ? Math.min(
+        parentRect.top,
+        window.innerHeight - (submenuItems?.length ?? 0) * 40 - 16
+      )
+    : 0;
+
   return (
     <AnimatePresence>
       {menu ? (
-        <motion.div
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          aria-label="Canvas context menu"
-          className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
-          exit={{ opacity: 0, scale: 0.95, y: -4 }}
-          initial={{ opacity: 0, scale: 0.95, y: -4 }}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          ref={ref}
-          role="menu"
-          style={{ left: x, top: y }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-        >
-          {items.map((item, index) => (
-            <button
-              className={cn(
-                'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
-                item.danger
-                  ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
-                  : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
-              )}
-              key={item.id}
-              onClick={() => {
-                onAction(item.id, menu.nodeId ?? menu.edgeId);
-                onClose();
-              }}
-              ref={(element) => {
-                itemRefs.current[index] = element;
-              }}
-              type="button"
-            >
-              <item.icon
-                className={
+        <>
+          <motion.div
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            aria-label="Canvas context menu"
+            className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            ref={ref}
+            role="menu"
+            style={{ left: x, top: y }}
+            transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          >
+            {items.map((item, index) => (
+              <button
+                className={cn(
+                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
                   item.danger
-                    ? 'text-red-500 dark:text-red-400'
-                    : 'text-gray-400 dark:text-gray-500'
-                }
-                size={15}
-              />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.shortcut ? (
-                <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                  {item.shortcut}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </motion.div>
+                    ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
+                    : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5',
+                  openSubmenu === item.id ? 'bg-black/5 dark:bg-white/5' : ''
+                )}
+                key={item.id}
+                onClick={() => {
+                  if (item.submenu) {
+                    return;
+                  }
+                  onAction(item.id, menu.nodeId ?? menu.edgeId);
+                  onClose();
+                }}
+                onMouseEnter={() => {
+                  activeIndexRef.current = index;
+                  if (item.submenu) {
+                    openSubmenuFor(item.id);
+                  } else if (openSubmenu) {
+                    scheduleCloseSubmenu();
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (item.submenu) {
+                    scheduleCloseSubmenu();
+                  }
+                }}
+                ref={(element) => {
+                  itemRefs.current[index] = element;
+                }}
+                type="button"
+              >
+                <item.icon
+                  className={
+                    item.danger
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }
+                  size={15}
+                />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.submenu ? (
+                  <ChevronRight
+                    className="text-gray-400 dark:text-gray-500"
+                    size={14}
+                  />
+                ) : item.shortcut ? (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    {item.shortcut}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </motion.div>
+
+          <AnimatePresence>
+            {openSubmenu && submenuItems ? (
+              <motion.div
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                aria-label="New item submenu"
+                className="fixed z-101 min-w-[180px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
+                exit={{ opacity: 0, scale: 0.95, x: -4 }}
+                initial={{ opacity: 0, scale: 0.95, x: -4 }}
+                onMouseEnter={cancelCloseSubmenu}
+                onMouseLeave={scheduleCloseSubmenu}
+                ref={submenuRef}
+                role="menu"
+                style={{ left: submenuX, top: submenuY }}
+                transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+              >
+                {submenuItems.map((subItem, subIndex) => (
+                  <button
+                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
+                    key={subItem.id}
+                    onClick={() => {
+                      onAction(subItem.id, menu.nodeId ?? menu.edgeId);
+                      onClose();
+                    }}
+                    onMouseEnter={() => {
+                      submenuActiveIndexRef.current = subIndex;
+                    }}
+                    ref={(element) => {
+                      submenuItemRefs.current[subIndex] = element;
+                    }}
+                    type="button"
+                  >
+                    <subItem.icon
+                      className="text-gray-400 dark:text-gray-500"
+                      size={15}
+                    />
+                    <span className="flex-1 text-left">{subItem.label}</span>
+                  </button>
+                ))}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </>
       ) : null}
     </AnimatePresence>
   );

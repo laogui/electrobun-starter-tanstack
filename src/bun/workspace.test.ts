@@ -18,6 +18,7 @@ const NOTE_ID_RE = /^note_/;
 
 vi.mock('electrobun/bun', () => ({
   Utils: {
+    moveToTrash: vi.fn(),
     paths: {
       userData: '/mock-user-data',
     },
@@ -53,6 +54,9 @@ describe('workspace', () => {
   let workspaceRoot: string;
 
   beforeEach(async () => {
+    const { Utils } = await import('electrobun/bun');
+    vi.mocked(Utils.moveToTrash).mockReset();
+    vi.mocked(Utils.moveToTrash).mockReturnValue(true);
     workspaceRoot = await mkdtemp(join(tmpdir(), 'workspace-test-'));
     renameMock.mockReset();
     renameMock.mockImplementation(async (from: string, to: string) => {
@@ -377,6 +381,111 @@ describe('workspace', () => {
     await expect(
       restoreView(workspaceRoot, 'trash_does_not_exist')
     ).resolves.toEqual({ success: false });
+  });
+
+  it('keeps trash entries when moving them to system Trash fails', async () => {
+    const { Utils } = await import('electrobun/bun');
+    const { initWorkspace, clearAllTrash } = await import('./workspace');
+    vi.mocked(Utils.moveToTrash).mockReturnValueOnce(false);
+    initWorkspace(workspaceRoot);
+
+    const trashFile = 'trash/trash_failed.canvas.json';
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    const trashPath = join(workspaceRoot, '.ghostboard', trashFile);
+    mkdirSync(join(workspaceRoot, '.ghostboard', 'trash'), { recursive: true });
+    writeFileSync(trashPath, '{"payload":"keep me"}');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+        ],
+        trash: [
+          {
+            trashId: 'trash_failed',
+            deletedAt: 100,
+            trashFile,
+            view: {
+              id: 'view-2',
+              name: 'Second',
+              file: 'views/view-2.canvas.json',
+            },
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await expect(clearAllTrash(workspaceRoot)).resolves.toEqual({
+      success: false,
+      purged: 0,
+    });
+    const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      trash?: unknown[];
+    };
+    expect(saved.trash).toHaveLength(1);
+  });
+
+  it('keeps a single trash entry when purging it fails', async () => {
+    const { Utils } = await import('electrobun/bun');
+    const { initWorkspace, purgeTrash } = await import('./workspace');
+    vi.mocked(Utils.moveToTrash).mockReturnValueOnce(false);
+    initWorkspace(workspaceRoot);
+
+    const trashFile = 'trash/trash_failed.canvas.json';
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    const trashPath = join(workspaceRoot, '.ghostboard', trashFile);
+    mkdirSync(join(workspaceRoot, '.ghostboard', 'trash'), { recursive: true });
+    writeFileSync(trashPath, '{"payload":"keep me"}');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+        ],
+        trash: [
+          {
+            trashId: 'trash_failed',
+            deletedAt: 100,
+            trashFile,
+            view: {
+              id: 'view-2',
+              name: 'Second',
+              file: 'views/view-2.canvas.json',
+            },
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await expect(purgeTrash(workspaceRoot, 'trash_failed')).resolves.toEqual({
+      success: false,
+    });
+    const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      trash?: unknown[];
+    };
+    expect(saved.trash).toHaveLength(1);
   });
 
   it('renameView updates an existing view name and returns false for missing views', async () => {

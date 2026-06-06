@@ -978,14 +978,23 @@ async function exportWorkspaceArchiveImpl(
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const archiveName = `ghostboard-workspace-${stamp}.zip`;
-  const outputPath = resolve(selectedFolder, archiveName);
-  if (resolve(wsPath).startsWith(resolve(selectedFolder))) {
+  const workspacePath = resolve(wsPath);
+  const selectedFolderPath = resolve(selectedFolder);
+  const outputPath = resolve(selectedFolderPath, archiveName);
+  const folderRelativeToWorkspace = relative(workspacePath, selectedFolderPath);
+  if (
+    folderRelativeToWorkspace === '' ||
+    !(
+      folderRelativeToWorkspace.startsWith('..') ||
+      isAbsolute(folderRelativeToWorkspace)
+    )
+  ) {
     // Refuse to write the archive inside the workspace we're zipping; this
     // would create a self-referential archive and could grow without bound.
     return { success: false };
   }
-  const parentDir = resolve(wsPath, '..');
-  const leaf = basename(resolve(wsPath));
+  const parentDir = resolve(workspacePath, '..');
+  const leaf = basename(workspacePath);
   try {
     const proc = Bun.spawn(['zip', '-r', '-q', outputPath, leaf], {
       cwd: parentDir,

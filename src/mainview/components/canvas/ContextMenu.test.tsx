@@ -136,6 +136,25 @@ describe('canvasContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the new item submenu inside the top viewport edge', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(120);
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'canvas' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: NEW_RE }));
+
+    const submenu = screen.getByRole('menu', { name: 'New item submenu' });
+    expect(Number.parseFloat(submenu.style.top)).toBeGreaterThanOrEqual(8);
+  });
+
   it('supports keyboard navigation and activation', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();

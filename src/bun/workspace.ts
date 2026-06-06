@@ -302,24 +302,29 @@ export async function clearAllTrash(
   if (trash.length === 0) {
     return { success: true, purged: 0 };
   }
+  const remaining: TrashEntry[] = [];
   for (const entry of trash) {
     const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
     if (!existsSync(trashPath)) {
       continue;
     }
     try {
-      Utils.moveToTrash(trashPath);
+      const moved = Utils.moveToTrash(trashPath);
+      if (!moved) {
+        remaining.push(entry);
+      }
     } catch (err) {
       console.warn(
         '[workspace] Failed to move trashed manifest to system Trash:',
         err
       );
+      remaining.push(entry);
     }
   }
-  const purged = trash.length;
-  config.trash = [];
+  const purged = trash.length - remaining.length;
+  config.trash = remaining;
   await saveWorkspaceConfig(wsPath, config);
-  return { success: true, purged };
+  return { success: remaining.length === 0, purged };
 }
 
 /**
@@ -339,12 +344,16 @@ export async function purgeTrash(
   const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
   if (existsSync(trashPath)) {
     try {
-      Utils.moveToTrash(trashPath);
+      const moved = Utils.moveToTrash(trashPath);
+      if (!moved) {
+        return { success: false };
+      }
     } catch (err) {
       console.warn(
         '[workspace] Failed to move trashed manifest to system Trash:',
         err
       );
+      return { success: false };
     }
   }
   config.trash = trash.filter((t) => t.trashId !== trashId);

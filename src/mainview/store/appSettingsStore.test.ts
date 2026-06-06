@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '@/settingsClient';
 
@@ -26,6 +26,15 @@ describe('appSettingsStore', () => {
     expect(state.theme).toBe('dark');
     expect(state.locale).toBe('zh');
     expect(state.fontFamily).toBe('system');
+  });
+
+  it('applySettings ignores undefined values from partial updates', () => {
+    useAppSettingsStore.getState().applySettings({ theme: 'dark' });
+    useAppSettingsStore
+      .getState()
+      .applySettings({ theme: undefined } as Partial<typeof DEFAULT_SETTINGS>);
+
+    expect(useAppSettingsStore.getState().theme).toBe('dark');
   });
 
   it('setField updates a single key', () => {

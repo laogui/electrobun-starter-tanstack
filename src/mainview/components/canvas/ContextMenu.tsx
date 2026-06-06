@@ -520,9 +520,9 @@ export function CanvasContextMenu({
     submenuItems,
   ]);
 
-  const x = menu ? Math.min(menu.x, window.innerWidth - 220) : 0;
+  const x = menu ? Math.max(8, Math.min(menu.x, window.innerWidth - 220)) : 0;
   const y = menu
-    ? Math.min(menu.y, window.innerHeight - items.length * 40 - 16)
+    ? Math.max(8, Math.min(menu.y, window.innerHeight - items.length * 40 - 16))
     : 0;
 
   const submenuParentIndex = openSubmenu
@@ -541,9 +541,12 @@ export function CanvasContextMenu({
       : parentRect.left - submenuWidth - 4
     : 0;
   const submenuY = parentRect
-    ? Math.min(
-        parentRect.top,
-        window.innerHeight - (submenuItems?.length ?? 0) * 40 - 16
+    ? Math.max(
+        8,
+        Math.min(
+          parentRect.top,
+          window.innerHeight - (submenuItems?.length ?? 0) * 40 - 16
+        )
       )
     : 0;
 
@@ -634,14 +637,18 @@ export function CanvasContextMenu({
               <motion.div
                 animate={{ opacity: 1, scale: 1, x: 0 }}
                 aria-label="New item submenu"
-                className="fixed z-101 min-w-[180px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
+                className="fixed z-101 min-w-[180px] overflow-y-auto rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
                 exit={{ opacity: 0, scale: 0.95, x: -4 }}
                 initial={{ opacity: 0, scale: 0.95, x: -4 }}
                 onMouseEnter={cancelCloseSubmenu}
                 onMouseLeave={scheduleCloseSubmenu}
                 ref={submenuRef}
                 role="menu"
-                style={{ left: submenuX, top: submenuY }}
+                style={{
+                  left: submenuX,
+                  maxHeight: 'calc(100vh - 16px)',
+                  top: submenuY,
+                }}
                 transition={{ type: 'spring', damping: 25, stiffness: 400 }}
               >
                 {submenuItems.map((subItem, subIndex) => (

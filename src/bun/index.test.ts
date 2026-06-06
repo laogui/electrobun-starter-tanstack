@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NOTE_ID_RE = /^note_/;
@@ -24,6 +26,7 @@ const browserWindowMock = vi.fn();
 const setApplicationMenuMock = vi.fn();
 const openFileDialogMock = vi.fn();
 const openPathMock = vi.fn();
+const bunSpawnMock = vi.fn();
 
 interface BrowserWindowOptions {
   frame?: {
@@ -216,6 +219,7 @@ const bunFileMock = vi.fn();
 const bunWriteMock = vi.fn();
 vi.stubGlobal('Bun', {
   file: bunFileMock,
+  spawn: bunSpawnMock,
   write: bunWriteMock,
 });
 
@@ -255,6 +259,7 @@ interface CanvasHandlers {
   saveNote: AnyHandler;
 }
 interface SettingsHandlers {
+  exportWorkspaceArchive: AnyHandler;
   getSettings: AnyHandler;
   saveSettings: AnyHandler;
 }
@@ -284,6 +289,7 @@ beforeEach(() => {
   openPathMock.mockReturnValue(true);
   fetchMock.mockReset();
   bunFileMock.mockReset();
+  bunSpawnMock.mockReset();
   bunWriteMock.mockReset();
   workspaceMocks.atomicWrite.mockResolvedValue(undefined);
   workspaceMocks.loadWorkspaceConfig.mockResolvedValue({
@@ -327,6 +333,7 @@ beforeEach(() => {
   bunFileMock.mockReturnValue({
     exists: vi.fn().mockResolvedValue(false),
     json: vi.fn(),
+    size: 123,
   });
 });
 
@@ -567,6 +574,31 @@ describe('src/bun/index helpers', () => {
       theme: 'dark',
       locale: 'zh',
     });
+  });
+
+  it('exportWorkspaceArchive refuses to write archives inside the workspace', async () => {
+    const workspacePath = '/private/tmp/ghostboard-index-workspace';
+    mkdirSync(`${workspacePath}/archives`, { recursive: true });
+    workspaceMocks.initWorkspace.mockReturnValueOnce(workspacePath);
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    expect(canvasHandlers.openSettings()).toEqual({ success: true });
+    const settingsHandlers = getSettingsHandlers();
+    openFileDialogMock.mockResolvedValueOnce([`${workspacePath}/archives`]);
+    bunSpawnMock.mockReturnValueOnce({
+      exited: Promise.resolve(0),
+      stderr: new Blob([]),
+    });
+    bunFileMock.mockReturnValueOnce({
+      exists: vi.fn().mockResolvedValue(true),
+      json: vi.fn(),
+      size: 123,
+    });
+
+    await expect(settingsHandlers.exportWorkspaceArchive()).resolves.toEqual({
+      success: false,
+    });
+    expect(bunSpawnMock).not.toHaveBeenCalled();
   });
 
   it('saveManifest writes card notes through preview generation', async () => {

@@ -37,9 +37,12 @@ export interface AppSettingsState extends AppSettings {
 export const useAppSettingsStore = create<AppSettingsState>((set) => ({
   ...DEFAULT_SETTINGS,
   applySettings: (next) => {
+    const definedSettings = Object.fromEntries(
+      Object.entries(next).filter(([, value]) => value !== undefined)
+    ) as Partial<AppSettings>;
     set((prev) => ({
       ...prev,
-      ...next,
+      ...definedSettings,
     }));
   },
   setField: (key, value) => {

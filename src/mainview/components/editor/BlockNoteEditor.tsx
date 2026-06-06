@@ -25,6 +25,10 @@ import {
 
 const TITLE_MAX_LENGTH = 120;
 
+export function getBlockNoteDebounceMs(autoSaveInterval: number): number {
+  return Math.round(autoSaveInterval);
+}
+
 interface BlockNoteEditorProps {
   color?: unknown;
   data: Record<string, unknown>;
@@ -98,7 +102,7 @@ export default function BlockNoteEditor({
   }, []);
 
   const autoSaveInterval = useAppSettingsStore((s) => s.autoSaveInterval);
-  const debounceMs = Math.round(autoSaveInterval * 1000);
+  const debounceMs = getBlockNoteDebounceMs(autoSaveInterval);
 
   const { flushNow, saveDebounced, setInitialRevision } = useBlockNoteSaver({
     debounceMs,

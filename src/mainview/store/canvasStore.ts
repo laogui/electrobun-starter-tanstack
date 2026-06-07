@@ -286,6 +286,8 @@ export interface CanvasState {
 
   // Actions – edge
   editingEdgeId: string | null;
+  /** Folder id whose subtitle is in inline-edit mode. */
+  editingSubtitleFolderId: string | null;
   /** Card id whose TagEditor should auto-open (driven by context-menu action). */
   editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
@@ -337,6 +339,7 @@ export interface CanvasState {
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
+  setEditingSubtitleFolderId: (id: string | null) => void;
   setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
@@ -395,6 +398,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
+  editingSubtitleFolderId: null,
   editingTagNodeId: null,
   renamingFolderId: null,
   renamingNodeId: null,
@@ -673,6 +677,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- edge actions -----------------------------------------------------------
   setEditingEdgeId: (id) => {
     set({ editingEdgeId: id });
+  },
+
+  setEditingSubtitleFolderId: (id) => {
+    set({ editingSubtitleFolderId: id });
   },
 
   setEditingTagNodeId: (id) => {

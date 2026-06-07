@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileDown,
   FilePlus,
+  FileText,
   FolderOpen,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -121,6 +122,7 @@ const getFolderItems = (locked: boolean): MenuItem[] => [
     shortcut: 'Enter',
   },
   { id: 'rename', label: m.menu_rename(), icon: PenLine },
+  { id: 'edit-subtitle', label: m.menu_edit_description(), icon: FileText },
   { id: 'new-child', label: m.menu_new_card_inside(), icon: FilePlus },
   lockItem(locked),
   {

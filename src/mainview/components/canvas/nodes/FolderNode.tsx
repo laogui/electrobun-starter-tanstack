@@ -20,16 +20,24 @@ export interface FolderData {
 
 export interface FolderContentProps {
   data: FolderData;
+  /** Enables contentEditable on the folder subtitle. */
+  editingSubtitle?: boolean;
   /** Enables contentEditable on the folder title. */
   editingTitle?: boolean;
   /** When true, hides subtitle/footer and bumps the title to a larger size. */
   isZoomedOut?: boolean;
   /** Click handler for the three-dot menu icon. */
   onMenuClick?: (e: React.MouseEvent) => void;
+  /** Blur handler for the subtitle (ignored unless `editingSubtitle`). */
+  onSubtitleBlur?: () => void;
+  /** Keydown handler for the subtitle (ignored unless `editingSubtitle`). */
+  onSubtitleKeyDown?: (e: React.KeyboardEvent) => void;
   /** Blur handler for the title (ignored unless `editingTitle`). */
   onTitleBlur?: () => void;
   /** Keydown handler for the title (ignored unless `editingTitle`). */
   onTitleKeyDown?: (e: React.KeyboardEvent) => void;
+  /** Ref forwarded to the contentEditable subtitle element. */
+  subtitleRef?: React.Ref<HTMLParagraphElement>;
   /** Ref forwarded to the contentEditable title element. */
   titleRef?: React.Ref<HTMLHeadingElement>;
 }
@@ -41,10 +49,14 @@ export const FolderContent = ({
   data,
   isZoomedOut = false,
   editingTitle = false,
+  editingSubtitle = false,
   onMenuClick,
   titleRef,
+  subtitleRef,
   onTitleBlur,
   onTitleKeyDown,
+  onSubtitleBlur,
+  onSubtitleKeyDown,
 }: FolderContentProps) => {
   const footerText = data.footer ?? data.updatedAt;
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
@@ -145,7 +157,16 @@ export const FolderContent = ({
             </h3>
             {isZoomedOut ? null : (
               <p
-                className="mt-2 truncate font-medium text-slate-500 text-sm leading-none"
+                className={cn(
+                  'nodrag nopan mt-2 truncate font-medium text-slate-500 text-sm leading-none outline-none',
+                  editingSubtitle &&
+                    'rounded-md bg-slate-900/5 px-1 ring-1 ring-slate-400/50'
+                )}
+                contentEditable={editingSubtitle}
+                onBlur={onSubtitleBlur}
+                onKeyDown={onSubtitleKeyDown}
+                ref={subtitleRef}
+                suppressContentEditableWarning
                 title={
                   typeof data.subtitle === 'string' ? data.subtitle : undefined
                 }
@@ -183,13 +204,22 @@ export const FolderContent = ({
 const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
   const { zoom } = useViewport();
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingSubtitle, setEditingSubtitle] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const subtitleRef = useRef<HTMLParagraphElement>(null);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const renamingFolderId = useCanvasStore((s) => s.renamingFolderId);
+  const editingSubtitleFolderId = useCanvasStore(
+    (s) => s.editingSubtitleFolderId
+  );
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const setRenamingFolderId = useCanvasStore((s) => s.setRenamingFolderId);
+  const setEditingSubtitleFolderId = useCanvasStore(
+    (s) => s.setEditingSubtitleFolderId
+  );
   const isZoomedOut = zoom < 0.4;
 
+  // -- Title editing --
   useEffect(() => {
     if (renamingFolderId !== id) {
       return;
@@ -249,6 +279,66 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
     [data.title, setRenamingFolderId]
   );
 
+  // -- Subtitle editing --
+  useEffect(() => {
+    if (editingSubtitleFolderId !== id) {
+      return;
+    }
+    setEditingSubtitle(true);
+  }, [id, editingSubtitleFolderId]);
+
+  useEffect(() => {
+    if (!editingSubtitle) {
+      return;
+    }
+    const frameId = globalThis.requestAnimationFrame(() => {
+      subtitleRef.current?.focus();
+      const selection = window.getSelection();
+      const range = document.createRange();
+      if (subtitleRef.current) {
+        range.selectNodeContents(subtitleRef.current);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+    });
+
+    return () => {
+      globalThis.cancelAnimationFrame(frameId);
+    };
+  }, [editingSubtitle]);
+
+  const handleSubtitleBlur = useCallback(() => {
+    const next = subtitleRef.current?.textContent?.trim() ?? '';
+    if (next !== (data.subtitle ?? '')) {
+      commitNodeData(id, { subtitle: next });
+    }
+    setEditingSubtitle(false);
+    setEditingSubtitleFolderId(null);
+  }, [id, data.subtitle, commitNodeData, setEditingSubtitleFolderId]);
+
+  const handleSubtitleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        subtitleRef.current?.blur();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        if (subtitleRef.current) {
+          subtitleRef.current.textContent = data.subtitle ?? '';
+        }
+        setEditingSubtitleFolderId(null);
+        subtitleRef.current?.blur();
+      }
+    },
+    [data.subtitle, setEditingSubtitleFolderId]
+  );
+
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
     // Trigger the node context menu by dispatching a contextmenu event on
     // the node DOM element, so the React Flow onNodeContextMenu fires.
@@ -288,11 +378,15 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
 
       <FolderContent
         data={data}
+        editingSubtitle={editingSubtitle}
         editingTitle={editingTitle}
         isZoomedOut={isZoomedOut}
         onMenuClick={handleMenuClick}
+        onSubtitleBlur={handleSubtitleBlur}
+        onSubtitleKeyDown={handleSubtitleKeyDown}
         onTitleBlur={handleTitleBlur}
         onTitleKeyDown={handleTitleKeyDown}
+        subtitleRef={subtitleRef}
         titleRef={titleRef}
       />
     </div>

@@ -63,6 +63,7 @@
   "menu_replace_file": "Replace File…",
   "menu_reveal_in_finder": "Reveal in Finder",
   "menu_rename_asset": "Rename",
+  "menu_edit_description": "Edit Description",
   "menu_import_markdown": "Import Markdown…",
   "toast_copied": "Copied",
   "toast_open_link_failed": "Could not open link",

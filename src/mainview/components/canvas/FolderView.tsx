@@ -220,9 +220,6 @@ export const FolderView = ({
 
       <div
         className="folder-scroll-container absolute inset-0 flex cursor-grab items-center overflow-x-auto overflow-y-hidden"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
         onClickCapture={handleClickCapture}
         onMouseDown={handleMouseDown}
         onMouseLeave={handleMouseUp}

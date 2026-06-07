@@ -13,11 +13,14 @@ import {
   type ThemeSetting,
 } from '@/settingsClient';
 
+import {
+  getLocaleStrings,
+  type SettingsLocaleStrings,
+} from './i18n/getLocaleStrings';
 import { AboutPanel } from './panels/AboutPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
 import { WorkspacePanel } from './panels/WorkspacePanel';
-import { getLocaleStrings, type SettingsLocaleStrings } from './strings';
 
 const THEME_VALUES: readonly ThemeSetting[] = ['system', 'light', 'dark'];
 const LOCALE_VALUES: readonly LocaleSetting[] = ['en', 'zh'];

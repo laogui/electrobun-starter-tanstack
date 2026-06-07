@@ -19,7 +19,7 @@ import {
   type WorkspaceInfo,
 } from '@/settingsClient';
 
-import type { SettingsLocaleStrings } from '../strings';
+import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 interface WorkspacePanelProps {
   client: SettingsClient;

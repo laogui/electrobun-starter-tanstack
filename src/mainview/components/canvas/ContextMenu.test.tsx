@@ -17,6 +17,7 @@ const COPY_RE = /^copy ⌘c$/i;
 const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
+  activeViewId: 'default',
   clipboard: [] as Array<{ id: string; data?: Record<string, unknown> }>,
   edges: [
     {
@@ -27,6 +28,10 @@ const edgeStoreState = {
     },
   ],
   nodes: [] as Array<{ id: string; data?: Record<string, unknown> }>,
+  views: [
+    { id: 'default', name: 'Default Canvas' },
+    { id: 'archive', name: 'Archive' },
+  ],
 };
 
 vi.mock('@/store/canvasStore', () => ({
@@ -306,6 +311,27 @@ describe('canvasContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
 
     expect(onAction).toHaveBeenCalledWith('focus', 'asset-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders move-to-view submenu for multi-selection', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 40, y: 60, target: 'multi', nodeId: 'node-1' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.mouseEnter(
+      screen.getByRole('button', { name: 'Move to canvas...' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+    expect(onAction).toHaveBeenCalledWith('move-to-view:archive', 'node-1');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

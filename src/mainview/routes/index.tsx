@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
+import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
@@ -504,7 +505,7 @@ function CanvasComponent() {
         if (cancelled) {
           return;
         }
-        if (data && data.nodes.length > 0) {
+        if (data) {
           hydrate(data.nodes, data.edges, data.viewport ?? null);
         } else if (await isRpcAvailable()) {
           if (cancelled) {
@@ -891,6 +892,15 @@ function CanvasComponent() {
           zoomable
         />
       </ReactFlow>
+
+      {nodesWithState.length === 0 ? (
+        <EmptyCanvasOverlay
+          onCreateNote={() => {
+            onCreateNode('card');
+          }}
+          onOpenNoteLibrary={onOpenNoteLibrary}
+        />
+      ) : null}
 
       <AnimatePresence>
         {focusedFolder ? (

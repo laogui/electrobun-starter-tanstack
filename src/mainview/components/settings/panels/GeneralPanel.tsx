@@ -16,7 +16,7 @@ import {
   type ThemeSetting,
 } from '@/settingsClient';
 
-import type { SettingsLocaleStrings } from '../strings';
+import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 interface SelectOption<TValue extends string> {
   label: string;

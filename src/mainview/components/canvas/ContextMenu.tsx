@@ -8,6 +8,7 @@ import {
   FilePlus,
   FolderOpen,
   Image as ImageIcon,
+  Layers,
   Link as LinkIcon,
   Lock,
   LogOut,
@@ -40,6 +41,11 @@ interface MenuItem {
   label: string;
   shortcut?: string;
   submenu?: MenuItem[];
+}
+
+interface ViewSummary {
+  id: string;
+  name: string;
 }
 
 type ContextMenuState = {
@@ -226,18 +232,40 @@ const getLinkItems = (locked: boolean): MenuItem[] => [
   },
 ];
 
-const getMultiItems = (): MenuItem[] => [
-  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
-  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
-  {
-    id: 'delete',
-    label: m.menu_delete(),
-    icon: Trash2,
-    shortcut: '⌫',
-    danger: true,
-  },
-];
+const MOVE_TO_VIEW_ACTION_PREFIX = 'move-to-view:';
+
+const getMultiItems = (
+  views: ViewSummary[],
+  activeViewId: string
+): MenuItem[] => {
+  const targetViews = views.filter((view) => view.id !== activeViewId);
+  return [
+    { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+    { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+    {
+      id: 'move-to-view',
+      label: 'Move to canvas...',
+      icon: Layers,
+      disabled: targetViews.length === 0,
+      submenu:
+        targetViews.length > 0
+          ? targetViews.map((view) => ({
+              id: `${MOVE_TO_VIEW_ACTION_PREFIX}${view.id}`,
+              label: view.name,
+              icon: Layers,
+            }))
+          : undefined,
+    },
+    { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
+    {
+      id: 'delete',
+      label: m.menu_delete(),
+      icon: Trash2,
+      shortcut: '⌫',
+      danger: true,
+    },
+  ];
+};
 
 const getAssetItems = (locked: boolean): MenuItem[] => [
   {
@@ -328,6 +356,8 @@ export function CanvasContextMenu({
     return Boolean((node?.data as { locked?: unknown } | undefined)?.locked);
   });
   const hasClipboard = useCanvasStore((state) => state.clipboard.length > 0);
+  const activeViewId = useCanvasStore((state) => state.activeViewId);
+  const views = useCanvasStore((state) => state.views);
 
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
@@ -339,7 +369,7 @@ export function CanvasContextMenu({
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
-    multi: getMultiItems,
+    multi: () => getMultiItems(views, activeViewId),
     canvas: () => getCanvasItems(hasClipboard),
   };
 

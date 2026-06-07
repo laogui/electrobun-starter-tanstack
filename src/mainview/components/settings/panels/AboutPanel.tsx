@@ -7,7 +7,7 @@ import type {
   UpdateCheckResult,
 } from '@/settingsClient';
 
-import type { SettingsLocaleStrings } from '../strings';
+import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 const RELEASE_NOTES_URL =
   'https://github.com/laogui/electrobun-starter-tanstack/releases';
@@ -226,9 +226,5 @@ function Banner({
       : kind === 'error'
         ? 'flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
         : 'flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200';
-  return (
-    <div className={className} role="status">
-      {children}
-    </div>
-  );
+  return <output className={className}>{children}</output>;
 }

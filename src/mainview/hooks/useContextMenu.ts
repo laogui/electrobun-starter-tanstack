@@ -94,6 +94,7 @@ export function useContextMenu({
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
   const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
+  const moveSelectedToView = useCanvasStore((s) => s.moveSelectedToView);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -153,6 +154,16 @@ export function useContextMenu({
           });
         } else {
           createNode(newType, rfInstance.current, { anchorCenter });
+        }
+        return;
+      }
+
+      if (action.startsWith('move-to-view:')) {
+        const moved = await moveSelectedToView(
+          action.slice('move-to-view:'.length)
+        );
+        if (!moved) {
+          toast.error('Could not move selection');
         }
         return;
       }
@@ -579,6 +590,7 @@ export function useContextMenu({
       saveSnapshot,
       createNode,
       toggleNodeLocked,
+      moveSelectedToView,
       onRequestCreate,
     ]
   );

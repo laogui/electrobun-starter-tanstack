@@ -25,11 +25,12 @@ import {
   isGroupChildNode,
 } from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, findSpecByNodeType } from '@/lib/canvasNodeRegistry';
+import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
-import { rpcDeleteNote } from '@/lib/rpc';
+import { loadCanvas, rpcDeleteNote, rpcSaveManifest } from '@/lib/rpc';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -178,6 +179,15 @@ function uniqueDetachedNodeId(
   return id;
 }
 
+function uniqueEdgeId(candidateId: string, usedEdgeIds: Set<string>): string {
+  let id = candidateId;
+  while (usedEdgeIds.has(id)) {
+    id = `edge-${nanoid(8)}`;
+  }
+  usedEdgeIds.add(id);
+  return id;
+}
+
 function resolveFolderChildSpec(childType: string | undefined) {
   if (!childType) {
     return buildNewNodeSpec('card');
@@ -308,6 +318,7 @@ export interface CanvasState {
     childId: string,
     options?: CreateNodeOptions
   ) => void;
+  moveSelectedToView: (targetViewId: string) => Promise<boolean>;
 
   // Helpers
   nextNodeId: () => string;
@@ -1090,6 +1101,159 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       _undoRedo: createUndoRedoState(),
       _hydrated: false,
     });
+  },
+
+  moveSelectedToView: async (targetViewId) => {
+    const { activeViewId, edges, nodes, viewport } = get();
+    if (targetViewId === activeViewId) {
+      return false;
+    }
+
+    const selectedNodes = nodes.filter((node) => node.selected);
+    if (selectedNodes.length === 0) {
+      return false;
+    }
+
+    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    const targetManifest = await loadCanvas(targetViewId).catch((error) => {
+      console.error('[canvasStore] Failed to load target canvas:', error);
+      return null;
+    });
+    const targetNodes = Array.isArray(targetManifest?.nodes)
+      ? (targetManifest.nodes as Node[])
+      : [];
+    const targetEdges = Array.isArray(targetManifest?.edges)
+      ? (targetManifest.edges as Edge[])
+      : [];
+    const targetViewport =
+      targetManifest && 'viewport' in targetManifest
+        ? (targetManifest.viewport as CanvasViewport | undefined)
+        : undefined;
+
+    const absoluteRects = buildAbsoluteRects(nodes);
+    const usedTargetNodeIds = new Set(targetNodes.map((node) => node.id));
+    const nodeIdMap = new Map<string, string>();
+    for (const node of selectedNodes) {
+      nodeIdMap.set(node.id, uniqueDetachedNodeId(node.id, usedTargetNodeIds));
+    }
+
+    const movedNodes = selectedNodes.map((node) => {
+      const {
+        extent: _extent,
+        parentId: sourceParentId,
+        selected: _selected,
+        ...rest
+      } = cleanNodeForClipboard(node) as Node & {
+        extent?: unknown;
+        parentId?: string;
+        selected?: boolean;
+      };
+      const parentIsMoving =
+        typeof sourceParentId === 'string' && selectedIds.has(sourceParentId);
+      const rect = absoluteRects.get(node.id);
+      const nextNode: Node = {
+        ...rest,
+        id: nodeIdMap.get(node.id)!,
+        position:
+          sourceParentId && !parentIsMoving
+            ? {
+                x: rect?.left ?? node.position.x,
+                y: rect?.top ?? node.position.y,
+              }
+            : node.position,
+        selected: false,
+      };
+      if (parentIsMoving) {
+        nextNode.parentId = nodeIdMap.get(sourceParentId);
+        nextNode.extent = node.extent;
+      }
+      return nextNode;
+    });
+
+    const usedTargetEdgeIds = new Set(targetEdges.map((edge) => edge.id));
+    const movedEdges = edges
+      .filter(
+        (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
+      )
+      .map((edge) => ({
+        ...cleanEdgeForClipboard(edge),
+        id: uniqueEdgeId(edge.id, usedTargetEdgeIds),
+        source: nodeIdMap.get(edge.source)!,
+        target: nodeIdMap.get(edge.target)!,
+        selected: false,
+      })) as Edge[];
+
+    const sourceNodes = sortNodesByParent(
+      nodes.flatMap((node) => {
+        if (selectedIds.has(node.id)) {
+          return [];
+        }
+        if (node.parentId && selectedIds.has(node.parentId)) {
+          const rect = absoluteRects.get(node.id);
+          const {
+            extent: _extent,
+            parentId: _parentId,
+            ...rest
+          } = node as Node & { extent?: unknown; parentId?: string };
+          return [
+            {
+              ...rest,
+              position: {
+                x: rect?.left ?? node.position.x,
+                y: rect?.top ?? node.position.y,
+              },
+            } as Node,
+          ];
+        }
+        return [node];
+      })
+    );
+    const sourceEdges = edges.filter(
+      (edge) => !(selectedIds.has(edge.source) || selectedIds.has(edge.target))
+    );
+
+    const sanitizedTarget = sanitizeForPersistence(
+      sortNodesByParent([...targetNodes, ...movedNodes]),
+      [...targetEdges, ...movedEdges]
+    );
+    const targetSave = await rpcSaveManifest(
+      targetViewId,
+      sanitizedTarget.nodes,
+      sanitizedTarget.edges,
+      targetViewport
+    ).catch((error) => {
+      console.error('[canvasStore] Failed to save target canvas:', error);
+      return { success: false };
+    });
+    if (!targetSave?.success) {
+      return false;
+    }
+
+    get().saveSnapshot();
+    set((state) => ({
+      edges: sourceEdges,
+      focusedFolder:
+        state.focusedFolder && selectedIds.has(state.focusedFolder.id)
+          ? null
+          : state.focusedFolder,
+      focusedNode:
+        state.focusedNode && selectedIds.has(state.focusedNode.id)
+          ? null
+          : state.focusedNode,
+      nodes: sourceNodes,
+    }));
+
+    const sanitizedSource = sanitizeForPersistence(sourceNodes, sourceEdges);
+    const sourceSave = await rpcSaveManifest(
+      activeViewId,
+      sanitizedSource.nodes,
+      sanitizedSource.edges,
+      viewport ?? undefined
+    ).catch((error) => {
+      console.error('[canvasStore] Failed to save source canvas:', error);
+      return { success: false };
+    });
+    return Boolean(sourceSave?.success);
   },
 
   // -- clipboard ------------------------------------------------------------

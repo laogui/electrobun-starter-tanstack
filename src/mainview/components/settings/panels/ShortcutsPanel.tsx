@@ -1,4 +1,4 @@
-import type { SettingsLocaleStrings } from '../strings';
+import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 const isMac =
   typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);

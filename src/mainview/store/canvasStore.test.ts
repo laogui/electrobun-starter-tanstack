@@ -20,12 +20,18 @@ import { useCanvasStore } from '@/store/canvasStore';
 const PASTE_ID_RE = /^paste-/;
 const PASTE_EDGE_ID_RE = /^paste-edge-/;
 
-const { rpcDeleteNoteMock } = vi.hoisted(() => ({
-  rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
-}));
+const { loadCanvasMock, rpcDeleteNoteMock, rpcSaveManifestMock } = vi.hoisted(
+  () => ({
+    loadCanvasMock: vi.fn(),
+    rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
+    rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
+  })
+);
 
 vi.mock('@/lib/rpc', () => ({
+  loadCanvas: loadCanvasMock,
   rpcDeleteNote: rpcDeleteNoteMock,
+  rpcSaveManifest: rpcSaveManifestMock,
 }));
 
 vi.mock('../../paraglide/messages.js', () => ({
@@ -90,6 +96,9 @@ afterEach(() => {
   resetStore();
   vi.unstubAllGlobals();
   rpcDeleteNoteMock.mockClear();
+  loadCanvasMock.mockReset();
+  rpcSaveManifestMock.mockReset();
+  rpcSaveManifestMock.mockResolvedValue({ success: true });
 });
 
 describe('canvasStore — node operations', () => {
@@ -685,6 +694,64 @@ describe('canvasStore — multi-view', () => {
     expect(state.viewport).toBeNull();
     expect(state._undoRedo.past).toEqual([]);
     expect(state._undoRedo.future).toEqual([]);
+  });
+
+  it('moves selected nodes and their internal edges to another view', async () => {
+    loadCanvasMock.mockResolvedValueOnce({
+      nodes: [makeNode('existing', { position: { x: 500, y: 500 } })],
+      edges: [],
+      viewport: { x: 10, y: 20, zoom: 1.25 },
+    });
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      viewport: { x: 1, y: 2, zoom: 0.75 },
+      nodes: [
+        makeNode('a', { selected: true, position: { x: 10, y: 20 } }),
+        makeNode('b', { selected: true, position: { x: 140, y: 20 } }),
+        makeNode('c', { position: { x: 280, y: 20 } }),
+      ],
+      edges: [
+        { id: 'edge-ab', source: 'a', target: 'b', selected: true },
+        { id: 'edge-bc', source: 'b', target: 'c' },
+      ],
+    });
+
+    await expect(
+      useCanvasStore.getState().moveSelectedToView('archive')
+    ).resolves.toBe(true);
+
+    expect(loadCanvasMock).toHaveBeenCalledWith('archive');
+    expect(rpcSaveManifestMock).toHaveBeenNthCalledWith(
+      1,
+      'archive',
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'existing' }),
+        expect.objectContaining({ id: 'a' }),
+        expect.objectContaining({ id: 'b' }),
+      ]),
+      [expect.objectContaining({ id: 'edge-ab', source: 'a', target: 'b' })],
+      { x: 10, y: 20, zoom: 1.25 }
+    );
+    const firstSaveCall = rpcSaveManifestMock.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>[],
+      Record<string, unknown>[],
+      unknown,
+    ];
+    expect(firstSaveCall[1].find((node) => node.id === 'a')).not.toHaveProperty(
+      'selected'
+    );
+    expect(rpcSaveManifestMock).toHaveBeenNthCalledWith(
+      2,
+      'default',
+      [expect.objectContaining({ id: 'c' })],
+      [],
+      { x: 1, y: 2, zoom: 0.75 }
+    );
+    expect(useCanvasStore.getState().nodes.map((node) => node.id)).toEqual([
+      'c',
+    ]);
+    expect(useCanvasStore.getState().edges).toEqual([]);
   });
 });
 

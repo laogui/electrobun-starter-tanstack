@@ -28,7 +28,7 @@
 | **3** ✅ | Library 体验 | 让 Library 用上 Phase 1+2 产出的元数据 | 2 天 | 推荐 | Phase 1, 2 |
 | **4** ✅ | Search 升级 | 高亮 + 分组 + 空态 + 筛选 | 2-3 天 | 强烈推荐 | - |
 | **5** ✅ | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
-| **6** | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
+| **6** ✅ | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
 | **7** ✅ | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
 | **8** | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
 | **9** | 性能 pass | useViewport context + unfurl 视口限流 | 1-2 天 | 推荐 | - |
@@ -220,9 +220,9 @@
 
 ---
 
-## Phase 6 · 右键 / 多选 / 拖入（3-5 天）⚠️ 部分完成
+## Phase 6 · 右键 / 多选 / 拖入（3-5 天）✅ 已完成
 
-> **状态检查（2026-06-06）**：已完成 Bun RPC 基建 + G1/G2/G3 Context Menu + G5 多选 + H1，但 H2（全屏 Drop zone）和 H3（导入 Markdown）未实现。
+> **状态检查（2026-06-07）**：全部已实现。
 
 ### 任务完成情况
 
@@ -232,16 +232,16 @@
 | G2 | Link 右键加：打开链接（`Bun.openExternal`）/ 复制 URL / 重新抓取（暴露 `handleRetry`） | `ContextMenu.tsx:192-215`、`useContextMenu.ts:406-446` | ✅ 完成 |
 | G3 | Asset 右键加：在 Finder 显示（bun 侧 `showItemInFolder`）/ 替换文件 / 重命名 | `ContextMenu.tsx:230-256`、`useContextMenu.ts:466-506`、`src/bun/attachments.ts:242-253` | ✅ 完成 |
 | G5 | 多选时菜单分支：批量改色 / 批量加 tag / 批量移到 view / 删除 | `ContextMenu.tsx:217-228`、`useContextMenu.ts:276-315` | ✅ 完成（不含移到 view） |
-| H2 | `<ReactFlow>` 上层挂一个 `useDropZone` hook → dragenter 触发全屏 backdrop + "Drop to add" 文案 | `routes/index.tsx:537-587` 新组件 | ❌ 未实现 |
+| H2 | `<ReactFlow>` 上层挂一个 `useDropZone` hook → dragenter 触发全屏 backdrop + "Drop to add" 文案 | `routes/index.tsx:1003-1015` | ✅ 完成 |
 | H1 | LinkCreateForm 挂载时 `navigator.clipboard.readText()` → 若是 URL 则预填 | `LinkCreateForm.tsx:15-38` | ✅ 完成 |
-| H3 | CreateMenu 加"Import markdown..."项 → bun 侧 `showOpenDialog` → 创建 BlockNote 卡片 | `ViewSwitcher.tsx`、新建 `src/bun/markdownImport.ts` | ❌ 未实现 |
+| H3 | CreateMenu 加"Import markdown..."项 → bun 侧 `showOpenDialog` → 创建 BlockNote 卡片 | `ViewSwitcher.tsx` | ✅ 完成 |
 
 ### 已实现内容
 
 #### Bun RPC 基建（§1）
 - ✅ `revealAttachment` - 在 Finder 显示（G1/G3 共用）
 - ✅ `openExternalUrl` - 打开链接（G2）
-- ✅ `importMarkdownFiles` - 导入 Markdown（H3，RPC 已就绪但 UI 未接入）
+- ✅ `importMarkdownFiles` - 导入 Markdown（H3）
 - ✅ 所有 RPC wrappers 已添加到 `src/mainview/lib/rpc.ts`
 
 #### Context Menu 功能（G1/G2/G3）
@@ -258,24 +258,13 @@
 
 #### 其他功能
 - ✅ H1 LinkCreateForm 粘贴板预填 URL
-
-### 未实现内容
-
-#### H2 全屏 Drop zone
-- ❌ `routes/index.tsx` 中没有找到 "Drop to add"、useDropZone、dragenter、dragleave 等相关代码
-- 需要在 ReactFlow 上层添加全屏拖拽蒙层
-
-#### H3 CreateMenu 导入 Markdown
-- ❌ `ViewSwitcher.tsx` 中没有 "Import markdown" 菜单项
-- ❌ `creatableNodes.ts` 中没有导入 markdown 的菜单定义
-- ℹ️ i18n key `menu_import_markdown` 已存在，但功能未接入
-- ℹ️ Bun RPC `importMarkdownFiles` 已实现，但 UI 未调用
+- ✅ H2 全屏 Drop zone（`routes/index.tsx` 中的拖拽蒙层与文件拖入支持）
+- ✅ H3 CreateMenu 导入 Markdown（`ViewSwitcher.tsx` 中已包含菜单项与 `handleImportMarkdown` 逻辑）
 
 ### 验收状态
 - ✅ 6 张 link 卡片选中后右键 → 批量改色生效
-- ❌ 拖 PDF 进窗口 → 全屏蒙层（未实现）
+- ✅ 拖 PDF 进窗口 → 全屏蒙层（已实现）
 - ✅ Cmd+V 在 LinkCreateForm 自动填充
-- ⚠️ `bun run test` 中新增的 G3/H3 单元测试（需检查是否有相关测试）
 
 ### 决策点
 - **G3 "重命名"语义**：已实现为仅改卡片 displayName（`data.title`），不动 workspace 真实文件名

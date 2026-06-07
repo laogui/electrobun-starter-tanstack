@@ -547,6 +547,27 @@ describe('routes/index', () => {
     });
   });
 
+  it('shows an empty canvas guide for empty manifests', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+      expect(screen.getByText('Start this canvas')).toBeInTheDocument();
+      expect(useCanvasStore.getState().nodes).toEqual([]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create first note' }));
+    expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('card');
+    expect(
+      screen.getByRole('link', { name: 'Browse templates' })
+    ).toHaveAttribute('href', '/templates');
+  });
+
   it('supports create menu and canvas context menu flows', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
@@ -784,8 +805,8 @@ describe('routes/index', () => {
     });
   });
 
-  it('seeds initial nodes when load returns empty data and rpc is available', async () => {
-    rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
+  it('seeds initial nodes when no manifest exists and rpc is available', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce(null);
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(true);
     const module = await import('./index');
     const CanvasRoute = module.Route.options
@@ -798,8 +819,8 @@ describe('routes/index', () => {
       expect(useCanvasStore.getState()._hydrated).toBe(true);
     });
 
-    // With the sanitizeForPersistence import fixed, the seed path now works:
-    // initial nodes are hydrated and persisted via rpcSaveManifest.
+    // Missing manifests still seed the first-run canvas; explicit empty
+    // manifests stay empty and show the empty-canvas guide.
     expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
     expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
   });

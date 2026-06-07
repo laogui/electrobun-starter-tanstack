@@ -304,6 +304,8 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   );
   const isDark = isColorDark(data.color);
   const isZoomedOut = zoom < 0.4;
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const [unfurlVisible, setUnfurlVisible] = useState(false);
 
   // Each (nodeId,url) pair is fetched at most once per session. Store the
   // attempted url so re-renders with stale `data` references do not re-issue
@@ -316,6 +318,37 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   }, [id, updateNodeData]);
 
   useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      setUnfurlVisible(true);
+      return;
+    }
+
+    const element = nodeRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+          setUnfurlVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: [0.5] }
+    );
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!unfurlVisible) {
+      return;
+    }
     const url = typeof data.url === 'string' ? data.url : '';
     if (!url) {
       return;
@@ -370,7 +403,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     return () => {
       cancelled = true;
     };
-  }, [data.url, data.unfurlStatus, id, updateNodeData]);
+  }, [data.url, data.unfurlStatus, id, unfurlVisible, updateNodeData]);
 
   return (
     <div
@@ -382,6 +415,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
             ? 'opacity-30'
             : 'opacity-100'
       )}
+      ref={nodeRef}
     >
       {tagEditor}
       <ResizeHandle

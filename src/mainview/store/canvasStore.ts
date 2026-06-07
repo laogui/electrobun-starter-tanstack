@@ -325,7 +325,10 @@ export interface CanvasState {
   reset: () => void;
   saveSnapshot: () => void;
   searchOpen: boolean;
-  selectNodeInDirection: (direction: 'down' | 'left' | 'right' | 'up') => void;
+  selectNodeInDirection: (
+    direction: 'down' | 'left' | 'right' | 'up',
+    options?: { extend?: boolean }
+  ) => Node | null;
   sendNodesBackward: (ids: string[]) => void;
   sendNodesToBack: (ids: string[]) => void;
 
@@ -811,13 +814,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }));
   },
 
-  selectNodeInDirection: (direction) => {
+  selectNodeInDirection: (direction, options) => {
     const { nodes } = get();
     const selectableNodes = nodes.filter(
       (node) => !(node.data as Record<string, unknown>).detached
     );
     if (selectableNodes.length === 0) {
-      return;
+      return null;
     }
     const absoluteRects = buildAbsoluteRects(selectableNodes);
     const centerOf = (node: Node) => {
@@ -835,8 +838,31 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       };
     };
 
+    const selectedNodes = selectableNodes.filter((node) => node.selected);
+    const pickExtendAnchor = () => {
+      if (selectedNodes.length === 0) {
+        return selectableNodes[0]!;
+      }
+      return [...selectedNodes].sort((a, b) => {
+        const ac = centerOf(a);
+        const bc = centerOf(b);
+        if (direction === 'right') {
+          return bc.x - ac.x || ac.y - bc.y || a.id.localeCompare(b.id);
+        }
+        if (direction === 'left') {
+          return ac.x - bc.x || ac.y - bc.y || a.id.localeCompare(b.id);
+        }
+        if (direction === 'down') {
+          return bc.y - ac.y || ac.x - bc.x || a.id.localeCompare(b.id);
+        }
+        return ac.y - bc.y || ac.x - bc.x || a.id.localeCompare(b.id);
+      })[0]!;
+    };
+
     const current =
-      selectableNodes.find((node) => node.selected) ?? selectableNodes[0]!;
+      options?.extend === true
+        ? pickExtendAnchor()
+        : (selectedNodes[0] ?? selectableNodes[0]!);
     const currentCenter = centerOf(current);
     const candidates = selectableNodes
       .filter((node) => node.id !== current.id)
@@ -870,9 +896,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       nodes: s.nodes.map((node) => ({
         ...node,
-        selected: node.id === target.id,
+        selected:
+          options?.extend === true
+            ? Boolean(node.selected || node.id === target.id)
+            : node.id === target.id,
       })),
     }));
+    return target;
   },
 
   groupSelected: () => {

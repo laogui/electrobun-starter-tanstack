@@ -168,6 +168,31 @@ describe('SettingsApp', () => {
       });
     });
   });
+
+  it('saves when the snap-to-grid setting changes', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      canvasSnapToGrid: true,
+      locale: 'en',
+    });
+
+    render(<SettingsApp client={client} />);
+
+    const user = userEvent.setup();
+    const snapSelect = await screen.findByRole('combobox', {
+      name: 'Snap to grid',
+    });
+    await user.click(snapSelect);
+    await user.click(await screen.findByRole('option', { name: 'Off' }));
+
+    await waitFor(() => {
+      expect(client.saveSettings).toHaveBeenCalledWith({
+        ...DEFAULT_SETTINGS,
+        canvasSnapToGrid: false,
+        locale: 'en',
+      });
+    });
+  });
 });
 
 describe('SettingsApp trash section', () => {

@@ -14,6 +14,7 @@ import {
 import {
   rpcExportNoteMarkdown,
   rpcExportNotesMarkdown,
+  rpcImportMarkdownFiles,
   rpcOpenExternalUrl,
   rpcRevealAttachment,
 } from '@/lib/rpc';
@@ -180,6 +181,27 @@ export function useContextMenu({
               }
             })
             .catch(() => toast(m.toast_export_failed()));
+          break;
+        }
+        case 'import-markdown': {
+          const result = await rpcImportMarkdownFiles().catch(() => null);
+          if (!result || result.canceled || result.notes.length === 0) {
+            break;
+          }
+          const anchorCenter = contextMenu
+            ? screenToFlow(contextMenu.x, contextMenu.y)
+            : undefined;
+          for (const note of result.notes) {
+            createNode('card', rfInstance.current, {
+              anchorCenter,
+              data: {
+                color: '#FFFFFF',
+                noteId: note.noteId,
+                title: note.title,
+                type: 'text',
+              },
+            });
+          }
           break;
         }
         case 'focus':

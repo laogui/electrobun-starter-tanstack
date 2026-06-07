@@ -746,6 +746,7 @@ function CanvasComponent() {
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
   const canvasBackgroundPreset = useAppSettingsStore((s) => s.canvasBackground);
+  const canvasSnapToGrid = useAppSettingsStore((s) => s.canvasSnapToGrid);
   const canvasBackground = isDarkTheme
     ? CANVAS_BG_DARK
     : (CANVAS_BG_LIGHT_PRESETS[canvasBackgroundPreset] ??
@@ -864,7 +865,7 @@ function CanvasComponent() {
         selectionMode={SelectionMode.Partial}
         selectionOnDrag={!editableInteractionLocked}
         snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-        snapToGrid
+        snapToGrid={canvasSnapToGrid}
         style={{ backgroundColor: canvasBackground }}
         zoomOnPinch={true}
       >

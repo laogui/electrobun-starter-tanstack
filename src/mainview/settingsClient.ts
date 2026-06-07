@@ -10,6 +10,7 @@ export type AutoSaveIntervalSetting =
 export interface AppSettings {
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
+  canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
   locale: LocaleSetting;
   theme: ThemeSetting;
@@ -92,6 +93,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'en',
   fontFamily: 'system',
   canvasBackground: 'default',
+  canvasSnapToGrid: true,
   autoSaveInterval: 800,
 };
 

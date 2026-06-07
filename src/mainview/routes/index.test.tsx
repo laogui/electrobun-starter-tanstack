@@ -3,10 +3,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_SETTINGS } from '@/settingsClient';
+import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const FOCUSED_RE = /Focused/;
-const NEW_NOTE_RE = /new note/i;
+const NEW_RE = /^new$/i;
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -18,6 +20,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
   rpcGetSettings: vi.fn(),
+  rpcImportMarkdownFiles: vi.fn(),
   rpcSetActiveView: vi.fn(),
 }));
 
@@ -58,6 +61,7 @@ vi.mock('@/lib/rpc', () => ({
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
   rpcGetSettings: rpcMocks.rpcGetSettings,
+  rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
   rpcSetActiveView: rpcMocks.rpcSetActiveView,
 }));
 
@@ -93,6 +97,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  menu_import_markdown: () => 'Import Markdown',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',
@@ -392,6 +397,9 @@ const resetStore = () => {
     createMenuOpen: false,
     editingEdgeId: null,
   });
+  useAppSettingsStore.setState({
+    ...DEFAULT_SETTINGS,
+  });
 };
 
 describe('routes/index', () => {
@@ -406,6 +414,11 @@ describe('routes/index', () => {
     rpcMocks.rpcRenameView.mockReset();
     rpcMocks.rpcGetSettings.mockReset();
     rpcMocks.rpcGetSettings.mockResolvedValue(null);
+    rpcMocks.rpcImportMarkdownFiles.mockReset();
+    rpcMocks.rpcImportMarkdownFiles.mockResolvedValue({
+      canceled: true,
+      notes: [],
+    });
     interactionMocks.onCreateNode.mockReset();
     assetFileMocks.saveAssetFileWithProgressToast.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockReset();
@@ -514,6 +527,26 @@ describe('routes/index', () => {
     });
   });
 
+  it('disables snap-to-grid dragging from app settings', async () => {
+    useAppSettingsStore.setState({
+      canvasSnapToGrid: false,
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(reactFlowMocks.props).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snapGrid: [24, 24],
+          snapToGrid: false,
+        })
+      );
+    });
+  });
+
   it('supports create menu and canvas context menu flows', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
@@ -534,7 +567,7 @@ describe('routes/index', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
 
-    expect(screen.getByRole('button', { name: /^new$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: NEW_RE })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();

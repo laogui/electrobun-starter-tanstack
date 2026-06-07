@@ -381,6 +381,82 @@ describe('useCanvasKeyboard', () => {
     ).toBe(false);
   });
 
+  it('extends the selection with Shift+Arrow navigation', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'left',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: true,
+        },
+        {
+          id: 'right',
+          type: 'card',
+          position: { x: 200, y: 0 },
+          data: {},
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+    dispatchKeyboard({
+      key: 'ArrowRight',
+      shiftKey: true,
+      cancelable: true,
+    });
+
+    const selectedIds = useCanvasStore
+      .getState()
+      .nodes.filter((node) => node.selected)
+      .map((node) => node.id);
+    expect(selectedIds).toEqual(['left', 'right']);
+  });
+
+  it('centers an arrow-selected node when it is outside the viewport', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 800,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 600,
+    });
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'left',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: {},
+          selected: true,
+          style: { width: 100, height: 100 },
+        },
+        {
+          id: 'far-right',
+          type: 'card',
+          position: { x: 2000, y: 0 },
+          data: {},
+          style: { width: 100, height: 100 },
+        },
+      ],
+    });
+    const rf = {
+      getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
+      setCenter: vi.fn(),
+    } as unknown as ReactFlowInstance<any, any>;
+    const rfInstance = { current: rf };
+
+    render(<TestComponentWithViewport rfInstance={rfInstance} />);
+    dispatchKeyboard({ key: 'ArrowRight', cancelable: true });
+
+    expect(rf.setCenter).toHaveBeenCalledWith(2050, 50, {
+      duration: 180,
+      zoom: 1,
+    });
+  });
+
   it('handles escape and enter for focused cards and folders', () => {
     const rect = {
       x: 0,

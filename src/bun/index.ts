@@ -800,6 +800,7 @@ type AutoSaveIntervalSetting = (typeof AUTO_SAVE_INTERVAL_VALUES)[number];
 interface AppSettings {
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
+  canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
   locale: string;
   theme: string;
@@ -810,6 +811,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'en',
   fontFamily: 'system',
   canvasBackground: 'default',
+  canvasSnapToGrid: true,
   autoSaveInterval: 800,
 };
 
@@ -831,6 +833,10 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
     canvasBackground: includes(CANVAS_BACKGROUND_VALUES, raw.canvasBackground)
       ? raw.canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
+    canvasSnapToGrid:
+      typeof raw.canvasSnapToGrid === 'boolean'
+        ? raw.canvasSnapToGrid
+        : DEFAULT_SETTINGS.canvasSnapToGrid,
     autoSaveInterval: includes(AUTO_SAVE_INTERVAL_VALUES, raw.autoSaveInterval)
       ? raw.autoSaveInterval
       : DEFAULT_SETTINGS.autoSaveInterval,

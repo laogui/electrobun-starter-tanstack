@@ -1,11 +1,32 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import LinkNode, { LinkContent } from './LinkNode';
 
 const OPEN_LINK_RE = /open link/i;
+
+interface MockUnfurlResult {
+  status: 'failed' | 'ready';
+  title?: string;
+  url: string;
+}
+
+const canvasStoreMocks = vi.hoisted(() => ({
+  saveSnapshot: vi.fn(),
+  updateNodeData: vi.fn(),
+}));
+
+const rpcMocks = vi.hoisted(() => ({
+  rpcUnfurlLink: vi.fn(async (): Promise<MockUnfurlResult | null> => null),
+}));
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -27,7 +48,7 @@ vi.mock('@/store/canvasStore', () => ({
       saveSnapshot: () => void;
       updateNodeData: (id: string, updates: Record<string, unknown>) => void;
     }) => unknown
-  ) => selector({ saveSnapshot: vi.fn(), updateNodeData: vi.fn() }),
+  ) => selector(canvasStoreMocks),
 }));
 
 vi.mock('@/components/card/useNodeTagEditing', () => ({
@@ -41,8 +62,13 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
 }));
 
 vi.mock('@/lib/rpc', () => ({
-  rpcUnfurlLink: vi.fn(async () => null),
+  rpcUnfurlLink: rpcMocks.rpcUnfurlLink,
 }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('LinkContent', () => {
   it('renders host fallback when no title is available', () => {
@@ -160,5 +186,70 @@ describe('LinkNode', () => {
     expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     expect(screen.getByTestId('handle-bottom')).toBeInTheDocument();
     expect(screen.getByTestId('handle-left')).toBeInTheDocument();
+  });
+
+  it('waits until the node is visible before fetching link preview metadata', async () => {
+    let observerCallback:
+      | ((
+          entries: Array<{ intersectionRatio: number; isIntersecting: boolean }>
+        ) => void)
+      | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+
+    class MockIntersectionObserver {
+      constructor(
+        callback: (
+          entries: Array<{
+            intersectionRatio: number;
+            isIntersecting: boolean;
+          }>
+        ) => void
+      ) {
+        observerCallback = callback;
+      }
+
+      disconnect = disconnect;
+      observe = observe;
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+    rpcMocks.rpcUnfurlLink.mockResolvedValueOnce({
+      status: 'ready',
+      title: 'Fetched title',
+      url: 'https://example.com/',
+    });
+
+    render(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: '',
+          url: 'https://example.com/',
+        }}
+        id="link-1"
+      />
+    );
+
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(rpcMocks.rpcUnfurlLink).not.toHaveBeenCalled();
+
+    act(() => {
+      observerCallback?.([{ intersectionRatio: 0.5, isIntersecting: true }]);
+    });
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcUnfurlLink).toHaveBeenCalledWith(
+        'https://example.com/'
+      );
+      expect(canvasStoreMocks.updateNodeData).toHaveBeenCalledWith('link-1', {
+        unfurlStatus: 'loading',
+      });
+      expect(canvasStoreMocks.updateNodeData).toHaveBeenCalledWith('link-1', {
+        title: 'Fetched title',
+        unfurlError: undefined,
+        unfurlStatus: 'ready',
+      });
+    });
   });
 });

@@ -123,14 +123,17 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    // Main menu has 4 items (New, Paste, Reset zoom, Import Markdown)
-    expect(screen.getAllByRole('button')).toHaveLength(4);
+    // Main menu has 5 items (New, Paste, Reset zoom, Import Markdown, Export Canvas Markdown)
+    expect(screen.getAllByRole('button')).toHaveLength(5);
     expect(screen.getByRole('button', { name: NEW_RE })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Reset zoom' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Import Markdown' })
     ).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });

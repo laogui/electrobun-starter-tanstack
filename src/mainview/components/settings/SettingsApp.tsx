@@ -54,6 +54,10 @@ export function normalizeSettings(
     )
       ? settings.canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
+    canvasSnapToGrid:
+      typeof settings?.canvasSnapToGrid === 'boolean'
+        ? settings.canvasSnapToGrid
+        : DEFAULT_SETTINGS.canvasSnapToGrid,
     autoSaveInterval: includesValue(
       AUTO_SAVE_INTERVAL_OPTIONS,
       settings?.autoSaveInterval

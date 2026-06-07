@@ -28,6 +28,9 @@ export interface SettingsLocaleStrings {
   canvasBgLabel: string;
   canvasBgMono: string;
   canvasBgPaper: string;
+  canvasSnapLabel: string;
+  canvasSnapOff: string;
+  canvasSnapOn: string;
   // Trash + Cleanup
   cleanupConfirmAction: string;
   cleanupConfirmBody: (count: number) => string;
@@ -157,6 +160,9 @@ const localeStrings: Record<LocaleSetting, SettingsLocaleStrings> = {
     canvasBgDefault: 'Default (cool gray)',
     canvasBgPaper: 'Paper (warm)',
     canvasBgMono: 'Mono (neutral)',
+    canvasSnapLabel: 'Snap to grid',
+    canvasSnapOn: 'On',
+    canvasSnapOff: 'Off',
     autoSaveLabel: 'Auto-save interval',
     autoSave500: 'Fast (0.5s)',
     autoSave800: 'Default (0.8s)',
@@ -307,6 +313,9 @@ const localeStrings: Record<LocaleSetting, SettingsLocaleStrings> = {
     canvasBgDefault: '默认（冷灰）',
     canvasBgPaper: '纸感（暖色）',
     canvasBgMono: '中性灰',
+    canvasSnapLabel: '吸附网格',
+    canvasSnapOn: '开启',
+    canvasSnapOff: '关闭',
     autoSaveLabel: '自动保存间隔',
     autoSave500: '快速（0.5 秒）',
     autoSave800: '默认（0.8 秒）',

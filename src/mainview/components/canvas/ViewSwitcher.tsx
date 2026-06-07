@@ -10,6 +10,7 @@ import {
   Download,
   FileImage,
   FileJson,
+  FilePlus,
   Grid2X2,
   Kanban,
   Layers,
@@ -36,6 +37,7 @@ import {
   rpcCreateView,
   rpcCreateViewFromTemplate,
   rpcDeleteView,
+  rpcImportMarkdownFiles,
   rpcListViews,
   rpcRenameView,
   rpcRestoreView,
@@ -441,6 +443,28 @@ export function ViewSwitcher({
     [onCreateNode, setCreateMenuOpen]
   );
 
+  const handleImportMarkdown = useCallback(async () => {
+    try {
+      const result = await rpcImportMarkdownFiles();
+      if (result.canceled || result.notes.length === 0) {
+        return;
+      }
+      for (const note of result.notes) {
+        onCreateNode('card', {
+          data: {
+            color: '#FFFFFF',
+            noteId: note.noteId,
+            title: note.title,
+            type: 'text',
+          },
+        });
+      }
+      setCreateMenuOpen(false);
+    } catch {
+      return;
+    }
+  }, [onCreateNode, setCreateMenuOpen]);
+
   const createMenuItems = getCreatableMenuItems('short');
 
   return (
@@ -592,41 +616,49 @@ export function ViewSwitcher({
                 sideOffset={12}
               >
                 <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
-                  {createMenuItems.map((item, index) => {
-                    const isLast =
-                      !onOpenNoteLibrary &&
-                      index === createMenuItems.length - 1;
-                    return (
-                      <Menu.Item
-                        aria-label={item.label}
-                        className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
-                          item.enabled
-                            ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
-                            : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
-                        } ${isLast ? '' : 'border-gray-100 border-b dark:border-neutral-700'}`}
-                        closeOnClick={item.id !== 'link' && item.id !== 'file'}
-                        disabled={!item.enabled}
-                        key={item.id}
-                        onClick={() => {
-                          const type = resolveCreatableKind(item.id);
-                          if (type) {
-                            if (type === 'link') {
-                              setLinkFormOpen(true);
-                              return;
-                            }
-                            if (type === 'asset') {
-                              assetFileInputRef.current?.click();
-                              return;
-                            }
-                            onCreateNode(type);
+                  {createMenuItems.map((item) => (
+                    <Menu.Item
+                      aria-label={item.label}
+                      className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
+                        item.enabled
+                          ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
+                          : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
+                      } border-gray-100 border-b dark:border-neutral-700`}
+                      closeOnClick={item.id !== 'link' && item.id !== 'file'}
+                      disabled={!item.enabled}
+                      key={item.id}
+                      onClick={() => {
+                        const type = resolveCreatableKind(item.id);
+                        if (type) {
+                          if (type === 'link') {
+                            setLinkFormOpen(true);
+                            return;
                           }
-                        }}
-                      >
-                        <item.icon size={18} />
-                        {item.label}
-                      </Menu.Item>
-                    );
-                  })}
+                          if (type === 'asset') {
+                            assetFileInputRef.current?.click();
+                            return;
+                          }
+                          onCreateNode(type);
+                        }
+                      }}
+                    >
+                      <item.icon size={18} />
+                      {item.label}
+                    </Menu.Item>
+                  ))}
+                  <Menu.Item
+                    aria-label={m.menu_import_markdown()}
+                    className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10 ${
+                      onOpenNoteLibrary
+                        ? 'border-gray-100 border-b dark:border-neutral-700'
+                        : ''
+                    }`}
+                    closeOnClick={false}
+                    onClick={handleImportMarkdown}
+                  >
+                    <FilePlus size={18} />
+                    {m.menu_import_markdown()}
+                  </Menu.Item>
                   {linkFormOpen ? (
                     <LinkCreateForm
                       onCreate={(data) => {

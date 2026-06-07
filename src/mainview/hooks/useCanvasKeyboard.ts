@@ -1,14 +1,66 @@
-import type { ReactFlowInstance } from '@xyflow/react';
+import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { type MutableRefObject, useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
 
+type CanvasDirection = 'down' | 'left' | 'right' | 'up';
+
 interface UseCanvasKeyboardOptions {
   onDeleteNodes?: (ids: string[]) => void;
   rfInstance?: MutableRefObject<ReactFlowInstance<any, any> | null>;
+}
+
+function getNodeCenter(node: Node, nodes: Node[]) {
+  const rect = buildAbsoluteRects(nodes).get(node.id);
+  if (rect) {
+    return {
+      x: (rect.left + rect.right) / 2,
+      y: (rect.top + rect.bottom) / 2,
+    };
+  }
+
+  const size = getNodeSize(node);
+  return {
+    x: node.position.x + size.width / 2,
+    y: node.position.y + size.height / 2,
+  };
+}
+
+function isFlowPointVisible(
+  point: { x: number; y: number },
+  viewport: { x: number; y: number; zoom: number }
+) {
+  const width = globalThis.innerWidth || document.documentElement.clientWidth;
+  const height =
+    globalThis.innerHeight || document.documentElement.clientHeight;
+  const screenX = point.x * viewport.zoom + viewport.x;
+  const screenY = point.y * viewport.zoom + viewport.y;
+  return screenX >= 0 && screenX <= width && screenY >= 0 && screenY <= height;
+}
+
+function centerNodeIfNeeded(
+  node: Node | null,
+  rf: ReactFlowInstance<any, any> | null | undefined
+) {
+  if (!(node && rf?.getViewport && rf.setCenter)) {
+    return;
+  }
+
+  const nodes = useCanvasStore.getState().nodes;
+  const center = getNodeCenter(node, nodes);
+  const viewport = rf.getViewport();
+  if (isFlowPointVisible(center, viewport)) {
+    return;
+  }
+
+  rf.setCenter(center.x, center.y, {
+    duration: 180,
+    zoom: viewport.zoom,
+  });
 }
 
 export function useCanvasKeyboard({
@@ -198,12 +250,13 @@ export function useCanvasKeyboard({
         e.key === 'ArrowLeft'
       ) {
         e.preventDefault();
-        const direction = e.key.replace('Arrow', '').toLowerCase() as
-          | 'down'
-          | 'left'
-          | 'right'
-          | 'up';
-        selectNodeInDirection(direction);
+        const direction = e.key
+          .replace('Arrow', '')
+          .toLowerCase() as CanvasDirection;
+        const selected = selectNodeInDirection(direction, {
+          extend: e.shiftKey,
+        });
+        centerNodeIfNeeded(selected, rfInstance?.current);
         return;
       }
 

@@ -81,6 +81,11 @@ const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
   },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
   {
+    id: 'import-markdown',
+    label: m.menu_import_markdown(),
+    icon: FilePlus,
+  },
+  {
     id: 'export-canvas-markdown',
     label: m.menu_export_canvas_markdown(),
     icon: FileDown,
@@ -338,7 +343,9 @@ export function CanvasContextMenu({
     canvas: () => getCanvasItems(hasClipboard),
   };
 
-  const items = menu ? (itemGetters[menu.target] ?? getCanvasItems)() : [];
+  const items = menu
+    ? (itemGetters[menu.target] ?? (() => getCanvasItems(hasClipboard)))()
+    : [];
   const submenuItems = openSubmenu
     ? items.find((item) => item.id === openSubmenu)?.submenu
     : undefined;

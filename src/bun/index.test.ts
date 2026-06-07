@@ -406,6 +406,7 @@ describe('src/bun/index helpers', () => {
       locale: 'zh',
       fontFamily: 'system',
       canvasBackground: 'default',
+      canvasSnapToGrid: true,
       autoSaveInterval: 800,
     });
 
@@ -417,6 +418,7 @@ describe('src/bun/index helpers', () => {
           locale: 'zh',
           fontFamily: 'system',
           canvasBackground: 'default',
+          canvasSnapToGrid: true,
           autoSaveInterval: 800,
         },
         null,

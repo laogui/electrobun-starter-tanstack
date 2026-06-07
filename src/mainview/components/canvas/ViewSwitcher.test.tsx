@@ -31,6 +31,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcCreateView: vi.fn(),
   rpcCreateViewFromTemplate: vi.fn(),
   rpcDeleteView: vi.fn(),
+  rpcImportMarkdownFiles: vi.fn(),
   rpcListViews: vi.fn(),
   rpcRenameView: vi.fn(),
   rpcRestoreView: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/lib/rpc', () => ({
   rpcCreateView: rpcMocks.rpcCreateView,
   rpcCreateViewFromTemplate: rpcMocks.rpcCreateViewFromTemplate,
   rpcDeleteView: rpcMocks.rpcDeleteView,
+  rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
   rpcListViews: rpcMocks.rpcListViews,
   rpcRenameView: rpcMocks.rpcRenameView,
   rpcRestoreView: rpcMocks.rpcRestoreView,
@@ -74,6 +76,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  menu_import_markdown: () => 'Import Markdown',
   menu_new_note: () => 'New Note',
   menu_new_checklist: () => 'New Checklist',
   menu_new_sticky: () => 'New Sticky',
@@ -160,6 +163,7 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcCreateView.mockReset();
     rpcMocks.rpcCreateViewFromTemplate.mockReset();
     rpcMocks.rpcDeleteView.mockReset();
+    rpcMocks.rpcImportMarkdownFiles.mockReset();
     rpcMocks.rpcRenameView.mockReset();
     saveAssetFileWithProgressToastMock.mockReset();
 
@@ -191,6 +195,10 @@ describe('viewSwitcher', () => {
       success: true,
       activeViewId: 'focus',
       trashId: 'trash_test',
+    });
+    rpcMocks.rpcImportMarkdownFiles.mockResolvedValue({
+      canceled: true,
+      notes: [],
     });
     rpcMocks.rpcRestoreView.mockReset();
     rpcMocks.rpcRestoreView.mockResolvedValue({
@@ -607,6 +615,43 @@ describe('viewSwitcher', () => {
       expect(saveAssetFileWithProgressToastMock).toHaveBeenCalledWith(file);
       expect(onCreateNode).toHaveBeenCalledWith('asset', {
         data: assetData,
+      });
+    });
+  });
+
+  it('imports markdown files from the create menu', async () => {
+    const onCreateNode = vi.fn();
+    rpcMocks.rpcImportMarkdownFiles.mockResolvedValueOnce({
+      notes: [
+        { noteId: 'note_imported_1', title: 'Imported One' },
+        { noteId: 'note_imported_2', title: 'Imported Two' },
+      ],
+    });
+
+    renderViewSwitcher({
+      createMenuOpen: true,
+      onCreateNode,
+    });
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Import Markdown' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcImportMarkdownFiles).toHaveBeenCalledTimes(1);
+      expect(onCreateNode).toHaveBeenNthCalledWith(1, 'card', {
+        data: {
+          color: '#FFFFFF',
+          noteId: 'note_imported_1',
+          title: 'Imported One',
+          type: 'text',
+        },
+      });
+      expect(onCreateNode).toHaveBeenNthCalledWith(2, 'card', {
+        data: {
+          color: '#FFFFFF',
+          noteId: 'note_imported_2',
+          title: 'Imported Two',
+          type: 'text',
+        },
       });
     });
   });

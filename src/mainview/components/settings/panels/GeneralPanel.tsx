@@ -23,6 +23,8 @@ interface SelectOption<TValue extends string> {
   value: TValue;
 }
 
+type CanvasSnapOptionValue = 'off' | 'on';
+
 function getSelectedLabel<TValue extends string>(
   options: readonly SelectOption<TValue>[],
   value: TValue
@@ -127,6 +129,10 @@ export function GeneralPanel({
     { label: strings.canvasBgPaper, value: 'paper' },
     { label: strings.canvasBgMono, value: 'mono' },
   ];
+  const canvasSnapOptions: SelectOption<CanvasSnapOptionValue>[] = [
+    { label: strings.canvasSnapOn, value: 'on' },
+    { label: strings.canvasSnapOff, value: 'off' },
+  ];
   const autoSaveLabels: Record<AutoSaveIntervalSetting, string> = {
     500: strings.autoSave500,
     800: strings.autoSave800,
@@ -179,6 +185,15 @@ export function GeneralPanel({
           }}
           options={canvasBgOptions}
           value={settings.canvasBackground}
+        />
+        <SettingsSelect
+          id="settings-canvas-snap"
+          label={strings.canvasSnapLabel}
+          onValueChange={(value) => {
+            onUpdate({ canvasSnapToGrid: value === 'on' });
+          }}
+          options={canvasSnapOptions}
+          value={settings.canvasSnapToGrid ? 'on' : 'off'}
         />
         <SettingsSelect
           id="settings-auto-save"

@@ -84,10 +84,7 @@ export function useContextMenu({
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
-  const setRenamingFolderId = useCanvasStore((s) => s.setRenamingFolderId);
-  const setEditingSubtitleFolderId = useCanvasStore(
-    (s) => s.setEditingSubtitleFolderId
-  );
+  const setEditingFolderId = useCanvasStore((s) => s.setEditingFolderId);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
@@ -297,15 +294,9 @@ export function useContextMenu({
           }
           break;
         }
-        case 'rename': {
+        case 'edit-folder': {
           if (nodeId) {
-            setRenamingFolderId(nodeId);
-          }
-          break;
-        }
-        case 'edit-subtitle': {
-          if (nodeId) {
-            setEditingSubtitleFolderId(nodeId);
+            setEditingFolderId(nodeId);
           }
           break;
         }
@@ -558,8 +549,7 @@ export function useContextMenu({
       updateNodeData,
       setEditingEdgeId,
       setEditingTagNodeId,
-      setRenamingFolderId,
-      setEditingSubtitleFolderId,
+      setEditingFolderId,
       setRenamingNodeId,
       changeNodeColor,
       addFolderChild,

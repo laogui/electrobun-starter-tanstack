@@ -17,6 +17,7 @@ const COPY_RE = /^copy ⌘c$/i;
 const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
+  clipboard: [] as Array<{ id: string; data?: Record<string, unknown> }>,
   edges: [
     {
       id: 'edge-1',
@@ -59,6 +60,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
+  menu_edit_folder_info: () => 'Edit Info',
   menu_new: () => 'New',
   menu_new_card_inside: () => 'New child',
   menu_move_out: () => 'Move Out',
@@ -302,5 +304,50 @@ describe('canvasContextMenu', () => {
 
     expect(onAction).toHaveBeenCalledWith('focus', 'asset-1');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the paste item when clipboard is empty', () => {
+    edgeStoreState.clipboard = [];
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'canvas' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    const paste = screen.getByRole('button', { name: 'Paste ⌘V' });
+    expect(paste).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.click(paste);
+    expect(onAction).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('enables the paste item when clipboard has content', () => {
+    edgeStoreState.clipboard = [{ id: 'node-1' }];
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, target: 'canvas' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    const paste = screen.getByRole('button', { name: 'Paste ⌘V' });
+    expect(paste).not.toHaveAttribute('aria-disabled');
+
+    fireEvent.click(paste);
+    expect(onAction).toHaveBeenCalledWith('paste', undefined);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // reset
+    edgeStoreState.clipboard = [];
   });
 });

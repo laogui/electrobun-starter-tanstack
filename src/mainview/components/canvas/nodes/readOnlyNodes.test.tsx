@@ -225,7 +225,7 @@ describe('readOnlyNodes', () => {
       );
 
       const title = screen.getByText('Archive');
-      expect(title.getAttribute('contenteditable')).toBe('false');
+      expect(title.getAttribute('contenteditable')).toBeNull();
       expect(screen.getByText('8 items')).toBeInTheDocument();
       expect(screen.getByTestId('handle-left')).toBeInTheDocument();
     });

@@ -6,7 +6,6 @@ import {
   ExternalLink,
   FileDown,
   FilePlus,
-  FileText,
   FolderOpen,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -35,6 +34,7 @@ import * as m from '../../../paraglide/messages.js';
 
 interface MenuItem {
   danger?: boolean;
+  disabled?: boolean;
   icon: React.ElementType;
   id: string;
   label: string;
@@ -61,7 +61,7 @@ type ContextMenuState = {
   edgeId?: string;
 } | null;
 
-const getCanvasItems = (): MenuItem[] => [
+const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
   {
     id: 'new',
     label: m.menu_new(),
@@ -72,7 +72,13 @@ const getCanvasItems = (): MenuItem[] => [
       icon: item.icon,
     })),
   },
-  { id: 'paste', label: m.menu_paste(), icon: ClipboardPaste, shortcut: '⌘V' },
+  {
+    id: 'paste',
+    label: m.menu_paste(),
+    icon: ClipboardPaste,
+    shortcut: '⌘V',
+    disabled: !hasClipboard,
+  },
   { id: 'reset-zoom', label: m.menu_reset_zoom(), icon: ZoomIn },
   {
     id: 'export-canvas-markdown',
@@ -121,8 +127,7 @@ const getFolderItems = (locked: boolean): MenuItem[] => [
     icon: FolderOpen,
     shortcut: 'Enter',
   },
-  { id: 'rename', label: m.menu_rename(), icon: PenLine },
-  { id: 'edit-subtitle', label: m.menu_edit_description(), icon: FileText },
+  { id: 'edit-folder', label: m.menu_edit_folder_info(), icon: PenLine },
   { id: 'new-child', label: m.menu_new_card_inside(), icon: FilePlus },
   lockItem(locked),
   {
@@ -317,6 +322,7 @@ export function CanvasContextMenu({
     const node = state.nodes.find((item) => item.id === menu.nodeId);
     return Boolean((node?.data as { locked?: unknown } | undefined)?.locked);
   });
+  const hasClipboard = useCanvasStore((state) => state.clipboard.length > 0);
 
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
@@ -329,7 +335,7 @@ export function CanvasContextMenu({
     asset: () => getAssetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
     multi: getMultiItems,
-    canvas: getCanvasItems,
+    canvas: () => getCanvasItems(hasClipboard),
   };
 
   const items = menu ? (itemGetters[menu.target] ?? getCanvasItems)() : [];
@@ -490,7 +496,7 @@ export function CanvasContextMenu({
         if (index !== -1) {
           e.preventDefault();
           const item = items[index];
-          if (item) {
+          if (item && !item.disabled) {
             if (item.submenu) {
               openSubmenuFor(item.id);
               setTimeout(() => {
@@ -578,15 +584,23 @@ export function CanvasContextMenu({
           >
             {items.map((item, index) => (
               <button
+                aria-disabled={item.disabled || undefined}
                 className={cn(
                   'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
-                  item.danger
-                    ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
-                    : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5',
-                  openSubmenu === item.id ? 'bg-black/5 dark:bg-white/5' : ''
+                  item.disabled
+                    ? 'cursor-default text-gray-300 dark:text-gray-600'
+                    : item.danger
+                      ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
+                      : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5',
+                  !item.disabled && openSubmenu === item.id
+                    ? 'bg-black/5 dark:bg-white/5'
+                    : ''
                 )}
                 key={item.id}
                 onClick={() => {
+                  if (item.disabled) {
+                    return;
+                  }
                   if (item.submenu) {
                     return;
                   }
@@ -594,6 +608,9 @@ export function CanvasContextMenu({
                   onClose();
                 }}
                 onMouseEnter={() => {
+                  if (item.disabled) {
+                    return;
+                  }
                   activeIndexRef.current = index;
                   if (item.submenu) {
                     openSubmenuFor(item.id);
@@ -613,9 +630,11 @@ export function CanvasContextMenu({
               >
                 <item.icon
                   className={
-                    item.danger
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                    item.disabled
+                      ? 'text-gray-300 dark:text-gray-600'
+                      : item.danger
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-gray-400 dark:text-gray-500'
                   }
                   size={15}
                 />

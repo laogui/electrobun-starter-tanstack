@@ -22,6 +22,7 @@ import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfi
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
+import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LibraryButton } from '@/components/canvas/LibraryButton';
@@ -612,12 +613,6 @@ function CanvasComponent() {
       if (node.type !== 'folder') {
         return;
       }
-      // Skip opening the folder when the user is inline-renaming it —
-      // clicking the contentEditable title to position the cursor should
-      // not trigger the FolderView overlay.
-      if (useCanvasStore.getState().renamingFolderId === node.id) {
-        return;
-      }
       const el = document.querySelector(`[data-id="${node.id}"]`);
       const rect = el?.getBoundingClientRect();
       if (!rect) {
@@ -947,6 +942,8 @@ function CanvasComponent() {
           open
         />
       ) : null}
+
+      <FolderEditDialog />
 
       <LibraryButton />
       <LibraryPopup rfInstance={rfInstance} />

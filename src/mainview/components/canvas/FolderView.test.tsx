@@ -23,8 +23,12 @@ vi.mock('@/components/canvas/nodes/CardNode', () => ({
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
-    selector: (state: { edges: unknown[]; nodes: unknown[] }) => unknown
-  ) => selector({ edges: [], nodes: [] }),
+    selector: (state: {
+      clipboard: unknown[];
+      edges: unknown[];
+      nodes: unknown[];
+    }) => unknown
+  ) => selector({ clipboard: [], edges: [], nodes: [] }),
 }));
 
 vi.mock('../../../paraglide/messages.js', () => ({

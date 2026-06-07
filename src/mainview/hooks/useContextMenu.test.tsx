@@ -107,7 +107,7 @@ const storeActions = {
   setEditingEdgeId: vi.fn((id: string) => {
     storeState.editingEdgeId = id;
   }),
-  setRenamingFolderId: vi.fn(),
+  setEditingFolderId: vi.fn(),
   changeNodeColor: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
@@ -474,11 +474,11 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
-          handleContextMenuAction('rename', 'folder-1');
+          handleContextMenuAction('edit-folder', 'folder-1');
         }}
         type="button"
       >
-        rename
+        edit-folder
       </button>
       <button
         onClick={() => {
@@ -628,7 +628,7 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'color' }));
     fireEvent.click(screen.getByRole('button', { name: 'child' }));
-    fireEvent.click(screen.getByRole('button', { name: 'rename' }));
+    fireEvent.click(screen.getByRole('button', { name: 'edit-folder' }));
     fireEvent.click(screen.getByRole('button', { name: 'edit-edge' }));
     fireEvent.click(screen.getByRole('button', { name: 'toggle-animated' }));
     fireEvent.click(screen.getByRole('button', { name: 'toggle-path' }));
@@ -639,7 +639,7 @@ describe('useContextMenu', () => {
     expect(storeActions.deleteNodes).toHaveBeenCalledWith(['card-1']);
     expect(storeActions.changeNodeColor).toHaveBeenCalledWith('card-1');
     expect(storeActions.addFolderChild).toHaveBeenCalledWith('folder-1');
-    expect(storeActions.setRenamingFolderId).toHaveBeenCalledWith('folder-1');
+    expect(storeActions.setEditingFolderId).toHaveBeenCalledWith('folder-1');
     expect(storeActions.setEditingEdgeId).toHaveBeenCalledWith('edge-1');
     expect(storeActions.updateEdgeData).toHaveBeenCalledWith('edge-1', {
       animated: true,

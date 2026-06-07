@@ -1,12 +1,6 @@
 // @vitest-environment jsdom
 
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/store/canvasStore';
@@ -49,7 +43,7 @@ describe('FolderNode', () => {
   beforeEach(() => {
     useCanvasStore.setState({
       commitNodeData: commitNodeDataMock,
-      renamingFolderId: null,
+      editingFolderId: null,
     });
   });
 
@@ -105,10 +99,7 @@ describe('FolderNode', () => {
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
 
-  it('renames the folder title after the context menu requests editing', async () => {
-    const keydownSpy = vi.fn();
-    globalThis.addEventListener('keydown', keydownSpy);
-
+  it('renders the title as static text (no inline contentEditable)', () => {
     render(
       <FolderNode
         data={{
@@ -120,26 +111,28 @@ describe('FolderNode', () => {
     );
 
     const title = screen.getByText('Research');
+    expect(title).not.toHaveAttribute('contenteditable', 'true');
+  });
 
-    act(() => {
-      useCanvasStore.getState().setRenamingFolderId('folder-3');
-    });
+  it('dispatches a contextmenu event when the menu button is clicked', () => {
+    render(
+      <div className="react-flow__node">
+        <FolderNode
+          data={{
+            subtitle: '12 children',
+            title: 'Research',
+          }}
+          id="folder-3"
+        />
+      </div>
+    );
 
-    await waitFor(() => {
-      expect(title).toHaveAttribute('contenteditable', 'true');
-    });
-    await waitFor(() => {
-      expect(document.activeElement).toBe(title);
-    });
+    const node = document.querySelector('.react-flow__node');
+    const contextMenuSpy = vi.fn();
+    node?.addEventListener('contextmenu', contextMenuSpy);
 
-    title.textContent = 'Designs';
-    fireEvent.keyDown(title, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Folder menu' }));
 
-    expect(commitNodeDataMock).toHaveBeenCalledWith('folder-3', {
-      title: 'Designs',
-    });
-    expect(keydownSpy).not.toHaveBeenCalled();
-
-    globalThis.removeEventListener('keydown', keydownSpy);
+    expect(contextMenuSpy).toHaveBeenCalledTimes(1);
   });
 });

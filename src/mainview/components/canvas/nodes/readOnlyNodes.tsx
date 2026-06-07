@@ -7,7 +7,7 @@
  * - The same presentational `XxxContent` used by the editable node
  *
  * They deliberately omit:
- * - `useCanvasStore` subscriptions (no `commitNodeData`, no `renamingFolderId`)
+ * - `useCanvasStore` subscriptions (no `commitNodeData`, no `editingFolderId`)
  * - RPC calls (no `rpcSaveAttachment`)
  * - NodeResizeControl / NodeResizer (resizing is not meaningful in previews)
  * - contentEditable handlers (content is purely visual)

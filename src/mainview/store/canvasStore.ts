@@ -286,8 +286,8 @@ export interface CanvasState {
 
   // Actions – edge
   editingEdgeId: string | null;
-  /** Folder id whose subtitle is in inline-edit mode. */
-  editingSubtitleFolderId: string | null;
+  /** Folder id whose info (name + description) dialog is open. */
+  editingFolderId: string | null;
   /** Card id whose TagEditor should auto-open (driven by context-menu action). */
   editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
@@ -320,7 +320,6 @@ export interface CanvasState {
   pendingSearchTarget: PendingSearchTarget | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
-  renamingFolderId: string | null;
   /** Asset/image card id whose displayName is in inline-rename mode. */
   renamingNodeId: string | null;
   reset: () => void;
@@ -339,7 +338,7 @@ export interface CanvasState {
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
-  setEditingSubtitleFolderId: (id: string | null) => void;
+  setEditingFolderId: (id: string | null) => void;
   setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
@@ -351,7 +350,6 @@ export interface CanvasState {
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setPendingSearchQuery: (query: string | null) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
-  setRenamingFolderId: (id: string | null) => void;
   setRenamingNodeId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
@@ -398,9 +396,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
-  editingSubtitleFolderId: null,
+  editingFolderId: null,
   editingTagNodeId: null,
-  renamingFolderId: null,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
@@ -679,16 +676,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ editingEdgeId: id });
   },
 
-  setEditingSubtitleFolderId: (id) => {
-    set({ editingSubtitleFolderId: id });
+  setEditingFolderId: (id) => {
+    set({ editingFolderId: id });
   },
 
   setEditingTagNodeId: (id) => {
     set({ editingTagNodeId: id });
-  },
-
-  setRenamingFolderId: (id) => {
-    set({ renamingFolderId: id });
   },
 
   setRenamingNodeId: (id) => {

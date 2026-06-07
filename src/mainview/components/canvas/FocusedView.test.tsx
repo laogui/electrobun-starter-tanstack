@@ -509,57 +509,6 @@ describe('focusedView', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('renders metadata bar for text notes with timestamps', async () => {
-    render(
-      <FocusedView
-        node={{
-          id: 'card-1',
-          type: 'card',
-          data: {
-            title: 'Meta',
-            content: 'Hello world',
-            createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-            updatedAt: new Date(Date.now() - 3_600_000).toISOString(),
-          },
-          rect,
-        }}
-        onClose={vi.fn()}
-      />
-    );
-
-    expect(
-      await screen.findByText('editor:Meta:Hello world')
-    ).toBeInTheDocument();
-    const container = document.querySelector('.min-\\[500px\\]\\:flex');
-    expect(container).toBeTruthy();
-    expect(container?.textContent).toContain('Created');
-    expect(container?.textContent).toContain('Updated');
-  });
-
-  it('does not render metadata bar for image nodes', () => {
-    render(
-      <FocusedView
-        node={{
-          id: 'image-1',
-          type: 'image',
-          data: {
-            title: 'Cover',
-            imageUrl: 'https://example.com/img.png',
-            createdAt: new Date().toISOString(),
-          },
-          rect,
-        }}
-        onClose={vi.fn()}
-      />
-    );
-
-    expect(
-      screen.getByText('image:Cover:https://example.com/img.png')
-    ).toBeInTheDocument();
-    const container = document.querySelector('.min-\\[500px\\]\\:flex');
-    expect(container).toBeNull();
-  });
-
   it('calls setCenter when closing and node is off-screen', () => {
     nodesMock = [
       {

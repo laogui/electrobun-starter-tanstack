@@ -368,7 +368,7 @@ function BlockNoteSurface({
           <TextareaAutosize
             aria-label="Note title"
             className={cn(
-              'mb-6 block w-full resize-none border-none bg-transparent font-bold text-4xl leading-tight tracking-normal outline-none',
+              'mb-6 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-none',
               titlePlaceholderStyle
             )}
             maxLength={TITLE_MAX_LENGTH}

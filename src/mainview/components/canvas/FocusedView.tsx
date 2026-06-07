@@ -1,5 +1,5 @@
 import { useReactFlow } from '@xyflow/react';
-import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
   lazy,
@@ -18,7 +18,6 @@ import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
-import { formatRelativeTime } from '@/lib/formatRelative';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -31,22 +30,6 @@ import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
 
 // Word/character counts derived from markdown body. Stripping fenced code,
-// link/image syntax, and inline formatting keeps the visible counts closer to
-// what users perceive as content.
-const WORD_SPLIT_RE = /\s+/;
-function countMarkdown(markdown: string): { words: number; chars: number } {
-  const plain = markdown
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`[^`]*`/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[#>*_~-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const words = plain ? plain.split(WORD_SPLIT_RE).filter(Boolean).length : 0;
-  return { words, chars: plain.length };
-}
-
 const BlockNoteEditor = lazy(
   () => import('@/components/editor/BlockNoteEditor')
 );
@@ -158,8 +141,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
   const nodes = useCanvasStore((s) => s.nodes);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
-  const views = useCanvasStore((s) => s.views);
-  const activeViewId = useCanvasStore((s) => s.activeViewId);
   const folderId =
     typeof node.folderId === 'string' ? node.folderId : undefined;
   const noteIdRaw = node.data.noteId;
@@ -171,10 +152,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const contentRaw = node.data.content;
   const content = typeof contentRaw === 'string' ? contentRaw : undefined;
   const dataTypeRaw = node.data.type;
-  const createdAtRaw = node.data.createdAt;
-  const createdAt = typeof createdAtRaw === 'string' ? createdAtRaw : undefined;
-  const updatedAtRaw = node.data.updatedAt;
-  const updatedAt = typeof updatedAtRaw === 'string' ? updatedAtRaw : undefined;
   const isFolderChild = Boolean(folderId);
 
   const updateFocusedData = useCallback(
@@ -281,12 +258,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
 
-  const wordCounts = useMemo(() => countMarkdown(content ?? ''), [content]);
-  const activeViewName = useMemo(
-    () => views.find((v) => v.id === activeViewId)?.name,
-    [views, activeViewId]
-  );
-
   const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const didToastOnErrorRef = useRef(false);
@@ -338,37 +309,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     onClose();
   }, [getNodes, getViewport, setCenter, folderId, node.id, onClose]);
 
-  // Notes go fullscreen; other content keeps the original centered modal size.
-  const targetWidth = isText
-    ? window.innerWidth
-    : Math.min(800, window.innerWidth * 0.8);
-  const targetHeight = isText
-    ? window.innerHeight
-    : Math.min(900, window.innerHeight * 0.85);
-
-  // Target position
-  const targetX = (window.innerWidth - targetWidth) / 2;
-  const targetY = (window.innerHeight - targetHeight) / 2;
-
-  const targetBorderRadius = isText ? 0 : 32;
-  const initialBorderRadius = isText ? 0 : 24;
-
-  // Compute scale and translate for FLIP animation
-  const flip = useMemo(() => {
-    const scaleX = node.rect.width / targetWidth;
-    const scaleY = node.rect.height / targetHeight;
-
-    const cardCenterX = node.rect.left + node.rect.width / 2;
-    const cardCenterY = node.rect.top + node.rect.height / 2;
-    const targetCenterX = targetX + targetWidth / 2;
-    const targetCenterY = targetY + targetHeight / 2;
-
-    const translateX = cardCenterX - targetCenterX;
-    const translateY = cardCenterY - targetCenterY;
-
-    return { scaleX, scaleY, translateX, translateY };
-  }, [node.rect, targetWidth, targetHeight, targetX, targetY]);
-
   // Prevent background scrolling
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -377,9 +317,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, []);
 
-  // Cmd/Ctrl + ←/→ navigate to the previous / next focusable item. Mirrors the
-  // on-screen chevron buttons; modifier-gated so plain ←/→ stay available to
-  // any focused input or editor inside the modal.
+  // Cmd/Ctrl + ←/→ navigate to the previous / next focusable item.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) {
@@ -401,9 +339,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, [handleNavigate, nextItem, previousItem]);
 
-  // Fallback ESC handler at document capture phase. Fires before any
-  // bubble-phase listener so the focused view always closes even if a
-  // downstream handler calls stopPropagation.
+  // Fallback ESC handler
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -420,256 +356,136 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   return (
     <motion.div
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-60 flex bg-white dark:bg-zinc-950"
       exit={{ opacity: 0 }}
       initial={{ opacity: 0 }}
-      onClick={handleClose}
-      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+      transition={{ duration: 0.15 }}
     >
-      <motion.button
-        animate={{ opacity: 1, x: 0 }}
-        className="absolute top-8 left-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
-        exit={{ opacity: 0, x: -20 }}
-        initial={{ opacity: 0, x: -20 }}
-        onClick={handleClose}
-        transition={{
-          type: 'spring',
-          damping: 20,
-          stiffness: 300,
-          delay: 0.15,
-        }}
-        whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <ArrowLeft size={24} />
-      </motion.button>
-
-      <div className="absolute top-8 right-8 z-70 flex items-center gap-3">
-        {isText && saveStatus !== 'idle' ? (
-          <motion.div
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            initial={{ opacity: 0, y: -20 }}
-            transition={{
-              type: 'spring',
-              damping: 20,
-              stiffness: 300,
-              delay: 0.15,
-            }}
-          >
-            <SaveIndicator
-              className="bg-black/40 backdrop-blur-md"
-              lastSavedAt={lastSavedAt}
-              status={saveStatus}
-            />
-          </motion.div>
-        ) : null}
-
-        <motion.button
-          animate={{ opacity: 1, x: 0 }}
-          aria-label={m.focused_close()}
-          className="rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
-          exit={{ opacity: 0, x: 20 }}
-          initial={{ opacity: 0, x: 20 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClose();
-          }}
-          transition={{
-            type: 'spring',
-            damping: 20,
-            stiffness: 300,
-            delay: 0.15,
-          }}
-          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <X size={24} />
-        </motion.button>
-      </div>
-
-      {isText ? (
-        <motion.div
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-20 left-8 z-70 hidden items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-white/60 text-xs backdrop-blur-md min-[500px]:flex"
-          exit={{ opacity: 0, y: -10 }}
-          initial={{ opacity: 0, y: -10 }}
-          transition={{
-            type: 'spring',
-            damping: 20,
-            stiffness: 300,
-            delay: 0.2,
-          }}
-        >
-          {createdAt ? (
-            <span>
-              {m.focused_created_at({ time: formatRelativeTime(createdAt) })}
-            </span>
-          ) : null}
-          {createdAt && updatedAt && updatedAt !== createdAt ? (
-            <span className="opacity-40"> · </span>
-          ) : null}
-          {updatedAt && updatedAt !== createdAt ? (
-            <span>
-              {m.focused_updated_at({ time: formatRelativeTime(updatedAt) })}
-            </span>
-          ) : null}
-          {(createdAt || updatedAt) && wordCounts.words > 0 ? (
-            <span className="opacity-40"> · </span>
-          ) : null}
-          {wordCounts.words > 0 ? (
-            <span>
-              {m.focused_word_count({
-                words: wordCounts.words,
-                chars: wordCounts.chars,
-              })}
-            </span>
-          ) : null}
-          {activeViewName ? (
-            <>
-              <span className="opacity-40"> · </span>
-              <span>{activeViewName}</span>
-            </>
-          ) : null}
-        </motion.div>
-      ) : null}
-
-      {previousItem ? (
-        <motion.button
-          animate={{ opacity: 1, x: 0 }}
-          aria-label="Previous item"
-          className="absolute top-1/2 left-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
-          exit={{ opacity: 0, x: -20 }}
-          initial={{ opacity: 0, x: -20 }}
-          onClick={(event) => {
-            event.stopPropagation();
-            handleNavigate(previousItem);
-          }}
-          transition={{
-            type: 'spring',
-            damping: 20,
-            stiffness: 300,
-            delay: 0.15,
-          }}
-          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <ChevronLeft size={24} />
-        </motion.button>
-      ) : null}
-
-      {nextItem ? (
-        <motion.button
-          animate={{ opacity: 1, x: 0 }}
-          aria-label="Next item"
-          className="absolute top-1/2 right-8 z-70 rounded-full bg-black/40 p-3 text-white backdrop-blur-md transition-colors hover:bg-black/60"
-          exit={{ opacity: 0, x: 20 }}
-          initial={{ opacity: 0, x: 20 }}
-          onClick={(event) => {
-            event.stopPropagation();
-            handleNavigate(nextItem);
-          }}
-          transition={{
-            type: 'spring',
-            damping: 20,
-            stiffness: 300,
-            delay: 0.15,
-          }}
-          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.25)' }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <ChevronRight size={24} />
-        </motion.button>
-      ) : null}
-
-      <motion.div
-        animate={{
-          x: 0,
-          y: 0,
-          scaleX: 1,
-          scaleY: 1,
-          borderRadius: targetBorderRadius,
-        }}
-        className="absolute overflow-hidden shadow-2xl"
-        exit={{
-          x: flip.translateX,
-          y: flip.translateY,
-          scaleX: flip.scaleX,
-          scaleY: flip.scaleY,
-          borderRadius: initialBorderRadius,
-        }}
-        initial={{
-          x: flip.translateX,
-          y: flip.translateY,
-          scaleX: flip.scaleX,
-          scaleY: flip.scaleY,
-          borderRadius: initialBorderRadius,
-        }}
+      {/* Floating Back Button (positioned below macOS traffic lights) */}
+      <button
+        aria-label={m.focused_close()}
+        className="absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
         onClick={(e) => {
           e.stopPropagation();
+          handleClose();
         }}
-        style={{
-          top: targetY,
-          left: targetX,
-          width: targetWidth,
-          height: targetHeight,
-          transformOrigin: 'center center',
-        }}
-        transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+        type="button"
       >
-        <div className="h-full">
-          {node.type === 'image' ? (
-            <ImageZoomPan>
-              <ImageContent
-                data={node.data as unknown as ImageData}
-                isFocused={true}
-              />
-            </ImageZoomPan>
-          ) : node.type === 'asset' ? (
-            <AssetContent data={node.data} isFocused={true} />
-          ) : node.type === 'link' ? (
-            <LinkContent
-              data={node.data}
-              isFocused={true}
-              onUrlChange={handleLinkUrlChange}
-            />
-          ) : isText ? (
-            <Suspense fallback={<FocusedSkeleton color={color} />}>
-              <BlockNoteEditor
-                color={color}
-                data={node.data}
-                key={node.id}
-                markdown={content}
-                nodeId={node.id}
-                noteId={noteId}
-                onMarkdownChange={(markdown) => {
-                  updateFocusedData({
-                    content: markdown,
-                    previewBlocks: undefined,
-                    previewExcerpt: undefined,
-                    previewHtml: undefined,
-                    previewVersion: undefined,
-                  });
-                }}
-                onPreviewUpdate={isFolderChild ? updateFocusedData : undefined}
-                onSaveStatusChange={handleSaveStatusChange}
-                onTitleChange={(nextTitle) => {
-                  updateFocusedData({ title: nextTitle });
-                }}
-                title={title}
-              />
-            </Suspense>
-          ) : (
-            <CardContent
-              data={node.data as unknown as CardContentData}
-              isFocused={true}
-              onChange={(newData) => {
-                commitFocusedData(newData);
-              }}
-            />
-          )}
+        <ArrowLeft size={16} />
+      </button>
+
+      {/* Floating Previous/Next Navigation (positioned center left/right) */}
+      {previousItem && (
+        <button
+          aria-label="Previous item"
+          className="absolute top-1/2 left-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNavigate(previousItem);
+          }}
+          title="Previous"
+          type="button"
+        >
+          <ChevronLeft size={16} />
+        </button>
+      )}
+      {nextItem && (
+        <button
+          aria-label="Next item"
+          className="absolute top-1/2 right-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNavigate(nextItem);
+          }}
+          title="Next"
+          type="button"
+        >
+          <ChevronRight size={16} />
+        </button>
+      )}
+
+      {/* Floating Save Status (bottom right) */}
+      {isText && saveStatus !== 'idle' && (
+        <div className="absolute right-6 bottom-6 z-70 text-xs text-zinc-400">
+          <SaveIndicator lastSavedAt={lastSavedAt} status={saveStatus} />
         </div>
-      </motion.div>
+      )}
+
+      {/* Content Area */}
+      <div
+        className="flex h-full w-full justify-center overflow-hidden"
+        onClick={handleClose}
+      >
+        <div
+          className={
+            isText
+              ? 'h-full w-full'
+              : 'h-full w-full max-w-5xl p-4 pt-16 md:p-12'
+          }
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className={
+              isText
+                ? 'h-full w-full'
+                : 'h-full w-full overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-2xl dark:border-white/5 dark:bg-zinc-900'
+            }
+          >
+            {node.type === 'image' ? (
+              <ImageZoomPan>
+                <ImageContent
+                  data={node.data as unknown as ImageData}
+                  isFocused={true}
+                />
+              </ImageZoomPan>
+            ) : node.type === 'asset' ? (
+              <AssetContent data={node.data} isFocused={true} />
+            ) : node.type === 'link' ? (
+              <LinkContent
+                data={node.data}
+                isFocused={true}
+                onUrlChange={handleLinkUrlChange}
+              />
+            ) : isText ? (
+              <Suspense fallback={<FocusedSkeleton color={color} />}>
+                <BlockNoteEditor
+                  color={color}
+                  data={node.data}
+                  key={node.id}
+                  markdown={content}
+                  nodeId={node.id}
+                  noteId={noteId}
+                  onMarkdownChange={(markdown) => {
+                    updateFocusedData({
+                      content: markdown,
+                      previewBlocks: undefined,
+                      previewExcerpt: undefined,
+                      previewHtml: undefined,
+                      previewVersion: undefined,
+                    });
+                  }}
+                  onPreviewUpdate={
+                    isFolderChild ? updateFocusedData : undefined
+                  }
+                  onSaveStatusChange={handleSaveStatusChange}
+                  onTitleChange={(nextTitle) => {
+                    updateFocusedData({ title: nextTitle });
+                  }}
+                  title={title}
+                />
+              </Suspense>
+            ) : (
+              <CardContent
+                data={node.data as unknown as CardContentData}
+                isFocused={true}
+                onChange={(newData) => {
+                  commitFocusedData(newData);
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 };

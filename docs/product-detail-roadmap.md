@@ -220,30 +220,66 @@
 
 ---
 
-## Phase 6 · 右键 / 多选 / 拖入（3-5 天）
+## Phase 6 · 右键 / 多选 / 拖入（3-5 天）⚠️ 部分完成
 
-> ⚠️ 启动前先 `git log --oneline -- src/mainview/components/canvas/ContextMenu.tsx src/mainview/hooks/useContextMenu.ts` 看看自核查后 G 组改动情况。
+> **状态检查（2026-06-06）**：已完成 Bun RPC 基建 + G1/G2/G3 Context Menu + G5 多选 + H1，但 H2（全屏 Drop zone）和 H3（导入 Markdown）未实现。
 
-### 任务
+### 任务完成情况
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| G1 | Image 右键加：替换图片 / 复制图片地址 / 在 Finder 显示 | `ContextMenu.tsx:134-151`、`useContextMenu.ts` |
-| G2 | Link 右键加：打开链接（`Bun.openExternal`）/ 复制 URL / 重新抓取（暴露 `handleRetry`） | `ContextMenu.tsx:153-172`、`LinkNode.tsx` |
-| G3 | Asset 右键加：在 Finder 显示（bun 侧 `showItemInFolder`）/ 替换文件 / 重命名 | `ContextMenu.tsx:174-192`、`src/bun/attachments.ts` 新增 RPC |
-| G5 | 多选时菜单分支：批量改色 / 批量加 tag / 批量移到 view / 删除 | `ContextMenu.tsx`、`useContextMenu.ts:188-212` |
-| H2 | `<ReactFlow>` 上层挂一个 `useDropZone` hook → dragenter 触发全屏 backdrop + "Drop to add" 文案 | `routes/index.tsx:537-587` 新组件 |
-| H1 | LinkCreateForm 挂载时 `navigator.clipboard.readText()` → 若是 URL 则预填 | `LinkCreateForm.tsx:15-17` |
-| H3 | CreateMenu 加"Import markdown..."项 → bun 侧 `showOpenDialog` → 创建 BlockNote 卡片 | `ViewSwitcher.tsx`、新建 `src/bun/markdownImport.ts` |
+| ID | 改动 | 文件 | 状态 |
+|---|---|---|---|
+| G1 | Image 右键加：替换图片 / 复制图片地址 / 在 Finder 显示 | `ContextMenu.tsx:161-190`、`useContextMenu.ts:448-493` | ✅ 完成 |
+| G2 | Link 右键加：打开链接（`Bun.openExternal`）/ 复制 URL / 重新抓取（暴露 `handleRetry`） | `ContextMenu.tsx:192-215`、`useContextMenu.ts:406-446` | ✅ 完成 |
+| G3 | Asset 右键加：在 Finder 显示（bun 侧 `showItemInFolder`）/ 替换文件 / 重命名 | `ContextMenu.tsx:230-256`、`useContextMenu.ts:466-506`、`src/bun/attachments.ts:242-253` | ✅ 完成 |
+| G5 | 多选时菜单分支：批量改色 / 批量加 tag / 批量移到 view / 删除 | `ContextMenu.tsx:217-228`、`useContextMenu.ts:276-315` | ✅ 完成（不含移到 view） |
+| H2 | `<ReactFlow>` 上层挂一个 `useDropZone` hook → dragenter 触发全屏 backdrop + "Drop to add" 文案 | `routes/index.tsx:537-587` 新组件 | ❌ 未实现 |
+| H1 | LinkCreateForm 挂载时 `navigator.clipboard.readText()` → 若是 URL 则预填 | `LinkCreateForm.tsx:15-38` | ✅ 完成 |
+| H3 | CreateMenu 加"Import markdown..."项 → bun 侧 `showOpenDialog` → 创建 BlockNote 卡片 | `ViewSwitcher.tsx`、新建 `src/bun/markdownImport.ts` | ❌ 未实现 |
 
-### 验收
-- 6 张 link 卡片选中后右键 → 批量改色生效。
-- 拖 PDF 进窗口 → 全屏蒙层。
-- Cmd+V 在 LinkCreateForm 自动填充。
-- `bun run test` 中新增的 G3/H3 单元测试通过。
+### 已实现内容
+
+#### Bun RPC 基建（§1）
+- ✅ `revealAttachment` - 在 Finder 显示（G1/G3 共用）
+- ✅ `openExternalUrl` - 打开链接（G2）
+- ✅ `importMarkdownFiles` - 导入 Markdown（H3，RPC 已就绪但 UI 未接入）
+- ✅ 所有 RPC wrappers 已添加到 `src/mainview/lib/rpc.ts`
+
+#### Context Menu 功能（G1/G2/G3）
+- ✅ Image 右键：替换图片、复制图片地址、在 Finder 显示
+- ✅ Link 右键：打开链接、复制 URL、重新抓取
+- ✅ Asset 右键：在 Finder 显示、替换文件、重命名
+- ✅ 所有相关 i18n key 已添加到 `messages/en.json` 和 `messages/zh.json`
+
+#### 多选功能（G5）
+- ✅ 批量改色
+- ✅ 批量加 tag
+- ✅ 批量删除
+- ℹ️ 批量移到 view 未实现（按方案决策，不在验收标准内）
+
+#### 其他功能
+- ✅ H1 LinkCreateForm 粘贴板预填 URL
+
+### 未实现内容
+
+#### H2 全屏 Drop zone
+- ❌ `routes/index.tsx` 中没有找到 "Drop to add"、useDropZone、dragenter、dragleave 等相关代码
+- 需要在 ReactFlow 上层添加全屏拖拽蒙层
+
+#### H3 CreateMenu 导入 Markdown
+- ❌ `ViewSwitcher.tsx` 中没有 "Import markdown" 菜单项
+- ❌ `creatableNodes.ts` 中没有导入 markdown 的菜单定义
+- ℹ️ i18n key `menu_import_markdown` 已存在，但功能未接入
+- ℹ️ Bun RPC `importMarkdownFiles` 已实现，但 UI 未调用
+
+### 验收状态
+- ✅ 6 张 link 卡片选中后右键 → 批量改色生效
+- ❌ 拖 PDF 进窗口 → 全屏蒙层（未实现）
+- ✅ Cmd+V 在 LinkCreateForm 自动填充
+- ⚠️ `bun run test` 中新增的 G3/H3 单元测试（需检查是否有相关测试）
 
 ### 决策点
-- **G3 "重命名"语义**：是改 attachment 真实文件名（影响 workspace 文件系统）还是仅改卡片 displayName？建议只改 displayName，避免破坏导出/同步。
+- **G3 "重命名"语义**：已实现为仅改卡片 displayName（`data.title`），不动 workspace 真实文件名
+- **G5 "批量移到 view"**：按方案决策未实现（不在验收标准内）
 
 ---
 
@@ -287,26 +323,55 @@
 
 ---
 
-## Phase 8 · Settings 重构（3-5 天）
+## Phase 8 · Settings 重构（3-5 天）✅ 已完成
+
+> 已完成（2026-06-06）。所有任务全部落地，无新 npm 依赖。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| I2 | SettingsApp 改成 macOS 风格左侧 sidebar + 右侧 panel；分四组：General / Workspace / Shortcuts / About | `SettingsApp.tsx` 整体重构 |
-| I1 | 各组新增： <br>· **General**: 字体 / 自动保存间隔 / 画布背景 <br>· **Workspace**: 当前路径 + 切换 + "在 Finder 打开" + 导出全部（zip） + 备份 <br>· **Shortcuts**: 只读 cheatsheet（先不做自定义热键，做 readonly 表） <br>· **About**: 版本号 / 更新日志链接 / 检查更新（接 Electrobun updater） | + 多个 `src/bun/*` RPC |
-| I3 | TrashSection 加：清空全部 + 按 deletedAt 排序 + `title={fullPath}` | `SettingsApp.tsx:523-597` |
-| F2 | rename 校验：同名提示 + maxLength=80 | `ViewSwitcher.tsx:390-402` |
-| F1 | ViewSwitcher 触发器加 `· N nodes` | `ViewSwitcher.tsx:468-482`，从 viewStore 取 |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | I2 | SettingsApp 改成 macOS 风格左侧 sidebar + 右侧 panel；分四组：General / Workspace / Shortcuts / About | `SettingsApp.tsx` 整体重构 |
+| ✅ 已完成 | I1 | 各组新增： <br>· **General**: 字体 / 自动保存间隔 / 画布背景 / 主题 / 语言 <br>· **Workspace**: 当前路径 + 切换 + "在 Finder 打开" + 导出全部（zip） + 备份 <br>· **Shortcuts**: 只读 cheatsheet <br>· **About**: 版本号 / 更新日志链接 / 检查更新 | `GeneralPanel.tsx`、`WorkspacePanel.tsx`、`ShortcutsPanel.tsx`、`AboutPanel.tsx` + 多个 RPC |
+| ✅ 已完成 | I3 | TrashSection 加：清空全部 + 按 deletedAt 排序 + `title={fullPath}` | `WorkspacePanel.tsx:247-450` |
+| ✅ 已完成 | F2 | rename 校验：同名提示 + maxLength=80 | `ViewSwitcher.tsx:380-418` |
+| ✅ 已完成 | F1 | ViewSwitcher 触发器加 `· N nodes` | `ViewSwitcher.tsx:425-429, 500-502` |
 
-### 验收
-- 所有 Settings 改动可来回切换并持久化。
-- workspace 切换后刷新加载新数据。
-- Trash 清空全部带二次确认。
+### 实际落地
+
+| 计划项 | 状态 | 实际方案 |
+|---|---|---|
+| I2 sidebar + panel | ✅ 完成 | macOS 风格左侧固定宽度 sidebar（w-44），右侧内容区可滚动；四个 section 通过 activeSection state 切换；Sidebar 组件独立，带 hover/active 状态和 [-webkit-app-region] 处理 |
+| I1 General | ✅ 完成 | GeneralPanel 支持主题（system/light/dark）、语言（en/zh）、字体（system/serif/mono）、画布背景（default/paper/mono）、自动保存间隔（500/800/2000/5000ms）；所有设置通过 SettingsClient 持久化 |
+| I1 Workspace | ✅ 完成 | WorkspacePanel 包含三个子 section：WorkspacePathSection（路径显示/复制/在 Finder 打开/切换/导出）、TrashSection（清空全部/按 deletedAt 排序/恢复/永久删除）、ContentCleanupSection（未链接文件清理）；所有操作带错误处理和用户反馈 |
+| I1 Shortcuts | ✅ 完成 | ShortcutsPanel 只读 cheatsheet，按 View/Edit/Nav 三组分类；自动检测 Mac/Windows 显示对应修饰键（⌘ vs Ctrl）；表格布局，带 kbd 样式 |
+| I1 About | ✅ 完成 | AboutPanel 显示应用名称、版本号、channel、commit hash；检查更新按钮（dev channel 禁用）；更新状态 banner（checking/available/none/error）；GitHub releases 链接 |
+| I3 TrashSection | ✅ 完成 | 清空全部带二次确认对话框；条目按 deletedAt 降序排列；每个条目显示完整路径（title 属性）和删除时间；支持恢复和永久删除 |
+| F2 rename 校验 | ✅ 完成 | 空名称提示、长度限制（VIEW_NAME_MAX_LENGTH=80）、同名冲突检测（大小写不敏感）；校验失败时阻止确认并显示错误提示 |
+| F1 节点计数 | ✅ 完成 | ViewSwitcher 触发器显示 `· N nodes`（单复数区分）；从 canvasStore 获取当前节点数；实时更新 |
+
+### 改动文件
+- 新增：`src/mainview/components/settings/panels/GeneralPanel.tsx`（General 设置面板）
+- 新增：`src/mainview/components/settings/panels/WorkspacePanel.tsx`（Workspace 设置面板，含 Trash 和 Cleanup）
+- 新增：`src/mainview/components/settings/panels/ShortcutsPanel.tsx`（快捷键 cheatsheet）
+- 新增：`src/mainview/components/settings/panels/AboutPanel.tsx`（About 面板）
+- 改：`src/mainview/components/settings/SettingsApp.tsx`（sidebar + panel 架构重构）
+- 改：`src/mainview/components/canvas/ViewSwitcher.tsx`（F1/F2 rename 校验和节点计数）
+- 改：`src/mainview/settingsClient.ts`（新增 WorkspaceInfo、TrashEntry、UnlinkedFileEntry、AppInfo、UpdateCheckResult 等类型和相关 RPC）
+- 改：`src/bun/index.ts`（新增 getWorkspaceInfo、switchWorkspace、exportWorkspaceArchive、getTrashEntries、restoreTrashEntry、purgeTrashEntry、clearTrash、getUnlinkedFiles、deleteUnlinkedFile、getAppInfo、checkForUpdate RPC）
+- i18n：`messages/en.json` + `messages/zh.json` 新增大量 Settings 相关翻译 key
+
+### 验收（已通过）
+- ✅ 所有 Settings 改动可来回切换并持久化
+- ✅ workspace 切换后刷新加载新数据
+- ✅ Trash 清空全部带二次确认
+- ✅ rename 校验正确拦截空名称、过长名称、同名冲突
+- ✅ ViewSwitcher 正确显示节点计数
+- ✅ 四个 panel 功能完整且 UI 符合 macOS 风格
 
 ### 决策点
-- **I1 范围**：是把列表全做还是先做 sidebar + workspace 切换 + about？后两组（字体/自动保存间隔/快捷键自定义）可以独立成 Phase 8.1。
-- **更新检查**：依赖 Electrobun updater 是否实现，若没有先做占位 "Check for updates" 按钮 + 跳转 GitHub release。
+- **I1 范围**：已全部完成，包括字体/自动保存间隔/快捷键 cheatsheet（自定义热键未做，按原计划为 readonly）
+- **更新检查**：已实现 RPC 和 UI，dev channel 显示提示信息，stable channel 可检查更新
 
 ---
 

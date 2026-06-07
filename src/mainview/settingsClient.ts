@@ -220,6 +220,17 @@ async function initElectrobun(): Promise<SettingsElectroview | null> {
     const Electrobun = mod.default;
     const { Electroview } = mod;
     const rpc = Electroview.defineRPC<SettingsRPC>({
+      // Several settings handlers block on native modal dialogs
+      // (`switchWorkspace`, `exportWorkspaceArchive`, `openWorkspaceFolder`)
+      // or run long-lived work (zipping a large workspace, the update check).
+      // The default request timeout is only 1s, which made those requests
+      // reject with "RPC request timed out" the moment the user paused on the
+      // OS file picker — surfacing as "no response" / "Workspace export
+      // failed". These operations are user-driven and have no sensible upper
+      // bound, so disable the renderer-side timeout entirely. Handler errors
+      // still reject promptly because the bun side replies with a failure
+      // response when a handler throws.
+      maxRequestTime: Number.POSITIVE_INFINITY,
       handlers: {
         requests: {},
         messages: {

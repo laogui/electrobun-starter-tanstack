@@ -310,6 +310,38 @@ describe('notes', () => {
     expect(readFileSync(outsidePath, 'utf8')).toContain('Secret');
   });
 
+  it('deriveMarkdownTitle prefers frontmatter, then heading, then filename', async () => {
+    const { deriveMarkdownTitle } = await import('./notes');
+
+    expect(
+      deriveMarkdownTitle({ title: ' FM Title ' }, '# Heading\nBody', 'x.md')
+    ).toBe('FM Title');
+    expect(deriveMarkdownTitle({}, '# Heading\nBody', 'fallback.md')).toBe(
+      'Heading'
+    );
+    expect(deriveMarkdownTitle({}, 'No heading', '/tmp/my-note.md')).toBe(
+      'my-note'
+    );
+  });
+
+  it('prepareImportedMarkdownBody strips a derived heading but keeps frontmatter titles', async () => {
+    const { prepareImportedMarkdownBody } = await import('./notes');
+
+    expect(
+      prepareImportedMarkdownBody(
+        { title: 'Card Title' },
+        '# Ignored\nBody',
+        'note.md'
+      )
+    ).toBe('# Ignored\nBody');
+    expect(
+      prepareImportedMarkdownBody({}, '# Card Title\n\nBody copy', 'note.md')
+    ).toBe('Body copy');
+    expect(
+      prepareImportedMarkdownBody({}, 'Intro\n\n# Later', 'later.md')
+    ).toBe('Intro\n\n# Later');
+  });
+
   it('deleteNoteFile removes an existing note and returns false for missing files', async () => {
     const { deleteNoteFile } = await import('./notes');
     const notePath = join(workspaceRoot, 'content', 'delete-me.md');

@@ -224,6 +224,33 @@ export function deriveMarkdownTitle(
   return base.trim() || 'Untitled';
 }
 
+/**
+ * Normalize an imported markdown body for workspace storage. When the display
+ * title is derived from the first `# Heading`, strip that heading so the card
+ * title and BlockNote body do not duplicate it.
+ */
+const LEADING_HEADING_RE = /^#\s+(.+?)(?:\r?\n|$)/;
+
+export function prepareImportedMarkdownBody(
+  frontmatter: Record<string, unknown>,
+  body: string,
+  fileName: string
+): string {
+  if (typeof frontmatter.title === 'string' && frontmatter.title.trim()) {
+    return body;
+  }
+  const match = LEADING_HEADING_RE.exec(body);
+  if (!match) {
+    return body;
+  }
+  const heading = match[1]?.trim();
+  const derivedTitle = deriveMarkdownTitle(frontmatter, body, fileName);
+  if (!heading || heading !== derivedTitle) {
+    return body;
+  }
+  return body.slice(match[0].length).trimStart();
+}
+
 /** Create a new note file. Returns the workspace-relative file path. */
 export async function createNote(
   wsPath: string,

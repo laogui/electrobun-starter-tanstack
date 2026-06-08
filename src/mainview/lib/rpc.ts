@@ -256,7 +256,8 @@ export async function rpcOpenExternalUrl(url: string) {
 
 export async function rpcImportMarkdownFiles(): Promise<{
   canceled?: boolean;
-  notes: Array<{ noteId: string; title: string }>;
+  failedCount?: number;
+  notes: Array<{ content?: string; noteId: string; title: string }>;
 }> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

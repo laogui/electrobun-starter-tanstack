@@ -366,10 +366,14 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     unfurlAttemptRef.current = normalized;
     updateNodeData(id, { unfurlStatus: 'loading' });
 
-    let cancelled = false;
+    // Apply the result only while this url is still the active attempt. The
+    // effect re-runs when we set the status to 'loading' above (and again when
+    // the user edits the url); using the attempt ref instead of a per-run
+    // `cancelled` flag prevents those re-runs from discarding an in-flight
+    // request, which otherwise leaves the node stuck on "Loading preview...".
     rpcUnfurlLink(normalized)
       .then((result) => {
-        if (cancelled || !result) {
+        if (unfurlAttemptRef.current !== normalized || !result) {
           return;
         }
         if (result.status === 'failed') {
@@ -391,7 +395,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         });
       })
       .catch(() => {
-        if (cancelled) {
+        if (unfurlAttemptRef.current !== normalized) {
           return;
         }
         updateNodeData(id, {
@@ -399,10 +403,6 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           unfurlError: 'Could not load link preview.',
         });
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [data.url, data.unfurlStatus, id, unfurlVisible, updateNodeData]);
 
   return (

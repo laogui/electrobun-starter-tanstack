@@ -582,7 +582,7 @@ function CanvasComponent() {
       }
       if (files.length > 0) {
         event.preventDefault();
-        void createAssetsFromFiles(files, currentPasteAnchor());
+        createAssetsFromFiles(files, currentPasteAnchor());
         return;
       }
 
@@ -907,6 +907,7 @@ function CanvasComponent() {
         connectionRadius={30}
         defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
         defaultViewport={savedViewport ?? undefined}
+        disableKeyboardA11y
         edges={edges}
         edgeTypes={edgeTypes}
         elevateEdgesOnSelect
@@ -915,6 +916,7 @@ function CanvasComponent() {
         minZoom={0.1}
         nodes={nodesWithState}
         nodesDraggable={!(spacePanActive || editableInteractionLocked)}
+        nodesFocusable={false}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
         onConnectEnd={onConnectEnd}

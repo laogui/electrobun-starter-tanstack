@@ -73,6 +73,8 @@ export interface CreateNodeOptions {
   anchorCenter?: { x: number; y: number };
   /** Additional data to merge over the node kind's registry defaults. */
   data?: Record<string, unknown>;
+  /** When false, skip the post-create viewport pan (batch imports). Default true. */
+  focusViewport?: boolean;
 }
 
 export interface AddConnectionOptions {
@@ -1390,7 +1392,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
     set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
 
-    if (typeof rfInstance?.setCenter === 'function') {
+    if (
+      options?.focusViewport !== false &&
+      typeof rfInstance?.setCenter === 'function'
+    ) {
       rfInstance.setCenter(
         placement.x + spec.size.width / 2,
         placement.y + spec.size.height / 2,

@@ -70,6 +70,8 @@
   "toast_reveal_failed": "找不到文件",
   "toast_replace_failed": "替换失败",
   "toast_markdown_imported": "已导入 {count} 篇笔记",
+  "toast_markdown_import_failed": "导入失败",
+  "toast_markdown_import_partial": "已导入 {imported} 篇，{failed} 篇失败",
   "drop_to_add": "拖入以添加",
   "tag_editor_placeholder": "添加标签…",
   "tag_editor_add": "添加",

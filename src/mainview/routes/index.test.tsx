@@ -648,6 +648,10 @@ describe('routes/index', () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('link', {
+      anchorCenter: {
+        x: 512,
+        y: 384,
+      },
       data: {
         url: 'https://example.com/pasted',
         title: 'example.com',

@@ -158,6 +158,63 @@ describe('unfurlLink', () => {
     });
   });
 
+  it('extracts og metadata located deep inside a large head', async () => {
+    // Mimic sites (e.g. YouTube) that emit a very large <head> and place their
+    // Open Graph tags hundreds of KiB into the document.
+    const filler = `<meta name="x" content="${'a'.repeat(700 * 1024)}" />`;
+    const html = `<!doctype html><html><head>${filler}<meta property="og:title" content="Deep Title" /><meta property="og:description" content="Deep description." /><meta property="og:image" content="https://cdn.example.com/deep.png" /></head><body>ignored</body></html>`;
+    const response = new Response(html, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+    globalThis.fetch = vi.fn(async () => response) as unknown as typeof fetch;
+
+    const result = await unfurlLink('https://example.com/');
+    expect(result).toMatchObject({
+      status: 'ready',
+      title: 'Deep Title',
+      description: 'Deep description.',
+      imageUrl: 'https://cdn.example.com/deep.png',
+    });
+  });
+
+  it('stops reading the body once the head closes', async () => {
+    const encoder = new TextEncoder();
+    let chunkIndex = 0;
+    let readPastHead = false;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          chunkIndex += 1;
+          if (chunkIndex === 1) {
+            controller.enqueue(
+              encoder.encode(
+                '<!doctype html><html><head><title>Early Stop</title></head>'
+              )
+            );
+            return;
+          }
+          // Reading should have stopped after the first chunk closed the head.
+          readPastHead = true;
+          controller.enqueue(encoder.encode('<body>more</body>'));
+          controller.close();
+        },
+      },
+      // Disable prefetch so `pull` is only invoked when our reader asks for the
+      // next chunk; otherwise the stream proactively buffers a second chunk.
+      { highWaterMark: 0 }
+    );
+    const response = new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+    globalThis.fetch = vi.fn(async () => response) as unknown as typeof fetch;
+
+    const result = await unfurlLink('https://example.com/');
+    expect(result).toMatchObject({ status: 'ready', title: 'Early Stop' });
+    expect(readPastHead).toBe(false);
+  });
+
   it('returns failed when the response is not html', async () => {
     const response = new Response('hello', {
       status: 200,

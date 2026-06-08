@@ -128,25 +128,29 @@ vi.mock('./manifest', () => ({
     manifestMocks.saveManifest(...args),
 }));
 
-vi.mock('./notes', () => ({
-  buildNoteIndex: (...args: Parameters<typeof noteMocks.buildNoteIndex>) =>
-    noteMocks.buildNoteIndex(...args),
-  cardDataToNote: (...args: Parameters<typeof noteMocks.cardDataToNote>) =>
-    noteMocks.cardDataToNote(...args),
-  createNote: (...args: Parameters<typeof noteMocks.createNote>) =>
-    noteMocks.createNote(...args),
-  deleteNoteFile: (...args: Parameters<typeof noteMocks.deleteNoteFile>) =>
-    noteMocks.deleteNoteFile(...args),
-  listFilesRecursive: (
-    ...args: Parameters<typeof noteMocks.listFilesRecursive>
-  ) => noteMocks.listFilesRecursive(...args),
-  loadNote: (...args: Parameters<typeof noteMocks.loadNote>) =>
-    noteMocks.loadNote(...args),
-  noteToCardData: (...args: Parameters<typeof noteMocks.noteToCardData>) =>
-    noteMocks.noteToCardData(...args),
-  saveNote: (...args: Parameters<typeof noteMocks.saveNote>) =>
-    noteMocks.saveNote(...args),
-}));
+vi.mock('./notes', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./notes')>();
+  return {
+    ...actual,
+    buildNoteIndex: (...args: Parameters<typeof noteMocks.buildNoteIndex>) =>
+      noteMocks.buildNoteIndex(...args),
+    cardDataToNote: (...args: Parameters<typeof noteMocks.cardDataToNote>) =>
+      noteMocks.cardDataToNote(...args),
+    createNote: (...args: Parameters<typeof noteMocks.createNote>) =>
+      noteMocks.createNote(...args),
+    deleteNoteFile: (...args: Parameters<typeof noteMocks.deleteNoteFile>) =>
+      noteMocks.deleteNoteFile(...args),
+    listFilesRecursive: (
+      ...args: Parameters<typeof noteMocks.listFilesRecursive>
+    ) => noteMocks.listFilesRecursive(...args),
+    loadNote: (...args: Parameters<typeof noteMocks.loadNote>) =>
+      noteMocks.loadNote(...args),
+    noteToCardData: (...args: Parameters<typeof noteMocks.noteToCardData>) =>
+      noteMocks.noteToCardData(...args),
+    saveNote: (...args: Parameters<typeof noteMocks.saveNote>) =>
+      noteMocks.saveNote(...args),
+  };
+});
 
 vi.mock('./preview', () => ({
   buildNotePreviewFromBlocks: (
@@ -246,6 +250,7 @@ interface CanvasHandlers {
   exportNotesMarkdown: AnyHandler;
   exportPng: AnyHandler;
   getSettings: AnyHandler;
+  importMarkdownFiles: AnyHandler;
   listViews: AnyHandler;
   loadAttachment: AnyHandler;
   loadBlockNote: AnyHandler;
@@ -1020,6 +1025,53 @@ describe('src/bun/index helpers', () => {
     expect(result.recoveredFromMarkdown).toBe(true);
     expect(result.markdown).toBe('legacy body');
     expect(result.blocks).toBeUndefined();
+  });
+
+  it('importMarkdownFiles imports readable files, strips derived headings, and reports failures', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    const importedPath = '/tmp/imported-note.md';
+    const missingPath = '/tmp/missing-note.md';
+
+    openFileDialogMock.mockResolvedValueOnce([importedPath, missingPath]);
+    bunFileMock.mockImplementation((p: string) => ({
+      exists: vi.fn().mockResolvedValue(p === importedPath),
+      text: vi.fn().mockResolvedValue('# Hello\n\nBody copy'),
+      json: vi.fn(),
+    }));
+    noteMocks.createNote.mockResolvedValue('content/hello-12345678.md');
+    noteMocks.saveNote.mockResolvedValue(undefined);
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '12345678-abcd-0000-0000-000000000000'
+    );
+
+    const result = (await canvasHandlers.importMarkdownFiles()) as {
+      canceled?: boolean;
+      failedCount?: number;
+      notes: Array<{ content?: string; noteId: string; title: string }>;
+    };
+
+    expect(result.canceled).toBeUndefined();
+    expect(result.failedCount).toBe(1);
+    expect(result.notes).toEqual([
+      {
+        content: 'Body copy',
+        noteId: 'note_12345678',
+        title: 'Hello',
+      },
+    ]);
+    expect(noteMocks.saveNote).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'content/hello-12345678.md',
+      expect.objectContaining({
+        createdAt: expect.any(String),
+        displayHint: 'text',
+        id: 'note_12345678',
+        title: 'Hello',
+        updatedAt: expect.any(String),
+      }),
+      'Body copy'
+    );
   });
 
   it('saveAttachment maps image extensions and rejects invalid data urls', async () => {

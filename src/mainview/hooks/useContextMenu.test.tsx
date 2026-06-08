@@ -1,9 +1,27 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useContextMenu } from '@/hooks/useContextMenu';
+
+const rpcMocks = vi.hoisted(() => ({
+  rpcImportMarkdownFiles: vi.fn(),
+}));
+
+vi.mock('@/lib/rpc', () => ({
+  rpcExportNoteMarkdown: vi.fn(),
+  rpcExportNotesMarkdown: vi.fn(),
+  rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
+  rpcOpenExternalUrl: vi.fn(),
+  rpcRevealAttachment: vi.fn(),
+}));
 
 const NODE_ID_RE = /^node-/;
 
@@ -156,6 +174,16 @@ const storeActions = {
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
+  toast_markdown_imported: ({ count }: { count: number }) =>
+    `Imported ${count}`,
+  toast_markdown_import_failed: () => 'Import failed',
+  toast_markdown_import_partial: ({
+    imported,
+    failed,
+  }: {
+    imported: number;
+    failed: number;
+  }) => `Imported ${imported}, failed ${failed}`,
   toast_node_deleted: () => 'Card deleted',
   toast_nodes_deleted: ({ count }: { count: number }) =>
     `${count} cards deleted`,
@@ -184,10 +212,15 @@ vi.mock('@/store/canvasStore', () => ({
 }));
 
 const viewport = { x: 10, y: 20, zoom: 2 };
+const screenToFlowPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({
+  x: x + 100,
+  y: y + 200,
+}));
 const zoomTo = vi.fn();
 const rfInstance = {
   current: {
     getViewport: () => viewport,
+    screenToFlowPosition,
     zoomTo,
   },
 };
@@ -528,6 +561,14 @@ const Harness = () => {
       >
         open-folder
       </button>
+      <button
+        onClick={async () => {
+          await handleContextMenuAction('import-markdown');
+        }}
+        type="button"
+      >
+        import-markdown
+      </button>
       <output aria-label="context-menu-state">
         {contextMenu ? JSON.stringify(contextMenu) : 'null'}
       </output>
@@ -536,6 +577,11 @@ const Harness = () => {
 };
 
 describe('useContextMenu', () => {
+  beforeEach(() => {
+    screenToFlowPosition.mockClear();
+    rpcMocks.rpcImportMarkdownFiles.mockReset();
+  });
+
   it('tracks pane/node/edge context menu state', () => {
     render(<Harness />);
 
@@ -580,6 +626,67 @@ describe('useContextMenu', () => {
     );
   });
 
+  it('imports markdown at the saved context-menu anchor', async () => {
+    rpcMocks.rpcImportMarkdownFiles.mockResolvedValueOnce({
+      notes: [
+        {
+          content: 'Body one',
+          noteId: 'note_import_1',
+          title: 'Imported One',
+        },
+        {
+          content: 'Body two',
+          noteId: 'note_import_2',
+          title: 'Imported Two',
+        },
+      ],
+    });
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'pane' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'import-markdown' }));
+    });
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcImportMarkdownFiles).toHaveBeenCalledTimes(1);
+      expect(screenToFlowPosition).toHaveBeenCalledWith({ x: 210, y: 180 });
+      expect(storeActions.createNode).toHaveBeenNthCalledWith(
+        1,
+        'card',
+        expect.anything(),
+        {
+          anchorCenter: { x: 310, y: 380 },
+          data: {
+            color: '#FFFFFF',
+            content: 'Body one',
+            noteId: 'note_import_1',
+            title: 'Imported One',
+            type: 'text',
+          },
+          focusViewport: false,
+        }
+      );
+      expect(storeActions.createNode).toHaveBeenNthCalledWith(
+        2,
+        'card',
+        expect.anything(),
+        {
+          anchorCenter: { x: 310, y: 380 },
+          data: {
+            color: '#FFFFFF',
+            content: 'Body two',
+            noteId: 'note_import_2',
+            title: 'Imported Two',
+            type: 'text',
+          },
+          focusViewport: true,
+        }
+      );
+    });
+  });
+
   it('creates a new note and dispatches node and edge actions', () => {
     render(<Harness />);
 
@@ -596,14 +703,12 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'new-note' }));
 
     expect(storeActions.saveSnapshot).toHaveBeenCalled();
+    expect(screenToFlowPosition).toHaveBeenCalledWith({ x: 210, y: 180 });
     expect(storeActions.createNode).toHaveBeenCalledWith(
       'card',
       expect.anything(),
       {
-        anchorCenter: {
-          x: (210 - viewport.x) / viewport.zoom,
-          y: (180 - viewport.y) / viewport.zoom,
-        },
+        anchorCenter: { x: 310, y: 380 },
       }
     );
     expect(storeState.nodes.at(-1)).toMatchObject({
@@ -783,10 +888,7 @@ describe('useContextMenu', () => {
 
     render(<RoutingHarness />);
 
-    const expectedAnchor = {
-      x: (210 - viewport.x) / viewport.zoom,
-      y: (180 - viewport.y) / viewport.zoom,
-    };
+    const expectedAnchor = { x: 310, y: 380 };
     const expectedScreen = { x: 210, y: 180 };
 
     fireEvent.click(screen.getByRole('button', { name: 'routing-pane' }));

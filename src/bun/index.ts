@@ -63,6 +63,7 @@ import {
   deriveMarkdownTitle,
   loadNote,
   parseFrontmatter,
+  prepareImportedMarkdownBody,
   saveNote,
 } from './notes';
 import {
@@ -546,7 +547,8 @@ interface CanvasRPC {
         params: Record<string, unknown>;
         response: {
           canceled?: boolean;
-          notes: Array<{ noteId: string; title: string }>;
+          failedCount?: number;
+          notes: Array<{ noteId: string; title: string; content?: string }>;
         };
       };
       unfurlLink: {
@@ -1815,9 +1817,13 @@ async function main() {
           });
           const paths = selected.filter(Boolean);
           if (paths.length === 0) {
-            return { canceled: true, notes: [] };
+            return { canceled: true, failedCount: 0, notes: [] };
           }
-          const notes: Array<{ noteId: string; title: string }> = [];
+          const notes: Array<{
+            noteId: string;
+            title: string;
+            content?: string;
+          }> = [];
           for (const path of paths) {
             try {
               const file = Bun.file(path);
@@ -1825,17 +1831,35 @@ async function main() {
                 continue;
               }
               const raw = await file.text();
-              const { frontmatter, body } = parseFrontmatter(raw);
-              const title = deriveMarkdownTitle(frontmatter, body, path);
+              const { frontmatter, body: rawBody } = parseFrontmatter(raw);
+              const title = deriveMarkdownTitle(frontmatter, rawBody, path);
+              const body = prepareImportedMarkdownBody(
+                frontmatter,
+                rawBody,
+                path
+              );
               const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
+              const now = new Date().toISOString();
+              const createdAt =
+                typeof frontmatter.createdAt === 'string' &&
+                frontmatter.createdAt.trim()
+                  ? frontmatter.createdAt.trim()
+                  : now;
               const filePath = await createNote(wsPath, noteId, title, 'text');
               await saveNote(
                 wsPath,
                 filePath,
-                { ...frontmatter, id: noteId, title, displayHint: 'text' },
+                {
+                  ...frontmatter,
+                  id: noteId,
+                  title,
+                  displayHint: 'text',
+                  createdAt,
+                  updatedAt: now,
+                },
                 body
               );
-              notes.push({ noteId, title });
+              notes.push({ noteId, title, content: body });
             } catch (error) {
               console.warn(
                 `[import] Failed to import markdown file ${path}:`,
@@ -1843,7 +1867,7 @@ async function main() {
               );
             }
           }
-          return { notes };
+          return { failedCount: paths.length - notes.length, notes };
         },
 
         unfurlLink: async ({ url }) => unfurlLink(url),

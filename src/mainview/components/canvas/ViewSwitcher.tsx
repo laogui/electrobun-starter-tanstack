@@ -33,6 +33,10 @@ import {
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
 import {
+  buildImportedCardCreateOptions,
+  handleMarkdownImportResult,
+} from '@/lib/importMarkdownCards';
+import {
   isRpcAvailable,
   rpcCreateView,
   rpcCreateViewFromTemplate,
@@ -444,24 +448,17 @@ export function ViewSwitcher({
   );
 
   const handleImportMarkdown = useCallback(async () => {
-    try {
-      const result = await rpcImportMarkdownFiles();
-      if (result.canceled || result.notes.length === 0) {
-        return;
+    const result = await rpcImportMarkdownFiles().catch(() => null);
+    const imported = handleMarkdownImportResult(result, (notes) => {
+      for (const [index, note] of notes.entries()) {
+        onCreateNode(
+          'card',
+          buildImportedCardCreateOptions(note, index, notes.length)
+        );
       }
-      for (const note of result.notes) {
-        onCreateNode('card', {
-          data: {
-            color: '#FFFFFF',
-            noteId: note.noteId,
-            title: note.title,
-            type: 'text',
-          },
-        });
-      }
+    });
+    if (imported) {
       setCreateMenuOpen(false);
-    } catch {
-      return;
     }
   }, [onCreateNode, setCreateMenuOpen]);
 

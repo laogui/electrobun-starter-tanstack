@@ -70,6 +70,8 @@
   "toast_reveal_failed": "File not found",
   "toast_replace_failed": "Replace failed",
   "toast_markdown_imported": "Imported {count} notes",
+  "toast_markdown_import_failed": "Import failed",
+  "toast_markdown_import_partial": "Imported {imported} notes, {failed} failed",
   "drop_to_add": "Drop to add",
   "tag_editor_placeholder": "Add tag…",
   "tag_editor_add": "Add",

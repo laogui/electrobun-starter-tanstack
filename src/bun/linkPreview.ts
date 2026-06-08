@@ -8,14 +8,20 @@
  *   - The server is given a short timeout to keep the UI responsive.
  *   - Hostnames that resolve to localhost / private networks are rejected
  *     before the fetch starts, to avoid SSRF against the user's machine.
- *   - Only the first ~256 KiB of the response body are parsed so we never
- *     buffer arbitrarily large pages into memory.
+ *   - Reading stops at </head> (or after ~1 MiB) so we never buffer
+ *     arbitrarily large pages into memory.
  */
 
-const REQUEST_TIMEOUT_MS = 3000;
-const MAX_BYTES = 256 * 1024;
+const REQUEST_TIMEOUT_MS = 5000;
+// Some sites (e.g. YouTube) emit a very large <head> and place their Open
+// Graph tags hundreds of KiB into the document, so we read up to 1 MiB before
+// giving up. Reading stops early once </head> is seen (see readBoundedText).
+const MAX_BYTES = 1024 * 1024;
 const MAX_REDIRECTS = 5;
-const USER_AGENT = 'GhostBoard-LinkPreview/1.0 (+https://github.com)';
+// Present as a mainstream browser. Several sites serve a stripped-down page
+// (without OG metadata) to unknown/bot user-agents.
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const LOCALHOST_HOSTNAMES = new Set([
   'localhost',
@@ -256,7 +262,8 @@ async function readBoundedText(
     return await response.text();
   }
 
-  const chunks: Uint8Array[] = [];
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  let text = '';
   let total = 0;
   while (total < maxBytes) {
     const { done, value } = await reader.read();
@@ -266,26 +273,22 @@ async function readBoundedText(
     if (!value) {
       continue;
     }
-    chunks.push(value);
     total += value.byteLength;
+    text += decoder.decode(value, { stream: true });
+    // Metadata lives in <head>; once it closes there is nothing left worth
+    // parsing, so stop early instead of buffering the rest of the document.
+    if (text.includes('</head>')) {
+      break;
+    }
   }
+  text += decoder.decode();
   try {
     await reader.cancel();
   } catch {
     // Reader was already finished.
   }
 
-  const combined = new Uint8Array(Math.min(total, maxBytes));
-  let offset = 0;
-  for (const chunk of chunks) {
-    if (offset >= combined.length) {
-      break;
-    }
-    const copyLength = Math.min(chunk.byteLength, combined.length - offset);
-    combined.set(chunk.subarray(0, copyLength), offset);
-    offset += copyLength;
-  }
-  return new TextDecoder('utf-8', { fatal: false }).decode(combined);
+  return text;
 }
 
 export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
@@ -308,7 +311,9 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
         signal: controller.signal,
         headers: {
           'user-agent': USER_AGENT,
-          accept: 'text/html,application/xhtml+xml',
+          accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'en-US,en;q=0.9',
         },
       });
 

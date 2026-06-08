@@ -252,4 +252,94 @@ describe('LinkNode', () => {
       });
     });
   });
+
+  it('applies the preview result even after re-rendering with the loading status', async () => {
+    let observerCallback:
+      | ((
+          entries: Array<{ intersectionRatio: number; isIntersecting: boolean }>
+        ) => void)
+      | undefined;
+
+    class MockIntersectionObserver {
+      constructor(
+        callback: (
+          entries: Array<{
+            intersectionRatio: number;
+            isIntersecting: boolean;
+          }>
+        ) => void
+      ) {
+        observerCallback = callback;
+      }
+
+      disconnect = vi.fn();
+      observe = vi.fn();
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    // Defer the rpc resolution so we can re-render the node with the
+    // 'loading' status (mirroring the real store update) before the request
+    // settles. This reproduces the effect re-run that previously cancelled the
+    // in-flight request and left the node stuck on "Loading preview...".
+    let resolveUnfurl: ((value: MockUnfurlResult) => void) | undefined;
+    rpcMocks.rpcUnfurlLink.mockReturnValueOnce(
+      new Promise<MockUnfurlResult>((resolve) => {
+        resolveUnfurl = resolve;
+      })
+    );
+
+    const { rerender } = render(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: '',
+          url: 'https://example.com/',
+        }}
+        id="link-1"
+      />
+    );
+
+    act(() => {
+      observerCallback?.([{ intersectionRatio: 0.5, isIntersecting: true }]);
+    });
+
+    await waitFor(() => {
+      expect(canvasStoreMocks.updateNodeData).toHaveBeenCalledWith('link-1', {
+        unfurlStatus: 'loading',
+      });
+    });
+
+    // Simulate the store re-rendering the node with the loading status, which
+    // re-runs the unfurl effect.
+    rerender(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: '',
+          unfurlStatus: 'loading',
+          url: 'https://example.com/',
+        }}
+        id="link-1"
+      />
+    );
+
+    await act(async () => {
+      resolveUnfurl?.({
+        status: 'ready',
+        title: 'Fetched title',
+        url: 'https://example.com/',
+      });
+    });
+
+    await waitFor(() => {
+      expect(canvasStoreMocks.updateNodeData).toHaveBeenCalledWith('link-1', {
+        title: 'Fetched title',
+        unfurlError: undefined,
+        unfurlStatus: 'ready',
+      });
+    });
+
+    expect(rpcMocks.rpcUnfurlLink).toHaveBeenCalledTimes(1);
+  });
 });

@@ -77,6 +77,16 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_group: () => 'Group',
   menu_file: () => 'File',
   menu_import_markdown: () => 'Import Markdown',
+  toast_markdown_imported: ({ count }: { count: number }) =>
+    `Imported ${count}`,
+  toast_markdown_import_failed: () => 'Import failed',
+  toast_markdown_import_partial: ({
+    imported,
+    failed,
+  }: {
+    imported: number;
+    failed: number;
+  }) => `Imported ${imported}, failed ${failed}`,
   menu_new_note: () => 'New Note',
   menu_new_checklist: () => 'New Checklist',
   menu_new_sticky: () => 'New Sticky',
@@ -640,18 +650,22 @@ describe('viewSwitcher', () => {
       expect(onCreateNode).toHaveBeenNthCalledWith(1, 'card', {
         data: {
           color: '#FFFFFF',
+          content: undefined,
           noteId: 'note_imported_1',
           title: 'Imported One',
           type: 'text',
         },
+        focusViewport: false,
       });
       expect(onCreateNode).toHaveBeenNthCalledWith(2, 'card', {
         data: {
           color: '#FFFFFF',
+          content: undefined,
           noteId: 'note_imported_2',
           title: 'Imported Two',
           type: 'text',
         },
+        focusViewport: true,
       });
     });
   });

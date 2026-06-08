@@ -50,6 +50,11 @@ const toText = (value: unknown): string =>
 
 interface InitialContent {
   blocks: PartialBlock[] | undefined;
+  /** Markdown body returned by the loadBlockNote RPC when recovering from a
+   *  legacy `.md` file (no sidecar). This takes priority over the component
+   *  prop so freshly imported notes whose card `data` has no `content` field
+   *  still display their full body. */
+  markdown?: string;
   recoveredFromMarkdown: boolean;
   revision: number | undefined;
 }
@@ -140,6 +145,10 @@ export default function BlockNoteEditor({
             blocks: Array.isArray(response.blocks)
               ? (response.blocks as PartialBlock[])
               : undefined,
+            markdown:
+              typeof (response as any).markdown === 'string'
+                ? (response as any).markdown
+                : undefined,
             revision:
               typeof response.revision === 'number'
                 ? response.revision
@@ -242,6 +251,12 @@ function BlockNoteSurface({
   saveDebounced,
   title,
 }: BlockNoteSurfaceProps) {
+  // Prefer the markdown body the RPC returned (from the .md file) over the
+  // prop-based `initialMarkdown` (from the card's data.content, which may be
+  // empty for freshly imported notes). This is the value we feed into the
+  // one-time markdown-to-blocks import below.
+  const effectiveMarkdown = initial.markdown ?? initialMarkdown;
+
   // Build the editor exactly once for the lifetime of this surface. If the
   // sidecar load returned blocks we use them as `initialContent`; otherwise
   // we let BlockNote start empty and then asynchronously import Markdown so
@@ -270,14 +285,14 @@ function BlockNoteSurface({
       didImportMarkdownRef.current = true;
       return;
     }
-    if (!initialMarkdown.trim()) {
+    if (!effectiveMarkdown.trim()) {
       didImportMarkdownRef.current = true;
       return;
     }
     didImportMarkdownRef.current = true;
     (async () => {
       try {
-        const blocks = await editor.tryParseMarkdownToBlocks(initialMarkdown);
+        const blocks = await editor.tryParseMarkdownToBlocks(effectiveMarkdown);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
         }
@@ -285,7 +300,7 @@ function BlockNoteSurface({
         console.error('[blocknote] Failed to import markdown:', error);
       }
     })();
-  }, [editor, initial.recoveredFromMarkdown, initialMarkdown]);
+  }, [editor, effectiveMarkdown, initial.recoveredFromMarkdown]);
 
   const handleChange = useCallback(async () => {
     const blocks = editor.document as Block[];

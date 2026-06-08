@@ -12,6 +12,10 @@ import {
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
 import {
+  buildImportedCardCreateOptions,
+  handleMarkdownImportResult,
+} from '@/lib/importMarkdownCards';
+import {
   rpcExportNoteMarkdown,
   rpcExportNotesMarkdown,
   rpcImportMarkdownFiles,
@@ -130,9 +134,12 @@ export function useContextMenu({
 
   const handleContextMenuAction = useCallback(
     async (action: string, nodeId?: string) => {
-      const viewport = rfInstance.current?.getViewport();
-
       const screenToFlow = (sx: number, sy: number) => {
+        const inst = rfInstance.current;
+        if (inst?.screenToFlowPosition) {
+          return inst.screenToFlowPosition({ x: sx, y: sy });
+        }
+        const viewport = inst?.getViewport();
         const zoom = viewport?.zoom ?? 1;
         return {
           x: (sx - (viewport?.x ?? 0)) / zoom,
@@ -195,24 +202,27 @@ export function useContextMenu({
           break;
         }
         case 'import-markdown': {
+          // Capture position before the async gap — `contextMenu` will be
+          // nulled by `onClose()` while the native file picker is open.
+          const savedMenu = contextMenu;
           const result = await rpcImportMarkdownFiles().catch(() => null);
-          if (!result || result.canceled || result.notes.length === 0) {
-            break;
-          }
-          const anchorCenter = contextMenu
-            ? screenToFlow(contextMenu.x, contextMenu.y)
+          const anchorCenter = savedMenu
+            ? screenToFlow(savedMenu.x, savedMenu.y)
             : undefined;
-          for (const note of result.notes) {
-            createNode('card', rfInstance.current, {
-              anchorCenter,
-              data: {
-                color: '#FFFFFF',
-                noteId: note.noteId,
-                title: note.title,
-                type: 'text',
-              },
-            });
-          }
+          handleMarkdownImportResult(result, (notes) => {
+            for (const [index, note] of notes.entries()) {
+              createNode(
+                'card',
+                rfInstance.current,
+                buildImportedCardCreateOptions(
+                  note,
+                  index,
+                  notes.length,
+                  anchorCenter
+                )
+              );
+            }
+          });
           break;
         }
         case 'focus':

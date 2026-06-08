@@ -87,6 +87,10 @@ const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
 const CANVAS_GRID_SIZE = 24;
 
+/** Layout for importing multiple files at once (drop / paste). */
+const ASSET_DROP_GRID_COLS = 3;
+const ASSET_DROP_GRID_GAP = 180;
+
 /** 小地图背景色 */
 const MINIMAP_BG_LIGHT = 'rgba(255, 255, 255, 0.92)';
 const MINIMAP_BG_DARK = 'rgba(28, 28, 28, 0.92)';
@@ -169,6 +173,9 @@ function CanvasComponent() {
     handleId: null,
     nodeId: null,
   });
+  // Last known pointer position (screen coords). Used to anchor pasted content
+  // near the cursor, since paste events carry no coordinates of their own.
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const { theme, systemTheme } = useTheme();
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -221,10 +228,14 @@ function CanvasComponent() {
       for (const [index, file] of files.entries()) {
         try {
           const data = await saveAssetFileWithProgressToast(file);
+          // Lay multiple files out on a grid instead of a single diagonal
+          // stack so dropping/pasting many files stays legible.
+          const col = index % ASSET_DROP_GRID_COLS;
+          const row = Math.floor(index / ASSET_DROP_GRID_COLS);
           onCreateNode('asset', {
             anchorCenter: {
-              x: anchorCenter.x + index * 28,
-              y: anchorCenter.y + index * 28,
+              x: anchorCenter.x + col * ASSET_DROP_GRID_GAP,
+              y: anchorCenter.y + row * ASSET_DROP_GRID_GAP,
             },
             data: { ...data },
           });
@@ -235,6 +246,16 @@ function CanvasComponent() {
     },
     [onCreateNode]
   );
+
+  // Flow-space anchor for pasted content: prefer the last cursor position so
+  // pastes land where the user is looking; fall back to the viewport center.
+  const currentPasteAnchor = useCallback(() => {
+    const screen = lastPointerRef.current ?? {
+      x: globalThis.innerWidth / 2,
+      y: globalThis.innerHeight / 2,
+    };
+    return screenToFlowPosition(screen);
+  }, [screenToFlowPosition]);
 
   const [linkPrompt, setLinkPrompt] = useState<{
     anchorCenter?: { x: number; y: number };
@@ -542,8 +563,31 @@ function CanvasComponent() {
       if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
         return;
       }
-      const text = event.clipboardData?.getData('text/plain') ?? '';
-      if (createLinkFromText(text)) {
+      const clipboard = event.clipboardData;
+      if (!clipboard) {
+        return;
+      }
+
+      // Prefer clipboard files (including screenshots pasted as image/png).
+      const files = Array.from(clipboard.files ?? []);
+      if (files.length === 0) {
+        for (const item of Array.from(clipboard.items ?? [])) {
+          if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) {
+              files.push(file);
+            }
+          }
+        }
+      }
+      if (files.length > 0) {
+        event.preventDefault();
+        void createAssetsFromFiles(files, currentPasteAnchor());
+        return;
+      }
+
+      const text = clipboard.getData('text/plain') ?? '';
+      if (createLinkFromText(text, { anchorCenter: currentPasteAnchor() })) {
         event.preventDefault();
       }
     };
@@ -552,7 +596,13 @@ function CanvasComponent() {
     return () => {
       globalThis.removeEventListener('paste', handlePaste);
     };
-  }, [createLinkFromText, focusedFolder, focusedNode]);
+  }, [
+    createAssetsFromFiles,
+    createLinkFromText,
+    currentPasteAnchor,
+    focusedFolder,
+    focusedNode,
+  ]);
 
   const onEdgesChange = useCallback(
     (changes: any) => {
@@ -670,6 +720,23 @@ function CanvasComponent() {
 
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const dragDepthRef = useRef(0);
+  // Cursor position (screen coords) for the drop ghost; rAF-throttled because
+  // `dragover` fires very frequently.
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRafRef = useRef<number | null>(null);
+
+  const onPointerMoveCanvas = useCallback((e: React.MouseEvent) => {
+    lastPointerRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (dragRafRef.current != null) {
+        cancelAnimationFrame(dragRafRef.current);
+      }
+    },
+    []
+  );
 
   const onDragEnterWindow = useCallback((e: React.DragEvent) => {
     const types = Array.from(e.dataTransfer?.types ?? []);
@@ -686,6 +753,7 @@ function CanvasComponent() {
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
     if (dragDepthRef.current === 0) {
       setIsDraggingFile(false);
+      setDragPos(null);
     }
   }, []);
 
@@ -694,6 +762,7 @@ function CanvasComponent() {
       // Reset overlay state on drop regardless of payload.
       dragDepthRef.current = 0;
       setIsDraggingFile(false);
+      setDragPos(null);
       const dataTransfer = (e as React.DragEvent).dataTransfer;
       const position = screenToFlowPosition({
         x: (e as React.DragEvent).clientX,
@@ -730,6 +799,13 @@ function CanvasComponent() {
 
   const onDragOverCanvas = useCallback((e: React.DragEvent | DragEvent) => {
     e.preventDefault();
+    const { clientX, clientY } = e as React.DragEvent;
+    if (dragRafRef.current == null) {
+      dragRafRef.current = requestAnimationFrame(() => {
+        dragRafRef.current = null;
+        setDragPos({ x: clientX, y: clientY });
+      });
+    }
     const dataTransfer = (e as React.DragEvent).dataTransfer;
     if (dataTransfer) {
       const types = Array.from(dataTransfer.types);
@@ -823,6 +899,7 @@ function CanvasComponent() {
       className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]"
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
+      onMouseMove={onPointerMoveCanvas}
     >
       <ReactFlow
         connectionLineComponent={ConnectionPreviewLine}
@@ -1014,13 +1091,28 @@ function CanvasComponent() {
         {isDraggingFile ? (
           <motion.div
             animate={{ opacity: 1 }}
-            className="pointer-events-none fixed inset-0 z-[200] flex items-center justify-center bg-blue-500/10 backdrop-blur-[2px]"
+            className="pointer-events-none fixed inset-0 z-[200] bg-blue-500/10 backdrop-blur-[2px]"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
           >
-            <div className="rounded-2xl border-2 border-blue-400 border-dashed bg-white/90 px-8 py-6 font-medium text-blue-600 text-lg shadow-xl dark:bg-neutral-900/90 dark:text-blue-300">
-              {m.drop_to_add()}
-            </div>
+            {dragPos ? (
+              <div
+                className="absolute flex items-center gap-2 rounded-xl border-2 border-blue-400 border-dashed bg-white/90 px-4 py-2.5 font-medium text-blue-600 text-sm shadow-xl dark:bg-neutral-900/90 dark:text-blue-300"
+                style={{
+                  left: dragPos.x,
+                  top: dragPos.y,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                {m.drop_to_add()}
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <div className="rounded-2xl border-2 border-blue-400 border-dashed bg-white/90 px-8 py-6 font-medium text-blue-600 text-lg shadow-xl dark:bg-neutral-900/90 dark:text-blue-300">
+                  {m.drop_to_add()}
+                </div>
+              </div>
+            )}
           </motion.div>
         ) : null}
       </AnimatePresence>

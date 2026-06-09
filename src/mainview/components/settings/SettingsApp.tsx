@@ -1,7 +1,15 @@
-import { Info, Keyboard, Settings as SettingsIcon, Wrench } from 'lucide-react';
+import {
+  Info,
+  Keyboard,
+  Settings as SettingsIcon,
+  Sparkles,
+  Wrench,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  AI_PROVIDER_OPTIONS,
+  type AIProviderSetting,
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
   type AutoSaveIntervalSetting,
@@ -18,6 +26,7 @@ import {
   type SettingsLocaleStrings,
 } from './i18n/getLocaleStrings';
 import { AboutPanel } from './panels/AboutPanel';
+import { AIPanel } from './panels/AIPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
 import { WorkspacePanel } from './panels/WorkspacePanel';
@@ -67,6 +76,21 @@ export function normalizeSettings(
     )
       ? (settings.autoSaveInterval as AutoSaveIntervalSetting)
       : DEFAULT_SETTINGS.autoSaveInterval,
+    aiEnabled:
+      typeof settings?.aiEnabled === 'boolean'
+        ? settings.aiEnabled
+        : DEFAULT_SETTINGS.aiEnabled,
+    aiProvider: includesValue(AI_PROVIDER_OPTIONS, settings?.aiProvider)
+      ? (settings.aiProvider as AIProviderSetting)
+      : DEFAULT_SETTINGS.aiProvider,
+    aiModel:
+      typeof settings?.aiModel === 'string' && settings.aiModel.length > 0
+        ? settings.aiModel
+        : DEFAULT_SETTINGS.aiModel,
+    aiBaseUrl:
+      typeof settings?.aiBaseUrl === 'string'
+        ? settings.aiBaseUrl
+        : DEFAULT_SETTINGS.aiBaseUrl,
   };
 }
 
@@ -89,20 +113,21 @@ export function applyTheme(theme: ThemeSetting) {
   );
 }
 
-type SettingsSection = 'about' | 'general' | 'shortcuts' | 'workspace';
+type SettingsSection = 'about' | 'ai' | 'general' | 'shortcuts' | 'workspace';
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string; size?: number }>;
   id: SettingsSection;
   labelKey: keyof Pick<
     SettingsLocaleStrings,
-    'navAbout' | 'navGeneral' | 'navShortcuts' | 'navWorkspace'
+    'navAbout' | 'navAi' | 'navGeneral' | 'navShortcuts' | 'navWorkspace'
   >;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'general', icon: SettingsIcon, labelKey: 'navGeneral' },
   { id: 'workspace', icon: Wrench, labelKey: 'navWorkspace' },
+  { id: 'ai', icon: Sparkles, labelKey: 'navAi' },
   { id: 'shortcuts', icon: Keyboard, labelKey: 'navShortcuts' },
   { id: 'about', icon: Info, labelKey: 'navAbout' },
 ];
@@ -214,6 +239,14 @@ export function SettingsApp({ client }: SettingsAppProps) {
           <WorkspacePanel
             client={client}
             locale={settings.locale}
+            strings={strings}
+          />
+        ) : null}
+        {activeSection === 'ai' ? (
+          <AIPanel
+            client={client}
+            onUpdate={updateSettings}
+            settings={settings}
             strings={strings}
           />
         ) : null}

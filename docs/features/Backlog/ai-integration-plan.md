@@ -810,3 +810,78 @@ AI 不只生成卡片，也可以建议：
   和「创意清单」的 `Cmd+K` 路线天然合体；把 §10 的 `aiRunTask` + `AIAction` pipeline 复用到自然语言操控，零额外架构成本。
 - **本地 / 云双 tier provider（§16.11）**
   在 §7 的 `AIProviderCapabilities` 上加 `tier`，是 “local-first 信仰落到模型层”的关键一步，也直接影响 §10 的 RPC 形态，越早定越省返工。
+
+---
+
+## 18. 业界对标映射 + 仍待补强的增量点子
+
+> 这一节做两件事：(1) 把前文能力对照到 React Flow + AI 的业界做法，看哪些是成熟方向、哪些是差异化护城河；(2) 只补 §4 / §13 / §16 里**尚未覆盖或没讲透**的点，不重复已有清单。
+
+### 18.1 先把两条路线分清
+
+React Flow 上的 AI 产品大致两类，本项目坚定属于后者：
+
+- **A. 节点即 AI 工作流编排**：节点 = LLM / 工具 / 逻辑步骤，边 = 数据流。代表 **Langflow、Flowise**（两者 UI 都基于 React Flow），以及 **Dify、n8n** 等同类工作流工具（不一定用 React Flow）。React Flow 官方也出了 `AI Workflow Editor` 模板（AI SDK + shadcn）。
+  - **不是本项目形态**（画布是"知识容器"不是"执行图"），但有一点可借：让"边"承载可被程序消费的语义——正好支撑 §16.2 的 edge label 体系。
+- **B. AI 操作 / 增强知识画布**：AI 读懂画布、生成 / 整理 / 连接 / 问答。这才是 GhostBoard 的赛道。
+
+### 18.2 能力 ↔ 业界对标表
+
+| 本项目能力（章节） | 业界对标 | 对方杀手锏 | 我们的差异化机会 |
+|---|---|---|---|
+| 一句话生成画布（§4.2 / Phase 2） | ClickUp Whiteboard Generator、FigJam AI、Jeda.ai | NL prompt 直接铺一张图 | local-first + 每卡 markdown 落盘，生成物可被外部编辑器接管 |
+| 自动整理 / 聚类（Phase 3 / §16.1） | Miro `Cluster by`、Mural AI clustering、Dovetail AI clustering | 选一堆 sticky → 按主题 / 情感自动分簇 + 自动起簇名 | 复用 Group/Folder 子画布 + `collision` / `resolvePlacement`，聚类后真正落成空间布局 |
+| 关系建议 / 自动连线（§13.2 / §16.2） | InfraNodus、Napkin AI、Obsidian/Logseq graph | 文本 → 关系网络 / 自动配图连线 | 已有 `LabeledEdge`（标签 / 颜色 / 动画），可做"带语义标签的连线"而非裸连线 |
+| 检索问答（Phase 4） | NotebookLM、Heptabase AI、Mem | source-grounded 回答 + inline 引用 | 引用可直接定位 / 高亮回画布节点（见 18.3.3） |
+| 图片 / 截图反推（Phase 5 / §16.5） | tldraw `Make Real`、Jeda.ai | 草图 / 截图 → 结构化产物 | 保留原图坐标布局，原图作底图淡显 |
+| Critique / 缺口（§13.4 / §16.2） | InfraNodus content gaps | 基于图结构找"未连接的主题簇" | 升级为语义层结构洞分析（见 18.3.2），超出纯图论健康检查 |
+| note 层改写（§16.3） | Notion AI、BlockNote `xl-ai`（本项目已集成） | 选段改写 / 扩写 / 翻译 | 已经有了——关键是把"note 层"和"画布层"AI 明确分双层 |
+
+### 18.3 §13 / §16 尚未覆盖、值得单列的点
+
+#### 18.3.1 Ghost 建议层：把"预览"做成产品名级别的统一范式（增量重点）
+
+§16.2 提过"半透明虚影边 hover 才显形"，建议把它**升级成所有生成类 AI 的统一空间化 preview 机制**，而不只针对边：
+
+- AI 产出的 `AIAction[]` 一律先渲染为 **ghost 节点 / ghost 边 / ghost group**（半透明、虚线描边、`motion` 入场），叠在真实画布上。
+- 支持单个 accept（点 ghost 上的 ✓）/ 批量 accept / 全部 dismiss；accept 才实体化并进 §3 的单次 undo 快照。
+- 直接呼应产品名 **GhostBoard**，也是 §3 "preview before apply" 最自然的视觉表达——比侧边栏列 diff 更"空间"。
+
+#### 18.3.2 语义结构洞分析（InfraNodus 式）（增量重点）
+
+§16.2 的"逻辑健康检查"只做 cycle / 孤岛 / 断链（纯图论）。可再叠一层**语义层**：
+
+- 对一张 view 的节点做 embedding，找出"语义相近但图上没有边"的成对 / 成簇节点 →"这两块也许该连起来"。
+- 找出"两个话题簇之间完全没有桥接节点"的**结构洞** → 生成一句研究式提问（"X 和 Y 之间缺一个连接，你怎么看？"），落成一张 ghost sticky。
+- 这正是 InfraNodus 的核心价值，天然贴合本项目的 node/edge 模型。
+
+#### 18.3.3 引用高亮问答（NotebookLM 式）
+
+Phase 4 只说"检索 + 重排"，但空间化产品的杀手锏是**把引用打回画布**：
+
+- 问答答案里每个论据带 `[来源]` 角标 → 点击直接 `fitView` 聚焦并高亮对应节点（复用 `canvasFocus`）。
+- "我关于 X 的想法散在哪几张卡" → 给答案的同时在画布上点亮全部命中节点，而不是返回一个列表。
+
+#### 18.3.4 思维导图式发散（节点钻取）
+
+§16.3 有"一卡拆多卡"（向内拆），缺"向外发散"：
+
+- 选一张卡 →"发散"→ AI 生成 3–5 张子卡并自动连边、径向布局在母卡周围，可连续点击逐层展开。
+- 经典 brainstorm / mind-map 扩展，复用 `useNodeCreation` + 力导向布局。
+
+#### 18.3.5 语义化缩放 AI（呼应 `ZoomLevelContext`）（增量重点）
+
+项目刚落地的 `ZoomLevelContext`（commit 2d14f72）是一个**别家没有的独有杠杆**：
+
+- 缩小时：AI 为每个 group / 区域生成一句"区域摘要标签"，远看就能读懂整块在讲什么（语义级 LOD，而非单纯隐藏细节）。
+- 放大时：才显示完整卡片内容。
+- 等于给"无限画布"叠了一层 **AI 生成的语义地图**，是 Miro / Mural 都没做透的方向。
+
+#### 18.3.6 画布区域 → 真实产物（Make Real 式）
+
+- 框选一组节点 + edges →"生成 X"：导出为 PRD / 周报 / kanban JSON / 一段可运行代码草稿。
+- 与 §16.9"画布 → 长文"互补：那是压平成文，这是**变形成另一种产物**。
+
+### 18.4 一句话收口
+
+本项目相对纯 prompt 类工具的最大护城河，是 **React Flow 的"空间 + 图"结构 + local-first 落盘 + 现成 undo**：能把 AI 输出做成**可被空间化预览（ghost）、可被图结构消费（edge 语义）、可被一键撤销**的提案。对标产品里没有谁同时占满这三点。

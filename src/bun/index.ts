@@ -8,6 +8,8 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
+import { type AIServerConfig, type AIServerHandle, startAIServer } from './ai';
+import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
@@ -590,6 +592,10 @@ interface CanvasRPC {
         params: Record<string, unknown>;
         response: AppSettings;
       };
+      getAIEndpoint: {
+        params: Record<string, unknown>;
+        response: { baseUrl: string; enabled: boolean; token: string };
+      };
       listViews: {
         params: Record<string, unknown>;
         response: {
@@ -739,6 +745,10 @@ interface SettingsRPC {
         params: Record<string, unknown>;
         response: ExportArchiveResponse;
       };
+      getAICredentialStatus: {
+        params: Record<string, unknown>;
+        response: { hasApiKey: boolean };
+      };
       getAppInfo: {
         params: Record<string, unknown>;
         response: AppInfoResponse;
@@ -775,6 +785,10 @@ interface SettingsRPC {
         params: Record<string, unknown>;
         response: { entries: UnlinkedFileEntry[] };
       };
+      setAIApiKey: {
+        params: { apiKey: string | null };
+        response: { success: boolean };
+      };
       switchWorkspace: {
         params: Record<string, unknown>;
         response: SwitchWorkspaceResponse;
@@ -799,7 +813,13 @@ type CanvasBackgroundSetting = (typeof CANVAS_BACKGROUND_VALUES)[number];
 const AUTO_SAVE_INTERVAL_VALUES = [500, 800, 2000, 5000] as const;
 type AutoSaveIntervalSetting = (typeof AUTO_SAVE_INTERVAL_VALUES)[number];
 
+const AI_PROVIDER_VALUES = ['openai', 'anthropic', 'ollama', 'custom'] as const;
+
 interface AppSettings {
+  aiBaseUrl: string;
+  aiEnabled: boolean;
+  aiModel: string;
+  aiProvider: (typeof AI_PROVIDER_VALUES)[number];
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
   canvasSnapToGrid: boolean;
@@ -815,6 +835,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   canvasBackground: 'default',
   canvasSnapToGrid: true,
   autoSaveInterval: 800,
+  aiEnabled: false,
+  aiProvider: 'openai',
+  aiModel: 'gpt-4.1-mini',
+  aiBaseUrl: '',
 };
 
 function includes<T extends string | number>(
@@ -842,6 +866,21 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
     autoSaveInterval: includes(AUTO_SAVE_INTERVAL_VALUES, raw.autoSaveInterval)
       ? raw.autoSaveInterval
       : DEFAULT_SETTINGS.autoSaveInterval,
+    aiEnabled:
+      typeof raw.aiEnabled === 'boolean'
+        ? raw.aiEnabled
+        : DEFAULT_SETTINGS.aiEnabled,
+    aiProvider: includes(AI_PROVIDER_VALUES, raw.aiProvider)
+      ? raw.aiProvider
+      : DEFAULT_SETTINGS.aiProvider,
+    aiModel:
+      typeof raw.aiModel === 'string' && raw.aiModel.length
+        ? raw.aiModel
+        : DEFAULT_SETTINGS.aiModel,
+    aiBaseUrl:
+      typeof raw.aiBaseUrl === 'string'
+        ? raw.aiBaseUrl
+        : DEFAULT_SETTINGS.aiBaseUrl,
   };
 }
 
@@ -851,6 +890,11 @@ let settingsFilePath = '';
 let settingsViewUrl = SETTINGS_VIEW_URL;
 let settingsWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
+// Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
+// Streaming responses cannot travel over RPC, so it runs on 127.0.0.1.
+let aiServer: AIServerHandle | null = null;
+// LLM API key loaded from <userData>/ai-credentials.json (never in settings.json)
+let cachedAIApiKey: string | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
 // Reference to settings window RPC — set when the settings window is opened.
@@ -880,6 +924,29 @@ export async function persistSettings(settings: AppSettings) {
   if (settingsFilePath) {
     await atomicWrite(settingsFilePath, JSON.stringify(normalized, null, 2));
   }
+}
+
+/**
+ * Assemble the live AI server config from cached settings + the API key stored
+ * in `<userData>/ai-credentials.json`. Returns null when AI is disabled or a
+ * cloud provider is missing its key, which makes /ai/chat reply 503.
+ */
+function buildAIConfig(): AIServerConfig | null {
+  if (!cachedSettings.aiEnabled) {
+    return null;
+  }
+  const provider = cachedSettings.aiProvider;
+  const apiKey = cachedAIApiKey ?? process.env.GHOSTBOARD_AI_API_KEY;
+  const needsKey = provider === 'openai' || provider === 'anthropic';
+  if (needsKey && !apiKey) {
+    return null;
+  }
+  return {
+    provider,
+    model: cachedSettings.aiModel,
+    apiKey: apiKey ?? undefined,
+    baseUrl: cachedSettings.aiBaseUrl || undefined,
+  };
 }
 
 function getCenteredSettingsWindowFrame(parentWindow: BrowserWindow | null) {
@@ -1074,6 +1141,12 @@ function createSettingsWindow(
           mainRpc?.send?.settingsUpdated(cachedSettings);
           return { success: true };
         },
+        getAICredentialStatus: () => ({ hasApiKey: cachedAIApiKey != null }),
+        setAIApiKey: async ({ apiKey }) => {
+          await saveAIApiKey(apiKey);
+          cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
+          return { success: true };
+        },
         listTrash: async () => await listTrash(wsPath),
         restoreTrash: async ({ trashId }) => {
           const result = await restoreView(wsPath, trashId);
@@ -1195,6 +1268,15 @@ async function main() {
   await seedFirstRunIfNeeded(wsPath);
   await migrateLegacyTagsFromNotes(wsPath);
   await loadSettings(wsPath);
+  // The LLM API key lives outside the workspace so it never lands in
+  // `<workspace>/.ghostboard/settings.json`. Cache it in memory for the
+  // duration of the run; the secure file is only touched on read/write.
+  cachedAIApiKey = (await loadAICredentials()).apiKey ?? null;
+  // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
+  // The handle holds the localhost base URL + bearer token the renderer
+  // connects with. The config is resolved per-request so settings updates
+  // take effect without restarting the server.
+  aiServer = startAIServer(() => buildAIConfig());
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
@@ -2055,6 +2137,12 @@ async function main() {
         },
 
         getSettings: () => cachedSettings,
+
+        getAIEndpoint: () => ({
+          baseUrl: aiServer?.baseUrl ?? '',
+          token: aiServer?.token ?? '',
+          enabled: aiServer != null && buildAIConfig() !== null,
+        }),
 
         listViews: async () => {
           const config = await loadWorkspaceConfig(wsPath);

@@ -74,6 +74,8 @@ const createClient = (
     version: '1.0.0',
     updateAvailable: false,
   }),
+  getAICredentialStatus: vi.fn().mockResolvedValue({ hasApiKey: false }),
+  setAIApiKey: vi.fn().mockResolvedValue({ success: true }),
 });
 
 describe('SettingsApp helpers', () => {

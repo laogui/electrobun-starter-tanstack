@@ -344,6 +344,23 @@ export async function rpcGetSettings() {
   return eb.rpc.request.getSettings({});
 }
 
+/**
+ * Fetch the localhost AI endpoint started by the Bun process. Returns the base
+ * URL + bearer token the BlockNote AI transport connects to, plus whether a
+ * provider is currently configured. Null outside Electrobun.
+ */
+export async function rpcGetAIEndpoint(): Promise<{
+  baseUrl: string;
+  enabled: boolean;
+  token: string;
+} | null> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.getAIEndpoint({});
+}
+
 export async function rpcOpenSettings() {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

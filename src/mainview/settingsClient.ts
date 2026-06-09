@@ -7,13 +7,29 @@ export const AUTO_SAVE_INTERVAL_OPTIONS = [500, 800, 2000, 5000] as const;
 export type AutoSaveIntervalSetting =
   (typeof AUTO_SAVE_INTERVAL_OPTIONS)[number];
 
+export const AI_PROVIDER_OPTIONS = [
+  'openai',
+  'anthropic',
+  'ollama',
+  'custom',
+] as const;
+export type AIProviderSetting = (typeof AI_PROVIDER_OPTIONS)[number];
+
 export interface AppSettings {
+  aiBaseUrl: string;
+  aiEnabled: boolean;
+  aiModel: string;
+  aiProvider: AIProviderSetting;
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
   canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
   locale: LocaleSetting;
   theme: ThemeSetting;
+}
+
+export interface AICredentialStatus {
+  hasApiKey: boolean;
 }
 
 export interface TrashEntry {
@@ -76,6 +92,7 @@ export interface SettingsClient {
     files: string[]
   ) => Promise<{ deleted: string[]; skipped: string[] }>;
   exportWorkspaceArchive: () => Promise<ExportArchiveResult>;
+  getAICredentialStatus: () => Promise<AICredentialStatus>;
   getAppInfo: () => Promise<AppInfo>;
   getSettings: () => Promise<AppSettings>;
   getWorkspaceInfo: () => Promise<WorkspaceInfo>;
@@ -85,6 +102,7 @@ export interface SettingsClient {
   restoreTrash: (trashId: string) => Promise<{ success: boolean }>;
   saveSettings: (settings: AppSettings) => Promise<{ success: boolean }>;
   scanUnlinkedNotes: () => Promise<UnlinkedFileEntry[]>;
+  setAIApiKey: (apiKey: string | null) => Promise<{ success: boolean }>;
   switchWorkspace: () => Promise<SwitchWorkspaceResult>;
 }
 
@@ -95,6 +113,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   canvasBackground: 'default',
   canvasSnapToGrid: true,
   autoSaveInterval: 800,
+  aiEnabled: false,
+  aiProvider: 'openai',
+  aiModel: 'gpt-4.1-mini',
+  aiBaseUrl: '',
 };
 
 interface SettingsRPC {
@@ -115,6 +137,10 @@ interface SettingsRPC {
       exportWorkspaceArchive: {
         params: Record<string, unknown>;
         response: ExportArchiveResult;
+      };
+      getAICredentialStatus: {
+        params: Record<string, unknown>;
+        response: AICredentialStatus;
       };
       getAppInfo: {
         params: Record<string, unknown>;
@@ -152,6 +178,10 @@ interface SettingsRPC {
         params: Record<string, unknown>;
         response: { entries: UnlinkedFileEntry[] };
       };
+      setAIApiKey: {
+        params: { apiKey: string | null };
+        response: { success: boolean };
+      };
       switchWorkspace: {
         params: Record<string, unknown>;
         response: SwitchWorkspaceResult;
@@ -184,6 +214,9 @@ interface SettingsElectroview {
       exportWorkspaceArchive: (
         params: Record<string, unknown>
       ) => Promise<ExportArchiveResult>;
+      getAICredentialStatus: (
+        params: Record<string, unknown>
+      ) => Promise<AICredentialStatus>;
       getAppInfo: (params: Record<string, unknown>) => Promise<AppInfo>;
       getSettings: (params: Record<string, unknown>) => Promise<AppSettings>;
       getWorkspaceInfo: (
@@ -203,6 +236,9 @@ interface SettingsElectroview {
       scanUnlinkedNotes: (
         params: Record<string, unknown>
       ) => Promise<{ entries: UnlinkedFileEntry[] }>;
+      setAIApiKey: (params: {
+        apiKey: string | null;
+      }) => Promise<{ success: boolean }>;
       switchWorkspace: (
         params: Record<string, unknown>
       ) => Promise<SwitchWorkspaceResult>;
@@ -375,6 +411,20 @@ export function createSettingsClient(): SettingsClient {
         };
       }
       return await electrobun.rpc.request.checkForUpdate({});
+    },
+    getAICredentialStatus: async () => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return { hasApiKey: false };
+      }
+      return await electrobun.rpc.request.getAICredentialStatus({});
+    },
+    setAIApiKey: async (apiKey) => {
+      const electrobun = await getElectrobun();
+      if (!electrobun?.rpc) {
+        return { success: false };
+      }
+      return await electrobun.rpc.request.setAIApiKey({ apiKey });
     },
   };
 }

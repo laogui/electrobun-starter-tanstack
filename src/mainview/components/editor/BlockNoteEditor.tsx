@@ -1,8 +1,29 @@
-import type { Block, PartialBlock } from '@blocknote/core';
+import {
+  type Block,
+  filterSuggestionItems,
+  type PartialBlock,
+} from '@blocknote/core';
 import '@blocknote/core/fonts/inter.css';
+import { en } from '@blocknote/core/locales';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
-import { useCreateBlockNote } from '@blocknote/react';
+import {
+  FormattingToolbar,
+  FormattingToolbarController,
+  getDefaultReactSlashMenuItems,
+  getFormattingToolbarItems,
+  SuggestionMenuController,
+  useCreateBlockNote,
+} from '@blocknote/react';
+import {
+  AIExtension,
+  AIMenuController,
+  AIToolbarButton,
+  getAISlashMenuItems,
+} from '@blocknote/xl-ai';
+import { en as aiEn } from '@blocknote/xl-ai/locales';
+import '@blocknote/xl-ai/style.css';
+import { DefaultChatTransport } from 'ai';
 import 'overlayscrollbars/overlayscrollbars.css';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +31,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
-import { rpcLoadBlockNote } from '@/lib/rpc';
+import { rpcGetAIEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 
@@ -59,6 +80,8 @@ interface InitialContent {
   revision: number | undefined;
 }
 
+type AIEndpointInfo = Awaited<ReturnType<typeof rpcGetAIEndpoint>>;
+
 export default function BlockNoteEditor({
   color,
   data,
@@ -74,6 +97,9 @@ export default function BlockNoteEditor({
   const initialMarkdown = toText(markdown);
   const [titleValue, setTitleValue] = useState(toText(title));
   const [initial, setInitial] = useState<InitialContent | null>(null);
+  const [aiEndpoint, setAiEndpoint] = useState<AIEndpointInfo | undefined>(
+    undefined
+  );
   const [loadFailed, setLoadFailed] = useState(false);
   const [, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [, setLastSavedAt] = useState<Date | null>(null);
@@ -180,7 +206,30 @@ export default function BlockNoteEditor({
     };
   }, [noteId, setInitialRevision]);
 
-  if (!initial) {
+  // Resolve the localhost AI endpoint (base URL + bearer token) once. The
+  // editor is created synchronously inside BlockNoteSurface, so we gate that
+  // surface until this resolves to avoid rebuilding the editor with AI later.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await rpcGetAIEndpoint();
+        if (!cancelled) {
+          setAiEndpoint(info);
+        }
+      } catch (error) {
+        console.error('[blocknote] Failed to resolve AI endpoint:', error);
+        if (!cancelled) {
+          setAiEndpoint(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!initial || aiEndpoint === undefined) {
     return (
       <div
         className={cn(
@@ -196,6 +245,7 @@ export default function BlockNoteEditor({
 
   return (
     <BlockNoteSurface
+      aiEndpoint={aiEndpoint}
       color={colorValue}
       flushNow={flushNow}
       initial={initial}
@@ -222,6 +272,7 @@ export default function BlockNoteEditor({
 export type { BlockNoteSaveStatus };
 
 interface BlockNoteSurfaceProps {
+  aiEndpoint: AIEndpointInfo;
   color: string;
   flushNow: () => void;
   initial: InitialContent;
@@ -238,6 +289,7 @@ interface BlockNoteSurfaceProps {
 }
 
 function BlockNoteSurface({
+  aiEndpoint,
   color,
   flushNow,
   initial,
@@ -261,6 +313,11 @@ function BlockNoteSurface({
   // sidecar load returned blocks we use them as `initialContent`; otherwise
   // we let BlockNote start empty and then asynchronously import Markdown so
   // we don't lose the legacy `.md` body during migration.
+  // AI is wired only when the Bun endpoint reports a configured provider. The
+  // transport points at the localhost /ai/chat route with the per-launch
+  // bearer token; without it we build a plain editor unchanged.
+  const aiEnabled = Boolean(aiEndpoint?.enabled && aiEndpoint.baseUrl);
+
   const editor = useCreateBlockNote({
     initialContent:
       initial.blocks && initial.blocks.length > 0 ? initial.blocks : undefined,
@@ -270,6 +327,19 @@ function BlockNoteSurface({
     // in the JSON sidecar and serialised into the Markdown mirror.
     uploadFile: uploadBlockNoteFile,
     resolveFileUrl: resolveBlockNoteFileUrl,
+    ...(aiEnabled && aiEndpoint
+      ? {
+          dictionary: { ...en, ai: aiEn },
+          extensions: [
+            AIExtension({
+              transport: new DefaultChatTransport({
+                api: `${aiEndpoint.baseUrl}/ai/chat`,
+                headers: { Authorization: `Bearer ${aiEndpoint.token}` },
+              }),
+            }),
+          ],
+        }
+      : {}),
   });
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
@@ -397,10 +467,38 @@ function BlockNoteSurface({
           />
           <BlockNoteView
             editor={editor}
+            formattingToolbar={!aiEnabled}
             onBlur={handleBlur}
             onChange={handleChange}
+            slashMenu={!aiEnabled}
             theme={isDark ? 'dark' : 'light'}
-          />
+          >
+            {aiEnabled ? (
+              <>
+                <AIMenuController />
+                <FormattingToolbarController
+                  formattingToolbar={() => (
+                    <FormattingToolbar>
+                      {...getFormattingToolbarItems()}
+                      <AIToolbarButton />
+                    </FormattingToolbar>
+                  )}
+                />
+                <SuggestionMenuController
+                  getItems={async (query) =>
+                    filterSuggestionItems(
+                      [
+                        ...getDefaultReactSlashMenuItems(editor),
+                        ...getAISlashMenuItems(editor),
+                      ],
+                      query
+                    )
+                  }
+                  triggerCharacter="/"
+                />
+              </>
+            ) : null}
+          </BlockNoteView>
         </div>
       </OverlayScrollbarsComponent>
     </div>

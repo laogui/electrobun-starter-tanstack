@@ -219,10 +219,28 @@ vi.mock('./userprefs', () => ({
     userPrefsMocks.saveUserPrefs(...args),
 }));
 
+const aiCredentialsMocks = {
+  loadAICredentials: vi.fn(async () => ({}) as { apiKey?: string }),
+  saveAIApiKey: vi.fn(async () => undefined),
+};
+
+vi.mock('./aicredentials', () => ({
+  loadAICredentials: (
+    ...args: Parameters<typeof aiCredentialsMocks.loadAICredentials>
+  ) => aiCredentialsMocks.loadAICredentials(...args),
+  saveAIApiKey: (...args: Parameters<typeof aiCredentialsMocks.saveAIApiKey>) =>
+    aiCredentialsMocks.saveAIApiKey(...args),
+}));
+
 const bunFileMock = vi.fn();
 const bunWriteMock = vi.fn();
+const bunServeMock = vi.fn(() => ({
+  port: 0,
+  stop: vi.fn(),
+}));
 vi.stubGlobal('Bun', {
   file: bunFileMock,
+  serve: bunServeMock,
   spawn: bunSpawnMock,
   write: bunWriteMock,
 });
@@ -232,8 +250,11 @@ vi.stubGlobal('fetch', fetchMock);
 
 const loadIndexModule = async () => {
   const mod = await import('./index');
-  await Promise.resolve();
-  await Promise.resolve();
+  // main() chains many awaits before reaching defineRPC; flush enough
+  // microtasks so the RPC handlers are registered before tests query them.
+  for (let i = 0; i < 8; i++) {
+    await Promise.resolve();
+  }
   return mod;
 };
 
@@ -413,6 +434,10 @@ describe('src/bun/index helpers', () => {
       canvasBackground: 'default',
       canvasSnapToGrid: true,
       autoSaveInterval: 800,
+      aiEnabled: false,
+      aiProvider: 'openai',
+      aiModel: 'gpt-4.1-mini',
+      aiBaseUrl: '',
     });
 
     expect(workspaceMocks.atomicWrite).toHaveBeenCalledWith(
@@ -425,6 +450,10 @@ describe('src/bun/index helpers', () => {
           canvasBackground: 'default',
           canvasSnapToGrid: true,
           autoSaveInterval: 800,
+          aiEnabled: false,
+          aiProvider: 'openai',
+          aiModel: 'gpt-4.1-mini',
+          aiBaseUrl: '',
         },
         null,
         2

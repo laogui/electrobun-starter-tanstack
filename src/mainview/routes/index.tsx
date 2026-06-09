@@ -34,6 +34,7 @@ import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { TagSidebar } from '@/components/tags/TagSidebar';
 import { TagSidebarButton } from '@/components/tags/TagSidebarButton';
+import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -901,76 +902,78 @@ function CanvasComponent() {
       onDragLeave={onDragLeaveWindow}
       onMouseMove={onPointerMoveCanvas}
     >
-      <ReactFlow
-        connectionLineComponent={ConnectionPreviewLine}
-        connectionMode={ConnectionMode.Loose}
-        connectionRadius={30}
-        defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
-        defaultViewport={savedViewport ?? undefined}
-        disableKeyboardA11y
-        edges={edges}
-        edgeTypes={edgeTypes}
-        elevateEdgesOnSelect
-        fitView={!savedViewport}
-        maxZoom={4}
-        minZoom={0.1}
-        nodes={nodesWithState}
-        nodesDraggable={!(spacePanActive || editableInteractionLocked)}
-        nodesFocusable={false}
-        nodeTypes={nodeTypes}
-        onConnect={onConnect}
-        onConnectEnd={onConnectEnd}
-        onConnectStart={onConnectStart}
-        onDragOver={onDragOverCanvas}
-        onDrop={onDropCanvas}
-        onEdgeContextMenu={onEdgeContextMenu}
-        onEdgesChange={onEdgesChange}
-        onInit={(instance) => {
-          rfInstance.current = instance;
-        }}
-        onMoveEnd={(_, viewport) => {
-          setViewport(viewport);
-        }}
-        onNodeClick={onNodeClick}
-        onNodeContextMenu={onNodeContextMenu}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDragStop={onNodeDragStop}
-        onNodesChange={onNodesChange}
-        onPaneContextMenu={onPaneContextMenu}
-        panOnDrag={false}
-        panOnScroll={true}
-        proOptions={{ hideAttribution: true }}
-        selectionMode={SelectionMode.Partial}
-        selectionOnDrag={!editableInteractionLocked}
-        snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-        snapToGrid={canvasSnapToGrid}
-        style={{ backgroundColor: canvasBackground }}
-        zoomOnPinch={true}
-      >
-        <Background
-          color={gridColor}
-          gap={CANVAS_GRID_SIZE}
-          size={1.5}
-          variant={BackgroundVariant.Dots}
-        />
-        <Controls position="bottom-left" />
-        <HelperLines horizontal={helperLineH} vertical={helperLineV} />
-        <MiniMap
-          maskColor={miniMapMask}
-          nodeColor={MINIMAP_NODE_COLOR}
-          nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
-          pannable
-          position="bottom-right"
-          style={{
-            backgroundColor: miniMapBackground,
-            border: miniMapBorder,
-            borderRadius: 8,
+      <ZoomLevelProvider>
+        <ReactFlow
+          connectionLineComponent={ConnectionPreviewLine}
+          connectionMode={ConnectionMode.Loose}
+          connectionRadius={30}
+          defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
+          defaultViewport={savedViewport ?? undefined}
+          disableKeyboardA11y
+          edges={edges}
+          edgeTypes={edgeTypes}
+          elevateEdgesOnSelect
+          fitView={!savedViewport}
+          maxZoom={4}
+          minZoom={0.1}
+          nodes={nodesWithState}
+          nodesDraggable={!(spacePanActive || editableInteractionLocked)}
+          nodesFocusable={false}
+          nodeTypes={nodeTypes}
+          onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
+          onConnectStart={onConnectStart}
+          onDragOver={onDragOverCanvas}
+          onDrop={onDropCanvas}
+          onEdgeContextMenu={onEdgeContextMenu}
+          onEdgesChange={onEdgesChange}
+          onInit={(instance) => {
+            rfInstance.current = instance;
           }}
-          zoomable
-        />
-      </ReactFlow>
+          onMoveEnd={(_, viewport) => {
+            setViewport(viewport);
+          }}
+          onNodeClick={onNodeClick}
+          onNodeContextMenu={onNodeContextMenu}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
+          onNodesChange={onNodesChange}
+          onPaneContextMenu={onPaneContextMenu}
+          panOnDrag={false}
+          panOnScroll={true}
+          proOptions={{ hideAttribution: true }}
+          selectionMode={SelectionMode.Partial}
+          selectionOnDrag={!editableInteractionLocked}
+          snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
+          snapToGrid={canvasSnapToGrid}
+          style={{ backgroundColor: canvasBackground }}
+          zoomOnPinch={true}
+        >
+          <Background
+            color={gridColor}
+            gap={CANVAS_GRID_SIZE}
+            size={1.5}
+            variant={BackgroundVariant.Dots}
+          />
+          <Controls position="bottom-left" />
+          <HelperLines horizontal={helperLineH} vertical={helperLineV} />
+          <MiniMap
+            maskColor={miniMapMask}
+            nodeColor={MINIMAP_NODE_COLOR}
+            nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
+            pannable
+            position="bottom-right"
+            style={{
+              backgroundColor: miniMapBackground,
+              border: miniMapBorder,
+              borderRadius: 8,
+            }}
+            zoomable
+          />
+        </ReactFlow>
+      </ZoomLevelProvider>
 
       {nodesWithState.length === 0 ? (
         <EmptyCanvasOverlay

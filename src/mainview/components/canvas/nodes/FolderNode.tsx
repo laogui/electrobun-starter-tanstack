@@ -1,5 +1,5 @@
-import { useViewport } from '@xyflow/react';
 import { memo, useCallback } from 'react';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -162,9 +162,8 @@ export const FolderContent = ({
 };
 
 const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
-  const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
 
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
     // Trigger the node context menu by dispatching a contextmenu event on

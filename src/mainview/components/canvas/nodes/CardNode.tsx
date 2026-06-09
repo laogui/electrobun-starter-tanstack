@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useViewport } from '@xyflow/react';
 import { Check, PenLine } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -273,7 +273,6 @@ export const CardContent = ({
 };
 
 const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
-  const { zoom } = useViewport();
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
@@ -282,7 +281,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const { data: tagSummaries } = useTags();
   const tagSuggestions = (tagSummaries ?? []).map((t) => t.name);
   const queryClient = useQueryClient();
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
 
   // Cards key node metadata by the note's stable id; the React Flow node id
   // is a fallback for legacy nodes that pre-date the noteId roll-out.

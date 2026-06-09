@@ -31,7 +31,7 @@
 | **6** ✅ | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
 | **7** ✅ | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
 | **8** | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
-| **9** | 性能 pass | useViewport context + unfurl 视口限流 | 1-2 天 | 推荐 | - |
+| **9** ✅ | 性能 pass | useViewport context + unfurl 视口限流 | 1-2 天 | 推荐 | - |
 | **10** | 视觉 / a11y 收尾 | shadow 统一 + dark + focus ring + onboarding | 2-3 天 | 推荐 | - |
 
 合计：~24-33 个工作日 / 5-7 周（单人全职）。
@@ -364,20 +364,28 @@
 
 ---
 
-## Phase 9 · 性能 pass（1-2 天）
+## Phase 9 · 性能 pass（1-2 天）✅ 已完成
+
+> **已完成（2026-06-09）**。核查发现 L4 / L2 在前序 PR 中已经落地，本 Phase 实际只需补 L1。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| L1 | 新建 `ZoomLevelContext`（Provider 在 routes/index.tsx，每 100ms throttle 写 `isZoomedOut`），节点改读 context 不再调 `useViewport()` | 新建 `src/mainview/contexts/ZoomLevelContext.tsx` + 6 个节点 |
-| L4 | LinkNode unfurl 加 `IntersectionObserver`，只在 50% 可见时触发；卸载时 abort | `LinkNode.tsx:316-365` |
-| L2 | FocusedView exit 不再设 top/left/width/height，全部用 transform；进入也改成 transform-only | `FocusedView.tsx:360-393` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成 | L1 | 新建 `ZoomLevelContext`（Provider 包在 `routes/index.tsx` 的 `<ReactFlow>` 外层，用 `useStore` 布尔选择器订阅 `transform[2] < 0.4`，布尔不变不重渲染），6 个节点改读 `useIsZoomedOut()` 不再调 `useViewport()` | 新建 `src/mainview/contexts/ZoomLevelContext.tsx` + LinkNode / FolderNode / AssetNode / ImageNode / CardNode / StickyNode |
+| ✅ 已实现（前序 PR） | L4 | LinkNode unfurl 已用 `IntersectionObserver`，只在 ≥50% 可见时触发，命中即 `disconnect()`，卸载也 `disconnect()` | `LinkNode.tsx:320-346` |
+| ✅ 已实现（前序 PR） | L2 | FocusedView 已是纯 `opacity` 的 `motion.div`，不再用 top/left/width/height layout 动画 | `FocusedView.tsx:356-363` |
 
-### 验收
-- Profiler 录 30 张卡片 + 缩放手势的 flame chart：节点 commit 数 ↓ 80%。
-- 30 张 link 卡同时进入视野 → 网络面板不再瞬间 30 个并发请求。
-- FocusedView 进入/退出动画在 throttled CPU 4× 下仍 60fps。
+### 实际落地（L1）
+- 用 React Flow 的 `useStore((s) => s.transform[2] < 0.4)` 替代手动 100ms throttle：`useStore` 自带等值比较，缩放过程中选择器每帧运行（极轻），但只有跨越 0.4 阈值时 Provider 才重渲染并触发节点重渲染。比 throttle 版更精确、更简单。
+- `useIsZoomedOut()` 仅 `useContext`，无 Provider 时返回默认 `false`（readonly 节点 / 单元测试零成本）。
+- 阈值常量 `ZOOMED_OUT_THRESHOLD = 0.4` 收敛到 context 单一来源。
+- 测试：6 个节点测试由 mock `useViewport` 改为 mock `@/contexts/ZoomLevelContext`；`routes/index.test.tsx` 的 `@xyflow/react` mock 补 `useStore`。
+
+### 验收（已通过）
+- ✅ `bun run test` 全绿（96 文件 / 906 测试）。
+- ✅ `bun run type-check` 无新增 `src/` 错误（仅 `node_modules/electrobun` 预存在报错）。
+- 待人工 Profiler 复核：30 张卡片 + 缩放手势节点 commit 数应大幅下降；30 张 link 卡进视野不再瞬时并发（L4 已保证）。
 
 ---
 

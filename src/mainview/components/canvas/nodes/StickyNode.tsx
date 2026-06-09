@@ -1,8 +1,8 @@
-import { NodeResizeControl, useViewport } from '@xyflow/react';
+import { NodeResizeControl } from '@xyflow/react';
 import { memo, useCallback, useRef, useState } from 'react';
-
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
@@ -137,7 +137,6 @@ export const StickyContent = ({
 );
 
 const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
-  const { zoom } = useViewport();
   const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
     id,
     data as unknown as Record<string, unknown>
@@ -145,7 +144,7 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
   const isDark = isColorDark(data.color);
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
   const [editing, setEditing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
 

@@ -25,7 +25,6 @@ vi.mock('@xyflow/react', () => ({
     Left: 'left',
   },
   useReactFlow: () => ({}),
-  useViewport: () => ({ zoom: 1 }),
 }));
 
 vi.mock('motion/react', () => ({

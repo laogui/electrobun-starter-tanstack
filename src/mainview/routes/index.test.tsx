@@ -321,6 +321,9 @@ vi.mock('@xyflow/react', async () => {
     useReactFlow: () => ({
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
     }),
+    useStore: (
+      selector: (state: { transform: [number, number, number] }) => unknown
+    ) => selector({ transform: [0, 0, 1] }),
   };
 });
 

@@ -10,7 +10,7 @@ const rpcLoadAttachmentMock = vi.fn();
 const rpcSaveAttachmentMock = vi.fn();
 const createImageThumbnailMock = vi.hoisted(() => vi.fn());
 const toastErrorMock = vi.hoisted(() => vi.fn());
-const useViewportMock = vi.fn(() => ({ zoom: 1 }));
+const isZoomedOutMock = vi.fn(() => false);
 
 const CLICK_TO_ADD_IMAGE_RE = /click to add image/i;
 
@@ -60,7 +60,10 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-  useViewport: () => useViewportMock(),
+}));
+
+vi.mock('@/contexts/ZoomLevelContext', () => ({
+  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 const saveSnapshotMock = vi.fn();
@@ -129,8 +132,8 @@ describe('ImageNode', () => {
     rpcSaveAttachmentMock.mockReset();
     createImageThumbnailMock.mockReset();
     toastErrorMock.mockReset();
-    useViewportMock.mockReset();
-    useViewportMock.mockReturnValue({ zoom: 1 });
+    isZoomedOutMock.mockReset();
+    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -199,7 +202,7 @@ describe('ImageNode', () => {
         .closest('.opacity-0')
     ).not.toBeNull();
 
-    useViewportMock.mockReturnValue({ zoom: 0.2 });
+    isZoomedOutMock.mockReturnValue(true);
     rerender(
       <ImageNode
         data={{ color: '#fff', imageUrl: 'https://example.com/z.png' }}

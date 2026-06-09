@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasStore } from '@/store/canvasStore';
 import FolderNode from './FolderNode';
 
-const useViewportMock = vi.fn(() => ({ zoom: 1 }));
+const isZoomedOutMock = vi.fn(() => false);
 const commitNodeDataMock = vi.fn();
 
 vi.mock('@xyflow/react', () => ({
@@ -36,7 +36,10 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-  useViewport: () => useViewportMock(),
+}));
+
+vi.mock('@/contexts/ZoomLevelContext', () => ({
+  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 describe('FolderNode', () => {
@@ -49,8 +52,8 @@ describe('FolderNode', () => {
 
   afterEach(() => {
     commitNodeDataMock.mockReset();
-    useViewportMock.mockReset();
-    useViewportMock.mockReturnValue({ zoom: 1 });
+    isZoomedOutMock.mockReset();
+    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -75,7 +78,7 @@ describe('FolderNode', () => {
   });
 
   it('hides subtitle when zoomed out and toggles resize body class hooks', () => {
-    useViewportMock.mockReturnValue({ zoom: 0.3 });
+    isZoomedOutMock.mockReturnValue(true);
 
     render(
       <FolderNode

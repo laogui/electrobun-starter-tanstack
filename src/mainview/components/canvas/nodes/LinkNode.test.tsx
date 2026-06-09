@@ -39,7 +39,10 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-  useViewport: () => ({ zoom: 1 }),
+}));
+
+vi.mock('@/contexts/ZoomLevelContext', () => ({
+  useIsZoomedOut: () => false,
 }));
 
 vi.mock('@/store/canvasStore', () => ({

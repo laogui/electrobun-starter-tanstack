@@ -8,7 +8,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 import CardNode, { CardContent } from './CardNode';
 
 const updateNodeDataMock = vi.fn();
-const useViewportMock = vi.fn(() => ({ zoom: 1 }));
+const isZoomedOutMock = vi.fn(() => false);
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -38,7 +38,10 @@ vi.mock('@xyflow/react', () => ({
     Left: 'left',
   },
   useReactFlow: () => ({ updateNodeData: updateNodeDataMock }),
-  useViewport: () => useViewportMock(),
+}));
+
+vi.mock('@/contexts/ZoomLevelContext', () => ({
+  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 vi.mock('@/components/preview/NotePreview', () => ({
@@ -81,8 +84,8 @@ vi.mock('@tanstack/react-query', () => ({
 describe('CardNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
-    useViewportMock.mockReset();
-    useViewportMock.mockReturnValue({ zoom: 1 });
+    isZoomedOutMock.mockReset();
+    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -113,7 +116,7 @@ describe('CardNode', () => {
   });
 
   it('renders zoomed-out summary and toggles resize body class hooks', () => {
-    useViewportMock.mockReturnValue({ zoom: 0.3 });
+    isZoomedOutMock.mockReturnValue(true);
 
     render(
       <CardNode

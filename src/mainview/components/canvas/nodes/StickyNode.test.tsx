@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import StickyNode from './StickyNode';
 
 const updateNodeDataMock = vi.fn();
-const useViewportMock = vi.fn(() => ({ zoom: 1 }));
+const isZoomedOutMock = vi.fn(() => false);
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -35,7 +35,10 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-  useViewport: () => useViewportMock(),
+}));
+
+vi.mock('@/contexts/ZoomLevelContext', () => ({
+  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 const saveSnapshotMock = vi.fn();
@@ -66,8 +69,8 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
 describe('StickyNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
-    useViewportMock.mockReset();
-    useViewportMock.mockReturnValue({ zoom: 1 });
+    isZoomedOutMock.mockReset();
+    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -116,7 +119,7 @@ describe('StickyNode', () => {
   });
 
   it('renders zoomed-out placeholder lines and hidden state support', () => {
-    useViewportMock.mockReturnValue({ zoom: 0.2 });
+    isZoomedOutMock.mockReturnValue(true);
     const { container } = render(
       <StickyNode
         data={{ color: '#ffee88', content: '', isHidden: true }}

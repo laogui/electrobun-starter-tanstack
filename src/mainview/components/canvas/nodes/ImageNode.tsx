@@ -1,10 +1,9 @@
-import { useViewport } from '@xyflow/react';
 import { AlertTriangle, ImagePlus, Loader2, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
@@ -228,7 +227,6 @@ export const ImageContent = ({
 };
 
 const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
-  const { zoom } = useViewport();
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
@@ -237,7 +235,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
     data as unknown as Record<string, unknown>
   );
   const isDark = isColorDark(data.color);
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
   const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);

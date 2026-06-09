@@ -1,4 +1,3 @@
-import { useViewport } from '@xyflow/react';
 import {
   ExternalLink,
   Globe2,
@@ -14,9 +13,9 @@ import {
   useRef,
   useState,
 } from 'react';
-
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
 import {
@@ -295,7 +294,6 @@ export const LinkContent = ({
 };
 
 const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
-  const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
@@ -303,7 +301,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     data as unknown as Record<string, unknown>
   );
   const isDark = isColorDark(data.color);
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const [unfurlVisible, setUnfurlVisible] = useState(false);
 

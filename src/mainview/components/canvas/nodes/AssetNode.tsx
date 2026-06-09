@@ -1,4 +1,3 @@
-import { useViewport } from '@xyflow/react';
 import {
   AlertTriangle,
   ExternalLink,
@@ -12,9 +11,9 @@ import {
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type {
   ArchiveSummary,
@@ -817,7 +816,6 @@ const AssetNode = ({
   id: string;
   data: AssetNodeRuntimeData;
 }) => {
-  const { zoom } = useViewport();
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
@@ -826,7 +824,7 @@ const AssetNode = ({
     id,
     data as unknown as Record<string, unknown>
   );
-  const isZoomedOut = zoom < 0.4;
+  const isZoomedOut = useIsZoomedOut();
   const asset = resolveAssetData(data);
   const isDark = isColorDark(asset.color);
 

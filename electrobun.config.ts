@@ -4,7 +4,7 @@ export default {
   app: {
     name: 'GhostBoard',
     identifier: 'com.ghostboard.app',
-    version: '0.0.1',
+    version: '1.0.0',
   },
   build: {
     // Vite builds both renderer HTML entries to dist/, we copy from there.
@@ -17,6 +17,7 @@ export default {
     // Ignore Vite output in watch mode — HMR handles view rebuilds separately
     watchIgnore: ['dist/**'],
     mac: {
+      icon: 'icon.iconset/icon_256x256.png',
       bundleCEF: false,
     },
     linux: {

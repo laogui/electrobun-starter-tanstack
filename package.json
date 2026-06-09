@@ -2,6 +2,7 @@
   "name": "ghostboard",
   "version": "1.0.0",
   "description": "GhostBoard — a local-first spatial canvas for visual knowledge management",
+  "license": "MIT",
   "scripts": {
     "start": "vite build && electrobun dev",
     "dev": "electrobun dev --watch",

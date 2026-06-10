@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
-import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   getCreatableMenuItems,
@@ -37,7 +36,6 @@ import {
   handleMarkdownImportResult,
 } from '@/lib/importMarkdownCards';
 import {
-  isRpcAvailable,
   rpcCreateView,
   rpcCreateViewFromTemplate,
   rpcDeleteView,
@@ -45,8 +43,6 @@ import {
   rpcListViews,
   rpcRenameView,
   rpcRestoreView,
-  rpcSaveManifest,
-  rpcSetActiveView,
 } from '@/lib/rpc';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 
@@ -134,6 +130,7 @@ export function ViewSwitcher({
   const views = useCanvasStore((s) => s.views);
   const setViews = useCanvasStore((s) => s.setViews);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
+  const switchView = useCanvasStore((s) => s.switchView);
   // Load views list + persisted activeViewId on mount
   useEffect(() => {
     (async () => {
@@ -206,34 +203,16 @@ export function ViewSwitcher({
         return;
       }
 
-      // Flush current canvas before switching. Abort the switch if the save
-      // fails — proceeding would clear the store and lose the unsaved edits.
-      if (await isRpcAvailable()) {
-        const { nodes, edges, viewport } = useCanvasStore.getState();
-        const sanitized = sanitizeForPersistence(nodes, edges);
-        const saved = await rpcSaveManifest(
-          activeViewId,
-          sanitized.nodes,
-          sanitized.edges,
-          viewport ?? undefined
-        ).catch((error) => {
-          console.error('[ViewSwitcher] Failed to flush before switch:', error);
-          return { success: false };
-        });
-        if (!saved?.success) {
-          toast.error(m.toast_view_switch_save_failed());
-          return;
-        }
+      // switchView flushes the current canvas first and refuses to switch
+      // when the save fails, so we never clear unsaved edits.
+      const switched = await switchView(viewId);
+      if (!switched) {
+        toast.error(m.toast_view_switch_save_failed());
+        return;
       }
-
-      // Persist the active view selection so it survives restarts
-      rpcSetActiveView(viewId).catch(() => {});
-
-      // Clear store & set new view ID; index.tsx's effect will load + hydrate
-      setActiveView(viewId);
       setOpen(options?.keepOpen ?? false);
     },
-    [activeViewId, setActiveView]
+    [activeViewId, switchView]
   );
 
   const beginInlineRename = useCallback(

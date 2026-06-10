@@ -238,7 +238,8 @@ const MOVE_TO_VIEW_ACTION_PREFIX = 'move-to-view:';
 
 const getMultiItems = (
   views: ViewSummary[],
-  activeViewId: string
+  activeViewId: string,
+  allLocked: boolean
 ): MenuItem[] => {
   const targetViews = views.filter((view) => view.id !== activeViewId);
   return [
@@ -258,6 +259,11 @@ const getMultiItems = (
     },
     { id: 'change-color', label: m.menu_change_color(), icon: Palette },
     { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+    {
+      id: 'toggle-lock-selection',
+      label: allLocked ? m.menu_unlock() : m.menu_lock(),
+      icon: allLocked ? Unlock : Lock,
+    },
     {
       id: 'move-to-view',
       label: m.menu_move_to_view(),
@@ -374,6 +380,18 @@ export function CanvasContextMenu({
   const hasClipboard = useCanvasStore((state) => state.clipboard.length > 0);
   const activeViewId = useCanvasStore((state) => state.activeViewId);
   const views = useCanvasStore((state) => state.views);
+  const allSelectedLocked = useCanvasStore((state) => {
+    if (menu?.target !== 'multi') {
+      return false;
+    }
+    const selected = state.nodes.filter((node) => node.selected);
+    return (
+      selected.length > 0 &&
+      selected.every((node) =>
+        Boolean((node.data as { locked?: unknown } | undefined)?.locked)
+      )
+    );
+  });
 
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
@@ -385,7 +403,7 @@ export function CanvasContextMenu({
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
-    multi: () => getMultiItems(views, activeViewId),
+    multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
     canvas: () => getCanvasItems(hasClipboard),
   };
 

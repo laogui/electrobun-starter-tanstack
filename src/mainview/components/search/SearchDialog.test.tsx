@@ -22,13 +22,15 @@ vi.mock('@/hooks/useSearch', () => ({
 }));
 
 const rpcMocks = vi.hoisted(() => ({
-  isRpcAvailable: vi.fn(),
-  rpcSaveManifest: vi.fn(),
+  isRpcAvailable: vi.fn().mockResolvedValue(true),
+  rpcSaveManifest: vi.fn().mockResolvedValue({ success: true }),
+  rpcSetActiveView: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/rpc', () => ({
   isRpcAvailable: rpcMocks.isRpcAvailable,
   rpcSaveManifest: rpcMocks.rpcSaveManifest,
+  rpcSetActiveView: rpcMocks.rpcSetActiveView,
 }));
 
 vi.mock('../../../paraglide/messages.js', () => ({
@@ -134,9 +136,10 @@ beforeEach(() => {
     edges: [],
     searchOpen: true,
     pendingSearchTarget: null,
+    _hydrated: true,
   });
   rpcMocks.isRpcAvailable.mockReset().mockResolvedValue(true);
-  rpcMocks.rpcSaveManifest.mockReset().mockResolvedValue(undefined);
+  rpcMocks.rpcSaveManifest.mockReset().mockResolvedValue({ success: true });
   searchState.current = {
     query: '',
     setQuery: vi.fn(),

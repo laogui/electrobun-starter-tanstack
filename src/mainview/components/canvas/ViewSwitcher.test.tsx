@@ -142,6 +142,7 @@ const resetStore = () => {
     clipboard: [],
     createMenuOpen: false,
     editingEdgeId: null,
+    _hydrated: true,
   });
 };
 

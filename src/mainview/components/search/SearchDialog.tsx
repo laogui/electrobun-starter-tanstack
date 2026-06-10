@@ -3,10 +3,9 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { ArrowRight, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
 import { useSearch } from '@/hooks/useSearch';
 import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
-import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
-import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
 import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -116,7 +115,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const pendingSearchQuery = useCanvasStore((s) => s.pendingSearchQuery);
   const setPendingSearchQuery = useCanvasStore((s) => s.setPendingSearchQuery);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
-  const setActiveView = useCanvasStore((s) => s.setActiveView);
+  const switchView = useCanvasStore((s) => s.switchView);
   const setPendingSearchTarget = useCanvasStore(
     (s) => s.setPendingSearchTarget
   );
@@ -342,10 +341,12 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       setOpen(false);
 
       if (result.kind === 'view' || result.viewId !== activeViewId) {
-        if (await isRpcAvailable()) {
-          const { nodes: liveNodes, edges } = useCanvasStore.getState();
-          const sanitized = sanitizeForPersistence(liveNodes, edges);
-          await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
+        // switchView flushes the current canvas first and aborts on failure,
+        // so jumping to a search result can never drop unsaved edits.
+        const switched = await switchView(result.viewId);
+        if (!switched) {
+          toast.error(m.toast_view_switch_save_failed());
+          return;
         }
         if (result.kind !== 'view') {
           setPendingSearchTarget({
@@ -354,7 +355,6 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
             edgeId: result.edgeId,
           });
         }
-        setActiveView(result.viewId);
         return;
       }
 
@@ -363,7 +363,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     [
       setOpen,
       activeViewId,
-      setActiveView,
+      switchView,
       setPendingSearchTarget,
       locateInCurrentView,
       recordHistory,

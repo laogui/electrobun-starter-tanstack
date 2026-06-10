@@ -100,6 +100,7 @@ export function useContextMenu({
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
   const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
+  const toggleNodesLocked = useCanvasStore((s) => s.toggleNodesLocked);
   const moveSelectedToView = useCanvasStore((s) => s.moveSelectedToView);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -456,6 +457,15 @@ export function useContextMenu({
           }
           break;
         }
+        case 'toggle-lock-selection': {
+          const selected = useCanvasStore
+            .getState()
+            .nodes.filter((n) => n.selected)
+            .map((n) => n.id);
+          const ids = selected.length > 0 ? selected : nodeId ? [nodeId] : [];
+          toggleNodesLocked(ids);
+          break;
+        }
         case 'open-link': {
           if (nodeId) {
             const node = useCanvasStore
@@ -612,6 +622,7 @@ export function useContextMenu({
       saveSnapshot,
       createNode,
       toggleNodeLocked,
+      toggleNodesLocked,
       moveSelectedToView,
       onRequestCreate,
     ]

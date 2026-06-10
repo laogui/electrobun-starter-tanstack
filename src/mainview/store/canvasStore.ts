@@ -29,8 +29,15 @@ import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
-import { loadCanvas, rpcDeleteNote, rpcSaveManifest } from '@/lib/rpc';
+import {
+  isRpcAvailable,
+  loadCanvas,
+  rpcDeleteNote,
+  rpcSaveManifest,
+  rpcSetActiveView,
+} from '@/lib/rpc';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -351,6 +358,10 @@ export interface CanvasState {
   setActiveTagFilters: (tags: string[]) => void;
 
   // Actions – multi-view
+  /**
+   * Low-level view swap: clears canvas state without persisting anything.
+   * User-initiated switches should go through `switchView` instead.
+   */
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
   setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
@@ -374,11 +385,19 @@ export interface CanvasState {
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setViewport: (viewport: CanvasViewport | null) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
+  /**
+   * Flush the current canvas to disk, then switch to `viewId`. Resolves to
+   * `false` (and leaves the current view active) when the flush fails, so
+   * callers can surface an error instead of silently dropping edits.
+   */
+  switchView: (viewId: string) => Promise<boolean>;
 
   // Tag filter sidebar (workspace-wide tag list)
   tagSidebarOpen: boolean;
   toggleLibrary: () => void;
   toggleNodeLocked: (nodeId: string) => void;
+  /** Lock every node in `ids` unless all are already locked, then unlock. */
+  toggleNodesLocked: (ids: string[]) => void;
   /** Toggle a single tag in/out of the active filters (case-insensitive). */
   toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
@@ -756,6 +775,26 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().commitNodeData(nodeId, { locked: !current });
   },
 
+  toggleNodesLocked: (ids) => {
+    const idSet = new Set(ids);
+    const targets = get().nodes.filter((node) => idSet.has(node.id));
+    if (targets.length === 0) {
+      return;
+    }
+    // Mixed selections lock everything; only a fully locked selection unlocks.
+    const nextLocked = targets.some(
+      (node) => !(node.data as { locked?: unknown } | undefined)?.locked
+    );
+    get().saveSnapshot();
+    set((s) => ({
+      nodes: s.nodes.map((node) =>
+        idSet.has(node.id)
+          ? { ...node, data: { ...node.data, locked: nextLocked } }
+          : node
+      ),
+    }));
+  },
+
   bringNodesToFront: (ids) => {
     const idSet = new Set(ids);
     if (idSet.size === 0) {
@@ -1113,6 +1152,39 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  switchView: async (viewId) => {
+    const { activeViewId, edges, nodes, viewport, _hydrated } = get();
+    if (viewId === activeViewId) {
+      return true;
+    }
+
+    // Flush the outgoing canvas first; abort the switch when the save fails so
+    // clearing the store can never drop unsaved edits. Skip the flush when the
+    // canvas was never hydrated — saving an empty store would wipe the manifest.
+    if (_hydrated && (await isRpcAvailable())) {
+      const sanitized = sanitizeForPersistence(nodes, edges);
+      const saved = await rpcSaveManifest(
+        activeViewId,
+        sanitized.nodes,
+        sanitized.edges,
+        viewport ?? undefined
+      ).catch((error) => {
+        console.error('[canvasStore] Failed to flush before switch:', error);
+        return { success: false };
+      });
+      if (!saved?.success) {
+        return false;
+      }
+      // Clear any pending flush backup on successful save
+      clearPendingFlushBackup(activeViewId);
+    }
+
+    // Persist the active view selection so it survives restarts.
+    rpcSetActiveView(viewId).catch(() => {});
+    get().setActiveView(viewId);
+    return true;
+  },
+
   moveSelectedToView: async (targetViewId) => {
     const { activeViewId, edges, nodes, viewport } = get();
     if (targetViewId === activeViewId) {
@@ -1226,6 +1298,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       sortNodesByParent([...targetNodes, ...movedNodes]),
       [...targetEdges, ...movedEdges]
     );
+    // Persist both manifests BEFORE touching local state, and roll the target
+    // back if the source save fails — otherwise a partial failure would leave
+    // the moved nodes existing in both views (or vanishing from the UI while
+    // still on disk). Target is written first so a crash between the two
+    // saves duplicates nodes instead of losing them.
     const targetSave = await rpcSaveManifest(
       targetViewId,
       sanitizedTarget.nodes,
@@ -1236,6 +1313,35 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return { success: false };
     });
     if (!targetSave?.success) {
+      return false;
+    }
+
+    const sanitizedSource = sanitizeForPersistence(sourceNodes, sourceEdges);
+    const sourceSave = await rpcSaveManifest(
+      activeViewId,
+      sanitizedSource.nodes,
+      sanitizedSource.edges,
+      viewport ?? undefined
+    ).catch((error) => {
+      console.error('[canvasStore] Failed to save source canvas:', error);
+      return { success: false };
+    });
+    if (!sourceSave?.success) {
+      const sanitizedOriginalTarget = sanitizeForPersistence(
+        targetNodes,
+        targetEdges
+      );
+      await rpcSaveManifest(
+        targetViewId,
+        sanitizedOriginalTarget.nodes,
+        sanitizedOriginalTarget.edges,
+        targetViewport
+      ).catch((error) => {
+        console.error(
+          '[canvasStore] Failed to roll back target canvas:',
+          error
+        );
+      });
       return false;
     }
 
@@ -1252,18 +1358,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : state.focusedNode,
       nodes: sourceNodes,
     }));
-
-    const sanitizedSource = sanitizeForPersistence(sourceNodes, sourceEdges);
-    const sourceSave = await rpcSaveManifest(
-      activeViewId,
-      sanitizedSource.nodes,
-      sanitizedSource.edges,
-      viewport ?? undefined
-    ).catch((error) => {
-      console.error('[canvasStore] Failed to save source canvas:', error);
-      return { success: false };
-    });
-    return Boolean(sourceSave?.success);
+    return true;
   },
 
   // -- clipboard ------------------------------------------------------------

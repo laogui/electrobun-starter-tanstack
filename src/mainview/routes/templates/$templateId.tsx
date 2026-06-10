@@ -60,7 +60,7 @@ function TemplatePreviewContent() {
 
   const views = useCanvasStore((s) => s.views);
   const setViews = useCanvasStore((s) => s.setViews);
-  const setActiveView = useCanvasStore((s) => s.setActiveView);
+  const switchView = useCanvasStore((s) => s.switchView);
 
   const { theme, systemTheme } = useTheme();
   const isDark =
@@ -81,12 +81,15 @@ function TemplatePreviewContent() {
         return;
       }
       setViews([...views, { id: result.id, name: result.name }]);
-      setActiveView(result.id);
+      const switched = await switchView(result.id);
+      if (!switched) {
+        toast.error(m.toast_view_switch_save_failed());
+      }
       await navigate({ to: '/' });
     } finally {
       setCreating(false);
     }
-  }, [templateId, views, setViews, setActiveView, navigate]);
+  }, [templateId, views, setViews, switchView, navigate]);
 
   /**
    * Dev-only: snapshot the current preview at 800×500, base64-encode the

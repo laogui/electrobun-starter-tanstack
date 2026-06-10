@@ -538,23 +538,29 @@ describe('canvasStore — undo/redo', () => {
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
   });
 
-  it('undo and redo restore viewport snapshots', () => {
+  it('undo and redo leave the current viewport untouched', () => {
+    // The React Flow camera only reads the stored viewport on mount, so
+    // undo/redo restoring a stale viewport would not move the camera — it
+    // would only corrupt the persisted value and cause a jump on relaunch.
     useCanvasStore.setState({
       nodes: [makeNode('a')],
       edges: [],
       viewport: { x: 10, y: 20, zoom: 1 },
     });
     useCanvasStore.getState().saveSnapshot();
+    useCanvasStore.getState().setNodes([makeNode('a'), makeNode('b')]);
     useCanvasStore.getState().setViewport({ x: 100, y: 200, zoom: 2 });
 
     useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes).toHaveLength(1);
     expect(useCanvasStore.getState().viewport).toEqual({
-      x: 10,
-      y: 20,
-      zoom: 1,
+      x: 100,
+      y: 200,
+      zoom: 2,
     });
 
     useCanvasStore.getState().redo();
+    expect(useCanvasStore.getState().nodes).toHaveLength(2);
     expect(useCanvasStore.getState().viewport).toEqual({
       x: 100,
       y: 200,

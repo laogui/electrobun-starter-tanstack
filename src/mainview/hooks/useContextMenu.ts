@@ -92,6 +92,8 @@ export function useContextMenu({
   const setEditingFolderId = useCanvasStore((s) => s.setEditingFolderId);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
+  const duplicateSelected = useCanvasStore((s) => s.duplicateSelected);
+  const groupSelected = useCanvasStore((s) => s.groupSelected);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
   const createNode = useCanvasStore((s) => s.createNode);
@@ -170,12 +172,20 @@ export function useContextMenu({
           action.slice('move-to-view:'.length)
         );
         if (!moved) {
-          toast.error('Could not move selection');
+          toast.error(m.toast_move_selection_failed());
         }
         return;
       }
 
       switch (action) {
+        case 'duplicate': {
+          duplicateSelected();
+          break;
+        }
+        case 'group-selection': {
+          groupSelected();
+          break;
+        }
         case 'paste': {
           pasteClipboard();
           break;
@@ -595,6 +605,8 @@ export function useContextMenu({
       setEditingFolderId,
       setRenamingNodeId,
       changeNodeColor,
+      duplicateSelected,
+      groupSelected,
       addFolderChild,
       pasteClipboard,
       saveSnapshot,

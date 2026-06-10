@@ -107,6 +107,9 @@ const MINIMAP_MASK_DARK = 'rgba(20, 20, 20, 0.7)';
 /** 小地图节点填充色 */
 const MINIMAP_NODE_COLOR = '#ddd';
 
+/** 小地图选中节点填充色 */
+const MINIMAP_NODE_SELECTED_COLOR = '#3b82f6';
+
 /** 小地图节点描边色 */
 const MINIMAP_NODE_STROKE_COLOR = '#999';
 
@@ -660,21 +663,6 @@ function CanvasComponent() {
     [setFocusedNode, setFocusedFolder]
   );
 
-  const onNodeClick = useCallback(
-    (_: any, node: Node) => {
-      if (node.type !== 'folder') {
-        return;
-      }
-      const el = document.querySelector(`[data-id="${node.id}"]`);
-      const rect = el?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
-      setFocusedFolder({ id: node.id, data: node.data, rect });
-    },
-    [setFocusedFolder]
-  );
-
   const onMoveFolderChildOut = useCallback(
     (child: { id: string }, rect: DOMRect) => {
       if (!focusedFolder) {
@@ -692,32 +680,65 @@ function CanvasComponent() {
     [focusedFolder, moveFolderChildToCanvas]
   );
 
-  const nodesWithState = useMemo(
-    () =>
-      nodes
-        .filter((node) => !(node.data as Record<string, unknown>).detached)
-        .map((node) => {
-          const locked = Boolean((node.data as { locked?: unknown }).locked);
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              isHidden:
-                focusedNode?.id === node.id || focusedFolder?.id === node.id,
-              isDropTarget: dropTargetId === node.id,
-            },
-            ...(locked
-              ? {
-                  draggable: false,
-                  connectable: false,
-                  deletable: false,
-                  className: `${node.className ?? ''} is-locked`.trim(),
-                }
-              : {}),
-          };
-        }),
-    [nodes, focusedNode, focusedFolder, dropTargetId]
+  // Decorate nodes with render-only flags while keeping object identity stable
+  // for unchanged nodes. Without the cache, every store update (including each
+  // drag frame) would hand React Flow a brand-new object per node and force the
+  // whole canvas to re-render.
+  const decoratedNodesCacheRef = useRef(
+    new Map<
+      string,
+      { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
+    >()
   );
+  const nodesWithState = useMemo(() => {
+    const cache = decoratedNodesCacheRef.current;
+    const nextCache = new Map<
+      string,
+      { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
+    >();
+    const result: Node[] = [];
+    for (const node of nodes) {
+      if ((node.data as Record<string, unknown>).detached) {
+        continue;
+      }
+      const isHidden =
+        focusedNode?.id === node.id || focusedFolder?.id === node.id;
+      const isDropTarget = dropTargetId === node.id;
+      const cached = cache.get(node.id);
+      if (
+        cached &&
+        cached.source === node &&
+        cached.isHidden === isHidden &&
+        cached.isDropTarget === isDropTarget
+      ) {
+        nextCache.set(node.id, cached);
+        result.push(cached.result);
+        continue;
+      }
+      const locked = Boolean((node.data as { locked?: unknown }).locked);
+      const decorated: Node = {
+        ...node,
+        data: { ...node.data, isHidden, isDropTarget },
+        ...(locked
+          ? {
+              draggable: false,
+              connectable: false,
+              deletable: false,
+              className: `${node.className ?? ''} is-locked`.trim(),
+            }
+          : {}),
+      };
+      nextCache.set(node.id, {
+        isDropTarget,
+        isHidden,
+        result: decorated,
+        source: node,
+      });
+      result.push(decorated);
+    }
+    decoratedNodesCacheRef.current = nextCache;
+    return result;
+  }, [nodes, focusedNode, focusedFolder, dropTargetId]);
 
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const dragDepthRef = useRef(0);
@@ -835,13 +856,18 @@ function CanvasComponent() {
     ? MINIMAP_BORDER_DARK
     : MINIMAP_BORDER_LIGHT;
   const miniMapMask = isDarkTheme ? MINIMAP_MASK_DARK : MINIMAP_MASK_LIGHT;
+  const miniMapNodeColor = useCallback(
+    (node: Node) =>
+      node.selected ? MINIMAP_NODE_SELECTED_COLOR : MINIMAP_NODE_COLOR,
+    []
+  );
   const activeViewName =
     views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
 
   const onExportCanvas = useCallback(async () => {
     const instance = rfInstance.current;
     if (!instance) {
-      toast.error('画布尚未准备好，暂时无法导出。');
+      toast.error(m.toast_canvas_not_ready());
       return;
     }
 
@@ -852,11 +878,11 @@ function CanvasComponent() {
         instance,
       });
       if (exported) {
-        toast.success('PNG 已导出。');
+        toast.success(m.toast_png_exported());
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'PNG 导出失败，请重试。';
+        error instanceof Error ? error.message : m.toast_export_failed();
       toast.error(message);
     }
   }, [activeViewName, canvasBackground]);
@@ -864,7 +890,7 @@ function CanvasComponent() {
   const onExportCanvasJson = useCallback(async () => {
     const instance = rfInstance.current;
     if (!instance) {
-      toast.error('画布尚未准备好，暂时无法导出。');
+      toast.error(m.toast_canvas_not_ready());
       return;
     }
 
@@ -878,11 +904,11 @@ function CanvasComponent() {
         viewport: instance.getViewport?.(),
       });
       if (exported) {
-        toast.success('JSON 已导出。');
+        toast.success(m.toast_json_exported());
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'JSON 导出失败，请重试。';
+        error instanceof Error ? error.message : m.toast_export_failed();
       toast.error(message);
     }
   }, [activeViewId, activeViewName, edges, nodes]);
@@ -933,7 +959,6 @@ function CanvasComponent() {
           onMoveEnd={(_, viewport) => {
             setViewport(viewport);
           }}
-          onNodeClick={onNodeClick}
           onNodeContextMenu={onNodeContextMenu}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeDrag={onNodeDrag}
@@ -941,11 +966,11 @@ function CanvasComponent() {
           onNodeDragStop={onNodeDragStop}
           onNodesChange={onNodesChange}
           onPaneContextMenu={onPaneContextMenu}
-          panOnDrag={false}
+          panOnDrag={spacePanActive}
           panOnScroll={true}
           proOptions={{ hideAttribution: true }}
           selectionMode={SelectionMode.Partial}
-          selectionOnDrag={!editableInteractionLocked}
+          selectionOnDrag={!(spacePanActive || editableInteractionLocked)}
           snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
           snapToGrid={canvasSnapToGrid}
           style={{ backgroundColor: canvasBackground }}
@@ -961,7 +986,7 @@ function CanvasComponent() {
           <HelperLines horizontal={helperLineH} vertical={helperLineV} />
           <MiniMap
             maskColor={miniMapMask}
-            nodeColor={MINIMAP_NODE_COLOR}
+            nodeColor={miniMapNodeColor}
             nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
             pannable
             position="bottom-right"

@@ -509,6 +509,29 @@ describe('useCanvasKeyboard', () => {
     expect(useCanvasStore.getState().focusedFolder).toBeNull();
   });
 
+  it('starts inline sticky editing instead of focusing on Enter', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'sticky-1',
+          type: 'sticky',
+          position: { x: 0, y: 0 },
+          data: { content: 'Note' },
+          selected: true,
+        },
+      ],
+    });
+
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'Enter', cancelable: true });
+    });
+
+    expect(useCanvasStore.getState().editingStickyId).toBe('sticky-1');
+    expect(useCanvasStore.getState().focusedNode).toBeNull();
+  });
+
   it('opens the search dialog and seeds the query when typing on the canvas', () => {
     render(<TestComponent />);
 

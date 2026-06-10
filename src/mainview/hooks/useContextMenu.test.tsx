@@ -127,6 +127,8 @@ const storeActions = {
   }),
   setEditingFolderId: vi.fn(),
   changeNodeColor: vi.fn(),
+  duplicateSelected: vi.fn(),
+  groupSelected: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
   nextNodeId: vi.fn(() => `node-${Math.random().toString(36).slice(2, 10)}`),
@@ -189,6 +191,7 @@ vi.mock('../../paraglide/messages.js', () => ({
     `${count} cards deleted`,
   toast_edge_deleted: () => 'Connection deleted',
   toast_undo: () => 'Undo',
+  toast_move_selection_failed: () => 'Could not move selection',
 }));
 
 vi.mock('nanoid', () => ({
@@ -456,6 +459,22 @@ const Harness = () => {
         type="button"
       >
         paste
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('duplicate', 'card-1');
+        }}
+        type="button"
+      >
+        duplicate
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('group-selection', 'card-1');
+        }}
+        type="button"
+      >
+        group
       </button>
       <button
         onClick={() => {
@@ -729,6 +748,8 @@ describe('useContextMenu', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'paste' }));
+    fireEvent.click(screen.getByRole('button', { name: 'duplicate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'group' }));
     fireEvent.click(screen.getByRole('button', { name: 'reset-zoom' }));
     fireEvent.click(screen.getByRole('button', { name: 'delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'color' }));
@@ -740,6 +761,8 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'delete-edge' }));
 
     expect(storeActions.pasteClipboard).toHaveBeenCalled();
+    expect(storeActions.duplicateSelected).toHaveBeenCalled();
+    expect(storeActions.groupSelected).toHaveBeenCalled();
     expect(zoomTo).toHaveBeenCalledWith(1, { duration: 300 });
     expect(storeActions.deleteNodes).toHaveBeenCalledWith(['card-1']);
     expect(storeActions.changeNodeColor).toHaveBeenCalledWith('card-1');

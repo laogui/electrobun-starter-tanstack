@@ -1,5 +1,6 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { ImagePlus } from 'lucide-react';
+import { useRef } from 'react';
 
 import * as m from '../../../paraglide/messages.js';
 
@@ -12,6 +13,8 @@ export function ReplaceImageConfirmDialog({
   onConfirm: () => void;
   open: boolean;
 }) {
+  // Non-destructive confirm: focus the primary action so Enter confirms.
+  const confirmRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root
       onOpenChange={(nextOpen) => {
@@ -23,7 +26,10 @@ export function ReplaceImageConfirmDialog({
     >
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-        <Dialog.Popup className="fixed top-1/2 left-1/2 z-[60] w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl outline-hidden transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-900">
+        <Dialog.Popup
+          className="fixed top-1/2 left-1/2 z-[60] w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl outline-hidden transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-900"
+          initialFocus={confirmRef}
+        >
           <div className="mb-4 flex items-start gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
               <ImagePlus size={17} />
@@ -48,6 +54,7 @@ export function ReplaceImageConfirmDialog({
             <button
               className="h-8 rounded-md bg-blue-600 px-3 font-medium text-[13px] text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:bg-blue-500 dark:hover:bg-blue-400"
               onClick={onConfirm}
+              ref={confirmRef}
               type="button"
             >
               {m.replace_image_confirm_action()}

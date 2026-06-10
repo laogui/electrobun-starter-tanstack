@@ -206,16 +206,24 @@ export function ViewSwitcher({
         return;
       }
 
-      // Flush current canvas before switching
+      // Flush current canvas before switching. Abort the switch if the save
+      // fails — proceeding would clear the store and lose the unsaved edits.
       if (await isRpcAvailable()) {
         const { nodes, edges, viewport } = useCanvasStore.getState();
         const sanitized = sanitizeForPersistence(nodes, edges);
-        await rpcSaveManifest(
+        const saved = await rpcSaveManifest(
           activeViewId,
           sanitized.nodes,
           sanitized.edges,
           viewport ?? undefined
-        );
+        ).catch((error) => {
+          console.error('[ViewSwitcher] Failed to flush before switch:', error);
+          return { success: false };
+        });
+        if (!saved?.success) {
+          toast.error(m.toast_view_switch_save_failed());
+          return;
+        }
       }
 
       // Persist the active view selection so it survives restarts

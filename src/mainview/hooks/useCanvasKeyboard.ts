@@ -261,12 +261,18 @@ export function useCanvasKeyboard({
       }
 
       if (e.key === 'Enter') {
-        const { nodes } = useCanvasStore.getState();
+        const { nodes, setEditingStickyId } = useCanvasStore.getState();
         const selected = nodes.filter((n) => n.selected);
         if (selected.length !== 1) {
           return;
         }
         const node = selected[0]!;
+        // Stickies have no focused view — Enter starts inline text editing.
+        if (node.type === 'sticky') {
+          e.preventDefault();
+          setEditingStickyId(node.id);
+          return;
+        }
         const el = document.querySelector(`[data-id="${node.id}"]`);
         const rect = el?.getBoundingClientRect();
         if (!rect) {

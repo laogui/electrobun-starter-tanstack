@@ -34,6 +34,15 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
 
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Mirror the latest zoom/pan into refs so the pointer listeners (registered
+  // once) can read fresh values without re-subscribing on every state change.
+  const zoomRef = useRef(zoom);
+  const panRef = useRef({ x: panX, y: panY });
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = { x: panX, y: panY };
+  });
 
   const reset = useCallback(() => {
     setZoom(1);
@@ -95,13 +104,13 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
     }
 
     const handlePointerDown = (e: PointerEvent) => {
-      if (zoom <= 1) {
+      if (zoomRef.current <= 1) {
         return;
       }
       e.preventDefault();
       container.setPointerCapture(e.pointerId);
       pointerStartRef.current = { x: e.clientX, y: e.clientY };
-      panStartRef.current = { x: panX, y: panY };
+      panStartRef.current = { ...panRef.current };
       setIsPanning(true);
     };
 
@@ -112,8 +121,9 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
       const dx = e.clientX - pointerStartRef.current.x;
       const dy = e.clientY - pointerStartRef.current.y;
       const rect = container.getBoundingClientRect();
-      setPanX(clampPan(panStartRef.current.x + dx, zoom, rect.width));
-      setPanY(clampPan(panStartRef.current.y + dy, zoom, rect.height));
+      const zoomLevel = zoomRef.current;
+      setPanX(clampPan(panStartRef.current.x + dx, zoomLevel, rect.width));
+      setPanY(clampPan(panStartRef.current.y + dy, zoomLevel, rect.height));
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -135,7 +145,7 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
       container.removeEventListener('pointerup', handlePointerUp);
       container.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [zoom, panX, panY]);
+  }, []);
 
   return { containerRef, isPanning, panX, panY, reset, zoom };
 }

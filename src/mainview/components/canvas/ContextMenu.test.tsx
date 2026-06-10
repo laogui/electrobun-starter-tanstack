@@ -60,6 +60,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_reset_zoom: () => 'Reset zoom',
   menu_open_focused: () => 'Open focused',
   menu_copy: () => 'Copy',
+  menu_duplicate: () => 'Duplicate',
+  menu_move_to_view: () => 'Move to canvas…',
   menu_change_color: () => 'Change color',
   menu_edit_tag: () => 'Edit Tag',
   menu_delete: () => 'Delete',
@@ -326,8 +328,15 @@ describe('canvasContextMenu', () => {
       />
     );
 
+    expect(
+      screen.getByRole('button', { name: 'Duplicate ⌘D' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Group ⌘G' })
+    ).toBeInTheDocument();
+
     fireEvent.mouseEnter(
-      screen.getByRole('button', { name: 'Move to canvas...' })
+      screen.getByRole('button', { name: 'Move to canvas…' })
     );
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
 

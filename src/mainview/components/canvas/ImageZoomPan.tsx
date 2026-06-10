@@ -10,26 +10,16 @@ export function ImageZoomPan({ children }: ImageZoomPanProps) {
   const { containerRef, isPanning, panX, panY, reset, zoom } =
     useImageZoomPan();
   const [showIndicator, setShowIndicator] = useState(false);
-  const [indicatorTimeout, setIndicatorTimeout] = useState<ReturnType<
-    typeof setTimeout
-  > | null>(null);
 
   useEffect(() => {
-    if (zoom !== 1) {
-      setShowIndicator(true);
-      if (indicatorTimeout) {
-        clearTimeout(indicatorTimeout);
-      }
-      const timeout = setTimeout(() => setShowIndicator(false), 1500);
-      setIndicatorTimeout(timeout);
-      return () => clearTimeout(timeout);
+    if (zoom === 1) {
+      setShowIndicator(false);
+      return;
     }
-    return () => {
-      if (indicatorTimeout) {
-        clearTimeout(indicatorTimeout);
-      }
-    };
-  }, [zoom, indicatorTimeout]);
+    setShowIndicator(true);
+    const timeout = setTimeout(() => setShowIndicator(false), 1500);
+    return () => clearTimeout(timeout);
+  }, [zoom]);
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { NodeResizeControl } from '@xyflow/react';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
@@ -164,29 +164,96 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
     }
   }, []);
 
+  // Focus the contentEditable and place the caret: at the click point when
+  // available, otherwise at the end of the text (keyboard entry).
+  const enterEditing = useCallback((caretPoint?: { x: number; y: number }) => {
+    setEditing(true);
+    setTimeout(() => {
+      const el = textRef.current;
+      if (!el) {
+        return;
+      }
+      el.focus();
+      const selection = window.getSelection();
+      const range = caretPoint
+        ? caretRangeFromPoint(caretPoint.x, caretPoint.y)
+        : null;
+      if (range) {
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else if (!caretPoint) {
+        const endRange = document.createRange();
+        endRange.selectNodeContents(el);
+        endRange.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(endRange);
+      }
+    }, 10);
+  }, []);
+
+  // Enter-to-edit: useCanvasKeyboard stamps `editingStickyId` when Enter is
+  // pressed with this sticky as the sole selection.
+  const editRequested = useCanvasStore((s) => s.editingStickyId === id);
+  const setEditingStickyId = useCanvasStore((s) => s.setEditingStickyId);
+  useEffect(() => {
+    if (!editRequested) {
+      return;
+    }
+    setEditingStickyId(null);
+    if (!editing) {
+      enterEditing();
+    }
+  }, [editRequested, editing, enterEditing, setEditingStickyId]);
+
+  // Slide-editor click model: the first click only selects; clicking a sticky
+  // that was already the sole selection enters edit mode. Selection state is
+  // sampled on pointerdown — before React Flow applies this click's selection
+  // change — so a fresh select-click never starts editing.
+  const wasSoleSelectionRef = useRef(false);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
+        wasSoleSelectionRef.current = false;
+        return;
+      }
+      const selectedNodes = useCanvasStore
+        .getState()
+        .nodes.filter((n) => n.selected);
+      wasSoleSelectionRef.current =
+        selectedNodes.length === 1 && selectedNodes[0]?.id === id;
+    },
+    [id]
+  );
+
   const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (
+        editing ||
+        !wasSoleSelectionRef.current ||
+        e.shiftKey ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      e.stopPropagation();
+      enterEditing({ x: e.clientX, y: e.clientY });
+    },
+    [editing, enterEditing]
+  );
+
+  // Double-click still works as a fast path when the sticky was not selected
+  // yet (first click selects, the dblclick event then enters editing).
+  const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (editing) {
         return;
       }
       e.stopPropagation();
-      const { clientX, clientY } = e;
-      setEditing(true);
-      setTimeout(() => {
-        const el = textRef.current;
-        if (!el) {
-          return;
-        }
-        el.focus();
-        const range = caretRangeFromPoint(clientX, clientY);
-        if (range) {
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
-      }, 10);
+      enterEditing({ x: e.clientX, y: e.clientY });
     },
-    [editing]
+    [editing, enterEditing]
   );
 
   return (
@@ -243,6 +310,8 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
           'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onPointerDown={handlePointerDown}
       >
         <StickyContent
           data={data}

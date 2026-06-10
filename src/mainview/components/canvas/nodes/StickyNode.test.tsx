@@ -42,18 +42,29 @@ vi.mock('@/contexts/ZoomLevelContext', () => ({
 }));
 
 const saveSnapshotMock = vi.fn();
+const setEditingStickyIdMock = vi.fn();
+
+const storeState: {
+  commitNodeData: typeof updateNodeDataMock;
+  editingStickyId: string | null;
+  nodes: Array<{ id: string; selected?: boolean }>;
+  saveSnapshot: typeof saveSnapshotMock;
+  setEditingStickyId: typeof setEditingStickyIdMock;
+} = {
+  commitNodeData: updateNodeDataMock,
+  editingStickyId: null,
+  nodes: [],
+  saveSnapshot: saveSnapshotMock,
+  setEditingStickyId: setEditingStickyIdMock,
+};
 
 vi.mock('@/store/canvasStore', () => ({
-  useCanvasStore: (
-    selector: (state: {
-      commitNodeData: typeof updateNodeDataMock;
-      saveSnapshot: typeof saveSnapshotMock;
-    }) => unknown
-  ) =>
-    selector({
-      commitNodeData: updateNodeDataMock,
-      saveSnapshot: saveSnapshotMock,
-    }),
+  useCanvasStore: Object.assign(
+    (selector: (state: typeof storeState) => unknown) => selector(storeState),
+    {
+      getState: () => storeState,
+    }
+  ),
 }));
 
 vi.mock('@/components/card/useNodeTagEditing', () => ({
@@ -69,8 +80,11 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
 describe('StickyNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
+    setEditingStickyIdMock.mockReset();
     isZoomedOutMock.mockReset();
     isZoomedOutMock.mockReturnValue(false);
+    storeState.nodes = [];
+    storeState.editingStickyId = null;
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -85,13 +99,86 @@ describe('StickyNode', () => {
     );
 
     const content = screen.getByText('Remember this');
-    fireEvent.click(content.parentElement?.parentElement!);
+    fireEvent.doubleClick(content.parentElement?.parentElement!);
     content.textContent = 'Updated note';
     fireEvent.blur(content);
 
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-1', {
       content: 'Updated note',
     });
+  });
+
+  it('does not enter edit mode when clicking an unselected sticky', () => {
+    vi.useFakeTimers();
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Select me' }}
+        id="sticky-click"
+      />
+    );
+
+    const content = screen.getByText('Select me');
+    const visual = content.parentElement?.parentElement!;
+    fireEvent.pointerDown(visual);
+    fireEvent.click(visual);
+    vi.advanceTimersByTime(20);
+    expect(content.getAttribute('contenteditable')).toBe('false');
+    vi.useRealTimers();
+  });
+
+  it('enters edit mode when clicking the already-selected sticky', () => {
+    vi.useFakeTimers();
+    storeState.nodes = [{ id: 'sticky-selected', selected: true }];
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Edit me' }}
+        id="sticky-selected"
+      />
+    );
+
+    const content = screen.getByText('Edit me');
+    const visual = content.parentElement?.parentElement!;
+    fireEvent.pointerDown(visual);
+    fireEvent.click(visual);
+    vi.advanceTimersByTime(20);
+    expect(content.getAttribute('contenteditable')).toBe('true');
+    vi.useRealTimers();
+  });
+
+  it('does not enter edit mode on shift-click (multi-select)', () => {
+    vi.useFakeTimers();
+    storeState.nodes = [{ id: 'sticky-shift', selected: true }];
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Shift me' }}
+        id="sticky-shift"
+      />
+    );
+
+    const content = screen.getByText('Shift me');
+    const visual = content.parentElement?.parentElement!;
+    fireEvent.pointerDown(visual, { shiftKey: true });
+    fireEvent.click(visual, { shiftKey: true });
+    vi.advanceTimersByTime(20);
+    expect(content.getAttribute('contenteditable')).toBe('false');
+    vi.useRealTimers();
+  });
+
+  it('enters edit mode when an editingStickyId request targets this node', () => {
+    vi.useFakeTimers();
+    storeState.editingStickyId = 'sticky-enter';
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Via Enter' }}
+        id="sticky-enter"
+      />
+    );
+
+    vi.advanceTimersByTime(20);
+    const content = screen.getByText('Via Enter');
+    expect(content.getAttribute('contenteditable')).toBe('true');
+    expect(setEditingStickyIdMock).toHaveBeenCalledWith(null);
+    vi.useRealTimers();
   });
 
   it('exits editing mode when Escape is pressed', () => {
@@ -104,7 +191,7 @@ describe('StickyNode', () => {
     );
 
     const content = screen.getByText('Original');
-    fireEvent.click(content.parentElement?.parentElement!);
+    fireEvent.doubleClick(content.parentElement?.parentElement!);
     vi.advanceTimersByTime(20);
     expect(content.getAttribute('contenteditable')).toBe('true');
 

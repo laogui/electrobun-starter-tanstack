@@ -150,7 +150,16 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_view_restored: ({ name }: { name: string }) =>
     `Canvas "${name}" restored`,
   toast_view_restore_failed: () => 'Could not restore canvas',
+  toast_view_switch_save_failed: () =>
+    'Could not save the current canvas — switch canceled.',
   toast_undo: () => 'Undo',
+  toast_canvas_not_ready: () => 'Canvas is not ready to export yet.',
+  toast_png_exported: () => 'PNG exported.',
+  toast_json_exported: () => 'JSON exported.',
+  toast_export_failed: () => 'Export failed',
+  toast_move_selection_failed: () => 'Could not move selection',
+  menu_duplicate: () => 'Duplicate',
+  menu_move_to_view: () => 'Move to canvas…',
   templates_browse_all: () => 'Browse all templates…',
   template_quick_start_name: () => 'Quick Start',
   template_weekly_planner_name: () => 'Weekly Planner',
@@ -751,7 +760,7 @@ describe('routes/index', () => {
           fileName: 'safe-Default Canvas',
         })
       );
-      expect(toastMocks.success).toHaveBeenCalledWith('PNG 已导出。');
+      expect(toastMocks.success).toHaveBeenCalledWith('PNG exported.');
     });
   });
 
@@ -779,7 +788,7 @@ describe('routes/index', () => {
           viewName: 'Default Canvas',
         })
       );
-      expect(toastMocks.success).toHaveBeenCalledWith('JSON 已导出。');
+      expect(toastMocks.success).toHaveBeenCalledWith('JSON exported.');
     });
   });
 

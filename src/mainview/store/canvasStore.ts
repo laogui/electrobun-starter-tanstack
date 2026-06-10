@@ -300,6 +300,8 @@ export interface CanvasState {
   editingEdgeId: string | null;
   /** Folder id whose info (name + description) dialog is open. */
   editingFolderId: string | null;
+  /** Sticky id that should enter inline text editing (driven by Enter key). */
+  editingStickyId: string | null;
   /** Card id whose TagEditor should auto-open (driven by context-menu action). */
   editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
@@ -355,6 +357,7 @@ export interface CanvasState {
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
   setEditingFolderId: (id: string | null) => void;
+  setEditingStickyId: (id: string | null) => void;
   setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
@@ -413,6 +416,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
   editingFolderId: null,
+  editingStickyId: null,
   editingTagNodeId: null,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
@@ -694,6 +698,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setEditingFolderId: (id) => {
     set({ editingFolderId: id });
+  },
+
+  setEditingStickyId: (id) => {
+    set({ editingStickyId: id });
   },
 
   setEditingTagNodeId: (id) => {
@@ -1659,6 +1667,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  // Note: undo/redo intentionally leave `viewport` untouched. The React Flow
+  // camera only reads the stored viewport on mount, so writing a stale
+  // snapshot value back would not move the camera — it would only overwrite
+  // the persisted viewport and make the camera jump on the next launch.
   undo: () => {
     const { nodes, edges, viewport, _undoRedo } = get();
     const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });
@@ -1668,7 +1680,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
-      viewport: result.snapshot.viewport ?? null,
       _undoRedo: result.state,
     });
   },
@@ -1682,7 +1693,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
-      viewport: result.snapshot.viewport ?? null,
       _undoRedo: result.state,
     });
   },

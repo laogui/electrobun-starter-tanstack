@@ -105,6 +105,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   toast_view_restored: ({ name }: { name: string }) =>
     `Canvas "${name}" restored`,
   toast_view_restore_failed: () => 'Could not restore canvas',
+  toast_view_switch_save_failed: () =>
+    'Could not save the current canvas — switch canceled.',
   toast_undo: () => 'Undo',
   view_node_count_one: () => '1 node',
   view_node_count_other: ({ count }: { count: number }) => `${count} nodes`,
@@ -506,6 +508,32 @@ describe('viewSwitcher', () => {
         { id: 'focus', name: 'Focus Mode' },
       ]);
     });
+  });
+
+  it('aborts the view switch when the pre-switch flush fails', async () => {
+    rpcMocks.rpcSaveManifest.mockResolvedValueOnce({ success: false });
+
+    renderViewSwitcher();
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcListViews).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Default Canvas'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Focus Mode' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalled();
+    });
+
+    const { toast } = await import('sonner');
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Could not save the current canvas — switch canceled.'
+      );
+    });
+    expect(useCanvasStore.getState().activeViewId).toBe('default');
+    expect(rpcMocks.rpcSetActiveView).not.toHaveBeenCalled();
   });
 
   it('skips manifest flush when rpc is unavailable during a view switch', async () => {

@@ -3,10 +3,12 @@ import {
   ChevronRight,
   ClipboardPaste,
   Copy,
+  CopyPlus,
   ExternalLink,
   FileDown,
   FilePlus,
   FolderOpen,
+  Group,
   Image as ImageIcon,
   Layers,
   Link as LinkIcon,
@@ -240,11 +242,25 @@ const getMultiItems = (
 ): MenuItem[] => {
   const targetViews = views.filter((view) => view.id !== activeViewId);
   return [
+    {
+      id: 'duplicate',
+      label: m.menu_duplicate(),
+      icon: CopyPlus,
+      shortcut: '⌘D',
+    },
+    // 'group-selection' (not 'group') — the bare id would be picked up by
+    // resolveCreatableKind and create a new empty group node instead.
+    {
+      id: 'group-selection',
+      label: m.menu_group(),
+      icon: Group,
+      shortcut: '⌘G',
+    },
     { id: 'change-color', label: m.menu_change_color(), icon: Palette },
     { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
     {
       id: 'move-to-view',
-      label: 'Move to canvas...',
+      label: m.menu_move_to_view(),
       icon: Layers,
       disabled: targetViews.length === 0,
       submenu:

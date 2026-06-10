@@ -1145,6 +1145,7 @@ function createSettingsWindow(
         setAIApiKey: async ({ apiKey }) => {
           await saveAIApiKey(apiKey);
           cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
+          mainRpc?.send?.settingsUpdated(cachedSettings);
           return { success: true };
         },
         listTrash: async () => await listTrash(wsPath),

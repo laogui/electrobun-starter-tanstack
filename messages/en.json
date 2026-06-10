@@ -271,7 +271,7 @@
   "settings_ai_api_key_saved": "API key saved.",
   "settings_ai_api_key_cleared": "API key cleared.",
   "settings_ai_api_key_save_failed": "Failed to save API key.",
-  "settings_ai_reload_hint": "Reload the current note to apply AI changes.",
+  "settings_ai_reload_hint": "AI changes apply to open notes automatically.",
   "settings_workspace_title": "Workspace",
   "settings_workspace_path_label": "Workspace folder",
   "settings_workspace_default_indicator": "Default location",

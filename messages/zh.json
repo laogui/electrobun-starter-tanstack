@@ -271,7 +271,7 @@
   "settings_ai_api_key_saved": "API 密钥已保存。",
   "settings_ai_api_key_cleared": "API 密钥已清除。",
   "settings_ai_api_key_save_failed": "API 密钥保存失败。",
-  "settings_ai_reload_hint": "请重新打开当前笔记以应用 AI 设置。",
+  "settings_ai_reload_hint": "AI 设置会自动应用到已打开的笔记。",
   "settings_workspace_title": "工作区",
   "settings_workspace_path_label": "工作区文件夹",
   "settings_workspace_default_indicator": "默认位置",

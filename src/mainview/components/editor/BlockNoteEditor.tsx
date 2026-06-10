@@ -104,6 +104,7 @@ export default function BlockNoteEditor({
   const [, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [, setLastSavedAt] = useState<Date | null>(null);
   const latestMarkdownRef = useRef(initialMarkdown);
+  const latestBlocksRef = useRef<PartialBlock[] | undefined>(undefined);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
 
   const colorValue = typeof color === 'string' ? color : '#FFFFFF';
@@ -150,6 +151,7 @@ export default function BlockNoteEditor({
   // we know whether we have JSON blocks or just markdown.
   useEffect(() => {
     let cancelled = false;
+    latestBlocksRef.current = undefined;
     if (typeof noteId !== 'string') {
       setInitial({
         blocks: undefined,
@@ -206,12 +208,9 @@ export default function BlockNoteEditor({
     };
   }, [noteId, setInitialRevision]);
 
-  // Resolve the localhost AI endpoint (base URL + bearer token) once. The
-  // editor is created synchronously inside BlockNoteSurface, so we gate that
-  // surface until this resolves to avoid rebuilding the editor with AI later.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadAIEndpoint = async () => {
       try {
         const info = await rpcGetAIEndpoint();
         if (!cancelled) {
@@ -223,11 +222,18 @@ export default function BlockNoteEditor({
           setAiEndpoint(null);
         }
       }
-    })();
+    };
+    loadAIEndpoint();
+    globalThis.addEventListener('settings-updated', loadAIEndpoint);
     return () => {
       cancelled = true;
+      globalThis.removeEventListener('settings-updated', loadAIEndpoint);
     };
   }, []);
+
+  const aiEndpointKey = aiEndpoint
+    ? `${aiEndpoint.enabled}:${aiEndpoint.baseUrl}:${aiEndpoint.token}`
+    : 'no-ai';
 
   if (!initial || aiEndpoint === undefined) {
     return (
@@ -251,6 +257,8 @@ export default function BlockNoteEditor({
       initial={initial}
       initialMarkdown={initialMarkdown}
       isDark={isDark}
+      key={aiEndpointKey}
+      latestBlocksRef={latestBlocksRef}
       latestMarkdownRef={latestMarkdownRef}
       loadFailed={loadFailed}
       noteId={typeof noteId === 'string' ? noteId : undefined}
@@ -278,6 +286,7 @@ interface BlockNoteSurfaceProps {
   initial: InitialContent;
   initialMarkdown: string;
   isDark: boolean;
+  latestBlocksRef: React.MutableRefObject<PartialBlock[] | undefined>;
   latestMarkdownRef: React.MutableRefObject<string>;
   loadFailed: boolean;
   noteId: string | undefined;
@@ -295,6 +304,7 @@ function BlockNoteSurface({
   initial,
   initialMarkdown,
   isDark,
+  latestBlocksRef,
   latestMarkdownRef,
   loadFailed,
   onMarkdownChange,
@@ -320,7 +330,10 @@ function BlockNoteSurface({
 
   const editor = useCreateBlockNote({
     initialContent:
-      initial.blocks && initial.blocks.length > 0 ? initial.blocks : undefined,
+      latestBlocksRef.current ??
+      (initial.blocks && initial.blocks.length > 0
+        ? initial.blocks
+        : undefined),
     // Route image / file / video / audio uploads through the GhostBoard
     // workspace pipeline. `uploadFile` runs on file-picker, paste, and
     // drag-drop; the returned workspace-relative path is what gets stored
@@ -365,12 +378,18 @@ function BlockNoteSurface({
         const blocks = await editor.tryParseMarkdownToBlocks(effectiveMarkdown);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
+          latestBlocksRef.current = blocks;
         }
       } catch (error) {
         console.error('[blocknote] Failed to import markdown:', error);
       }
     })();
-  }, [editor, effectiveMarkdown, initial.recoveredFromMarkdown]);
+  }, [
+    editor,
+    effectiveMarkdown,
+    initial.recoveredFromMarkdown,
+    latestBlocksRef,
+  ]);
 
   const handleChange = useCallback(async () => {
     const blocks = editor.document as Block[];
@@ -381,9 +400,16 @@ function BlockNoteSurface({
       console.error('[blocknote] Failed to serialize markdown:', error);
     }
     latestMarkdownRef.current = markdown;
+    latestBlocksRef.current = blocks as PartialBlock[];
     onMarkdownChange(markdown);
     saveDebounced({ blocks: blocks as unknown as unknown[], markdown });
-  }, [editor, latestMarkdownRef, onMarkdownChange, saveDebounced]);
+  }, [
+    editor,
+    latestBlocksRef,
+    latestMarkdownRef,
+    onMarkdownChange,
+    saveDebounced,
+  ]);
 
   const handleBlur = useCallback(() => {
     onTitleBlur();

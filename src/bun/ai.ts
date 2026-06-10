@@ -28,6 +28,17 @@ export interface AIServerHandle {
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 
+// The renderer webview (http://localhost:5173 in dev, views:// in prod) calls
+// this 127.0.0.1 endpoint cross-origin with an Authorization header, which
+// triggers a CORS preflight. Auth is enforced by the per-launch bearer token,
+// so a wildcard origin is safe; without these headers the webview blocks the
+// request before it ever reaches the provider.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+} as const;
+
 function resolveModel(config: AIServerConfig): LanguageModel {
   switch (config.provider) {
     case 'anthropic': {
@@ -77,7 +88,7 @@ async function handleAIChat(
     toolChoice: 'required',
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({ headers: CORS_HEADERS });
 }
 
 /**
@@ -96,21 +107,36 @@ export function startAIServer(
     port: 0,
     fetch: async (req) => {
       const url = new URL(req.url);
-      if (req.method !== 'POST' || url.pathname !== '/ai/chat') {
+      if (url.pathname !== '/ai/chat') {
+        return new Response('Not found', { status: 404 });
+      }
+      if (req.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+      if (req.method !== 'POST') {
         return new Response('Not found', { status: 404 });
       }
       if (req.headers.get('authorization') !== `Bearer ${token}`) {
-        return new Response('Unauthorized', { status: 401 });
+        return new Response('Unauthorized', {
+          status: 401,
+          headers: CORS_HEADERS,
+        });
       }
       const config = getConfig();
       if (!config) {
-        return new Response('AI not configured', { status: 503 });
+        return new Response('AI not configured', {
+          status: 503,
+          headers: CORS_HEADERS,
+        });
       }
       try {
         return await handleAIChat(req, config);
       } catch (err) {
         console.error('[ai] chat request failed:', err);
-        return new Response('AI request failed', { status: 500 });
+        return new Response('AI request failed', {
+          status: 500,
+          headers: CORS_HEADERS,
+        });
       }
     },
   });

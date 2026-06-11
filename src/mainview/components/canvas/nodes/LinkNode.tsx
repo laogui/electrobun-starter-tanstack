@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ExternalLink,
   Globe2,
   Link as LinkIcon,
@@ -104,6 +105,7 @@ export const LinkContent = ({
   const description = link.description?.trim();
   const [draftUrl, setDraftUrl] = useState(link.url);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [heroImageError, setHeroImageError] = useState(false);
 
   useEffect(() => {
     setDraftUrl(link.url);
@@ -129,23 +131,32 @@ export const LinkContent = ({
   if (isFocused) {
     return (
       <div
-        className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+        className="size-full overflow-y-auto bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
         style={colorToStyle(link.color)}
       >
-        <div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-8">
-          <div className="mb-8 flex items-center justify-between gap-4">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-8 pt-10 pb-12">
+          {link.imageUrl && !heroImageError ? (
+            <img
+              alt=""
+              className="mb-8 aspect-[21/9] w-full rounded-2xl border border-black/5 object-cover shadow-sm dark:border-white/10"
+              draggable={false}
+              onError={() => setHeroImageError(true)}
+              src={link.imageUrl}
+            />
+          ) : null}
+
+          <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <LinkFaviconBadge faviconUrl={link.faviconUrl} />
               <div className="min-w-0">
-                <p className="truncate font-medium text-neutral-500 text-sm dark:text-neutral-400">
-                  {host || 'Link'}
+                <p className="truncate font-medium text-sm">
+                  {link.siteName || host || 'Link'}
                 </p>
-                <p
-                  className="truncate text-neutral-400 text-xs dark:text-neutral-500"
-                  title={link.url || undefined}
-                >
-                  {link.url}
-                </p>
+                {link.siteName && host ? (
+                  <p className="truncate text-neutral-400 text-xs dark:text-neutral-500">
+                    {host}
+                  </p>
+                ) : null}
               </div>
             </div>
             {openableUrl ? (
@@ -161,55 +172,58 @@ export const LinkContent = ({
             ) : null}
           </div>
 
-          <div className="min-h-0 flex-1 rounded-2xl border border-black/10 bg-white/65 p-8 shadow-sm dark:border-white/10 dark:bg-white/8">
-            <div className="max-w-3xl">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-neutral-100 px-3 py-1 font-medium text-neutral-500 text-xs dark:border-white/10 dark:bg-white/10 dark:text-neutral-300">
-                <LinkIcon size={13} />
-                URL
-              </div>
-              <h1 className="text-balance font-bold text-4xl leading-tight tracking-normal">
-                {title}
-              </h1>
-              {description ? (
-                <p className="mt-5 max-w-2xl text-lg/relaxed text-neutral-600 dark:text-neutral-300">
-                  {description}
-                </p>
-              ) : null}
-              {onUrlChange ? (
-                <form
-                  className="mt-8 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20"
-                  onSubmit={handleUrlSubmit}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      aria-label="Link URL"
-                      className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-none transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
-                      onChange={(event) => {
-                        setDraftUrl(event.target.value);
-                      }}
-                      value={draftUrl}
-                    />
-                    <button
-                      className="nodrag nopan shrink-0 rounded-lg bg-neutral-950 px-3 py-2 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
-                      type="submit"
-                    >
-                      Save URL
-                    </button>
-                  </div>
-                  {urlError ? (
-                    <p className="mt-2 text-red-600 text-xs dark:text-red-300">
-                      {urlError}
-                    </p>
-                  ) : null}
-                </form>
-              ) : (
-                <div className="mt-8 rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
-                  <p className="break-all font-mono text-neutral-700 text-sm dark:text-neutral-100">
-                    {link.url || 'No URL'}
-                  </p>
-                </div>
-              )}
+          <h1 className="mt-7 text-balance font-bold text-4xl leading-tight tracking-tight">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-4 text-lg/relaxed text-neutral-600 dark:text-neutral-300">
+              {description}
+            </p>
+          ) : null}
+          {link.unfurlStatus === 'failed' ? (
+            <div className="mt-6 inline-flex items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 text-xs dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+              <AlertTriangle size={13} />
+              Preview unavailable
             </div>
+          ) : null}
+
+          <div className="mt-auto border-black/8 border-t pt-6 dark:border-white/10">
+            <p className="mb-2 flex items-center gap-1.5 font-medium text-neutral-400 text-xs uppercase tracking-wider dark:text-neutral-500">
+              <LinkIcon size={12} />
+              URL
+            </p>
+            {onUrlChange ? (
+              <form onSubmit={handleUrlSubmit}>
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label="Link URL"
+                    className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-none transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
+                    onChange={(event) => {
+                      setDraftUrl(event.target.value);
+                    }}
+                    value={draftUrl}
+                  />
+                  <button
+                    className="nodrag nopan shrink-0 rounded-lg bg-neutral-950 px-3 py-2 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
+                    type="submit"
+                  >
+                    Save URL
+                  </button>
+                </div>
+                {urlError ? (
+                  <p className="mt-2 text-red-600 text-xs dark:text-red-300">
+                    {urlError}
+                  </p>
+                ) : null}
+              </form>
+            ) : (
+              <p
+                className="break-all font-mono text-neutral-500 text-sm dark:text-neutral-300"
+                title={link.url || undefined}
+              >
+                {link.url || 'No URL'}
+              </p>
+            )}
           </div>
         </div>
       </div>

@@ -171,17 +171,33 @@ export const ImageContent = ({
     }
     return (
       <div
-        className="flex size-full flex-col items-center justify-center gap-3"
-        style={colorToStyle(data.color)}
+        className={cn(
+          'flex size-full flex-col items-center justify-center gap-3',
+          isFocused && 'text-zinc-500'
+        )}
+        style={isFocused ? undefined : colorToStyle(data.color)}
       >
-        <ImagePlus className="text-gray-300" size={isFocused ? 64 : 40} />
-        <span className="text-gray-400 text-sm">No image</span>
+        <ImagePlus
+          className={isFocused ? 'text-zinc-600' : 'text-gray-300'}
+          size={isFocused ? 64 : 40}
+        />
+        <span
+          className={cn(
+            'text-sm',
+            isFocused ? 'text-zinc-500' : 'text-gray-400'
+          )}
+        >
+          No image
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="flex size-full flex-col" style={colorToStyle(data.color)}>
+    <div
+      className="flex size-full flex-col"
+      style={isFocused ? undefined : colorToStyle(data.color)}
+    >
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {displaySrc ? (
           <img
@@ -200,25 +216,26 @@ export const ImageContent = ({
           </div>
         ) : null}
       </div>
-      {data.title || (onTitleChange && !isFocused) ? (
+      {/* The focused (lightbox) view shows its caption as a FocusedView
+          overlay instead of a bottom title bar. */}
+      {!isFocused && (data.title || onTitleChange) ? (
         <div className="border-black/5 border-t px-4 py-3">
           <h3
             className={cn(
-              'truncate font-semibold leading-tight outline-none',
-              onTitleChange && !isFocused && 'nodrag nopan',
-              isFocused ? 'text-xl' : 'text-sm',
+              'truncate font-semibold text-sm leading-tight outline-none',
+              onTitleChange && 'nodrag nopan',
               !(data.title || editingTitle) && 'opacity-40',
               editingTitle &&
                 'nodrag nopan rounded-md bg-black/5 px-1 ring-1 ring-blue-400/40 dark:bg-white/10'
             )}
             contentEditable={editingTitle}
             onBlur={handleTitleBlur}
-            onClick={onTitleChange && !isFocused ? startEditing : undefined}
+            onClick={onTitleChange ? startEditing : undefined}
             onKeyDown={handleTitleKeyDown}
             ref={titleRef}
             suppressContentEditableWarning
           >
-            {data.title || (onTitleChange && !isFocused ? 'Add title…' : '')}
+            {data.title || (onTitleChange ? 'Add title…' : '')}
           </h3>
         </div>
       ) : null}

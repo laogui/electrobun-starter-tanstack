@@ -18,9 +18,11 @@ import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
+import { cn } from '@/lib/utils';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
+import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
 import type { CardContentData } from './nodes/CardNode';
@@ -257,6 +259,18 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     node.type !== 'image' &&
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
+  const isImage = node.type === 'image';
+  const isChecklist =
+    !isImage &&
+    node.type !== 'asset' &&
+    node.type !== 'link' &&
+    dataTypeRaw === 'checklist';
+  // Full-bleed surfaces own their entire layout; the others render inside the
+  // centered detail shell.
+  const isFullBleed = isText || isChecklist || isImage;
+  const chromeButtonClass = isImage
+    ? 'bg-white/10 text-zinc-300 hover:bg-white/20'
+    : 'bg-black/5 text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20';
 
   const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -356,7 +370,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   return (
     <motion.div
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-60 flex bg-white dark:bg-zinc-950"
+      className={cn(
+        'fixed inset-0 z-60 flex',
+        isImage ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950'
+      )}
       exit={{ opacity: 0 }}
       initial={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
@@ -364,7 +381,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       {/* Floating Back Button (positioned below macOS traffic lights) */}
       <button
         aria-label={m.focused_close()}
-        className="absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+        className={cn(
+          'absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full transition-colors',
+          chromeButtonClass
+        )}
         onClick={(e) => {
           e.stopPropagation();
           handleClose();
@@ -378,7 +398,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       {previousItem && (
         <button
           aria-label="Previous item"
-          className="absolute top-1/2 left-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+          className={cn(
+            'absolute top-1/2 left-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
+            chromeButtonClass
+          )}
           onClick={(e) => {
             e.stopPropagation();
             handleNavigate(previousItem);
@@ -392,7 +415,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       {nextItem && (
         <button
           aria-label="Next item"
-          className="absolute top-1/2 right-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/5 text-zinc-600 transition-colors hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+          className={cn(
+            'absolute top-1/2 right-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
+            chromeButtonClass
+          )}
           onClick={(e) => {
             e.stopPropagation();
             handleNavigate(nextItem);
@@ -403,6 +429,15 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
           <ChevronRight size={16} />
         </button>
       )}
+
+      {/* Floating image caption (lightbox mode) */}
+      {isImage && title ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-70 flex justify-center">
+          <span className="max-w-[70vw] truncate rounded-full bg-white/10 px-4 py-1.5 text-sm text-white/90 backdrop-blur-md">
+            {title}
+          </span>
+        </div>
+      ) : null}
 
       {/* Floating Save Status (bottom right) */}
       {isText && saveStatus !== 'idle' && (
@@ -417,16 +452,18 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         onClick={handleClose}
       >
         <div
-          className={
-            isText
-              ? 'h-full w-full'
-              : 'h-full w-full max-w-5xl p-4 pt-16 md:p-12'
-          }
+          className={cn(
+            isFullBleed && 'h-full w-full',
+            !isFullBleed &&
+              (node.type === 'asset'
+                ? 'h-full w-full max-w-6xl p-4 pt-16 md:p-10 md:pt-16'
+                : 'h-full w-full max-w-4xl p-4 pt-16 md:p-12 md:pt-16')
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           <div
             className={
-              isText
+              isFullBleed
                 ? 'h-full w-full'
                 : 'h-full w-full overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-2xl dark:border-white/5 dark:bg-zinc-900'
             }
@@ -474,6 +511,13 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                   title={title}
                 />
               </Suspense>
+            ) : isChecklist ? (
+              <ChecklistFocusedView
+                data={node.data as unknown as CardContentData}
+                onCommit={(updates) => {
+                  commitFocusedData(updates);
+                }}
+              />
             ) : (
               <CardContent
                 data={node.data as unknown as CardContentData}

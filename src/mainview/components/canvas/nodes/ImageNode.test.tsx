@@ -158,7 +158,9 @@ describe('ImageNode', () => {
     );
 
     expect(screen.getByRole('img', { name: 'Cover' })).toBeInTheDocument();
-    expect(screen.getByText('Cover')).toBeInTheDocument();
+    // The focused (lightbox) view shows its caption as a FocusedView overlay,
+    // so ImageContent itself no longer renders a bottom title bar.
+    expect(screen.queryByText('Cover')).not.toBeInTheDocument();
   });
 
   it('rehydrates workspace-relative image URLs before rendering', async () => {

@@ -9,7 +9,14 @@ import {
   Loader2,
   Play,
 } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
@@ -578,6 +585,7 @@ export const AssetContent = ({
   const playableMedia = isPlayableMedia(asset);
   const pdfPreview = isPdfPreview(asset);
   const textPreview = isTextPreview(asset);
+  const imagePreview = isImageAsFile(asset);
   const previewableFile = pdfPreview || textPreview;
   const attachmentLabel = asset.attachmentFile ?? 'Unsaved attachment';
   const [mediaSrc, setMediaSrc] = useState<string | null>(
@@ -606,7 +614,7 @@ export const AssetContent = ({
     if (
       !(
         isFocused &&
-        (playableMedia || previewableFile) &&
+        (playableMedia || previewableFile || imagePreview) &&
         asset.attachmentFile &&
         !asset.missing
       )
@@ -653,6 +661,7 @@ export const AssetContent = ({
     asset.attachmentFile,
     asset.missing,
     asset.previewUrl,
+    imagePreview,
     isFocused,
     playableMedia,
     previewableFile,
@@ -664,109 +673,137 @@ export const AssetContent = ({
       mediaError,
       mediaLoading,
     });
+    const duration = formatDuration(asset.duration);
+    const imageSrc = mediaSrc ?? asset.thumbnailUrl ?? null;
+
+    let preview: ReactNode = null;
+    if (mediaState) {
+      preview = (
+        <div className="grid size-full place-items-center p-8">
+          <div className="w-full max-w-md">{mediaState}</div>
+        </div>
+      );
+    } else if (pdfPreview && mediaSrc) {
+      preview = (
+        <iframe
+          className="size-full"
+          src={mediaSrc}
+          title={`${title} PDF preview`}
+        />
+      );
+    } else if (textPreview && mediaSrc) {
+      preview = (
+        <div className="size-full overflow-y-auto px-8 py-10">
+          <pre className="mx-auto w-full max-w-3xl whitespace-pre-wrap font-mono text-neutral-700 text-sm leading-relaxed dark:text-neutral-200">
+            {decodeTextDataUrl(mediaSrc)}
+          </pre>
+        </div>
+      );
+    } else if (asset.kind === 'video' && mediaSrc) {
+      preview = (
+        <div className="grid size-full place-items-center bg-neutral-950 p-6">
+          {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
+          <video
+            aria-label={`${title} video player`}
+            className="max-h-full max-w-full rounded-xl"
+            controls
+            poster={asset.thumbnailUrl}
+            preload="metadata"
+            src={mediaSrc}
+          />
+        </div>
+      );
+    } else if (asset.kind === 'audio' && mediaSrc) {
+      preview = (
+        <div className="grid size-full place-items-center p-8">
+          <div className="w-full max-w-xl">
+            <AudioThumbnail asset={asset} />
+            {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
+            <audio
+              aria-label={`${title} audio player`}
+              className="w-full"
+              controls
+              preload="metadata"
+              src={mediaSrc}
+            />
+          </div>
+        </div>
+      );
+    } else if (imagePreview && imageSrc) {
+      preview = (
+        <div className="grid size-full place-items-center p-6">
+          <img
+            alt={`${title} preview`}
+            className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
+            draggable={false}
+            src={imageSrc}
+          />
+        </div>
+      );
+    } else {
+      preview = (
+        <div className="size-full overflow-y-auto p-8">
+          <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center py-8">
+            <div className="mx-auto mb-5 grid size-16 place-items-center rounded-2xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
+              <AssetIcon asset={asset} size={30} />
+            </div>
+            <h2 className="text-balance text-center font-bold text-2xl leading-tight">
+              {title}
+            </h2>
+            <MetadataGrid asset={asset} />
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div
         className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
         style={colorToStyle(asset.color)}
       >
-        <div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-8">
-          <div className="mb-8 flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
-                <AssetIcon asset={asset} size={23} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-medium text-neutral-500 text-sm dark:text-neutral-400">
-                  {label}
-                </p>
-                <p
-                  className="truncate text-neutral-400 text-xs dark:text-neutral-500"
-                  title={attachmentLabel}
-                >
-                  {attachmentLabel}
-                </p>
-              </div>
+        <div className="flex shrink-0 items-center justify-between gap-4 border-black/8 border-b px-6 py-4 dark:border-white/10">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-11 shrink-0 place-items-center rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
+              <AssetIcon asset={asset} size={21} />
             </div>
-            <button
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
-              disabled={!canOpen}
-              onClick={handleOpen}
-              type="button"
-            >
-              Open file
-              <ExternalLink size={16} />
-            </button>
-          </div>
-
-          <div className="min-h-0 flex-1 rounded-2xl border border-black/10 bg-white/65 p-8 shadow-sm dark:border-white/10 dark:bg-white/8">
-            <div className="max-w-3xl">
-              {asset.missing ? (
-                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 font-medium text-red-700 text-xs dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
-                  <AlertTriangle size={13} />
-                  Missing attachment
-                </div>
-              ) : null}
-              <h1 className="text-balance font-bold text-4xl leading-tight tracking-normal">
+            <div className="min-w-0">
+              <h1 className="truncate font-semibold text-lg leading-tight">
                 {title}
               </h1>
-              {pdfPreview && !asset.missing ? (
-                <div className="mt-8">
-                  {mediaState ??
-                    (mediaSrc ? (
-                      <iframe
-                        className="h-[52vh] min-h-96 w-full rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10"
-                        src={mediaSrc}
-                        title={`${title} PDF preview`}
-                      />
-                    ) : null)}
-                </div>
-              ) : null}
-              {textPreview && !asset.missing ? (
-                <div className="mt-8">
-                  {mediaState ??
-                    (mediaSrc ? (
-                      <pre className="max-h-[52vh] min-h-80 overflow-auto whitespace-pre-wrap rounded-2xl border border-black/10 bg-neutral-50 p-5 font-mono text-neutral-700 text-sm leading-relaxed shadow-inner dark:border-white/10 dark:bg-black/20 dark:text-neutral-200">
-                        {decodeTextDataUrl(mediaSrc)}
-                      </pre>
-                    ) : null)}
-                </div>
-              ) : null}
-              {asset.kind === 'video' ? (
-                <div className="mt-8">
-                  {mediaState ??
-                    (mediaSrc ? (
-                      // biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet.
-                      <video
-                        aria-label={`${title} video player`}
-                        className="aspect-video w-full rounded-2xl bg-neutral-950 shadow-sm"
-                        controls
-                        poster={asset.thumbnailUrl}
-                        preload="metadata"
-                        src={mediaSrc}
-                      />
-                    ) : null)}
-                </div>
-              ) : null}
-              {asset.kind === 'audio' ? (
-                <div className="mt-8 rounded-2xl border border-black/10 bg-neutral-50 p-5 dark:border-white/10 dark:bg-black/20">
-                  {mediaState ??
-                    (mediaSrc ? (
-                      // biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet.
-                      <audio
-                        aria-label={`${title} audio player`}
-                        className="w-full"
-                        controls
-                        preload="metadata"
-                        src={mediaSrc}
-                      />
-                    ) : null)}
-                </div>
-              ) : null}
-              <MetadataGrid asset={asset} />
+              <p className="flex min-w-0 items-center gap-1.5 text-neutral-500 text-xs dark:text-neutral-400">
+                <span className="shrink-0">{label}</span>
+                {asset.size ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="shrink-0">
+                      {formatFileSize(asset.size)}
+                    </span>
+                  </>
+                ) : null}
+                {duration ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="shrink-0">{duration}</span>
+                  </>
+                ) : null}
+                <span aria-hidden="true">·</span>
+                <span className="truncate" title={attachmentLabel}>
+                  {attachmentLabel}
+                </span>
+              </p>
             </div>
           </div>
+          <button
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
+            disabled={!canOpen}
+            onClick={handleOpen}
+            type="button"
+          >
+            Open file
+            <ExternalLink size={16} />
+          </button>
         </div>
+        <div className="min-h-0 flex-1 overflow-hidden">{preview}</div>
       </div>
     );
   }

@@ -205,6 +205,40 @@ describe('StickyNode', () => {
     vi.useRealTimers();
   });
 
+  it('inserts a newline at the caret when Enter is pressed while editing', () => {
+    vi.useFakeTimers();
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Line one' }}
+        id="sticky-enter-newline"
+      />
+    );
+
+    const content = screen.getByText('Line one');
+    fireEvent.doubleClick(content.parentElement?.parentElement!);
+    vi.advanceTimersByTime(20);
+    expect(content.getAttribute('contenteditable')).toBe('true');
+
+    // Place the caret at the end of the content.
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(content);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.keyDown(content, { key: 'Enter' });
+    expect(content.textContent).toBe('Line one\n');
+
+    // Type a second line, then commit on blur.
+    content.appendChild(document.createTextNode('Line two'));
+    fireEvent.blur(content);
+    expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-enter-newline', {
+      content: 'Line one\nLine two',
+    });
+    vi.useRealTimers();
+  });
+
   it('renders zoomed-out placeholder lines and hidden state support', () => {
     isZoomedOutMock.mockReturnValue(true);
     const { container } = render(

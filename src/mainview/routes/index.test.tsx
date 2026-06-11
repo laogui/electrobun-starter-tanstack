@@ -225,6 +225,7 @@ vi.mock('@xyflow/react', async () => {
       onPaneContextMenu,
       onDragOver,
       onDrop,
+      onNodeClick,
       onNodeDoubleClick,
       snapGrid,
       snapToGrid,
@@ -243,6 +244,10 @@ vi.mock('@xyflow/react', async () => {
       onPaneContextMenu?: (event: MouseEvent) => void;
       onDragOver?: (event: DragEvent) => void;
       onDrop?: (event: DragEvent) => void;
+      onNodeClick?: (
+        event: MouseEvent,
+        node: { id: string; type?: string; data: Record<string, unknown> }
+      ) => void;
       onNodeDoubleClick?: (
         event: MouseEvent,
         node: { id: string; type?: string; data: Record<string, unknown> }
@@ -314,6 +319,18 @@ vi.mock('@xyflow/react', async () => {
             type="button"
           >
             Open focused node
+          </button>
+          <button
+            onClick={() => {
+              const node = nodes[0];
+              if (!node) {
+                return;
+              }
+              onNodeClick?.({} as MouseEvent, node);
+            }}
+            type="button"
+          >
+            Click focused node
           </button>
           {nodes.map((node) => (
             <div data-id={node.id} key={node.id}>
@@ -520,6 +537,64 @@ describe('routes/index', () => {
     await waitFor(() => {
       expect(screen.getByText('Focused loaded-1')).toBeInTheDocument();
     });
+  });
+
+  it('opens the focused view when clicking the already sole-selected node', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    useCanvasStore.setState((s) => ({
+      nodes: s.nodes.map((n) => ({ ...n, selected: n.id === 'loaded-1' })),
+    }));
+
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 100,
+      toJSON: () => ({}),
+    } as DOMRect;
+    const element = document.querySelector('[data-id="loaded-1"]');
+    vi.spyOn(element!, 'getBoundingClientRect').mockReturnValue(rect);
+
+    // Pointerdown samples the pre-click selection; the click then opens.
+    fireEvent.pointerDown(element!);
+    fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Focused loaded-1')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps the first click as select-only without opening the focused view', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    const element = document.querySelector('[data-id="loaded-1"]');
+
+    // No node was selected at pointerdown time, so this click only selects.
+    fireEvent.pointerDown(element!);
+    fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
+
+    expect(screen.queryByText('Focused loaded-1')).toBeNull();
   });
 
   it('enables 24px snap-to-grid dragging', async () => {

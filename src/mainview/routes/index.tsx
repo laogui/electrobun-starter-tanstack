@@ -647,8 +647,8 @@ function CanvasComponent() {
     };
   }, []);
 
-  const onNodeDoubleClick = useCallback(
-    (_: any, node: Node) => {
+  const openNodeFocusedView = useCallback(
+    (node: Node) => {
       const el = document.querySelector(`[data-id="${node.id}"]`);
       const rect = el?.getBoundingClientRect();
       if (!rect) {
@@ -661,6 +661,59 @@ function CanvasComponent() {
       }
     },
     [setFocusedNode, setFocusedFolder]
+  );
+
+  // Two-stage click model (mirrors StickyNode's slide-editor behavior): the
+  // first click only selects; clicking a node that was already the sole
+  // selection opens its focused view. Selection is sampled on pointerdown —
+  // before React Flow applies this click's selection change — so a fresh
+  // select-click never opens.
+  const soleSelectionOnPointerDownRef = useRef<string | null>(null);
+  const onCanvasPointerDownCapture = useCallback((e: React.PointerEvent) => {
+    if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
+      soleSelectionOnPointerDownRef.current = null;
+      return;
+    }
+    const selectedNodes = useCanvasStore
+      .getState()
+      .nodes.filter((n) => n.selected);
+    soleSelectionOnPointerDownRef.current =
+      selectedNodes.length === 1 ? (selectedNodes[0]?.id ?? null) : null;
+  }, []);
+
+  const onNodeClick = useCallback(
+    (e: React.MouseEvent, node: Node) => {
+      if (
+        e.shiftKey ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        !isFocusableNode(node.type) ||
+        soleSelectionOnPointerDownRef.current !== node.id ||
+        useCanvasStore.getState().focusedNode?.id === node.id
+      ) {
+        return;
+      }
+      openNodeFocusedView(node);
+    },
+    [openNodeFocusedView]
+  );
+
+  // Double-click remains the fast path when the node was not selected yet
+  // (first click selects, the dblclick event then opens). Skip when the
+  // two-stage click already opened this node so the animation never restarts.
+  const onNodeDoubleClick = useCallback(
+    (_: any, node: Node) => {
+      const state = useCanvasStore.getState();
+      if (
+        state.focusedNode?.id === node.id ||
+        state.focusedFolder?.id === node.id
+      ) {
+        return;
+      }
+      openNodeFocusedView(node);
+    },
+    [openNodeFocusedView]
   );
 
   const onMoveFolderChildOut = useCallback(
@@ -927,6 +980,7 @@ function CanvasComponent() {
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
       onMouseMove={onPointerMoveCanvas}
+      onPointerDownCapture={onCanvasPointerDownCapture}
     >
       <ZoomLevelProvider>
         <ReactFlow
@@ -959,6 +1013,7 @@ function CanvasComponent() {
           onMoveEnd={(_, viewport) => {
             setViewport(viewport);
           }}
+          onNodeClick={onNodeClick}
           onNodeContextMenu={onNodeContextMenu}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeDrag={onNodeDrag}

@@ -130,7 +130,11 @@ export const CardContent = ({
                 onClick={
                   readOnly
                     ? undefined
-                    : () => {
+                    : (e) => {
+                        // Keep checklist toggles from bubbling into the node
+                        // click, which opens the focused view when the card
+                        // is already the sole selection.
+                        e.stopPropagation();
                         if (onChange) {
                           const newItems = (data.items ?? []).map(
                             (entry, index) =>
@@ -181,7 +185,12 @@ export const CardContent = ({
           )}
           {/* Add new item input — hidden in readOnly (e.g., template previews) */}
           {readOnly ? null : (
-            <div className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100">
+            <div
+              className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
               <div
                 className={cn(
                   'size-4 shrink-0 rounded-sm border',

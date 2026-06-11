@@ -36,6 +36,30 @@ const caretRangeFromPoint = (x: number, y: number): Range | null => {
   return null;
 };
 
+// Insert a literal newline at the caret. The sticky body renders with
+// `white-space: pre-wrap`, so a `\n` text node breaks the line reliably across
+// WebKit/Chromium without relying on the browser's native (and inconsistent)
+// contentEditable Enter handling, which injects block/`<br>` structure into a
+// subtree React owns as the `{data.content}` child.
+const insertNewlineAtCaret = (root: HTMLElement): boolean => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+  range.deleteContents();
+  const newline = document.createTextNode('\n');
+  range.insertNode(newline);
+  range.setStartAfter(newline);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+};
+
 export interface StickyData {
   color?: string;
   content?: string;
@@ -161,6 +185,16 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
       e.preventDefault();
       e.stopPropagation();
       textRef.current?.blur();
+      return;
+    }
+    // Enter inserts a newline (sticky notes are multi-line plain text).
+    // Skip while an IME composition is active so it can commit normally.
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      const el = textRef.current;
+      if (el && insertNewlineAtCaret(el)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }
   }, []);
 

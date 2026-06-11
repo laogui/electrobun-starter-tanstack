@@ -676,24 +676,28 @@ export const AssetContent = ({
     const duration = formatDuration(asset.duration);
     const imageSrc = mediaSrc ?? asset.thumbnailUrl ?? null;
 
+    // Every preview branch is absolutely positioned against the relative
+    // flex-1 wrapper below: percentage heights inside flex items are
+    // unreliable in WebKit, so `size-full` here would let tall content
+    // (e.g. image previews) overflow the window.
     let preview: ReactNode = null;
     if (mediaState) {
       preview = (
-        <div className="grid size-full place-items-center p-8">
+        <div className="absolute inset-0 flex items-center justify-center p-8">
           <div className="w-full max-w-md">{mediaState}</div>
         </div>
       );
     } else if (pdfPreview && mediaSrc) {
       preview = (
         <iframe
-          className="size-full"
+          className="absolute inset-0 size-full"
           src={mediaSrc}
           title={`${title} PDF preview`}
         />
       );
     } else if (textPreview && mediaSrc) {
       preview = (
-        <div className="size-full overflow-y-auto px-8 py-10">
+        <div className="absolute inset-0 overflow-y-auto px-8 py-10">
           <pre className="mx-auto w-full max-w-3xl whitespace-pre-wrap font-mono text-neutral-700 text-sm leading-relaxed dark:text-neutral-200">
             {decodeTextDataUrl(mediaSrc)}
           </pre>
@@ -701,7 +705,7 @@ export const AssetContent = ({
       );
     } else if (asset.kind === 'video' && mediaSrc) {
       preview = (
-        <div className="grid size-full place-items-center bg-neutral-950 p-6">
+        <div className="absolute inset-0 flex items-center justify-center bg-neutral-950 p-6">
           {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
           <video
             aria-label={`${title} video player`}
@@ -715,7 +719,7 @@ export const AssetContent = ({
       );
     } else if (asset.kind === 'audio' && mediaSrc) {
       preview = (
-        <div className="grid size-full place-items-center p-8">
+        <div className="absolute inset-0 flex items-center justify-center p-8">
           <div className="w-full max-w-xl">
             <AudioThumbnail asset={asset} />
             {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
@@ -731,7 +735,7 @@ export const AssetContent = ({
       );
     } else if (imagePreview && imageSrc) {
       preview = (
-        <div className="grid size-full place-items-center p-6">
+        <div className="absolute inset-0 flex items-center justify-center p-6">
           <img
             alt={`${title} preview`}
             className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
@@ -742,7 +746,7 @@ export const AssetContent = ({
       );
     } else {
       preview = (
-        <div className="size-full overflow-y-auto p-8">
+        <div className="absolute inset-0 overflow-y-auto p-8">
           <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center py-8">
             <div className="mx-auto mb-5 grid size-16 place-items-center rounded-2xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
               <AssetIcon asset={asset} size={30} />
@@ -803,7 +807,7 @@ export const AssetContent = ({
             <ExternalLink size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">{preview}</div>
+        <div className="relative min-h-0 flex-1 overflow-hidden">{preview}</div>
       </div>
     );
   }

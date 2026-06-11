@@ -11,7 +11,11 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
 import { iconFor } from './resultIcon';
-import { type RecentCard, SearchEmptyState } from './SearchEmptyState';
+import {
+  type CanvasEntry,
+  type RecentCard,
+  SearchEmptyState,
+} from './SearchEmptyState';
 import { highlightMatches } from './searchResultRender';
 
 const SEARCH_HISTORY_STORAGE_KEY = 'ghostboard:search-history';
@@ -35,6 +39,16 @@ interface ResultGroup {
   viewId: string;
   viewName: string;
 }
+
+/**
+ * A navigable row in the zero-query empty state. The flat order (history →
+ * recent cards → canvases) mirrors the render order in SearchEmptyState so the
+ * keyboard active index lines up with the highlighted row.
+ */
+type EmptyItem =
+  | { type: 'history'; entry: string }
+  | { type: 'card'; card: RecentCard }
+  | { type: 'canvas'; canvas: CanvasEntry };
 
 function readHistory(): string[] {
   if (typeof window === 'undefined') {
@@ -121,6 +135,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
   const setEdges = useCanvasStore((s) => s.setEdges);
+  const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
   const nodes = useCanvasStore((s) => s.nodes);
   const views = useCanvasStore((s) => s.views);
 
@@ -199,6 +214,26 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     [nodes]
   );
 
+  // Canvases offered as quick jump targets in the empty state (everything but
+  // the one already in view). Mirrors the filter inside SearchEmptyState.
+  const otherCanvases = useMemo<CanvasEntry[]>(
+    () => views.filter((v) => v.id !== activeViewId),
+    [views, activeViewId]
+  );
+
+  // Flat list of navigable empty-state rows, only relevant before the user
+  // types. Drives ArrowUp/Down/Enter when there is no query.
+  const emptyItems = useMemo<EmptyItem[]>(() => {
+    if (trimmedQuery) {
+      return [];
+    }
+    return [
+      ...history.map((entry): EmptyItem => ({ type: 'history', entry })),
+      ...recentCards.map((card): EmptyItem => ({ type: 'card', card })),
+      ...otherCanvases.map((canvas): EmptyItem => ({ type: 'canvas', canvas })),
+    ];
+  }, [trimmedQuery, history, recentCards, otherCanvases]);
+
   const recordHistory = useCallback((value: string) => {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -271,10 +306,12 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     setActiveIndex(0);
   }, [results, trimmedQuery]);
 
-  // Keep the active row within bounds when collapsing groups shrinks the list.
+  // Keep the active row within bounds when the navigable list shrinks (a group
+  // collapses, or empty-state rows like history get removed/cleared).
   useEffect(() => {
-    setActiveIndex((i) => Math.min(i, Math.max(0, visibleResults.length - 1)));
-  }, [visibleResults.length]);
+    const navLength = trimmedQuery ? visibleResults.length : emptyItems.length;
+    setActiveIndex((i) => Math.min(i, Math.max(0, navLength - 1)));
+  }, [trimmedQuery, visibleResults.length, emptyItems.length]);
 
   // Focus input on open
   useEffect(() => {
@@ -412,14 +449,49 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
     [views, handleSelect]
   );
 
+  // Cmd/Ctrl+N: close search and open the canvas create menu. Mirrors the
+  // global shortcut, which is otherwise swallowed while the search input holds
+  // focus.
+  const handleCreate = useCallback(() => {
+    setOpen(false);
+    setCreateMenuOpen(true);
+  }, [setOpen, setCreateMenuOpen]);
+
+  const activateEmptyItem = useCallback(
+    (item: EmptyItem) => {
+      if (item.type === 'history') {
+        setQuery(item.entry);
+        inputRef.current?.focus();
+        return;
+      }
+      if (item.type === 'card') {
+        handlePickCard(item.card);
+        return;
+      }
+      handlePickCanvas(item.canvas.id);
+    },
+    [setQuery, handlePickCard, handlePickCanvas]
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (visibleResults.length === 0) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreate();
+        return;
+      }
+
+      // Navigate either the search results or the empty-state rows depending on
+      // whether a query is active.
+      const navLength = trimmedQuery
+        ? visibleResults.length
+        : emptyItems.length;
+      if (navLength === 0) {
         return;
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, visibleResults.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, navLength - 1));
         return;
       }
       if (e.key === 'ArrowUp') {
@@ -429,13 +501,28 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const item = visibleResults[activeIndex];
-        if (item) {
-          handleSelect(item);
+        if (trimmedQuery) {
+          const item = visibleResults[activeIndex];
+          if (item) {
+            handleSelect(item);
+          }
+        } else {
+          const item = emptyItems[activeIndex];
+          if (item) {
+            activateEmptyItem(item);
+          }
         }
       }
     },
-    [visibleResults, activeIndex, handleSelect]
+    [
+      trimmedQuery,
+      visibleResults,
+      emptyItems,
+      activeIndex,
+      handleSelect,
+      activateEmptyItem,
+      handleCreate,
+    ]
   );
 
   const filterChips: { id: SearchFilter; label: string }[] = [
@@ -521,10 +608,12 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
             {error || trimmedQuery ? null : (
               <SearchEmptyState
+                activeIndex={activeIndex}
                 activeViewId={activeViewId}
                 canvases={views}
                 history={history}
                 onClearHistory={clearHistory}
+                onHover={setActiveIndex}
                 onPickCanvas={handlePickCanvas}
                 onPickCard={handlePickCard}
                 onPickHistory={(entry) => {

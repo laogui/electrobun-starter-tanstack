@@ -1,10 +1,13 @@
-import { Clock, CornerDownLeft, Layers, Plus, X } from 'lucide-react';
+import { Clock, CornerDownLeft, Layers, X } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { SearchResultKind } from '@/lib/searchTypes';
 
 import * as m from '../../../paraglide/messages.js';
 import { iconFor } from './resultIcon';
+
+const isMac =
+  typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
 
 export interface RecentCard {
   id: string;
@@ -18,15 +21,27 @@ export interface CanvasEntry {
 }
 
 interface SearchEmptyStateProps {
+  /** Flat navigation index of the currently active empty-state row. */
+  activeIndex: number;
   activeViewId: string;
   canvases: CanvasEntry[];
   history: string[];
   onClearHistory: () => void;
+  /** Sync the active row to the one under the pointer. */
+  onHover: (index: number) => void;
   onPickCanvas: (viewId: string) => void;
   onPickCard: (card: RecentCard) => void;
   onPickHistory: (entry: string) => void;
   onRemoveHistory: (entry: string) => void;
   recentCards: RecentCard[];
+}
+
+function rowClass(active: boolean): string {
+  return `flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm outline-hidden transition-colors ${
+    active
+      ? 'bg-blue-50 text-blue-900 dark:bg-blue-500/10 dark:text-blue-100'
+      : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
+  }`;
 }
 
 /**
@@ -39,6 +54,8 @@ export function SearchEmptyState({
   recentCards,
   canvases,
   activeViewId,
+  activeIndex,
+  onHover,
   onPickHistory,
   onRemoveHistory,
   onClearHistory,
@@ -49,6 +66,11 @@ export function SearchEmptyState({
     () => canvases.filter((c) => c.id !== activeViewId),
     [canvases, activeViewId]
   );
+
+  // Running flat index shared across the history / recent-card / canvas
+  // sections. Must match the navigable-item order built in SearchDialog so
+  // keyboard navigation and the highlighted row stay in sync.
+  let cursor = 0;
 
   return (
     <div className="flex flex-col">
@@ -67,32 +89,41 @@ export function SearchEmptyState({
             icon={<Clock aria-hidden size={12} />}
             label={m.search_recent_title()}
           />
-          {history.map((entry) => (
-            <button
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-gray-700 text-sm hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
-              key={entry}
-              onClick={() => {
-                onPickHistory(entry);
-              }}
-              type="button"
-            >
-              <Clock
-                aria-hidden
-                className="shrink-0 text-gray-400 dark:text-gray-500"
-                size={14}
-              />
-              <span className="flex-1 truncate">{entry}</span>
-              <X
-                aria-label="Remove from history"
-                className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveHistory(entry);
+          {history.map((entry) => {
+            const index = cursor++;
+            return (
+              <button
+                aria-selected={index === activeIndex}
+                className={rowClass(index === activeIndex)}
+                data-result-index={index}
+                key={entry}
+                onClick={() => {
+                  onPickHistory(entry);
                 }}
-                size={14}
-              />
-            </button>
-          ))}
+                onMouseEnter={() => {
+                  onHover(index);
+                }}
+                role="option"
+                type="button"
+              >
+                <Clock
+                  aria-hidden
+                  className="shrink-0 text-gray-400 dark:text-gray-500"
+                  size={14}
+                />
+                <span className="flex-1 truncate">{entry}</span>
+                <X
+                  aria-label="Remove from history"
+                  className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveHistory(entry);
+                  }}
+                  size={14}
+                />
+              </button>
+            );
+          })}
         </section>
       ) : null}
 
@@ -104,13 +135,20 @@ export function SearchEmptyState({
           />
           {recentCards.map((card) => {
             const Icon = iconFor(card.kind);
+            const index = cursor++;
             return (
               <button
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-gray-700 text-sm hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
+                aria-selected={index === activeIndex}
+                className={rowClass(index === activeIndex)}
+                data-result-index={index}
                 key={card.id}
                 onClick={() => {
                   onPickCard(card);
                 }}
+                onMouseEnter={() => {
+                  onHover(index);
+                }}
+                role="option"
                 type="button"
               >
                 <Icon
@@ -133,23 +171,32 @@ export function SearchEmptyState({
             icon={<Layers aria-hidden size={12} />}
             label={m.search_jump_to_canvas()}
           />
-          {otherCanvases.map((canvas) => (
-            <button
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-gray-700 text-sm hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
-              key={canvas.id}
-              onClick={() => {
-                onPickCanvas(canvas.id);
-              }}
-              type="button"
-            >
-              <Layers
-                aria-hidden
-                className="shrink-0 text-gray-400 dark:text-gray-500"
-                size={16}
-              />
-              <span className="flex-1 truncate">{canvas.name}</span>
-            </button>
-          ))}
+          {otherCanvases.map((canvas) => {
+            const index = cursor++;
+            return (
+              <button
+                aria-selected={index === activeIndex}
+                className={rowClass(index === activeIndex)}
+                data-result-index={index}
+                key={canvas.id}
+                onClick={() => {
+                  onPickCanvas(canvas.id);
+                }}
+                onMouseEnter={() => {
+                  onHover(index);
+                }}
+                role="option"
+                type="button"
+              >
+                <Layers
+                  aria-hidden
+                  className="shrink-0 text-gray-400 dark:text-gray-500"
+                  size={16}
+                />
+                <span className="flex-1 truncate">{canvas.name}</span>
+              </button>
+            );
+          })}
         </section>
       ) : null}
 
@@ -166,9 +213,7 @@ export function SearchEmptyState({
           {m.search_tip_select()}
         </span>
         <span className="flex items-center gap-1">
-          <Kbd>
-            <Plus aria-hidden size={11} />N
-          </Kbd>
+          <Kbd>{isMac ? '⌘N' : '⌃N'}</Kbd>
           {m.search_tip_create()}
         </span>
       </div>

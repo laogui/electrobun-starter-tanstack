@@ -29,6 +29,11 @@ import {
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
 } from './cleanup';
+import {
+  activateLicense as activateLicenseKey,
+  checkLicenseStatus,
+  type LicenseInfo,
+} from './license';
 import { type UnfurlResult, unfurlLink } from './linkPreview';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
@@ -792,6 +797,14 @@ interface SettingsRPC {
       switchWorkspace: {
         params: Record<string, unknown>;
         response: SwitchWorkspaceResponse;
+      };
+      checkLicense: {
+        params: Record<string, unknown>;
+        response: LicenseInfo;
+      };
+      activateLicense: {
+        params: { key: string };
+        response: { success: boolean; error?: string };
       };
     };
     messages: Record<never, unknown>;
@@ -2238,6 +2251,13 @@ async function main() {
           }
           return await writeTemplateThumbnail(templateId, pngBase64);
         },
+
+        // @ts-expect-error - Type inference issue with Electrobun RPC
+        checkLicense: async () => await checkLicenseStatus(),
+
+        // @ts-expect-error - Type inference issue with Electrobun RPC
+        activateLicense: async (params: { key: string }) =>
+          await activateLicenseKey(params.key),
       },
       messages: {},
     },

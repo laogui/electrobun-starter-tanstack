@@ -61,7 +61,7 @@
       "id": "qs-folder",
       "type": "folder",
       "position": { "x": 740, "y": 200 },
-      "style": { "width": 280, "height": 260 },
+      "style": { "width": 280, "height": 280 },
       "data": {
         "title": "3 items",
         "subtitle": "📚 收纳示例：双击展开",

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { LicenseActivationDialog } from '@/components/LicenseActivationDialog';
+import { LicenseStatusCard } from '@/components/LicenseStatusCard';
 import {
   Select,
   SelectContent,
@@ -110,6 +113,8 @@ export function GeneralPanel({
   settings,
   strings,
 }: GeneralPanelProps) {
+  const [showLicenseDialog, setShowLicenseDialog] = useState(false);
+
   const themeOptions: SelectOption<ThemeSetting>[] = [
     { label: strings.system, value: 'system' },
     { label: strings.light, value: 'light' },
@@ -148,6 +153,14 @@ export function GeneralPanel({
   return (
     <div className="space-y-5">
       <PanelHeading>{strings.generalTitle}</PanelHeading>
+
+      {/* License Status */}
+      <div className="space-y-2">
+        <h3 className="font-medium text-gray-700 text-sm dark:text-gray-300">
+          License
+        </h3>
+        <LicenseStatusCard onActivateClick={() => setShowLicenseDialog(true)} />
+      </div>
 
       <div className="space-y-4">
         <SettingsSelect
@@ -217,6 +230,16 @@ export function GeneralPanel({
           </p>
         ) : null}
       </div>
+
+      {/* License Activation Dialog */}
+      <LicenseActivationDialog
+        onClose={() => setShowLicenseDialog(false)}
+        onSuccess={() => {
+          // 刷新许可证状态
+          window.location.reload();
+        }}
+        open={showLicenseDialog}
+      />
     </div>
   );
 }

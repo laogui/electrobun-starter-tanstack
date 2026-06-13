@@ -30,7 +30,7 @@
       "id": "rn-folder-chapters",
       "type": "folder",
       "position": { "x": 60, "y": 380 },
-      "style": { "width": 280, "height": 260 },
+      "style": { "width": 280, "height": 280 },
       "data": {
         "title": "4 章",
         "subtitle": "📚 章节笔记",

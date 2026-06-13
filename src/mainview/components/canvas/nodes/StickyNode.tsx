@@ -66,6 +66,13 @@ export interface StickyData {
   isHidden?: boolean;
 }
 
+const STICKY_FALLBACK_COLOR = '#FEF08A';
+const FOLD_SIZE = 26;
+// Cuts the top-right corner out of the note body so the canvas shows through
+// behind the folded-back flap, like a real lifted paper corner.
+const FOLD_BODY_CLIP = `polygon(0 0, calc(100% - ${FOLD_SIZE}px) 0, 100% ${FOLD_SIZE}px, 100% 100%, 0 100%)`;
+const FOLD_FLAP_CLIP = 'polygon(0 0, 100% 100%, 0 100%)';
+
 export interface StickyContentProps {
   data: StickyData;
   /** Enables contentEditable on the body text. */
@@ -92,73 +99,77 @@ export const StickyContent = ({
   textRef,
   onBlur,
   onKeyDown,
-}: StickyContentProps) => (
-  <>
-    {isZoomedOut ? (
-      <div className="size-full p-3" style={colorToStyle(data.color)}>
-        {data.content ? (
-          <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
-            {data.content.length > 16
-              ? `${data.content.slice(0, 16)}…`
-              : data.content}
-          </p>
-        ) : (
-          <div className="mt-1 space-y-2 opacity-30">
-            <div className="h-2 w-full rounded-full bg-current" />
-            <div className="h-2 w-4/6 rounded-full bg-current" />
-          </div>
-        )}
-      </div>
-    ) : (
-      <div
-        className={cn(
-          'flex size-full flex-col p-4 transition-shadow duration-150',
-          editing && 'ring-2 ring-blue-400/40 ring-inset'
-        )}
-        style={colorToStyle(data.color)}
-      >
+}: StickyContentProps) => {
+  const baseColor = data.color?.startsWith('#')
+    ? data.color
+    : STICKY_FALLBACK_COLOR;
+  return (
+    <>
+      {isZoomedOut ? (
+        <div
+          className="size-full p-3"
+          style={{ ...colorToStyle(data.color), clipPath: FOLD_BODY_CLIP }}
+        >
+          {data.content ? (
+            <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
+              {data.content.length > 16
+                ? `${data.content.slice(0, 16)}…`
+                : data.content}
+            </p>
+          ) : (
+            <div className="mt-1 space-y-2 opacity-30">
+              <div className="h-2 w-full rounded-full bg-current" />
+              <div className="h-2 w-4/6 rounded-full bg-current" />
+            </div>
+          )}
+        </div>
+      ) : (
         <div
           className={cn(
-            'wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
-            editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
+            'flex size-full flex-col p-4 transition-shadow duration-150',
+            editing && 'ring-2 ring-blue-400/40 ring-inset'
           )}
-          contentEditable={editing}
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
-          ref={textRef}
-          suppressContentEditableWarning
+          style={{ ...colorToStyle(data.color), clipPath: FOLD_BODY_CLIP }}
         >
-          {data.content}
+          <div
+            className={cn(
+              'wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
+              editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
+            )}
+            contentEditable={editing}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
+            ref={textRef}
+            suppressContentEditableWarning
+          >
+            {data.content}
+          </div>
         </div>
+      )}
+      {/* Folded-back flap: the underside of the cut corner, tinted from the
+          note color — shadowed at the crease where the paper bends away, and
+          catching light at the loose curled tip — casting a soft shadow onto
+          the note body below it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-0 right-0"
+        style={{
+          width: FOLD_SIZE,
+          height: FOLD_SIZE,
+          filter: 'drop-shadow(-2px 2px 2px rgba(0,0,0,0.18))',
+        }}
+      >
+        <div
+          className="size-full"
+          style={{
+            clipPath: FOLD_FLAP_CLIP,
+            background: `linear-gradient(to bottom left, color-mix(in srgb, ${baseColor} 72%, #000) 0%, ${baseColor} 50%, color-mix(in srgb, ${baseColor} 62%, #fff) 100%)`,
+          }}
+        />
       </div>
-    )}
-    <div className="pointer-events-none absolute top-0 right-0 size-6">
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: 0.3,
-          background: 'linear-gradient(225deg, #ddd 50%, transparent 50%)',
-        }}
-      />
-      <div
-        className="absolute bottom-0 left-0"
-        style={{
-          width: '100%',
-          height: '100%',
-          background:
-            'linear-gradient(45deg, rgba(0,0,0,0.07) 50%, transparent 50%)',
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(225deg, transparent 46%, rgba(0,0,0,0.15) 50%, transparent 54%)',
-        }}
-      />
-    </div>
-  </>
-);
+    </>
+  );
+};
 
 const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
   const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
@@ -341,7 +352,7 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
+          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm shadow-card-cutout transition-[filter] duration-200 ease-out'
         )}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}

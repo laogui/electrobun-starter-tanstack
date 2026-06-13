@@ -66,11 +66,22 @@ function getOpenableUrl(url: string): string | null {
   return normalizeLinkUrl(url);
 }
 
-function LinkFaviconBadge({ faviconUrl }: { faviconUrl?: string }) {
+function LinkFaviconBadge({
+  className,
+  faviconUrl,
+}: {
+  className?: string;
+  faviconUrl?: string;
+}) {
   const [errored, setErrored] = useState(false);
   const showImage = !!faviconUrl && !errored;
   return (
-    <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
+    <div
+      className={cn(
+        'grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200',
+        className
+      )}
+    >
       {showImage ? (
         <img
           alt=""
@@ -230,31 +241,45 @@ export const LinkContent = ({
     );
   }
 
+  const showHeroImage = Boolean(link.imageUrl) && !heroImageError;
+
   return (
     <div
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(link.color)}
     >
-      {link.imageUrl ? (
-        <div className="relative h-28 w-full shrink-0 overflow-hidden border-black/5 border-b dark:border-white/10">
+      <div className="relative h-28 w-full shrink-0 overflow-hidden border-black/5 border-b dark:border-white/10">
+        {showHeroImage ? (
           <img
             alt=""
             className="size-full object-cover"
             draggable={false}
             loading="lazy"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-            }}
+            onError={() => setHeroImageError(true)}
             src={link.imageUrl}
           />
-        </div>
-      ) : null}
-      <div className="flex min-h-0 flex-1 flex-col p-5">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <LinkFaviconBadge faviconUrl={link.faviconUrl} />
-          <span className="rounded-full border border-black/10 bg-white/60 px-2 py-1 font-semibold text-[11px] text-neutral-500 uppercase tracking-normal dark:border-white/10 dark:bg-white/10 dark:text-neutral-300">
-            Link
-          </span>
+        ) : (
+          <div className="grid size-full place-items-center bg-gradient-to-br from-neutral-100 via-neutral-50 to-neutral-200 dark:from-neutral-800 dark:via-neutral-900 dark:to-neutral-950">
+            <Globe2
+              className="text-neutral-300 dark:text-neutral-600"
+              size={36}
+              strokeWidth={1.5}
+            />
+          </div>
+        )}
+        {showHeroImage ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
+        ) : null}
+        <span className="absolute top-3 right-3 rounded-full border border-black/5 bg-white/80 px-2 py-1 font-semibold text-[11px] text-neutral-600 uppercase tracking-normal backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
+          Link
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
+        <div className="-mt-5 mb-3">
+          <LinkFaviconBadge
+            className="bg-white shadow-md dark:bg-neutral-800"
+            faviconUrl={link.faviconUrl}
+          />
         </div>
         {link.unfurlStatus === 'loading' ? (
           <div className="space-y-3">

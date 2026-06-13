@@ -81,7 +81,7 @@ describe('formatDuration', () => {
 });
 
 describe('AssetContent', () => {
-  it('renders file name, MIME type, and size', () => {
+  it('renders the file name without a MIME/size footer on the card', () => {
     render(
       <AssetContent
         data={{
@@ -97,8 +97,10 @@ describe('AssetContent', () => {
     );
 
     expect(screen.getByText('report.pdf')).toBeInTheDocument();
-    expect(screen.getByText('application/pdf')).toBeInTheDocument();
-    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    // The card view no longer surfaces raw MIME type / file size — that
+    // metadata lives in the focused view's header and metadata grid.
+    expect(screen.queryByText('application/pdf')).not.toBeInTheDocument();
+    expect(screen.queryByText('2.0 KB')).not.toBeInTheDocument();
   });
 
   it('provides a title for the truncated focused attachment path', () => {

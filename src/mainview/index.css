@@ -18,6 +18,20 @@
       0 48px 80px -24px rgba(15, 23, 42, 0.28);
   }
 
+  /* drop-shadow variant of the card shadow for nodes whose shape is cut with
+     clip-path (e.g. the sticky's folded corner) — box-shadow would trace the
+     rectangular border box and leak into the cut-out area. */
+  .shadow-card-cutout {
+    filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.05))
+      drop-shadow(0 3px 6px rgba(15, 23, 42, 0.08))
+      drop-shadow(0 12px 20px rgba(15, 23, 42, 0.1));
+  }
+  .shadow-card-cutout:hover {
+    filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.08))
+      drop-shadow(0 8px 14px rgba(15, 23, 42, 0.12))
+      drop-shadow(0 24px 36px rgba(15, 23, 42, 0.18));
+  }
+
   .custom-scrollbar {
     scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
     scrollbar-width: thin;

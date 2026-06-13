@@ -6,6 +6,7 @@ import {
   FileQuestion,
   FileText,
   FileVideo,
+  Image as ImageIcon,
   Loader2,
   Play,
 } from 'lucide-react';
@@ -235,7 +236,7 @@ function VideoThumbnail({
 }) {
   const duration = formatDuration(asset.duration);
   return (
-    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
+    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
       {asset.thumbnailUrl ? (
         <img
           alt={`${title} thumbnail`}
@@ -265,7 +266,7 @@ function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
   const duration = formatDuration(asset.duration);
   const bars = asset.waveform?.length ? asset.waveform.slice(0, 32) : null;
   return (
-    <div className="mb-4 rounded-2xl border border-black/10 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/8">
+    <div className="mb-4 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/8">
       <div className="flex items-center gap-3">
         <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-neutral-950 text-neutral-50 dark:bg-neutral-50 dark:text-neutral-950">
           <FileAudio size={23} />
@@ -345,7 +346,7 @@ function ImageAsFileThumbnail({
   title: string;
 }) {
   return (
-    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-black/10 bg-neutral-100 dark:border-white/10 dark:bg-black/30">
+    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-100 dark:border-white/10 dark:bg-black/30">
       {asset.thumbnailUrl ? (
         <img
           alt={`${title} thumbnail`}
@@ -354,31 +355,96 @@ function ImageAsFileThumbnail({
         />
       ) : (
         <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.85_0.04_220/.4),transparent_55%),oklch(0.96_0.01_220)] text-neutral-500 dark:bg-[radial-gradient(circle_at_50%_35%,oklch(0.55_0.07_220/.45),transparent_55%),oklch(0.22_0.02_240)] dark:text-neutral-300">
-          <FileQuestion className="opacity-70" size={36} />
+          <ImageIcon className="opacity-70" size={36} strokeWidth={1.5} />
         </div>
       )}
     </div>
   );
 }
 
-function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
-  // No bun-side raster preview yet (see Phase 2 roadmap). Show a styled
-  // placeholder that still differentiates a PDF from generic file cards on
-  // the canvas while keeping the dependency footprint zero.
+const FILE_EXTENSION_RE = /\.([a-z0-9]{1,8})$/i;
+
+function getFileExtension(fileName: string): string | null {
+  const match = FILE_EXTENSION_RE.exec(fileName);
+  return match?.[1] ? match[1].toUpperCase() : null;
+}
+
+const PAGE_CORNER = 14;
+const PAGE_CLIP = `polygon(0 0, calc(100% - ${PAGE_CORNER}px) 0, 100% ${PAGE_CORNER}px, 100% 100%, 0 100%)`;
+const PAGE_FOLD_CLIP = 'polygon(0 0, 100% 100%, 0 100%)';
+
+/**
+ * Miniature paper-page glyph with a folded corner, skeleton text lines, and
+ * an optional file-type badge. Shared by the PDF and generic file thumbnails
+ * so file cards read as documents at a glance.
+ */
+function FilePageGlyph({
+  badge,
+  badgeClassName,
+}: {
+  badge: string | null;
+  badgeClassName?: string;
+}) {
   return (
-    <div className="relative mb-4 aspect-video overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-rose-100 shadow-inner dark:border-rose-900/40 dark:from-rose-950/40 dark:via-neutral-900 dark:to-rose-950/30">
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="flex flex-col items-center gap-2 text-rose-700 dark:text-rose-300">
-          <div className="grid size-12 place-items-center rounded-xl border border-rose-300 bg-white/80 shadow-sm dark:border-rose-800/60 dark:bg-rose-950/60">
-            <FileText size={26} />
+    <div className="relative">
+      <div style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.16))' }}>
+        <div
+          className="relative h-20 w-16 rounded-md bg-white"
+          style={{ clipPath: PAGE_CLIP }}
+        >
+          <div
+            className="absolute top-0 right-0"
+            style={{
+              width: PAGE_CORNER,
+              height: PAGE_CORNER,
+              clipPath: PAGE_FOLD_CLIP,
+              background:
+                'linear-gradient(to bottom left, #f4f4f5, #d4d4d8 55%, #bdbdc2)',
+            }}
+          />
+          <div className="absolute inset-x-3 top-6 space-y-[5px]">
+            <div className="h-[3px] rounded-full bg-neutral-200" />
+            <div className="h-[3px] rounded-full bg-neutral-200" />
+            <div className="h-[3px] w-3/4 rounded-full bg-neutral-200" />
+            <div className="h-[3px] w-1/2 rounded-full bg-neutral-200" />
           </div>
-          <span className="font-semibold text-[11px] uppercase tracking-wider">
-            {asset.mimeType === 'application/pdf' ? 'PDF document' : 'Document'}
-          </span>
         </div>
       </div>
-      <div className="absolute top-2 right-2 rounded-md bg-rose-600/90 px-2 py-0.5 font-bold text-[10px] text-white uppercase tracking-wider shadow-sm">
-        PDF
+      {badge ? (
+        <span
+          className={cn(
+            'absolute bottom-3 -left-2.5 rounded px-1.5 py-0.5 font-bold text-[9px] text-white uppercase tracking-wide shadow-sm',
+            badgeClassName ?? 'bg-neutral-600 dark:bg-neutral-500'
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
+  // No bun-side raster preview yet (see Phase 2 roadmap). Show a paper-page
+  // glyph that still differentiates a PDF from generic file cards on the
+  // canvas while keeping the dependency footprint zero.
+  return (
+    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-gradient-to-b from-rose-50/80 to-rose-100/70 dark:border-white/10 dark:from-rose-950/30 dark:to-rose-950/50">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <FilePageGlyph badge="PDF" badgeClassName="bg-rose-600" />
+        <span className="font-semibold text-[10px] text-rose-700/90 uppercase tracking-wider dark:text-rose-300">
+          {asset.mimeType === 'application/pdf' ? 'PDF document' : 'Document'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function GenericFileThumbnail({ asset }: { asset: AssetNodeData }) {
+  return (
+    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-gradient-to-b from-neutral-100 to-neutral-200/80 dark:border-white/10 dark:from-neutral-800/80 dark:to-neutral-900">
+      <div className="absolute inset-0 grid place-items-center">
+        <FilePageGlyph badge={getFileExtension(asset.fileName)} />
       </div>
     </div>
   );
@@ -391,7 +457,7 @@ function TextThumbnail({ asset }: { asset: AssetNodeData }) {
   const excerpt = asset.previewExcerpt?.trim() ?? '';
   const hasExcerpt = excerpt.length > 0;
   return (
-    <div className="relative mb-4 max-h-32 overflow-hidden rounded-2xl border border-black/10 bg-neutral-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20">
+    <div className="relative mb-4 max-h-32 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20">
       {hasExcerpt ? (
         <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-neutral-700 leading-relaxed dark:text-neutral-200">
           {excerpt}
@@ -420,7 +486,7 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
   const countLabel = entryCount > 0 ? `${entryCount} items` : 'Archive';
 
   return (
-    <div className="mb-4 rounded-2xl border border-black/10 bg-amber-50/60 p-3 shadow-inner dark:border-white/10 dark:bg-amber-400/10">
+    <div className="mb-4 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-amber-50/60 p-3 shadow-inner dark:border-white/10 dark:bg-amber-400/10">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
           <FileArchive size={15} />
@@ -479,7 +545,7 @@ function AssetThumbnail({
   if (isTextAsFile(asset)) {
     return <TextThumbnail asset={asset} />;
   }
-  return null;
+  return <GenericFileThumbnail asset={asset} />;
 }
 
 function MetadataGrid({ asset }: { asset: AssetNodeData }) {
@@ -818,7 +884,7 @@ export const AssetContent = ({
       style={colorToStyle(asset.color)}
     >
       <div className="flex min-h-0 flex-1 flex-col p-5">
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
             <AssetIcon asset={asset} size={19} />
           </div>
@@ -834,17 +900,9 @@ export const AssetContent = ({
           </span>
         </div>
         <AssetThumbnail asset={asset} title={title} />
-        <h3 className="line-clamp-3 font-bold text-xl leading-tight">
+        <h3 className="line-clamp-3 shrink-0 font-bold text-xl leading-tight">
           {title}
         </h3>
-        <div className="mt-auto min-w-0 pt-4">
-          <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-black/8 bg-white/55 px-3 py-2 text-neutral-500 dark:border-white/10 dark:bg-white/8 dark:text-neutral-300">
-            <span className="truncate text-xs">{asset.mimeType}</span>
-            <span className="shrink-0 text-xs">
-              {formatFileSize(asset.size)}
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );

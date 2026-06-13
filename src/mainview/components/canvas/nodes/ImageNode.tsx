@@ -215,30 +215,31 @@ export const ImageContent = ({
             <Loader2 className="animate-spin text-white/80" size={28} />
           </div>
         ) : null}
+        {/* The focused (lightbox) view shows its caption as a FocusedView
+            overlay. On the canvas card the caption sits on a bottom scrim so
+            the image keeps the full card area. */}
+        {!isFocused && (data.title || onTitleChange) ? (
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/25 to-transparent px-4 pt-10 pb-3">
+            <h3
+              className={cn(
+                'truncate font-semibold text-sm text-white leading-tight outline-none [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]',
+                onTitleChange && 'nodrag nopan',
+                !(data.title || editingTitle) && 'text-white/60',
+                editingTitle &&
+                  'nodrag nopan rounded-md bg-black/30 px-1 ring-1 ring-white/50'
+              )}
+              contentEditable={editingTitle}
+              onBlur={handleTitleBlur}
+              onClick={onTitleChange ? startEditing : undefined}
+              onKeyDown={handleTitleKeyDown}
+              ref={titleRef}
+              suppressContentEditableWarning
+            >
+              {data.title || (onTitleChange ? 'Add title…' : '')}
+            </h3>
+          </div>
+        ) : null}
       </div>
-      {/* The focused (lightbox) view shows its caption as a FocusedView
-          overlay instead of a bottom title bar. */}
-      {!isFocused && (data.title || onTitleChange) ? (
-        <div className="border-black/5 border-t px-4 py-3">
-          <h3
-            className={cn(
-              'truncate font-semibold text-sm leading-tight outline-none',
-              onTitleChange && 'nodrag nopan',
-              !(data.title || editingTitle) && 'opacity-40',
-              editingTitle &&
-                'nodrag nopan rounded-md bg-black/5 px-1 ring-1 ring-blue-400/40 dark:bg-white/10'
-            )}
-            contentEditable={editingTitle}
-            onBlur={handleTitleBlur}
-            onClick={onTitleChange ? startEditing : undefined}
-            onKeyDown={handleTitleKeyDown}
-            ref={titleRef}
-            suppressContentEditableWarning
-          >
-            {data.title || (onTitleChange ? 'Add title…' : '')}
-          </h3>
-        </div>
-      ) : null}
     </div>
   );
 };

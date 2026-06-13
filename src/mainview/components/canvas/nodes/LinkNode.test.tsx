@@ -30,8 +30,22 @@ const rpcMocks = vi.hoisted(() => ({
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
-  NodeResizeControl: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  NodeResizeControl: ({
+    children,
+    minHeight,
+    minWidth,
+  }: {
+    children: React.ReactNode;
+    minHeight?: number;
+    minWidth?: number;
+  }) => (
+    <div
+      data-min-height={minHeight}
+      data-min-width={minWidth}
+      data-testid="resize-control"
+    >
+      {children}
+    </div>
   ),
   Position: {
     Top: 'top',
@@ -169,6 +183,27 @@ describe('LinkContent', () => {
         )
     ).toBe(true);
   });
+
+  it('reserves three lines for long canvas titles before truncating', () => {
+    const longTitle =
+      'Dia browser keeps research notes drafts links and source material together for focused work';
+    render(
+      <LinkContent
+        data={{
+          color: '#ffffff',
+          title: longTitle,
+          url: 'https://www.diabrowser.com/',
+        }}
+      />
+    );
+
+    const title = screen.getByRole('heading', {
+      level: 3,
+      name: longTitle,
+    });
+    expect(title).toHaveClass('line-clamp-3');
+    expect(title).toHaveClass('min-h-[4.5rem]');
+  });
 });
 
 describe('LinkNode', () => {
@@ -189,6 +224,24 @@ describe('LinkNode', () => {
     expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     expect(screen.getByTestId('handle-bottom')).toBeInTheDocument();
     expect(screen.getByTestId('handle-left')).toBeInTheDocument();
+  });
+
+  it('keeps link nodes tall enough for a three-line title', () => {
+    render(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: 'Example',
+          url: 'https://example.com/',
+        }}
+        id="link-1"
+      />
+    );
+
+    expect(screen.getByTestId('resize-control')).toHaveAttribute(
+      'data-min-height',
+      '320'
+    );
   });
 
   it('waits until the node is visible before fetching link preview metadata', async () => {

@@ -1,4 +1,4 @@
-import { ArrowRight, Link as LinkIcon } from 'lucide-react';
+import { ArrowRight, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { createLinkNodeData, type LinkNodeData } from '@/lib/contentTypes';
@@ -6,74 +6,57 @@ import { createLinkNodeData, type LinkNodeData } from '@/lib/contentTypes';
 export function LinkCreateForm({
   onCreate,
 }: {
-  onCreate: (data: LinkNodeData) => void;
+  onCreate: (data: LinkNodeData) => Promise<void> | void;
 }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
-  const [prefilled, setPrefilled] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     inputRef.current?.focus();
-    let cancelled = false;
-    // Prefill from the system clipboard when it holds a parseable URL.
-    // Browser/Electrobun may reject readText outside a user gesture or in
-    // insecure contexts; failures are swallowed so the form stays usable.
-    navigator.clipboard
-      ?.readText?.()
-      .then((text) => {
-        if (cancelled) {
-          return;
-        }
-        const trimmed = text.trim();
-        if (trimmed && createLinkNodeData(trimmed)) {
-          setValue((prev) => {
-            if (!prev) {
-              setPrefilled(true);
-              setTimeout(() => setPrefilled(false), 2000);
-              return trimmed;
-            }
-            return prev;
-          });
-        }
-      })
-      .catch(() => {
-        /* clipboard permission denied — ignore */
-      });
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, []);
 
   return (
     <form
       className="border-gray-100 border-t p-3 dark:border-neutral-700"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
+        if (isSubmitting) {
+          return;
+        }
         const data = createLinkNodeData(value);
         if (!data) {
           setError('Enter a valid http or https URL.');
           return;
         }
         setError('');
-        setValue('');
-        onCreate(data);
+        setIsSubmitting(true);
+        try {
+          await onCreate(data);
+          if (mountedRef.current) {
+            setValue('');
+          }
+        } catch {
+          if (mountedRef.current) {
+            setError('Could not create link.');
+          }
+        } finally {
+          if (mountedRef.current) {
+            setIsSubmitting(false);
+          }
+        }
       }}
     >
       <label className="sr-only" htmlFor="create-link-url">
         Link URL
       </label>
-      <div
-        className={`flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm transition-colors duration-200 ${
-          prefilled
-            ? 'border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/20'
-            : 'border-gray-200 bg-white dark:border-neutral-600 dark:bg-neutral-900'
-        }`}
-      >
-        <LinkIcon
-          className={`shrink-0 transition-colors duration-200 ${prefilled ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'}`}
-          size={16}
-        />
+      <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-neutral-600 dark:bg-neutral-900">
+        <LinkIcon className="shrink-0 text-gray-400" size={16} />
         <input
           autoCapitalize="off"
           autoComplete="off"
@@ -85,26 +68,28 @@ export function LinkCreateForm({
           id="create-link-url"
           onChange={(event) => {
             setValue(event.target.value);
-            setPrefilled(false);
             if (error) {
               setError('');
             }
           }}
-          placeholder={
-            prefilled ? 'URL from clipboard' : 'https://example.com'
-          }
+          placeholder="https://example.com"
           ref={inputRef}
           spellCheck="false"
           type="text"
           value={value}
         />
         <button
-          aria-label="Create link"
+          aria-busy={isSubmitting}
+          aria-label={isSubmitting ? 'Creating link' : 'Create link'}
           className="grid size-7 shrink-0 place-items-center rounded-lg bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300 dark:bg-gray-100 dark:text-gray-950 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400 dark:hover:bg-gray-300"
-          disabled={!value.trim()}
+          disabled={isSubmitting || !value.trim()}
           type="submit"
         >
-          <ArrowRight size={14} />
+          {isSubmitting ? (
+            <Loader2 className="animate-spin" size={14} />
+          ) : (
+            <ArrowRight size={14} />
+          )}
         </button>
       </div>
       {error ? <p className="mt-2 text-red-500 text-xs">{error}</p> : null}

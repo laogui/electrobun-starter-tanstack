@@ -5,9 +5,19 @@
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
-let initPromise: Promise<any> | null = null;
-/** True when we know for certain this is not an Electrobun environment. */
-let notElectrobun = false;
+// Persist the init promise on `globalThis` so Vite HMR re-evaluating this
+// module does NOT spawn a second Electroview. A duplicate Electroview opens
+// a second WebSocket to Bun; Bun's socketMap[webviewId] then points at the
+// new socket, but the OLD instance's `requestListeners` Map still owns any
+// in-flight request promise. Bun would then deliver responses to the NEW
+// socket whose RPC has no listener for those ids, leaving the promises
+// dangling forever.
+declare global {
+  // eslint-disable-next-line no-var
+  var __ghostboardInitPromise: Promise<any> | null | undefined;
+  // eslint-disable-next-line no-var
+  var __ghostboardNotElectrobun: boolean | undefined;
+}
 const MAX_INIT_RETRIES = 3;
 let initRetries = 0;
 
@@ -16,7 +26,7 @@ async function initElectrobun() {
     console.warn(
       '[persistence] Not running inside Electrobun — persistence disabled'
     );
-    notElectrobun = true;
+    globalThis.__ghostboardNotElectrobun = true;
     return null;
   }
   try {
@@ -25,7 +35,7 @@ async function initElectrobun() {
     const { Electroview } = mod;
 
     const rpc = Electroview.defineRPC({
-      maxRequestTime: 10_000,
+      maxRequestTime: Number.POSITIVE_INFINITY,
       handlers: {
         requests: {},
         messages: {
@@ -59,26 +69,25 @@ async function initElectrobun() {
 }
 
 async function getElectrobun() {
-  // Permanently disabled when not in Electrobun environment
-  if (notElectrobun) {
+  if (globalThis.__ghostboardNotElectrobun) {
     return null;
   }
 
-  if (!initPromise) {
-    initPromise = initElectrobun().then((instance) => {
+  if (!globalThis.__ghostboardInitPromise) {
+    globalThis.__ghostboardInitPromise = initElectrobun().then((instance) => {
       if (
         instance === null &&
-        !notElectrobun &&
+        !globalThis.__ghostboardNotElectrobun &&
         initRetries < MAX_INIT_RETRIES
       ) {
         // Transient failure — allow retry on next call
         initRetries += 1;
-        initPromise = null;
+        globalThis.__ghostboardInitPromise = null;
       }
       return instance;
     });
   }
-  return await initPromise;
+  return await globalThis.__ghostboardInitPromise;
 }
 
 export async function loadCanvas(viewId: string) {
@@ -276,14 +285,115 @@ export interface UnfurlLinkResult {
   url: string;
 }
 
+// The unfurl request goes over the localhost HTTP server started by
+// `startAIServer` (see `src/bun/ai.ts`) instead of Electrobun RPC. The RPC
+// transport was occasionally dropping responses for subsequent unfurls when
+// Vite HMR caused webview reloads, leaving the promise dangling forever.
+// HTTP is request-scoped and immune to that class of socket-routing issue.
+let cachedLocalEndpoint: { baseUrl: string; token: string } | null = null;
+
+async function getLocalHttpEndpoint(): Promise<{
+  baseUrl: string;
+  token: string;
+} | null> {
+  if (cachedLocalEndpoint) {
+    return cachedLocalEndpoint;
+  }
+  const endpoint = await rpcGetAIEndpoint();
+  if (!endpoint?.baseUrl) {
+    return null;
+  }
+  cachedLocalEndpoint = { baseUrl: endpoint.baseUrl, token: endpoint.token };
+  return cachedLocalEndpoint;
+}
+
+// Renderer-side guard against bad input reaching the local HTTP server. The
+// backend re-validates with stricter SSRF protections (`parseSafeHttpUrl` in
+// linkPreview.ts), but rejecting obviously bad URLs here avoids a wasted
+// round-trip and keeps the loading state from blinking on for invalid input.
+function isValidUnfurlUrl(rawUrl: string): boolean {
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0) {
+    return false;
+  }
+  if (rawUrl.length > 2048) {
+    return false;
+  }
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// Backend has its own 8s fetch timeout; this is an outer bound so the
+// renderer never hangs on a stuck local socket. Slightly longer than the
+// backend budget so backend failures surface as `{ status: 'failed' }`
+// rather than as our own AbortError.
+const UNFURL_FETCH_TIMEOUT_MS = 12_000;
+const UNFURL_MAX_ATTEMPTS = 2;
+const UNFURL_RETRY_DELAY_MS = 500;
+
+async function fetchUnfurlOnce(
+  endpoint: { baseUrl: string; token: string },
+  url: string
+): Promise<{ kind: 'ok'; data: UnfurlLinkResult } | { kind: 'retry' } | { kind: 'giveUp' }> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    UNFURL_FETCH_TIMEOUT_MS
+  );
+  try {
+    const res = await fetch(
+      `${endpoint.baseUrl}/unfurl?url=${encodeURIComponent(url)}`,
+      {
+        headers: { authorization: `Bearer ${endpoint.token}` },
+        signal: controller.signal,
+      }
+    );
+    // 5xx is treated as transient (worth a retry); 4xx is a client error and
+    // will not change on retry.
+    if (res.status >= 500) {
+      return { kind: 'retry' };
+    }
+    if (!res.ok) {
+      return { kind: 'giveUp' };
+    }
+    return { kind: 'ok', data: (await res.json()) as UnfurlLinkResult };
+  } catch (error) {
+    // AbortError (timeout) and network failures are both retryable.
+    if (error instanceof Error) {
+      console.warn('[rpcUnfurlLink] fetch attempt failed:', error.message);
+    }
+    return { kind: 'retry' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function rpcUnfurlLink(
   url: string
 ): Promise<UnfurlLinkResult | null> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
+  if (!isValidUnfurlUrl(url)) {
     return null;
   }
-  return eb.rpc.request.unfurlLink({ url });
+  const endpoint = await getLocalHttpEndpoint();
+  if (!endpoint) {
+    return null;
+  }
+  for (let attempt = 1; attempt <= UNFURL_MAX_ATTEMPTS; attempt += 1) {
+    const outcome = await fetchUnfurlOnce(endpoint, url);
+    if (outcome.kind === 'ok') {
+      return outcome.data;
+    }
+    if (outcome.kind === 'giveUp') {
+      return null;
+    }
+    if (attempt < UNFURL_MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, UNFURL_RETRY_DELAY_MS));
+    }
+  }
+  return null;
 }
 
 export async function rpcExportPng(dataUrl: string, fileName: string) {

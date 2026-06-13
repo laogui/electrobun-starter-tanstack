@@ -90,10 +90,34 @@ describe('startAIServer', () => {
   });
 
   it('returns 404 for unknown routes', async () => {
-    startAIServer(() => null);
+    const handle = startAIServer(() => null);
     const res = await invoke(
-      new Request('http://127.0.0.1:4242/other', { method: 'POST' })
+      new Request('http://127.0.0.1:4242/other', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${handle.token}` },
+      })
     );
     expect(res.status).toBe(404);
+  });
+
+  it('rejects /unfurl without bearer token', async () => {
+    startAIServer(() => null);
+    const res = await invoke(
+      new Request('http://127.0.0.1:4242/unfurl?url=https://example.com', {
+        method: 'GET',
+      })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when /unfurl is called without a url param', async () => {
+    const handle = startAIServer(() => null);
+    const res = await invoke(
+      new Request('http://127.0.0.1:4242/unfurl', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${handle.token}` },
+      })
+    );
+    expect(res.status).toBe(400);
   });
 });

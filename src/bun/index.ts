@@ -34,7 +34,6 @@ import {
   checkLicenseStatus,
   type LicenseInfo,
 } from './license';
-import { type UnfurlResult, unfurlLink } from './linkPreview';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
@@ -558,10 +557,7 @@ interface CanvasRPC {
           notes: Array<{ noteId: string; title: string; content?: string }>;
         };
       };
-      unfurlLink: {
-        params: { url: string };
-        response: UnfurlResult;
-      };
+
       exportPng: {
         params: { dataUrl: string; fileName: string };
         response: { canceled?: boolean; filePath?: string; success: boolean };
@@ -1296,7 +1292,7 @@ async function main() {
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
-    maxRequestTime: 10_000,
+    maxRequestTime: Number.POSITIVE_INFINITY,
     handlers: {
       requests: {
         loadCanvas: async ({ viewId }) => {
@@ -1966,8 +1962,6 @@ async function main() {
           return { failedCount: paths.length - notes.length, notes };
         },
 
-        unfurlLink: async ({ url }) => unfurlLink(url),
-
         exportPng: async ({ dataUrl, fileName }) => {
           const match = PNG_DATA_URL_RE.exec(dataUrl);
           if (!match) {
@@ -2255,7 +2249,6 @@ async function main() {
         // @ts-expect-error - Type inference issue with Electrobun RPC
         checkLicense: async () => await checkLicenseStatus(),
 
-        // @ts-expect-error - Type inference issue with Electrobun RPC
         activateLicense: async (params: { key: string }) =>
           await activateLicenseKey(params.key),
       },

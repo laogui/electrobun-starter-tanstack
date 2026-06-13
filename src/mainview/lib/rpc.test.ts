@@ -10,6 +10,7 @@ const request = {
   loadAttachment: vi.fn(),
   openAttachment: vi.fn(),
   getSettings: vi.fn(),
+  getAIEndpoint: vi.fn(),
   openSettings: vi.fn(),
   listViews: vi.fn(),
   createView: vi.fn(),
@@ -50,6 +51,11 @@ beforeEach(() => {
   ElectroviewCtor.mockClear();
   vi.resetModules();
   vi.unstubAllGlobals();
+  // The rpc module persists its init promise + Electrobun-detection flag on
+  // `globalThis` to survive Vite HMR re-evaluation. That same persistence
+  // would leak state across tests, so explicitly clear it here.
+  (globalThis as Record<string, unknown>).__ghostboardInitPromise = undefined;
+  (globalThis as Record<string, unknown>).__ghostboardNotElectrobun = undefined;
 });
 
 describe('rpc', () => {
@@ -110,6 +116,19 @@ describe('rpc', () => {
     expect(ElectroviewCtor).toHaveBeenCalledTimes(1);
     expect(request.getSettings).toHaveBeenCalledWith({});
     expect(request.listViews).toHaveBeenCalledWith({});
+  });
+
+  it('does not impose a renderer-side RPC request timeout', async () => {
+    vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+    const rpc = await loadModule();
+
+    await rpc.isRpcAvailable();
+
+    expect(defineRPC).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxRequestTime: Number.POSITIVE_INFINITY,
+      })
+    );
   });
 
   it('forwards all RPC calls with the expected payloads', async () => {
@@ -206,5 +225,138 @@ describe('rpc', () => {
     const rpc = await loadModule();
 
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
+  });
+
+  describe('rpcUnfurlLink', () => {
+    const endpoint = {
+      baseUrl: 'http://127.0.0.1:4242',
+      enabled: true,
+      token: 'tok',
+    };
+
+    it('rejects invalid URLs before hitting the network', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue(endpoint);
+      const rpc = await loadModule();
+
+      await expect(rpc.rpcUnfurlLink('')).resolves.toBeNull();
+      await expect(rpc.rpcUnfurlLink('not a url')).resolves.toBeNull();
+      await expect(
+        rpc.rpcUnfurlLink('javascript:alert(1)')
+      ).resolves.toBeNull();
+      await expect(rpc.rpcUnfurlLink('file:///etc/passwd')).resolves.toBeNull();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns parsed metadata on a successful response', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const payload = {
+        url: 'https://example.com/',
+        status: 'ready' as const,
+        title: 'Example',
+      };
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(payload),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue(endpoint);
+      const rpc = await loadModule();
+
+      await expect(rpc.rpcUnfurlLink('https://example.com/')).resolves.toEqual(
+        payload
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [calledUrl, init] = fetchMock.mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+      expect(calledUrl).toBe(
+        'http://127.0.0.1:4242/unfurl?url=https%3A%2F%2Fexample.com%2F'
+      );
+      expect(
+        (init.headers as Record<string, string>).authorization
+      ).toBe('Bearer tok');
+    });
+
+    it('retries once on network failure and then succeeds', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const payload = {
+        url: 'https://example.com/',
+        status: 'ready' as const,
+        title: 'Example',
+      };
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('network down'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(payload),
+        });
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue(endpoint);
+      const rpc = await loadModule();
+
+      await expect(rpc.rpcUnfurlLink('https://example.com/')).resolves.toEqual(
+        payload
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry on 4xx responses', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue(endpoint);
+      const rpc = await loadModule();
+
+      await expect(
+        rpc.rpcUnfurlLink('https://example.com/')
+      ).resolves.toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries on 5xx and gives up after exhausting attempts', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue(endpoint);
+      const rpc = await loadModule();
+
+      await expect(
+        rpc.rpcUnfurlLink('https://example.com/')
+      ).resolves.toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns null when the local endpoint is unavailable', async () => {
+      vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      request.getAIEndpoint.mockResolvedValue({
+        baseUrl: '',
+        enabled: false,
+        token: '',
+      });
+      const rpc = await loadModule();
+
+      await expect(
+        rpc.rpcUnfurlLink('https://example.com/')
+      ).resolves.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

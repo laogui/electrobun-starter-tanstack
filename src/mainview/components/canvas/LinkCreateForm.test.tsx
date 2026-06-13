@@ -1,12 +1,36 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LinkCreateForm } from '@/components/canvas/LinkCreateForm';
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('LinkCreateForm', () => {
-  it('creates link node data and resets the input for valid URLs', () => {
+  it('does not read the clipboard when the form opens', async () => {
+    const readText = vi.fn().mockResolvedValue('https://example.com');
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      clipboard: { readText },
+    });
+
+    render(<LinkCreateForm onCreate={() => {}} />);
+
+    await act(async () => {});
+
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it('creates link node data and resets the input for valid URLs', async () => {
     const onCreate = vi.fn();
     render(<LinkCreateForm onCreate={onCreate} />);
 
@@ -21,7 +45,9 @@ describe('LinkCreateForm', () => {
       title: 'example.com',
       color: '#FFFFFF',
     });
-    expect((input as HTMLInputElement).value).toBe('');
+    await waitFor(() => {
+      expect((input as HTMLInputElement).value).toBe('');
+    });
     expect(
       screen.queryByText('Enter a valid http or https URL.')
     ).not.toBeInTheDocument();
@@ -62,5 +88,35 @@ describe('LinkCreateForm', () => {
 
     fireEvent.change(input, { target: { value: 'https://example.com' } });
     expect(button).not.toBeDisabled();
+  });
+
+  it('shows a loading state while the create handler is pending', async () => {
+    let resolveCreate: (() => void) | undefined;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCreate = resolve;
+        })
+    );
+    render(<LinkCreateForm onCreate={onCreate} />);
+
+    fireEvent.change(screen.getByLabelText('Link URL'), {
+      target: { value: 'https://example.com/docs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    const busyButton = screen.getByRole('button', { name: 'Creating link' });
+    expect(busyButton).toBeDisabled();
+    expect(busyButton).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      resolveCreate?.();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Create link' })
+      ).toHaveAttribute('aria-busy', 'false');
+    });
   });
 });

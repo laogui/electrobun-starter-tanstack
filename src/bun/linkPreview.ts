@@ -353,7 +353,6 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
           ? { faviconUrl: resolveUrl(meta.faviconUrl, parsed.toString()) }
           : {}),
       };
-      console.log('[unfurlLink] Parsed metadata for', rawUrl, ':', result);
       return result;
     }
     console.warn('[unfurlLink] Too many redirects for', rawUrl);

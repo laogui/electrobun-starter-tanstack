@@ -125,6 +125,9 @@ function buildRfInstanceWithEdge() {
 }
 
 beforeEach(() => {
+  // Search history persists to localStorage; clear it so recorded queries from
+  // one test don't leak navigable history rows into the next.
+  window.localStorage.clear();
   useCanvasStore.getState().reset();
   useCanvasStore.setState({
     activeViewId: 'default',
@@ -461,6 +464,54 @@ describe('searchDialog interactions', () => {
     await waitFor(() => {
       expect(useCanvasStore.getState().activeViewId).toBe('other');
     });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('navigates empty-state rows with the keyboard and activates on Enter', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          id: 'n1',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Recent Card', updatedAt: 100 },
+        } as any,
+      ],
+    });
+    setSearch({ query: '' });
+    render(<SearchDialog />);
+
+    // Recent card first, then the "Other Canvas" jump target.
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+
+    const input = screen.getByLabelText('Search query');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Enter on the canvas row switches view and closes the dialog.
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(useCanvasStore.getState().activeViewId).toBe('other');
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('opens the create menu and closes search on Cmd/Ctrl+N', () => {
+    setSearch({ query: '' });
+    render(<SearchDialog />);
+    expect(useCanvasStore.getState().createMenuOpen).toBe(false);
+
+    fireEvent.keyDown(screen.getByLabelText('Search query'), {
+      key: 'n',
+      metaKey: true,
+    });
+
+    expect(useCanvasStore.getState().createMenuOpen).toBe(true);
     expect(useCanvasStore.getState().searchOpen).toBe(false);
   });
 

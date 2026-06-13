@@ -287,7 +287,7 @@ export const LinkContent = ({
             <div className="min-w-0 flex-1">
               <h3
                 className={cn(
-                  'line-clamp-2 font-bold text-xl leading-tight',
+                  'line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6',
                   !title && 'text-neutral-400'
                 )}
               >
@@ -302,7 +302,7 @@ export const LinkContent = ({
           )}
         </div>
         {description && link.unfurlStatus !== 'loading' ? (
-          <p className='line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400'>
+          <p className="line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400">
             {description}
           </p>
         ) : null}
@@ -411,26 +411,9 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     rpcUnfurlLink(normalized)
       .then((result) => {
         if (unfurlAttemptRef.current !== normalized) {
-          console.log(
-            '[LinkNode] Unfurl result ignored (URL changed):',
-            normalized
-          );
           return;
         }
-        if (!result) {
-          console.warn(
-            '[LinkNode] Unfurl returned null (RPC failure):',
-            normalized
-          );
-          updateNodeData(id, {
-            unfurlStatus: 'failed',
-            unfurlError: 'Could not load link preview.',
-          });
-          return;
-        }
-        console.log('[LinkNode] Unfurl result for', normalized, ':', result);
-        if (result.status === 'failed') {
-          console.warn('[LinkNode] Unfurl failed for', normalized);
+        if (!result || result.status === 'failed') {
           updateNodeData(id, {
             unfurlStatus: 'failed',
             unfurlError: 'Could not load link preview.',
@@ -438,7 +421,6 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           return;
         }
         const { status: _status, url: _url, ...meta } = result;
-        console.log('[LinkNode] Extracted metadata:', meta);
         updateNodeData(id, {
           unfurlStatus: 'ready',
           unfurlError: undefined,
@@ -453,7 +435,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         if (unfurlAttemptRef.current !== normalized) {
           return;
         }
-        console.error('[LinkNode] Unfurl RPC error for', normalized, ':', error);
+        console.warn('[LinkNode] Unfurl failed for', normalized, error);
         updateNodeData(id, {
           unfurlStatus: 'failed',
           unfurlError: 'Could not load link preview.',
@@ -478,7 +460,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         hoverClassName="group-hover/link:opacity-100"
         maxHeight={600}
         maxWidth={800}
-        minHeight={240}
+        minHeight={320}
         minWidth={320}
         nodeId={id}
         onResizeStart={saveSnapshot}

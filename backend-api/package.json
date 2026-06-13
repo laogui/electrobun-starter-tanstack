@@ -8,7 +8,11 @@
     "dev": "nodemon server.js",
     "test": "node test-server.js"
   },
-  "keywords": ["license", "api", "ghostboard"],
+  "keywords": [
+    "license",
+    "api",
+    "ghostboard"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {

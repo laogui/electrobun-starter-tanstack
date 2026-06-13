@@ -322,7 +322,7 @@ app.get('/api/v1/admin/licenses/:key/activations', adminAuth, (req, res) => {
 });
 
 // 错误处理
-app.use((err, _req, res,_nextt) => {
+app.use((err, _req, res, _nextt) => {
   console.error('Error:', err);
   res.status(500).json({
     success: false,

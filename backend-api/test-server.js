@@ -26,7 +26,7 @@ async function testAPI() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ADMIN_API_KEY}`,
+        Authorization: `Bearer ${ADMIN_API_KEY}`,
       },
       body: JSON.stringify({
         email: 'test@example.com',
@@ -96,9 +96,12 @@ async function testAPI() {
 
     // 6. 获取激活历史
     console.log('6️⃣  Getting activation history...');
-    const historyRes = await fetch(`${API_BASE}/admin/licenses/${testKey}/activations`, {
-      headers: { 'Authorization': `Bearer ${ADMIN_API_KEY}` },
-    });
+    const historyRes = await fetch(
+      `${API_BASE}/admin/licenses/${testKey}/activations`,
+      {
+        headers: { Authorization: `Bearer ${ADMIN_API_KEY}` },
+      }
+    );
     const history = await historyRes.json();
     console.log('   ✅ Activations:', history.activations.length);
     console.log('');
@@ -106,7 +109,6 @@ async function testAPI() {
     console.log('='.repeat(60));
     console.log('✅ All tests passed!');
     console.log('='.repeat(60));
-
   } catch (error) {
     console.error('❌ Error:', error.message);
     process.exit(1);
@@ -125,7 +127,7 @@ async function checkServer() {
 
 async function main() {
   const serverRunning = await checkServer();
-  
+
   if (!serverRunning) {
     console.error('❌ API server is not running!');
     console.log('Please start the server first:');

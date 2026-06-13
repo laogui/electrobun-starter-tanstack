@@ -1,6 +1,7 @@
 import { Check, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 
@@ -240,31 +241,14 @@ export const ChecklistFocusedView = ({
       style={colorToStyle(data.color)}
     >
       <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-8 pt-24 pb-32">
-        {data.tag || (data.tags && data.tags.length > 0) ? (
-          <div className="mb-4 flex flex-wrap items-center gap-1.5">
-            {data.tag ? (
-              <span
-                className="rounded-md px-2 py-1 font-semibold text-xs"
-                style={colorToStyle(data.tagColor)}
-              >
-                {data.tag}
-              </span>
-            ) : null}
-            {data.tags?.map((value) => (
-              <span
-                className={cn(
-                  'rounded-md px-2 py-0.5 text-xs',
-                  isDark
-                    ? 'bg-white/15 text-white/85'
-                    : 'bg-black/5 text-neutral-700'
-                )}
-                key={value}
-              >
-                {value}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <NodeTagChips
+          className="mb-4"
+          isDark={isDark}
+          tag={data.tag}
+          tagColor={data.tagColor}
+          tagColors={data.tagColors}
+          tags={data.tags}
+        />
 
         <input
           aria-label="Checklist title"

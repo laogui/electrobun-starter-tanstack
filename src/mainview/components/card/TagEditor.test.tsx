@@ -9,31 +9,39 @@ import { TagEditor, type TagEditorChange } from './TagEditor';
 function Harness({
   initialTag,
   initialTagColor,
+  initialTagColors,
   initialTags = [],
   onChangeSpy,
   suggestions,
 }: {
   initialTag?: string;
   initialTagColor?: string;
+  initialTagColors?: Record<string, string>;
   initialTags?: string[];
   onChangeSpy?: (next: TagEditorChange) => void;
   suggestions?: string[];
 }) {
   const [tag, setTag] = useState(initialTag);
   const [tagColor, setTagColor] = useState(initialTagColor);
+  const [tagColors, setTagColors] = useState<Record<string, string>>(
+    initialTagColors ?? {}
+  );
   const [tags, setTags] = useState<string[]>(initialTags);
   const [open, setOpen] = useState(true);
 
   const apply = (next: TagEditorChange) => {
     onChangeSpy?.(next);
-    if (next.tag !== undefined) {
+    if ('tag' in next) {
       setTag(next.tag);
     }
-    if (next.tagColor !== undefined) {
+    if ('tagColor' in next) {
       setTagColor(next.tagColor);
     }
-    if (next.tags !== undefined) {
-      setTags(next.tags);
+    if ('tagColors' in next) {
+      setTagColors(next.tagColors ?? {});
+    }
+    if ('tags' in next) {
+      setTags(next.tags ?? []);
     }
   };
 
@@ -45,6 +53,7 @@ function Harness({
       suggestions={suggestions}
       tag={tag}
       tagColor={tagColor}
+      tagColors={tagColors}
       tags={tags}
     >
       <button type="button">trigger</button>
@@ -53,82 +62,140 @@ function Harness({
 }
 
 describe('TagEditor', () => {
-  it('adds a tag when pressing Enter', () => {
+  it('adds a tag only when the confirmation button is clicked', () => {
     const spy = vi.fn();
     render(<Harness onChangeSpy={spy} />);
 
-    // The first input is the primary tag; the second is the multi-tags input.
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
 
-    fireEvent.change(multiInput, { target: { value: 'draft' } });
-    fireEvent.keyDown(multiInput, { key: 'Enter' });
+    fireEvent.change(input, { target: { value: 'draft' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(spy).not.toHaveBeenCalled();
 
-    expect(spy).toHaveBeenCalledWith({ tags: ['draft'] });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(spy).toHaveBeenCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: {},
+      tags: ['draft'],
+    });
     expect(screen.getByText('draft')).toBeInTheDocument();
+  });
+
+  it('does not confirm pinyin while an IME composition is active', () => {
+    const spy = vi.fn();
+    render(<Harness onChangeSpy={spy} />);
+
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'zhong' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(spy).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(input);
+    fireEvent.change(input, { target: { value: '中' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(spy).toHaveBeenCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: {},
+      tags: ['中'],
+    });
   });
 
   it('splits comma-separated input into multiple tags and dedupes', () => {
     const spy = vi.fn();
     render(<Harness initialTags={['alpha']} onChangeSpy={spy} />);
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.change(multiInput, { target: { value: 'beta, ALPHA' } });
-    fireEvent.keyDown(multiInput, { key: 'Enter' });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'beta, ALPHA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     // Last onChange should contain alpha (existing, deduped) + beta (new)
-    expect(spy).toHaveBeenLastCalledWith({ tags: ['alpha', 'beta'] });
+    expect(spy).toHaveBeenLastCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: {},
+      tags: ['alpha', 'beta'],
+    });
+  });
+
+  it('merges the legacy primary tag into the same tag list', () => {
+    render(
+      <Harness
+        initialTag="Idea"
+        initialTagColor="#FDF2F8"
+        initialTags={['Alpha']}
+      />
+    );
+
+    expect(screen.getAllByPlaceholderText('Add tag…')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Idea' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alpha' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Idea' }).closest('span')
+    ).toHaveStyle({
+      backgroundColor: '#FDF2F8',
+    });
+  });
+
+  it('updates the selected tag color', () => {
+    const spy = vi.fn();
+    render(<Harness initialTags={['draft']} onChangeSpy={spy} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '#FDF2F8' }));
+
+    expect(spy).toHaveBeenCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: { draft: '#FDF2F8' },
+      tags: ['draft'],
+    });
   });
 
   it('removes a tag when clicking its × button', () => {
     const spy = vi.fn();
-    render(<Harness initialTags={['draft', 'review']} onChangeSpy={spy} />);
+    render(
+      <Harness
+        initialTagColors={{ draft: '#FDF2F8', review: '#EAF2B8' }}
+        initialTags={['draft', 'review']}
+        onChangeSpy={spy}
+      />
+    );
 
     const removeButtons = screen.getAllByLabelText('Remove tag');
     fireEvent.click(removeButtons[0]!);
 
-    expect(spy).toHaveBeenCalledWith({ tags: ['review'] });
+    expect(spy).toHaveBeenCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: { review: '#EAF2B8' },
+      tags: ['review'],
+    });
   });
 
-  it('removes the last tag on Backspace when input is empty', () => {
+  it('does not remove existing tags when Backspace clears the add input', () => {
     const spy = vi.fn();
     render(<Harness initialTags={['draft', 'review']} onChangeSpy={spy} />);
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.keyDown(multiInput, { key: 'Backspace' });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'temp' } });
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(input, { key: 'Backspace' });
 
-    expect(spy).toHaveBeenCalledWith({ tags: ['draft'] });
-  });
-
-  it('updates the primary tag and color', () => {
-    const spy = vi.fn();
-    render(<Harness onChangeSpy={spy} />);
-
-    const primaryInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[0] as HTMLInputElement;
-    fireEvent.change(primaryInput, { target: { value: 'urgent' } });
-    expect(spy).toHaveBeenCalledWith({ tag: 'urgent' });
-
-    // Pick the second color swatch (index 1) — buttons have aria-label = hex value.
-    const swatch = screen.getByLabelText('#FDF2F8');
-    fireEvent.click(swatch);
-    expect(spy).toHaveBeenCalledWith({ tagColor: '#FDF2F8' });
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'draft' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'review' })).toBeInTheDocument();
   });
 
   it('disables input when MAX_TAGS reached', () => {
     const eight = Array.from({ length: 8 }, (_, i) => `t${i}`);
     render(<Harness initialTags={eight} />);
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    expect(multiInput).toBeDisabled();
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
     expect(screen.getByText('Up to 8 tags')).toBeInTheDocument();
   });
 
@@ -137,10 +204,8 @@ describe('TagEditor', () => {
       <Harness suggestions={['Work', 'Workshop', 'Personal', 'Errand']} />
     );
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.change(multiInput, { target: { value: 'wor' } });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'wor' } });
 
     const options = screen.getAllByRole('option');
     expect(options.map((o) => o.textContent)).toEqual(['Work', 'Workshop']);
@@ -154,10 +219,8 @@ describe('TagEditor', () => {
       />
     );
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.change(multiInput, { target: { value: 'wor' } });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'wor' } });
 
     const options = screen.getAllByRole('option');
     expect(options.map((o) => o.textContent)).toEqual(['Workshop']);
@@ -167,26 +230,40 @@ describe('TagEditor', () => {
     const spy = vi.fn();
     render(<Harness onChangeSpy={spy} suggestions={['Work', 'Workshop']} />);
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.change(multiInput, { target: { value: 'wor' } });
-    fireEvent.keyDown(multiInput, { key: 'ArrowDown' });
-    fireEvent.keyDown(multiInput, { key: 'Enter' });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'wor' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(spy).toHaveBeenLastCalledWith({ tags: ['Workshop'] });
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('adds a suggestion when clicked', () => {
     const spy = vi.fn();
     render(<Harness onChangeSpy={spy} suggestions={['Work', 'Personal']} />);
 
-    const multiInput = screen.getAllByPlaceholderText(
-      'Add tag…'
-    )[1] as HTMLInputElement;
-    fireEvent.change(multiInput, { target: { value: 'per' } });
+    const input = screen.getByPlaceholderText('Add tag…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'per' } });
     fireEvent.click(screen.getByRole('option', { name: 'Personal' }));
 
-    expect(spy).toHaveBeenLastCalledWith({ tags: ['Personal'] });
+    expect(spy).toHaveBeenLastCalledWith({
+      tag: undefined,
+      tagColor: undefined,
+      tagColors: {},
+      tags: ['Personal'],
+    });
+  });
+
+  it('keeps popover input clicks from bubbling to the node surface', () => {
+    const parentClick = vi.fn();
+    render(
+      <div onClick={parentClick}>
+        <Harness />
+      </div>
+    );
+
+    fireEvent.click(screen.getByPlaceholderText('Add tag…'));
+
+    expect(parentClick).not.toHaveBeenCalled();
   });
 });

@@ -30,9 +30,9 @@
 | **5** ✅ | 编辑器收尾 | 保存指示器 + 删 EditableCardContent + 标题 input | 2 天 | 强烈推荐 | - |
 | **6** ✅ | 右键 / 多选 / 拖入 | ContextMenu 完整化 + 全局 drop zone | 3-5 天 | 推荐 | - |
 | **7** ✅ | FocusedView 完善 | 元信息 + 关闭按钮 + 图片缩放 | 2 天 | 推荐 | - |
-| **8** | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
+| **8** ✅ | Settings 重构 | sidebar + 工作区 / 快捷键 / 关于 | 3-5 天 | 推荐 | - |
 | **9** ✅ | 性能 pass | useViewport context + unfurl 视口限流 | 1-2 天 | 推荐 | - |
-| **10** | 视觉 / a11y 收尾 | shadow 统一 + dark + focus ring + onboarding | 2-3 天 | 推荐 | - |
+| **10** 🟡 | 视觉 / a11y 收尾 | shadow 统一 + dark + focus ring + onboarding | 2-3 天 | 推荐 | - |
 
 合计：~24-33 个工作日 / 5-7 周（单人全职）。
 
@@ -389,23 +389,40 @@
 
 ---
 
-## Phase 10 · 视觉 / a11y 收尾（2-3 天）
+## Phase 10 · 视觉 / a11y 收尾（2-3 天）🟡 进行中
+
+> **状态核查（2026-06-13）**：核查发现 J7 / J8 / J4 在前序 PR 已落地，J3 / F4 本次落地，J6 留待真正有需求时再做。
 
 ### 任务
 
-| ID | 改动 | 文件 |
-|---|---|---|
-| J3 | 所有菜单按钮统一 `focus-visible:ring-2 ring-blue-500/60` | `ContextMenu.tsx`、`ViewSwitcher.tsx` |
-| J4 | resize handle `opacity-30 group-hover:opacity-100` 渐变 | 5 个节点（或 Phase 1 抽出的共享组件） |
-| J6 | 在 `index.css` 给 BlockNote checklist + tiptap-task-item checkbox 写明确样式 | `src/mainview/index.css` |
-| J7 | 空画布 onboarding：中心 placeholder + 6 个常用模板 chip + "/" 提示 | 新建 `EmptyCanvasOverlay.tsx`、`routes/index.tsx` |
-| J8 | MiniMap selected 节点用 `nodeColor={(n) => n.selected ? blue : gray}` | `routes/index.tsx:712-724` |
-| F4 | CreateMenu 分两栏：常用（note / sticky / link / image）+ 更多（folder / group / file / checklist） | `ViewSwitcher.tsx:55-69, 566` |
+| 状态 | ID | 改动 | 文件 |
+|---|---|---|---|
+| ✅ 已完成（本次） | J3 | 菜单按钮统一焦点态：ContextMenu 主菜单/子菜单 item 加 `focus-visible:bg-black/5`（与 hover 同款，inset 不被 popup 边缘裁剪）；ViewSwitcher 三个 Menu.Trigger（view 名 / 导出 / Plus）抽 `TRIGGER_FOCUS_RING` 加 `focus-visible:ring-2 ring-blue-500/60` | `ContextMenu.tsx:660`、`ContextMenu.tsx:748`、`ViewSwitcher.tsx`（`TRIGGER_FOCUS_RING` 常量 + 3 处 trigger）|
+| ✅ 已实现（前序 PR） | J4 | resize handle 用 `opacity-0 → group-hover:opacity-100` 二态渐隐（比 spec 的 30%→100% 更干净，按"变体完成"处理） | `src/mainview/components/canvas/nodes/_shared/ResizeHandle.tsx:50-55` |
+| ⏭ 暂不做 | J6 | BlockNote checklist + tiptap-task-item checkbox 明确样式 | `src/mainview/index.css` 当前只有 `.note-preview .note-checkbox`（markdown 预览的复选框），BlockNote 编辑器自己的 checklist 用的是它内置样式，目前无用户吐槽 → 留到真有反馈再补 |
+| ✅ 已实现（前序 PR + 本次 i18n） | J7 | 空画布 onboarding：`EmptyCanvasOverlay` 渲染主标题 + 3 个 quick action（Create first note / Browse templates / Open note library）+ 2 条 hint。本次把原硬编码英文全部走 paraglide（en/zh），并为按钮加 `FOCUS_RING` | `src/mainview/components/canvas/EmptyCanvasOverlay.tsx`、`routes/index.tsx:1062-1069`、`messages/*.json`（`empty_canvas_*` × 7） |
+| ✅ 已实现（前序 PR） | J8 | MiniMap selected 节点用 `nodeColor` 回调：`miniMapNodeColor = (n) => n.selected ? '#3b82f6' : '#ddd'` | `routes/index.tsx:107-115, 916-924, 1048` |
+| ✅ 已完成（本次） | F4 | CreateMenu 按 `COMMON_CREATE_IDS = {note, sticky, link, image}` 分两栏，中间插 "More" section header（border-b + uppercase tracking-wider，与 view_from_template 标头一致）。共享 render 路径抽 `renderCreateMenuItem(item, deps)` 函数（接 `onCreateNode` / `setLinkFormOpen` / `openAssetPicker`），保留 link inline form + asset picker 特殊分支 | `ViewSwitcher.tsx`（`COMMON_CREATE_IDS` + `renderCreateMenuItem` + 2 段 map） |
 
-### 验收
-- 键盘 Tab 走完整个 UI 全部可见 focus ring。
-- 空画布有内容感。
-- MiniMap 一眼看到当前选中位置。
+### 本次新增 i18n key（en + zh，paraglide-js compiled）
+
+`menu_more`、`menu_note_library`、`empty_canvas_title`、`empty_canvas_description`、`empty_canvas_create_note`、`empty_canvas_browse_templates`、`empty_canvas_open_library`、`empty_canvas_hint_drop`、`empty_canvas_hint_create_menu`。
+
+同时把 `ViewSwitcher.tsx` 里仍硬编码的 `"Note Library"` aria-label + 行内文本改为 `m.menu_note_library()`。
+
+### 验收（已通过）
+- ✅ `bun run test` —— ViewSwitcher 24 个测试 + routes/index 18 个相关测试全部通过；整库 948/950（2 个 pre-existing 失败：`pasted URLs` 和 `readOnlyNodes.test.tsx:187`，与本次改动无关，stash 验证过）
+- ✅ `bun run check` 对改动文件 0 lint error（86 个总错误全部位于本次未触及的文件 / 配置）
+- ✅ `bun run type-check` 对改动的 4 个文件 0 error（剩余 license.ts / vite.config.ts / routes/index.tsx:867 / node_modules/electrobun 均 pre-existing）
+- ✅ 键盘 Tab 走过 view 触发器 / 导出 / + 三个按钮均见 blue ring；进入 ContextMenu 上下方向键时 highlighted item 有 hover-同款 bg
+- ✅ 空画布弹层切 zh 显示中文，三个 quick action 按钮也有 focus ring
+- ✅ CreateMenu 打开后 4 个常用项在 More 标签上方，folder/group/file/checklist 在下方；link 仍可打开 inline form，file 仍可触发文件选择器
+
+### 决策点（落地时的取舍）
+
+- **J3 menu item 上不用 ring，用 bg**：ContextMenu popup 内部 item 加 2px ring 会被 popup 边缘裁，视觉脏。改为 `focus-visible:bg-black/5` 复用 hover 同款，键盘 nav 通过 `itemRefs.current[idx].focus()` 触发 focus-visible —— 满足 "Tab 走 UI 全部可见 focus" 而不引入视觉噪声。Trigger 按钮（独立浮动）保留 spec 的 ring 写法。
+- **F4 分两栏不用纵向分栏**：原 spec 说"分两栏"，实际改成"两段+section header"。理由：popup 已 `min-w-50`，真做左右两栏会逼 popup 至少 `min-w-72`，且与已有 "view_from_template" 模板分组的 header 风格不一致；section header 复用相同视觉语言更协调。
+- **J6 跳过**：BlockNote checklist 用的是 tiptap-task-item 自带样式，目前无 issue / 反馈；为它写 override 容易和后续 BlockNote 升级冲突。等真有视觉问题再补。
 
 ---
 

@@ -8,7 +8,7 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
-import { type AIServerConfig, type AIServerHandle, startAIServer } from './ai';
+import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import {
   assertWorkspaceAttachmentPath,
@@ -34,6 +34,10 @@ import {
   checkLicenseStatus,
   type LicenseInfo,
 } from './license';
+import {
+  type LocalHttpServerHandle,
+  startLocalHttpServer,
+} from './localHttpServer';
 import type { CanvasManifest, ManifestEdge, ManifestNode } from './manifest';
 import { loadManifest, saveManifest as writeManifest } from './manifest';
 import {
@@ -593,9 +597,9 @@ interface CanvasRPC {
         params: Record<string, unknown>;
         response: AppSettings;
       };
-      getAIEndpoint: {
+      getLocalHttpEndpoint: {
         params: Record<string, unknown>;
-        response: { baseUrl: string; enabled: boolean; token: string };
+        response: { aiEnabled: boolean; baseUrl: string; token: string };
       };
       listViews: {
         params: Record<string, unknown>;
@@ -901,7 +905,7 @@ let settingsWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
 // Streaming responses cannot travel over RPC, so it runs on 127.0.0.1.
-let aiServer: AIServerHandle | null = null;
+let localHttpServer: LocalHttpServerHandle | null = null;
 // LLM API key loaded from <userData>/ai-credentials.json (never in settings.json)
 let cachedAIApiKey: string | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
@@ -1282,17 +1286,17 @@ async function main() {
   // `<workspace>/.ghostboard/settings.json`. Cache it in memory for the
   // duration of the run; the secure file is only touched on read/write.
   cachedAIApiKey = (await loadAICredentials()).apiKey ?? null;
-  // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
-  // The handle holds the localhost base URL + bearer token the renderer
-  // connects with. The config is resolved per-request so settings updates
-  // take effect without restarting the server.
-  aiServer = startAIServer(() => buildAIConfig());
+  // Local HTTP endpoint for renderer calls that do not fit Electrobun RPC
+  // well. The handle holds the localhost base URL + bearer token the renderer
+  // connects with. AI config is resolved per-request so settings updates take
+  // effect without restarting the server.
+  localHttpServer = startLocalHttpServer(() => buildAIConfig());
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
-    maxRequestTime: Number.POSITIVE_INFINITY,
+    maxRequestTime: 10_000,
     handlers: {
       requests: {
         loadCanvas: async ({ viewId }) => {
@@ -2146,10 +2150,10 @@ async function main() {
 
         getSettings: () => cachedSettings,
 
-        getAIEndpoint: () => ({
-          baseUrl: aiServer?.baseUrl ?? '',
-          token: aiServer?.token ?? '',
-          enabled: aiServer != null && buildAIConfig() !== null,
+        getLocalHttpEndpoint: () => ({
+          baseUrl: localHttpServer?.baseUrl ?? '',
+          token: localHttpServer?.token ?? '',
+          aiEnabled: localHttpServer != null && buildAIConfig() !== null,
         }),
 
         listViews: async () => {

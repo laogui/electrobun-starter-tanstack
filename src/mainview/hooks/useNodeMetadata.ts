@@ -13,6 +13,37 @@ const QUERY_KEY = ['node-metadata'] as const;
 
 export type { NodeMetadata, NodeMetadataMap } from '@/lib/rpc';
 
+const MAX_TAG_LENGTH = 32;
+
+function normalizeTagColorMap(
+  raw: Record<string, string> | undefined,
+  tagNames: string[]
+): Record<string, string> | undefined {
+  if (!raw) {
+    return;
+  }
+  const canonicalNames = new Map(
+    tagNames.map((name) => [name.toLowerCase(), name])
+  );
+  const out: Record<string, string> = {};
+  for (const [rawName, rawColor] of Object.entries(raw)) {
+    const name = rawName.trim().slice(0, MAX_TAG_LENGTH);
+    const color = rawColor.trim();
+    if (!(name && color)) {
+      continue;
+    }
+    const canonical = canonicalNames.get(name.toLowerCase());
+    if (canonical) {
+      out[canonical] = color;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function tagNamesForColors(meta: NodeMetadata): string[] {
+  return [...(meta.tag ? [meta.tag] : []), ...(meta.tags ?? [])];
+}
+
 /**
  * Fetch the workspace-wide node metadata map (tag / tagColor / tags keyed by
  * `noteId` for cards or React Flow `nodeId` for non-card nodes). Cached for
@@ -52,14 +83,14 @@ export function useSetNodeMetadata() {
         const base = current ?? {};
         const merged: NodeMetadata = { ...(base[id] ?? {}) };
         if ('tag' in metadata) {
-          if (metadata.tag && metadata.tag.trim()) {
+          if (metadata.tag?.trim()) {
             merged.tag = metadata.tag.trim();
           } else {
             merged.tag = undefined;
           }
         }
         if ('tagColor' in metadata) {
-          if (metadata.tagColor && metadata.tagColor.trim()) {
+          if (metadata.tagColor?.trim()) {
             merged.tagColor = metadata.tagColor.trim();
           } else {
             merged.tagColor = undefined;
@@ -68,6 +99,17 @@ export function useSetNodeMetadata() {
         if ('tags' in metadata) {
           const arr = (metadata.tags ?? []).filter((t) => t.trim().length > 0);
           merged.tags = arr.length > 0 ? arr : undefined;
+        }
+        if ('tagColors' in metadata) {
+          merged.tagColors = normalizeTagColorMap(
+            metadata.tagColors,
+            tagNamesForColors(merged)
+          );
+        } else if ('tag' in metadata || 'tags' in metadata) {
+          merged.tagColors = normalizeTagColorMap(
+            merged.tagColors,
+            tagNamesForColors(merged)
+          );
         }
         const next = { ...base };
         if (Object.values(merged).every((v) => v === undefined)) {

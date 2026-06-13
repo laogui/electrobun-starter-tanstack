@@ -248,10 +248,8 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
-  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
-    id,
-    data as unknown as Record<string, unknown>
-  );
+  const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
+    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
   const isZoomedOut = useIsZoomedOut();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -486,6 +484,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               isDark={isDark}
               tag={tag}
               tagColor={tagColor}
+              tagColors={tagColors}
               tags={tags}
             />
           </div>

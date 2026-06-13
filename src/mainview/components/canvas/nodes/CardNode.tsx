@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, PenLine } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { getNodeTagItems, NodeTagChips } from '@/components/card/NodeTagChips';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
@@ -11,32 +12,6 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-
-interface SecondaryTagChipsProps {
-  isDark: boolean;
-  tags?: string[];
-}
-
-const SecondaryTagChips = ({ isDark, tags }: SecondaryTagChipsProps) => {
-  if (!tags || tags.length === 0) {
-    return null;
-  }
-  return (
-    <>
-      {tags.map((value) => (
-        <span
-          className={cn(
-            'rounded-md px-2 py-0.5 text-xs',
-            isDark ? 'bg-white/15 text-white/85' : 'bg-black/5 text-neutral-700'
-          )}
-          key={value}
-        >
-          {value}
-        </span>
-      ))}
-    </>
-  );
-};
 
 export interface ChecklistItem {
   checked?: boolean;
@@ -56,6 +31,7 @@ export interface CardContentData {
   previewVersion?: number;
   tag?: string;
   tagColor?: string;
+  tagColors?: Record<string, string>;
   tags?: string[];
   title?: string;
   /**
@@ -80,6 +56,16 @@ export const CardContent = ({
 }: CardContentProps) => {
   const [newItem, setNewItem] = useState('');
   const isDark = isColorDark(data.color);
+  const tagChips = (
+    <NodeTagChips
+      className="mb-3"
+      isDark={isDark}
+      tag={data.tag}
+      tagColor={data.tagColor}
+      tagColors={data.tagColors}
+      tags={data.tags}
+    />
+  );
 
   if (data.type === 'checklist') {
     return (
@@ -90,17 +76,7 @@ export const CardContent = ({
         )}
         style={colorToStyle(data.color)}
       >
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          {data.tag ? (
-            <span
-              className="rounded-md px-2 py-1 font-semibold text-xs"
-              style={colorToStyle(data.tagColor)}
-            >
-              {data.tag}
-            </span>
-          ) : null}
-          <SecondaryTagChips isDark={isDark} tags={data.tags} />
-        </div>
+        {tagChips}
         {data.title ? (
           <h2
             className={cn('mb-4 font-bold', isFocused ? 'text-3xl' : 'text-xl')}
@@ -243,19 +219,7 @@ export const CardContent = ({
       className={cn('flex h-full flex-col p-6', isDark && 'text-white')}
       style={colorToStyle(data.color)}
     >
-      {data.tag || (data.tags && data.tags.length > 0) ? (
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {data.tag ? (
-            <span
-              className="inline-block rounded-md px-2 py-1 font-semibold text-xs"
-              style={colorToStyle(data.tagColor)}
-            >
-              {data.tag}
-            </span>
-          ) : null}
-          <SecondaryTagChips isDark={isDark} tags={data.tags} />
-        </div>
-      ) : null}
+      {tagChips}
       <h2
         className={cn(
           'mb-4 flex items-center gap-2 font-bold text-xl',
@@ -304,10 +268,22 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
       ...data,
       tag: meta?.tag,
       tagColor: meta?.tagColor,
+      tagColors: meta?.tagColors,
       tags: meta?.tags,
     }),
-    [data, meta?.tag, meta?.tagColor, meta?.tags]
+    [data, meta?.tag, meta?.tagColor, meta?.tagColors, meta?.tags]
   );
+  const tagItems = useMemo(
+    () =>
+      getNodeTagItems({
+        tag: viewData.tag,
+        tagColor: viewData.tagColor,
+        tagColors: viewData.tagColors,
+        tags: viewData.tags,
+      }),
+    [viewData.tag, viewData.tagColor, viewData.tagColors, viewData.tags]
+  );
+  const firstTag = tagItems[0];
 
   // OR semantics: a card is "in scope" if it carries at least one of the
   // active filter tags. An empty filter list means no filtering at all.
@@ -372,6 +348,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         suggestions={tagSuggestions}
         tag={viewData.tag}
         tagColor={viewData.tagColor}
+        tagColors={viewData.tagColors}
         tags={viewData.tags}
       >
         <button
@@ -407,10 +384,10 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
             )}
             style={colorToStyle(data.color)}
           >
-            {viewData.tag ? (
+            {firstTag ? (
               <div
                 className="mb-4 h-4 w-12 rounded-md"
-                style={colorToStyle(viewData.tagColor)}
+                style={colorToStyle(firstTag.color)}
               />
             ) : null}
             <h2 className="font-bold text-2xl/tight">

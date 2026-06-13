@@ -10,7 +10,7 @@ const request = {
   loadAttachment: vi.fn(),
   openAttachment: vi.fn(),
   getSettings: vi.fn(),
-  getAIEndpoint: vi.fn(),
+  getLocalHttpEndpoint: vi.fn(),
   openSettings: vi.fn(),
   listViews: vi.fn(),
   createView: vi.fn(),
@@ -118,7 +118,7 @@ describe('rpc', () => {
     expect(request.listViews).toHaveBeenCalledWith({});
   });
 
-  it('does not impose a renderer-side RPC request timeout', async () => {
+  it('uses a finite renderer-side RPC request timeout', async () => {
     vi.stubGlobal('__electrobunWebviewId', 'webview-1');
     const rpc = await loadModule();
 
@@ -126,7 +126,7 @@ describe('rpc', () => {
 
     expect(defineRPC).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxRequestTime: Number.POSITIVE_INFINITY,
+      maxRequestTime: 10_000,
       })
     );
   });
@@ -229,8 +229,8 @@ describe('rpc', () => {
 
   describe('rpcUnfurlLink', () => {
     const endpoint = {
+      aiEnabled: true,
       baseUrl: 'http://127.0.0.1:4242',
-      enabled: true,
       token: 'tok',
     };
 
@@ -238,7 +238,7 @@ describe('rpc', () => {
       vi.stubGlobal('__electrobunWebviewId', 'webview-1');
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue(endpoint);
+      request.getLocalHttpEndpoint.mockResolvedValue(endpoint);
       const rpc = await loadModule();
 
       await expect(rpc.rpcUnfurlLink('')).resolves.toBeNull();
@@ -264,7 +264,7 @@ describe('rpc', () => {
         json: () => Promise.resolve(payload),
       });
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue(endpoint);
+      request.getLocalHttpEndpoint.mockResolvedValue(endpoint);
       const rpc = await loadModule();
 
       await expect(rpc.rpcUnfurlLink('https://example.com/')).resolves.toEqual(
@@ -299,7 +299,7 @@ describe('rpc', () => {
           json: () => Promise.resolve(payload),
         });
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue(endpoint);
+      request.getLocalHttpEndpoint.mockResolvedValue(endpoint);
       const rpc = await loadModule();
 
       await expect(rpc.rpcUnfurlLink('https://example.com/')).resolves.toEqual(
@@ -316,7 +316,7 @@ describe('rpc', () => {
         json: () => Promise.resolve({}),
       });
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue(endpoint);
+      request.getLocalHttpEndpoint.mockResolvedValue(endpoint);
       const rpc = await loadModule();
 
       await expect(
@@ -333,7 +333,7 @@ describe('rpc', () => {
         json: () => Promise.resolve({}),
       });
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue(endpoint);
+      request.getLocalHttpEndpoint.mockResolvedValue(endpoint);
       const rpc = await loadModule();
 
       await expect(
@@ -346,9 +346,9 @@ describe('rpc', () => {
       vi.stubGlobal('__electrobunWebviewId', 'webview-1');
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
-      request.getAIEndpoint.mockResolvedValue({
+      request.getLocalHttpEndpoint.mockResolvedValue({
+        aiEnabled: false,
         baseUrl: '',
-        enabled: false,
         token: '',
       });
       const rpc = await loadModule();

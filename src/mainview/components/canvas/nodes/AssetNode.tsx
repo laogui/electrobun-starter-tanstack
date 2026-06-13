@@ -919,10 +919,8 @@ const AssetNode = ({
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
-  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
-    id,
-    data as unknown as Record<string, unknown>
-  );
+  const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
+    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isZoomedOut = useIsZoomedOut();
   const asset = resolveAssetData(data);
   const isDark = isColorDark(asset.color);
@@ -1032,6 +1030,7 @@ const AssetNode = ({
               isDark={isDark}
               tag={tag}
               tagColor={tagColor}
+              tagColors={tagColors}
               tags={tags}
             />
           </div>

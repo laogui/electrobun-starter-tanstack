@@ -100,18 +100,34 @@ describe('nodeMetadata: load / set / get / delete', () => {
   });
 
   it('loadAllMetadata reads existing sidecar', async () => {
-    seedFileSidecar(ws, { 'note-1': { tag: 'Work', tags: ['api'] } });
+    seedFileSidecar(ws, {
+      'note-1': {
+        tag: 'Work',
+        tagColor: '#fcd34d',
+        tagColors: { api: '#FDF2F8', stale: '#000000', Work: '#DBEAFE' },
+        tags: ['api'],
+      },
+    });
     const m = await loadAllMetadata(ws);
-    expect(m['note-1']).toEqual({ tag: 'Work', tags: ['api'] });
+    expect(m['note-1']).toEqual({
+      tag: 'Work',
+      tagColor: '#fcd34d',
+      tagColors: { api: '#FDF2F8', Work: '#DBEAFE' },
+      tags: ['api'],
+    });
   });
 
   it('setNodeMetadata merges partials and flushes to disk', async () => {
     await setNodeMetadata(ws, 'note-1', { tag: 'Work', tagColor: '#fcd34d' });
-    await setNodeMetadata(ws, 'note-1', { tags: ['api', 'h1'] });
+    await setNodeMetadata(ws, 'note-1', {
+      tagColors: { api: '#FDF2F8', h1: '#EAF2B8', stale: '#000000' },
+      tags: ['api', 'h1'],
+    });
     await flushNodeMetadata(ws);
     expect(getNodeMetadata(ws, 'note-1')).toEqual({
       tag: 'Work',
       tagColor: '#fcd34d',
+      tagColors: { api: '#FDF2F8', h1: '#EAF2B8' },
       tags: ['api', 'h1'],
     });
     const onDisk = readFileSidecar(ws) as {
@@ -120,13 +136,22 @@ describe('nodeMetadata: load / set / get / delete', () => {
     expect(onDisk.entries['note-1']).toEqual({
       tag: 'Work',
       tagColor: '#fcd34d',
+      tagColors: { api: '#FDF2F8', h1: '#EAF2B8' },
       tags: ['api', 'h1'],
     });
   });
 
   it('setting empty values clears fields and drops empty entry', async () => {
-    await setNodeMetadata(ws, 'note-1', { tag: 'Work', tags: ['api'] });
-    await setNodeMetadata(ws, 'note-1', { tag: '', tags: [] });
+    await setNodeMetadata(ws, 'note-1', {
+      tag: 'Work',
+      tagColors: { api: '#FDF2F8' },
+      tags: ['api'],
+    });
+    await setNodeMetadata(ws, 'note-1', {
+      tag: '',
+      tagColors: {},
+      tags: [],
+    });
     await flushNodeMetadata(ws);
     expect(getNodeMetadata(ws, 'note-1')).toBeUndefined();
   });
@@ -195,7 +220,10 @@ describe('renameTagEverywhere', () => {
   it('renames primary tag and updates entries', async () => {
     seedFileSidecar(ws, {
       'note-1': { tag: 'Work', tagColor: '#fcd34d' },
-      'sticky-1': { tags: ['Work', 'idea'] },
+      'sticky-1': {
+        tagColors: { Work: '#FDF2F8', idea: '#EAF2B8' },
+        tags: ['Work', 'idea'],
+      },
     });
     const result = await renameTagEverywhere(ws, 'Work', 'Job');
     expect(result.updated).toBe(2);
@@ -204,7 +232,10 @@ describe('renameTagEverywhere', () => {
       tag: 'Job',
       tagColor: '#fcd34d',
     });
-    expect(getNodeMetadata(ws, 'sticky-1')?.tags).toEqual(['Job', 'idea']);
+    expect(getNodeMetadata(ws, 'sticky-1')).toEqual({
+      tagColors: { Job: '#FDF2F8', idea: '#EAF2B8' },
+      tags: ['Job', 'idea'],
+    });
   });
 
   it('case-insensitive matching merges duplicates', async () => {
@@ -233,22 +264,36 @@ describe('deleteTagEverywhere', () => {
 
   it('removes primary tag + clears tagColor', async () => {
     seedFileSidecar(ws, {
-      'note-1': { tag: 'Work', tagColor: '#fcd34d', tags: ['api'] },
+      'note-1': {
+        tag: 'Work',
+        tagColor: '#fcd34d',
+        tagColors: { Work: '#DBEAFE', api: '#FDF2F8' },
+        tags: ['api'],
+      },
     });
     const result = await deleteTagEverywhere(ws, 'Work');
     expect(result.updated).toBe(1);
-    expect(getNodeMetadata(ws, 'note-1')).toEqual({ tags: ['api'] });
+    expect(getNodeMetadata(ws, 'note-1')).toEqual({
+      tagColors: { api: '#FDF2F8' },
+      tags: ['api'],
+    });
   });
 
   it('removes from secondary list and drops empty entries', async () => {
     seedFileSidecar(ws, {
-      'sticky-1': { tags: ['idea'] },
-      'sticky-2': { tags: ['idea', 'api'] },
+      'sticky-1': { tagColors: { idea: '#FDF2F8' }, tags: ['idea'] },
+      'sticky-2': {
+        tagColors: { idea: '#FDF2F8', api: '#EAF2B8' },
+        tags: ['idea', 'api'],
+      },
     });
     const result = await deleteTagEverywhere(ws, 'idea');
     expect(result.updated).toBe(2);
     expect(getNodeMetadata(ws, 'sticky-1')).toBeUndefined();
-    expect(getNodeMetadata(ws, 'sticky-2')?.tags).toEqual(['api']);
+    expect(getNodeMetadata(ws, 'sticky-2')).toEqual({
+      tagColors: { api: '#EAF2B8' },
+      tags: ['api'],
+    });
   });
 
   it('returns 0 when name is blank', async () => {

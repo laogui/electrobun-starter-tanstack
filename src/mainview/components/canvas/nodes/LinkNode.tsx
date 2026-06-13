@@ -335,10 +335,8 @@ export const LinkContent = ({
 const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
-    id,
-    data as unknown as Record<string, unknown>
-  );
+  const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
+    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
   const isZoomedOut = useIsZoomedOut();
   const nodeRef = useRef<HTMLDivElement | null>(null);
@@ -394,7 +392,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     if (!normalized) {
       return;
     }
-    if (data.unfurlStatus === 'ready' || data.unfurlStatus === 'loading') {
+    if (data.unfurlStatus === 'ready') {
       return;
     }
     if (unfurlAttemptRef.current === normalized) {
@@ -489,6 +487,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
               isDark={isDark}
               tag={tag}
               tagColor={tagColor}
+              tagColors={tagColors}
               tags={tags}
             />
           </div>

@@ -184,7 +184,7 @@ describe('readOnlyNodes', () => {
       );
 
       expect(screen.getByText('report.pdf')).toBeInTheDocument();
-      expect(screen.getByText('application/pdf')).toBeInTheDocument();
+      expect(screen.getByText('PDF document')).toBeInTheDocument();
       expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     });
   });

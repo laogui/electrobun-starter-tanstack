@@ -157,6 +157,14 @@ export async function activateLicense(
 /**
  * 在线验证许可证(可选)
  */
+interface VerifyLicenseResponse {
+  license?: {
+    activatedAt: string | number;
+  };
+  success?: boolean;
+  valid?: boolean;
+}
+
 async function verifyLicenseOnline(
   key: string,
   deviceId: string
@@ -168,9 +176,9 @@ async function verifyLicenseOnline(
       body: JSON.stringify({ key, deviceId }),
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as VerifyLicenseResponse;
 
-    if (data.success && data.valid) {
+    if (data.success && data.valid && data.license) {
       return {
         activated: true,
         key,
@@ -202,7 +210,9 @@ export async function checkLicenseStatus(): Promise<LicenseInfo> {
     }
 
     // 在线验证失败,返回未激活
-    console.warn('[license] Online verification failed, license may be revoked');
+    console.warn(
+      '[license] Online verification failed, license may be revoked'
+    );
     return { activated: false };
   }
 

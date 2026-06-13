@@ -6,6 +6,7 @@ import { atomicWrite } from './workspace';
 export interface NodeMetadata {
   tag?: string;
   tagColor?: string;
+  tagColors?: Record<string, string>;
   tags?: string[];
 }
 
@@ -60,6 +61,99 @@ function isPlainEntry(value: unknown): value is NodeMetadata {
   return true;
 }
 
+function normalizeTagColorMap(
+  raw: unknown,
+  allowedTags: string[]
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return;
+  }
+  const canonicalNames = new Map(
+    allowedTags.map((name) => [name.toLowerCase(), name])
+  );
+  const out: Record<string, string> = {};
+  for (const [rawName, rawColor] of Object.entries(raw)) {
+    if (typeof rawColor !== 'string') {
+      continue;
+    }
+    const name = rawName.trim().slice(0, MAX_TAG_LENGTH);
+    const color = rawColor.trim();
+    if (!(name && color)) {
+      continue;
+    }
+    const canonical = canonicalNames.get(name.toLowerCase());
+    if (!canonical) {
+      continue;
+    }
+    out[canonical] = color;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function compactEntry(entry: NodeMetadata): NodeMetadata | null {
+  const out: NodeMetadata = {};
+  if (entry.tag !== undefined) {
+    out.tag = entry.tag;
+  }
+  if (entry.tagColor !== undefined) {
+    out.tagColor = entry.tagColor;
+  }
+  if (entry.tagColors !== undefined) {
+    out.tagColors = entry.tagColors;
+  }
+  if (entry.tags !== undefined) {
+    out.tags = entry.tags;
+  }
+  return Object.keys(out).length === 0 ? null : out;
+}
+
+function tagNamesForColors(entry: NodeMetadata): string[] {
+  return [...(entry.tag ? [entry.tag] : []), ...(entry.tags ?? [])];
+}
+
+function sameTagColorMap(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined
+): boolean {
+  const aEntries = Object.entries(a ?? {});
+  const bEntries = Object.entries(b ?? {});
+  if (aEntries.length !== bEntries.length) {
+    return false;
+  }
+  return aEntries.every(([key, value]) => b?.[key] === value);
+}
+
+function renameTagColors(
+  colors: Record<string, string> | undefined,
+  oldKey: string,
+  newName: string,
+  allowedTags: string[]
+): Record<string, string> | undefined {
+  if (!colors) {
+    return;
+  }
+  const canonicalNames = new Map(
+    allowedTags.map((name) => [name.toLowerCase(), name])
+  );
+  const out: Record<string, string> = {};
+  let renamedColor: string | undefined;
+  for (const [name, color] of Object.entries(colors)) {
+    if (name.toLowerCase() === oldKey) {
+      renamedColor = color;
+      continue;
+    }
+    const canonical = canonicalNames.get(name.toLowerCase());
+    if (canonical) {
+      out[canonical] = color;
+    }
+  }
+  const renamedCanonical = canonicalNames.get(newName.toLowerCase());
+  if (renamedCanonical && renamedColor && !out[renamedCanonical]) {
+    out[renamedCanonical] = renamedColor;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function normalizeEntry(raw: unknown): NodeMetadata | null {
   if (!isPlainEntry(raw)) {
     return null;
@@ -80,7 +174,14 @@ function normalizeEntry(raw: unknown): NodeMetadata | null {
       out.tags = clean;
     }
   }
-  return Object.keys(out).length === 0 ? null : out;
+  const tagColors = normalizeTagColorMap(
+    (raw as { tagColors?: unknown }).tagColors,
+    tagNamesForColors(out)
+  );
+  if (tagColors) {
+    out.tagColors = tagColors;
+  }
+  return compactEntry(out);
 }
 
 /** Public helper used both at read and write time. Mirrors sanitize rules. */
@@ -149,7 +250,7 @@ function scheduleFlush(wsPath: string): void {
   }
   s.flushTimer = setTimeout(() => {
     s.flushTimer = null;
-    void writeToDisk(wsPath).catch((err) => {
+    writeToDisk(wsPath).catch((err) => {
       console.error('[nodeMetadata] flush failed:', err);
     });
   }, FLUSH_DEBOUNCE_MS);
@@ -213,10 +314,32 @@ export async function setNodeMetadata(
       next.tags = undefined;
     }
   }
-  if (Object.values(next).every((v) => v === undefined)) {
-    delete s.entries[id];
+  if ('tagColors' in partial) {
+    const cleaned = normalizeTagColorMap(
+      partial.tagColors,
+      tagNamesForColors(next)
+    );
+    if (cleaned) {
+      next.tagColors = cleaned;
+    } else {
+      next.tagColors = undefined;
+    }
+  } else if ('tag' in partial || 'tags' in partial) {
+    const cleaned = normalizeTagColorMap(
+      next.tagColors,
+      tagNamesForColors(next)
+    );
+    if (cleaned) {
+      next.tagColors = cleaned;
+    } else {
+      next.tagColors = undefined;
+    }
+  }
+  const compacted = compactEntry(next);
+  if (compacted) {
+    s.entries[id] = compacted;
   } else {
-    s.entries[id] = next;
+    delete s.entries[id];
   }
   scheduleFlush(wsPath);
 }
@@ -429,8 +552,25 @@ export async function renameTagEverywhere(
         changed = true;
       }
     }
+    if (meta.tagColors) {
+      const rebuiltColors = renameTagColors(
+        meta.tagColors,
+        oldKey,
+        cleanNext,
+        tagNamesForColors(next)
+      );
+      if (!sameTagColorMap(meta.tagColors, rebuiltColors)) {
+        next.tagColors = rebuiltColors;
+        changed = true;
+      }
+    }
     if (changed) {
-      entries[id] = next;
+      const compacted = compactEntry(next);
+      if (compacted) {
+        entries[id] = compacted;
+      } else {
+        delete entries[id];
+      }
       updated += 1;
     }
   }
@@ -468,15 +608,38 @@ export async function deleteTagEverywhere(
     if (Array.isArray(meta.tags)) {
       const filtered = meta.tags.filter((t) => t.toLowerCase() !== key);
       if (filtered.length !== meta.tags.length) {
-        next.tags = filtered.length > 0 ? filtered : undefined;
+        if (filtered.length > 0) {
+          next.tags = filtered;
+        } else {
+          next.tags = undefined;
+        }
+        changed = true;
+      }
+    }
+    if (meta.tagColors) {
+      const filteredColors = normalizeTagColorMap(
+        Object.fromEntries(
+          Object.entries(meta.tagColors).filter(
+            ([tagName]) => tagName.toLowerCase() !== key
+          )
+        ),
+        tagNamesForColors(next)
+      );
+      if (!sameTagColorMap(meta.tagColors, filteredColors)) {
+        if (filteredColors) {
+          next.tagColors = filteredColors;
+        } else {
+          next.tagColors = undefined;
+        }
         changed = true;
       }
     }
     if (changed) {
-      if (Object.values(next).every((v) => v === undefined)) {
-        delete entries[id];
+      const compacted = compactEntry(next);
+      if (compacted) {
+        entries[id] = compacted;
       } else {
-        entries[id] = next;
+        delete entries[id];
       }
       updated += 1;
     }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startAIServer } from './ai';
+import { startLocalHttpServer } from './localHttpServer';
 
 type FetchHandler = (req: Request) => Promise<Response> | Response;
 
@@ -22,14 +22,14 @@ function invoke(req: Request): Promise<Response> | Response {
   return capturedFetch(req);
 }
 
-describe('startAIServer', () => {
+describe('startLocalHttpServer', () => {
   beforeEach(() => {
     capturedFetch = null;
     serveMock.mockClear();
   });
 
-  it('binds localhost and reports enabled state from config', () => {
-    const handle = startAIServer(() => ({
+  it('binds localhost and returns a bearer token', () => {
+    const handle = startLocalHttpServer(() => ({
       provider: 'openai',
       model: 'gpt-test',
       apiKey: 'k',
@@ -38,12 +38,11 @@ describe('startAIServer', () => {
       expect.objectContaining({ hostname: '127.0.0.1', port: 0 })
     );
     expect(handle.baseUrl).toBe('http://127.0.0.1:4242');
-    expect(handle.enabled).toBe(true);
     expect(handle.token).toBeTruthy();
   });
 
   it('answers the CORS preflight for /ai/chat', async () => {
-    startAIServer(() => null);
+    startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'OPTIONS',
@@ -63,7 +62,7 @@ describe('startAIServer', () => {
   });
 
   it('rejects bad tokens with 401 and includes CORS headers', async () => {
-    startAIServer(() => null);
+    startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'POST',
@@ -75,7 +74,7 @@ describe('startAIServer', () => {
   });
 
   it('replies 503 with CORS headers when AI is not configured', async () => {
-    const handle = startAIServer(() => null);
+    const handle = startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'POST',
@@ -90,7 +89,7 @@ describe('startAIServer', () => {
   });
 
   it('returns 404 for unknown routes', async () => {
-    const handle = startAIServer(() => null);
+    const handle = startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/other', {
         method: 'POST',
@@ -101,7 +100,7 @@ describe('startAIServer', () => {
   });
 
   it('rejects /unfurl without bearer token', async () => {
-    startAIServer(() => null);
+    startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/unfurl?url=https://example.com', {
         method: 'GET',
@@ -111,7 +110,7 @@ describe('startAIServer', () => {
   });
 
   it('returns 400 when /unfurl is called without a url param', async () => {
-    const handle = startAIServer(() => null);
+    const handle = startLocalHttpServer(() => null);
     const res = await invoke(
       new Request('http://127.0.0.1:4242/unfurl', {
         method: 'GET',

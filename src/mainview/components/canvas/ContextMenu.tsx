@@ -657,12 +657,12 @@ export function CanvasContextMenu({
               <button
                 aria-disabled={item.disabled || undefined}
                 className={cn(
-                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors',
+                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors focus-visible:outline-none',
                   item.disabled
                     ? 'cursor-default text-gray-300 dark:text-gray-600'
                     : item.danger
-                      ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
-                      : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5',
+                      ? 'text-red-600 hover:bg-red-50 focus-visible:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 dark:focus-visible:bg-red-900/30'
+                      : 'text-gray-700 hover:bg-black/5 focus-visible:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5 dark:focus-visible:bg-white/5',
                   !item.disabled && openSubmenu === item.id
                     ? 'bg-black/5 dark:bg-white/5'
                     : ''
@@ -745,7 +745,7 @@ export function CanvasContextMenu({
               >
                 {submenuItems.map((subItem, subIndex) => (
                   <button
-                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5"
+                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-none dark:text-gray-200 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
                     key={subItem.id}
                     onClick={() => {
                       onAction(subItem.id, menu.nodeId ?? menu.edgeId);

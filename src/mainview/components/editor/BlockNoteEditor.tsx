@@ -31,7 +31,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
-import { rpcGetAIEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
+import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 
@@ -80,7 +80,9 @@ interface InitialContent {
   revision: number | undefined;
 }
 
-type AIEndpointInfo = Awaited<ReturnType<typeof rpcGetAIEndpoint>>;
+type LocalHttpEndpointInfo = Awaited<
+  ReturnType<typeof rpcGetLocalHttpEndpoint>
+>;
 
 export default function BlockNoteEditor({
   color,
@@ -97,9 +99,9 @@ export default function BlockNoteEditor({
   const initialMarkdown = toText(markdown);
   const [titleValue, setTitleValue] = useState(toText(title));
   const [initial, setInitial] = useState<InitialContent | null>(null);
-  const [aiEndpoint, setAiEndpoint] = useState<AIEndpointInfo | undefined>(
-    undefined
-  );
+  const [localHttpEndpoint, setLocalHttpEndpoint] = useState<
+    LocalHttpEndpointInfo | undefined
+  >(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
   const [, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [, setLastSavedAt] = useState<Date | null>(null);
@@ -210,32 +212,35 @@ export default function BlockNoteEditor({
 
   useEffect(() => {
     let cancelled = false;
-    const loadAIEndpoint = async () => {
+    const loadLocalHttpEndpoint = async () => {
       try {
-        const info = await rpcGetAIEndpoint();
+        const info = await rpcGetLocalHttpEndpoint();
         if (!cancelled) {
-          setAiEndpoint(info);
+          setLocalHttpEndpoint(info);
         }
       } catch (error) {
-        console.error('[blocknote] Failed to resolve AI endpoint:', error);
+        console.error(
+          '[blocknote] Failed to resolve local HTTP endpoint:',
+          error
+        );
         if (!cancelled) {
-          setAiEndpoint(null);
+          setLocalHttpEndpoint(null);
         }
       }
     };
-    loadAIEndpoint();
-    globalThis.addEventListener('settings-updated', loadAIEndpoint);
+    loadLocalHttpEndpoint();
+    globalThis.addEventListener('settings-updated', loadLocalHttpEndpoint);
     return () => {
       cancelled = true;
-      globalThis.removeEventListener('settings-updated', loadAIEndpoint);
+      globalThis.removeEventListener('settings-updated', loadLocalHttpEndpoint);
     };
   }, []);
 
-  const aiEndpointKey = aiEndpoint
-    ? `${aiEndpoint.enabled}:${aiEndpoint.baseUrl}:${aiEndpoint.token}`
+  const localHttpEndpointKey = localHttpEndpoint
+    ? `${localHttpEndpoint.aiEnabled}:${localHttpEndpoint.baseUrl}:${localHttpEndpoint.token}`
     : 'no-ai';
 
-  if (!initial || aiEndpoint === undefined) {
+  if (!initial || localHttpEndpoint === undefined) {
     return (
       <div
         className={cn(
@@ -251,13 +256,13 @@ export default function BlockNoteEditor({
 
   return (
     <BlockNoteSurface
-      aiEndpoint={aiEndpoint}
+      localHttpEndpoint={localHttpEndpoint}
       color={colorValue}
       flushNow={flushNow}
       initial={initial}
       initialMarkdown={initialMarkdown}
       isDark={isDark}
-      key={aiEndpointKey}
+      key={localHttpEndpointKey}
       latestBlocksRef={latestBlocksRef}
       latestMarkdownRef={latestMarkdownRef}
       loadFailed={loadFailed}
@@ -280,7 +285,7 @@ export default function BlockNoteEditor({
 export type { BlockNoteSaveStatus };
 
 interface BlockNoteSurfaceProps {
-  aiEndpoint: AIEndpointInfo;
+  localHttpEndpoint: LocalHttpEndpointInfo;
   color: string;
   flushNow: () => void;
   initial: InitialContent;
@@ -298,7 +303,7 @@ interface BlockNoteSurfaceProps {
 }
 
 function BlockNoteSurface({
-  aiEndpoint,
+  localHttpEndpoint,
   color,
   flushNow,
   initial,
@@ -326,7 +331,9 @@ function BlockNoteSurface({
   // AI is wired only when the Bun endpoint reports a configured provider. The
   // transport points at the localhost /ai/chat route with the per-launch
   // bearer token; without it we build a plain editor unchanged.
-  const aiEnabled = Boolean(aiEndpoint?.enabled && aiEndpoint.baseUrl);
+  const aiEnabled = Boolean(
+    localHttpEndpoint?.aiEnabled && localHttpEndpoint.baseUrl
+  );
 
   const editor = useCreateBlockNote({
     initialContent:
@@ -340,14 +347,16 @@ function BlockNoteSurface({
     // in the JSON sidecar and serialised into the Markdown mirror.
     uploadFile: uploadBlockNoteFile,
     resolveFileUrl: resolveBlockNoteFileUrl,
-    ...(aiEnabled && aiEndpoint
+    ...(aiEnabled && localHttpEndpoint
       ? {
           dictionary: { ...en, ai: aiEn },
           extensions: [
             AIExtension({
               transport: new DefaultChatTransport({
-                api: `${aiEndpoint.baseUrl}/ai/chat`,
-                headers: { Authorization: `Bearer ${aiEndpoint.token}` },
+                api: `${localHttpEndpoint.baseUrl}/ai/chat`,
+                headers: {
+                  Authorization: `Bearer ${localHttpEndpoint.token}`,
+                },
               }),
             }),
           ],

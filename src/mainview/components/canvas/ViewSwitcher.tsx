@@ -28,6 +28,8 @@ import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
+  type CreatableMenuItem,
+  type CreateActionId,
   getCreatableMenuItems,
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
@@ -56,6 +58,76 @@ import { LinkCreateForm } from './LinkCreateForm';
  * row without ellipsis-soup.
  */
 const VIEW_NAME_MAX_LENGTH = 80;
+
+/**
+ * Create-menu items shown in the top "common" group. Everything else falls
+ * under the "More" header. Keep this aligned with the icons on the empty
+ * canvas onboarding so the same four entry points feel like first-class
+ * actions across the app.
+ */
+const COMMON_CREATE_IDS = new Set<CreateActionId>([
+  'note',
+  'sticky',
+  'link',
+  'image',
+]);
+
+/**
+ * Focus ring shared across the bottom-bar trigger buttons. Centralized so
+ * adding a new floating control later picks up the same a11y treatment.
+ */
+const TRIGGER_FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60';
+
+interface RenderCreateMenuItemDeps {
+  onCreateNode: (
+    type: CreatableCanvasNodeKind,
+    options?: CreateNodeOptions
+  ) => void;
+  openAssetPicker: () => void;
+  setLinkFormOpen: (open: boolean) => void;
+}
+
+/**
+ * Renders a single creation `Menu.Item`. Extracted so the common and "More"
+ * groups can share one render path and stay 1:1 with what was previously a
+ * single flat `createMenuItems.map(...)`.
+ */
+function renderCreateMenuItem(
+  item: CreatableMenuItem,
+  { onCreateNode, openAssetPicker, setLinkFormOpen }: RenderCreateMenuItemDeps
+) {
+  return (
+    <Menu.Item
+      aria-label={item.label}
+      className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
+        item.enabled
+          ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
+          : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
+      } border-gray-100 border-b dark:border-neutral-700`}
+      closeOnClick={item.id !== 'link' && item.id !== 'file'}
+      disabled={!item.enabled}
+      key={item.id}
+      onClick={async () => {
+        const type = resolveCreatableKind(item.id);
+        if (type) {
+          if (type === 'link') {
+            setLinkFormOpen(true);
+            return;
+          }
+          if (type === 'asset') {
+            openAssetPicker();
+            return;
+          }
+          await onCreateNode(type);
+        }
+      }}
+    >
+      <item.icon size={18} />
+      {item.label}
+    </Menu.Item>
+  );
+}
 
 const getQuickTemplateItems = () => [
   {
@@ -449,7 +521,17 @@ export function ViewSwitcher({
     }
   }, [onCreateNode, setCreateMenuOpen]);
 
+  // Split the create menu into "common" (note / sticky / link / image) and
+  // "more" (folder / group / file / checklist). Common are the everyday
+  // entry points; everything else is one section header away to keep the
+  // popup scannable. F4 in the product detail roadmap.
   const createMenuItems = getCreatableMenuItems('short');
+  const commonCreateItems = createMenuItems.filter((item) =>
+    COMMON_CREATE_IDS.has(item.id)
+  );
+  const moreCreateItems = createMenuItems.filter(
+    (item) => !COMMON_CREATE_IDS.has(item.id)
+  );
 
   return (
     <>
@@ -497,7 +579,7 @@ export function ViewSwitcher({
       >
         <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2">
           <Menu.Trigger
-            className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-800/80 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80"
+            className={`flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur-md transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-800/80 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
             render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
             <Layers className="text-gray-500 dark:text-gray-400" size={16} />
@@ -522,7 +604,7 @@ export function ViewSwitcher({
             <Menu.Root>
               <Menu.Trigger
                 aria-label="Export canvas"
-                className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+                className={`flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
                 render={<motion.button whileTap={{ scale: 0.9 }} />}
               >
                 <Download
@@ -580,7 +662,7 @@ export function ViewSwitcher({
             open={createMenuOpen}
           >
             <Menu.Trigger
-              className="flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80"
+              className={`flex size-8 items-center justify-center rounded-xl bg-white/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:bg-neutral-800/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
               render={<motion.button whileTap={{ scale: 0.9 }} />}
             >
               <motion.span
@@ -600,36 +682,25 @@ export function ViewSwitcher({
                 sideOffset={12}
               >
                 <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
-                  {createMenuItems.map((item) => (
-                    <Menu.Item
-                      aria-label={item.label}
-                      className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
-                        item.enabled
-                          ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
-                          : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
-                      } border-gray-100 border-b dark:border-neutral-700`}
-                      closeOnClick={item.id !== 'link' && item.id !== 'file'}
-                      disabled={!item.enabled}
-                      key={item.id}
-                      onClick={async () => {
-                        const type = resolveCreatableKind(item.id);
-                        if (type) {
-                          if (type === 'link') {
-                            setLinkFormOpen(true);
-                            return;
-                          }
-                          if (type === 'asset') {
-                            assetFileInputRef.current?.click();
-                            return;
-                          }
-                          await onCreateNode(type);
-                        }
-                      }}
-                    >
-                      <item.icon size={18} />
-                      {item.label}
-                    </Menu.Item>
-                  ))}
+                  {commonCreateItems.map((item) =>
+                    renderCreateMenuItem(item, {
+                      onCreateNode,
+                      setLinkFormOpen,
+                      openAssetPicker: () =>
+                        assetFileInputRef.current?.click(),
+                    })
+                  )}
+                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
+                    {m.menu_more()}
+                  </div>
+                  {moreCreateItems.map((item) =>
+                    renderCreateMenuItem(item, {
+                      onCreateNode,
+                      setLinkFormOpen,
+                      openAssetPicker: () =>
+                        assetFileInputRef.current?.click(),
+                    })
+                  )}
                   <Menu.Item
                     aria-label={m.menu_import_markdown()}
                     className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10 ${
@@ -654,13 +725,13 @@ export function ViewSwitcher({
                   ) : null}
                   {onOpenNoteLibrary ? (
                     <Menu.Item
-                      aria-label="Note Library"
+                      aria-label={m.menu_note_library()}
                       className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
                       closeOnClick
                       onClick={onOpenNoteLibrary}
                     >
                       <BookOpen size={18} />
-                      Note Library
+                      {m.menu_note_library()}
                     </Menu.Item>
                   ) : null}
                 </Menu.Popup>

@@ -14,6 +14,7 @@ interface UseNodeTagEditingResult {
   /** Primary tag chip (display name + tag color). */
   tag: string | undefined;
   tagColor: string | undefined;
+  tagColors: Record<string, string> | undefined;
   /** Mount this once anywhere in JSX — it renders an invisible popover anchor. */
   tagEditor: React.ReactElement;
   tags: string[] | undefined;
@@ -44,6 +45,7 @@ export function useNodeTagEditing(
 
   const tag = meta?.tag;
   const tagColor = meta?.tagColor;
+  const tagColors = meta?.tagColors;
   const tags = meta?.tags;
 
   // OR semantics: a card is "in scope" if it carries at least one of the
@@ -102,6 +104,7 @@ export function useNodeTagEditing(
       suggestions={suggestions}
       tag={tag}
       tagColor={tagColor}
+      tagColors={tagColors}
       tags={tags}
     >
       <button
@@ -113,5 +116,13 @@ export function useNodeTagEditing(
     </TagEditor>
   );
 
-  return { tag, tagColor, tags, dimmedByFilter, tagEditor, openTagEditor };
+  return {
+    tag,
+    tagColor,
+    tagColors,
+    tags,
+    dimmedByFilter,
+    tagEditor,
+    openTagEditor,
+  };
 }

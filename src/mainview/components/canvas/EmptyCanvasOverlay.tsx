@@ -6,6 +6,11 @@ import {
   Upload,
 } from 'lucide-react';
 
+import * as m from '../../../paraglide/messages.js';
+
+const FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
+
 export function EmptyCanvasOverlay({
   onCreateNote,
   onOpenNoteLibrary,
@@ -22,51 +27,56 @@ export function EmptyCanvasOverlay({
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-[22px] text-gray-900 leading-tight dark:text-gray-50">
-              Start this canvas
+              {m.empty_canvas_title()}
             </h2>
             <p className="mt-2 text-gray-600 text-sm leading-6 dark:text-gray-300">
-              Add a note, open your library, or start from a reusable canvas
-              template.
+              {m.empty_canvas_description()}
             </p>
           </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-3">
           <button
-            className="flex min-h-22 flex-col items-start justify-between rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-left text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-400/25 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/25"
+            className={`flex min-h-22 flex-col items-start justify-between rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-left text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-400/25 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/25 ${FOCUS_RING}`}
             onClick={onCreateNote}
             type="button"
           >
             <FilePlus size={18} />
-            <span className="font-medium text-sm">Create first note</span>
+            <span className="font-medium text-sm">
+              {m.empty_canvas_create_note()}
+            </span>
           </button>
 
           <a
-            className="flex min-h-22 flex-col items-start justify-between rounded-md border border-black/10 bg-white px-4 py-3 text-left text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-neutral-800 dark:text-gray-200 dark:hover:bg-neutral-700"
+            className={`flex min-h-22 flex-col items-start justify-between rounded-md border border-black/10 bg-white px-4 py-3 text-left text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-neutral-800 dark:text-gray-200 dark:hover:bg-neutral-700 ${FOCUS_RING}`}
             href="/templates"
           >
             <LayoutTemplate size={18} />
-            <span className="font-medium text-sm">Browse templates</span>
+            <span className="font-medium text-sm">
+              {m.empty_canvas_browse_templates()}
+            </span>
           </a>
 
           <button
-            className="flex min-h-22 flex-col items-start justify-between rounded-md border border-black/10 bg-white px-4 py-3 text-left text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-neutral-800 dark:text-gray-200 dark:hover:bg-neutral-700"
+            className={`flex min-h-22 flex-col items-start justify-between rounded-md border border-black/10 bg-white px-4 py-3 text-left text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-neutral-800 dark:text-gray-200 dark:hover:bg-neutral-700 ${FOCUS_RING}`}
             onClick={onOpenNoteLibrary}
             type="button"
           >
             <Library size={18} />
-            <span className="font-medium text-sm">Open note library</span>
+            <span className="font-medium text-sm">
+              {m.empty_canvas_open_library()}
+            </span>
           </button>
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2 text-gray-500 text-xs dark:text-gray-400">
           <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 dark:bg-white/8">
             <Upload size={14} />
-            Drop files anywhere to add them
+            {m.empty_canvas_hint_drop()}
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 dark:bg-white/8">
             <Command size={14} />
-            Cmd+N opens the create menu
+            {m.empty_canvas_hint_create_menu()}
           </span>
         </div>
       </div>

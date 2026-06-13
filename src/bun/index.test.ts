@@ -419,14 +419,14 @@ describe('src/bun/index helpers', () => {
     );
   });
 
-  it('does not impose a main-window RPC request timeout', async () => {
+  it('uses a finite main-window RPC request timeout', async () => {
     await loadIndexModule();
 
     const canvasRpcCall = defineRpcMock.mock.calls.find(
       ([config]) => 'loadCanvas' in config.handlers.requests
     );
 
-    expect(canvasRpcCall?.[0].maxRequestTime).toBe(Number.POSITIVE_INFINITY);
+    expect(canvasRpcCall?.[0].maxRequestTime).toBe(10_000);
   });
 
   it('persistSettings writes through atomicWrite after settings file is known', async () => {

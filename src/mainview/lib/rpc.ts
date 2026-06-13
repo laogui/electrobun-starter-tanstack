@@ -35,7 +35,7 @@ async function initElectrobun() {
     const { Electroview } = mod;
 
     const rpc = Electroview.defineRPC({
-      maxRequestTime: Number.POSITIVE_INFINITY,
+      maxRequestTime: 10_000,
       handlers: {
         requests: {},
         messages: {
@@ -286,10 +286,10 @@ export interface UnfurlLinkResult {
 }
 
 // The unfurl request goes over the localhost HTTP server started by
-// `startAIServer` (see `src/bun/ai.ts`) instead of Electrobun RPC. The RPC
-// transport was occasionally dropping responses for subsequent unfurls when
-// Vite HMR caused webview reloads, leaving the promise dangling forever.
-// HTTP is request-scoped and immune to that class of socket-routing issue.
+// `startLocalHttpServer` instead of Electrobun RPC. The RPC transport was
+// occasionally dropping responses for subsequent unfurls when Vite HMR caused
+// webview reloads, leaving the promise dangling forever. HTTP is request-scoped
+// and immune to that class of socket-routing issue.
 let cachedLocalEndpoint: { baseUrl: string; token: string } | null = null;
 
 async function getLocalHttpEndpoint(): Promise<{
@@ -299,7 +299,7 @@ async function getLocalHttpEndpoint(): Promise<{
   if (cachedLocalEndpoint) {
     return cachedLocalEndpoint;
   }
-  const endpoint = await rpcGetAIEndpoint();
+  const endpoint = await rpcGetLocalHttpEndpoint();
   if (!endpoint?.baseUrl) {
     return null;
   }
@@ -337,12 +337,13 @@ const UNFURL_RETRY_DELAY_MS = 500;
 async function fetchUnfurlOnce(
   endpoint: { baseUrl: string; token: string },
   url: string
-): Promise<{ kind: 'ok'; data: UnfurlLinkResult } | { kind: 'retry' } | { kind: 'giveUp' }> {
+): Promise<
+  | { kind: 'ok'; data: UnfurlLinkResult }
+  | { kind: 'retry' }
+  | { kind: 'giveUp' }
+> {
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(),
-    UNFURL_FETCH_TIMEOUT_MS
-  );
+  const timer = setTimeout(() => controller.abort(), UNFURL_FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(
       `${endpoint.baseUrl}/unfurl?url=${encodeURIComponent(url)}`,
@@ -455,20 +456,20 @@ export async function rpcGetSettings() {
 }
 
 /**
- * Fetch the localhost AI endpoint started by the Bun process. Returns the base
- * URL + bearer token the BlockNote AI transport connects to, plus whether a
+ * Fetch the localhost HTTP endpoint started by the Bun process. Returns the
+ * base URL + bearer token used by local HTTP routes, plus whether an AI
  * provider is currently configured. Null outside Electrobun.
  */
-export async function rpcGetAIEndpoint(): Promise<{
+export async function rpcGetLocalHttpEndpoint(): Promise<{
+  aiEnabled: boolean;
   baseUrl: string;
-  enabled: boolean;
   token: string;
 } | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;
   }
-  return eb.rpc.request.getAIEndpoint({});
+  return eb.rpc.request.getLocalHttpEndpoint({});
 }
 
 export async function rpcOpenSettings() {
@@ -561,6 +562,7 @@ export async function rpcDeleteTag(name: string) {
 export interface NodeMetadata {
   tag?: string;
   tagColor?: string;
+  tagColors?: Record<string, string>;
   tags?: string[];
 }
 

@@ -590,14 +590,14 @@ function CanvasComponent() {
         return;
       }
 
+      // preventDefault() must be called synchronously during the event
+      // dispatch — gate on the sync URL extractor before kicking off the async
+      // node creation so the browser does not also paste raw text.
       const text = clipboard.getData('text/plain') ?? '';
-      createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).then(
-        (created) => {
-          if (created) {
-            event.preventDefault();
-          }
-        }
-      );
+      if (extractLinkUrl(text)) {
+        event.preventDefault();
+        void createLinkFromText(text, { anchorCenter: currentPasteAnchor() });
+      }
     };
 
     globalThis.addEventListener('paste', handlePaste);
@@ -863,9 +863,13 @@ function CanvasComponent() {
         return;
       }
 
+      // Same as the paste handler: gate synchronously on the URL extractor.
+      // The previous `if (createLinkFromText(...))` check was effectively a
+      // no-op because the async function always returned a truthy Promise.
       const text = getDroppedText(dataTransfer ?? null);
-      if (createLinkFromText(text, { anchorCenter: position })) {
+      if (extractLinkUrl(text)) {
         e.preventDefault();
+        void createLinkFromText(text, { anchorCenter: position });
       }
     },
     [

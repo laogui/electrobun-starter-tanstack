@@ -398,4 +398,113 @@ describe('LinkNode', () => {
 
     expect(rpcMocks.rpcUnfurlLink).toHaveBeenCalledTimes(1);
   });
+
+  it('ignores an old preview result and fetches again when the url changes while loading', async () => {
+    let observerCallback:
+      | ((
+          entries: Array<{ intersectionRatio: number; isIntersecting: boolean }>
+        ) => void)
+      | undefined;
+
+    class MockIntersectionObserver {
+      constructor(
+        callback: (
+          entries: Array<{
+            intersectionRatio: number;
+            isIntersecting: boolean;
+          }>
+        ) => void
+      ) {
+        observerCallback = callback;
+      }
+
+      disconnect = vi.fn();
+      observe = vi.fn();
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    let resolveOldUnfurl: ((value: MockUnfurlResult) => void) | undefined;
+    let resolveNewUnfurl: ((value: MockUnfurlResult) => void) | undefined;
+    rpcMocks.rpcUnfurlLink
+      .mockReturnValueOnce(
+        new Promise<MockUnfurlResult>((resolve) => {
+          resolveOldUnfurl = resolve;
+        })
+      )
+      .mockReturnValueOnce(
+        new Promise<MockUnfurlResult>((resolve) => {
+          resolveNewUnfurl = resolve;
+        })
+      );
+
+    const { rerender } = render(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: '',
+          url: 'https://old.example/',
+        }}
+        id="link-1"
+      />
+    );
+
+    act(() => {
+      observerCallback?.([{ intersectionRatio: 0.5, isIntersecting: true }]);
+    });
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcUnfurlLink).toHaveBeenCalledWith(
+        'https://old.example/'
+      );
+    });
+
+    rerender(
+      <LinkNode
+        data={{
+          color: '#ffffff',
+          title: '',
+          unfurlStatus: 'loading',
+          url: 'https://new.example/',
+        }}
+        id="link-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcUnfurlLink).toHaveBeenCalledWith(
+        'https://new.example/'
+      );
+    });
+
+    await act(async () => {
+      resolveOldUnfurl?.({
+        status: 'ready',
+        title: 'Old title',
+        url: 'https://old.example/',
+      });
+    });
+
+    expect(canvasStoreMocks.updateNodeData).not.toHaveBeenCalledWith('link-1', {
+      title: 'Old title',
+      unfurlError: undefined,
+      unfurlStatus: 'ready',
+    });
+
+    await act(async () => {
+      resolveNewUnfurl?.({
+        status: 'ready',
+        title: 'New title',
+        url: 'https://new.example/',
+      });
+    });
+
+    await waitFor(() => {
+      expect(canvasStoreMocks.updateNodeData).toHaveBeenCalledWith('link-1', {
+        title: 'New title',
+        unfurlError: undefined,
+        unfurlStatus: 'ready',
+      });
+    });
+  });
 });

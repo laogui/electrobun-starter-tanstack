@@ -67,7 +67,13 @@ vi.mock('@/hooks/useTags', () => ({
 const setMetadataMock = vi.fn();
 const metadataStore: Record<
   string,
-  { tag?: string; tagColor?: string; tags?: string[] } | undefined
+  | {
+      tag?: string;
+      tagColor?: string;
+      tagColors?: Record<string, string>;
+      tags?: string[];
+    }
+  | undefined
 > = {};
 vi.mock('@/hooks/useNodeMetadata', () => ({
   useNodeMetadata: () => ({

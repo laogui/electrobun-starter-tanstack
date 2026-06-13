@@ -147,16 +147,13 @@ export const StickyContent = ({
         </div>
       )}
       {/* Folded-back flap: the underside of the cut corner, tinted from the
-          note color — shadowed at the crease where the paper bends away, and
-          catching light at the loose curled tip — casting a soft shadow onto
-          the note body below it. */}
+          note color and catching light at the loose curled tip. */}
       <div
         aria-hidden
         className="pointer-events-none absolute top-0 right-0"
         style={{
           width: FOLD_SIZE,
           height: FOLD_SIZE,
-          filter: 'drop-shadow(-2px 2px 2px rgba(0,0,0,0.18))',
         }}
       >
         <div
@@ -171,7 +168,15 @@ export const StickyContent = ({
   );
 };
 
-const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
+const StickyNode = ({
+  id,
+  data,
+  dragging = false,
+}: {
+  id: string;
+  data: StickyData;
+  dragging?: boolean;
+}) => {
   const { tag, tagColor, tags, dimmedByFilter, tagEditor } = useNodeTagEditing(
     id,
     data as unknown as Record<string, unknown>
@@ -352,7 +357,8 @@ const StickyNode = ({ id, data }: { id: string; data: StickyData }) => {
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full cursor-grab overflow-hidden rounded-sm shadow-card-cutout transition-[filter] duration-200 ease-out'
+          'node-visual relative z-0 size-full overflow-hidden rounded-sm',
+          dragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}

@@ -267,4 +267,35 @@ describe('StickyNode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'end resize' }));
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
+
+  it('renders without drop-shadow filters', () => {
+    const { container, rerender } = render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'No shadow' }}
+        id="sticky-no-shadow"
+      />
+    );
+
+    expect(container.querySelector('.node-visual')).not.toHaveClass(
+      'shadow-card-cutout'
+    );
+    expect(container.querySelector('[aria-hidden="true"]')).not.toHaveStyle({
+      filter: expect.stringContaining('drop-shadow'),
+    });
+
+    rerender(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'No shadow' }}
+        dragging
+        id="sticky-no-shadow"
+      />
+    );
+
+    expect(container.querySelector('.node-visual')).not.toHaveClass(
+      'shadow-card-cutout'
+    );
+    expect(container.querySelector('[aria-hidden="true"]')).not.toHaveStyle({
+      filter: expect.stringContaining('drop-shadow'),
+    });
+  });
 });

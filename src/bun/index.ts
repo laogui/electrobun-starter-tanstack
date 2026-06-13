@@ -1296,7 +1296,7 @@ async function main() {
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
-    maxRequestTime: 5000,
+    maxRequestTime: 10_000,
     handlers: {
       requests: {
         loadCanvas: async ({ viewId }) => {

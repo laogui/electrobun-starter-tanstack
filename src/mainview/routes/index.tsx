@@ -206,10 +206,10 @@ function CanvasComponent() {
   const { onCreateNode } = useNodeCreation({ rfInstance });
 
   const createLinkFromText = useCallback(
-    (
+    async (
       text: string,
       options?: { anchorCenter?: { x: number; y: number } }
-    ): boolean => {
+    ): Promise<boolean> => {
       const url = extractLinkUrl(text);
       if (!url) {
         return false;
@@ -218,7 +218,7 @@ function CanvasComponent() {
       if (!data) {
         return false;
       }
-      onCreateNode('link', {
+      await onCreateNode('link', {
         ...options,
         data: { ...data },
       });
@@ -236,7 +236,7 @@ function CanvasComponent() {
           // stack so dropping/pasting many files stays legible.
           const col = index % ASSET_DROP_GRID_COLS;
           const row = Math.floor(index / ASSET_DROP_GRID_COLS);
-          onCreateNode('asset', {
+          await onCreateNode('asset', {
             anchorCenter: {
               x: anchorCenter.x + col * ASSET_DROP_GRID_GAP,
               y: anchorCenter.y + row * ASSET_DROP_GRID_GAP,
@@ -322,7 +322,7 @@ function CanvasComponent() {
   // kinds are created immediately; `link` opens the URL popover and `asset`
   // opens the file picker, mirroring the bottom create menu's special flows.
   const requestCreate = useCallback(
-    (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
+    async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
       if (kind === 'link') {
         setLinkPrompt({
           anchorCenter: request?.anchorCenter,
@@ -335,7 +335,7 @@ function CanvasComponent() {
         assetFileInputRef.current?.click();
         return;
       }
-      onCreateNode(
+      await onCreateNode(
         kind,
         request?.anchorCenter
           ? { anchorCenter: request.anchorCenter }
@@ -591,9 +591,13 @@ function CanvasComponent() {
       }
 
       const text = clipboard.getData('text/plain') ?? '';
-      if (createLinkFromText(text, { anchorCenter: currentPasteAnchor() })) {
-        event.preventDefault();
-      }
+      createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).then(
+        (created) => {
+          if (created) {
+            event.preventDefault();
+          }
+        }
+      );
     };
 
     globalThis.addEventListener('paste', handlePaste);
@@ -1057,8 +1061,8 @@ function CanvasComponent() {
 
       {nodesWithState.length === 0 ? (
         <EmptyCanvasOverlay
-          onCreateNote={() => {
-            onCreateNode('card');
+          onCreateNote={async () => {
+            await onCreateNode('card');
           }}
           onOpenNoteLibrary={onOpenNoteLibrary}
         />
@@ -1159,8 +1163,8 @@ function CanvasComponent() {
           onClose={() => {
             setLinkPrompt(null);
           }}
-          onCreate={(data) => {
-            onCreateNode('link', {
+          onCreate={async (data) => {
+            await onCreateNode('link', {
               ...(linkPrompt.anchorCenter
                 ? { anchorCenter: linkPrompt.anchorCenter }
                 : {}),

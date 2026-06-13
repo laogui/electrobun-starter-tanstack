@@ -44,8 +44,8 @@ const DEFAULT_GROUP_W = 500;
 const DEFAULT_GROUP_H = 300;
 const DEFAULT_ASSET_W = 350;
 const DEFAULT_ASSET_H = 260;
-const DEFAULT_LINK_W = 320;
-const DEFAULT_LINK_H = 180;
+const DEFAULT_LINK_W = 380;
+const DEFAULT_LINK_H = 280;
 
 function pickRandom<T>(values: readonly T[]): T {
   // Falls back to first entry when array is empty (which the canvas color

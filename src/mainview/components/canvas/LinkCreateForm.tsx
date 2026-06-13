@@ -10,6 +10,7 @@ export function LinkCreateForm({
 }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const [prefilled, setPrefilled] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,14 @@ export function LinkCreateForm({
         }
         const trimmed = text.trim();
         if (trimmed && createLinkNodeData(trimmed)) {
-          setValue((prev) => (prev ? prev : trimmed));
+          setValue((prev) => {
+            if (!prev) {
+              setPrefilled(true);
+              setTimeout(() => setPrefilled(false), 2000);
+              return trimmed;
+            }
+            return prev;
+          });
         }
       })
       .catch(() => {
@@ -55,19 +63,38 @@ export function LinkCreateForm({
       <label className="sr-only" htmlFor="create-link-url">
         Link URL
       </label>
-      <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-neutral-600 dark:bg-neutral-900">
-        <LinkIcon className="shrink-0 text-gray-400" size={16} />
+      <div
+        className={`flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm transition-colors duration-200 ${
+          prefilled
+            ? 'border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/20'
+            : 'border-gray-200 bg-white dark:border-neutral-600 dark:bg-neutral-900'
+        }`}
+      >
+        <LinkIcon
+          className={`shrink-0 transition-colors duration-200 ${prefilled ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'}`}
+          size={16}
+        />
         <input
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
           className="min-w-0 flex-1 bg-transparent text-gray-900 text-sm outline-none placeholder:text-gray-400 dark:text-gray-100"
+          data-1p-ignore
+          data-form-type="other"
+          data-lpignore="true"
           id="create-link-url"
           onChange={(event) => {
             setValue(event.target.value);
+            setPrefilled(false);
             if (error) {
               setError('');
             }
           }}
-          placeholder="https://example.com"
+          placeholder={
+            prefilled ? 'URL from clipboard' : 'https://example.com'
+          }
           ref={inputRef}
+          spellCheck="false"
           type="text"
           value={value}
         />

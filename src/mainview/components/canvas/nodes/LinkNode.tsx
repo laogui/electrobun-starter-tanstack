@@ -248,67 +248,67 @@ export const LinkContent = ({
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(link.color)}
     >
-      <div className="relative h-28 w-full shrink-0 overflow-hidden border-black/5 border-b dark:border-white/10">
+      <div className="relative h-32 w-full shrink-0 overflow-hidden">
         {showHeroImage ? (
-          <img
-            alt=""
-            className="size-full object-cover"
-            draggable={false}
-            loading="lazy"
-            onError={() => setHeroImageError(true)}
-            src={link.imageUrl}
-          />
+          <>
+            <img
+              alt=""
+              className="size-full object-cover"
+              draggable={false}
+              loading="lazy"
+              onError={() => setHeroImageError(true)}
+              src={link.imageUrl}
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/12 to-transparent dark:from-black/30" />
+          </>
         ) : (
-          <div className="grid size-full place-items-center bg-gradient-to-br from-neutral-100 via-neutral-50 to-neutral-200 dark:from-neutral-800 dark:via-neutral-900 dark:to-neutral-950">
+          <div className="relative size-full overflow-hidden bg-gradient-to-br from-neutral-100 via-neutral-50/70 to-neutral-200 dark:from-neutral-800/90 dark:via-neutral-850 dark:to-neutral-900">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.5),transparent_50%)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.06),transparent_50%)]" />
             <Globe2
-              className="text-neutral-300 dark:text-neutral-600"
-              size={36}
-              strokeWidth={1.5}
+              className="absolute right-4 bottom-2 text-neutral-200/40 dark:text-neutral-700/40"
+              size={56}
+              strokeWidth={1.2}
             />
           </div>
         )}
-        {showHeroImage ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/20 to-transparent" />
-        ) : null}
         <span className="absolute top-3 right-3 rounded-full border border-black/5 bg-white/80 px-2 py-1 font-semibold text-[11px] text-neutral-600 uppercase tracking-normal backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
           Link
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
-        <div className="-mt-5 mb-3">
-          <LinkFaviconBadge
-            className="bg-white shadow-md dark:bg-neutral-800"
-            faviconUrl={link.faviconUrl}
-          />
-        </div>
-        {link.unfurlStatus === 'loading' ? (
-          <div className="space-y-3">
-            <div className="h-6 w-3/4 animate-pulse rounded-lg bg-neutral-200 dark:bg-neutral-700" />
-            <div className="flex items-center gap-2 text-neutral-400 text-xs">
-              <Loader2 className="animate-spin" size={14} />
-              Loading preview...
+      <div className="flex min-h-0 flex-1 flex-col p-5 pb-4">
+        <div className="mb-3 flex shrink-0 items-start gap-3">
+          <LinkFaviconBadge faviconUrl={link.faviconUrl} />
+          {link.unfurlStatus === 'loading' ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
+              <Loader2 className="shrink-0 animate-spin" size={16} />
+              <span>Loading preview...</span>
             </div>
-          </div>
-        ) : (
-          <>
-            <h3
-              className={cn(
-                'line-clamp-3 font-bold text-xl leading-tight',
-                !title && 'text-neutral-400'
-              )}
-            >
-              {title || 'Untitled link'}
-            </h3>
-            {description ? (
-              <p className="mt-3 line-clamp-2 text-neutral-500 text-sm leading-snug dark:text-neutral-400">
-                {description}
-              </p>
-            ) : null}
-          </>
-        )}
+          ) : (
+            <div className="min-w-0 flex-1">
+              <h3
+                className={cn(
+                  'line-clamp-2 font-bold text-xl leading-tight',
+                  !title && 'text-neutral-400'
+                )}
+              >
+                {title || 'Untitled link'}
+              </h3>
+              {link.siteName && host ? (
+                <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
+                  {link.siteName}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+        {description && link.unfurlStatus !== 'loading' ? (
+          <p className='line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400'>
+            {description}
+          </p>
+        ) : null}
         {link.unfurlStatus === 'failed' ? (
           <button
-            className="nodrag nopan mt-2 flex items-center gap-1.5 text-neutral-400 text-xs transition-colors hover:text-neutral-600 dark:hover:text-neutral-200"
+            className="nodrag nopan mt-3 inline-flex items-center gap-1.5 self-start rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 text-xs transition-colors hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200"
             onClick={(e) => {
               e.stopPropagation();
               onRetry?.();
@@ -316,12 +316,12 @@ export const LinkContent = ({
             type="button"
           >
             <RefreshCw size={12} />
-            <span>Retry</span>
+            <span>Retry preview</span>
           </button>
         ) : null}
-        <div className="mt-auto min-w-0 pt-4">
-          <div className="flex min-w-0 items-center gap-2 rounded-xl border border-black/8 bg-white/55 px-3 py-2 text-neutral-500 dark:border-white/10 dark:bg-white/8 dark:text-neutral-300">
-            <LinkIcon className="shrink-0" size={14} />
+        <div className="mt-auto min-w-0 shrink-0 pt-3">
+          <div className="flex min-w-0 items-center gap-2 rounded-lg border border-black/8 bg-neutral-50/80 px-3 py-2.5 text-neutral-500 dark:border-white/8 dark:bg-white/5 dark:text-neutral-400">
+            <LinkIcon className="shrink-0 opacity-50" size={13} />
             <span className="truncate text-xs" title={link.url || undefined}>
               {host || link.url}
             </span>
@@ -410,10 +410,27 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     // request, which otherwise leaves the node stuck on "Loading preview...".
     rpcUnfurlLink(normalized)
       .then((result) => {
-        if (unfurlAttemptRef.current !== normalized || !result) {
+        if (unfurlAttemptRef.current !== normalized) {
+          console.log(
+            '[LinkNode] Unfurl result ignored (URL changed):',
+            normalized
+          );
           return;
         }
+        if (!result) {
+          console.warn(
+            '[LinkNode] Unfurl returned null (RPC failure):',
+            normalized
+          );
+          updateNodeData(id, {
+            unfurlStatus: 'failed',
+            unfurlError: 'Could not load link preview.',
+          });
+          return;
+        }
+        console.log('[LinkNode] Unfurl result for', normalized, ':', result);
         if (result.status === 'failed') {
+          console.warn('[LinkNode] Unfurl failed for', normalized);
           updateNodeData(id, {
             unfurlStatus: 'failed',
             unfurlError: 'Could not load link preview.',
@@ -421,6 +438,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           return;
         }
         const { status: _status, url: _url, ...meta } = result;
+        console.log('[LinkNode] Extracted metadata:', meta);
         updateNodeData(id, {
           unfurlStatus: 'ready',
           unfurlError: undefined,
@@ -431,10 +449,11 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           ...(meta.faviconUrl ? { faviconUrl: meta.faviconUrl } : {}),
         });
       })
-      .catch(() => {
+      .catch((error) => {
         if (unfurlAttemptRef.current !== normalized) {
           return;
         }
+        console.error('[LinkNode] Unfurl RPC error for', normalized, ':', error);
         updateNodeData(id, {
           unfurlStatus: 'failed',
           unfurlError: 'Could not load link preview.',
@@ -457,10 +476,10 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
       {tagEditor}
       <ResizeHandle
         hoverClassName="group-hover/link:opacity-100"
-        maxHeight={420}
-        maxWidth={640}
-        minHeight={150}
-        minWidth={240}
+        maxHeight={600}
+        maxWidth={800}
+        minHeight={240}
+        minWidth={320}
         nodeId={id}
         onResizeStart={saveSnapshot}
       />

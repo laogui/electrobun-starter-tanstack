@@ -425,7 +425,7 @@ export function ViewSwitcher({
     async (file: File) => {
       try {
         const data = await saveAssetFileWithProgressToast(file);
-        onCreateNode('asset', { data: { ...data } });
+        await onCreateNode('asset', { data: { ...data } });
         setCreateMenuOpen(false);
       } catch {
         return;
@@ -436,9 +436,9 @@ export function ViewSwitcher({
 
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
-    const imported = handleMarkdownImportResult(result, (notes) => {
+    const imported = handleMarkdownImportResult(result, async (notes) => {
       for (const [index, note] of notes.entries()) {
-        onCreateNode(
+        await onCreateNode(
           'card',
           buildImportedCardCreateOptions(note, index, notes.length)
         );
@@ -611,7 +611,7 @@ export function ViewSwitcher({
                       closeOnClick={item.id !== 'link' && item.id !== 'file'}
                       disabled={!item.enabled}
                       key={item.id}
-                      onClick={() => {
+                      onClick={async () => {
                         const type = resolveCreatableKind(item.id);
                         if (type) {
                           if (type === 'link') {
@@ -622,7 +622,7 @@ export function ViewSwitcher({
                             assetFileInputRef.current?.click();
                             return;
                           }
-                          onCreateNode(type);
+                          await onCreateNode(type);
                         }
                       }}
                     >
@@ -645,8 +645,8 @@ export function ViewSwitcher({
                   </Menu.Item>
                   {linkFormOpen ? (
                     <LinkCreateForm
-                      onCreate={(data) => {
-                        onCreateNode('link', { data: { ...data } });
+                      onCreate={async (data) => {
+                        await onCreateNode('link', { data: { ...data } });
                         setLinkFormOpen(false);
                         setCreateMenuOpen(false);
                       }}

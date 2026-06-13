@@ -12,7 +12,7 @@
  *     arbitrarily large pages into memory.
  */
 
-const REQUEST_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 8000;
 // Some sites (e.g. YouTube) emit a very large <head> and place their Open
 // Graph tags hundreds of KiB into the document, so we read up to 1 MiB before
 // giving up. Reading stops early once </head> is seen (see readBoundedText).
@@ -340,9 +340,9 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
       const html = await readBoundedText(response, MAX_BYTES);
       const meta = parseHtmlMetadata(html);
 
-      return {
+      const result = {
         url: rawUrl,
-        status: 'ready',
+        status: 'ready' as const,
         ...(meta.title ? { title: meta.title } : {}),
         ...(meta.description ? { description: meta.description } : {}),
         ...(meta.siteName ? { siteName: meta.siteName } : {}),
@@ -353,9 +353,13 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
           ? { faviconUrl: resolveUrl(meta.faviconUrl, parsed.toString()) }
           : {}),
       };
+      console.log('[unfurlLink] Parsed metadata for', rawUrl, ':', result);
+      return result;
     }
+    console.warn('[unfurlLink] Too many redirects for', rawUrl);
     return { url: rawUrl, status: 'failed' };
-  } catch {
+  } catch (error) {
+    console.warn('[unfurlLink] Failed to unfurl', rawUrl, ':', error);
     return { url: rawUrl, status: 'failed' };
   } finally {
     clearTimeout(timer);

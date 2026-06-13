@@ -12,12 +12,12 @@ export function useNodeCreation({ rfInstance }: UseNodeCreationOptions) {
   const createNode = useCanvasStore((s) => s.createNode);
 
   const onCreateNode = useCallback(
-    (type: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
+    async (type: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
       if (options) {
-        createNode(type, rfInstance.current, options);
+        await createNode(type, rfInstance.current, options);
         return;
       }
-      createNode(type, rfInstance.current);
+      await createNode(type, rfInstance.current);
     },
     [createNode, rfInstance]
   );

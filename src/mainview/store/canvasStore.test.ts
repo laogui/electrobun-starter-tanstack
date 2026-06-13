@@ -20,18 +20,28 @@ import { useCanvasStore } from '@/store/canvasStore';
 const PASTE_ID_RE = /^paste-/;
 const PASTE_EDGE_ID_RE = /^paste-edge-/;
 
-const { loadCanvasMock, rpcDeleteNoteMock, rpcSaveManifestMock } = vi.hoisted(
-  () => ({
-    loadCanvasMock: vi.fn(),
-    rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
-    rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
-  })
-);
+const {
+  loadCanvasMock,
+  rpcDeleteNoteMock,
+  rpcSaveManifestMock,
+  rpcCheckLicenseMock,
+} = vi.hoisted(() => ({
+  loadCanvasMock: vi.fn(),
+  rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
+  rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
+  rpcCheckLicenseMock: vi.fn(() =>
+    Promise.resolve({ activated: true, email: 'test@example.com' })
+  ),
+}));
 
 vi.mock('@/lib/rpc', () => ({
   loadCanvas: loadCanvasMock,
   rpcDeleteNote: rpcDeleteNoteMock,
   rpcSaveManifest: rpcSaveManifestMock,
+}));
+
+vi.mock('@/lib/rpc-license', () => ({
+  rpcCheckLicense: rpcCheckLicenseMock,
 }));
 
 vi.mock('../../paraglide/messages.js', () => ({
@@ -912,13 +922,13 @@ describe('canvasStore — changeNodeColor', () => {
 });
 
 describe('canvasStore — createNode', () => {
-  it('creates a card node using the viewport center', () => {
+  it('creates a card node using the viewport center', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1200,
       innerHeight: 900,
     });
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('card', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -932,13 +942,13 @@ describe('canvasStore — createNode', () => {
     expect(node.style).toEqual({ width: CARD_W, height: CARD_H });
   });
 
-  it('creates a folder node with localized default data', () => {
+  it('creates a folder node with localized default data', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1000,
       innerHeight: 800,
     });
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('folder', createRfInstance({ x: 0, y: 0, zoom: 1 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -951,13 +961,13 @@ describe('canvasStore — createNode', () => {
     expect(node.data).toMatchObject({ subtitle: '', children: [] });
   });
 
-  it('creates a checklist card node using the card dimensions', () => {
+  it('creates a checklist card node using the card dimensions', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1200,
       innerHeight: 900,
     });
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('checklist', createRfInstance({ x: 100, y: 50, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -977,13 +987,13 @@ describe('canvasStore — createNode', () => {
     });
   });
 
-  it('creates an image node with fixed initial color', () => {
+  it('creates an image node with fixed initial color', async () => {
     vi.stubGlobal('window', {
       innerWidth: 900,
       innerHeight: 700,
     });
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('image', createRfInstance({ x: 0, y: 0, zoom: 1 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -1001,14 +1011,14 @@ describe('canvasStore — createNode', () => {
     });
   });
 
-  it('creates a link node with provided URL metadata', () => {
+  it('creates a link node with provided URL metadata', async () => {
     vi.stubGlobal('window', {
       innerWidth: 900,
       innerHeight: 700,
     });
     const linkSize = CANVAS_NODE_SPECS.link.size;
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('link', createRfInstance({ x: 0, y: 0, zoom: 1 }), {
         data: {
@@ -1031,14 +1041,14 @@ describe('canvasStore — createNode', () => {
     });
   });
 
-  it('creates an asset node with provided attachment metadata', () => {
+  it('creates an asset node with provided attachment metadata', async () => {
     vi.stubGlobal('window', {
       innerWidth: 900,
       innerHeight: 700,
     });
     const assetSize = CANVAS_NODE_SPECS.asset.size;
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('asset', createRfInstance({ x: 0, y: 0, zoom: 1 }), {
         data: {
@@ -1068,14 +1078,14 @@ describe('canvasStore — createNode', () => {
     });
   });
 
-  it('creates a sticky node with a random palette color', () => {
+  it('creates a sticky node with a random palette color', async () => {
     vi.stubGlobal('window', {
       innerWidth: 800,
       innerHeight: 600,
     });
     vi.spyOn(Math, 'random').mockReturnValue(0);
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('sticky', createRfInstance({ x: 0, y: 0, zoom: 1 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -1089,14 +1099,14 @@ describe('canvasStore — createNode', () => {
     expect(node.data).toMatchObject({ content: '', color: '#FEF08A' });
   });
 
-  it('creates a group node with a random color and localized label', () => {
+  it('creates a group node with a random color and localized label', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1400,
       innerHeight: 1000,
     });
     vi.spyOn(Math, 'random').mockReturnValue(0);
 
-    useCanvasStore
+    await useCanvasStore
       .getState()
       .createNode('group', createRfInstance({ x: 50, y: 100, zoom: 2 }));
     const node = useCanvasStore.getState().nodes.at(-1)!;
@@ -1110,7 +1120,7 @@ describe('canvasStore — createNode', () => {
     expect(node.data).toMatchObject({ color: 'blue' });
   });
 
-  it('animates the viewport to the new node via setCenter', () => {
+  it('animates the viewport to the new node via setCenter', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1200,
       innerHeight: 900,
@@ -1121,7 +1131,7 @@ describe('canvasStore — createNode', () => {
       setCenter,
     } as unknown as ReactFlowInstance<any, any>;
 
-    useCanvasStore.getState().createNode('card', rf);
+    await useCanvasStore.getState().createNode('card', rf);
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
     expect(setCenter).toHaveBeenCalledWith(

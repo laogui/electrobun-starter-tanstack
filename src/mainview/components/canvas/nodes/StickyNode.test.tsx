@@ -77,6 +77,10 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
   }),
 }));
 
+vi.mock('../../../../paraglide/messages.js', () => ({
+  sticky_empty_placeholder: () => 'Type something…',
+}));
+
 describe('StickyNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
@@ -236,6 +240,67 @@ describe('StickyNode', () => {
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-enter-newline', {
       content: 'Line one\nLine two',
     });
+    vi.useRealTimers();
+  });
+
+  it('shows a placeholder data-attribute when editing an empty sticky', () => {
+    vi.useFakeTimers();
+    render(
+      <StickyNode data={{ color: '#ffee88', content: '' }} id="sticky-empty" />
+    );
+
+    // The empty contentEditable body carries the placeholder for the CSS
+    // :empty::before rule to surface once it enters edit mode.
+    const body = document.querySelector('.sticky-editable')!;
+    expect(body.getAttribute('contenteditable')).toBe('false');
+    expect(body.getAttribute('data-placeholder')).toBeNull();
+
+    fireEvent.doubleClick(body.parentElement?.parentElement!);
+    vi.advanceTimersByTime(20);
+
+    expect(body.getAttribute('contenteditable')).toBe('true');
+    expect(body.getAttribute('data-placeholder')).toBe('Type something…');
+    expect(body.classList.contains('sticky-editable-empty')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('strips formatting on paste and inserts plain text only', () => {
+    vi.useFakeTimers();
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Before' }}
+        id="sticky-paste"
+      />
+    );
+
+    const body = screen.getByText('Before');
+    fireEvent.doubleClick(body.parentElement?.parentElement!);
+    vi.advanceTimersByTime(20);
+    expect(body.getAttribute('contenteditable')).toBe('true');
+
+    // Place caret at end of existing text.
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    // jsdom doesn't implement document.execCommand; stub it so the paste
+    // handler's insertText call can be observed.
+    const insertTextSpy = vi.fn(() => true);
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: insertTextSpy,
+      writable: true,
+    });
+
+    const clipboardData = {
+      getData: (type: string) => (type === 'text/plain' ? ' pasted' : ''),
+    };
+    fireEvent.paste(body, { clipboardData });
+
+    expect(insertTextSpy).toHaveBeenCalledWith('insertText', false, ' pasted');
     vi.useRealTimers();
   });
 

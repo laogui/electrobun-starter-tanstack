@@ -23,6 +23,7 @@
   "menu_new_note": "New Note",
   "menu_new_checklist": "New Checklist",
   "menu_new_sticky": "New Sticky",
+  "sticky_empty_placeholder": "Type something…",
   "menu_new_image": "New Image",
   "menu_new_link": "New Link",
   "menu_new_folder": "New Folder",

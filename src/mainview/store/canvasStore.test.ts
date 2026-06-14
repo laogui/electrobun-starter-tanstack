@@ -175,6 +175,50 @@ describe('canvasStore — node operations', () => {
     expect(node.data.content).toBe('');
   });
 
+  it('updateNodeData syncs focusedNode.data when the focused node is updated', () => {
+    // Regression guard: the focused view reads from focusedNode.data, a snapshot
+    // taken when the view opened. Without syncing, checklist edits (delete /
+    // toggle / rename) made inside the focused view never re-render.
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          type: 'card',
+          data: { title: 'List', type: 'checklist', items: [{ text: 'One' }] },
+        }),
+      ],
+      focusedNode: {
+        id: 'a',
+        type: 'card',
+        data: { title: 'List', type: 'checklist', items: [{ text: 'One' }] },
+        rect: fakeRect(),
+      },
+    });
+
+    // Simulate deleting an item from the focused checklist.
+    useCanvasStore.getState().updateNodeData('a', { items: [] });
+
+    const state = useCanvasStore.getState();
+    expect(state.nodes[0]?.data.items).toEqual([]);
+    expect(state.focusedNode?.data.items).toEqual([]);
+  });
+
+  it('updateNodeData leaves focusedNode untouched for a different node', () => {
+    useCanvasStore.setState({
+      nodes: [makeNode('a'), makeNode('b')],
+      focusedNode: {
+        id: 'b',
+        type: 'card',
+        data: { title: 'Focused', content: '', color: '#FFFFFF' },
+        rect: fakeRect(),
+      },
+    });
+
+    useCanvasStore.getState().updateNodeData('a', { title: 'Updated A' });
+
+    // focusedNode still points at 'b' with its original data.
+    expect(useCanvasStore.getState().focusedNode?.data.title).toBe('Focused');
+  });
+
   it('toggleNodeLocked flips locked state through a semantic action', () => {
     useCanvasStore.setState({ nodes: [makeNode('a', { data: {} })] });
 

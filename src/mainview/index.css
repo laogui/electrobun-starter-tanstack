@@ -50,6 +50,16 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.2);
   }
+
+  /* Empty-sticky placeholder. Toggled via the `sticky-editable-empty` class
+     (driven by React's `data.content`) rather than `:empty`, because the
+     contentEditable can hold a stray <br> after the user clears all text in
+     some browsers, which would defeat `:empty`. */
+  .sticky-editable-empty[data-placeholder]:empty::before {
+    pointer-events: none;
+    content: attr(data-placeholder);
+    opacity: 0.4;
+  }
 }
 
 .folder-scroll-container {

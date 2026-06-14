@@ -8,6 +8,7 @@ import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
+import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 
 type CaretPositionFromPoint = (
@@ -83,6 +84,8 @@ export interface StickyContentProps {
   onBlur?: () => void;
   /** Keydown handler for the body text (ignored unless `editing`). */
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  /** Paste handler for the body text (ignored unless `editing`). */
+  onPaste?: (e: React.ClipboardEvent) => void;
   /** Ref forwarded to the contentEditable body text element. */
   textRef?: React.Ref<HTMLDivElement>;
 }
@@ -99,6 +102,7 @@ export const StickyContent = ({
   textRef,
   onBlur,
   onKeyDown,
+  onPaste,
 }: StickyContentProps) => {
   const baseColor = data.color?.startsWith('#')
     ? data.color
@@ -125,20 +129,22 @@ export const StickyContent = ({
         </div>
       ) : (
         <div
-          className={cn(
-            'flex size-full flex-col p-4 transition-shadow duration-150',
-            editing && 'ring-2 ring-blue-400/40 ring-inset'
-          )}
+          className="flex size-full flex-col p-4 transition-shadow duration-150"
           style={{ ...colorToStyle(data.color), clipPath: FOLD_BODY_CLIP }}
         >
           <div
             className={cn(
-              'wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
-              editing ? 'nodrag nopan cursor-text' : 'pointer-events-none'
+              'sticky-editable wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
+              editing ? 'nodrag nopan cursor-text' : 'pointer-events-none',
+              !data.content && 'sticky-editable-empty'
             )}
             contentEditable={editing}
+            data-placeholder={
+              editing ? m.sticky_empty_placeholder() : undefined
+            }
             onBlur={onBlur}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             ref={textRef}
             suppressContentEditableWarning
           >
@@ -146,8 +152,10 @@ export const StickyContent = ({
           </div>
         </div>
       )}
-      {/* Folded-back flap: the underside of the cut corner, tinted from the
-          note color and catching light at the loose curled tip. */}
+      {/* Folded-back flap with a cast shadow beneath it. The shadow is its own
+          triangle, offset down-left onto the note and blurred — it reads as the
+          lifted corner dropping a shadow onto the paper, which is clearer on a
+          small fold than a drop-filter on the flap. */}
       <div
         aria-hidden
         className="pointer-events-none absolute top-0 right-0"
@@ -156,11 +164,22 @@ export const StickyContent = ({
           height: FOLD_SIZE,
         }}
       >
+        {/* Cast shadow the fold drops onto the note body (down + left). */}
+        <div
+          className="absolute inset-0"
+          style={{
+            clipPath: FOLD_FLAP_CLIP,
+            background: 'rgba(0, 0, 0, 0.3)',
+            transform: 'translate(-1px, 1px)',
+            filter: 'blur(2.5px)',
+          }}
+        />
+        {/* The flap: back of the folded paper, a touch darker than the face. */}
         <div
           className="size-full"
           style={{
             clipPath: FOLD_FLAP_CLIP,
-            background: `linear-gradient(to bottom left, color-mix(in srgb, ${baseColor} 72%, #000) 0%, ${baseColor} 50%, color-mix(in srgb, ${baseColor} 62%, #fff) 100%)`,
+            background: `linear-gradient(to top right, color-mix(in srgb, ${baseColor} 65%, #000) 0%, ${baseColor} 100%)`,
           }}
         />
       </div>
@@ -210,6 +229,21 @@ const StickyNode = ({
         e.stopPropagation();
       }
     }
+  }, []);
+
+  // Strip formatting on paste so the sticky stays plain text. The body renders
+  // React's `{data.content}` as a single text node, so any block/inline
+  // structure the browser would inject (divs, spans, <br>) desyncs the DOM
+  // from React's model and can jump the caret. `document.execCommand` is
+  // deprecated but remains the only way to insert at the caret without a
+  // manual selection-range dance; insertText is the only command used here.
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) {
+      return;
+    }
+    e.preventDefault();
+    document.execCommand('insertText', false, text);
   }, []);
 
   // Focus the contentEditable and place the caret: at the click point when
@@ -368,6 +402,7 @@ const StickyNode = ({
           isZoomedOut={isZoomedOut}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           textRef={textRef}
         />
         {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (

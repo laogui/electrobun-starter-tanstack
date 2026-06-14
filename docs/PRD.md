@@ -30,9 +30,9 @@
   - **图文卡片**：包含图片和文本（如演示中的 Target audience 饼图卡片）。
   - **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。画布上的勾选和添加条目操作不改变交互状态（保持 `idle` 或 `selected`），不触发 `inline-editing`；仅当需要完整编辑时通过聚焦模式处理。
   - **长文本/文档**：承载长篇幅的文章。在聚焦模式下使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用块。BlockNote 文档以无损 JSON sidecar (`content/.ghostboard/blocknote/<noteId>.json`) 作为编辑态的 canonical source，并同步生成人类可读的 `.md` mirror，保证内容仍可独立阅读、备份和恢复。
-  - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。
-  - **本地文件卡片 (Asset)**：支持从文件选择器或拖拽导入本地文件，文件内容保存到 `attachments/`，画布上显示文件名、类型、缩略图或 waveform。视频/音频在聚焦模式下可播放，普通文件提供打开原文件入口。当前 PDF 仍按普通文件处理，暂不提供页面级预览。
-  - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统会尝试抓取网页标题、描述、站点名、favicon/image 元数据；当前画布 UI 主要展示标题/URL/描述，富媒体卡片样式仍属后续增强。
+  - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。在画布上显示图片缩略图，聚焦模式下显示原图。支持图片替换、标题编辑和标签管理。
+  - **本地文件卡片 (Asset)**：支持从文件选择器或拖拽导入本地文件，文件内容保存到 `attachments/`，画布上显示文件名、类型、缩略图或 waveform。视频/音频在聚焦模式下可播放，普通文件提供打开原文件入口。支持文件预览、标题编辑和标签管理。当前 PDF 仍按普通文件处理，暂不提供页面级预览。
+  - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示标题/URL/描述，支持富媒体卡片样式预览。
   - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；双击进入原地编辑模式，失焦后自动保存。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
 - **卡片通用能力**：
   - **Markdown 预览渲染**：普通文本卡片在画布态（非聚焦态）下通过 **markdown-it** 将 Markdown 正文渲染为安全的 HTML 预览，经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist 卡片在画布上保持独立的结构化 `data.items` 交互，不走 markdown-it 预览渲染。
@@ -683,8 +683,8 @@ updatedAt: 2026-03-31T14:30:00Z
 | 24  | **高级视频/PDF 卡片**    | Asset MVP 已支持视频/音频播放；后续补大文件原生导入、PDF 页面预览、视频转码/封面编辑                                                                                                                                 |
 | 25  | **富 Web Clips**         | Link MVP 已支持 URL 节点和基础 unfurl；后续补 favicon/image 展示、网页剪藏、Magazine 风格预览                                                                                                                                 |
 | 26  | **全局快捷键快速输入**   | Quick Input from anywhere                                                                                                                                                                        |
-| 27  | **AI 辅助**              | Gemini 总结、生成、关联推荐                                                                                                                                                                      |
-| 28  | **商业化**               | Free + Pro 订阅                                                                                                                                                                                  |
+| 27  | **AI 辅助**              | ✅ 基础架构已实现 — 本地 HTTP 服务器支持 AI 流式传输，集成 Gemini 等 AI 能力进行内容总结、生成和关联推荐。后续需完善 UI 入口和用户体验。                                                                 |
+| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片，激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
 | 29  | **双向链接 (Backlinks)** | 支持 `[[note]]` 语法在笔记正文中引用其他笔记，自动建立反向链接索引。与 Edge 系统互补——Edge 是画布上显式的视觉关系，Backlink 是内容层隐式的语义关系。侧边栏或聚焦模式底部展示"被哪些笔记引用"列表 |
 
 ---
@@ -713,7 +713,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | TODO-1 | **补 Folder children 搜索** | 后端和前端 fallback 都应索引 Folder children 中的 Card/Asset/Link/Image，使其能被全局搜索命中并定位回画布。 | P0 |
 | TODO-2 | **明确 unlinked Markdown 策略** | 决定 `content/*.md` 中无 manifest 引用的文件是进入搜索结果，还是只留在设置页清理工具。 | P0 |
 | TODO-3 | **Asset 大文件导入** | 文件选择/拖拽不要只走 data URL；接入 native path copy，避免视频/大文件触发 25 MB data URL 限制。 | P1 |
-| TODO-4 | **Link 富预览与安全硬化** | UI 展示 favicon/image preview；unfurl 增加 DNS 解析后的私网 IP 防护，降低 DNS rebinding 风险。 | P1 |
+| TODO-4 | **Link 富预览与安全硬化** | ✅ 已实现 — UI 展示 favicon/image preview；unfurl 已增加 DNS 解析后的私网 IP 防护，降低 DNS rebinding 风险。 | ~~P1~~ ✅ |
 | TODO-5 | **PDF 预览** | Asset 中 PDF 从普通文件升级为页面缩略图/内嵌预览。 | P2 |
 | TODO-6 | **模板库 P5 收尾** | 补模板数量，接入 thumbnail，删除 `preview-test` 路由，决定从模板创建的画布命名规则，考虑 URL query 同步与 i18n metadata。 | P1 |
 | TODO-7 | **Multi-workspace** | 欢迎页、创建/打开/切换 workspace、recent list、app config、settings 迁移策略。 | P2 |

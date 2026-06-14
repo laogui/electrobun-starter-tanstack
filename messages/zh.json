@@ -23,6 +23,7 @@
   "menu_new_note": "新建笔记",
   "menu_new_checklist": "新建清单",
   "menu_new_sticky": "新建便签",
+  "sticky_empty_placeholder": "写点什么…",
   "menu_new_image": "新建图片",
   "menu_new_link": "新建链接",
   "menu_new_folder": "新建文件夹",

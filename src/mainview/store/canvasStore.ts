@@ -748,11 +748,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   updateNodeData: (nodeId, updates) => {
-    set((s) => ({
-      nodes: s.nodes.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
-      ),
-    }));
+    set((s) => {
+      // The focused view reads from `focusedNode.data`, a snapshot captured when
+      // the view opened. Without syncing it here, edits made inside the focused
+      // view (e.g. deleting a checklist item) write to `nodes` but the view
+      // keeps rendering stale data, so the edit appears to "not work". Mirror
+      // the folder-child path (see updateFolderChildData) by refreshing the
+      // snapshot whenever it points at the node being updated.
+      const focusedNode =
+        s.focusedNode?.id === nodeId
+          ? {
+              ...s.focusedNode,
+              data: { ...s.focusedNode.data, ...updates },
+            }
+          : s.focusedNode;
+      return {
+        focusedNode,
+        nodes: s.nodes.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
+        ),
+      };
+    });
   },
 
   commitNodeData: (nodeId, updates) => {

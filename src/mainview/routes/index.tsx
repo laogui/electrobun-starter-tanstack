@@ -61,6 +61,13 @@ import {
   extractLinkUrl,
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
+import {
+  createImageDropPreview,
+  isImageFile,
+  isOsFileDrag,
+  persistImportedImage,
+  revokeImageDropPreview,
+} from '@/lib/importCanvasFiles';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import {
   type ConnectionStartState,
@@ -204,6 +211,7 @@ function CanvasComponent() {
   const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const createLinkFromText = useCallback(
     async (
@@ -230,17 +238,51 @@ function CanvasComponent() {
   const createAssetsFromFiles = useCallback(
     async (files: File[], anchorCenter: { x: number; y: number }) => {
       for (const [index, file] of files.entries()) {
+        const col = index % ASSET_DROP_GRID_COLS;
+        const row = Math.floor(index / ASSET_DROP_GRID_COLS);
+        const position = {
+          x: anchorCenter.x + col * ASSET_DROP_GRID_GAP,
+          y: anchorCenter.y + row * ASSET_DROP_GRID_GAP,
+        };
+
+        if (isImageFile(file)) {
+          const preview = createImageDropPreview(file);
+          try {
+            const nodeId = await onCreateNode('image', {
+              anchorCenter: position,
+              data: {
+                imageUrl: preview.imageUrl,
+                thumbnailUrl: preview.imageUrl,
+                title: preview.title,
+              },
+              focusViewport: false,
+            });
+            if (!nodeId) {
+              revokeImageDropPreview(preview.imageUrl);
+              continue;
+            }
+            void persistImportedImage(nodeId, file, updateNodeData)
+              .catch((error) => {
+                console.error(
+                  '[canvas] Failed to persist dropped image:',
+                  error
+                );
+                toast.error('Image could not be saved.');
+              })
+              .finally(() => {
+                revokeImageDropPreview(preview.imageUrl);
+              });
+          } catch (error) {
+            revokeImageDropPreview(preview.imageUrl);
+            console.error('[canvas] Failed to import dropped image:', error);
+          }
+          continue;
+        }
+
         try {
           const data = await saveAssetFileWithProgressToast(file);
-          // Lay multiple files out on a grid instead of a single diagonal
-          // stack so dropping/pasting many files stays legible.
-          const col = index % ASSET_DROP_GRID_COLS;
-          const row = Math.floor(index / ASSET_DROP_GRID_COLS);
           await onCreateNode('asset', {
-            anchorCenter: {
-              x: anchorCenter.x + col * ASSET_DROP_GRID_GAP,
-              y: anchorCenter.y + row * ASSET_DROP_GRID_GAP,
-            },
+            anchorCenter: position,
             data: { ...data },
           });
         } catch (error) {
@@ -248,7 +290,7 @@ function CanvasComponent() {
         }
       }
     },
-    [onCreateNode]
+    [onCreateNode, updateNodeData]
   );
 
   // Flow-space anchor for pasted content: prefer the last cursor position so
@@ -274,7 +316,6 @@ function CanvasComponent() {
     nodeId: string;
     kind: 'image' | 'asset';
   } | null>(null);
-  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const onReplaceNodeFile = useCallback(
     (nodeId: string, kind: 'image' | 'asset') => {
@@ -818,10 +859,9 @@ function CanvasComponent() {
   );
 
   const onDragEnterWindow = useCallback((e: React.DragEvent) => {
-    const types = Array.from(e.dataTransfer?.types ?? []);
     // Only react to OS file drags — internal drags (library notes / detached
-    // chips) leave 'Files' off the dataTransfer types list.
-    if (!types.includes('Files')) {
+    // chips) leave 'Files' off the dataTransfer types list on some platforms.
+    if (!isOsFileDrag(e.dataTransfer)) {
       return;
     }
     dragDepthRef.current += 1;
@@ -891,9 +931,11 @@ function CanvasComponent() {
     }
     const dataTransfer = (e as React.DragEvent).dataTransfer;
     if (dataTransfer) {
+      const hasFilePayload = isOsFileDrag(dataTransfer);
+      if (hasFilePayload) {
+        setIsDraggingFile(true);
+      }
       const types = Array.from(dataTransfer.types);
-      const hasFilePayload =
-        types.includes('Files') || (dataTransfer.files?.length ?? 0) > 0;
       const hasLinkPayload =
         types.includes('text/uri-list') ||
         types.includes('text/plain') ||

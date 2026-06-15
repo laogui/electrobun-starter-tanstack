@@ -294,7 +294,7 @@ export interface CanvasState {
     type: CreatableCanvasNodeKind,
     rfInstance: ReactFlowInstance<any, any> | null,
     options?: CreateNodeOptions
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   cutSelected: () => void;
   deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
@@ -1544,6 +1544,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         { duration: 240, zoom }
       );
     }
+
+    return id;
   },
 
   deleteNodes: (ids) => {

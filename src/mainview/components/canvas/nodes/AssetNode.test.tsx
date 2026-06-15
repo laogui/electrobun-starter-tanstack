@@ -424,6 +424,35 @@ describe('AssetContent', () => {
     expect(screen.getByText('+2 more')).toBeInTheDocument();
   });
 
+  it('shows focused image previews immediately from the thumbnail', async () => {
+    rpcLoadAttachmentMock.mockImplementation(
+      () =>
+        new Promise(() => {
+          // Intentionally never resolves to ensure we do not block on RPC.
+        })
+    );
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/file_abc.png',
+          color: '#ffffff',
+          fileName: 'screenshot.png',
+          kind: 'file',
+          mimeType: 'image/png',
+          thumbnailUrl: 'data:image/jpeg;base64,thumb',
+          title: 'screenshot.png',
+        }}
+        isFocused
+      />
+    );
+
+    expect(
+      await screen.findByAltText('screenshot.png preview')
+    ).toHaveAttribute('src', 'data:image/jpeg;base64,thumb');
+    expect(screen.queryByText('Loading media')).not.toBeInTheDocument();
+  });
+
   it('renders an image-as-file thumbnail when the MIME is image/*', () => {
     render(
       <AssetContent

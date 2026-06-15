@@ -690,7 +690,32 @@ export const AssetContent = ({
     if (asset.previewUrl) {
       setMediaSrc(asset.previewUrl);
       setMediaError(null);
+      setMediaLoading(false);
       return;
+    }
+
+    // If a thumbnail is already available, show it immediately and load
+    // the full file in the background — no loading spinner needed.
+    if (imagePreview && asset.thumbnailUrl) {
+      setMediaSrc(asset.thumbnailUrl);
+      setMediaError(null);
+      setMediaLoading(false);
+
+      let cancelled = false;
+      rpcLoadAttachment(asset.attachmentFile)
+        .then((result) => {
+          if (cancelled || !result?.dataUrl) {
+            return;
+          }
+          setMediaSrc(result.dataUrl);
+        })
+        .catch(() => {
+          // Keep the thumbnail visible when the full attachment cannot load.
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
@@ -702,14 +727,16 @@ export const AssetContent = ({
           return;
         }
         if (!result?.dataUrl) {
-          setMediaSrc(null);
-          setMediaError('Media file could not be loaded.');
+          if (!asset.thumbnailUrl) {
+            setMediaSrc(null);
+            setMediaError('Media file could not be loaded.');
+          }
           return;
         }
         setMediaSrc(result.dataUrl);
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!(cancelled || asset.thumbnailUrl)) {
           setMediaSrc(null);
           setMediaError('Media file could not be loaded.');
         }
@@ -727,6 +754,7 @@ export const AssetContent = ({
     asset.attachmentFile,
     asset.missing,
     asset.previewUrl,
+    asset.thumbnailUrl,
     imagePreview,
     isFocused,
     playableMedia,

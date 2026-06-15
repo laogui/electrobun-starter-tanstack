@@ -226,6 +226,20 @@ const AUDIO_EXTENSIONS = new Set([
   'opus',
 ]);
 
+const IMAGE_EXTENSION_MIME: Record<string, string> = {
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  ico: 'image/x-icon',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
+
 function getExtension(name: string): string {
   const dot = name.lastIndexOf('.');
   if (dot < 0 || dot === name.length - 1) {
@@ -269,6 +283,19 @@ export function classifyFile(
     return {
       kind: 'audio',
       mimeType: rawMime || `audio/${ext === 'm4a' ? 'mp4' : ext}`,
+      isPdf: false,
+    };
+  }
+
+  if (rawMime.startsWith('image/')) {
+    return { kind: 'file', mimeType: rawMime, isPdf: false };
+  }
+
+  const imageMime = IMAGE_EXTENSION_MIME[ext];
+  if (imageMime) {
+    return {
+      kind: 'file',
+      mimeType: rawMime || imageMime,
       isPdf: false,
     };
   }

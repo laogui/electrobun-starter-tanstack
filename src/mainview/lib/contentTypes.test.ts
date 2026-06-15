@@ -82,6 +82,19 @@ describe('classifyFile', () => {
     expect(result.kind).toBe('video');
     expect(result.mimeType).toBe('video/quicktime');
   });
+
+  it('classifies images by extension when MIME is missing', () => {
+    const result = classifyFile({ name: 'screenshot.png' });
+    expect(result.kind).toBe('file');
+    expect(result.mimeType).toBe('image/png');
+    expect(result.isPdf).toBe(false);
+  });
+
+  it('classifies images by MIME type', () => {
+    const result = classifyFile({ name: 'photo.bin', type: 'image/webp' });
+    expect(result.kind).toBe('file');
+    expect(result.mimeType).toBe('image/webp');
+  });
 });
 
 describe('getAssetDisplayTitle', () => {

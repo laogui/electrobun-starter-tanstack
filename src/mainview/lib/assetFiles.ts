@@ -136,6 +136,19 @@ export async function saveAssetFile(
   reportProgress(0.02, 'Preparing file');
 
   const isMedia = classified.kind === 'video' || classified.kind === 'audio';
+
+  // For images, generate thumbnail from an object URL in parallel with
+  // reading the file — this avoids waiting for the full data URL read
+  // before the card can show a preview.
+  let imageThumbnailPromise:
+    | Promise<{ thumbnailFile?: string; thumbnailUrl?: string }>
+    | undefined;
+  let objectUrl: string | undefined;
+  if (classified.mimeType.startsWith('image/')) {
+    objectUrl = URL.createObjectURL(file);
+    imageThumbnailPromise = saveImageAssetThumbnail(objectUrl, file.name);
+  }
+
   let videoMetadata: { duration?: number; thumbnailUrl?: string } = {};
   let audioMetadata: { duration?: number; waveform?: number[] } = {};
   if (classified.kind === 'video') {
@@ -172,15 +185,24 @@ export async function saveAssetFile(
     reportProgress(0.96, 'Saving thumbnail');
   } else if (classified.kind === 'audio') {
     reportProgress(0.94, 'Reading waveform');
-  } else if (classified.mimeType.startsWith('image/')) {
-    // Image-as-file edge case: the asset path captured an `image/*` MIME but
-    // classifyFile keeps it under `kind: 'file'`. Generate a thumbnail so the
-    // canvas card shows the picture instead of a generic file glyph.
+  } else if (
+    classified.mimeType.startsWith('image/') &&
+    imageThumbnailPromise
+  ) {
     reportProgress(0.92, 'Saving thumbnail');
-    const imageThumb = await saveImageAssetThumbnail(dataUrl, file.name);
+    const imageThumb = await imageThumbnailPromise;
     thumbnailFile = imageThumb.thumbnailFile;
-    imageThumbnailUrl = imageThumb.thumbnailUrl;
+    // Thumbnail generation may fall back to the ephemeral object URL when the
+    // source image is already small. Never persist that blob — use the data URL
+    // we just read so the card preview survives object URL revocation.
+    const thumbUrl = imageThumb.thumbnailUrl;
+    imageThumbnailUrl =
+      thumbUrl && !thumbUrl.startsWith('blob:') ? thumbUrl : dataUrl;
     reportProgress(0.96, 'Saving thumbnail');
+  }
+
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
   }
 
   const duration = videoMetadata.duration ?? audioMetadata.duration;

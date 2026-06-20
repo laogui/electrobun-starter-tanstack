@@ -256,7 +256,6 @@ export default function BlockNoteEditor({
 
   return (
     <BlockNoteSurface
-      localHttpEndpoint={localHttpEndpoint}
       color={colorValue}
       flushNow={flushNow}
       initial={initial}
@@ -266,6 +265,7 @@ export default function BlockNoteEditor({
       latestBlocksRef={latestBlocksRef}
       latestMarkdownRef={latestMarkdownRef}
       loadFailed={loadFailed}
+      localHttpEndpoint={localHttpEndpoint}
       noteId={typeof noteId === 'string' ? noteId : undefined}
       onMarkdownChange={onMarkdownChange}
       onTitleBlur={() => {
@@ -285,7 +285,6 @@ export default function BlockNoteEditor({
 export type { BlockNoteSaveStatus };
 
 interface BlockNoteSurfaceProps {
-  localHttpEndpoint: LocalHttpEndpointInfo;
   color: string;
   flushNow: () => void;
   initial: InitialContent;
@@ -294,6 +293,7 @@ interface BlockNoteSurfaceProps {
   latestBlocksRef: React.MutableRefObject<PartialBlock[] | undefined>;
   latestMarkdownRef: React.MutableRefObject<string>;
   loadFailed: boolean;
+  localHttpEndpoint: LocalHttpEndpointInfo;
   noteId: string | undefined;
   onMarkdownChange: (markdown: string) => void;
   onTitleBlur: () => void;

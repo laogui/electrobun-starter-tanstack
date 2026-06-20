@@ -126,7 +126,7 @@ describe('rpc', () => {
 
     expect(defineRPC).toHaveBeenCalledWith(
       expect.objectContaining({
-      maxRequestTime: 10_000,
+        maxRequestTime: 10_000,
       })
     );
   });
@@ -278,9 +278,9 @@ describe('rpc', () => {
       expect(calledUrl).toBe(
         'http://127.0.0.1:4242/unfurl?url=https%3A%2F%2Fexample.com%2F'
       );
-      expect(
-        (init.headers as Record<string, string>).authorization
-      ).toBe('Bearer tok');
+      expect((init.headers as Record<string, string>).authorization).toBe(
+        'Bearer tok'
+      );
     });
 
     it('retries once on network failure and then succeeds', async () => {

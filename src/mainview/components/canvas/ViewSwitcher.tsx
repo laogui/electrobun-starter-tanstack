@@ -686,8 +686,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () =>
-                        assetFileInputRef.current?.click(),
+                      openAssetPicker: () => assetFileInputRef.current?.click(),
                     })
                   )}
                   <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
@@ -697,8 +696,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () =>
-                        assetFileInputRef.current?.click(),
+                      openAssetPicker: () => assetFileInputRef.current?.click(),
                     })
                   )}
                   <Menu.Item

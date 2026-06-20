@@ -13,6 +13,7 @@ import { Search, Settings } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 
 import { Toaster } from '@/components/ui/Toaster';
+import { useTitlebarDragReleaseFix } from '@/hooks/useTitlebarDragReleaseFix';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
 import type { AppSettings, FontFamilySetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
@@ -58,6 +59,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const { setTheme } = useTheme();
   const titlebarRef = useTitlebarHeightVar();
+  useTitlebarDragReleaseFix();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
   const applyAppSettings = useAppSettingsStore((s) => s.applySettings);

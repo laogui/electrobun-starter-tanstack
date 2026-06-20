@@ -4,9 +4,9 @@
 
 export interface LicenseInfo {
   activated: boolean;
-  key?: string;
   activatedAt?: number;
   fingerprint?: string;
+  key?: string;
 }
 
 let initPromise: Promise<any> | null = null;

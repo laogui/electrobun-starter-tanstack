@@ -1,20 +1,20 @@
 /**
  * Mock License API for local testing
  * 用于本地测试的模拟 API
- * 
+ *
  * 使用方式:
  * import { mockLicenseAPI } from '@/lib/license-api-mock';
  * mockLicenseAPI.activate('GHOST-...', 'device-123');
  */
 
 export interface LicenseInfo {
-  key: string;
   activated: boolean;
   activatedAt?: string;
   deviceId?: string;
   features?: {
     unlimitedCards: boolean;
   };
+  key: string;
 }
 
 // 模拟存储

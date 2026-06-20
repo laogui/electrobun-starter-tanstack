@@ -94,6 +94,26 @@ describe('StickyNode', () => {
     vi.clearAllMocks();
   });
 
+  it('renders the PNG pushpin decoration instead of the pushpin emoji', () => {
+    const { container } = render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Pinned note' }}
+        id="sticky-pushpin"
+      />
+    );
+
+    const pushpin = container.querySelector<HTMLImageElement>(
+      'img[data-sticky-pushpin]'
+    );
+
+    expect(pushpin).not.toBeNull();
+    expect(pushpin).toHaveAttribute('src', expect.stringContaining('pushpin'));
+    expect(pushpin).toHaveClass('h-6', 'w-auto');
+    expect(pushpin?.parentElement).toHaveClass('-top-3');
+    expect(pushpin?.parentElement).not.toHaveClass('-translate-y-1/2');
+    expect(container).not.toHaveTextContent('📌');
+  });
+
   it('renders sticky content and updates edited text on blur', () => {
     render(
       <StickyNode

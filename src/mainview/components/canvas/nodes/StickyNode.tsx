@@ -1,5 +1,6 @@
 import { NodeResizeControl } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import redPushpinUrl from '@/assets/pushpin.png';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
@@ -67,13 +68,6 @@ export interface StickyData {
   isHidden?: boolean;
 }
 
-const STICKY_FALLBACK_COLOR = '#FEF08A';
-const FOLD_SIZE = 26;
-// Cuts the top-right corner out of the note body so the canvas shows through
-// behind the folded-back flap, like a real lifted paper corner.
-const FOLD_BODY_CLIP = `polygon(0 0, calc(100% - ${FOLD_SIZE}px) 0, 100% ${FOLD_SIZE}px, 100% 100%, 0 100%)`;
-const FOLD_FLAP_CLIP = 'polygon(0 0, 100% 100%, 0 100%)';
-
 export interface StickyContentProps {
   data: StickyData;
   /** Enables contentEditable on the body text. */
@@ -92,7 +86,7 @@ export interface StickyContentProps {
 
 /**
  * Pure presentational sticky-note content. Renders the colored body, editable
- * (or read-only) text area, and the folded-corner decoration. No store / RPC
+ * (or read-only) text area, and the pushpin decoration. No store / RPC
  * coupling — reusable for template previews, exports, thumbnails.
  */
 export const StickyContent = ({
@@ -104,15 +98,12 @@ export const StickyContent = ({
   onKeyDown,
   onPaste,
 }: StickyContentProps) => {
-  const baseColor = data.color?.startsWith('#')
-    ? data.color
-    : STICKY_FALLBACK_COLOR;
   return (
     <>
       {isZoomedOut ? (
         <div
-          className="size-full p-3"
-          style={{ ...colorToStyle(data.color), clipPath: FOLD_BODY_CLIP }}
+          className="size-full overflow-hidden rounded-sm p-3"
+          style={colorToStyle(data.color)}
         >
           {data.content ? (
             <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
@@ -129,8 +120,8 @@ export const StickyContent = ({
         </div>
       ) : (
         <div
-          className="flex size-full flex-col p-4 transition-shadow duration-150"
-          style={{ ...colorToStyle(data.color), clipPath: FOLD_BODY_CLIP }}
+          className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-8 transition-shadow duration-150"
+          style={colorToStyle(data.color)}
         >
           <div
             className={cn(
@@ -152,35 +143,24 @@ export const StickyContent = ({
           </div>
         </div>
       )}
-      {/* Folded-back flap with a cast shadow beneath it. The shadow is its own
-          triangle, offset down-left onto the note and blurred — it reads as the
-          lifted corner dropping a shadow onto the paper, which is clearer on a
-          small fold than a drop-filter on the flap. */}
+      {/* Pushpin centered at the top, pressing the note flat against the wall.
+          Half floats above the note so the head reads as sitting on top of the
+          paper — the body div clips its own corners, so the pin (a sibling) is
+          never cut off by the note's rounded container. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 right-0"
+        className="pointer-events-none absolute -top-3 left-1/2 flex -translate-x-1/2 select-none"
         style={{
-          width: FOLD_SIZE,
-          height: FOLD_SIZE,
+          filter: 'drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.35))',
         }}
       >
-        {/* Cast shadow the fold drops onto the note body (down + left). */}
-        <div
-          className="absolute inset-0"
-          style={{
-            clipPath: FOLD_FLAP_CLIP,
-            background: 'rgba(0, 0, 0, 0.3)',
-            transform: 'translate(-1px, 1px)',
-            filter: 'blur(2.5px)',
-          }}
-        />
-        {/* The flap: back of the folded paper, a touch darker than the face. */}
-        <div
-          className="size-full"
-          style={{
-            clipPath: FOLD_FLAP_CLIP,
-            background: `linear-gradient(to top right, color-mix(in srgb, ${baseColor} 65%, #000) 0%, ${baseColor} 100%)`,
-          }}
+        <img
+          alt=""
+          aria-hidden
+          className="h-6 w-auto select-none"
+          data-sticky-pushpin
+          draggable={false}
+          src={redPushpinUrl}
         />
       </div>
     </>
@@ -389,7 +369,7 @@ const StickyNode = ({
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full overflow-hidden rounded-sm',
+          'node-visual relative z-0 size-full rounded-sm',
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         onClick={handleClick}

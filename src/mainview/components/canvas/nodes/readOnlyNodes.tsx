@@ -111,7 +111,7 @@ AssetNodeReadOnly.displayName = 'AssetNodeReadOnly';
 export const StickyNodeReadOnly = memo(({ data }: { data: StickyData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
-    <div className="node-visual relative size-full overflow-hidden rounded-sm border border-black/5 shadow-card">
+    <div className="node-visual relative size-full rounded-sm border border-black/5 shadow-card">
       <StickyContent data={data} />
     </div>
   </div>

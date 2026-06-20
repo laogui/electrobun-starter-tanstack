@@ -23,7 +23,7 @@
     "machine-translate": "inlang machine translate --project project.inlang",
     "check": "ultracite check",
     "fix": "ultracite fix",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install && bun scripts/ensure-electrobun-cli.ts"
   },
   "dependencies": {
     "2": "^3.0.0",

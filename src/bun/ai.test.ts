@@ -1,5 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const assertWorkspaceAttachmentPathMock = vi.hoisted(() =>
+  vi.fn((wsPath: string, filePath: string) => ({
+    fullPath: `${wsPath}/${filePath}`,
+    relativePath: filePath,
+  }))
+);
+const saveAttachmentStreamMock = vi.hoisted(() => vi.fn());
+const generateFileMetadataMock = vi.hoisted(() => vi.fn(async () => ({})));
+
+vi.mock('./attachments', () => ({
+  assertWorkspaceAttachmentPath: assertWorkspaceAttachmentPathMock,
+  saveAttachmentStream: saveAttachmentStreamMock,
+}));
+
+vi.mock('./thumbnail', () => ({
+  generateFileMetadata: generateFileMetadataMock,
+}));
+
 import { startLocalHttpServer } from './localHttpServer';
 
 type FetchHandler = (req: Request) => Promise<Response> | Response;
@@ -11,7 +29,12 @@ const serveMock = vi.fn((options: { fetch: FetchHandler }) => {
   return { port: 4242, stop: vi.fn() };
 });
 
-vi.stubGlobal('Bun', { serve: serveMock });
+const bunFileMock = vi.hoisted(() => vi.fn());
+
+vi.stubGlobal('Bun', {
+  serve: serveMock,
+  file: bunFileMock,
+});
 
 const ORIGIN = 'http://localhost:5173';
 
@@ -22,18 +45,30 @@ function invoke(req: Request): Promise<Response> | Response {
   return capturedFetch(req);
 }
 
+function createServerOptions(wsPath = '/tmp/workspace') {
+  return {
+    getAIConfig: () => null,
+    getWorkspacePath: () => wsPath,
+  };
+}
+
 describe('startLocalHttpServer', () => {
   beforeEach(() => {
     capturedFetch = null;
     serveMock.mockClear();
+    assertWorkspaceAttachmentPathMock.mockClear();
+    bunFileMock.mockReset();
   });
 
   it('binds localhost and returns a bearer token', () => {
-    const handle = startLocalHttpServer(() => ({
-      provider: 'openai',
-      model: 'gpt-test',
-      apiKey: 'k',
-    }));
+    const handle = startLocalHttpServer({
+      getAIConfig: () => ({
+        provider: 'openai',
+        model: 'gpt-test',
+        apiKey: 'k',
+      }),
+      getWorkspacePath: () => '/tmp/workspace',
+    });
     expect(serveMock).toHaveBeenCalledWith(
       expect.objectContaining({ hostname: '127.0.0.1', port: 0 })
     );
@@ -42,7 +77,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('answers the CORS preflight for /ai/chat', async () => {
-    startLocalHttpServer(() => null);
+    startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'OPTIONS',
@@ -62,7 +97,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('rejects bad tokens with 401 and includes CORS headers', async () => {
-    startLocalHttpServer(() => null);
+    startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'POST',
@@ -74,7 +109,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('replies 503 with CORS headers when AI is not configured', async () => {
-    const handle = startLocalHttpServer(() => null);
+    const handle = startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/ai/chat', {
         method: 'POST',
@@ -89,7 +124,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('returns 404 for unknown routes', async () => {
-    const handle = startLocalHttpServer(() => null);
+    const handle = startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/other', {
         method: 'POST',
@@ -100,7 +135,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('rejects /unfurl without bearer token', async () => {
-    startLocalHttpServer(() => null);
+    startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/unfurl?url=https://example.com', {
         method: 'GET',
@@ -110,7 +145,7 @@ describe('startLocalHttpServer', () => {
   });
 
   it('returns 400 when /unfurl is called without a url param', async () => {
-    const handle = startLocalHttpServer(() => null);
+    const handle = startLocalHttpServer(createServerOptions());
     const res = await invoke(
       new Request('http://127.0.0.1:4242/unfurl', {
         method: 'GET',
@@ -118,5 +153,115 @@ describe('startLocalHttpServer', () => {
       })
     );
     expect(res.status).toBe(400);
+  });
+
+  it('accepts attachment auth via query token for media elements', async () => {
+    bunFileMock.mockReturnValue({
+      exists: async () => false,
+      size: 0,
+      type: 'video/mp4',
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fmissing.mp4&token=${handle.token}`,
+        { method: 'GET' }
+      )
+    );
+    expect(res.status).toBe(404);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('serves suffix byte ranges', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=-2' } }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 3-4/5');
+    expect(res.headers.get('content-length')).toBe('2');
+    expect(await res.text()).toBe('de');
+  });
+
+  it('clamps a byte range end to the file size', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=0-99' } }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 0-4/5');
+    expect(await res.text()).toBe('abcde');
+  });
+
+  it.each([
+    'bytes=9-',
+    'bytes=0-1,3-4',
+    'invalid',
+  ])('returns 416 for an unsatisfiable range: %s', async (range) => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: range } }
+      )
+    );
+
+    expect(res.status).toBe(416);
+    expect(res.headers.get('content-range')).toBe('bytes */5');
+  });
+
+  it('returns range headers without a body for HEAD', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=1-3' }, method: 'HEAD' }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 1-3/5');
+    expect(res.headers.get('content-length')).toBe('3');
+    expect(await res.text()).toBe('');
   });
 });

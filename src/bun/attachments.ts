@@ -1,9 +1,11 @@
+import { rename, rm } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
 const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)*;base64,(.+)$/i;
 const SAFE_EXTENSION_RE = /^[a-z0-9]{1,12}$/;
+/** Cap for the legacy `saveAttachment` data-URL RPC path (images, BlockNote, etc.). */
 const MAX_DATA_URL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 type AttachmentKind = 'audio' | 'file' | 'image' | 'video';
@@ -154,6 +156,28 @@ function inferAttachmentKind(mimeType: string): AttachmentKind {
   return 'file';
 }
 
+function resolveAttachmentTarget(
+  wsPath: string,
+  input: {
+    existingFile?: string;
+    kind: AttachmentKind;
+    mimeType: string;
+    suggestedName?: string;
+  }
+): WorkspaceAttachmentPath {
+  if (input.existingFile) {
+    return assertWorkspaceAttachmentPath(wsPath, input.existingFile);
+  }
+  const mimeType = input.mimeType.toLowerCase();
+  const prefix = prefixForAttachment(input.kind, mimeType);
+  const extension =
+    extensionFromName(input.suggestedName) || extensionForMime(mimeType);
+  const filePath = `attachments/${prefix}_${crypto
+    .randomUUID()
+    .slice(0, 8)}.${extension}`;
+  return assertWorkspaceAttachmentPath(wsPath, filePath);
+}
+
 function parseDataUrl(dataUrl: string): {
   base64Data: string;
   mimeType: string;
@@ -179,27 +203,51 @@ export async function saveAttachment(
     throw new Error('Attachment is too large for data URL upload.');
   }
 
-  if (input.existingFile) {
-    const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
-      wsPath,
-      input.existingFile
-    );
-    await Bun.write(fullPath, new Uint8Array(buffer));
-    return { filePath: relativePath };
-  }
-
   const kind = input.kind ?? inferAttachmentKind(mimeType);
-  const prefix = prefixForAttachment(kind, mimeType);
-  const extension =
-    extensionFromName(input.suggestedName) || extensionForMime(mimeType);
-  const filePath = `attachments/${prefix}_${crypto
-    .randomUUID()
-    .slice(0, 8)}.${extension}`;
-  const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
-    wsPath,
-    filePath
-  );
+  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
+    existingFile: input.existingFile,
+    kind,
+    mimeType,
+    suggestedName: input.suggestedName,
+  });
   await Bun.write(fullPath, new Uint8Array(buffer));
+  return { filePath: relativePath };
+}
+
+interface SaveAttachmentStreamInput {
+  body: NonNullable<ConstructorParameters<typeof Response>[0]>;
+  existingFile?: string;
+  kind?: AttachmentKind;
+  mimeType?: string;
+  suggestedName?: string;
+}
+
+/**
+ * Persist a streamed upload into `attachments/` without decoding a data URL.
+ * Used by the localhost `/attachment/upload` route so drag-and-drop imports
+ * can copy bytes straight from the renderer `File` body.
+ */
+export async function saveAttachmentStream(
+  wsPath: string,
+  input: SaveAttachmentStreamInput
+): Promise<{ filePath: string }> {
+  const mimeType = (input.mimeType ?? 'application/octet-stream').toLowerCase();
+  const kind = input.kind ?? inferAttachmentKind(mimeType);
+  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
+    existingFile: input.existingFile,
+    kind,
+    mimeType,
+    suggestedName: input.suggestedName,
+  });
+  const tempPath = `${fullPath}.upload-${crypto.randomUUID()}.tmp`;
+  const writeBody = new Response(input.body);
+  try {
+    await Bun.write(tempPath, writeBody);
+    await rename(tempPath, fullPath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
   return { filePath: relativePath };
 }
 
@@ -281,18 +329,11 @@ export async function saveAttachmentFile(
     'application/octet-stream'
   ).toLowerCase();
   const kind = input.kind ?? inferAttachmentKind(mimeType);
-  const prefix = prefixForAttachment(kind, mimeType);
-  const extension =
-    extensionFromName(input.suggestedName) ||
-    extensionFromName(input.sourcePath) ||
-    extensionForMime(mimeType);
-  const filePath = `attachments/${prefix}_${crypto
-    .randomUUID()
-    .slice(0, 8)}.${extension}`;
-  const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
-    wsPath,
-    filePath
-  );
+  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
+    kind,
+    mimeType,
+    suggestedName: input.suggestedName || input.sourcePath,
+  });
 
   // Stream the bytes through Bun.write to avoid loading the whole file into
   // memory; Bun handles BunFile -> path copies as a streamed operation.

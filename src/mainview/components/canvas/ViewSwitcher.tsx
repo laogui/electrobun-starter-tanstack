@@ -493,14 +493,22 @@ export function ViewSwitcher({
       ? m.view_node_count_one()
       : m.view_node_count_other({ count: activeViewNodeCount });
 
-  const handleAssetFile = useCallback(
-    async (file: File) => {
-      try {
-        const data = await saveAssetFileWithProgressToast(file);
-        await onCreateNode('asset', { data: { ...data } });
-        setCreateMenuOpen(false);
-      } catch {
+  const handleAssetFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
         return;
+      }
+      setCreateMenuOpen(false);
+      for (const file of files) {
+        try {
+          const data = await saveAssetFileWithProgressToast(file);
+          await onCreateNode('asset', { data: { ...data } });
+        } catch (error) {
+          console.error(
+            '[ViewSwitcher] Failed to import selected file:',
+            error
+          );
+        }
       }
     },
     [onCreateNode, setCreateMenuOpen]
@@ -537,12 +545,13 @@ export function ViewSwitcher({
     <>
       <input
         className="hidden"
+        multiple
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) {
-            handleAssetFile(file);
-          }
+          const files = Array.from(event.target.files ?? []);
           event.target.value = '';
+          handleAssetFiles(files).catch((error) => {
+            console.error('[ViewSwitcher] Failed to import files:', error);
+          });
         }}
         ref={assetFileInputRef}
         type="file"

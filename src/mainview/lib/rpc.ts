@@ -238,6 +238,51 @@ export async function rpcSaveAttachmentFile(
   return eb.rpc.request.saveAttachmentFile({ sourcePath, ...options });
 }
 
+export async function rpcGenerateVideoThumbnail(
+  attachmentFile: string
+): Promise<{ thumbnailFile?: string } | null> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.generateVideoThumbnail({ attachmentFile });
+}
+
+/**
+ * Stream a renderer `File`/`Blob` into `attachments/` through the localhost
+ * HTTP bridge. Avoids data-URL round-trips and the 25 MB RPC cap.
+ */
+export async function uploadAttachmentBlob(
+  blob: Blob,
+  options: {
+    fileName: string;
+    kind: 'audio' | 'file' | 'image' | 'video';
+    mimeType: string;
+  }
+): Promise<SaveAttachmentResult> {
+  const endpoint = await getLocalHttpEndpoint();
+  if (!endpoint?.baseUrl) {
+    throw new Error('Local attachment upload bridge is unavailable.');
+  }
+  const url = new URL(`${endpoint.baseUrl}/attachment/upload`);
+  url.searchParams.set('token', endpoint.token);
+  url.searchParams.set('fileName', options.fileName);
+  url.searchParams.set('mimeType', options.mimeType);
+  url.searchParams.set('kind', options.kind);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${endpoint.token}`,
+      'Content-Type': options.mimeType || 'application/octet-stream',
+    },
+    body: blob,
+  });
+  if (!response.ok) {
+    throw new Error('Attachment upload failed.');
+  }
+  return (await response.json()) as SaveAttachmentResult;
+}
+
 export async function rpcLoadAttachment(filePath: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
@@ -495,6 +540,24 @@ export async function rpcGetLocalHttpEndpoint(): Promise<{
     return null;
   }
   return eb.rpc.request.getLocalHttpEndpoint({});
+}
+
+/**
+ * Build a localhost streaming URL for a workspace attachment. Video and audio
+ * players cannot attach Authorization headers, so the token is embedded in the
+ * query string. Falls back to null when the local HTTP bridge is unavailable.
+ */
+export async function resolveAttachmentStreamUrl(
+  attachmentFile: string
+): Promise<string | null> {
+  const endpoint = await getLocalHttpEndpoint();
+  if (!endpoint?.baseUrl) {
+    return null;
+  }
+  const url = new URL(`${endpoint.baseUrl}/attachment`);
+  url.searchParams.set('path', attachmentFile);
+  url.searchParams.set('token', endpoint.token);
+  return url.toString();
 }
 
 export async function rpcOpenSettings() {

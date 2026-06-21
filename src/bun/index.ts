@@ -93,7 +93,7 @@ import {
   loadTemplate,
   writeTemplateThumbnail,
 } from './templates';
-import { generateFileMetadata } from './thumbnail';
+import { generateFileMetadata, generateVideoPosterFile } from './thumbnail';
 import { loadUserPrefs, saveUserPrefs } from './userprefs';
 import {
   addView,
@@ -560,6 +560,10 @@ interface CanvasRPC {
           failedCount?: number;
           notes: Array<{ noteId: string; title: string; content?: string }>;
         };
+      };
+      generateVideoThumbnail: {
+        params: { attachmentFile: string };
+        response: { thumbnailFile?: string };
       };
 
       exportPng: {
@@ -1290,7 +1294,10 @@ async function main() {
   // well. The handle holds the localhost base URL + bearer token the renderer
   // connects with. AI config is resolved per-request so settings updates take
   // effect without restarting the server.
-  localHttpServer = startLocalHttpServer(() => buildAIConfig());
+  localHttpServer = startLocalHttpServer({
+    getAIConfig: () => buildAIConfig(),
+    getWorkspacePath: () => wsPath,
+  });
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
@@ -1872,6 +1879,15 @@ async function main() {
             params.mimeType ?? ''
           );
           return { ...saved, ...metadata };
+        },
+
+        generateVideoThumbnail: async ({ attachmentFile }) => {
+          const { fullPath } = assertWorkspaceAttachmentPath(
+            wsPath,
+            attachmentFile
+          );
+          const thumbnailFile = await generateVideoPosterFile(wsPath, fullPath);
+          return thumbnailFile ? { thumbnailFile } : {};
         },
 
         loadAttachment: async ({ filePath }) =>

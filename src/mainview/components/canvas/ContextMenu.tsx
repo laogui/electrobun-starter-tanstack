@@ -196,6 +196,7 @@ const getImageItems = (locked: boolean): MenuItem[] => [
     label: m.menu_reveal_in_finder(),
     icon: FolderOpen,
   },
+  { id: 'rename-asset', label: m.menu_rename_asset(), icon: PenLine },
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },

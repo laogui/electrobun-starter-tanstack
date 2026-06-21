@@ -30,6 +30,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import { TypeBadge } from './_shared/TypeBadge';
 
 const DEFAULT_LINK_COLOR = '#FFFFFF';
 
@@ -271,9 +272,9 @@ export const LinkContent = ({
             />
           </div>
         )}
-        <span className="absolute top-3 right-3 rounded-full border border-black/5 bg-white/80 px-2 py-1 font-semibold text-[11px] text-neutral-600 uppercase tracking-normal backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
+        <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
           Link
-        </span>
+        </TypeBadge>
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-5 pb-4">
         <div className="mb-3 flex shrink-0 items-start gap-3">

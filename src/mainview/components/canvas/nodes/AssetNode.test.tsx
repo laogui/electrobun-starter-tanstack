@@ -10,6 +10,7 @@ import AssetNode, {
 } from './AssetNode';
 
 const OPEN_FILE_RE = /open file/i;
+const resolveAttachmentStreamUrlMock = vi.hoisted(() => vi.fn());
 const rpcLoadAttachmentMock = vi.hoisted(() => vi.fn());
 const rpcOpenAttachmentMock = vi.hoisted(() => vi.fn());
 const toastErrorMock = vi.hoisted(() => vi.fn());
@@ -48,6 +49,7 @@ vi.mock('@/components/card/useNodeTagEditing', () => ({
 }));
 
 vi.mock('@/lib/rpc', () => ({
+  resolveAttachmentStreamUrl: resolveAttachmentStreamUrlMock,
   rpcLoadAttachment: rpcLoadAttachmentMock,
   rpcOpenAttachment: rpcOpenAttachmentMock,
 }));
@@ -217,7 +219,43 @@ describe('AssetContent', () => {
     expect(container.querySelector('video')).toBeNull();
   });
 
-  it('loads focused video media only through the attachment RPC', async () => {
+  it('prefers the localhost stream URL for focused video playback', async () => {
+    resolveAttachmentStreamUrlMock.mockResolvedValueOnce(
+      'http://127.0.0.1:4242/attachment?path=attachments%2Fvideo_abc.mp4&token=abc'
+    );
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/video_abc.mp4',
+          color: '#ffffff',
+          duration: 12,
+          fileName: 'demo.mp4',
+          kind: 'video',
+          mimeType: 'video/mp4',
+          size: 4096,
+          title: 'Demo video',
+        }}
+        isFocused
+      />
+    );
+
+    await waitFor(() => {
+      expect(resolveAttachmentStreamUrlMock).toHaveBeenCalledWith(
+        'attachments/video_abc.mp4'
+      );
+    });
+    expect(rpcLoadAttachmentMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByLabelText('Demo video video player')
+    ).toHaveAttribute(
+      'src',
+      'http://127.0.0.1:4242/attachment?path=attachments%2Fvideo_abc.mp4&token=abc'
+    );
+  });
+
+  it('falls back to the attachment RPC when streaming is unavailable', async () => {
+    resolveAttachmentStreamUrlMock.mockResolvedValueOnce(null);
     rpcLoadAttachmentMock.mockResolvedValueOnce({
       dataUrl: 'data:video/mp4;base64,AAAA',
     });
@@ -248,10 +286,10 @@ describe('AssetContent', () => {
     ).toHaveAttribute('src', 'data:video/mp4;base64,AAAA');
   });
 
-  it('loads focused audio media through the attachment RPC', async () => {
-    rpcLoadAttachmentMock.mockResolvedValueOnce({
-      dataUrl: 'data:audio/mpeg;base64,AAAA',
-    });
+  it('loads focused audio media through the stream URL', async () => {
+    resolveAttachmentStreamUrlMock.mockResolvedValueOnce(
+      'http://127.0.0.1:4242/attachment?path=attachments%2Faudio_abc.mp3&token=abc'
+    );
 
     render(
       <AssetContent
@@ -270,13 +308,17 @@ describe('AssetContent', () => {
     );
 
     await waitFor(() => {
-      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+      expect(resolveAttachmentStreamUrlMock).toHaveBeenCalledWith(
         'attachments/audio_abc.mp3'
       );
     });
+    expect(rpcLoadAttachmentMock).not.toHaveBeenCalled();
     expect(
       await screen.findByLabelText('Demo audio audio player')
-    ).toHaveAttribute('src', 'data:audio/mpeg;base64,AAAA');
+    ).toHaveAttribute(
+      'src',
+      'http://127.0.0.1:4242/attachment?path=attachments%2Faudio_abc.mp3&token=abc'
+    );
   });
 
   it('loads focused text files into an inline preview', async () => {

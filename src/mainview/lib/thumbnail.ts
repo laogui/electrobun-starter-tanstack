@@ -236,7 +236,7 @@ export async function createVideoThumbnail(
   const video = document.createElement('video');
   video.muted = true;
   video.playsInline = true;
-  video.preload = 'metadata';
+  video.preload = 'auto';
 
   try {
     video.src = objectUrl;

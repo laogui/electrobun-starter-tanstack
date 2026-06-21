@@ -29,13 +29,19 @@ import type {
   AssetNodeData,
 } from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
-import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
+import {
+  resolveAttachmentStreamUrl,
+  rpcLoadAttachment,
+  rpcOpenAttachment,
+} from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
+import { AssetHoverCard } from './_shared/AssetHoverCard';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import { TypeBadge } from './_shared/TypeBadge';
 
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
 
@@ -159,6 +165,36 @@ function getAssetLabel(asset: AssetNodeData): string {
   return 'File';
 }
 
+// Builds the metadata rows shown in the canvas hover panel. Surfacing this
+// info on hover lets the card face stay minimal (badge + thumbnail + title).
+function buildAssetHoverRows(asset: AssetNodeData): {
+  label: string;
+  value: string;
+}[] {
+  const rows: { label: string; value: string }[] = [];
+  rows.push({ label: 'Type', value: getAssetLabel(asset) });
+  if (asset.fileName) {
+    rows.push({ label: 'File', value: asset.fileName });
+  }
+  if (typeof asset.size === 'number') {
+    rows.push({ label: 'Size', value: formatFileSize(asset.size) });
+  }
+  const duration = formatDuration(asset.duration);
+  if (duration) {
+    rows.push({ label: 'Duration', value: duration });
+  }
+  if (asset.archiveSummary) {
+    rows.push({
+      label: 'Entries',
+      value: `${asset.archiveSummary.entryCount} items`,
+    });
+  }
+  if (asset.attachmentFile) {
+    rows.push({ label: 'Path', value: asset.attachmentFile });
+  }
+  return rows;
+}
+
 function AssetIcon({
   asset,
   className,
@@ -227,6 +263,37 @@ function decodeTextDataUrl(dataUrl: string): string {
   }
 }
 
+function useResolvedAttachmentPreview(
+  previewUrl: string | undefined,
+  attachmentFile: string | undefined
+): string | undefined {
+  const [resolvedUrl, setResolvedUrl] = useState(previewUrl);
+
+  useEffect(() => {
+    if (previewUrl) {
+      setResolvedUrl(previewUrl);
+      return;
+    }
+    if (!attachmentFile) {
+      setResolvedUrl(undefined);
+      return;
+    }
+    let cancelled = false;
+    resolveAttachmentStreamUrl(attachmentFile)
+      .then((url) => {
+        if (!cancelled && url) {
+          setResolvedUrl(url);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentFile, previewUrl]);
+
+  return resolvedUrl;
+}
+
 function VideoThumbnail({
   asset,
   title,
@@ -235,13 +302,17 @@ function VideoThumbnail({
   title: string;
 }) {
   const duration = formatDuration(asset.duration);
+  const thumbSrc = useResolvedAttachmentPreview(
+    asset.thumbnailUrl,
+    asset.thumbnailFile
+  );
   return (
     <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
-      {asset.thumbnailUrl ? (
+      {thumbSrc ? (
         <img
           alt={`${title} thumbnail`}
           className="size-full object-cover"
-          src={asset.thumbnailUrl}
+          src={thumbSrc}
         />
       ) : (
         <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.7_0.08_250/.28),transparent_48%),oklch(0.22_0.02_255)]">
@@ -721,19 +792,33 @@ export const AssetContent = ({
     let cancelled = false;
     setMediaLoading(true);
     setMediaError(null);
-    rpcLoadAttachment(asset.attachmentFile)
-      .then((result) => {
+
+    const loadPlayableMedia = async () => {
+      if (playableMedia) {
+        const streamUrl = await resolveAttachmentStreamUrl(
+          asset.attachmentFile!
+        );
+        if (streamUrl) {
+          return streamUrl;
+        }
+      }
+      const result = await rpcLoadAttachment(asset.attachmentFile!);
+      return result?.dataUrl ?? null;
+    };
+
+    loadPlayableMedia()
+      .then((src) => {
         if (cancelled) {
           return;
         }
-        if (!result?.dataUrl) {
+        if (!src) {
           if (!asset.thumbnailUrl) {
             setMediaSrc(null);
             setMediaError('Media file could not be loaded.');
           }
           return;
         }
-        setMediaSrc(result.dataUrl);
+        setMediaSrc(src);
       })
       .catch(() => {
         if (!(cancelled || asset.thumbnailUrl)) {
@@ -911,22 +996,13 @@ export const AssetContent = ({
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(asset.color)}
     >
-      <div className="flex min-h-0 flex-1 flex-col p-5">
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
-            <AssetIcon asset={asset} size={19} />
-          </div>
-          <span
-            className={cn(
-              'rounded-full border px-2 py-1 font-semibold text-[11px] uppercase tracking-normal',
-              asset.missing
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200'
-                : 'border-black/10 bg-white/60 text-neutral-500 dark:border-white/10 dark:bg-white/10 dark:text-neutral-300'
-            )}
-          >
-            {asset.missing ? 'Missing' : label}
-          </span>
-        </div>
+      <div className="relative flex min-h-0 flex-1 flex-col p-5">
+        <TypeBadge
+          className="absolute top-5 right-5 z-10"
+          missing={asset.missing}
+        >
+          {asset.missing ? 'Missing' : label}
+        </TypeBadge>
         <AssetThumbnail asset={asset} title={title} />
         <h3 className="line-clamp-3 shrink-0 font-bold text-xl leading-tight">
           {title}
@@ -1011,59 +1087,64 @@ const AssetNode = ({
 
       <NodeHandles />
 
-      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
-        {isZoomedOut ? (
-          <div
-            className="flex size-full flex-col justify-center p-5"
-            style={colorToStyle(asset.color)}
-          >
-            <AssetIcon asset={asset} className="mb-4 opacity-70" size={30} />
-            <h3 className="line-clamp-2 font-bold text-2xl/tight">
-              {getAssetDisplayTitle(asset)}
-            </h3>
-            <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
-          </div>
-        ) : (
-          <AssetContent data={data} />
-        )}
-        {isRenaming && !isZoomedOut ? (
-          <div
-            className="absolute inset-x-5 bottom-16 z-10"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <input
-              aria-label="Rename asset"
-              className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
-              onBlur={commitRename}
-              onChange={(e) => setRenameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitRename();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  cancelRename();
-                }
-              }}
-              ref={renameInputRef}
-              type="text"
-              value={renameDraft}
-            />
-          </div>
-        ) : null}
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
-          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
-            <NodeTagChips
-              isDark={isDark}
-              tag={tag}
-              tagColor={tagColor}
-              tagColors={tagColors}
-              tags={tags}
-            />
-          </div>
-        ) : null}
-      </div>
+      <AssetHoverCard
+        enabled={!(isZoomedOut || asset.missing)}
+        rows={buildAssetHoverRows(asset)}
+      >
+        <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+          {isZoomedOut ? (
+            <div
+              className="flex size-full flex-col justify-center p-5"
+              style={colorToStyle(asset.color)}
+            >
+              <AssetIcon asset={asset} className="mb-4 opacity-70" size={30} />
+              <h3 className="line-clamp-2 font-bold text-2xl/tight">
+                {getAssetDisplayTitle(asset)}
+              </h3>
+              <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
+            </div>
+          ) : (
+            <AssetContent data={data} />
+          )}
+          {isRenaming && !isZoomedOut ? (
+            <div
+              className="absolute inset-x-5 bottom-16 z-10"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <input
+                aria-label="Rename asset"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                onBlur={commitRename}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+                ref={renameInputRef}
+                type="text"
+                value={renameDraft}
+              />
+            </div>
+          ) : null}
+          {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+            <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+              <NodeTagChips
+                isDark={isDark}
+                tag={tag}
+                tagColor={tagColor}
+                tagColors={tagColors}
+                tags={tags}
+              />
+            </div>
+          ) : null}
+        </div>
+      </AssetHoverCard>
     </div>
   );
 };

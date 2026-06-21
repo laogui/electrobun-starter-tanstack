@@ -34,8 +34,10 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
+import { AssetHoverCard } from './_shared/AssetHoverCard';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import { TypeBadge } from './_shared/TypeBadge';
 
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
 
@@ -157,6 +159,36 @@ function getAssetLabel(asset: AssetNodeData): string {
     return 'Audio';
   }
   return 'File';
+}
+
+// Builds the metadata rows shown in the canvas hover panel. Surfacing this
+// info on hover lets the card face stay minimal (badge + thumbnail + title).
+function buildAssetHoverRows(asset: AssetNodeData): {
+  label: string;
+  value: string;
+}[] {
+  const rows: { label: string; value: string }[] = [];
+  rows.push({ label: 'Type', value: getAssetLabel(asset) });
+  if (asset.fileName) {
+    rows.push({ label: 'File', value: asset.fileName });
+  }
+  if (typeof asset.size === 'number') {
+    rows.push({ label: 'Size', value: formatFileSize(asset.size) });
+  }
+  const duration = formatDuration(asset.duration);
+  if (duration) {
+    rows.push({ label: 'Duration', value: duration });
+  }
+  if (asset.archiveSummary) {
+    rows.push({
+      label: 'Entries',
+      value: `${asset.archiveSummary.entryCount} items`,
+    });
+  }
+  if (asset.attachmentFile) {
+    rows.push({ label: 'Path', value: asset.attachmentFile });
+  }
+  return rows;
 }
 
 function AssetIcon({
@@ -911,22 +943,13 @@ export const AssetContent = ({
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(asset.color)}
     >
-      <div className="flex min-h-0 flex-1 flex-col p-5">
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200">
-            <AssetIcon asset={asset} size={19} />
-          </div>
-          <span
-            className={cn(
-              'rounded-full border px-2 py-1 font-semibold text-[11px] uppercase tracking-normal',
-              asset.missing
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200'
-                : 'border-black/10 bg-white/60 text-neutral-500 dark:border-white/10 dark:bg-white/10 dark:text-neutral-300'
-            )}
-          >
-            {asset.missing ? 'Missing' : label}
-          </span>
-        </div>
+      <div className="relative flex min-h-0 flex-1 flex-col p-5">
+        <TypeBadge
+          className="absolute top-5 right-5 z-10"
+          missing={asset.missing}
+        >
+          {asset.missing ? 'Missing' : label}
+        </TypeBadge>
         <AssetThumbnail asset={asset} title={title} />
         <h3 className="line-clamp-3 shrink-0 font-bold text-xl leading-tight">
           {title}
@@ -1011,59 +1034,64 @@ const AssetNode = ({
 
       <NodeHandles />
 
-      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
-        {isZoomedOut ? (
-          <div
-            className="flex size-full flex-col justify-center p-5"
-            style={colorToStyle(asset.color)}
-          >
-            <AssetIcon asset={asset} className="mb-4 opacity-70" size={30} />
-            <h3 className="line-clamp-2 font-bold text-2xl/tight">
-              {getAssetDisplayTitle(asset)}
-            </h3>
-            <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
-          </div>
-        ) : (
-          <AssetContent data={data} />
-        )}
-        {isRenaming && !isZoomedOut ? (
-          <div
-            className="absolute inset-x-5 bottom-16 z-10"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <input
-              aria-label="Rename asset"
-              className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
-              onBlur={commitRename}
-              onChange={(e) => setRenameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitRename();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  cancelRename();
-                }
-              }}
-              ref={renameInputRef}
-              type="text"
-              value={renameDraft}
-            />
-          </div>
-        ) : null}
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
-          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
-            <NodeTagChips
-              isDark={isDark}
-              tag={tag}
-              tagColor={tagColor}
-              tagColors={tagColors}
-              tags={tags}
-            />
-          </div>
-        ) : null}
-      </div>
+      <AssetHoverCard
+        enabled={!(isZoomedOut || asset.missing)}
+        rows={buildAssetHoverRows(asset)}
+      >
+        <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+          {isZoomedOut ? (
+            <div
+              className="flex size-full flex-col justify-center p-5"
+              style={colorToStyle(asset.color)}
+            >
+              <AssetIcon asset={asset} className="mb-4 opacity-70" size={30} />
+              <h3 className="line-clamp-2 font-bold text-2xl/tight">
+                {getAssetDisplayTitle(asset)}
+              </h3>
+              <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
+            </div>
+          ) : (
+            <AssetContent data={data} />
+          )}
+          {isRenaming && !isZoomedOut ? (
+            <div
+              className="absolute inset-x-5 bottom-16 z-10"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <input
+                aria-label="Rename asset"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                onBlur={commitRename}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+                ref={renameInputRef}
+                type="text"
+                value={renameDraft}
+              />
+            </div>
+          ) : null}
+          {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+            <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+              <NodeTagChips
+                isDark={isDark}
+                tag={tag}
+                tagColor={tagColor}
+                tagColors={tagColors}
+                tags={tags}
+              />
+            </div>
+          ) : null}
+        </div>
+      </AssetHoverCard>
     </div>
   );
 };

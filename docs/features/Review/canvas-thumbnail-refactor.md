@@ -170,3 +170,19 @@
 - 所有改动不影响 focused（聚焦展开）视图，仅针对画布上小卡片的缩略表现
 - zoomed-out（极缩小）视图已有骨架化简化逻辑，无需额外处理
 - 建议先做 Phase 1 看效果，再决定 Phase 2/3 的优先级
+
+---
+
+## 实施修正记录（2026-06 落地版）
+
+落地时核对代码后发现原方案与现状有偏差，已据此调整实现：
+
+1. **卡片面本就很干净**：非聚焦卡片面（`AssetNode.tsx` `AssetContent` 非 focused 分支）实际只显示「图标 + 类型 badge + 缩略图 + 标题」，文件大小/时长/MIME 仅存在于 focused 视图。因此 Phase 1 的实质简化为：去掉 AssetNode 左上角图标 box（与右上角 badge 信息冗余），ImageNode 去掉底部标题渐变层（图片即缩略图），其余类型保留标题作为辨识。
+2. **`TypeBadge` 是提取而非新建**：`AssetNode.tsx:919-928` 原本就有内联类型 pill，提取到 `_shared/TypeBadge.tsx` 复用给 AssetNode / ImageNode / LinkNode。
+3. **Hover 用 Base UI 而非 Radix**：项目未安装 Radix，使用 `@base-ui/react/preview-card`（HoverCard 等价物），模板抄 `TagEditor.tsx`（Portal + Positioner + `nodrag nopan`），无需加依赖。
+4. **ImageNode 重命名迁移**：原标题层兼任点击重命名入口，去掉后改由 `renamingNodeId` + `<input>`（同 AssetNode 模式）承接，并在图片节点右键菜单补充 `rename-asset` 项（`ContextMenu.tsx` `getImageItems`）。
+5. **`src/bun/preview.ts` 不动**：该文件是笔记卡片预览，与文件元数据无关；文件元数据走 `src/bun/thumbnail.ts` 的 `generateFileMetadata`。
+6. **LinkNode 暂不加 hover**：链接卡片信息本就少（hero + favicon + 标题 + URL pill），hover 增量价值有限，Phase 2 先做 Asset/Image 系。
+7. **Phase 3 维持延后**：`pdfjs-dist` 被 `src/bun/thumbnail.ts:9-12` 明确排除，PDF/Office 真实缩略图需先决策。
+
+涉及新增文件：`_shared/TypeBadge.tsx`、`_shared/AssetHoverCard.tsx` 及对应测试。

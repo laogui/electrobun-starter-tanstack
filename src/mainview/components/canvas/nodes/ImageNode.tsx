@@ -13,8 +13,10 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { ReplaceImageConfirmDialog } from '../ReplaceImageConfirmDialog';
+import { AssetHoverCard } from './_shared/AssetHoverCard';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import { TypeBadge } from './_shared/TypeBadge';
 
 const FILE_EXT_RE = /\.[^.]+$/;
 
@@ -32,66 +34,10 @@ export interface ImageData {
 export const ImageContent = ({
   data,
   isFocused,
-  onTitleChange,
 }: {
   data: ImageData;
   isFocused?: boolean;
-  onTitleChange?: (title: string) => void;
 }) => {
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const [editingTitle, setEditingTitle] = useState(false);
-
-  const handleTitleBlur = useCallback(() => {
-    setEditingTitle(false);
-    if (!onTitleChange) {
-      return;
-    }
-    const next = titleRef.current?.textContent?.trim() ?? '';
-    if (next !== (data.title ?? '')) {
-      onTitleChange(next);
-    }
-  }, [data.title, onTitleChange]);
-
-  const handleTitleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLHeadingElement>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        titleRef.current?.blur();
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (titleRef.current) {
-          titleRef.current.textContent = data.title ?? '';
-        }
-        titleRef.current?.blur();
-      }
-    },
-    [data.title]
-  );
-
-  const startEditing = useCallback(
-    (e: React.MouseEvent) => {
-      if (!onTitleChange || isFocused) {
-        return;
-      }
-      e.stopPropagation();
-      setEditingTitle(true);
-      globalThis.requestAnimationFrame(() => {
-        titleRef.current?.focus();
-        const sel = window.getSelection();
-        const range = document.createRange();
-        if (titleRef.current) {
-          range.selectNodeContents(titleRef.current);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      });
-    },
-    [isFocused, onTitleChange]
-  );
   // The canvas always prefers the lightweight thumbnail when present so we
   // avoid keeping the original full-resolution bitmap in memory just to draw
   // a card preview. The focused / lightbox view falls back to the original
@@ -215,30 +161,6 @@ export const ImageContent = ({
             <Loader2 className="animate-spin text-white/80" size={28} />
           </div>
         ) : null}
-        {/* The focused (lightbox) view shows its caption as a FocusedView
-            overlay. On the canvas card the caption sits on a bottom scrim so
-            the image keeps the full card area. */}
-        {!isFocused && (data.title || onTitleChange) ? (
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/25 to-transparent px-4 pt-10 pb-3">
-            <h3
-              className={cn(
-                'truncate font-semibold text-sm text-white leading-tight outline-none [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]',
-                onTitleChange && 'nodrag nopan',
-                !(data.title || editingTitle) && 'text-white/60',
-                editingTitle &&
-                  'nodrag nopan rounded-md bg-black/30 px-1 ring-1 ring-white/50'
-              )}
-              contentEditable={editingTitle}
-              onBlur={handleTitleBlur}
-              onClick={onTitleChange ? startEditing : undefined}
-              onKeyDown={handleTitleKeyDown}
-              ref={titleRef}
-              suppressContentEditableWarning
-            >
-              {data.title || (onTitleChange ? 'Add title…' : '')}
-            </h3>
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -248,11 +170,15 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
+  const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
   const isZoomedOut = useIsZoomedOut();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameDraft, setRenameDraft] = useState(data.title ?? '');
   const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
   const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);
   const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
@@ -260,6 +186,37 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const hasImage = Boolean(
     rawImageUrl || data.imageFile || data.thumbnailFile || data.thumbnailUrl
   );
+
+  useEffect(() => {
+    if (isRenaming) {
+      setRenameDraft(data.title ?? '');
+      // Autofocus + select after mount.
+      requestAnimationFrame(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      });
+    }
+  }, [isRenaming, data.title]);
+
+  const commitRename = useCallback(() => {
+    const next = renameDraft.trim();
+    if (next && next !== data.title) {
+      saveSnapshot();
+      updateNodeData(id, { title: next });
+    }
+    setRenamingNodeId(null);
+  }, [
+    renameDraft,
+    data.title,
+    saveSnapshot,
+    updateNodeData,
+    id,
+    setRenamingNodeId,
+  ]);
+
+  const cancelRename = useCallback(() => {
+    setRenamingNodeId(null);
+  }, [setRenamingNodeId]);
 
   const handleFile = useCallback(
     (file: File) => {
@@ -434,62 +391,104 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
         open={pendingReplaceFile !== null}
       />
 
-      <div
-        className={cn(
-          'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
-        )}
+      <AssetHoverCard
+        enabled={!isZoomedOut && hasImage && Boolean(data.title)}
+        rows={
+          data.title
+            ? [
+                { label: 'Name', value: data.title },
+                ...(data.imageFile
+                  ? [{ label: 'Path', value: data.imageFile }]
+                  : []),
+              ]
+            : []
+        }
       >
-        {isZoomedOut ? (
-          <div
-            className="flex size-full items-center justify-center"
-            style={colorToStyle(data.color)}
-          >
-            {previewImageUrl ? (
-              <img
-                alt=""
-                className="pointer-events-none size-full object-cover"
-                draggable={false}
-                src={previewImageUrl}
-              />
-            ) : (
-              <ImagePlus className="text-gray-300" size={32} />
-            )}
-          </div>
-        ) : hasImage ? (
-          <ImageContent
-            data={data}
-            onTitleChange={(title) => commitNodeData(id, { title })}
-          />
-        ) : (
-          <div
-            className="flex size-full flex-col items-center justify-center gap-3"
-            style={colorToStyle(data.color)}
-          >
-            <button
-              className="nodrag nopan flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-6 transition-colors hover:bg-black/5"
-              onClick={openFilePicker}
-              type="button"
+        <div
+          className={cn(
+            'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
+          )}
+        >
+          {isZoomedOut ? (
+            <div
+              className="flex size-full items-center justify-center"
+              style={colorToStyle(data.color)}
             >
-              <ImagePlus className="text-gray-300" size={40} />
-              <span className="text-gray-400 text-sm">Click to add image</span>
-            </button>
-            <span className="text-gray-300 text-xs">
-              or drag &amp; drop / paste
-            </span>
-          </div>
-        )}
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
-          <div className="pointer-events-none absolute right-3 bottom-3 left-3">
-            <NodeTagChips
-              isDark={isDark}
-              tag={tag}
-              tagColor={tagColor}
-              tagColors={tagColors}
-              tags={tags}
-            />
-          </div>
-        ) : null}
-      </div>
+              {previewImageUrl ? (
+                <img
+                  alt=""
+                  className="pointer-events-none size-full object-cover"
+                  draggable={false}
+                  src={previewImageUrl}
+                />
+              ) : (
+                <ImagePlus className="text-gray-300" size={32} />
+              )}
+            </div>
+          ) : hasImage ? (
+            <ImageContent data={data} />
+          ) : (
+            <div
+              className="flex size-full flex-col items-center justify-center gap-3"
+              style={colorToStyle(data.color)}
+            >
+              <button
+                className="nodrag nopan flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-6 transition-colors hover:bg-black/5"
+                onClick={openFilePicker}
+                type="button"
+              >
+                <ImagePlus className="text-gray-300" size={40} />
+                <span className="text-gray-400 text-sm">
+                  Click to add image
+                </span>
+              </button>
+              <span className="text-gray-300 text-xs">
+                or drag &amp; drop / paste
+              </span>
+            </div>
+          )}
+          {hasImage && !isZoomedOut ? (
+            <TypeBadge className="absolute top-5 right-5 z-10">Image</TypeBadge>
+          ) : null}
+          {isRenaming && hasImage && !isZoomedOut ? (
+            <div
+              className="absolute inset-x-5 bottom-16 z-10"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <input
+                aria-label="Rename image"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                onBlur={commitRename}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+                ref={renameInputRef}
+                type="text"
+                value={renameDraft}
+              />
+            </div>
+          ) : null}
+          {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+            <div className="pointer-events-none absolute right-3 bottom-3 left-3">
+              <NodeTagChips
+                isDark={isDark}
+                tag={tag}
+                tagColor={tagColor}
+                tagColors={tagColors}
+                tags={tags}
+              />
+            </div>
+          ) : null}
+        </div>
+      </AssetHoverCard>
     </div>
   );
 };

@@ -171,4 +171,97 @@ describe('startLocalHttpServer', () => {
     expect(res.status).toBe(404);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
+
+  it('serves suffix byte ranges', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=-2' } }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 3-4/5');
+    expect(res.headers.get('content-length')).toBe('2');
+    expect(await res.text()).toBe('de');
+  });
+
+  it('clamps a byte range end to the file size', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=0-99' } }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 0-4/5');
+    expect(await res.text()).toBe('abcde');
+  });
+
+  it.each([
+    'bytes=9-',
+    'bytes=0-1,3-4',
+    'invalid',
+  ])('returns 416 for an unsatisfiable range: %s', async (range) => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: range } }
+      )
+    );
+
+    expect(res.status).toBe(416);
+    expect(res.headers.get('content-range')).toBe('bytes */5');
+  });
+
+  it('returns range headers without a body for HEAD', async () => {
+    const body = new Blob(['abcde'], { type: 'video/mp4' });
+    bunFileMock.mockReturnValue({
+      exists: async () => true,
+      size: body.size,
+      slice: (start: number, end: number) => body.slice(start, end),
+      type: body.type,
+    });
+    const handle = startLocalHttpServer(createServerOptions());
+
+    const res = await invoke(
+      new Request(
+        `http://127.0.0.1:4242/attachment?path=attachments%2Fvideo.mp4&token=${handle.token}`,
+        { headers: { Range: 'bytes=1-3' }, method: 'HEAD' }
+      )
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('content-range')).toBe('bytes 1-3/5');
+    expect(res.headers.get('content-length')).toBe('3');
+    expect(await res.text()).toBe('');
+  });
 });

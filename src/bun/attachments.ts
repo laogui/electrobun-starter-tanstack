@@ -1,3 +1,4 @@
+import { rename, rm } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
@@ -214,7 +215,7 @@ export async function saveAttachment(
 }
 
 interface SaveAttachmentStreamInput {
-  body: ReadableStream | Blob | BunFile | ArrayBuffer | Uint8Array;
+  body: NonNullable<ConstructorParameters<typeof Response>[0]>;
   existingFile?: string;
   kind?: AttachmentKind;
   mimeType?: string;
@@ -238,7 +239,15 @@ export async function saveAttachmentStream(
     mimeType,
     suggestedName: input.suggestedName,
   });
-  await Bun.write(fullPath, input.body);
+  const tempPath = `${fullPath}.upload-${crypto.randomUUID()}.tmp`;
+  const writeBody = new Response(input.body);
+  try {
+    await Bun.write(tempPath, writeBody);
+    await rename(tempPath, fullPath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
   return { filePath: relativePath };
 }
 

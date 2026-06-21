@@ -61,6 +61,7 @@ function createProgressReporter(
 }
 
 const FILE_EXT_RE = /\.[^.]+$/;
+const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:[\\/]/;
 
 /**
  * Desktop webviews may expose the dropped file's absolute OS path on the File
@@ -76,7 +77,7 @@ export function getDesktopFilePath(file: File): string | undefined {
   if (!trimmed) {
     return;
   }
-  if (trimmed.startsWith('/') || /^[A-Za-z]:[\\/]/.test(trimmed)) {
+  if (trimmed.startsWith('/') || WINDOWS_ABSOLUTE_PATH_RE.test(trimmed)) {
     return trimmed;
   }
   return;
@@ -250,13 +251,12 @@ async function copyFileIntoWorkspace(
 
 async function ensureVideoThumbnail(
   attachmentFile: string,
-  fileName: string,
   media: MediaMetadata
 ): Promise<MediaMetadata> {
   if (media.thumbnailFile) {
     return media;
   }
-  const generated = await rpcGenerateVideoThumbnail(attachmentFile, fileName);
+  const generated = await rpcGenerateVideoThumbnail(attachmentFile);
   if (!generated?.thumbnailFile) {
     return media;
   }
@@ -283,7 +283,7 @@ export async function saveAssetFile(
   const attachmentFile = assertAttachmentSaved(result, file.name);
 
   if (classified.kind === 'video') {
-    media = await ensureVideoThumbnail(attachmentFile, file.name, media);
+    media = await ensureVideoThumbnail(attachmentFile, media);
   }
 
   reportProgress(1, 'Added to canvas');
@@ -337,7 +337,7 @@ export async function saveAssetFromPath(
   const attachmentFile = assertAttachmentSaved(result, input.fileName);
 
   if (classified.kind === 'video') {
-    media = await ensureVideoThumbnail(attachmentFile, input.fileName, media);
+    media = await ensureVideoThumbnail(attachmentFile, media);
   }
 
   return buildAssetNodePayload(fileLike, attachmentFile, result, media);

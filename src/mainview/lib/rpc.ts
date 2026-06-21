@@ -231,33 +231,14 @@ export async function rpcSaveAttachmentFile(
   return eb.rpc.request.saveAttachmentFile({ sourcePath, ...options });
 }
 
-export interface PickedAssetFile {
-  fileName: string;
-  mimeType: string;
-  size: number;
-  sourcePath: string;
-}
-
-export async function rpcPickAssetFiles(): Promise<{
-  canceled: boolean;
-  files: PickedAssetFile[];
-} | null> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.pickAssetFiles({});
-}
-
 export async function rpcGenerateVideoThumbnail(
-  attachmentFile: string,
-  fileName?: string
+  attachmentFile: string
 ): Promise<{ thumbnailFile?: string } | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;
   }
-  return eb.rpc.request.generateVideoThumbnail({ attachmentFile, fileName });
+  return eb.rpc.request.generateVideoThumbnail({ attachmentFile });
 }
 
 /**

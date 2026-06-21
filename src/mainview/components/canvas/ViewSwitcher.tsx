@@ -25,10 +25,7 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import {
-  saveAssetFileWithProgressToast,
-  saveAssetFromPathWithProgressToast,
-} from '@/lib/assetImportProgress';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   type CreatableMenuItem,
@@ -46,7 +43,6 @@ import {
   rpcDeleteView,
   rpcImportMarkdownFiles,
   rpcListViews,
-  rpcPickAssetFiles,
   rpcRenameView,
   rpcRestoreView,
 } from '@/lib/rpc';
@@ -497,34 +493,26 @@ export function ViewSwitcher({
       ? m.view_node_count_one()
       : m.view_node_count_other({ count: activeViewNodeCount });
 
-  const handleAssetFile = useCallback(
-    async (file: File) => {
-      try {
-        const data = await saveAssetFileWithProgressToast(file);
-        await onCreateNode('asset', { data: { ...data } });
-        setCreateMenuOpen(false);
-      } catch {
+  const handleAssetFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
         return;
+      }
+      setCreateMenuOpen(false);
+      for (const file of files) {
+        try {
+          const data = await saveAssetFileWithProgressToast(file);
+          await onCreateNode('asset', { data: { ...data } });
+        } catch (error) {
+          console.error(
+            '[ViewSwitcher] Failed to import selected file:',
+            error
+          );
+        }
       }
     },
     [onCreateNode, setCreateMenuOpen]
   );
-
-  const handlePickAssetFiles = useCallback(async () => {
-    const picked = await rpcPickAssetFiles();
-    if (!picked || picked.canceled || picked.files.length === 0) {
-      return;
-    }
-    setCreateMenuOpen(false);
-    for (const entry of picked.files) {
-      try {
-        const data = await saveAssetFromPathWithProgressToast(entry);
-        await onCreateNode('asset', { data: { ...data } });
-      } catch (error) {
-        console.error('[ViewSwitcher] Failed to import picked file:', error);
-      }
-    }
-  }, [onCreateNode, setCreateMenuOpen]);
 
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
@@ -557,12 +545,13 @@ export function ViewSwitcher({
     <>
       <input
         className="hidden"
+        multiple
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) {
-            handleAssetFile(file);
-          }
+          const files = Array.from(event.target.files ?? []);
           event.target.value = '';
+          handleAssetFiles(files).catch((error) => {
+            console.error('[ViewSwitcher] Failed to import files:', error);
+          });
         }}
         ref={assetFileInputRef}
         type="file"
@@ -706,7 +695,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () => void handlePickAssetFiles(),
+                      openAssetPicker: () => assetFileInputRef.current?.click(),
                     })
                   )}
                   <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
@@ -716,7 +705,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () => void handlePickAssetFiles(),
+                      openAssetPicker: () => assetFileInputRef.current?.click(),
                     })
                   )}
                   <Menu.Item

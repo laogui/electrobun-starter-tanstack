@@ -630,9 +630,9 @@ describe('viewSwitcher', () => {
     expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('creates asset nodes from the create menu file picker', async () => {
+  it('opens the renderer picker and creates one asset per selected file', async () => {
     const onCreateNode = vi.fn();
-    const assetData = {
+    const firstAssetData = {
       attachmentFile: 'attachments/file_abc.txt',
       color: '#FFFFFF',
       fileName: 'notes.txt',
@@ -641,22 +641,79 @@ describe('viewSwitcher', () => {
       size: 5,
       title: 'notes.txt',
     };
-    saveAssetFileWithProgressToastMock.mockResolvedValueOnce(assetData);
+    const secondAssetData = {
+      ...firstAssetData,
+      attachmentFile: 'attachments/file_def.txt',
+      fileName: 'tasks.txt',
+      title: 'tasks.txt',
+    };
+    saveAssetFileWithProgressToastMock
+      .mockResolvedValueOnce(firstAssetData)
+      .mockResolvedValueOnce(secondAssetData);
 
     const { container } = renderViewSwitcher({
       createMenuOpen: true,
       onCreateNode,
     });
-    const input = container.querySelector('input[type="file"]')!;
-    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const inputClick = vi.spyOn(input, 'click');
+    const firstFile = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+    const secondFile = new File(['tasks'], 'tasks.txt', { type: 'text/plain' });
 
-    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
+
+    expect(inputClick).toHaveBeenCalledOnce();
+    expect(input).toHaveAttribute('multiple');
+
+    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
 
     await waitFor(() => {
-      expect(saveAssetFileWithProgressToastMock).toHaveBeenCalledWith(file);
-      expect(onCreateNode).toHaveBeenCalledWith('asset', {
-        data: assetData,
+      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
+        1,
+        firstFile
+      );
+      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
+        2,
+        secondFile
+      );
+      expect(onCreateNode).toHaveBeenNthCalledWith(1, 'asset', {
+        data: firstAssetData,
       });
+      expect(onCreateNode).toHaveBeenNthCalledWith(2, 'asset', {
+        data: secondAssetData,
+      });
+    });
+  });
+
+  it('continues importing selected files after one file fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onCreateNode = vi.fn();
+    const savedAsset = {
+      attachmentFile: 'attachments/file_def.txt',
+      color: '#FFFFFF',
+      fileName: 'tasks.txt',
+      kind: 'file',
+      mimeType: 'text/plain',
+      size: 5,
+      title: 'tasks.txt',
+    };
+    saveAssetFileWithProgressToastMock
+      .mockRejectedValueOnce(new Error('first failed'))
+      .mockResolvedValueOnce(savedAsset);
+    const { container } = renderViewSwitcher({ onCreateNode });
+    const input = container.querySelector('input[type="file"]')!;
+    const firstFile = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+    const secondFile = new File(['tasks'], 'tasks.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
+
+    await waitFor(() => {
+      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
+        2,
+        secondFile
+      );
+      expect(onCreateNode).toHaveBeenCalledWith('asset', { data: savedAsset });
     });
   });
 

@@ -1,6 +1,6 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 
 import { assertWorkspaceAttachmentPath } from './attachments';
 
@@ -410,8 +410,7 @@ const VIDEO_POSTER_MAX_EDGE = 640;
  */
 export async function generateVideoPosterFile(
   wsPath: string,
-  sourceFullPath: string,
-  suggestedName: string
+  sourceFullPath: string
 ): Promise<string | undefined> {
   if (process.platform !== 'darwin') {
     return;
@@ -441,7 +440,6 @@ export async function generateVideoPosterFile(
       return;
     }
     const posterFile = Bun.file(join(tempDir, posterName));
-    const baseName = basename(suggestedName).replace(/\.[^.]+$/, '') || 'video';
     const targetPath = `attachments/img_${crypto.randomUUID().slice(0, 8)}.png`;
     const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
       wsPath,

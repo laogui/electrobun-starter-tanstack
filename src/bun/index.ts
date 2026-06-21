@@ -561,20 +561,8 @@ interface CanvasRPC {
           notes: Array<{ noteId: string; title: string; content?: string }>;
         };
       };
-      pickAssetFiles: {
-        params: Record<string, unknown>;
-        response: {
-          canceled: boolean;
-          files: Array<{
-            fileName: string;
-            mimeType: string;
-            size: number;
-            sourcePath: string;
-          }>;
-        };
-      };
       generateVideoThumbnail: {
-        params: { attachmentFile: string; fileName?: string };
+        params: { attachmentFile: string };
         response: { thumbnailFile?: string };
       };
 
@@ -1893,44 +1881,12 @@ async function main() {
           return { ...saved, ...metadata };
         },
 
-        pickAssetFiles: async () => {
-          const selected = await Utils.openFileDialog({
-            allowedFileTypes: '*',
-            allowsMultipleSelection: true,
-            canChooseDirectory: false,
-            canChooseFiles: true,
-            startingFolder: '~/Desktop',
-          });
-          const paths = selected.filter(Boolean);
-          if (paths.length === 0) {
-            return { canceled: true, files: [] };
-          }
-          const files = [];
-          for (const sourcePath of paths) {
-            const sourceFile = Bun.file(sourcePath);
-            if (!(await sourceFile.exists())) {
-              continue;
-            }
-            files.push({
-              fileName: basename(sourcePath),
-              mimeType: sourceFile.type || 'application/octet-stream',
-              size: sourceFile.size,
-              sourcePath,
-            });
-          }
-          return { canceled: false, files };
-        },
-
-        generateVideoThumbnail: async ({ attachmentFile, fileName }) => {
+        generateVideoThumbnail: async ({ attachmentFile }) => {
           const { fullPath } = assertWorkspaceAttachmentPath(
             wsPath,
             attachmentFile
           );
-          const thumbnailFile = await generateVideoPosterFile(
-            wsPath,
-            fullPath,
-            fileName ?? basename(fullPath)
-          );
+          const thumbnailFile = await generateVideoPosterFile(wsPath, fullPath);
           return thumbnailFile ? { thumbnailFile } : {};
         },
 

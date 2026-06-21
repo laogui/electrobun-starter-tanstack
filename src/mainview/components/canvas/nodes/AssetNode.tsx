@@ -279,11 +279,13 @@ function useResolvedAttachmentPreview(
       return;
     }
     let cancelled = false;
-    void resolveAttachmentStreamUrl(attachmentFile).then((url) => {
-      if (!cancelled && url) {
-        setResolvedUrl(url);
-      }
-    });
+    resolveAttachmentStreamUrl(attachmentFile)
+      .then((url) => {
+        if (!cancelled && url) {
+          setResolvedUrl(url);
+        }
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

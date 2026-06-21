@@ -165,6 +165,7 @@ describe('saveAssetFile', () => {
   });
 
   it('falls back to bun-side poster generation when renderer thumbnail extraction fails', async () => {
+    vi.stubGlobal('URL', {});
     uploadAttachmentBlobMock.mockResolvedValueOnce({
       filePath: 'attachments/video_abc.mp4',
     });
@@ -180,8 +181,7 @@ describe('saveAssetFile', () => {
 
     expect(result.thumbnailFile).toBe('attachments/img_poster.png');
     expect(rpcGenerateVideoThumbnailMock).toHaveBeenCalledWith(
-      'attachments/video_abc.mp4',
-      'clip.mp4'
+      'attachments/video_abc.mp4'
     );
   });
 

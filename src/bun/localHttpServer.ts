@@ -32,6 +32,44 @@ const CORS_HEADERS = {
     'Content-Length, Content-Range, Accept-Ranges',
 } as const;
 
+const BYTE_RANGE_RE = /^bytes=(?:(\d+)-(\d*)|-(\d+))$/i;
+
+interface ByteRange {
+  end: number;
+  start: number;
+}
+
+function parseByteRange(value: string, size: number): ByteRange | null {
+  if (!(Number.isSafeInteger(size) && size > 0)) {
+    return null;
+  }
+  const match = BYTE_RANGE_RE.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  if (match[3] !== undefined) {
+    const suffixLength = Number(match[3]);
+    if (!(Number.isSafeInteger(suffixLength) && suffixLength > 0)) {
+      return null;
+    }
+    return {
+      start: Math.max(0, size - suffixLength),
+      end: size - 1,
+    };
+  }
+
+  const start = Number(match[1]);
+  if (!(Number.isSafeInteger(start) && start >= 0 && start < size)) {
+    return null;
+  }
+  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+  if (!(Number.isSafeInteger(requestedEnd) && requestedEnd >= start)) {
+    return null;
+  }
+  return { start, end: Math.min(requestedEnd, size - 1) };
+}
+
 function readRequestToken(
   req: Request,
   url: URL,
@@ -73,29 +111,26 @@ async function serveWorkspaceAttachment(
 
   const rangeHeader = req.headers.get('range');
   if (rangeHeader) {
-    const match = /^bytes=(\d+)-(\d*)$/i.exec(rangeHeader);
-    if (match) {
-      const start = Number(match[1]);
-      const end = match[2] ? Number(match[2]) : size - 1;
-      if (
-        Number.isFinite(start) &&
-        Number.isFinite(end) &&
-        start >= 0 &&
-        end >= start &&
-        end < size
-      ) {
-        const chunk = file.slice(start, end + 1);
-        const body = req.method === 'HEAD' ? null : chunk;
-        return new Response(body, {
-          status: 206,
-          headers: {
-            ...baseHeaders,
-            'Content-Length': String(end - start + 1),
-            'Content-Range': `bytes ${start}-${end}/${size}`,
-          },
-        });
-      }
+    const range = parseByteRange(rangeHeader, size);
+    if (!range) {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          ...baseHeaders,
+          'Content-Range': `bytes */${size}`,
+        },
+      });
     }
+    const chunk = file.slice(range.start, range.end + 1);
+    const body = req.method === 'HEAD' ? null : chunk;
+    return new Response(body, {
+      status: 206,
+      headers: {
+        ...baseHeaders,
+        'Content-Length': String(range.end - range.start + 1),
+        'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
+      },
+    });
   }
 
   if (req.method === 'HEAD') {

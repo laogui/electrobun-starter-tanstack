@@ -1,7 +1,7 @@
 import { Check, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { LicenseInfo } from '@/lib/rpc-license';
-import { rpcCheckLicense } from '@/lib/rpc-license';
+import { refreshLicense } from '@/lib/rpc-license';
 
 interface LicenseStatusCardProps {
   onActivateClick: () => void;
@@ -12,20 +12,18 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadLicense();
-  }, []);
-
-  const loadLicense = async () => {
     setLoading(true);
-    try {
-      const status = await rpcCheckLicense();
-      setLicense(status);
-    } catch (error) {
-      console.error('[License] Failed to load:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    refreshLicense()
+      .then((status) => {
+        setLicense(status);
+      })
+      .catch((error) => {
+        console.error('[License] Failed to load:', error);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   if (loading) {
     return (
@@ -83,6 +81,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
           <button
             className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 font-medium text-sm text-white transition-colors hover:bg-blue-600"
             onClick={onActivateClick}
+            type="button"
           >
             <Sparkles size={14} />
             Activate Pro License
@@ -98,8 +97,8 @@ export function LicenseStatusBadge() {
   const [licensed, setLicensed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    rpcCheckLicense().then((status) => {
-      setLicensed(status?.activated);
+    refreshLicense().then((status) => {
+      setLicensed(Boolean(status?.activated));
     });
   }, []);
 

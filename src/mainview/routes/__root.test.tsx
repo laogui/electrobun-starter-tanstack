@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const rpcMocks = vi.hoisted(() => ({
   rpcGetSettings: vi.fn(),
   rpcOpenSettings: vi.fn(),
+  refreshLicense: vi.fn(),
 }));
 const setThemeMock = vi.fn();
 const setLocaleMock = vi.fn();
@@ -20,6 +21,10 @@ vi.mock('better-themes', () => ({
 vi.mock('@/lib/rpc', () => ({
   rpcGetSettings: rpcMocks.rpcGetSettings,
   rpcOpenSettings: rpcMocks.rpcOpenSettings,
+}));
+
+vi.mock('@/lib/rpc-license', () => ({
+  refreshLicense: rpcMocks.refreshLicense,
 }));
 
 vi.mock('../../paraglide/runtime.js', () => ({
@@ -92,6 +97,7 @@ describe('__root route', () => {
   beforeEach(() => {
     rpcMocks.rpcGetSettings.mockReset();
     rpcMocks.rpcOpenSettings.mockReset();
+    rpcMocks.refreshLicense.mockReset();
     setThemeMock.mockReset();
     setLocaleMock.mockReset();
     setSearchOpenMock.mockReset();
@@ -99,6 +105,7 @@ describe('__root route', () => {
     useRouterStateMock.mockReturnValue('/');
     rpcMocks.rpcGetSettings.mockResolvedValue({ theme: 'dark', locale: 'zh' });
     rpcMocks.rpcOpenSettings.mockResolvedValue({ success: true });
+    rpcMocks.refreshLicense.mockResolvedValue({ activated: false });
   });
 
   afterEach(() => {
@@ -114,6 +121,15 @@ describe('__root route', () => {
       expect(rpcMocks.rpcGetSettings).toHaveBeenCalledTimes(1);
       expect(setThemeMock).toHaveBeenCalledWith('dark');
       expect(setLocaleMock).toHaveBeenCalledWith('zh');
+    });
+  });
+
+  it('prefetches the license status on mount', async () => {
+    const RootDocument = await loadRootDocument();
+    render(<RootDocument />);
+
+    await waitFor(() => {
+      expect(rpcMocks.refreshLicense).toHaveBeenCalledTimes(1);
     });
   });
 

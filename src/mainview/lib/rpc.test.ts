@@ -20,6 +20,8 @@ const request = {
   listTemplates: vi.fn(),
   getTemplate: vi.fn(),
   createViewFromTemplate: vi.fn(),
+  checkLicense: vi.fn(),
+  activateLicense: vi.fn(),
 };
 
 const defineRPC = vi.fn(() => ({ request }));
@@ -84,6 +86,8 @@ describe('rpc', () => {
       success: false,
     });
     await expect(rpc.rpcGetSettings()).resolves.toBeNull();
+    await expect(rpc.rpcCheckLicense()).resolves.toBeNull();
+    await expect(rpc.rpcActivateLicense('GHOST-TEST')).resolves.toBeNull();
     await expect(rpc.rpcOpenSettings()).resolves.toEqual({ success: false });
     await expect(rpc.rpcListViews()).resolves.toBeNull();
     await expect(rpc.rpcCreateView('Inbox')).resolves.toBeNull();
@@ -108,14 +112,17 @@ describe('rpc', () => {
     request.listViews.mockResolvedValue([
       { id: 'default', name: 'Default Canvas' },
     ]);
+    request.checkLicense.mockResolvedValue({ activated: false });
 
     await rpc.rpcGetSettings();
     await rpc.rpcListViews();
+    await rpc.rpcCheckLicense();
 
     expect(defineRPC).toHaveBeenCalledTimes(1);
     expect(ElectroviewCtor).toHaveBeenCalledTimes(1);
     expect(request.getSettings).toHaveBeenCalledWith({});
     expect(request.listViews).toHaveBeenCalledWith({});
+    expect(request.checkLicense).toHaveBeenCalledWith({});
   });
 
   it('uses a finite renderer-side RPC request timeout', async () => {
@@ -153,6 +160,8 @@ describe('rpc', () => {
     await rpc.rpcLoadAttachment('images/a.png');
     await rpc.rpcOpenAttachment('attachments/file_abc.pdf');
     await rpc.rpcOpenSettings();
+    await rpc.rpcCheckLicense();
+    await rpc.rpcActivateLicense('GHOST-ABCD-EFGH-IJKL-1234');
     await rpc.rpcCreateView('Inbox');
     await rpc.rpcDeleteView('view-1');
     await rpc.rpcRenameView('view-1', 'Renamed');
@@ -197,6 +206,10 @@ describe('rpc', () => {
       filePath: 'attachments/file_abc.pdf',
     });
     expect(request.openSettings).toHaveBeenCalledWith({});
+    expect(request.checkLicense).toHaveBeenCalledWith({});
+    expect(request.activateLicense).toHaveBeenCalledWith({
+      key: 'GHOST-ABCD-EFGH-IJKL-1234',
+    });
     expect(request.createView).toHaveBeenCalledWith({ name: 'Inbox' });
     expect(request.deleteView).toHaveBeenCalledWith({ viewId: 'view-1' });
     expect(request.renameView).toHaveBeenCalledWith({

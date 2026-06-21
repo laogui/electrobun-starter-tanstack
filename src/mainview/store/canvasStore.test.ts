@@ -25,13 +25,17 @@ const {
   rpcDeleteNoteMock,
   rpcSaveManifestMock,
   rpcCheckLicenseMock,
+  getCachedLicenseMock,
 } = vi.hoisted(() => ({
   loadCanvasMock: vi.fn(),
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
-  rpcCheckLicenseMock: vi.fn(() =>
-    Promise.resolve({ activated: true, email: 'test@example.com' })
-  ),
+  rpcCheckLicenseMock: vi.fn<
+    () => Promise<{ activated: boolean; email?: string } | null>
+  >(() => Promise.resolve({ activated: true, email: 'test@example.com' })),
+  getCachedLicenseMock: vi.fn<
+    () => { activated: boolean; email?: string } | null
+  >(() => null),
 }));
 
 vi.mock('@/lib/rpc', () => ({
@@ -41,6 +45,8 @@ vi.mock('@/lib/rpc', () => ({
 }));
 
 vi.mock('@/lib/rpc-license', () => ({
+  getCachedLicense: getCachedLicenseMock,
+  refreshLicense: rpcCheckLicenseMock,
   rpcCheckLicense: rpcCheckLicenseMock,
 }));
 
@@ -106,6 +112,13 @@ afterEach(() => {
   resetStore();
   vi.unstubAllGlobals();
   rpcDeleteNoteMock.mockClear();
+  rpcCheckLicenseMock.mockReset();
+  rpcCheckLicenseMock.mockResolvedValue({
+    activated: true,
+    email: 'test@example.com',
+  });
+  getCachedLicenseMock.mockReset();
+  getCachedLicenseMock.mockReturnValue(null);
   loadCanvasMock.mockReset();
   rpcSaveManifestMock.mockReset();
   rpcSaveManifestMock.mockResolvedValue({ success: true });
@@ -966,6 +979,112 @@ describe('canvasStore — changeNodeColor', () => {
 });
 
 describe('canvasStore — createNode', () => {
+  const fillFreeCardLimit = () => {
+    useCanvasStore.setState({
+      nodes: Array.from({ length: 100 }, (_, index) =>
+        makeNode(`existing-card-${index}`, {
+          position: { x: 10_000 + index * 1000, y: 10_000 },
+        })
+      ),
+    });
+  };
+
+  it('does not check the license when creating below the free card limit', async () => {
+    await useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(rpcCheckLicenseMock).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toHaveLength(1);
+  });
+
+  it('does not check the license for an unlimited node kind at the card limit', async () => {
+    fillFreeCardLimit();
+
+    await useCanvasStore
+      .getState()
+      .createNode('folder', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(rpcCheckLicenseMock).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
+  });
+
+  it.each([
+    'card',
+    'sticky',
+    'checklist',
+  ] as const)('blocks an unlicensed user from creating %s beyond the free card limit', async (kind) => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockResolvedValue({ activated: false });
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode(kind, createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toBeUndefined();
+    expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toHaveLength(100);
+  });
+
+  it('allows a licensed user to create beyond the free card limit', async () => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockResolvedValue({ activated: true });
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toMatch(NODE_ID_REGEX);
+    expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
+  });
+
+  it('uses a cached active license without refreshing at the free card limit', async () => {
+    fillFreeCardLimit();
+    getCachedLicenseMock.mockReturnValue({ activated: true });
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toMatch(NODE_ID_REGEX);
+    expect(rpcCheckLicenseMock).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
+  });
+
+  it('rechecks a cached inactive license so cross-window activation is observed', async () => {
+    fillFreeCardLimit();
+    getCachedLicenseMock.mockReturnValue({ activated: false });
+    rpcCheckLicenseMock.mockResolvedValue({ activated: true });
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode('sticky', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toMatch(NODE_ID_REGEX);
+    expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
+  });
+
+  it('allows creation when the boundary license check fails', async () => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockRejectedValue(new Error('RPC unavailable'));
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toMatch(NODE_ID_REGEX);
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
+    expect(consoleError).toHaveBeenCalledWith(
+      '[License] Check failed:',
+      expect.any(Error)
+    );
+  });
+
   it('creates a card node using the viewport center', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1200,

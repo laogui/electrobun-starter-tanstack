@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTitlebarDragReleaseFix } from '@/hooks/useTitlebarDragReleaseFix';
 import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
+import { refreshLicense } from '@/lib/rpc-license';
 import type { AppSettings, FontFamilySetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -88,6 +89,12 @@ function RootDocument() {
       applyAll(s as AppSettings);
     });
   }, [applyAll]);
+
+  // Warm the session cache through the shared renderer RPC connection. This
+  // is intentionally fire-and-forget so license I/O never delays the shell.
+  useEffect(() => {
+    refreshLicense();
+  }, []);
 
   // Listen for live pushes from the settings window
   useEffect(() => {

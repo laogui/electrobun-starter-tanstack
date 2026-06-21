@@ -38,7 +38,7 @@ import {
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
-import { rpcCheckLicense } from '@/lib/rpc-license';
+import { getCachedLicense, refreshLicense } from '@/lib/rpc-license';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -1452,29 +1452,35 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   nextNodeId: () => `node-${nanoid(8)}`,
 
   createNode: async (type, rfInstance, options) => {
-    // License check: limit card creation for unlicensed users
+    const spec = buildNewNodeSpec(type);
+    const isLimitedNode =
+      spec.base.type === 'card' || spec.base.type === 'sticky';
     const currentNodes = get().nodes;
     const cardCount = currentNodes.filter(
       (n) => n.type === 'card' || n.type === 'sticky'
     ).length;
 
-    try {
-      const license = await rpcCheckLicense();
-      if (!license?.activated && cardCount >= 100) {
-        toast.error(
-          'Free version limited to 100 cards. Please activate a license to continue.',
-          {
-            duration: 4000,
-          }
-        );
-        return;
+    if (isLimitedNode && cardCount >= 100) {
+      try {
+        const cachedLicense = getCachedLicense();
+        const license = cachedLicense?.activated
+          ? cachedLicense
+          : await refreshLicense();
+        if (license && !license.activated) {
+          toast.error(
+            'Free version limited to 100 cards. Please activate a license to continue.',
+            {
+              duration: 4000,
+            }
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('[License] Check failed:', error);
+        // Continue on error to avoid blocking offline users
       }
-    } catch (error) {
-      console.error('[License] Check failed:', error);
-      // Continue on error to avoid blocking offline users
     }
 
-    const spec = buildNewNodeSpec(type);
     const viewport = rfInstance?.getViewport();
     const zoom = viewport?.zoom ?? 1;
 

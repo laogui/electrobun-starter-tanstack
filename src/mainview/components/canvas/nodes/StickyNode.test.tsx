@@ -132,37 +132,18 @@ describe('StickyNode', () => {
     });
   });
 
-  it('does not enter edit mode when clicking an unselected sticky', () => {
+  it('enters edit mode on a plain single click of an unselected sticky', () => {
     vi.useFakeTimers();
-    render(
-      <StickyNode
-        data={{ color: '#ffee88', content: 'Select me' }}
-        id="sticky-click"
-      />
-    );
-
-    const content = screen.getByText('Select me');
-    const visual = content.parentElement?.parentElement!;
-    fireEvent.pointerDown(visual);
-    fireEvent.click(visual);
-    vi.advanceTimersByTime(20);
-    expect(content.getAttribute('contenteditable')).toBe('false');
-    vi.useRealTimers();
-  });
-
-  it('enters edit mode when clicking the already-selected sticky', () => {
-    vi.useFakeTimers();
-    storeState.nodes = [{ id: 'sticky-selected', selected: true }];
     render(
       <StickyNode
         data={{ color: '#ffee88', content: 'Edit me' }}
-        id="sticky-selected"
+        id="sticky-click"
       />
     );
 
     const content = screen.getByText('Edit me');
     const visual = content.parentElement?.parentElement!;
-    fireEvent.pointerDown(visual);
+    // No prior selection required: a single plain click opens the editor.
     fireEvent.click(visual);
     vi.advanceTimersByTime(20);
     expect(content.getAttribute('contenteditable')).toBe('true');

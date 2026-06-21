@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  computeImageNodeSize,
   createImageDropPreview,
   isImageFile,
   isOsFileDrag,
@@ -54,6 +55,59 @@ describe('isOsFileDrag', () => {
         items: [],
       } as unknown as DataTransfer)
     ).toBe(false);
+  });
+});
+
+describe('computeImageNodeSize', () => {
+  it('keeps a fixed base width snapped to the 24px grid', () => {
+    // 350 -> nearest multiple of 24 is 360.
+    const { width } = computeImageNodeSize(1000, 1000);
+    expect(width).toBe(360);
+  });
+
+  it('makes a square card for a square image', () => {
+    expect(computeImageNodeSize(800, 800)).toEqual({
+      width: 360,
+      height: 360,
+    });
+  });
+
+  it('derives a shorter card for a wide image (height from aspect)', () => {
+    // 16:9 ~= 1.78 aspect -> height = 350 / 1.78 ~= 197 -> snap to 192.
+    const { width, height } = computeImageNodeSize(1600, 900);
+    expect(width).toBe(360);
+    expect(height).toBe(192);
+    expect(height).toBeLessThan(width);
+  });
+
+  it('derives a taller card for a portrait image', () => {
+    // 9:16 ~= 0.5625 aspect -> height = 350 / 0.5625 ~= 622 -> snap to 624.
+    const { width, height } = computeImageNodeSize(900, 1600);
+    expect(width).toBe(360);
+    expect(height).toBe(624);
+    expect(height).toBeGreaterThan(width);
+  });
+
+  it('clamps an extremely tall image to the max height (center-cropped)', () => {
+    // Aspect clamped to 1:3 -> height = 350 * 3 = 1050 -> clamped to 900.
+    const { width, height } = computeImageNodeSize(200, 4000);
+    expect(width).toBe(360);
+    expect(height).toBe(900);
+  });
+
+  it('clamps an extremely wide image to the min height (center-cropped)', () => {
+    // Aspect clamped to 3:1 -> height = 350 / 3 ~= 117 -> clamped to 150.
+    const { width, height } = computeImageNodeSize(4000, 200);
+    expect(width).toBe(360);
+    expect(height).toBe(150);
+  });
+
+  it('falls back to a square card for degenerate dimensions', () => {
+    expect(computeImageNodeSize(0, 0)).toEqual({ width: 350, height: 350 });
+    expect(computeImageNodeSize(Number.NaN, 100)).toEqual({
+      width: 350,
+      height: 350,
+    });
   });
 });
 

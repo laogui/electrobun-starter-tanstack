@@ -83,6 +83,11 @@ export interface CreateNodeOptions {
   data?: Record<string, unknown>;
   /** When false, skip the post-create viewport pan (batch imports). Default true. */
   focusViewport?: boolean;
+  /**
+   * Override the node kind's default size. Used by image imports to size the
+   * card to the dropped image's aspect ratio instead of the fixed default.
+   */
+  size?: { height: number; width: number };
 }
 
 export interface AddConnectionOptions {
@@ -1453,6 +1458,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   createNode: async (type, rfInstance, options) => {
     const spec = buildNewNodeSpec(type);
+    const size = options?.size ?? spec.size;
     const isLimitedNode =
       spec.base.type === 'card' || spec.base.type === 'sticky';
     const currentNodes = get().nodes;
@@ -1497,8 +1503,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         };
     const center = options?.anchorCenter ?? viewportCenter;
     const anchor = options?.anchor ?? {
-      x: center.x - spec.size.width / 2,
-      y: center.y - spec.size.height / 2,
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2,
     };
 
     const { nodes } = get();
@@ -1507,7 +1513,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       anchor,
       nodes,
       newType: specType,
-      size: spec.size,
+      size,
     });
 
     if (!canPlace) {
@@ -1532,6 +1538,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ...spec.base,
       id,
       position,
+      ...(options?.size
+        ? {
+            style: {
+              ...(spec.base.style as Record<string, unknown>),
+              width: size.width,
+              height: size.height,
+            },
+          }
+        : {}),
       data: {
         ...(spec.base.data as Record<string, unknown>),
         ...(options?.data ?? {}),
@@ -1545,8 +1560,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       typeof rfInstance?.setCenter === 'function'
     ) {
       rfInstance.setCenter(
-        placement.x + spec.size.width / 2,
-        placement.y + spec.size.height / 2,
+        placement.x + size.width / 2,
+        placement.y + size.height / 2,
         { duration: 240, zoom }
       );
     }

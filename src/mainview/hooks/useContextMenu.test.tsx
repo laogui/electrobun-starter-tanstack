@@ -206,7 +206,7 @@ vi.mock('@/store/canvasStore', () => ({
         ...storeActions,
       }),
     {
-      getState: () => storeState,
+      getState: () => ({ ...storeState, ...storeActions }),
       setState: (partial: Partial<typeof storeState>) => {
         Object.assign(storeState, partial);
       },
@@ -599,6 +599,9 @@ describe('useContextMenu', () => {
   beforeEach(() => {
     screenToFlowPosition.mockClear();
     rpcMocks.rpcImportMarkdownFiles.mockReset();
+    // Selection now changes on right-click, so start each test from a clean
+    // selection to avoid leaking state between tests.
+    storeState.nodes = storeState.nodes.map((n) => ({ ...n, selected: false }));
   });
 
   it('tracks pane/node/edge context menu state', () => {
@@ -643,6 +646,39 @@ describe('useContextMenu', () => {
     expect(output).toHaveTextContent(
       '{"x":120,"y":160,"target":"edge","edgeId":"edge-1"}'
     );
+  });
+
+  it('selects the right-clicked node when it is outside the current selection', () => {
+    // A different node is selected; right-clicking folder-1 should make it the
+    // sole selection so batch actions act on the menu target.
+    storeState.nodes = storeState.nodes.map((n) => ({
+      ...n,
+      selected: n.id === 'card-1',
+    }));
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'node' }));
+
+    const selectedIds = storeState.nodes
+      .filter((n) => n.selected)
+      .map((n) => n.id);
+    expect(selectedIds).toEqual(['folder-1']);
+  });
+
+  it('preserves a multi-selection when right-clicking a node inside it', () => {
+    storeState.nodes = storeState.nodes.map((n) => ({
+      ...n,
+      selected: n.id === 'card-1' || n.id === 'folder-1',
+    }));
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'node' }));
+
+    const selectedIds = storeState.nodes
+      .filter((n) => n.selected)
+      .map((n) => n.id)
+      .sort();
+    expect(selectedIds).toEqual(['card-1', 'folder-1']);
   });
 
   it('imports markdown at the saved context-menu anchor', async () => {

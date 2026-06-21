@@ -267,36 +267,13 @@ const StickyNode = ({
     }
   }, [editRequested, editing, enterEditing, setEditingStickyId]);
 
-  // Slide-editor click model: the first click only selects; clicking a sticky
-  // that was already the sole selection enters edit mode. Selection state is
-  // sampled on pointerdown — before React Flow applies this click's selection
-  // change — so a fresh select-click never starts editing.
-  const wasSoleSelectionRef = useRef(false);
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
-        wasSoleSelectionRef.current = false;
-        return;
-      }
-      const selectedNodes = useCanvasStore
-        .getState()
-        .nodes.filter((n) => n.selected);
-      wasSoleSelectionRef.current =
-        selectedNodes.length === 1 && selectedNodes[0]?.id === id;
-    },
-    [id]
-  );
-
+  // Single-click-to-edit model (mirrors the canvas' single-click-to-open): a
+  // plain click enters edit mode directly, since editing IS a sticky's "open".
+  // Modifier-clicks are reserved for selection and a drag never emits a click,
+  // so neither starts editing.
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (
-        editing ||
-        !wasSoleSelectionRef.current ||
-        e.shiftKey ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey
-      ) {
+      if (editing || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
         return;
       }
       e.stopPropagation();
@@ -305,8 +282,9 @@ const StickyNode = ({
     [editing, enterEditing]
   );
 
-  // Double-click still works as a fast path when the sticky was not selected
-  // yet (first click selects, the dblclick event then enters editing).
+  // Double-click stays as a redundant edit path in case the first click is
+  // swallowed (e.g. by a drag threshold). Harmless once the click already
+  // entered editing.
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (editing) {
@@ -374,7 +352,6 @@ const StickyNode = ({
         )}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        onPointerDown={handlePointerDown}
       >
         <StickyContent
           data={data}

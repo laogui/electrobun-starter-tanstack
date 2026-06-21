@@ -42,6 +42,10 @@ const reactFlowMocks = vi.hoisted(() => ({
   props: vi.fn(),
 }));
 
+const helperLineMocks = vi.hoisted(() => ({
+  onNodesChange: vi.fn(),
+}));
+
 const toastMocks = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -237,6 +241,7 @@ vi.mock('@xyflow/react', async () => {
       onDrop,
       onNodeClick,
       onNodeDoubleClick,
+      onNodesChange,
       snapGrid,
       snapToGrid,
       children,
@@ -261,6 +266,9 @@ vi.mock('@xyflow/react', async () => {
       onNodeDoubleClick?: (
         event: MouseEvent,
         node: { id: string; type?: string; data: Record<string, unknown> }
+      ) => void;
+      onNodesChange?: (
+        changes: Array<{ id: string; type: string; selected?: boolean }>
       ) => void;
       snapGrid?: [number, number];
       snapToGrid?: boolean;
@@ -342,8 +350,34 @@ vi.mock('@xyflow/react', async () => {
           >
             Click focused node
           </button>
+          <button
+            onClick={() => {
+              const node = nodes[0];
+              if (!node) {
+                return;
+              }
+              onNodeClick?.({ shiftKey: true } as MouseEvent, node);
+            }}
+            type="button"
+          >
+            Shift-click focused node
+          </button>
+          <button
+            onClick={() => {
+              const node = nodes[0];
+              if (!node) {
+                return;
+              }
+              onNodesChange?.([
+                { id: node.id, selected: true, type: 'select' },
+              ]);
+            }}
+            type="button"
+          >
+            Apply RF selection
+          </button>
           {nodes.map((node) => (
-            <div data-id={node.id} key={node.id}>
+            <div className="react-flow__node" data-id={node.id} key={node.id}>
               {String(node.data.title ?? node.id)}
             </div>
           ))}
@@ -380,7 +414,7 @@ vi.mock('@/hooks/useHelperLines', () => ({
   useHelperLines: () => ({
     helperLineH: null,
     helperLineV: null,
-    onNodesChange: vi.fn(),
+    onNodesChange: helperLineMocks.onNodesChange,
   }),
 }));
 
@@ -469,6 +503,7 @@ describe('routes/index', () => {
       (name: string) => `safe-${name}`
     );
     reactFlowMocks.props.mockReset();
+    helperLineMocks.onNodesChange.mockReset();
     toastMocks.error.mockReset();
     toastMocks.success.mockReset();
 
@@ -549,7 +584,7 @@ describe('routes/index', () => {
     });
   });
 
-  it('opens the focused view when clicking the already sole-selected node', async () => {
+  it('opens the focused view on a plain single click', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
       .component as () => React.ReactElement;
@@ -559,10 +594,6 @@ describe('routes/index', () => {
     await waitFor(() => {
       expect(screen.getByText('Loaded Card')).toBeInTheDocument();
     });
-
-    useCanvasStore.setState((s) => ({
-      nodes: s.nodes.map((n) => ({ ...n, selected: n.id === 'loaded-1' })),
-    }));
 
     const rect = {
       x: 0,
@@ -578,8 +609,7 @@ describe('routes/index', () => {
     const element = document.querySelector('[data-id="loaded-1"]');
     vi.spyOn(element!, 'getBoundingClientRect').mockReturnValue(rect);
 
-    // Pointerdown samples the pre-click selection; the click then opens.
-    fireEvent.pointerDown(element!);
+    // A single plain click opens directly, no prior selection required.
     fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
 
     await waitFor(() => {
@@ -587,7 +617,52 @@ describe('routes/index', () => {
     });
   });
 
-  it('keeps the first click as select-only without opening the focused view', async () => {
+  it('opens a folder view on a plain single click', async () => {
+    rpcMocks.loadCanvas.mockResolvedValue({
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: { title: 'My Folder', subtitle: '', children: [] },
+        },
+      ],
+      edges: [],
+    });
+
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('My Folder')).toBeInTheDocument();
+    });
+
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 100,
+      toJSON: () => ({}),
+    } as DOMRect;
+    const element = document.querySelector('[data-id="folder-1"]');
+    vi.spyOn(element!, 'getBoundingClientRect').mockReturnValue(rect);
+
+    // Folders open their focused view on a single plain click too.
+    fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Folder folder-1')).toBeInTheDocument();
+    });
+  });
+
+  it('does not open the focused view on a modifier-click (selection only)', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
       .component as () => React.ReactElement;
@@ -598,13 +673,56 @@ describe('routes/index', () => {
       expect(screen.getByText('Loaded Card')).toBeInTheDocument();
     });
 
-    const element = document.querySelector('[data-id="loaded-1"]');
-
-    // No node was selected at pointerdown time, so this click only selects.
-    fireEvent.pointerDown(element!);
-    fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
+    // Shift-click is reserved for adjusting selection, so it must not open.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Shift-click focused node' })
+    );
 
     expect(screen.queryByText('Focused loaded-1')).toBeNull();
+  });
+
+  it('drops the selection change from a plain click on a node', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    // Pressing down on a node (no modifier) arms suppression; the pure
+    // selection change React Flow would emit for that click is then dropped
+    // before it reaches the selection pipeline.
+    const element = document.querySelector('[data-id="loaded-1"]');
+    fireEvent.pointerDown(element!);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply RF selection' }));
+
+    expect(helperLineMocks.onNodesChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps selection changes from marquee/modifier interactions', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    // A press that does not originate on a node (marquee on the pane) leaves
+    // suppression off, so the selection change flows through untouched.
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Apply RF selection' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Apply RF selection' }));
+
+    expect(helperLineMocks.onNodesChange).toHaveBeenCalledWith([
+      { id: 'loaded-1', selected: true, type: 'select' },
+    ]);
   });
 
   it('enables 24px snap-to-grid dragging', async () => {

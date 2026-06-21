@@ -114,9 +114,23 @@ export function useContextMenu({
     e.preventDefault();
     // Right-clicking a node that is part of a multi-selection swaps the menu
     // for the batch variant so the user can act on every selected node.
-    const selected = useCanvasStore.getState().nodes.filter((n) => n.selected);
+    const { nodes, setNodes } = useCanvasStore.getState();
+    const selected = nodes.filter((n) => n.selected);
     const isMulti =
       selected.length > 1 && selected.some((n) => n.id === node.id);
+    // Plain clicks no longer select, so keep the visible selection in sync with
+    // what the menu acts on: a right-click outside the current selection makes
+    // the target the sole selection; a right-click inside a multi-selection
+    // preserves it for batch actions.
+    if (!isMulti) {
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.selected === (n.id === node.id)
+            ? n
+            : { ...n, selected: n.id === node.id }
+        )
+      );
+    }
     setContextMenu({
       x: e.clientX,
       y: e.clientY,

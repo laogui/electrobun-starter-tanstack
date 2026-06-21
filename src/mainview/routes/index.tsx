@@ -1,5 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
-import type { Connection, Node, ReactFlowInstance } from '@xyflow/react';
+import type {
+  Connection,
+  Node,
+  NodeChange,
+  ReactFlowInstance,
+} from '@xyflow/react';
 import {
   Background,
   BackgroundVariant,
@@ -62,10 +67,12 @@ import {
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
 import {
+  computeImageNodeSize,
   createImageDropPreview,
   isImageFile,
   isOsFileDrag,
   persistImportedImage,
+  readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
@@ -247,9 +254,17 @@ function CanvasComponent() {
 
         if (isImageFile(file)) {
           const preview = createImageDropPreview(file);
+          // Size the card to the image's aspect ratio (clamped) before it is
+          // created, so the thumbnail shows in full. A failed read falls back
+          // to the registry default size.
+          const naturalSize = await readImageNaturalSize(preview.imageUrl);
+          const size = naturalSize
+            ? computeImageNodeSize(naturalSize.width, naturalSize.height)
+            : undefined;
           try {
             const nodeId = await onCreateNode('image', {
               anchorCenter: position,
+              ...(size ? { size } : {}),
               data: {
                 imageUrl: preview.imageUrl,
                 thumbnailUrl: preview.imageUrl,
@@ -708,34 +723,39 @@ function CanvasComponent() {
     [setFocusedNode, setFocusedFolder]
   );
 
-  // Two-stage click model (mirrors StickyNode's slide-editor behavior): the
-  // first click only selects; clicking a node that was already the sole
-  // selection opens its focused view. Selection is sampled on pointerdown —
-  // before React Flow applies this click's selection change — so a fresh
-  // select-click never opens.
-  const soleSelectionOnPointerDownRef = useRef<string | null>(null);
+  // Single-click-to-open model: a plain (no-modifier) click on a node opens
+  // its focused view directly. Selection is reserved for marquee drag and
+  // modifier-clicks, so a plain click must NOT leave the node selected. We
+  // detect a plain node press on pointerdown and suppress the pure-selection
+  // changes React Flow would otherwise emit for it (see handleNodesChange).
+  // Marquee starts on the pane (not a node) and modifier-clicks are allowed
+  // through, so both keep working.
+  const suppressClickSelectRef = useRef(false);
   const onCanvasPointerDownCapture = useCallback((e: React.PointerEvent) => {
-    if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
-      soleSelectionOnPointerDownRef.current = null;
-      return;
-    }
-    const selectedNodes = useCanvasStore
-      .getState()
-      .nodes.filter((n) => n.selected);
-    soleSelectionOnPointerDownRef.current =
-      selectedNodes.length === 1 ? (selectedNodes[0]?.id ?? null) : null;
+    const hasModifier = e.shiftKey || e.metaKey || e.ctrlKey || e.altKey;
+    const onNode = Boolean(
+      (e.target as Element | null)?.closest?.('.react-flow__node')
+    );
+    suppressClickSelectRef.current = onNode && !hasModifier;
   }, []);
 
   const onNodeClick = useCallback(
     (e: React.MouseEvent, node: Node) => {
+      // Modifier-clicks toggle selection (handled by React Flow); only a plain
+      // click opens. Folders open their focused view too. Skip nodes that have
+      // no focused view and the one that is already open.
+      const state = useCanvasStore.getState();
+      const isOpenable = node.type === 'folder' || isFocusableNode(node.type);
+      const alreadyOpen =
+        state.focusedNode?.id === node.id ||
+        state.focusedFolder?.id === node.id;
       if (
         e.shiftKey ||
         e.metaKey ||
         e.ctrlKey ||
         e.altKey ||
-        !isFocusableNode(node.type) ||
-        soleSelectionOnPointerDownRef.current !== node.id ||
-        useCanvasStore.getState().focusedNode?.id === node.id
+        !isOpenable ||
+        alreadyOpen
       ) {
         return;
       }
@@ -744,9 +764,9 @@ function CanvasComponent() {
     [openNodeFocusedView]
   );
 
-  // Double-click remains the fast path when the node was not selected yet
-  // (first click selects, the dblclick event then opens). Skip when the
-  // two-stage click already opened this node so the animation never restarts.
+  // Double-click stays as a redundant open path in case a first click is
+  // swallowed (e.g. by a drag threshold); for already-open nodes the plain
+  // click handled it, so skip to avoid restarting the focus animation.
   const onNodeDoubleClick = useCallback(
     (_: any, node: Node) => {
       const state = useCanvasStore.getState();
@@ -759,6 +779,27 @@ function CanvasComponent() {
       openNodeFocusedView(node);
     },
     [openNodeFocusedView]
+  );
+
+  // Drop the pure-selection changes a plain node click produces so clicking a
+  // node opens it without selecting it. Batches that also carry position/
+  // dimension changes (drags, resizes) and marquee/modifier selections pass
+  // through untouched. A dropped batch clears the flag; mixed batches (e.g.
+  // drags) leave it set, but that is harmless — the next pointerdown resets it
+  // before any selection change can be misattributed.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (
+        suppressClickSelectRef.current &&
+        changes.length > 0 &&
+        changes.every((change) => change.type === 'select')
+      ) {
+        suppressClickSelectRef.current = false;
+        return;
+      }
+      onNodesChange(changes);
+    },
+    [onNodesChange]
   );
 
   const onMoveFolderChildOut = useCallback(
@@ -1069,7 +1110,7 @@ function CanvasComponent() {
           onNodeDrag={onNodeDrag}
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onPaneContextMenu={onPaneContextMenu}
           panOnDrag={spacePanActive}
           panOnScroll={true}

@@ -1,3 +1,9 @@
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+
+import { assertWorkspaceAttachmentPath } from './attachments';
+
 /**
  * Bun-side metadata extraction for attachment-backed canvas asset nodes.
  *
@@ -393,4 +399,60 @@ export async function generateFileMetadata(
     return excerpt ? { previewExcerpt: excerpt } : {};
   }
   return {};
+}
+
+const VIDEO_POSTER_MAX_EDGE = 640;
+
+/**
+ * Best-effort video poster for a workspace attachment. On macOS this shells
+ * out to `qlmanage` so imports still get a raster preview when the renderer
+ * webview cannot decode the dropped codec.
+ */
+export async function generateVideoPosterFile(
+  wsPath: string,
+  sourceFullPath: string,
+  suggestedName: string
+): Promise<string | undefined> {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'gb-video-thumb-'));
+  try {
+    const proc = Bun.spawn(
+      [
+        'qlmanage',
+        '-t',
+        '-s',
+        String(VIDEO_POSTER_MAX_EDGE),
+        '-o',
+        tempDir,
+        sourceFullPath,
+      ],
+      { stderr: 'ignore', stdout: 'ignore' }
+    );
+    await proc.exited;
+    if (proc.exitCode !== 0) {
+      return;
+    }
+    const entries = await readdir(tempDir);
+    const posterName = entries.find((entry) => entry.endsWith('.png'));
+    if (!posterName) {
+      return;
+    }
+    const posterFile = Bun.file(join(tempDir, posterName));
+    const baseName = basename(suggestedName).replace(/\.[^.]+$/, '') || 'video';
+    const targetPath = `attachments/img_${crypto.randomUUID().slice(0, 8)}.png`;
+    const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
+      wsPath,
+      targetPath
+    );
+    await Bun.write(fullPath, posterFile);
+    return relativePath;
+  } catch (error) {
+    console.warn('[thumbnail] generateVideoPosterFile failed:', error);
+    return;
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
 }

@@ -1,7 +1,12 @@
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { type AssetImportProgress, saveAssetFile } from '@/lib/assetFiles';
+import {
+  type AssetImportProgress,
+  type SaveAssetFromPathInput,
+  saveAssetFile,
+  saveAssetFromPath,
+} from '@/lib/assetFiles';
 import type { AssetNodeData } from '@/lib/contentTypes';
 
 const IMPORT_TOAST_DURATION_MS = 60 * 60 * 1000;
@@ -49,6 +54,49 @@ export function AssetImportProgressToast({
       </div>
     </output>
   );
+}
+
+export async function saveAssetFromPathWithProgressToast(
+  input: SaveAssetFromPathInput
+): Promise<AssetNodeData> {
+  const toastId = `asset-import-${
+    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  }`;
+  const label = input.fileName;
+  try {
+    const data = await saveAssetFromPath(input, {
+      onProgress: (progress) => {
+        toast.custom(
+          () => (
+            <AssetImportProgressToast
+              fileName={progress.fileName}
+              label={progress.label}
+              progress={progress.progress}
+            />
+          ),
+          {
+            id: toastId,
+            duration: IMPORT_TOAST_DURATION_MS,
+          }
+        );
+      },
+    });
+    toast.success('File added', {
+      id: toastId,
+      description: label,
+      duration: 2200,
+    });
+    return data;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'File could not be saved.';
+    toast.error(message, {
+      id: toastId,
+      description: label,
+      duration: 5000,
+    });
+    throw error;
+  }
 }
 
 export async function saveAssetFileWithProgressToast(

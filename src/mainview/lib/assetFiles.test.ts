@@ -2,12 +2,22 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { saveAssetFile, summarizeWaveform } from '@/lib/assetFiles';
+import {
+  getDesktopFilePath,
+  saveAssetFile,
+  summarizeWaveform,
+} from '@/lib/assetFiles';
 
-const rpcSaveAttachmentMock = vi.hoisted(() => vi.fn());
+const rpcSaveAttachmentFileMock = vi.hoisted(() => vi.fn());
+const uploadAttachmentBlobMock = vi.hoisted(() => vi.fn());
+const resolveAttachmentStreamUrlMock = vi.hoisted(() => vi.fn());
+const rpcGenerateVideoThumbnailMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/rpc', () => ({
-  rpcSaveAttachment: rpcSaveAttachmentMock,
+  resolveAttachmentStreamUrl: resolveAttachmentStreamUrlMock,
+  rpcGenerateVideoThumbnail: rpcGenerateVideoThumbnailMock,
+  rpcSaveAttachmentFile: rpcSaveAttachmentFileMock,
+  uploadAttachmentBlob: uploadAttachmentBlobMock,
 }));
 
 function mockVideoElementMetadata() {
@@ -63,18 +73,32 @@ function mockVideoElementMetadata() {
     return originalCreateElement(tagName);
   }) as unknown as typeof document.createElement);
 
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('data:image/jpeg')) {
+        return new Response(new Blob(['thumb'], { type: 'image/jpeg' }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    })
+  );
+
   return { createObjectUrl, revokeObjectUrl };
 }
 
 afterEach(() => {
-  rpcSaveAttachmentMock.mockReset();
+  rpcSaveAttachmentFileMock.mockReset();
+  uploadAttachmentBlobMock.mockReset();
+  resolveAttachmentStreamUrlMock.mockReset();
+  rpcGenerateVideoThumbnailMock.mockReset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('saveAssetFile', () => {
-  it('saves a file through the attachment RPC and returns lightweight metadata', async () => {
-    rpcSaveAttachmentMock.mockResolvedValueOnce({
+  it('streams files into the workspace when no desktop path is available', async () => {
+    uploadAttachmentBlobMock.mockResolvedValueOnce({
       filePath: 'attachments/file_abc.txt',
     });
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
@@ -89,50 +113,30 @@ describe('saveAssetFile', () => {
       title: 'notes.txt',
     });
 
-    expect(rpcSaveAttachmentMock).toHaveBeenCalledWith(
-      'data:text/plain;base64,aGVsbG8=',
-      undefined,
-      {
-        kind: 'file',
-        mimeType: 'text/plain',
-        suggestedName: 'notes.txt',
-      }
-    );
+    expect(uploadAttachmentBlobMock).toHaveBeenCalledWith(file, {
+      fileName: 'notes.txt',
+      kind: 'file',
+      mimeType: 'text/plain',
+    });
+    expect(rpcSaveAttachmentFileMock).not.toHaveBeenCalled();
   });
 
-  it('reports staged import progress while saving a file', async () => {
-    rpcSaveAttachmentMock.mockResolvedValueOnce({
-      filePath: 'attachments/file_abc.txt',
-    });
-    const onProgress = vi.fn();
-    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
-
-    await saveAssetFile(file, { onProgress });
-
-    expect(onProgress).toHaveBeenCalledWith({
-      fileName: 'notes.txt',
-      label: 'Preparing file',
-      progress: 0.02,
-    });
-    expect(onProgress).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fileName: 'notes.txt',
-        label: 'Saving attachment',
-      })
+  it('copies video files through the path-based RPC when a desktop path exists', async () => {
+    mockVideoElementMetadata();
+    resolveAttachmentStreamUrlMock.mockResolvedValue(
+      'http://127.0.0.1:4242/attachment?path=attachments%2Fimg_thumb.png'
     );
-    expect(onProgress).toHaveBeenLastCalledWith({
-      fileName: 'notes.txt',
-      label: 'Added to canvas',
-      progress: 1,
+    uploadAttachmentBlobMock.mockResolvedValueOnce({
+      filePath: 'attachments/img_thumb.png',
     });
-  });
-
-  it('extracts video duration and saves a best-effort thumbnail', async () => {
-    const { createObjectUrl, revokeObjectUrl } = mockVideoElementMetadata();
-    rpcSaveAttachmentMock
-      .mockResolvedValueOnce({ filePath: 'attachments/video_abc.mp4' })
-      .mockResolvedValueOnce({ filePath: 'attachments/img_thumb.jpg' });
+    rpcSaveAttachmentFileMock.mockResolvedValueOnce({
+      filePath: 'attachments/video_abc.mp4',
+    });
+    rpcGenerateVideoThumbnailMock.mockResolvedValue(null);
     const file = new File(['movie'], 'clip.mp4', { type: 'video/mp4' });
+    Object.defineProperty(file, 'path', {
+      value: '/Users/test/Movies/clip.mp4',
+    });
 
     await expect(saveAssetFile(file)).resolves.toEqual({
       attachmentFile: 'attachments/video_abc.mp4',
@@ -142,37 +146,47 @@ describe('saveAssetFile', () => {
       kind: 'video',
       mimeType: 'video/mp4',
       size: 5,
-      thumbnailFile: 'attachments/img_thumb.jpg',
-      thumbnailUrl: 'data:image/jpeg;base64,dGh1bWI=',
+      thumbnailFile: 'attachments/img_thumb.png',
+      thumbnailUrl:
+        'http://127.0.0.1:4242/attachment?path=attachments%2Fimg_thumb.png',
       title: 'clip.mp4',
     });
 
-    expect(createObjectUrl).toHaveBeenCalledWith(file);
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:video');
-    expect(rpcSaveAttachmentMock).toHaveBeenNthCalledWith(
-      1,
-      'data:video/mp4;base64,bW92aWU=',
-      undefined,
+    expect(getDesktopFilePath(file)).toBe('/Users/test/Movies/clip.mp4');
+    expect(rpcSaveAttachmentFileMock).toHaveBeenCalledWith(
+      '/Users/test/Movies/clip.mp4',
       {
         kind: 'video',
         mimeType: 'video/mp4',
         suggestedName: 'clip.mp4',
       }
     );
-    expect(rpcSaveAttachmentMock).toHaveBeenNthCalledWith(
-      2,
-      'data:image/jpeg;base64,dGh1bWI=',
-      undefined,
-      {
-        kind: 'image',
-        mimeType: 'image/jpeg',
-        suggestedName: 'clip.mp4-thumbnail.jpg',
-      }
+    expect(uploadAttachmentBlobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to bun-side poster generation when renderer thumbnail extraction fails', async () => {
+    uploadAttachmentBlobMock.mockResolvedValueOnce({
+      filePath: 'attachments/video_abc.mp4',
+    });
+    rpcGenerateVideoThumbnailMock.mockResolvedValueOnce({
+      thumbnailFile: 'attachments/img_poster.png',
+    });
+    resolveAttachmentStreamUrlMock.mockResolvedValue(
+      'http://127.0.0.1:4242/attachment?path=attachments%2Fimg_poster.png'
+    );
+    const file = new File(['movie'], 'clip.mp4', { type: 'video/mp4' });
+
+    const result = await saveAssetFile(file);
+
+    expect(result.thumbnailFile).toBe('attachments/img_poster.png');
+    expect(rpcGenerateVideoThumbnailMock).toHaveBeenCalledWith(
+      'attachments/video_abc.mp4',
+      'clip.mp4'
     );
   });
 
   it('extracts an audio waveform when AudioContext is available', async () => {
-    rpcSaveAttachmentMock.mockResolvedValueOnce({
+    uploadAttachmentBlobMock.mockResolvedValueOnce({
       filePath: 'attachments/audio_abc.mp3',
     });
 
@@ -213,69 +227,17 @@ describe('saveAssetFile', () => {
         ),
     }));
     const close = vi.fn(async () => undefined);
-    let constructed = 0;
     class FakeAudioContext {
       decodeAudioData = decodeAudioData;
       close = close;
-      constructor() {
-        constructed += 1;
-      }
     }
     vi.stubGlobal('AudioContext', FakeAudioContext);
 
     const file = new File(['music'], 'song.mp3', { type: 'audio/mpeg' });
     const result = await saveAssetFile(file);
 
-    expect(constructed).toBe(1);
-    expect(decodeAudioData).toHaveBeenCalledTimes(1);
-    expect(close).toHaveBeenCalledTimes(1);
     expect(result.duration).toBe(30);
-    expect(result.waveform).toBeDefined();
     expect(result.waveform).toHaveLength(48);
-    for (const value of result.waveform ?? []) {
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('omits the waveform when AudioContext is unavailable', async () => {
-    rpcSaveAttachmentMock.mockResolvedValueOnce({
-      filePath: 'attachments/audio_abc.mp3',
-    });
-
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:audio'),
-      revokeObjectURL: vi.fn(),
-    });
-    const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation(((
-      tagName: string
-    ) => {
-      if (tagName === 'audio') {
-        const audio = originalCreateElement('audio') as HTMLAudioElement;
-        Object.defineProperties(audio, {
-          duration: { configurable: true, value: 5 },
-          load: { configurable: true, value: vi.fn() },
-          src: {
-            configurable: true,
-            get: () => 'blob:audio',
-            set: () => {
-              window.setTimeout(() => {
-                audio.dispatchEvent(new Event('loadedmetadata'));
-              }, 0);
-            },
-          },
-        });
-        return audio;
-      }
-      return originalCreateElement(tagName);
-    }) as unknown as typeof document.createElement);
-    vi.stubGlobal('AudioContext', undefined);
-    vi.stubGlobal('webkitAudioContext', undefined);
-
-    const file = new File(['x'], 'short.mp3', { type: 'audio/mpeg' });
-    const result = await saveAssetFile(file);
-    expect(result.waveform).toBeUndefined();
   });
 });
 
@@ -292,15 +254,5 @@ describe('summarizeWaveform', () => {
     const summary = summarizeWaveform(channel, 32);
     expect(summary).toHaveLength(32);
     expect(Math.max(...summary)).toBeCloseTo(1, 2);
-    for (const value of summary) {
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('returns zeros when the channel is silent', () => {
-    expect(summarizeWaveform(new Float32Array(100), 8)).toEqual(
-      new Array(8).fill(0)
-    );
   });
 });

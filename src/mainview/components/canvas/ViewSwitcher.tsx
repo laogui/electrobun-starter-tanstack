@@ -25,7 +25,10 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import {
+  saveAssetFileWithProgressToast,
+  saveAssetFromPathWithProgressToast,
+} from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   type CreatableMenuItem,
@@ -43,6 +46,7 @@ import {
   rpcDeleteView,
   rpcImportMarkdownFiles,
   rpcListViews,
+  rpcPickAssetFiles,
   rpcRenameView,
   rpcRestoreView,
 } from '@/lib/rpc';
@@ -506,6 +510,22 @@ export function ViewSwitcher({
     [onCreateNode, setCreateMenuOpen]
   );
 
+  const handlePickAssetFiles = useCallback(async () => {
+    const picked = await rpcPickAssetFiles();
+    if (!picked || picked.canceled || picked.files.length === 0) {
+      return;
+    }
+    setCreateMenuOpen(false);
+    for (const entry of picked.files) {
+      try {
+        const data = await saveAssetFromPathWithProgressToast(entry);
+        await onCreateNode('asset', { data: { ...data } });
+      } catch (error) {
+        console.error('[ViewSwitcher] Failed to import picked file:', error);
+      }
+    }
+  }, [onCreateNode, setCreateMenuOpen]);
+
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
     const imported = handleMarkdownImportResult(result, async (notes) => {
@@ -686,8 +706,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () =>
-                        assetFileInputRef.current?.click(),
+                      openAssetPicker: () => void handlePickAssetFiles(),
                     })
                   )}
                   <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
@@ -697,8 +716,7 @@ export function ViewSwitcher({
                     renderCreateMenuItem(item, {
                       onCreateNode,
                       setLinkFormOpen,
-                      openAssetPicker: () =>
-                        assetFileInputRef.current?.click(),
+                      openAssetPicker: () => void handlePickAssetFiles(),
                     })
                   )}
                   <Menu.Item

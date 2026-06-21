@@ -29,7 +29,11 @@ import type {
   AssetNodeData,
 } from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
-import { rpcLoadAttachment, rpcOpenAttachment } from '@/lib/rpc';
+import {
+  resolveAttachmentStreamUrl,
+  rpcLoadAttachment,
+  rpcOpenAttachment,
+} from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -259,6 +263,35 @@ function decodeTextDataUrl(dataUrl: string): string {
   }
 }
 
+function useResolvedAttachmentPreview(
+  previewUrl: string | undefined,
+  attachmentFile: string | undefined
+): string | undefined {
+  const [resolvedUrl, setResolvedUrl] = useState(previewUrl);
+
+  useEffect(() => {
+    if (previewUrl) {
+      setResolvedUrl(previewUrl);
+      return;
+    }
+    if (!attachmentFile) {
+      setResolvedUrl(undefined);
+      return;
+    }
+    let cancelled = false;
+    void resolveAttachmentStreamUrl(attachmentFile).then((url) => {
+      if (!cancelled && url) {
+        setResolvedUrl(url);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentFile, previewUrl]);
+
+  return resolvedUrl;
+}
+
 function VideoThumbnail({
   asset,
   title,
@@ -267,13 +300,17 @@ function VideoThumbnail({
   title: string;
 }) {
   const duration = formatDuration(asset.duration);
+  const thumbSrc = useResolvedAttachmentPreview(
+    asset.thumbnailUrl,
+    asset.thumbnailFile
+  );
   return (
     <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
-      {asset.thumbnailUrl ? (
+      {thumbSrc ? (
         <img
           alt={`${title} thumbnail`}
           className="size-full object-cover"
-          src={asset.thumbnailUrl}
+          src={thumbSrc}
         />
       ) : (
         <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.7_0.08_250/.28),transparent_48%),oklch(0.22_0.02_255)]">
@@ -753,19 +790,33 @@ export const AssetContent = ({
     let cancelled = false;
     setMediaLoading(true);
     setMediaError(null);
-    rpcLoadAttachment(asset.attachmentFile)
-      .then((result) => {
+
+    const loadPlayableMedia = async () => {
+      if (playableMedia) {
+        const streamUrl = await resolveAttachmentStreamUrl(
+          asset.attachmentFile!
+        );
+        if (streamUrl) {
+          return streamUrl;
+        }
+      }
+      const result = await rpcLoadAttachment(asset.attachmentFile!);
+      return result?.dataUrl ?? null;
+    };
+
+    loadPlayableMedia()
+      .then((src) => {
         if (cancelled) {
           return;
         }
-        if (!result?.dataUrl) {
+        if (!src) {
           if (!asset.thumbnailUrl) {
             setMediaSrc(null);
             setMediaError('Media file could not be loaded.');
           }
           return;
         }
-        setMediaSrc(result.dataUrl);
+        setMediaSrc(src);
       })
       .catch(() => {
         if (!(cancelled || asset.thumbnailUrl)) {

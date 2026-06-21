@@ -93,7 +93,7 @@ import {
   loadTemplate,
   writeTemplateThumbnail,
 } from './templates';
-import { generateFileMetadata } from './thumbnail';
+import { generateFileMetadata, generateVideoPosterFile } from './thumbnail';
 import { loadUserPrefs, saveUserPrefs } from './userprefs';
 import {
   addView,
@@ -560,6 +560,22 @@ interface CanvasRPC {
           failedCount?: number;
           notes: Array<{ noteId: string; title: string; content?: string }>;
         };
+      };
+      pickAssetFiles: {
+        params: Record<string, unknown>;
+        response: {
+          canceled: boolean;
+          files: Array<{
+            fileName: string;
+            mimeType: string;
+            size: number;
+            sourcePath: string;
+          }>;
+        };
+      };
+      generateVideoThumbnail: {
+        params: { attachmentFile: string; fileName?: string };
+        response: { thumbnailFile?: string };
       };
 
       exportPng: {
@@ -1290,7 +1306,10 @@ async function main() {
   // well. The handle holds the localhost base URL + bearer token the renderer
   // connects with. AI config is resolved per-request so settings updates take
   // effect without restarting the server.
-  localHttpServer = startLocalHttpServer(() => buildAIConfig());
+  localHttpServer = startLocalHttpServer({
+    getAIConfig: () => buildAIConfig(),
+    getWorkspacePath: () => wsPath,
+  });
   const url = await getMainViewUrl();
   settingsViewUrl = getSettingsViewUrl(url);
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
@@ -1872,6 +1891,47 @@ async function main() {
             params.mimeType ?? ''
           );
           return { ...saved, ...metadata };
+        },
+
+        pickAssetFiles: async () => {
+          const selected = await Utils.openFileDialog({
+            allowedFileTypes: '*',
+            allowsMultipleSelection: true,
+            canChooseDirectory: false,
+            canChooseFiles: true,
+            startingFolder: '~/Desktop',
+          });
+          const paths = selected.filter(Boolean);
+          if (paths.length === 0) {
+            return { canceled: true, files: [] };
+          }
+          const files = [];
+          for (const sourcePath of paths) {
+            const sourceFile = Bun.file(sourcePath);
+            if (!(await sourceFile.exists())) {
+              continue;
+            }
+            files.push({
+              fileName: basename(sourcePath),
+              mimeType: sourceFile.type || 'application/octet-stream',
+              size: sourceFile.size,
+              sourcePath,
+            });
+          }
+          return { canceled: false, files };
+        },
+
+        generateVideoThumbnail: async ({ attachmentFile, fileName }) => {
+          const { fullPath } = assertWorkspaceAttachmentPath(
+            wsPath,
+            attachmentFile
+          );
+          const thumbnailFile = await generateVideoPosterFile(
+            wsPath,
+            fullPath,
+            fileName ?? basename(fullPath)
+          );
+          return thumbnailFile ? { thumbnailFile } : {};
         },
 
         loadAttachment: async ({ filePath }) =>

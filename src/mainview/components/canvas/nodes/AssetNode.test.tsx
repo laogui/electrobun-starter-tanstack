@@ -83,7 +83,7 @@ describe('formatDuration', () => {
 });
 
 describe('AssetContent', () => {
-  it('renders the file name without a MIME/size footer on the card', () => {
+  it('keeps the card face minimal without filename, MIME, or size', () => {
     render(
       <AssetContent
         data={{
@@ -98,11 +98,13 @@ describe('AssetContent', () => {
       />
     );
 
-    expect(screen.getByText('report.pdf')).toBeInTheDocument();
-    // The card view no longer surfaces raw MIME type / file size — that
-    // metadata lives in the focused view's header and metadata grid.
+    // The card face now fills with the preview only — filename, MIME type, and
+    // size all live in the hover card / focused view, so the canvas stays clean.
+    expect(screen.queryByText('report.pdf')).not.toBeInTheDocument();
     expect(screen.queryByText('application/pdf')).not.toBeInTheDocument();
     expect(screen.queryByText('2.0 KB')).not.toBeInTheDocument();
+    // The PDF preview placeholder still renders so the kind reads at a glance.
+    expect(screen.getByText('PDF document')).toBeInTheDocument();
   });
 
   it('provides a title for the truncated focused attachment path', () => {
@@ -557,7 +559,9 @@ describe('AssetNode', () => {
       />
     );
 
-    expect(screen.getByText('notes.txt')).toBeInTheDocument();
+    // Filename is no longer on the card face; the type badge identifies it.
+    expect(screen.queryByText('notes.txt')).not.toBeInTheDocument();
+    expect(screen.getByText('Text')).toBeInTheDocument();
     expect(screen.getByTestId('handle-top')).toBeInTheDocument();
     expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     expect(screen.getByTestId('handle-bottom')).toBeInTheDocument();

@@ -307,7 +307,7 @@ function VideoThumbnail({
     asset.thumbnailFile
   );
   return (
-    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-950/90 text-white shadow-inner dark:border-white/10">
+    <div className="relative size-full overflow-hidden bg-neutral-950/90 text-white">
       {thumbSrc ? (
         <img
           alt={`${title} thumbnail`}
@@ -417,7 +417,7 @@ function ImageAsFileThumbnail({
   title: string;
 }) {
   return (
-    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-100 dark:border-white/10 dark:bg-black/30">
+    <div className="relative size-full overflow-hidden bg-neutral-100 dark:bg-black/30">
       {asset.thumbnailUrl ? (
         <img
           alt={`${title} thumbnail`}
@@ -500,7 +500,7 @@ function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
   // glyph that still differentiates a PDF from generic file cards on the
   // canvas while keeping the dependency footprint zero.
   return (
-    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-gradient-to-b from-rose-50/80 to-rose-100/70 dark:border-white/10 dark:from-rose-950/30 dark:to-rose-950/50">
+    <div className="relative size-full overflow-hidden bg-gradient-to-b from-rose-50/80 to-rose-100/70 dark:from-rose-950/30 dark:to-rose-950/50">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
         <FilePageGlyph badge="PDF" badgeClassName="bg-rose-600" />
         <span className="font-semibold text-[10px] text-rose-700/90 uppercase tracking-wider dark:text-rose-300">
@@ -513,7 +513,7 @@ function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
 
 function GenericFileThumbnail({ asset }: { asset: AssetNodeData }) {
   return (
-    <div className="relative mb-4 aspect-video min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-gradient-to-b from-neutral-100 to-neutral-200/80 dark:border-white/10 dark:from-neutral-800/80 dark:to-neutral-900">
+    <div className="relative size-full overflow-hidden bg-gradient-to-b from-neutral-100 to-neutral-200/80 dark:from-neutral-800/80 dark:to-neutral-900">
       <div className="absolute inset-0 grid place-items-center">
         <FilePageGlyph badge={getFileExtension(asset.fileName)} />
       </div>
@@ -528,7 +528,7 @@ function TextThumbnail({ asset }: { asset: AssetNodeData }) {
   const excerpt = asset.previewExcerpt?.trim() ?? '';
   const hasExcerpt = excerpt.length > 0;
   return (
-    <div className="relative mb-4 max-h-32 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-neutral-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20">
+    <div className="relative size-full overflow-hidden bg-neutral-50 p-4 dark:bg-black/20">
       {hasExcerpt ? (
         <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-neutral-700 leading-relaxed dark:text-neutral-200">
           {excerpt}
@@ -557,7 +557,7 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
   const countLabel = entryCount > 0 ? `${entryCount} items` : 'Archive';
 
   return (
-    <div className="mb-4 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-amber-50/60 p-3 shadow-inner dark:border-white/10 dark:bg-amber-400/10">
+    <div className="size-full overflow-auto bg-amber-50/60 p-4 dark:bg-amber-400/10">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
           <FileArchive size={15} />
@@ -596,13 +596,24 @@ function AssetThumbnail({
   title: string;
 }) {
   if (asset.missing) {
-    return null;
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-2 bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-200">
+        <AlertTriangle size={28} />
+        <span className="font-medium text-sm">Missing file</span>
+      </div>
+    );
   }
   if (asset.kind === 'video') {
     return <VideoThumbnail asset={asset} title={title} />;
   }
   if (asset.kind === 'audio') {
-    return <AudioThumbnail asset={asset} />;
+    return (
+      <div className="flex size-full items-center justify-center p-5">
+        <div className="w-full">
+          <AudioThumbnail asset={asset} />
+        </div>
+      </div>
+    );
   }
   if (isImageAsFile(asset)) {
     return <ImageAsFileThumbnail asset={asset} title={title} />;
@@ -993,21 +1004,16 @@ export const AssetContent = ({
 
   return (
     <div
-      className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+      className="relative size-full bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(asset.color)}
     >
-      <div className="relative flex min-h-0 flex-1 flex-col p-5">
-        <TypeBadge
-          className="absolute top-5 right-5 z-10"
-          missing={asset.missing}
-        >
-          {asset.missing ? 'Missing' : label}
-        </TypeBadge>
-        <AssetThumbnail asset={asset} title={title} />
-        <h3 className="line-clamp-3 shrink-0 font-bold text-xl leading-tight">
-          {title}
-        </h3>
-      </div>
+      <TypeBadge
+        className="absolute top-5 right-5 z-10"
+        missing={asset.missing}
+      >
+        {asset.missing ? 'Missing' : label}
+      </TypeBadge>
+      <AssetThumbnail asset={asset} title={title} />
     </div>
   );
 };

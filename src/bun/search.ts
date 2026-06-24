@@ -15,6 +15,7 @@ export type SearchResultKind =
   | 'image'
   | 'card'
   | 'asset'
+  | 'recording'
   | 'link'
   | 'edge'
   | 'view';
@@ -292,6 +293,20 @@ function addManifestNodeMatches(
       candidates.push({ field: 'fileName', value: asString(data.fileName) });
       candidates.push({ field: 'mimeType', value: asString(data.mimeType) });
       break;
+    case 'recording': {
+      const title = asString(data.title);
+      const recordingNumber =
+        typeof data.recordingNumber === 'number' && data.recordingNumber > 0
+          ? data.recordingNumber
+          : 1;
+      candidates.push({
+        field: 'title',
+        value: title || `New Recording #${recordingNumber}`,
+      });
+      candidates.push({ field: 'fileName', value: asString(data.fileName) });
+      candidates.push({ field: 'mimeType', value: asString(data.mimeType) });
+      break;
+    }
     case 'link':
       candidates.push({ field: 'title', value: asString(data.title) });
       candidates.push({ field: 'url', value: asString(data.url) });
@@ -381,6 +396,8 @@ function nodeKind(nodeType: string): SearchResultKind {
       return 'image';
     case 'asset':
       return 'asset';
+    case 'recording':
+      return 'recording';
     case 'link':
       return 'link';
     case 'card':

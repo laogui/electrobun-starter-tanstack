@@ -273,6 +273,79 @@ describe('search', () => {
     expect(fileNameHit!.score).toBeGreaterThan(mimeHit!.score);
   });
 
+  it('matches recording metadata and default numbered titles', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'recording-title',
+              type: 'recording',
+              position: { x: 0, y: 0 },
+              data: {
+                title: 'Design voice memo',
+                fileName: 'voice-session.m4a',
+                mimeType: 'audio/mp4',
+                recordingNumber: 7,
+              },
+            },
+            {
+              id: 'recording-default',
+              type: 'recording',
+              position: { x: 1, y: 1 },
+              data: {
+                title: '',
+                fileName: 'recording-8.m4a',
+                mimeType: 'audio/webm',
+                recordingNumber: 8,
+              },
+            },
+          ],
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+
+    const titleHits = await searchWorkspace(workspaceRoot, {
+      query: 'design voice',
+    });
+    expect(
+      titleHits.find((r) => r.kind === 'recording' && r.matchField === 'title')
+    ).toBeDefined();
+
+    const fileNameHits = await searchWorkspace(workspaceRoot, {
+      query: 'voice-session',
+    });
+    expect(
+      fileNameHits.find(
+        (r) => r.kind === 'recording' && r.matchField === 'fileName'
+      )
+    ).toBeDefined();
+
+    const mimeHits = await searchWorkspace(workspaceRoot, {
+      query: 'audio/webm',
+    });
+    expect(
+      mimeHits.find(
+        (r) => r.kind === 'recording' && r.matchField === 'mimeType'
+      )
+    ).toBeDefined();
+
+    const defaultTitleHits = await searchWorkspace(workspaceRoot, {
+      query: 'New Recording #8',
+    });
+    expect(
+      defaultTitleHits.find(
+        (r) =>
+          r.kind === 'recording' &&
+          r.nodeId === 'recording-default' &&
+          r.matchField === 'title'
+      )
+    ).toBeDefined();
+  });
+
   it('matches sticky content, folder title/subtitle, group label, edge label', async () => {
     writeWorkspace(workspaceRoot, {
       activeViewId: 'v1',

@@ -1561,6 +1561,21 @@ describe('src/bun/index helpers', () => {
             },
           },
           {
+            id: 'recording-1',
+            type: 'recording',
+            position: { x: 20, y: 30 },
+            data: {
+              attachmentFile: 'attachments/recording_abc.m4a',
+              color: '#FFFFFF',
+              fileName: 'recording-1.m4a',
+              mimeType: 'audio/mp4',
+              missing: true,
+              previewUrl: 'blob:recording',
+              recordingNumber: 1,
+              title: '',
+            },
+          },
+          {
             id: 'folder-1',
             type: 'folder',
             position: { x: 0, y: 0 },
@@ -1579,6 +1594,20 @@ describe('src/bun/index helpers', () => {
                     previewUrl: 'blob:child',
                   },
                 },
+                {
+                  id: 'recording-child',
+                  type: 'recording',
+                  data: {
+                    attachmentFile: 'attachments/recording_child.m4a',
+                    color: '#FFFFFF',
+                    fileName: 'child.m4a',
+                    mimeType: 'audio/mp4',
+                    missing: true,
+                    previewUrl: 'blob:child-recording',
+                    recordingNumber: 2,
+                    title: '',
+                  },
+                },
               ],
             },
           },
@@ -1591,17 +1620,26 @@ describe('src/bun/index helpers', () => {
       nodes: Array<{ data: Record<string, unknown> }>;
     };
     const assetData = manifest.nodes[0]?.data;
-    const folderChildren = manifest.nodes[1]?.data.children as Array<{
+    const recordingData = manifest.nodes[1]?.data;
+    const folderChildren = manifest.nodes[2]?.data.children as Array<{
       data: Record<string, unknown>;
     }>;
 
     expect(assetData).not.toHaveProperty('missing');
     expect(assetData).not.toHaveProperty('previewUrl');
     expect(assetData).not.toHaveProperty('thumbnailUrl');
+    expect(recordingData).not.toHaveProperty('missing');
+    expect(recordingData).not.toHaveProperty('previewUrl');
+    expect(recordingData?.attachmentFile).toBe('attachments/recording_abc.m4a');
     expect(folderChildren[0]?.data).not.toHaveProperty('missing');
     expect(folderChildren[0]?.data).not.toHaveProperty('previewUrl');
     expect(folderChildren[0]?.data.attachmentFile).toBe(
       'attachments/file_child.pdf'
+    );
+    expect(folderChildren[1]?.data).not.toHaveProperty('missing');
+    expect(folderChildren[1]?.data).not.toHaveProperty('previewUrl');
+    expect(folderChildren[1]?.data.attachmentFile).toBe(
+      'attachments/recording_child.m4a'
     );
   });
 
@@ -1691,7 +1729,32 @@ describe('src/bun/index helpers', () => {
                   noteId: 'note_existing',
                 },
               },
+              {
+                id: 'child-recording',
+                type: 'recording',
+                data: {
+                  attachmentFile: 'attachments/child-recording.m4a',
+                  color: '#FFFFFF',
+                  fileName: 'child-recording.m4a',
+                  mimeType: 'audio/mp4',
+                  recordingNumber: 2,
+                  title: '',
+                },
+              },
             ],
+          },
+        },
+        {
+          id: 'recording-1',
+          type: 'recording',
+          position: { x: 10, y: 10 },
+          data: {
+            attachmentFile: 'attachments/missing-recording.m4a',
+            color: '#FFFFFF',
+            fileName: 'missing-recording.m4a',
+            mimeType: 'audio/mp4',
+            recordingNumber: 1,
+            title: '',
           },
         },
       ],
@@ -1854,7 +1917,32 @@ describe('src/bun/index helpers', () => {
                   mimeType: 'application/pdf',
                 },
               },
+              {
+                id: 'child-recording',
+                type: 'recording',
+                data: {
+                  attachmentFile: 'attachments/child-recording.m4a',
+                  color: '#FFFFFF',
+                  fileName: 'child-recording.m4a',
+                  mimeType: 'audio/mp4',
+                  recordingNumber: 2,
+                  title: '',
+                },
+              },
             ],
+          },
+        },
+        {
+          id: 'recording-1',
+          type: 'recording',
+          position: { x: 10, y: 10 },
+          data: {
+            attachmentFile: 'attachments/missing-recording.m4a',
+            color: '#FFFFFF',
+            fileName: 'missing-recording.m4a',
+            mimeType: 'audio/mp4',
+            recordingNumber: 1,
+            title: '',
           },
         },
       ],
@@ -1869,9 +1957,19 @@ describe('src/bun/index helpers', () => {
       exists: vi.fn().mockResolvedValue(false),
       arrayBuffer: vi.fn(),
     };
+    const childRecordingFile = {
+      exists: vi.fn().mockResolvedValue(false),
+      arrayBuffer: vi.fn(),
+    };
+    const topLevelRecordingFile = {
+      exists: vi.fn().mockResolvedValue(false),
+      arrayBuffer: vi.fn(),
+    };
     bunFileMock
       .mockReturnValueOnce(topLevelFile)
-      .mockReturnValueOnce(childFile);
+      .mockReturnValueOnce(childFile)
+      .mockReturnValueOnce(childRecordingFile)
+      .mockReturnValueOnce(topLevelRecordingFile);
 
     const result = (await canvasHandlers.loadCanvas({
       viewId: 'default',
@@ -1879,8 +1977,12 @@ describe('src/bun/index helpers', () => {
 
     expect(result.nodes[0]?.data.missing).toBe(true);
     expect(result.nodes[1]?.data.children[0].data.missing).toBe(true);
+    expect(result.nodes[1]?.data.children[1].data.missing).toBe(true);
+    expect(result.nodes[2]?.data.missing).toBe(true);
     expect(topLevelFile.arrayBuffer).not.toHaveBeenCalled();
     expect(childFile.arrayBuffer).not.toHaveBeenCalled();
+    expect(childRecordingFile.arrayBuffer).not.toHaveBeenCalled();
+    expect(topLevelRecordingFile.arrayBuffer).not.toHaveBeenCalled();
   });
 
   it('loadCanvas hydrates image thumbnails for top-level nodes and folder children with original fallback', async () => {

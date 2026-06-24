@@ -11,6 +11,7 @@ vi.mock('../../paraglide/messages.js', () => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  menu_recording: () => 'Recording',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',
@@ -19,6 +20,7 @@ vi.mock('../../paraglide/messages.js', () => ({
   menu_new_folder: () => 'New folder',
   menu_new_group: () => 'New group',
   menu_new_file: () => 'New file',
+  menu_new_recording: () => 'New recording',
 }));
 
 describe('resolveCreatableKind', () => {
@@ -46,6 +48,7 @@ describe('getCreatableMenuItems', () => {
       'folder',
       'group',
       'file',
+      'recording',
     ]);
     expect(contextItems.map((item) => item.id)).toEqual(
       bottomItems.map((item) => item.id)
@@ -68,6 +71,7 @@ describe('getCreatableMenuItems', () => {
       'Folder',
       'Group',
       'File',
+      'Recording',
     ]);
     expect(contextItems.map((item) => item.label)).toEqual([
       'New note',
@@ -78,6 +82,7 @@ describe('getCreatableMenuItems', () => {
       'New folder',
       'New group',
       'New file',
+      'New recording',
     ]);
   });
 });

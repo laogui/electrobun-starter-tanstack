@@ -63,6 +63,7 @@ type ContextMenuState = {
     | 'folder'
     | 'group'
     | 'sticky'
+    | 'recording'
     | 'multi'
     | 'edge';
   nodeId?: string;
@@ -318,6 +319,26 @@ const getAssetItems = (locked: boolean): MenuItem[] => [
   },
 ];
 
+const getRecordingItems = (locked: boolean): MenuItem[] => [
+  {
+    id: 'reveal-in-finder',
+    label: m.menu_reveal_in_finder(),
+    icon: FolderOpen,
+  },
+  { id: 'rename-asset', label: m.menu_rename_asset(), icon: PenLine },
+  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
+  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  lockItem(locked),
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
+];
+
 type EdgePathType = 'smoothstep' | 'bezier';
 
 const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
@@ -403,6 +424,7 @@ export function CanvasContextMenu({
     image: () => getImageItems(nodeLocked),
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
+    recording: () => getRecordingItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
     multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
     canvas: () => getCanvasItems(hasClipboard),

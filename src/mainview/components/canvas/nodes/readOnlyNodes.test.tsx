@@ -183,8 +183,8 @@ describe('readOnlyNodes', () => {
         />
       );
 
-      expect(screen.getByText('report.pdf')).toBeInTheDocument();
       expect(screen.getByText('PDF document')).toBeInTheDocument();
+      expect(screen.getAllByText('PDF')).toHaveLength(2);
       expect(screen.getByTestId('handle-right')).toBeInTheDocument();
     });
   });

@@ -24,7 +24,6 @@ import {
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
@@ -85,6 +84,7 @@ interface RenderCreateMenuItemDeps {
     options?: CreateNodeOptions
   ) => void;
   openAssetPicker: () => void;
+  openRecorder: () => void;
   setLinkFormOpen: (open: boolean) => void;
 }
 
@@ -95,7 +95,12 @@ interface RenderCreateMenuItemDeps {
  */
 function renderCreateMenuItem(
   item: CreatableMenuItem,
-  { onCreateNode, openAssetPicker, setLinkFormOpen }: RenderCreateMenuItemDeps
+  {
+    onCreateNode,
+    openAssetPicker,
+    openRecorder,
+    setLinkFormOpen,
+  }: RenderCreateMenuItemDeps
 ) {
   return (
     <Menu.Item
@@ -105,7 +110,9 @@ function renderCreateMenuItem(
           ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
           : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
       } border-gray-100 border-b dark:border-neutral-700`}
-      closeOnClick={item.id !== 'link' && item.id !== 'file'}
+      closeOnClick={
+        item.id !== 'link' && item.id !== 'file' && item.id !== 'recording'
+      }
       disabled={!item.enabled}
       key={item.id}
       onClick={async () => {
@@ -117,6 +124,10 @@ function renderCreateMenuItem(
           }
           if (type === 'asset') {
             openAssetPicker();
+            return;
+          }
+          if (type === 'recording') {
+            openRecorder();
             return;
           }
           await onCreateNode(type);
@@ -177,6 +188,7 @@ export function ViewSwitcher({
   onExportCanvas,
   onExportCanvasJson,
   onOpenNoteLibrary,
+  onOpenRecorder,
   createMenuOpen,
   setCreateMenuOpen,
 }: {
@@ -188,6 +200,7 @@ export function ViewSwitcher({
   onExportCanvas?: () => void;
   onExportCanvasJson?: () => void;
   onOpenNoteLibrary?: () => void;
+  onOpenRecorder: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -696,6 +709,7 @@ export function ViewSwitcher({
                       onCreateNode,
                       setLinkFormOpen,
                       openAssetPicker: () => assetFileInputRef.current?.click(),
+                      openRecorder: onOpenRecorder,
                     })
                   )}
                   <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
@@ -706,6 +720,7 @@ export function ViewSwitcher({
                       onCreateNode,
                       setLinkFormOpen,
                       openAssetPicker: () => assetFileInputRef.current?.click(),
+                      openRecorder: onOpenRecorder,
                     })
                   )}
                   <Menu.Item

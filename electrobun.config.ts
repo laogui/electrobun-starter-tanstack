@@ -21,6 +21,13 @@ export default {
       // This avoids iconutil rejecting .iconset folders on newer local toolchains.
       icons: undefined,
       bundleCEF: false,
+      // Microphone access for the audio-recording (voice memo) node. Electrobun
+      // maps `audio-input` to NSMicrophoneUsageDescription in the generated
+      // Info.plist so packaged/notarized builds can prompt for TCC permission.
+      entitlements: {
+        'com.apple.security.device.audio-input':
+          'GhostBoard needs microphone access to record voice memos.',
+      },
       // Signing/notarization run only when credentials are present (CI or a
       // local .env). Without them, non-dev builds simply skip signing so local
       // iteration keeps working. dev builds never sign.

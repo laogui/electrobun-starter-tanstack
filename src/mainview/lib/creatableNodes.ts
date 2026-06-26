@@ -5,6 +5,7 @@ import {
   ImageIcon,
   Link as LinkIcon,
   ListChecks,
+  Mic,
   NotebookPen,
   StickyNote,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ export const CREATABLE_KIND_BY_ACTION = {
   folder: 'folder',
   group: 'group',
   file: 'asset',
+  recording: 'recording',
 } as const satisfies Record<string, CreatableCanvasNodeKind>;
 
 /** Canonical (prefix-free) creation action id. */
@@ -95,6 +97,14 @@ const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
     id: 'file',
     icon: File,
     labels: { short: () => m.menu_file(), new: () => m.menu_new_file() },
+  },
+  {
+    id: 'recording',
+    icon: Mic,
+    labels: {
+      short: () => m.menu_recording(),
+      new: () => m.menu_new_recording(),
+    },
   },
 ];
 

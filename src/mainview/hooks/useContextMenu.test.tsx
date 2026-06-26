@@ -25,6 +25,14 @@ vi.mock('@/lib/rpc', () => ({
 
 const NODE_ID_RE = /^node-/;
 
+interface TestNode {
+  data: Record<string, unknown>;
+  id: string;
+  position: { x: number; y: number };
+  selected?: boolean;
+  type: string;
+}
+
 const storeState = {
   nodes: [
     {
@@ -75,7 +83,20 @@ const storeState = {
         title: 'Report',
       },
     },
-  ],
+    {
+      id: 'recording-1',
+      type: 'recording',
+      position: { x: 150, y: 160 },
+      data: {
+        attachmentFile: 'attachments/recording-1.m4a',
+        color: '#FFFFFF',
+        fileName: 'recording-1.m4a',
+        mimeType: 'audio/mp4',
+        recordingNumber: 1,
+        title: '',
+      },
+    },
+  ] as TestNode[],
   edges: [
     {
       id: 'edge-1',
@@ -383,6 +404,33 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onNodeContextMenu(
+            {
+              preventDefault: vi.fn(),
+              clientX: 96,
+              clientY: 76,
+            } as never,
+            {
+              id: 'recording-1',
+              type: 'recording',
+              position: { x: 0, y: 0 },
+              data: {
+                attachmentFile: 'attachments/recording-1.m4a',
+                color: '#FFFFFF',
+                fileName: 'recording-1.m4a',
+                mimeType: 'audio/mp4',
+                recordingNumber: 1,
+                title: '',
+              },
+            } as never
+          );
+        }}
+        type="button"
+      >
+        node-recording
+      </button>
+      <button
+        onClick={() => {
           onEdgeContextMenu(
             {
               preventDefault: vi.fn(),
@@ -640,6 +688,11 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'node-asset' }));
     expect(output).toHaveTextContent(
       '{"x":95,"y":75,"target":"asset","nodeId":"asset-1"}'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'node-recording' }));
+    expect(output).toHaveTextContent(
+      '{"x":96,"y":76,"target":"recording","nodeId":"recording-1"}'
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));

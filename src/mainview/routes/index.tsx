@@ -33,6 +33,7 @@ import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LibraryButton } from '@/components/canvas/LibraryButton';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
+import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
@@ -41,6 +42,7 @@ import { TagSidebar } from '@/components/tags/TagSidebar';
 import { TagSidebarButton } from '@/components/tags/TagSidebarButton';
 import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
+import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
 import { useContextMenu } from '@/hooks/useContextMenu';
@@ -75,6 +77,7 @@ import {
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
+import { saveRecording } from '@/lib/recordingFiles';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import {
   type ConnectionStartState,
@@ -186,6 +189,42 @@ function getDroppedFiles(dataTransfer: DataTransfer | null): File[] {
   return Array.from(dataTransfer.files).filter((file) => file.size >= 0);
 }
 
+interface RecordingNumberEntry {
+  data?: unknown;
+  type?: string;
+}
+
+function readRecordingNumber(data: unknown): number {
+  const value = (data as { recordingNumber?: unknown } | undefined)
+    ?.recordingNumber;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : 0;
+}
+
+function maxRecordingNumberFromEntry(entry: RecordingNumberEntry): number {
+  let max = entry.type === 'recording' ? readRecordingNumber(entry.data) : 0;
+
+  if (entry.type === 'folder') {
+    const children = (entry.data as { children?: unknown } | undefined)
+      ?.children;
+    if (Array.isArray(children)) {
+      for (const child of children as RecordingNumberEntry[]) {
+        max = Math.max(max, maxRecordingNumberFromEntry(child));
+      }
+    }
+  }
+
+  return max;
+}
+
+function maxRecordingNumberFromNodes(nodes: Node[]): number {
+  return nodes.reduce(
+    (max, node) => Math.max(max, maxRecordingNumberFromEntry(node)),
+    0
+  );
+}
+
 function CanvasComponent() {
   const connectionStartRef = useRef<ConnectionStartState>({
     handleId: null,
@@ -276,7 +315,7 @@ function CanvasComponent() {
               revokeImageDropPreview(preview.imageUrl);
               continue;
             }
-            void persistImportedImage(nodeId, file, updateNodeData)
+            persistImportedImage(nodeId, file, updateNodeData)
               .catch((error) => {
                 console.error(
                   '[canvas] Failed to persist dropped image:',
@@ -322,6 +361,14 @@ function CanvasComponent() {
     anchorCenter?: { x: number; y: number };
     screen?: { x: number; y: number };
   } | null>(null);
+  const [recorderNumber, setRecorderNumber] = useState<number | null>(null);
+  const lastRecordingAnchorRef = useRef<{ x: number; y: number } | undefined>(
+    undefined
+  );
+  const lastRecordingKindRef = useRef<CreatableCanvasNodeKind | undefined>(
+    undefined
+  );
+  const reservedRecordingNumberRef = useRef(0);
   const assetFileInputRef = useRef<HTMLInputElement>(null);
   const pendingAssetAnchorRef = useRef<{ x: number; y: number } | undefined>(
     undefined
@@ -374,9 +421,59 @@ function CanvasComponent() {
     [updateNodeData]
   );
 
+  const closeRecorder = useCallback(() => {
+    lastRecordingAnchorRef.current = undefined;
+    lastRecordingKindRef.current = undefined;
+    setRecorderNumber(null);
+  }, []);
+
+  const openRecorder = useCallback(
+    (anchorCenter?: { x: number; y: number }) => {
+      lastRecordingAnchorRef.current = anchorCenter;
+      lastRecordingKindRef.current = 'recording';
+      const maxNumber = Math.max(
+        reservedRecordingNumberRef.current,
+        maxRecordingNumberFromNodes(useCanvasStore.getState().nodes)
+      );
+      const nextNumber = maxNumber + 1;
+      reservedRecordingNumberRef.current = nextNumber;
+      setRecorderNumber(nextNumber);
+      setCreateMenuOpen(false);
+    },
+    [setCreateMenuOpen]
+  );
+
+  const handleRecordingComplete = useCallback(
+    async (result: RecordingResult) => {
+      const number = recorderNumber ?? 1;
+      setRecorderNumber(null);
+      const targetKind = lastRecordingKindRef.current ?? 'recording';
+      const anchorCenter = lastRecordingAnchorRef.current;
+      lastRecordingAnchorRef.current = undefined;
+      lastRecordingKindRef.current = undefined;
+      try {
+        const data = await saveRecording({
+          blob: result.blob,
+          durationMs: result.durationMs,
+          mimeType: result.mimeType,
+          recordingNumber: number,
+        });
+        await onCreateNode(targetKind, {
+          ...(anchorCenter ? { anchorCenter } : {}),
+          data: { ...data },
+        });
+      } catch (error) {
+        console.error('[index] Failed to save recording:', error);
+        toast.error(m.toast_recording_save_failed());
+      }
+    },
+    [onCreateNode, recorderNumber]
+  );
+
   // Unified create entry point shared with the canvas right-click menu. Plain
-  // kinds are created immediately; `link` opens the URL popover and `asset`
-  // opens the file picker, mirroring the bottom create menu's special flows.
+  // kinds are created immediately; `link` opens the URL popover, `asset`
+  // opens the file picker, and `recording` opens the microphone dialog —
+  // mirroring the bottom create menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
       if (kind === 'link') {
@@ -391,6 +488,10 @@ function CanvasComponent() {
         assetFileInputRef.current?.click();
         return;
       }
+      if (kind === 'recording') {
+        openRecorder(request?.anchorCenter);
+        return;
+      }
       await onCreateNode(
         kind,
         request?.anchorCenter
@@ -398,7 +499,7 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [onCreateNode]
+    [onCreateNode, openRecorder]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -652,7 +753,11 @@ function CanvasComponent() {
       const text = clipboard.getData('text/plain') ?? '';
       if (extractLinkUrl(text)) {
         event.preventDefault();
-        void createLinkFromText(text, { anchorCenter: currentPasteAnchor() });
+        createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).catch(
+          (error) => {
+            console.error('[canvas] Failed to create pasted link:', error);
+          }
+        );
       }
     };
 
@@ -950,7 +1055,9 @@ function CanvasComponent() {
       const text = getDroppedText(dataTransfer ?? null);
       if (extractLinkUrl(text)) {
         e.preventDefault();
-        void createLinkFromText(text, { anchorCenter: position });
+        createLinkFromText(text, { anchorCenter: position }).catch((error) => {
+          console.error('[canvas] Failed to create dropped link:', error);
+        });
       }
     },
     [
@@ -1155,6 +1262,14 @@ function CanvasComponent() {
         />
       ) : null}
 
+      {recorderNumber !== null ? (
+        <RecordingRecorder
+          onCancel={closeRecorder}
+          onComplete={handleRecordingComplete}
+          recordingNumber={recorderNumber}
+        />
+      ) : null}
+
       <AnimatePresence>
         {focusedFolder ? (
           <FolderView
@@ -1221,6 +1336,7 @@ function CanvasComponent() {
         onExportCanvas={onExportCanvas}
         onExportCanvasJson={onExportCanvasJson}
         onOpenNoteLibrary={onOpenNoteLibrary}
+        onOpenRecorder={openRecorder}
         setCreateMenuOpen={setCreateMenuOpen}
       />
       <CanvasContextMenu

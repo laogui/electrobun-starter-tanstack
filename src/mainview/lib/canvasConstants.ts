@@ -5,6 +5,7 @@ import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
 import LinkNode from '@/components/canvas/nodes/LinkNode';
+import RecordingNode from '@/components/canvas/nodes/RecordingNode';
 import {
   AssetNodeReadOnly,
   CardNodeReadOnly,
@@ -12,6 +13,7 @@ import {
   GroupNodeReadOnly,
   ImageNodeReadOnly,
   LinkNodeReadOnly,
+  RecordingNodeReadOnly,
   StickyNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
@@ -46,6 +48,7 @@ export const nodeTypes = {
   group: GroupNode,
   image: ImageNode,
   link: LinkNode,
+  recording: RecordingNode,
   sticky: StickyNode,
 };
 
@@ -62,6 +65,7 @@ export const readOnlyNodeTypes = {
   group: GroupNodeReadOnly,
   image: ImageNodeReadOnly,
   link: LinkNodeReadOnly,
+  recording: RecordingNodeReadOnly,
   sticky: StickyNodeReadOnly,
 };
 

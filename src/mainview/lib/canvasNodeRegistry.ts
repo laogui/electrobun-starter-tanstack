@@ -46,6 +46,8 @@ const DEFAULT_ASSET_W = 350;
 const DEFAULT_ASSET_H = 260;
 const DEFAULT_LINK_W = 380;
 const DEFAULT_LINK_H = 360;
+const DEFAULT_RECORDING_W = 380;
+const DEFAULT_RECORDING_H = 150;
 
 function pickRandom<T>(values: readonly T[]): T {
   // Falls back to first entry when array is empty (which the canvas color
@@ -148,6 +150,20 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       url: '',
       title: '',
       color: '#FFFFFF',
+    }),
+    canEnterGroup: true,
+    canEnterFolder: true,
+  },
+  recording: {
+    kind: 'recording',
+    nodeType: 'recording',
+    size: { width: DEFAULT_RECORDING_W, height: DEFAULT_RECORDING_H },
+    defaultData: () => ({
+      color: '#FFFFFF',
+      fileName: '',
+      mimeType: 'audio/mp4',
+      recordingNumber: 1,
+      title: '',
     }),
     canEnterGroup: true,
     canEnterFolder: true,

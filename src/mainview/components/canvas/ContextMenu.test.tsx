@@ -48,6 +48,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  menu_recording: () => 'Recording',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
   menu_new_sticky: () => 'New sticky',
@@ -56,6 +57,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_folder: () => 'New folder',
   menu_new_group: () => 'New group',
   menu_new_file: () => 'New file',
+  menu_new_recording: () => 'New Recording',
   menu_paste: () => 'Paste',
   menu_reset_zoom: () => 'Reset zoom',
   menu_open_focused: () => 'Open focused',
@@ -313,6 +315,44 @@ describe('canvasContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: OPEN_FOCUSED_RE }));
 
     expect(onAction).toHaveBeenCalledWith('focus', 'asset-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders recording node actions without card-only focused or markdown actions', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'recording' as never,
+          nodeId: 'recording-1',
+        }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Reveal in Finder' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Copy as Markdown' })
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Export as Markdown' })
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Move to Library' })
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+
+    expect(onAction).toHaveBeenCalledWith('rename-asset', 'recording-1');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

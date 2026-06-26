@@ -32,6 +32,18 @@ const assetFileMocks = vi.hoisted(() => ({
   saveAssetFileWithProgressToast: vi.fn(),
 }));
 
+const recordingMocks = vi.hoisted(() => ({
+  lastRecorderProps: null as null | {
+    onComplete: (result: {
+      blob: Blob;
+      durationMs: number;
+      mimeType: string;
+    }) => void;
+    recordingNumber: number;
+  },
+  saveRecording: vi.fn(),
+}));
+
 const exportMocks = vi.hoisted(() => ({
   exportReactFlowCanvasToJson: vi.fn(),
   exportReactFlowCanvasToPng: vi.fn(),
@@ -79,6 +91,10 @@ vi.mock('@/lib/assetImportProgress', () => ({
   saveAssetFileWithProgressToast: assetFileMocks.saveAssetFileWithProgressToast,
 }));
 
+vi.mock('@/lib/recordingFiles', () => ({
+  saveRecording: recordingMocks.saveRecording,
+}));
+
 vi.mock('sonner', () => ({
   toast: toastMocks,
 }));
@@ -101,6 +117,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_file: () => 'File',
+  menu_recording: () => 'Recording',
   menu_more: () => 'More',
   menu_note_library: () => 'Note Library',
   menu_import_markdown: () => 'Import Markdown',
@@ -120,6 +137,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_new_folder: () => 'New folder',
   menu_new_group: () => 'New group',
   menu_new_file: () => 'New file',
+  menu_new_recording: () => 'New Recording',
   menu_paste: () => 'Paste',
   menu_reset_zoom: () => 'Reset zoom',
   menu_open_focused: () => 'Open focused',
@@ -172,6 +190,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_json_exported: () => 'JSON exported.',
   toast_export_failed: () => 'Export failed',
   toast_move_selection_failed: () => 'Could not move selection',
+  toast_recording_save_failed: () => 'Localized recording save failed',
   menu_duplicate: () => 'Duplicate',
   menu_move_to_view: () => 'Move to canvas…',
   templates_browse_all: () => 'Browse all templates…',
@@ -445,6 +464,33 @@ vi.mock('@/components/canvas/FolderView', () => ({
   ),
 }));
 
+vi.mock('@/components/canvas/RecordingRecorder', () => ({
+  RecordingRecorder: (props: {
+    onComplete: (result: {
+      blob: Blob;
+      durationMs: number;
+      mimeType: string;
+    }) => void;
+    recordingNumber: number;
+  }) => {
+    recordingMocks.lastRecorderProps = props;
+    return (
+      <button
+        onClick={() => {
+          props.onComplete({
+            blob: new Blob(['audio'], { type: 'audio/mp4' }),
+            durationMs: 1000,
+            mimeType: 'audio/mp4',
+          });
+        }}
+        type="button"
+      >
+        Finish recording
+      </button>
+    );
+  },
+}));
+
 vi.mock('@/components/canvas/HelperLines', () => ({
   HelperLines: () => <div>HelperLines</div>,
 }));
@@ -494,6 +540,16 @@ describe('routes/index', () => {
     });
     interactionMocks.onCreateNode.mockReset();
     assetFileMocks.saveAssetFileWithProgressToast.mockReset();
+    recordingMocks.saveRecording.mockReset();
+    recordingMocks.saveRecording.mockResolvedValue({
+      attachmentFile: 'attachments/recording-1.m4a',
+      color: '#FFFFFF',
+      fileName: 'recording-1.m4a',
+      mimeType: 'audio/mp4',
+      recordingNumber: 1,
+      title: '',
+    });
+    recordingMocks.lastRecorderProps = null;
     exportMocks.exportReactFlowCanvasToPng.mockReset();
     exportMocks.exportReactFlowCanvasToPng.mockResolvedValue(true);
     exportMocks.exportReactFlowCanvasToJson.mockReset();
@@ -810,6 +866,164 @@ describe('routes/index', () => {
     expect(
       screen.getByRole('button', { name: 'Reset zoom' })
     ).toBeInTheDocument();
+  });
+
+  it('creates completed recordings at the canvas context-menu anchor', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open canvas menu' }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: NEW_RE }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Recording' }));
+
+    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish recording' }));
+
+    await waitFor(() => {
+      expect(recordingMocks.saveRecording).toHaveBeenCalledWith({
+        blob: expect.any(Blob),
+        durationMs: 1000,
+        mimeType: 'audio/mp4',
+        recordingNumber: 1,
+      });
+      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('recording', {
+        anchorCenter: { x: 180, y: 240 },
+        data: {
+          attachmentFile: 'attachments/recording-1.m4a',
+          color: '#FFFFFF',
+          fileName: 'recording-1.m4a',
+          mimeType: 'audio/mp4',
+          recordingNumber: 1,
+          title: '',
+        },
+      });
+    });
+  });
+
+  it('numbers recordings after existing folder-child recordings', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Folder',
+            subtitle: '',
+            children: [
+              {
+                id: 'recording-child',
+                type: 'recording',
+                data: {
+                  fileName: 'recording-4.m4a',
+                  mimeType: 'audio/mp4',
+                  recordingNumber: 4,
+                  title: '',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
+
+    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(5);
+  });
+
+  it('reserves recording numbers while the previous save is still pending', async () => {
+    let resolveSave!: (value: {
+      attachmentFile: string;
+      color: string;
+      fileName: string;
+      mimeType: string;
+      recordingNumber: number;
+      title: string;
+    }) => void;
+    recordingMocks.saveRecording.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      })
+    );
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
+
+    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish recording' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Finish recording' })).toBe(
+        null
+      );
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
+
+    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(2);
+
+    resolveSave({
+      attachmentFile: 'attachments/recording-1.m4a',
+      color: '#FFFFFF',
+      fileName: 'recording-1.m4a',
+      mimeType: 'audio/mp4',
+      recordingNumber: 1,
+      title: '',
+    });
+  });
+
+  it('uses the localized recording save failure toast', async () => {
+    recordingMocks.saveRecording.mockRejectedValueOnce(new Error('disk full'));
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish recording' }));
+
+    await waitFor(() => {
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        'Localized recording save failed'
+      );
+    });
   });
 
   it('creates link nodes from the create menu URL form', async () => {

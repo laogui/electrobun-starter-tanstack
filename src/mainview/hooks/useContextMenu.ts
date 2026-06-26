@@ -53,7 +53,8 @@ type NodeContextTarget =
   | 'group'
   | 'sticky'
   | 'image'
-  | 'link';
+  | 'link'
+  | 'recording';
 
 /**
  * Map a React Flow `node.type` to the context-menu `target` discriminator.
@@ -67,6 +68,7 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   sticky: 'sticky',
   image: 'image',
   link: 'link',
+  recording: 'recording',
 };
 
 function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {

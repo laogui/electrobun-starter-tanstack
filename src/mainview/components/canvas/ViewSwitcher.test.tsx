@@ -97,6 +97,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_folder: () => 'New Folder',
   menu_new_group: () => 'New Group',
   menu_new_file: () => 'New File',
+  menu_recording: () => 'Recording',
+  menu_new_recording: () => 'New Recording',
   delete_view_confirm_title: () => 'Delete canvas?',
   delete_view_confirm_body: ({ name }: { name: string }) =>
     `"${name}" and everything on it will be moved to trash.`,
@@ -151,6 +153,7 @@ const resetStore = () => {
 const renderViewSwitcher = ({
   createMenuOpen = false,
   onCreateNode = vi.fn(),
+  onOpenRecorder = vi.fn(),
   setCreateMenuOpen = vi.fn(),
 }: {
   createMenuOpen?: boolean;
@@ -158,12 +161,14 @@ const renderViewSwitcher = ({
     type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
+  onOpenRecorder?: () => void;
   setCreateMenuOpen?: (v: boolean) => void;
 } = {}) =>
   render(
     <ViewSwitcher
       createMenuOpen={createMenuOpen}
       onCreateNode={onCreateNode}
+      onOpenRecorder={onOpenRecorder}
       setCreateMenuOpen={setCreateMenuOpen}
     />
   );
@@ -617,7 +622,8 @@ describe('viewSwitcher', () => {
 
   it('creates supported nodes from the create menu', async () => {
     const onCreateNode = vi.fn();
-    renderViewSwitcher({ createMenuOpen: true, onCreateNode });
+    const onOpenRecorder = vi.fn();
+    renderViewSwitcher({ createMenuOpen: true, onCreateNode, onOpenRecorder });
 
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
@@ -628,6 +634,10 @@ describe('viewSwitcher', () => {
 
     const fileItem = screen.getByRole('menuitem', { name: 'File' });
     expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
+    expect(onOpenRecorder).toHaveBeenCalledTimes(1);
+    expect(onCreateNode).not.toHaveBeenCalledWith('recording');
   });
 
   it('opens the renderer picker and creates one asset per selected file', async () => {

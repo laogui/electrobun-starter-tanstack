@@ -379,6 +379,10 @@ async function hydrateImageData(
   return nextData;
 }
 
+function hasAttachmentRuntimeData(type: string | undefined): boolean {
+  return type === 'asset' || type === 'recording';
+}
+
 export function getSettingsViewUrl(mainViewUrl: string): string {
   return mainViewUrl === DEV_SERVER_URL
     ? SETTINGS_DEV_SERVER_URL
@@ -1322,7 +1326,7 @@ async function main() {
 
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
-              if (node.type === 'asset') {
+              if (hasAttachmentRuntimeData(node.type)) {
                 return {
                   ...node,
                   data: await hydrateAssetData(wsPath, node.data),
@@ -1369,7 +1373,7 @@ async function main() {
                 }>;
                 const hydratedChildren = await Promise.all(
                   rawChildren.map(async (child) => {
-                    if (child.type === 'asset') {
+                    if (hasAttachmentRuntimeData(child.type)) {
                       return {
                         ...child,
                         data: await hydrateAssetData(
@@ -1562,7 +1566,7 @@ async function main() {
                 };
               }
 
-              if (node.type === 'asset') {
+              if (hasAttachmentRuntimeData(node.type)) {
                 return {
                   id: node.id,
                   type: node.type,
@@ -1586,7 +1590,7 @@ async function main() {
                 const childLocMap = folderChildLocMap.get(idx);
                 const serializedChildren = await Promise.all(
                   rawChildren.map(async (child, cidx) => {
-                    if (child.type === 'asset') {
+                    if (hasAttachmentRuntimeData(child.type)) {
                       return {
                         ...child,
                         data: stripAttachmentRuntimeData(

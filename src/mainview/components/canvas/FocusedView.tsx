@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { SaveIndicator } from '@/components/editor/SaveIndicator';
 import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -323,13 +324,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     onClose();
   }, [getNodes, getViewport, setCenter, folderId, node.id, onClose]);
 
-  // Prevent background scrolling
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
+  useBodyScrollLock();
 
   // Cmd/Ctrl + ←/→ navigate to the previous / next focusable item.
   useEffect(() => {

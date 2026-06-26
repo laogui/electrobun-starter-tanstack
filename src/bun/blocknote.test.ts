@@ -126,13 +126,17 @@ describe('blocknote sidecar I/O', () => {
     expect(loaded?.corrupted).toBe(true);
   });
 
-  it('deleteBlockNoteSidecar removes existing files and returns false for missing', async () => {
+  it('deleteBlockNoteSidecar removes existing files asynchronously and returns false for missing', async () => {
     await saveBlockNoteSidecar(wsPath, 'note_del', {
       blocks: [],
       revision: 1,
     });
-    expect(deleteBlockNoteSidecar(wsPath, 'note_del')).toBe(true);
-    expect(deleteBlockNoteSidecar(wsPath, 'note_del')).toBe(false);
+    await expect(deleteBlockNoteSidecar(wsPath, 'note_del')).resolves.toBe(
+      true
+    );
+    await expect(deleteBlockNoteSidecar(wsPath, 'note_del')).resolves.toBe(
+      false
+    );
   });
 
   it('round-trips note metadata and preview as the note record', async () => {

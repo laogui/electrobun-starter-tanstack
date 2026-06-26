@@ -26,7 +26,6 @@
     "prepare": "lefthook install && bun scripts/ensure-electrobun-cli.ts"
   },
   "dependencies": {
-    "2": "^3.0.0",
     "@ai-sdk/anthropic": "^3.0.81",
     "@ai-sdk/openai": "^3.0.68",
     "@ai-sdk/openai-compatible": "^2.0.48",

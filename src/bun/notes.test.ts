@@ -20,6 +20,7 @@ vi.mock('electrobun/bun', () => ({
 }));
 
 const renameMock = vi.fn();
+const unlinkMock = vi.fn();
 vi.mock('node:fs/promises', async () => {
   const actual =
     await vi.importActual<typeof import('node:fs/promises')>(
@@ -29,6 +30,7 @@ vi.mock('node:fs/promises', async () => {
   return {
     ...actual,
     rename: (...args: Parameters<typeof renameMock>) => renameMock(...args),
+    unlink: (...args: Parameters<typeof unlinkMock>) => unlinkMock(...args),
   };
 });
 
@@ -54,6 +56,10 @@ describe('notes', () => {
       const data = await readFile(from, 'utf8');
       await writeFile(to, data);
       rmSync(from, { force: true });
+    });
+    unlinkMock.mockReset();
+    unlinkMock.mockImplementation(async (filePath: string) => {
+      rmSync(filePath, { force: true });
     });
     setBunFile();
   });
@@ -350,6 +356,7 @@ describe('notes', () => {
     await expect(
       deleteNoteFile(workspaceRoot, 'content/delete-me.md')
     ).resolves.toBe(true);
+    expect(unlinkMock).toHaveBeenCalledWith(notePath);
     expect(existsSync(notePath)).toBe(false);
     await expect(
       deleteNoteFile(workspaceRoot, 'content/missing.md')

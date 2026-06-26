@@ -1179,11 +1179,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (viewId === activeViewId) {
       return true;
     }
+    const rpcAvailable = await isRpcAvailable();
 
     // Flush the outgoing canvas first; abort the switch when the save fails so
     // clearing the store can never drop unsaved edits. Skip the flush when the
     // canvas was never hydrated — saving an empty store would wipe the manifest.
-    if (_hydrated && (await isRpcAvailable())) {
+    if (_hydrated && rpcAvailable) {
       const sanitized = sanitizeForPersistence(nodes, edges);
       const saved = await rpcSaveManifest(
         activeViewId,
@@ -1202,7 +1203,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     // Persist the active view selection so it survives restarts.
-    rpcSetActiveView(viewId).catch(() => {});
+    if (rpcAvailable) {
+      const activeViewSaved = await rpcSetActiveView(viewId).catch((error) => {
+        console.error('[canvasStore] Failed to persist active view:', error);
+        return { success: false };
+      });
+      if (!activeViewSaved?.success) {
+        return false;
+      }
+    }
     get().setActiveView(viewId);
     return true;
   },

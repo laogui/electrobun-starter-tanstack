@@ -129,6 +129,30 @@ describe('folderView', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('preserves an existing body scroll lock when it unmounts', () => {
+    document.body.style.overflow = 'hidden';
+
+    const view = render(
+      <FolderView
+        folder={{
+          id: 'folder-empty',
+          rect,
+          data: {
+            title: 'Only Title',
+            subtitle: '',
+            children: [],
+          },
+        }}
+        onCardClick={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    view.unmount();
+
+    expect(document.body.style.overflow).toBe('hidden');
+  });
+
   it('opens a child context menu and moves a child out', () => {
     const onMoveChildOut = vi.fn();
 

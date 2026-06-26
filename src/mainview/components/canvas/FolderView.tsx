@@ -1,8 +1,9 @@
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { colorToStyle } from '@/lib/colorUtils';
 
 import type { FocusedItem } from '@/store/canvasStore';
@@ -111,12 +112,7 @@ export const FolderView = ({
     hasDragged: false,
   });
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
+  useBodyScrollLock();
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) {

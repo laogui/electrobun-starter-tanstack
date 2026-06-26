@@ -24,12 +24,16 @@ const {
   loadCanvasMock,
   rpcDeleteNoteMock,
   rpcSaveManifestMock,
+  rpcSetActiveViewMock,
+  isRpcAvailableMock,
   rpcCheckLicenseMock,
   getCachedLicenseMock,
 } = vi.hoisted(() => ({
   loadCanvasMock: vi.fn(),
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
+  rpcSetActiveViewMock: vi.fn(() => Promise.resolve({ success: true })),
+  isRpcAvailableMock: vi.fn(() => Promise.resolve(true)),
   rpcCheckLicenseMock: vi.fn<
     () => Promise<{ activated: boolean; email?: string } | null>
   >(() => Promise.resolve({ activated: true, email: 'test@example.com' })),
@@ -42,6 +46,8 @@ vi.mock('@/lib/rpc', () => ({
   loadCanvas: loadCanvasMock,
   rpcDeleteNote: rpcDeleteNoteMock,
   rpcSaveManifest: rpcSaveManifestMock,
+  rpcSetActiveView: rpcSetActiveViewMock,
+  isRpcAvailable: isRpcAvailableMock,
 }));
 
 vi.mock('@/lib/rpc-license', () => ({
@@ -122,6 +128,10 @@ afterEach(() => {
   loadCanvasMock.mockReset();
   rpcSaveManifestMock.mockReset();
   rpcSaveManifestMock.mockResolvedValue({ success: true });
+  rpcSetActiveViewMock.mockReset();
+  rpcSetActiveViewMock.mockResolvedValue({ success: true });
+  isRpcAvailableMock.mockReset();
+  isRpcAvailableMock.mockResolvedValue(true);
 });
 
 describe('canvasStore — node operations', () => {
@@ -767,6 +777,32 @@ describe('canvasStore — multi-view', () => {
     expect(state.viewport).toBeNull();
     expect(state._undoRedo.past).toEqual([]);
     expect(state._undoRedo.future).toEqual([]);
+  });
+
+  it('switchView does not clear local state when persisting active view fails', async () => {
+    rpcSetActiveViewMock.mockResolvedValueOnce({ success: false });
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      _hydrated: true,
+      nodes: [makeNode('a')],
+      edges: [],
+      viewport: { x: 1, y: 2, zoom: 1 },
+    });
+
+    await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
+      false
+    );
+
+    const state = useCanvasStore.getState();
+    expect(rpcSaveManifestMock).toHaveBeenCalledWith(
+      'default',
+      [expect.objectContaining({ id: 'a' })],
+      [],
+      { x: 1, y: 2, zoom: 1 }
+    );
+    expect(rpcSetActiveViewMock).toHaveBeenCalledWith('focus');
+    expect(state.activeViewId).toBe('default');
+    expect(state.nodes).toHaveLength(1);
   });
 
   it('moves selected nodes and their internal edges to another view', async () => {

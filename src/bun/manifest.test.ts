@@ -110,8 +110,9 @@ describe('manifest', () => {
     ).resolves.toEqual(manifest);
   });
 
-  it('loadManifest rejects invalid JSON content', async () => {
+  it('loadManifest returns null and reports invalid JSON content', async () => {
     const { loadManifest } = await import('./manifest');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const manifestPath = join(
       workspaceRoot,
       '.ghostboard',
@@ -122,6 +123,9 @@ describe('manifest', () => {
 
     await expect(
       loadManifest(workspaceRoot, 'views/broken.canvas.json')
-    ).rejects.toThrow();
+    ).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[manifest] Failed to load')
+    );
   });
 });

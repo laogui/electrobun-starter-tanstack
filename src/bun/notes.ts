@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
+import { readdir, unlink } from 'node:fs/promises';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './workspace';
@@ -169,6 +170,29 @@ export function listFilesRecursive(dir: string, prefix = ''): string[] {
   return results;
 }
 
+/** Recursively list all files under a directory without blocking the event loop. */
+export async function listFilesRecursiveAsync(
+  dir: string,
+  prefix = ''
+): Promise<string[]> {
+  if (!existsSync(dir)) {
+    return [];
+  }
+  const results: string[] = [];
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      results.push(
+        ...(await listFilesRecursiveAsync(join(dir, entry.name), rel))
+      );
+    } else {
+      results.push(rel);
+    }
+  }
+  return results;
+}
+
 /** Load a note by its file path (workspace-relative). */
 export async function loadNote(
   wsPath: string,
@@ -291,8 +315,7 @@ export async function deleteNoteFile(
   if (!(await file.exists())) {
     return false;
   }
-  const { unlinkSync } = await import('node:fs');
-  unlinkSync(fullPath);
+  await unlink(fullPath);
   return true;
 }
 

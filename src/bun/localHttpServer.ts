@@ -33,6 +33,8 @@ const CORS_HEADERS = {
 } as const;
 
 const BYTE_RANGE_RE = /^bytes=(?:(\d+)-(\d*)|-(\d+))$/i;
+const ATTACHMENT_KINDS = new Set(['audio', 'file', 'image', 'video']);
+type AttachmentKind = 'audio' | 'file' | 'image' | 'video';
 
 interface ByteRange {
   end: number;
@@ -226,11 +228,17 @@ export function startLocalHttpServer(
             headers: CORS_HEADERS,
           });
         }
+        if (!ATTACHMENT_KINDS.has(kind)) {
+          return new Response('Invalid attachment kind', {
+            status: 400,
+            headers: CORS_HEADERS,
+          });
+        }
         try {
           const wsPath = options.getWorkspacePath();
           const saved = await saveAttachmentStream(wsPath, {
             body: req.body,
-            kind: kind as 'audio' | 'file' | 'image' | 'video',
+            kind: kind as AttachmentKind,
             mimeType,
             suggestedName: fileName,
           });

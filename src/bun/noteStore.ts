@@ -9,7 +9,7 @@ import {
 } from './blocknote';
 import {
   displayHintToType,
-  listFilesRecursive,
+  listFilesRecursiveAsync,
   loadNote,
   type NoteDocument,
   type NoteFrontmatter,
@@ -72,7 +72,7 @@ export async function buildNoteIndex(
 
   // 1) Sidecars (JSON note records). The noteId is the file basename.
   const sidecarDir = blocknoteSidecarDir(wsPath);
-  for (const rel of listFilesRecursive(sidecarDir)) {
+  for (const rel of await listFilesRecursiveAsync(sidecarDir)) {
     if (!rel.endsWith('.json')) {
       continue;
     }
@@ -84,7 +84,7 @@ export async function buildNoteIndex(
 
   // 2) Legacy markdown files. Skip the sidecar dir (only scan `.md`).
   const contentDir = join(wsPath, 'content');
-  for (const rel of listFilesRecursive(contentDir)) {
+  for (const rel of await listFilesRecursiveAsync(contentDir)) {
     if (!rel.endsWith('.md')) {
       continue;
     }

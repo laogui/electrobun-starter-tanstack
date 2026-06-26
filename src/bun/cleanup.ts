@@ -1,11 +1,12 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
 import { blocknoteSidecarDir } from './blocknote';
 import { loadManifest, type ManifestNode } from './manifest';
-import { listFilesRecursive, parseFrontmatter } from './notes';
+import { listFilesRecursiveAsync, parseFrontmatter } from './notes';
 import { loadWorkspaceConfig } from './workspace';
 
 export interface UnlinkedFileEntry {
@@ -90,7 +91,7 @@ export async function scanUnlinkedNotes(
   const contentDir = join(wsPath, 'content');
   const entries: UnlinkedFileEntry[] = [];
 
-  for (const rel of listFilesRecursive(contentDir)) {
+  for (const rel of await listFilesRecursiveAsync(contentDir)) {
     if (!rel.endsWith('.md')) {
       continue;
     }
@@ -115,7 +116,7 @@ export async function scanUnlinkedNotes(
     let size = 0;
     let modifiedAt = 0;
     try {
-      const s = statSync(fullPath);
+      const s = await stat(fullPath);
       size = s.size;
       modifiedAt = s.mtimeMs;
     } catch {
@@ -140,7 +141,7 @@ export async function scanUnlinkedNotes(
       .filter((id): id is string => Boolean(id))
   );
   const sidecarDir = blocknoteSidecarDir(wsPath);
-  for (const rel of listFilesRecursive(sidecarDir)) {
+  for (const rel of await listFilesRecursiveAsync(sidecarDir)) {
     if (!rel.endsWith('.json') || rel.includes('/')) {
       continue;
     }
@@ -159,7 +160,7 @@ export async function scanUnlinkedNotes(
     let size = 0;
     let modifiedAt = 0;
     try {
-      const s = statSync(fullPath);
+      const s = await stat(fullPath);
       size = s.size;
       modifiedAt = s.mtimeMs;
     } catch {

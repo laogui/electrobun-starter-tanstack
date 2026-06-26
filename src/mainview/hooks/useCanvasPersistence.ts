@@ -25,14 +25,17 @@ async function flushNow(
   const { nodes, edges, viewport } = useCanvasStore.getState();
   const sanitized = sanitizeForPersistence(nodes, edges);
   try {
-    await rpcSaveManifest(
+    const result = await rpcSaveManifest(
       viewId,
       sanitized.nodes,
       sanitized.edges,
       viewport ?? undefined
     );
-    clearPendingFlushBackup(viewId);
-    return true;
+    if (result?.success) {
+      clearPendingFlushBackup(viewId);
+      return true;
+    }
+    return false;
   } catch (error) {
     console.error('[persistence] Failed to flush manifest:', error);
     return false;
@@ -67,6 +70,13 @@ export function useCanvasPersistence() {
   useEffect(() => {
     let rpcReady = false;
     let earlyDirty = false;
+    const flushAndMarkClean = () => {
+      flushNow(pendingTimer, viewIdRef.current).then((success) => {
+        if (success) {
+          dirty.current = false;
+        }
+      });
+    };
 
     isRpcAvailable().then((available) => {
       isAvailable.current = available;
@@ -92,8 +102,7 @@ export function useCanvasPersistence() {
       if (available && earlyDirty) {
         dirty.current = true;
         pendingTimer.current = setTimeout(() => {
-          flushNow(pendingTimer, viewIdRef.current);
-          dirty.current = false;
+          flushAndMarkClean();
         }, LAYOUT_DEBOUNCE_MS);
       }
     });
@@ -128,8 +137,7 @@ export function useCanvasPersistence() {
         clearTimeout(pendingTimer.current);
       }
       pendingTimer.current = setTimeout(() => {
-        flushNow(pendingTimer, viewIdRef.current);
-        dirty.current = false;
+        flushAndMarkClean();
       }, LAYOUT_DEBOUNCE_MS);
     });
 
@@ -137,8 +145,7 @@ export function useCanvasPersistence() {
       if (!(isAvailable.current && dirty.current)) {
         return;
       }
-      flushNow(pendingTimer, viewIdRef.current).catch(() => {});
-      dirty.current = false;
+      flushAndMarkClean();
     };
 
     const handleBeforeUnload = () => {
@@ -164,7 +171,7 @@ export function useCanvasPersistence() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibility);
       if (pendingTimer.current && isAvailable.current && dirty.current) {
-        flushNow(pendingTimer, viewIdRef.current).catch(() => {});
+        flushAndMarkClean();
       } else if (pendingTimer.current) {
         clearTimeout(pendingTimer.current);
       }

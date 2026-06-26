@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './workspace';
@@ -193,16 +194,16 @@ export async function blocknoteSidecarExists(
 }
 
 /** Delete the sidecar for a note. Returns true if a file was removed. */
-export function deleteBlockNoteSidecar(
+export async function deleteBlockNoteSidecar(
   wsPath: string,
   noteId: string
-): boolean {
+): Promise<boolean> {
   const relativePath = blocknoteSidecarRelativePath(noteId);
   const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
   if (!existsSync(fullPath)) {
     return false;
   }
-  unlinkSync(fullPath);
+  await unlink(fullPath);
   return true;
 }
 

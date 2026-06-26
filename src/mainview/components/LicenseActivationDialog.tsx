@@ -96,6 +96,7 @@ export function LicenseActivationDialog({
           <button
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             onClick={onClose}
+            type="button"
           >
             <X size={20} />
           </button>
@@ -109,12 +110,16 @@ export function LicenseActivationDialog({
           </p>
 
           <div className="mb-4">
-            <label className="mb-2 block font-medium text-gray-700 text-sm dark:text-gray-300">
+            <label
+              className="mb-2 block font-medium text-gray-700 text-sm dark:text-gray-300"
+              htmlFor="license-key"
+            >
               License Key
             </label>
             <input
               autoFocus
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              id="license-key"
               maxLength={29}
               onChange={(e) => handleKeyInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
@@ -142,6 +147,7 @@ export function LicenseActivationDialog({
                 <button
                   className="mt-2 text-xs text-yellow-700 underline dark:text-yellow-300"
                   onClick={showTestKeys}
+                  type="button"
                 >
                   Show test keys
                 </button>
@@ -156,12 +162,14 @@ export function LicenseActivationDialog({
             className="flex-1 rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={loading || !key.trim()}
             onClick={handleActivate}
+            type="button"
           >
             {loading ? 'Activating...' : 'Activate'}
           </button>
           <button
             className="rounded-lg border border-gray-300 px-4 py-2 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
             onClick={onClose}
+            type="button"
           >
             Cancel
           </button>

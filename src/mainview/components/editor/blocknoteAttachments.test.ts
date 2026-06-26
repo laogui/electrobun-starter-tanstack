@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpcSaveAttachmentMock = vi.fn();
 const rpcLoadAttachmentMock = vi.fn();
+const DATA_IMAGE_PNG_RE = /^data:image\/png;base64,/;
+const SAVE_ATTACHMENT_ERROR_RE = /Failed to save attachment/;
 
 vi.mock('@/lib/rpc', () => ({
   rpcSaveAttachment: (...args: unknown[]) => rpcSaveAttachmentMock(...args),
@@ -25,11 +27,15 @@ describe('inferAttachmentKind', () => {
 });
 
 class FakeFile {
-  constructor(
-    public name: string,
-    public type: string,
-    private readonly bytes: Uint8Array
-  ) {}
+  name: string;
+  type: string;
+  readonly bytes: Uint8Array;
+
+  constructor(name: string, type: string, bytes: Uint8Array) {
+    this.name = name;
+    this.type = type;
+    this.bytes = bytes;
+  }
 }
 
 function fakeFile(
@@ -90,7 +96,7 @@ describe('uploadBlockNoteFile', () => {
     const result = await uploadBlockNoteFile(fakeFile('cat.png', 'image/png'));
     expect(result).toBe('attachments/image_abc.png');
     expect(rpcSaveAttachmentMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^data:image\/png;base64,/),
+      expect.stringMatching(DATA_IMAGE_PNG_RE),
       undefined,
       {
         kind: 'image',
@@ -103,7 +109,7 @@ describe('uploadBlockNoteFile', () => {
   it('throws when the Bun side fails to persist', async () => {
     rpcSaveAttachmentMock.mockResolvedValue(null);
     await expect(uploadBlockNoteFile(fakeFile('a.bin', ''))).rejects.toThrow(
-      /Failed to save attachment/
+      SAVE_ATTACHMENT_ERROR_RE
     );
   });
 });

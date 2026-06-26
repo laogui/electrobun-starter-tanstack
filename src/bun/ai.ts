@@ -54,10 +54,22 @@ export async function handleAIChat(
   config: AIServerConfig,
   headers?: HeadersInit
 ): Promise<Response> {
-  const { messages, toolDefinitions } = (await req.json()) as {
-    messages: unknown[];
-    toolDefinitions: unknown[];
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response('Invalid AI chat request', { status: 400, headers });
+  }
+  if (!(body && typeof body === 'object')) {
+    return new Response('Invalid AI chat request', { status: 400, headers });
+  }
+  const { messages, toolDefinitions } = body as {
+    messages?: unknown;
+    toolDefinitions?: unknown;
   };
+  if (!(Array.isArray(messages) && Array.isArray(toolDefinitions))) {
+    return new Response('Invalid AI chat request', { status: 400, headers });
+  }
 
   const result = streamText({
     model: resolveModel(config),

@@ -641,6 +641,47 @@ describe('search', () => {
     expect(results).toHaveLength(0);
   });
 
+  it('does not read unreferenced note files during search', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'n1',
+              type: 'card',
+              position: { x: 0, y: 0 },
+              data: { noteId: 'note-1', file: 'content/referenced.md' },
+            },
+          ],
+        },
+      },
+      notes: {
+        'referenced.md': {
+          id: 'note-1',
+          title: 'Referenced',
+          body: 'matchable body',
+        },
+        'orphan.md': {
+          id: 'note-orphan',
+          title: 'Orphan',
+          body: 'unique-marker',
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+
+    await searchWorkspace(workspaceRoot, { query: 'matchable' });
+
+    const fileCalls = vi
+      .mocked(Bun.file)
+      .mock.calls.map(([filePath]) => String(filePath));
+    expect(fileCalls.some((filePath) => filePath.endsWith('orphan.md'))).toBe(
+      false
+    );
+  });
+
   it('cleanMarkdown strips fences, links, headings, bold/italic, lists', async () => {
     const { cleanMarkdown } = await import('./search');
     expect(cleanMarkdown('# Heading\n**bold** and _x_')).toBe(

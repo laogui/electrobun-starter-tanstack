@@ -251,6 +251,54 @@ describe('useCanvasPersistence', () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 
+  it('keeps pending changes dirty when a blur flush fails and retries them later', async () => {
+    rpcMocks.rpcSaveManifest
+      .mockRejectedValueOnce(new Error('save failed'))
+      .mockResolvedValueOnce({ success: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 0, y: 0 }, data: {} },
+      ]);
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 80, y: 80 }, data: {} },
+      ]);
+
+    await act(async () => {
+      globalThis.dispatchEvent(new Event('blur'));
+      await Promise.resolve();
+    });
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      globalThis.dispatchEvent(new Event('blur'));
+      await Promise.resolve();
+    });
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(2);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenLastCalledWith(
+      'default',
+      [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 80, y: 80 },
+          data: {},
+        },
+      ],
+      [],
+      undefined
+    );
+  });
+
   it('flushes pending changes during unmount', async () => {
     const view = render(<TestComponent />);
     await vi.runAllTicks();

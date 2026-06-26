@@ -1,6 +1,6 @@
 import { blocksToPlainText } from './blocknotePreview';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
-import { listNoteRecords } from './noteStore';
+import { buildNoteIndex, loadNoteRecord, type NoteRecord } from './noteStore';
 import { loadWorkspaceConfig } from './workspace';
 
 // ---------------------------------------------------------------------------
@@ -413,18 +413,39 @@ async function scanNotes(
   noteIdToNodes: Map<string, NodeRef[]>,
   results: SearchResult[]
 ) {
-  // Enumerate note records from the note store (sidecar JSON is the source of
-  // truth; legacy `.md` notes are still discovered for matching).
-  const records = await listNoteRecords(wsPath);
+  const searchable: Array<{ record: NoteRecord; refs: NodeRef[] }> = [];
+  const unresolved: string[] = [];
 
-  for (const record of records) {
-    const refs = noteIdToNodes.get(record.noteId);
-    if (!refs || refs.length === 0) {
-      // Note exists but is not referenced by any manifest; skip — there is
-      // nowhere to navigate to.
-      continue;
+  for (const [noteId, refs] of noteIdToNodes) {
+    const markdownFile = markdownFileFromRefs(refs);
+    const record = await loadNoteRecord(wsPath, noteId, markdownFile);
+    if (record) {
+      searchable.push({ record, refs });
+    } else {
+      unresolved.push(noteId);
     }
+  }
 
+  if (unresolved.length > 0) {
+    const noteIndex = await buildNoteIndex(wsPath);
+    for (const noteId of unresolved) {
+      const refs = noteIdToNodes.get(noteId);
+      if (!refs) {
+        continue;
+      }
+      const location = noteIndex.get(noteId);
+      const record = await loadNoteRecord(
+        wsPath,
+        noteId,
+        location?.markdownFile
+      );
+      if (record) {
+        searchable.push({ record, refs });
+      }
+    }
+  }
+
+  for (const { record, refs } of searchable) {
     const title = record.title;
     // Tags live in node-metadata for sidecar notes; legacy markdown still
     // carries them in frontmatter.
@@ -485,6 +506,16 @@ async function scanNotes(
       }
     }
   }
+}
+
+function markdownFileFromRefs(refs: NodeRef[]): string | undefined {
+  for (const ref of refs) {
+    const file = asString(ref.node.data.file);
+    if (file) {
+      return file;
+    }
+  }
+  return;
 }
 
 function pushNoteResult(

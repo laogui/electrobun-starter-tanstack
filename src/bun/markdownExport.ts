@@ -15,7 +15,8 @@ const LEADING_DOT_SLASH_RE = /^\.\//;
 const MD_ATTACHMENT_LINK_RE = /\]\((attachments\/[^)\s]+)\)/g;
 const SLUG_STRIP_RE = /[^a-z\d]+/g;
 const SLUG_TRIM_RE = /^-|-$/g;
-const YAML_UNSAFE_RE = /[:#"\n]/;
+const YAML_INDICATOR_START_RE = /^[-?:![\]{}#&*|>'"%@`]/;
+const YAML_UNSAFE_RE = /[:#"\n\r{}[\],&*?|>%@`]/;
 
 export interface ExportedNote {
   attachments: string[]; // workspace-relative attachment paths referenced
@@ -58,8 +59,10 @@ const rewriteMarkdownAttachments = (
 // Only the user-controlled title needs quoting; noteId is `[A-Za-z0-9_-]+`
 // and timestamps are ISO-8601 tokens that are safe unquoted in YAML.
 const yamlValue = (value: string): string =>
-  YAML_UNSAFE_RE.test(value)
-    ? `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n')}"`
+  YAML_UNSAFE_RE.test(value) ||
+  YAML_INDICATOR_START_RE.test(value) ||
+  value.trim() !== value
+    ? JSON.stringify(value)
     : value;
 
 const buildFrontmatter = (record: NoteRecord, exportedAt: string): string => {

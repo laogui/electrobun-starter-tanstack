@@ -123,6 +123,32 @@ describe('startLocalHttpServer', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
+  it('replies 400 when AI chat receives an invalid request body', async () => {
+    const handle = startLocalHttpServer({
+      getAIConfig: () => ({
+        provider: 'openai',
+        model: 'gpt-test',
+        apiKey: 'k',
+      }),
+      getWorkspacePath: () => '/tmp/workspace',
+    });
+    const res = await invoke(
+      new Request('http://127.0.0.1:4242/ai/chat', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          'Content-Type': 'application/json',
+          Origin: ORIGIN,
+        },
+        body: JSON.stringify({ messages: [] }),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Invalid AI chat request');
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
   it('returns 404 for unknown routes', async () => {
     const handle = startLocalHttpServer(createServerOptions());
     const res = await invoke(
@@ -132,6 +158,24 @@ describe('startLocalHttpServer', () => {
       })
     );
     expect(res.status).toBe(404);
+  });
+
+  it('rejects attachment uploads with an invalid kind', async () => {
+    const handle = startLocalHttpServer(createServerOptions());
+    const res = await invoke(
+      new Request(
+        'http://127.0.0.1:4242/attachment/upload?fileName=test.bin&kind=script',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${handle.token}` },
+          body: new Blob(['payload']),
+        }
+      )
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Invalid attachment kind');
+    expect(saveAttachmentStreamMock).not.toHaveBeenCalled();
   });
 
   it('rejects /unfurl without bearer token', async () => {

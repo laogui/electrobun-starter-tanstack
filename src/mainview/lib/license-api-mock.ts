@@ -31,7 +31,7 @@ const TEST_LICENSES = [
 ];
 
 // 初始化测试数据
-TEST_LICENSES.forEach((key) => {
+for (const key of TEST_LICENSES) {
   mockStorage.licenses.set(key, {
     key,
     email: 'test@example.com',
@@ -42,7 +42,7 @@ TEST_LICENSES.forEach((key) => {
     activatedAt: null,
     createdAt: new Date().toISOString(),
   });
-});
+}
 
 export const mockLicenseAPI = {
   /**
@@ -149,7 +149,7 @@ export const mockLicenseAPI = {
   reset(): void {
     mockStorage.licenses.clear();
     mockStorage.activations.clear();
-    TEST_LICENSES.forEach((key) => {
+    for (const key of TEST_LICENSES) {
       mockStorage.licenses.set(key, {
         key,
         email: 'test@example.com',
@@ -160,14 +160,14 @@ export const mockLicenseAPI = {
         activatedAt: null,
         createdAt: new Date().toISOString(),
       });
-    });
+    }
   },
 };
 
 // 打印测试许可证到控制台
 if (import.meta.env.DEV) {
   console.log('[Mock License API] Test licenses available:');
-  TEST_LICENSES.forEach((key, i) => {
+  for (const [i, key] of TEST_LICENSES.entries()) {
     console.log(`  ${i + 1}. ${key}`);
-  });
+  }
 }

@@ -41,7 +41,13 @@ export async function loadManifest(
   if (!(await file.exists())) {
     return null;
   }
-  return await file.json();
+  try {
+    return await file.json();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[manifest] Failed to load ${viewFile}: ${message}`);
+    return null;
+  }
 }
 
 /** Save a canvas manifest to disk (atomic write). */

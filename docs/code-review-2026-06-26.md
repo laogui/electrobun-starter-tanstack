@@ -4,6 +4,12 @@
 **范围**: 全部源文件 (`src/bun/`, `src/mainview/`, `src/shared/`) + 配置 + 测试覆盖
 **总计**: ~120 个源文件, ~100 个测试文件
 
+**修复状态标记**:
+
+- `[已修复]`: 本轮已完成对应问题的主要修复，并补充或更新了相关验证。
+- `[部分修复]`: 本轮修复了其中高风险或高价值子项，但原问题仍有剩余设计/覆盖面未完成。
+- 未标记条目: 本轮尚未处理。
+
 ---
 
 ## 目录
@@ -21,6 +27,8 @@
 
 ### C1. 幽灵依赖 `"2": "^3.0.0"` — `package.json`
 
+> 状态: `[已修复]` 已移除误加依赖 `"2"`，并同步更新 `bun.lock`。
+
 ```json
 "dependencies": {
     "2": "^3.0.0",
@@ -31,6 +39,8 @@
 npm 上不存在合法的 `"2"` 包。这极可能是合并冲突残留、lockfile 损坏或复制粘贴错误。Bun/npm 可能会安装一个完全无关的包，或在某些环境下报错。**必须确认这到底对应什么包并修正**。
 
 ### C2. `loadManifest` 缺少 try-catch — `src/bun/manifest.ts`
+
+> 状态: `[已修复]` `loadManifest` 现在会捕获损坏 JSON，记录 warning 并返回 `null`；已更新对应测试。
 
 ```typescript
 export async function loadManifest(wsPath, viewFile): Promise<CanvasManifest | null> {
@@ -52,6 +62,8 @@ Phase 1 中建立 `nodeLocMap`，Phase 2 中用 `!` 强制断言取值。若 Pha
 
 ### H1. XOR "加密" 虚假安全 — `src/bun/license.ts`
 
+> 状态: `[部分修复]` 已将 `generateLicenseKey` 从 `Math.random()` 改为 `crypto.randomBytes`，并把 XOR 注释改为本地混淆；但本地 license 方案仍未重设计为真正的签名/服务端校验方案。
+
 - `encode`/`decode` 使用 XOR 算法，密钥就是设备指纹，算法完全暴露在源码中
 - `validateKey` 用 `Bun.hash`（非加密哈希），校验和公式可逆
 - `generateLicenseKey` 用 `Math.random()`（可预测）
@@ -59,13 +71,19 @@ Phase 1 中建立 `nodeLocMap`，Phase 2 中用 `!` 强制断言取值。若 Pha
 
 ### H2. `getDeviceFingerprint` 使用 `require('node:os')` — `src/bun/license.ts`
 
+> 状态: `[已修复]` 已替换为 ESM `import { cpus, hostname, totalmem } from 'node:os'`。
+
 全项目统一使用 ESM `import`，唯独此处用 CJS `require()`。在 ESM-only bundling 环境下会崩溃，且缓存行为不同于静态 import。
 
 ### H3. `listNoteRecords` 全量加载所有笔记 — `src/bun/noteStore.ts`
 
+> 状态: `[已修复]` 搜索路径不再无条件全量读取所有 note；现在优先按 manifest 引用加载，只有 legacy 缺少文件路径时才回退索引。
+
 每次搜索查询都会调用 `buildNoteIndex`（读取所有 `.md` 文件提取 frontmatter）+ `loadNoteRecord`（解析所有 sidecar JSON）。1000+ 笔记的工作区意味着每次击键（debounce 后）1000+ 次文件读取。**这是搜索性能的定时炸弹**。
 
 ### H4. 同步文件系统调用阻塞事件循环 — `src/bun/notes.ts`, `src/bun/cleanup.ts`
+
+> 状态: `[部分修复]` 搜索、cleanup 扫描、note 删除、blocknote sidecar 删除等高频/用户触发路径已改为异步 I/O；`listFilesRecursive` 同步版本仍保留给现有 legacy 调用，后续可继续收敛。
 
 - `listFilesRecursive` 使用 `readdirSync`
 - `deleteNoteFile` 使用 `unlinkSync`
@@ -74,6 +92,8 @@ Phase 1 中建立 `nodeLocMap`，Phase 2 中用 `!` 强制断言取值。若 Pha
 大型工作区下会导致明显的 UI 卡顿。应全部替换为异步版本。
 
 ### H5. `document.body.style.overflow` 冲突 — `src/mainview/components/canvas/FocusedView.tsx` + `FolderView.tsx`
+
+> 状态: `[已修复]` 已抽出 `useBodyScrollLock`，恢复进入前的 overflow 值，并补了两个视图的回归测试。
 
 两个组件都在 mount 时设 `overflow = 'hidden'`，unmount 时设 `'auto'`。如果同时挂载（从 FolderView 内打开 FocusedView），卸载其中一个会重置另一个的滚动锁定。应使用引用计数器。
 
@@ -91,9 +111,13 @@ useEffect 闭包引用 `focusedNode`, `focusedFolder`, `searchOpen` 等 20+ 个 
 
 ### H9. `switchView` 部分失败导致不一致 — `src/mainview/store/canvasStore.ts`
 
+> 状态: `[已修复]` `switchView` 现在等待 `rpcSetActiveView` 成功；失败时返回 `false`，不会提前清空本地 canvas 状态。
+
 `rpcSaveManifest` 成功后 `setActiveView` 已清除本地 store，但 `rpcSetActiveView` 失败被 `.catch(() => {})` 吞掉。本地已切换但持久化的 activeView 未更新。下次启动加载旧视图。
 
 ### H10. blur/visibility change 时 flush 失败静默丢弃 — `src/mainview/hooks/useCanvasPersistence.ts`
+
+> 状态: `[已修复]` `flushNow` 现在检查 RPC 返回结果，只有保存成功才清除 dirty 状态；失败后仍保持 dirty，后续可重试。
 
 ```typescript
 handleFlush -> flushNow(...).catch(() => {})
@@ -107,9 +131,13 @@ handleFlush -> flushNow(...).catch(() => {})
 
 ### M1. API Key 明文存储 — `src/bun/aicredentials.ts`
 
+> 状态: `[部分修复]` 写入 credentials 后已设置文件权限为 `0600`；但仍是本地明文 JSON，若要彻底解决应迁移到系统 keychain 或加密存储。
+
 LLM API Key 写入 `<userData>/ai-credentials.json` 纯文本。没有设置文件权限，任何能读 userData 目录的进程都能获取。
 
 ### M2. 上传端点未验证 `kind` 参数 — `src/bun/localHttpServer.ts`
+
+> 状态: `[已修复]` 上传端点现在只接受 `audio`、`file`、`image`、`video`，非法 kind 返回 400。
 
 ```typescript
 kind: kind as 'audio' | 'file' | 'image' | 'video'
@@ -118,6 +146,8 @@ kind: kind as 'audio' | 'file' | 'image' | 'video'
 直接将 URL query 参数强转为联合类型，任意字符串都会被接受。应使用 zod 或手动验证。
 
 ### M3. AI Chat 请求体无运行时验证 — `src/bun/ai.ts`
+
+> 状态: `[已修复]` AI chat 请求体现在要求 object 且 `messages`、`toolDefinitions` 为数组；无效请求返回 400。
 
 ```typescript
 (await req.json()) as { messages, toolDefinitions }
@@ -146,6 +176,8 @@ kind: kind as 'audio' | 'file' | 'image' | 'video'
 写入临时文件后 rename。如果进程在两步之间崩溃，`.tmp` 文件永不清理。无启动时清理逻辑。
 
 ### M9. YAML 导出不完整转义 — `src/bun/markdownExport.ts`
+
+> 状态: `[已修复]` YAML value 判断已覆盖更多 YAML 指示字符，并对不安全值使用 JSON 字符串形式输出；已补特殊字符标题测试。
 
 `yamlValue` 只转义 `:`, `#`, `"`, `\n`，但不转义 `{`, `}`, `[`, `]`, `&`, `*`, `?`, `|`, `>`, `%`, `@`, `` ` ``。标题含这些字符时会产生无效 YAML frontmatter。
 
@@ -187,9 +219,13 @@ unfurl effect 调用 `updateNodeData({ unfurlStatus: 'loading' })`，而 `unfurl
 
 ### M19. `require('node:os')` vs ESM import — `src/bun/license.ts`
 
+> 状态: `[已修复]` 同 H2，已改为静态 ESM import。
+
 全项目统一 ESM，此处独用 CJS `require()`。
 
 ### M20. 测试覆盖缺失 — 33+ 源文件无测试
+
+> 状态: `[部分修复]` 本轮为 manifest、canvas persistence、view switching、body scroll lock、AI 输入校验、attachment kind、YAML export、search、async deletion、AI credentials、license key 生成等新增或更新了回归测试；整体 33+ 无测试模块清单仍未完全清零。
 
 **无测试的模块**: `userprefs.ts`, `license.ts`, `localHttpServer.ts`, `blocknoteMarkdown.ts`(部分), `main.tsx`, `router.tsx`, `settings.tsx`, `settingsClient.ts`, `ZoomLevelContext.tsx`, `initialNodes.ts`, `flags.ts`, `formatRelative.ts`, `searchTypes.ts`, `canvasConstants.ts`, `license-api-mock.ts`, `workspaceAttachmentPaths.ts`, 以及 10+ 组件 (LibraryCard, TagSidebarButton, DeleteTagConfirmDialog, FolderEditDialog, ImageZoomPan, ReplaceImageConfirmDialog, EmptyCanvasOverlay, LibraryButton, SaveIndicator, AboutPanel, AIPanel, GeneralPanel, ShortcutsPanel, WorkspacePanel, SearchEmptyState, resultIcon)。
 
@@ -241,11 +277,11 @@ unfurl effect 调用 `updateNodeData({ unfurlStatus: 'loading' })`，而 `unfurl
 
 ### 建议修复优先级
 
-1. **C1** - 幽灵依赖 `"2": "^3.0.0"` (package.json)
-2. **C2** - `loadManifest` 未防护 JSON 解析 (manifest.ts)
-3. **H3** - 搜索全量加载 O(n) 性能 (noteStore.ts)
-4. **H4** - 同步文件系统调用 (notes.ts, cleanup.ts)
-5. **H5** - overflow 冲突 (FocusedView + FolderView)
-6. **H9/H10** - 状态一致性 (canvasStore + useCanvasPersistence)
-7. **H1** - License 安全方案重设计
-8. **M20** - 补充 33+ 无测试模块的测试覆盖
+1. `[已修复]` **C1** - 幽灵依赖 `"2": "^3.0.0"` (package.json)
+2. `[已修复]` **C2** - `loadManifest` 未防护 JSON 解析 (manifest.ts)
+3. `[已修复]` **H3** - 搜索全量加载 O(n) 性能 (noteStore.ts)
+4. `[部分修复]` **H4** - 同步文件系统调用 (notes.ts, cleanup.ts)
+5. `[已修复]` **H5** - overflow 冲突 (FocusedView + FolderView)
+6. `[已修复]` **H9/H10** - 状态一致性 (canvasStore + useCanvasPersistence)
+7. `[部分修复]` **H1** - License 安全方案重设计
+8. `[部分修复]` **M20** - 补充 33+ 无测试模块的测试覆盖

@@ -24,7 +24,7 @@ vi.mock('@/hooks/useSearch', () => ({
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn().mockResolvedValue(true),
   rpcSaveManifest: vi.fn().mockResolvedValue({ success: true }),
-  rpcSetActiveView: vi.fn().mockResolvedValue(undefined),
+  rpcSetActiveView: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('@/lib/rpc', () => ({
@@ -50,6 +50,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   search_tip_create: () => 'New card',
   search_group_collapse: () => 'Collapse group',
   search_group_expand: () => 'Expand group',
+  toast_view_switch_save_failed: () => 'Failed to switch view',
 }));
 
 import { SearchDialog } from './SearchDialog';
@@ -143,6 +144,7 @@ beforeEach(() => {
   });
   rpcMocks.isRpcAvailable.mockReset().mockResolvedValue(true);
   rpcMocks.rpcSaveManifest.mockReset().mockResolvedValue({ success: true });
+  rpcMocks.rpcSetActiveView.mockReset().mockResolvedValue({ success: true });
   searchState.current = {
     query: '',
     setQuery: vi.fn(),

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { rename } from 'node:fs/promises';
+import { chmod, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
@@ -52,4 +52,5 @@ export async function saveAIApiKey(apiKey: string | null): Promise<void> {
   const tmp = `${path}.${crypto.randomUUID().slice(0, 8)}.tmp`;
   await Bun.write(tmp, JSON.stringify(credentials, null, 2));
   await rename(tmp, path);
+  await chmod(path, 0o600);
 }

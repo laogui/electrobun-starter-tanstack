@@ -257,6 +257,27 @@ describe('focusedView', () => {
     });
   });
 
+  it('preserves an existing body scroll lock when it unmounts', () => {
+    const onClose = vi.fn();
+    document.body.style.overflow = 'hidden';
+
+    const view = render(
+      <FocusedView
+        node={{
+          id: 'card-1',
+          type: 'card',
+          data: { title: 'Alpha', content: 'Body', noteId: 'note-1' },
+          rect,
+        }}
+        onClose={onClose}
+      />
+    );
+
+    view.unmount();
+
+    expect(document.body.style.overflow).toBe('hidden');
+  });
+
   it('routes folder-child text edits back into the owning folder data', async () => {
     render(
       <FocusedView

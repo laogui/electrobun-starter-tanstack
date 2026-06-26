@@ -63,6 +63,17 @@ describe('markdownExport', () => {
       expect(result.attachments).toEqual([]);
     });
 
+    it('quotes YAML titles with flow collection and anchor characters', () => {
+      const result = buildNoteMarkdown(
+        sidecarRecord({ title: 'Plan [v2] & owners @ friday' }),
+        {
+          exportedAt: '2026-03-03T00:00:00.000Z',
+        }
+      );
+
+      expect(result.markdown).toContain('title: "Plan [v2] & owners @ friday"');
+    });
+
     it('omits frontmatter when includeFrontmatter is false', () => {
       const result = buildNoteMarkdown(sidecarRecord(), {
         includeFrontmatter: false,

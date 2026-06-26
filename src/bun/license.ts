@@ -1,4 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
+import { cpus, hostname, totalmem } from 'node:os';
 import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
@@ -27,18 +29,18 @@ export interface LicenseInfo {
 const LICENSE_FILE = 'license.dat';
 const LICENSE_KEY_PATTERN =
   /^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+const LICENSE_KEY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 /**
  * 生成设备指纹 - 基于硬件信息的唯一标识
  */
 function getDeviceFingerprint(): string {
-  const os = require('node:os');
-  const raw = `${process.platform}${os.hostname()}${os.cpus()[0]?.model || ''}${os.totalmem()}`;
+  const raw = `${process.platform}${hostname()}${cpus()[0]?.model || ''}${totalmem()}`;
   return Bun.hash(raw).toString(16);
 }
 
 /**
- * XOR编码(与设备指纹绑定)
+ * Local obfuscation (bound to the device fingerprint).
  */
 function encode(data: string, key: string): Uint8Array {
   const bytes = new TextEncoder().encode(data);
@@ -48,6 +50,7 @@ function encode(data: string, key: string): Uint8Array {
     const b = bytes[i];
     const k = keyBytes[i % keyBytes.length];
     if (b !== undefined && k !== undefined) {
+      // biome-ignore lint/suspicious/noBitwiseOperators: XOR is the intended byte transform.
       result[i] = b ^ k;
     }
   }
@@ -55,7 +58,7 @@ function encode(data: string, key: string): Uint8Array {
 }
 
 /**
- * XOR解码
+ * Decode local obfuscation.
  */
 function decode(encoded: Uint8Array, key: string): string | null {
   try {
@@ -65,6 +68,7 @@ function decode(encoded: Uint8Array, key: string): string | null {
       const e = encoded[i];
       const k = keyBytes[i % keyBytes.length];
       if (e !== undefined && k !== undefined) {
+        // biome-ignore lint/suspicious/noBitwiseOperators: XOR is the intended byte transform.
         result[i] = e ^ k;
       }
     }
@@ -223,12 +227,30 @@ export async function checkLicenseStatus(): Promise<LicenseInfo> {
  * 生成许可证密钥(仅用于测试)
  */
 export function generateLicenseKey(): string {
-  const s1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-  const s2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-  const s3 = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const s1 = randomLicenseSegment();
+  const s2 = randomLicenseSegment();
+  const s3 = randomLicenseSegment();
   const checksum = Bun.hash(`${s1}${s2}${s3}`)
     .toString(16)
     .slice(0, 4)
     .toUpperCase();
   return `GHOST-${s1}-${s2}-${s3}-${checksum}`;
+}
+
+function randomLicenseSegment(): string {
+  let segment = '';
+  while (segment.length < 4) {
+    const bytes = randomBytes(8);
+    for (const byte of bytes) {
+      // Rejection sampling avoids modulo bias for the 36-character alphabet.
+      if (byte >= 252) {
+        continue;
+      }
+      segment += LICENSE_KEY_CHARS[byte % LICENSE_KEY_CHARS.length];
+      if (segment.length === 4) {
+        break;
+      }
+    }
+  }
+  return segment;
 }

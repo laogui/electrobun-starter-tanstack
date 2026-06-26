@@ -1847,7 +1847,7 @@ async function main() {
           // Best-effort sidecar cleanup; ignore failures so we never block
           // deletion on a stale or read-only sidecar.
           try {
-            if (deleteBlockNoteSidecar(wsPath, noteId)) {
+            if (await deleteBlockNoteSidecar(wsPath, noteId)) {
               deleted = true;
             }
           } catch {

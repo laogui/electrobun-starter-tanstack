@@ -1,6 +1,5 @@
 import { NodeResizeControl } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import redPushpinUrl from '@/assets/pushpin.png';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
@@ -146,21 +145,38 @@ export const StickyContent = ({
       {/* Pushpin centered at the top, pressing the note flat against the wall.
           Half floats above the note so the head reads as sitting on top of the
           paper — the body div clips its own corners, so the pin (a sibling) is
-          never cut off by the note's rounded container. */}
+          never cut off by the note's rounded container. Rendered as a pure-CSS
+          metallic ball (gradient + inset highlight/shadow + cast shadow) with a
+          nested glint instead of a bitmap, so it stays crisp at any zoom. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-3 left-1/2 flex -translate-x-1/2 select-none"
+        className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 select-none"
+        data-sticky-pushpin
         style={{
-          filter: 'drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.35))',
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle at 34% 30%, #b6ffd2 0%, #00f260 38%, #00b347 74%, #00742d 100%)',
+          boxShadow: [
+            'inset 1.5px 1.5px 3px rgba(255,255,255,0.35)',
+            'inset -2px -2px 4px rgba(0,0,0,0.45)',
+            '1px 2px 2.5px rgba(0,0,0,0.3)',
+          ].join(', '),
         }}
       >
-        <img
-          alt=""
-          aria-hidden
-          className="h-6 w-auto select-none"
-          data-sticky-pushpin
-          draggable={false}
-          src={redPushpinUrl}
+        <span
+          style={{
+            position: 'absolute',
+            top: '14%',
+            left: '20%',
+            width: '34%',
+            height: '24%',
+            background: 'rgba(255,255,255,0.6)',
+            borderRadius: '50%',
+            transform: 'rotate(-20deg)',
+            filter: 'blur(0.8px)',
+          }}
         />
       </div>
     </>

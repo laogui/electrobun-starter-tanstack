@@ -54,6 +54,8 @@ export async function loadManifest(wsPath, viewFile): Promise<CanvasManifest | n
 
 ### C3. `index.ts` 非空断言 `nodeLocMap.get(idx)!` — `src/bun/index.ts`
 
+> 状态: `[已修复]` 已将 `src/bun/index.ts:1668` 的 `nodeLocMap.get(idx)!` 非空断言替换为防御性 guard——缺映射时跳过该节点的笔记写入、原样返回节点,而不是 `TypeError` 崩掉整个 `saveManifest`。与同文件 folder-child 路径的 guard 写法一致。
+
 Phase 1 中建立 `nodeLocMap`，Phase 2 中用 `!` 强制断言取值。若 Phase 1 因任何原因（竞态、逻辑错误）未填充某 card 节点的映射，直接 `TypeError: Cannot read properties of undefined`，整个保存流程中断。
 
 ---
@@ -279,6 +281,7 @@ unfurl effect 调用 `updateNodeData({ unfurlStatus: 'loading' })`，而 `unfurl
 
 1. `[已修复]` **C1** - 幽灵依赖 `"2": "^3.0.0"` (package.json)
 2. `[已修复]` **C2** - `loadManifest` 未防护 JSON 解析 (manifest.ts)
+3. `[已修复]` **C3** - `nodeLocMap.get(idx)!` 非空断言改为防御性 guard (index.ts)
 3. `[已修复]` **H3** - 搜索全量加载 O(n) 性能 (noteStore.ts)
 4. `[部分修复]` **H4** - 同步文件系统调用 (notes.ts, cleanup.ts)
 5. `[已修复]` **H5** - overflow 冲突 (FocusedView + FolderView)

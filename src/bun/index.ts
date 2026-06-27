@@ -1664,8 +1664,16 @@ async function main() {
                 return node;
               }
 
-              const noteId = node.data.noteId as string;
-              const location = nodeLocMap.get(idx)!;
+              const noteId = node.data.noteId as string | undefined;
+              const location = nodeLocMap.get(idx);
+              if (!(location && noteId)) {
+                // Phase 1 should always pre-allocate a location for every card.
+                // If one is missing (logic error, or a future refactor that
+                // makes Phase 1 tolerant of single-note failures), skip the
+                // note write and keep the node as-is instead of crashing the
+                // whole save. Mirrors the folder-child guard above.
+                return node;
+              }
 
               // Persist note content (sidecar-aware): sidecar-backed notes merge
               // metadata only; legacy cards round-trip markdown.

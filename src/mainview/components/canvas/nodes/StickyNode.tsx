@@ -3,7 +3,11 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
-import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import {
+  colorToStyle,
+  isColorDark,
+  stickyPushpinBackground,
+} from '@/lib/colorUtils';
 import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -119,7 +123,7 @@ export const StickyContent = ({
         </div>
       ) : (
         <div
-          className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-8 transition-shadow duration-150"
+          className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"
           style={colorToStyle(data.color)}
         >
           <div
@@ -156,26 +160,30 @@ export const StickyContent = ({
           width: 24,
           height: 24,
           borderRadius: '50%',
-          background:
-            'radial-gradient(circle at 34% 30%, #b6ffd2 0%, #00f260 38%, #00b347 74%, #00742d 100%)',
+          // Same shading recipe as the original reference pushpin: diagonal
+          // gradient + inset highlight/shadow for the round ball, plus a soft
+          // cast shadow on the note. The gradient is derived from the sticky's
+          // own color (green default when it has none).
+          background: stickyPushpinBackground(data.color),
           boxShadow: [
-            'inset 1.5px 1.5px 3px rgba(255,255,255,0.35)',
-            'inset -2px -2px 4px rgba(0,0,0,0.45)',
-            '1px 2px 2.5px rgba(0,0,0,0.3)',
+            'inset 1px 1px 2.5px rgba(255,255,255,0.3)',
+            'inset -1.5px -1.5px 3px rgba(0,0,0,0.4)',
+            '1px 1.5px 2px rgba(0,0,0,0.25)',
           ].join(', '),
         }}
       >
+        {/* Edge reflection glint (the reference's ::before) */}
         <span
           style={{
             position: 'absolute',
-            top: '14%',
-            left: '20%',
-            width: '34%',
-            height: '24%',
-            background: 'rgba(255,255,255,0.6)',
+            top: '10%',
+            left: '15%',
+            width: '40%',
+            height: '30%',
+            background: 'rgba(255,255,255,0.15)',
             borderRadius: '50%',
             transform: 'rotate(-20deg)',
-            filter: 'blur(0.8px)',
+            filter: 'blur(1px)',
           }}
         />
       </div>

@@ -108,7 +108,7 @@ describe('StickyNode', () => {
 
     expect(pushpin).not.toBeNull();
     expect(pushpin?.tagName).toBe('DIV');
-    expect(pushpin).toHaveClass('-top-1.5');
+    expect(pushpin).toHaveClass('top-1');
     expect(pushpin).not.toHaveClass('-translate-y-1/2');
     expect(pushpin?.style.borderRadius).toBe('50%');
     expect(container).not.toHaveTextContent('📌');

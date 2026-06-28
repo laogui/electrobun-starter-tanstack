@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import {
+  colorToStyle,
+  DEFAULT_PUSHPIN_BACKGROUND,
+  isColorDark,
+  stickyPushpinBackground,
+} from '@/lib/colorUtils';
 
 describe('colorToStyle', () => {
   it('returns a backgroundColor style for a valid hex color', () => {
@@ -48,5 +53,43 @@ describe('isColorDark', () => {
     expect(isColorDark('#FEF08A')).toBe(false);
     expect(isColorDark('#DBEAFE')).toBe(false);
     expect(isColorDark('#FDF2F8')).toBe(false);
+  });
+});
+
+const PUSHPIN_GRADIENT_RE =
+  /^linear-gradient\(135deg, #[0-9a-f]{6} 0%, #[0-9a-f]{6} 100%\)$/;
+const HEX_STOP_RE = /#[0-9a-f]{6}/g;
+
+describe('stickyPushpinBackground', () => {
+  it('falls back to the green default when no color is given', () => {
+    expect(stickyPushpinBackground(undefined)).toBe(DEFAULT_PUSHPIN_BACKGROUND);
+    expect(stickyPushpinBackground('')).toBe(DEFAULT_PUSHPIN_BACKGROUND);
+    expect(stickyPushpinBackground('red')).toBe(DEFAULT_PUSHPIN_BACKGROUND);
+  });
+
+  it('falls back to the default for achromatic (white/gray) colors', () => {
+    expect(stickyPushpinBackground('#FFFFFF')).toBe(DEFAULT_PUSHPIN_BACKGROUND);
+    expect(stickyPushpinBackground('#808080')).toBe(DEFAULT_PUSHPIN_BACKGROUND);
+  });
+
+  it('derives a 135deg gradient that keeps the source hue', () => {
+    const yellow = stickyPushpinBackground('#FEF08A');
+    expect(yellow).toMatch(PUSHPIN_GRADIENT_RE);
+    // Pastel yellow stays in the yellow range: red & green high, blue low.
+    const stops = yellow.match(HEX_STOP_RE) ?? [];
+    expect(stops).toHaveLength(2);
+    for (const stop of stops) {
+      const r = Number.parseInt(stop.slice(1, 3), 16);
+      const g = Number.parseInt(stop.slice(3, 5), 16);
+      const b = Number.parseInt(stop.slice(5, 7), 16);
+      expect(r).toBeGreaterThan(b);
+      expect(g).toBeGreaterThan(b);
+    }
+  });
+
+  it('produces different gradients for different hues', () => {
+    expect(stickyPushpinBackground('#BFDBFE')).not.toBe(
+      stickyPushpinBackground('#FBCFE8')
+    );
   });
 });

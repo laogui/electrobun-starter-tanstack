@@ -12,6 +12,9 @@ const getBezierPathMock = vi.hoisted(() =>
 const getSmoothStepPathMock = vi.hoisted(() =>
   vi.fn(() => ['smooth-path', 30, 40])
 );
+const useInternalNodeMock = vi.hoisted(() =>
+  vi.fn((_id?: string): unknown => undefined)
+);
 const updateEdgeDataMock = vi.fn();
 const setEditingEdgeIdMock = vi.fn();
 const useCanvasStoreMock = vi.fn((selector) =>
@@ -49,6 +52,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     ),
     getBezierPath: getBezierPathMock,
     getSmoothStepPath: getSmoothStepPathMock,
+    useInternalNode: useInternalNodeMock,
   };
 });
 
@@ -64,6 +68,8 @@ describe('LabeledEdge', () => {
     useCanvasStoreMock.mockClear();
     getBezierPathMock.mockClear();
     getSmoothStepPathMock.mockClear();
+    useInternalNodeMock.mockReset();
+    useInternalNodeMock.mockReturnValue(undefined);
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -202,6 +208,45 @@ describe('LabeledEdge', () => {
       targetPosition: Position.Right,
       targetX: 10,
       targetY: 20,
+    });
+  });
+
+  it('uses floating side anchors when both nodes are measured, with reverse applied', () => {
+    const buildNode = (x: number, width: number) =>
+      ({
+        internals: { positionAbsolute: { x, y: 0 } },
+        measured: { width, height: 100 },
+      }) as never;
+    // node-1 at x=0, node-2 at x=300: floating anchors to right/left midpoints.
+    useInternalNodeMock.mockImplementation((id?: string) =>
+      id === 'node-1' ? buildNode(0, 100) : buildNode(300, 100)
+    );
+
+    render(
+      <LabeledEdge
+        data={{ pathType: 'bezier', reverseVisualDirection: true }}
+        id="edge-5"
+        selected={false}
+        source="node-1"
+        sourcePosition={Position.Top}
+        sourceX={1}
+        sourceY={1}
+        target="node-2"
+        targetPosition={Position.Top}
+        targetX={2}
+        targetY={2}
+      />
+    );
+
+    // Floating geometry wins over the passed handle coords, and reverse swaps
+    // source/target so the arrow points the original direction.
+    expect(getBezierPathMock).toHaveBeenCalledWith({
+      sourceX: 300,
+      sourceY: 50,
+      sourcePosition: Position.Left,
+      targetX: 100,
+      targetY: 50,
+      targetPosition: Position.Right,
     });
   });
 });

@@ -4,14 +4,18 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   getSmoothStepPath,
+  useInternalNode,
 } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
+import { getFloatingEdgeParams } from '@/lib/floatingEdge';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 function LabeledEdgeComponent({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -76,23 +80,32 @@ function LabeledEdgeComponent({
     [id, setEditingEdgeId]
   );
 
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+
+  // Floating geometry: anchor each endpoint to the side facing the other card so
+  // the edge always takes the shortest route instead of detouring from a fixed
+  // handle. Falls back to the handle-based coords until both nodes are measured
+  // (e.g. during the first mount frame, or in unit tests without a provider).
+  const geometry = getFloatingEdgeParams(sourceNode, targetNode) ?? {
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  };
+
   const pathParams = reverseVisualDirection
     ? {
-        sourceX: targetX,
-        sourceY: targetY,
-        targetX: sourceX,
-        targetY: sourceY,
-        sourcePosition: targetPosition,
-        targetPosition: sourcePosition,
+        sourceX: geometry.targetX,
+        sourceY: geometry.targetY,
+        targetX: geometry.sourceX,
+        targetY: geometry.sourceY,
+        sourcePosition: geometry.targetPosition,
+        targetPosition: geometry.sourcePosition,
       }
-    : {
-        sourceX,
-        sourceY,
-        targetX,
-        targetY,
-        sourcePosition,
-        targetPosition,
-      };
+    : geometry;
 
   const [edgePath, labelX, labelY] =
     pathType === 'bezier'

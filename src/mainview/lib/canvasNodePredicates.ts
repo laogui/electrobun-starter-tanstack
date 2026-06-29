@@ -7,12 +7,8 @@ import { CANVAS_NODE_SPECS } from './canvasNodeRegistry';
  * not `CanvasNodeKind`, since that's what runtime callers normally have.
  *
  * Implementation note: the group / folder eligibility sets are computed lazily
- * on first call, not at module load. This avoids a temporal-dead-zone bug
- * caused by the canvas-node import cycle:
- *   `canvasStore` → `canvasNodeRegistry` → `canvasConstants` → node components
- *   → `useCanvasStore` → `canvasUtils` → `canvasNodePredicates` → registry.
- * If the predicate sets were initialized eagerly, the inner reach back into
- * `CANVAS_NODE_SPECS` would hit it before the export had been assigned.
+ * on first call, not at module load. This keeps derived sets out of the registry
+ * initialization path.
  */
 
 let groupChildNodeTypes: Set<string> | null = null;

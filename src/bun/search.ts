@@ -191,14 +191,17 @@ export async function searchWorkspace(
   const noteIdToNodes = new Map<string, NodeRef[]>();
 
   // Walk manifests once: collect noteId → node mapping AND search short text.
-  for (const view of views) {
-    let manifest: Awaited<ReturnType<typeof loadManifest>> = null;
-    try {
-      manifest = await loadManifest(wsPath, view.file);
-    } catch (error) {
-      console.warn(`[search] Failed to load manifest for ${view.id}:`, error);
-      continue;
-    }
+  const loadedManifests = await Promise.all(
+    views.map(async (view) => {
+      try {
+        return { manifest: await loadManifest(wsPath, view.file), view };
+      } catch (error) {
+        console.warn(`[search] Failed to load manifest for ${view.id}:`, error);
+        return { manifest: null, view };
+      }
+    })
+  );
+  for (const { manifest, view } of loadedManifests) {
     if (!manifest) {
       continue;
     }
@@ -259,7 +262,9 @@ export async function searchWorkspace(
     }
   }
 
-  return [...dedup.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return Array.from(dedup.values())
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 function addManifestNodeMatches(
@@ -416,9 +421,14 @@ async function scanNotes(
   const searchable: Array<{ record: NoteRecord; refs: NodeRef[] }> = [];
   const unresolved: string[] = [];
 
-  for (const [noteId, refs] of noteIdToNodes) {
-    const markdownFile = markdownFileFromRefs(refs);
-    const record = await loadNoteRecord(wsPath, noteId, markdownFile);
+  const initialRecords = await Promise.all(
+    Array.from(noteIdToNodes.entries()).map(async ([noteId, refs]) => {
+      const markdownFile = markdownFileFromRefs(refs);
+      const record = await loadNoteRecord(wsPath, noteId, markdownFile);
+      return { noteId, record, refs };
+    })
+  );
+  for (const { noteId, record, refs } of initialRecords) {
     if (record) {
       searchable.push({ record, refs });
     } else {
@@ -428,20 +438,26 @@ async function scanNotes(
 
   if (unresolved.length > 0) {
     const noteIndex = await buildNoteIndex(wsPath);
-    for (const noteId of unresolved) {
-      const refs = noteIdToNodes.get(noteId);
-      if (!refs) {
+    const resolvedRecords = await Promise.all(
+      unresolved.map(async (noteId) => {
+        const refs = noteIdToNodes.get(noteId);
+        if (!refs) {
+          return null;
+        }
+        const location = noteIndex.get(noteId);
+        const record = await loadNoteRecord(
+          wsPath,
+          noteId,
+          location?.markdownFile
+        );
+        return record ? { record, refs } : null;
+      })
+    );
+    for (const entry of resolvedRecords) {
+      if (!entry) {
         continue;
       }
-      const location = noteIndex.get(noteId);
-      const record = await loadNoteRecord(
-        wsPath,
-        noteId,
-        location?.markdownFile
-      );
-      if (record) {
-        searchable.push({ record, refs });
-      }
+      searchable.push(entry);
     }
   }
 
@@ -450,14 +466,19 @@ async function scanNotes(
     // Tags live in node-metadata for sidecar notes; legacy markdown still
     // carries them in frontmatter.
     let tag = '';
-    let tags: string[] = [];
+    const tags: string[] = [];
     let bodyText = '';
     if (record.source === 'markdown' && record.markdownDoc) {
       const fm = record.markdownDoc.frontmatter;
       tag = asString(fm.tag);
-      tags = Array.isArray(fm.tags)
-        ? (fm.tags as unknown[]).map(asString).filter(Boolean)
-        : [];
+      if (Array.isArray(fm.tags)) {
+        for (const rawTag of fm.tags as unknown[]) {
+          const normalizedTag = asString(rawTag);
+          if (normalizedTag) {
+            tags.push(normalizedTag);
+          }
+        }
+      }
       bodyText = cleanMarkdown(record.markdownDoc.body);
     } else {
       bodyText = blocksToPlainText(record.blocks);
@@ -465,7 +486,16 @@ async function scanNotes(
 
     const titleIdx = indexOfCi(title, queryLower);
     const tagIdx = indexOfCi(tag, queryLower);
-    const tagsIdx = tags.findIndex((t) => indexOfCi(t, queryLower) !== -1);
+    let matchingTag: string | undefined;
+    let matchingTagIdx = -1;
+    for (const candidateTag of tags) {
+      const candidateIdx = indexOfCi(candidateTag, queryLower);
+      if (candidateIdx !== -1) {
+        matchingTag = candidateTag;
+        matchingTagIdx = candidateIdx;
+        break;
+      }
+    }
     const bodyIdx = indexOfCi(bodyText, queryLower);
 
     for (const ref of refs) {
@@ -482,15 +512,15 @@ async function scanNotes(
       }
       if (tagIdx !== -1 && tag) {
         pushNoteResult(results, ref, record.noteId, title, tag, 'tag', tagIdx);
-      } else if (tagsIdx !== -1 && tags[tagsIdx]) {
+      } else if (matchingTag) {
         pushNoteResult(
           results,
           ref,
           record.noteId,
           title,
-          tags[tagsIdx],
+          matchingTag,
           'tag',
-          indexOfCi(tags[tagsIdx], queryLower)
+          matchingTagIdx
         );
       }
       if (bodyIdx !== -1 && bodyText) {

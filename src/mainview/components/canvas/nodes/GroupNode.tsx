@@ -1,5 +1,5 @@
 import { NodeResizer, useUpdateNodeInternals } from '@xyflow/react';
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -62,7 +62,7 @@ export const GroupContent = ({
     <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
       <div
         className={cn(
-          'nodrag nopan font-semibold text-xs tracking-wide outline-none',
+          'nodrag nopan font-semibold text-xs tracking-wide outline-hidden',
           'text-gray-600',
           editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
         )}

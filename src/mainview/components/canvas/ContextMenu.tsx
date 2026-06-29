@@ -26,8 +26,16 @@ import {
   Unlock,
   ZoomIn,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
@@ -365,6 +373,8 @@ const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
 
 export type { ContextMenuState };
 
+// This component owns keyboard roving, submenu state, and menu rendering together.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export function CanvasContextMenu({
   menu,
   onClose,
@@ -380,8 +390,42 @@ export function CanvasContextMenu({
   const submenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndexRef = useRef(0);
   const submenuActiveIndexRef = useRef(0);
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const menuKey = menu
+    ? [
+        menu.target,
+        menu.nodeId ?? '',
+        menu.edgeId ?? '',
+        Math.round(menu.x),
+        Math.round(menu.y),
+      ].join(':')
+    : null;
+  const [submenuState, setSubmenuState] = useState<{
+    menuKey: string | null;
+    openSubmenu: string | null;
+  }>(() => ({
+    menuKey,
+    openSubmenu: null,
+  }));
+  if (submenuState.menuKey !== menuKey) {
+    setSubmenuState({ menuKey, openSubmenu: null });
+  }
+  const openSubmenu =
+    submenuState.menuKey === menuKey ? submenuState.openSubmenu : null;
+  const setOpenSubmenu = useCallback(
+    (next: SetStateAction<string | null>) => {
+      setSubmenuState((current) => {
+        const currentOpen =
+          current.menuKey === menuKey ? current.openSubmenu : null;
+        return {
+          menuKey,
+          openSubmenu: typeof next === 'function' ? next(currentOpen) : next,
+        };
+      });
+    },
+    [menuKey]
+  );
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusFrameRef = useRef<number | null>(null);
   const edgePathType = useCanvasStore((state) => {
     if (menu?.target !== 'edge' || !menu.edgeId) {
       return 'bezier';
@@ -461,20 +505,27 @@ export function CanvasContextMenu({
     [submenuItems]
   );
 
-  const openSubmenuFor = useCallback((id: string) => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setOpenSubmenu(id);
-    submenuActiveIndexRef.current = 0;
-  }, []);
+  const openSubmenuFor = useCallback(
+    (id: string) => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setOpenSubmenu(id);
+      submenuActiveIndexRef.current = 0;
+    },
+    [setOpenSubmenu]
+  );
 
   const scheduleCloseSubmenu = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
     closeTimerRef.current = setTimeout(() => {
       setOpenSubmenu(null);
+      closeTimerRef.current = null;
     }, 100);
-  }, []);
+  }, [setOpenSubmenu]);
 
   const cancelCloseSubmenu = useCallback(() => {
     if (closeTimerRef.current) {
@@ -483,14 +534,145 @@ export function CanvasContextMenu({
     }
   }, []);
 
+  const scheduleSubmenuFocus = useCallback(
+    (index: number) => {
+      if (focusFrameRef.current !== null) {
+        cancelAnimationFrame(focusFrameRef.current);
+      }
+      focusFrameRef.current = requestAnimationFrame(() => {
+        focusFrameRef.current = null;
+        focusSubmenuItem(index);
+      });
+    },
+    [focusSubmenuItem]
+  );
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      if (focusFrameRef.current !== null) {
+        cancelAnimationFrame(focusFrameRef.current);
+        focusFrameRef.current = null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!menu) {
       return;
     }
     activeIndexRef.current = 0;
-    setOpenSubmenu(null);
     itemRefs.current[0]?.focus();
   }, [menu]);
+
+  const handleDocumentPointerDown = useEffectEvent((e: PointerEvent) => {
+    const button = e.button ?? 0;
+    if (button !== 0) {
+      return;
+    }
+    const target = e.target as HTMLElement;
+    const inMenu = ref.current?.contains(target) ?? false;
+    const inSubmenu = submenuRef.current?.contains(target) ?? false;
+    if (!(inMenu || inSubmenu)) {
+      onClose();
+    }
+  });
+
+  const handleDocumentKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (openSubmenu) {
+        e.preventDefault();
+        setOpenSubmenu(null);
+        itemRefs.current[activeIndexRef.current]?.focus();
+        return;
+      }
+      onClose();
+      return;
+    }
+    if (openSubmenu && submenuItems) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusSubmenuItem(submenuActiveIndexRef.current + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusSubmenuItem(submenuActiveIndexRef.current - 1);
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setOpenSubmenu(null);
+        itemRefs.current[activeIndexRef.current]?.focus();
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ') {
+        const active = document.activeElement;
+        const index = submenuItemRefs.current.indexOf(
+          active as HTMLButtonElement
+        );
+        if (index !== -1) {
+          e.preventDefault();
+          const item = submenuItems[index];
+          if (item) {
+            onAction(item.id, menu?.nodeId ?? menu?.edgeId);
+            onClose();
+          }
+        }
+        return;
+      }
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusItem(activeIndexRef.current + 1);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusItem(activeIndexRef.current - 1);
+      return;
+    }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      focusItem(0);
+      return;
+    }
+    if (e.key === 'End') {
+      e.preventDefault();
+      focusItem(items.length - 1);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      const activeItem = items[activeIndexRef.current];
+      if (activeItem?.submenu) {
+        e.preventDefault();
+        openSubmenuFor(activeItem.id);
+        scheduleSubmenuFocus(0);
+      }
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      const active = document.activeElement;
+      const index = itemRefs.current.indexOf(active as HTMLButtonElement);
+      if (index !== -1) {
+        e.preventDefault();
+        const item = items[index];
+        if (item && !item.disabled) {
+          if (item.submenu) {
+            openSubmenuFor(item.id);
+            scheduleSubmenuFocus(0);
+          } else {
+            onAction(item.id, menu?.nodeId ?? menu?.edgeId);
+            onClose();
+          }
+        }
+      }
+    }
+  });
 
   useEffect(() => {
     if (!menu) {
@@ -498,111 +680,10 @@ export function CanvasContextMenu({
     }
 
     const handleClick = (e: PointerEvent) => {
-      const button = e.button ?? 0;
-      if (button !== 0) {
-        return;
-      }
-      const target = e.target as HTMLElement;
-      const inMenu = ref.current?.contains(target) ?? false;
-      const inSubmenu = submenuRef.current?.contains(target) ?? false;
-      if (!(inMenu || inSubmenu)) {
-        onClose();
-      }
+      handleDocumentPointerDown(e);
     };
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (openSubmenu) {
-          e.preventDefault();
-          setOpenSubmenu(null);
-          itemRefs.current[activeIndexRef.current]?.focus();
-          return;
-        }
-        onClose();
-        return;
-      }
-      if (openSubmenu && submenuItems) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          focusSubmenuItem(submenuActiveIndexRef.current + 1);
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          focusSubmenuItem(submenuActiveIndexRef.current - 1);
-          return;
-        }
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          setOpenSubmenu(null);
-          itemRefs.current[activeIndexRef.current]?.focus();
-          return;
-        }
-        if (e.key === 'Enter' || e.key === ' ') {
-          const active = document.activeElement;
-          const index = submenuItemRefs.current.indexOf(
-            active as HTMLButtonElement
-          );
-          if (index !== -1) {
-            e.preventDefault();
-            const item = submenuItems[index];
-            if (item) {
-              onAction(item.id, menu.nodeId ?? menu.edgeId);
-              onClose();
-            }
-          }
-          return;
-        }
-      }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        focusItem(activeIndexRef.current + 1);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        focusItem(activeIndexRef.current - 1);
-        return;
-      }
-      if (e.key === 'Home') {
-        e.preventDefault();
-        focusItem(0);
-        return;
-      }
-      if (e.key === 'End') {
-        e.preventDefault();
-        focusItem(items.length - 1);
-        return;
-      }
-      if (e.key === 'ArrowRight') {
-        const activeItem = items[activeIndexRef.current];
-        if (activeItem?.submenu) {
-          e.preventDefault();
-          openSubmenuFor(activeItem.id);
-          setTimeout(() => {
-            focusSubmenuItem(0);
-          }, 0);
-        }
-        return;
-      }
-      if (e.key === 'Enter' || e.key === ' ') {
-        const active = document.activeElement;
-        const index = itemRefs.current.indexOf(active as HTMLButtonElement);
-        if (index !== -1) {
-          e.preventDefault();
-          const item = items[index];
-          if (item && !item.disabled) {
-            if (item.submenu) {
-              openSubmenuFor(item.id);
-              setTimeout(() => {
-                focusSubmenuItem(0);
-              }, 0);
-            } else {
-              onAction(item.id, menu.nodeId ?? menu.edgeId);
-              onClose();
-            }
-          }
-        }
-      }
+      handleDocumentKeyDown(e);
     };
     document.addEventListener('pointerdown', handleClick, true);
     document.addEventListener('keydown', handleKey);
@@ -610,17 +691,7 @@ export function CanvasContextMenu({
       document.removeEventListener('pointerdown', handleClick, true);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [
-    focusItem,
-    focusSubmenuItem,
-    items,
-    menu,
-    onAction,
-    onClose,
-    openSubmenu,
-    openSubmenuFor,
-    submenuItems,
-  ]);
+  }, [menu]);
 
   const x = menu ? Math.max(8, Math.min(menu.x, window.innerWidth - 220)) : 0;
   const y = menu
@@ -680,7 +751,7 @@ export function CanvasContextMenu({
               <button
                 aria-disabled={item.disabled || undefined}
                 className={cn(
-                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors focus-visible:outline-none',
+                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors focus-visible:outline-hidden',
                   item.disabled
                     ? 'cursor-default text-gray-300 dark:text-gray-600'
                     : item.danger
@@ -768,7 +839,7 @@ export function CanvasContextMenu({
               >
                 {submenuItems.map((subItem, subIndex) => (
                   <button
-                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-none dark:text-gray-200 dark:focus-visible:bg-white/5 dark:hover:bg-white/5"
+                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-hidden dark:text-gray-200 dark:focus-visible:bg-white/5 dark:hover:bg-white/5"
                     key={subItem.id}
                     onClick={() => {
                       onAction(subItem.id, menu.nodeId ?? menu.edgeId);

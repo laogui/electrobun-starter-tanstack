@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { createElement, Fragment, type ReactNode } from 'react';
 
 /**
  * Split `text` on case-insensitive occurrences of `query` and wrap each match
@@ -20,29 +20,41 @@ export function highlightMatches(text: string, query: string): ReactNode {
   const segments: ReactNode[] = [];
   let cursor = 0;
   let matchIndex = haystack.indexOf(needle, cursor);
-  let key = 0;
 
   while (matchIndex !== -1) {
     if (matchIndex > cursor) {
       segments.push(
-        <Fragment key={key++}>{text.slice(cursor, matchIndex)}</Fragment>
+        createElement(
+          Fragment,
+          { key: `text-${cursor}-${matchIndex}` },
+          text.slice(cursor, matchIndex)
+        )
       );
     }
     const end = matchIndex + needle.length;
     segments.push(
-      <mark
-        className="rounded-[2px] bg-yellow-200 text-inherit dark:bg-yellow-400/30"
-        key={key++}
-      >
-        {text.slice(matchIndex, end)}
-      </mark>
+      createElement(
+        'mark',
+        {
+          className:
+            'rounded-[2px] bg-yellow-200 text-inherit dark:bg-yellow-400/30',
+          key: `match-${matchIndex}-${end}`,
+        },
+        text.slice(matchIndex, end)
+      )
     );
     cursor = end;
     matchIndex = haystack.indexOf(needle, cursor);
   }
 
   if (cursor < text.length) {
-    segments.push(<Fragment key={key++}>{text.slice(cursor)}</Fragment>);
+    segments.push(
+      createElement(
+        Fragment,
+        { key: `text-${cursor}-${text.length}` },
+        text.slice(cursor)
+      )
+    );
   }
 
   return segments;

@@ -225,11 +225,13 @@ export async function writeTemplateThumbnail(
   }
 
   const bytes = Uint8Array.from(Buffer.from(base64, 'base64'));
-  if (
-    bytes.length < PNG_SIGNATURE.length ||
-    !PNG_SIGNATURE.every((byte, idx) => bytes[idx] === byte)
-  ) {
+  if (bytes.length < PNG_SIGNATURE.length) {
     return { success: false, reason: 'invalid-png' };
+  }
+  for (const [idx, byte] of PNG_SIGNATURE.entries()) {
+    if (bytes[idx] !== byte) {
+      return { success: false, reason: 'invalid-png' };
+    }
   }
 
   const dir = join(repoRoot, 'src', 'bun', 'templates', templateId);

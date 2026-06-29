@@ -65,12 +65,13 @@ export function getHelperLines(
     }
 
     const { w: nodeW, h: nodeH } = getNodeDimensions(node);
-    const nodeLeft = node.position.x;
-    const nodeRight = node.position.x + nodeW;
-    const nodeTop = node.position.y;
-    const nodeBottom = node.position.y + nodeH;
-    const nodeCenterX = node.position.x + nodeW / 2;
-    const nodeCenterY = node.position.y + nodeH / 2;
+    const { x: nodeX, y: nodeY } = node.position;
+    const nodeLeft = nodeX;
+    const nodeRight = nodeX + nodeW;
+    const nodeTop = nodeY;
+    const nodeBottom = nodeY + nodeH;
+    const nodeCenterX = nodeX + nodeW / 2;
+    const nodeCenterY = nodeY + nodeH / 2;
 
     // Vertical alignment checks (x-axis snapping)
     const vChecks = [

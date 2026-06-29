@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
@@ -65,12 +65,7 @@ export function useNodeTagEditing(
   })();
 
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (editingTagNodeId === nodeId) {
-      setOpen(true);
-    }
-  }, [editingTagNodeId, nodeId]);
+  const editorOpen = open || editingTagNodeId === nodeId;
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -100,7 +95,7 @@ export function useNodeTagEditing(
     <TagEditor
       onChange={handleChange}
       onOpenChange={handleOpenChange}
-      open={open}
+      open={editorOpen}
       suggestions={suggestions}
       tag={tag}
       tagColor={tagColor}

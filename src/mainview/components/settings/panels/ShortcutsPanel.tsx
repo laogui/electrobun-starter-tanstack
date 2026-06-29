@@ -108,7 +108,7 @@ function ShortcutGroupSection({
   return (
     <section aria-labelledby={`shortcuts-${heading}`} className="space-y-2">
       <h3
-        className="font-medium text-[11px] text-neutral-500 uppercase tracking-wider dark:text-neutral-400"
+        className="font-medium text-[11px] text-neutral-500 uppercase tracking-wide dark:text-neutral-400"
         id={`shortcuts-${heading}`}
       >
         {heading}

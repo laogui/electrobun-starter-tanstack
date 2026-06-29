@@ -9,7 +9,7 @@ import {
 import * as m from '../../../paraglide/messages.js';
 
 const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
 
 export function EmptyCanvasOverlay({
   onCreateNote,

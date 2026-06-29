@@ -10,18 +10,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 const LAYOUT_DEBOUNCE_MS = 2500;
 
-/**
- * Flush current canvas state to disk immediately.
- * Cancels any pending debounce timer. Returns success boolean.
- */
-async function flushNow(
-  pendingTimer: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
-  viewId: string
-): Promise<boolean> {
-  if (pendingTimer.current) {
-    clearTimeout(pendingTimer.current);
-    pendingTimer.current = null;
-  }
+async function saveManifestNow(viewId: string): Promise<boolean> {
   const { nodes, edges, viewport } = useCanvasStore.getState();
   const sanitized = sanitizeForPersistence(nodes, edges);
   try {
@@ -40,6 +29,21 @@ async function flushNow(
     console.error('[persistence] Failed to flush manifest:', error);
     return false;
   }
+}
+
+/**
+ * Flush current canvas state to disk immediately.
+ * Cancels any pending debounce timer. Returns success boolean.
+ */
+async function flushNow(
+  pendingTimer: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  viewId: string
+): Promise<boolean> {
+  if (pendingTimer.current) {
+    clearTimeout(pendingTimer.current);
+    pendingTimer.current = null;
+  }
+  return saveManifestNow(viewId);
 }
 
 export function useCanvasPersistence() {
@@ -70,12 +74,26 @@ export function useCanvasPersistence() {
   useEffect(() => {
     let rpcReady = false;
     let earlyDirty = false;
+    let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
+    let scheduledViewId: string | null = null;
     const flushAndMarkClean = () => {
       flushNow(pendingTimer, viewIdRef.current).then((success) => {
         if (success) {
           dirty.current = false;
         }
       });
+    };
+    const scheduleFlush = () => {
+      if (scheduledTimer) {
+        clearTimeout(scheduledTimer);
+      }
+      scheduledTimer = setTimeout(() => {
+        scheduledTimer = null;
+        scheduledViewId = null;
+        flushAndMarkClean();
+      }, LAYOUT_DEBOUNCE_MS);
+      scheduledViewId = viewIdRef.current;
+      pendingTimer.current = scheduledTimer;
     };
 
     isRpcAvailable().then((available) => {
@@ -101,9 +119,7 @@ export function useCanvasPersistence() {
 
       if (available && earlyDirty) {
         dirty.current = true;
-        pendingTimer.current = setTimeout(() => {
-          flushAndMarkClean();
-        }, LAYOUT_DEBOUNCE_MS);
+        scheduleFlush();
       }
     });
 
@@ -133,12 +149,7 @@ export function useCanvasPersistence() {
         return;
       }
 
-      if (pendingTimer.current) {
-        clearTimeout(pendingTimer.current);
-      }
-      pendingTimer.current = setTimeout(() => {
-        flushAndMarkClean();
-      }, LAYOUT_DEBOUNCE_MS);
+      scheduleFlush();
     });
 
     const handleFlush = () => {
@@ -170,11 +181,15 @@ export function useCanvasPersistence() {
       window.removeEventListener('blur', handleFlush);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibility);
-      if (pendingTimer.current && isAvailable.current && dirty.current) {
-        flushAndMarkClean();
-      } else if (pendingTimer.current) {
-        clearTimeout(pendingTimer.current);
+      if (scheduledTimer) {
+        const viewId = scheduledViewId;
+        clearTimeout(scheduledTimer);
+        if (viewId) {
+          saveManifestNow(viewId).catch(() => undefined);
+        }
       }
+      scheduledTimer = null;
+      scheduledViewId = null;
     };
   }, []);
 }

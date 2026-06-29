@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
-import { atomicWrite } from './workspace';
+import { atomicWrite } from './atomicWrite';
 
 /** Schema version for the BlockNote JSON sidecar file. */
 export const BLOCKNOTE_SCHEMA = 'ghostboard-blocknote/v1';
@@ -102,7 +102,7 @@ function assertWorkspaceSidecarPath(
 }
 
 /** sha256 hex digest. */
-export function contentHash(value: string): string {
+function contentHash(value: string): string {
   return `sha256-${createHash('sha256').update(value).digest('hex')}`;
 }
 

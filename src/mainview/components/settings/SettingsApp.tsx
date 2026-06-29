@@ -5,20 +5,12 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  AI_PROVIDER_OPTIONS,
-  type AIProviderSetting,
   type AppSettings,
-  AUTO_SAVE_INTERVAL_OPTIONS,
-  type AutoSaveIntervalSetting,
-  type CanvasBackgroundSetting,
   DEFAULT_SETTINGS,
-  type FontFamilySetting,
-  type LocaleSetting,
   type SettingsClient,
-  type ThemeSetting,
 } from '@/settingsClient';
 
 import {
@@ -30,88 +22,7 @@ import { AIPanel } from './panels/AIPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
 import { WorkspacePanel } from './panels/WorkspacePanel';
-
-const THEME_VALUES: readonly ThemeSetting[] = ['system', 'light', 'dark'];
-const LOCALE_VALUES: readonly LocaleSetting[] = ['en', 'zh'];
-const FONT_VALUES: readonly FontFamilySetting[] = ['system', 'serif', 'mono'];
-const CANVAS_BG_VALUES: readonly CanvasBackgroundSetting[] = [
-  'default',
-  'paper',
-  'mono',
-];
-
-function includesValue<TValue extends number | string>(
-  values: readonly TValue[],
-  value: unknown
-): value is TValue {
-  return values.includes(value as TValue);
-}
-
-export function normalizeSettings(
-  settings: Partial<AppSettings> | null | undefined
-): AppSettings {
-  return {
-    theme: includesValue(THEME_VALUES, settings?.theme)
-      ? settings.theme
-      : DEFAULT_SETTINGS.theme,
-    locale: includesValue(LOCALE_VALUES, settings?.locale)
-      ? settings.locale
-      : DEFAULT_SETTINGS.locale,
-    fontFamily: includesValue(FONT_VALUES, settings?.fontFamily)
-      ? settings.fontFamily
-      : DEFAULT_SETTINGS.fontFamily,
-    canvasBackground: includesValue(
-      CANVAS_BG_VALUES,
-      settings?.canvasBackground
-    )
-      ? settings.canvasBackground
-      : DEFAULT_SETTINGS.canvasBackground,
-    canvasSnapToGrid:
-      typeof settings?.canvasSnapToGrid === 'boolean'
-        ? settings.canvasSnapToGrid
-        : DEFAULT_SETTINGS.canvasSnapToGrid,
-    autoSaveInterval: includesValue(
-      AUTO_SAVE_INTERVAL_OPTIONS,
-      settings?.autoSaveInterval
-    )
-      ? (settings.autoSaveInterval as AutoSaveIntervalSetting)
-      : DEFAULT_SETTINGS.autoSaveInterval,
-    aiEnabled:
-      typeof settings?.aiEnabled === 'boolean'
-        ? settings.aiEnabled
-        : DEFAULT_SETTINGS.aiEnabled,
-    aiProvider: includesValue(AI_PROVIDER_OPTIONS, settings?.aiProvider)
-      ? (settings.aiProvider as AIProviderSetting)
-      : DEFAULT_SETTINGS.aiProvider,
-    aiModel:
-      typeof settings?.aiModel === 'string' && settings.aiModel.length > 0
-        ? settings.aiModel
-        : DEFAULT_SETTINGS.aiModel,
-    aiBaseUrl:
-      typeof settings?.aiBaseUrl === 'string'
-        ? settings.aiBaseUrl
-        : DEFAULT_SETTINGS.aiBaseUrl,
-  };
-}
-
-export function applyTheme(theme: ThemeSetting) {
-  const html = document.documentElement;
-
-  if (theme === 'dark') {
-    html.classList.add('dark');
-    return;
-  }
-
-  if (theme === 'light') {
-    html.classList.remove('dark');
-    return;
-  }
-
-  html.classList.toggle(
-    'dark',
-    globalThis.matchMedia('(prefers-color-scheme: dark)').matches
-  );
-}
+import { applyTheme, normalizeSettings } from './settingsState';
 
 type SettingsSection = 'about' | 'ai' | 'general' | 'shortcuts' | 'workspace';
 
@@ -137,11 +48,14 @@ interface SettingsAppProps {
 }
 
 export function SettingsApp({ client }: SettingsAppProps) {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsState, setSettingsState] = useState(() => ({
+    loadFailed: false,
+    saveFailed: false,
+    settings: DEFAULT_SETTINGS,
+  }));
   const [activeSection, setActiveSection] =
     useState<SettingsSection>('general');
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const { loadFailed, saveFailed, settings } = settingsState;
   const settingsRef = useRef(settings);
 
   const strings = getLocaleStrings(settings.locale);
@@ -157,12 +71,15 @@ export function SettingsApp({ client }: SettingsAppProps) {
         }
         const normalizedSettings = normalizeSettings(loadedSettings);
         settingsRef.current = normalizedSettings;
-        setSettings(normalizedSettings);
-        setLoadFailed(false);
+        setSettingsState((current) => ({
+          ...current,
+          loadFailed: false,
+          settings: normalizedSettings,
+        }));
       })
       .catch(() => {
         if (mounted) {
-          setLoadFailed(true);
+          setSettingsState((current) => ({ ...current, loadFailed: true }));
         }
       });
 
@@ -185,26 +102,32 @@ export function SettingsApp({ client }: SettingsAppProps) {
         ...patch,
       });
       settingsRef.current = nextSettings;
-      setSettings(nextSettings);
-      setSaveFailed(false);
+      setSettingsState((current) => ({
+        ...current,
+        saveFailed: false,
+        settings: nextSettings,
+      }));
 
       client
         .saveSettings(nextSettings)
         .then((result) => {
-          setSaveFailed(!result.success);
+          setSettingsState((current) => ({
+            ...current,
+            saveFailed: !result.success,
+          }));
         })
         .catch(() => {
-          setSaveFailed(true);
+          setSettingsState((current) => ({ ...current, saveFailed: true }));
         });
     },
     [client]
   );
 
-  const errorMessage = useMemo(
-    () =>
-      loadFailed ? strings.loadError : saveFailed ? strings.saveError : null,
-    [loadFailed, saveFailed, strings.loadError, strings.saveError]
-  );
+  const errorMessage = loadFailed
+    ? strings.loadError
+    : saveFailed
+      ? strings.saveError
+      : null;
 
   return (
     <main className="flex h-screen min-h-0 bg-neutral-50 text-neutral-950 transition-colors dark:bg-neutral-950 dark:text-neutral-50">

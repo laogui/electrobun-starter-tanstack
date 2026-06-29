@@ -1,7 +1,7 @@
 import { Popover } from '@base-ui/react/popover';
 import { Check, X } from 'lucide-react';
 import type { KeyboardEvent, ReactNode, SyntheticEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CARD_COLORS, colorToStyle } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,7 @@ function filterSuggestions(
     if (excluded.has(lower)) {
       continue;
     }
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups
     if (!lower.includes(needle)) {
       continue;
     }
@@ -160,6 +161,8 @@ function stopPopoverEvent(e: SyntheticEvent) {
   e.stopPropagation();
 }
 
+// Component split is a broad UI refactor; keep popover keyboard/editing behavior intact.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export function TagEditor({
   children,
   onChange,
@@ -176,11 +179,49 @@ export function TagEditor({
     () => buildTagColorMap({ tag, tagColor, tagColors, tags: safeTags }),
     [tag, tagColor, tagColors, safeTags]
   );
-  const [draft, setDraft] = useState('');
-  const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const [selectedTag, setSelectedTag] = useState<string | null>(
+  const [draftState, setDraftState] = useState(() => ({
+    activeSuggestion: 0,
+    draft: '',
+    open,
+  }));
+  if (draftState.open !== open) {
+    setDraftState({ activeSuggestion: 0, draft: '', open });
+  }
+  const draft = draftState.open === open ? draftState.draft : '';
+  const activeSuggestion =
+    draftState.open === open ? draftState.activeSuggestion : 0;
+  const setDraft = useCallback((next: string) => {
+    setDraftState((current) => ({ ...current, draft: next }));
+  }, []);
+  const setActiveSuggestion = useCallback(
+    (next: number | ((previous: number) => number)) => {
+      setDraftState((current) => ({
+        ...current,
+        activeSuggestion:
+          typeof next === 'function' ? next(current.activeSuggestion) : next,
+      }));
+    },
+    []
+  );
+  const resetDraft = useCallback(() => {
+    setDraftState((current) => ({
+      ...current,
+      activeSuggestion: 0,
+      draft: '',
+    }));
+  }, []);
+  const [selectedTagState, setSelectedTag] = useState<string | null>(
     () => safeTags[0] ?? null
   );
+  const selectedTag =
+    safeTags.length === 0
+      ? null
+      : selectedTagState && safeTags.some((t) => t === selectedTagState)
+        ? selectedTagState
+        : (safeTags[0] ?? null);
+  if (selectedTagState !== selectedTag) {
+    setSelectedTag(selectedTag);
+  }
   const inputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
   const limitReached = safeTags.length >= MAX_TAGS;
@@ -201,21 +242,7 @@ export function TagEditor({
         window.clearTimeout(handle);
       };
     }
-    setDraft('');
-    setActiveSuggestion(0);
   }, [open]);
-
-  useEffect(() => {
-    if (safeTags.length === 0) {
-      if (selectedTag !== null) {
-        setSelectedTag(null);
-      }
-      return;
-    }
-    if (!(selectedTag && safeTags.some((t) => t === selectedTag))) {
-      setSelectedTag(safeTags[0] ?? null);
-    }
-  }, [safeTags, selectedTag]);
 
   const commitTags = (nextTags: string[], nextColors = safeTagColors): void => {
     const prunedColors = pruneTagColorMap(nextColors, nextTags);
@@ -241,15 +268,17 @@ export function TagEditor({
       commitTags(next);
       setSelectedTag(next.at(-1) ?? null);
     }
-    setDraft('');
-    setActiveSuggestion(0);
+    resetDraft();
   };
 
   const commitDraft = () => {
-    const parts = draft
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
+    const parts: string[] = [];
+    for (const part of draft.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        parts.push(trimmed);
+      }
+    }
     if (parts.length === 0) {
       return;
     }
@@ -261,8 +290,7 @@ export function TagEditor({
       commitTags(next);
       setSelectedTag(next.at(-1) ?? null);
     }
-    setDraft('');
-    setActiveSuggestion(0);
+    resetDraft();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -292,8 +320,7 @@ export function TagEditor({
     }
     if (e.key === 'Escape' && filteredSuggestions.length > 0) {
       e.preventDefault();
-      setDraft('');
-      setActiveSuggestion(0);
+      resetDraft();
       return;
     }
   };
@@ -315,7 +342,7 @@ export function TagEditor({
       <Popover.Portal>
         <Popover.Positioner side="bottom" sideOffset={6}>
           <Popover.Popup
-            className="nodrag nopan z-50 w-72 origin-(--transform-origin) rounded-lg border border-black/5 bg-white p-3 text-sm shadow-xl outline-none dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-100"
+            className="nodrag nopan z-50 w-72 origin-(--transform-origin) rounded-lg border border-black/5 bg-white p-3 text-sm shadow-xl outline-hidden dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-100"
             onClick={stopPopoverEvent}
             onContextMenu={stopPopoverEvent}
             onDoubleClick={stopPopoverEvent}
@@ -382,8 +409,9 @@ export function TagEditor({
             ) : null}
             <div className="mt-2 flex items-stretch gap-1.5">
               <input
+                aria-label="Tag name"
                 className={cn(
-                  'min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:bg-neutral-900 dark:focus:border-white/30',
+                  'min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm outline-hidden focus:border-black/30 dark:border-white/10 dark:bg-neutral-900 dark:focus:border-white/30',
                   limitReached && 'cursor-not-allowed opacity-50'
                 )}
                 disabled={limitReached}

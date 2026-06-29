@@ -1,11 +1,12 @@
 import { useReactFlow } from '@xyflow/react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 import {
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -137,6 +138,8 @@ function domRectForItem(item: FocusedItem): DOMRect {
   return el?.getBoundingClientRect() ?? item.rect;
 }
 
+// This orchestrates focus navigation and delegates the per-kind editing UI below.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
@@ -198,31 +201,40 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const focusableItems = useMemo<FocusedItem[]>(() => {
     if (folderId) {
       const folder = nodes.find((candidate) => candidate.id === folderId);
-      const children = (
-        ((folder?.data as Record<string, unknown> | undefined)?.children ??
-          []) as FolderChildEntry[]
-      ).filter((child) => isFocusableNode(child.type));
-      return children.map((child) => ({
-        id: child.id,
-        folderId,
-        type: child.type,
-        data: child.data,
-        rect: node.rect,
-      }));
+      const children = ((folder?.data as Record<string, unknown> | undefined)
+        ?.children ?? []) as FolderChildEntry[];
+      const items: FocusedItem[] = [];
+      for (const child of children) {
+        if (!isFocusableNode(child.type)) {
+          continue;
+        }
+        items.push({
+          id: child.id,
+          folderId,
+          type: child.type,
+          data: child.data,
+          rect: node.rect,
+        });
+      }
+      return items;
     }
 
-    return nodes
-      .filter(
-        (candidate) =>
-          isFocusableNode(candidate.type) &&
-          !(candidate.data as Record<string, unknown> | undefined)?.detached
-      )
-      .map((candidate) => ({
+    const items: FocusedItem[] = [];
+    for (const candidate of nodes) {
+      if (
+        !isFocusableNode(candidate.type) ||
+        (candidate.data as Record<string, unknown> | undefined)?.detached
+      ) {
+        continue;
+      }
+      items.push({
         id: candidate.id,
         type: candidate.type,
         data: candidate.data as Record<string, unknown>,
         rect: rectForNode(candidate as NodeWithLayout),
-      }));
+      });
+    }
+    return items;
   }, [folderId, node.rect, nodes]);
 
   const currentIndex = focusableItems.findIndex(
@@ -327,26 +339,30 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   useBodyScrollLock();
 
   // Cmd/Ctrl + ←/→ navigate to the previous / next focusable item.
+  const handleNavigationKey = useEffectEvent((event: KeyboardEvent) => {
+    if (!(event.metaKey || event.ctrlKey)) {
+      return;
+    }
+    if (event.key === 'ArrowLeft' && previousItem) {
+      event.preventDefault();
+      handleNavigate(previousItem);
+      return;
+    }
+    if (event.key === 'ArrowRight' && nextItem) {
+      event.preventDefault();
+      handleNavigate(nextItem);
+    }
+  });
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) {
-        return;
-      }
-      if (event.key === 'ArrowLeft' && previousItem) {
-        event.preventDefault();
-        handleNavigate(previousItem);
-        return;
-      }
-      if (event.key === 'ArrowRight' && nextItem) {
-        event.preventDefault();
-        handleNavigate(nextItem);
-      }
+      handleNavigationKey(event);
     };
     document.addEventListener('keydown', handler);
     return () => {
       document.removeEventListener('keydown', handler);
     };
-  }, [handleNavigate, nextItem, previousItem]);
+  }, []);
 
   // Fallback ESC handler
   useEffect(() => {
@@ -445,6 +461,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       <div
         className="flex h-full w-full justify-center overflow-hidden"
         onClick={handleClose}
+        role="presentation"
       >
         <div
           className={cn(

@@ -6,6 +6,7 @@ import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { RecordingNodeData } from '@/lib/contentTypes';
 import { getRecordingDisplayTitle } from '@/lib/contentTypes';
+import { EMPTY_CAPTIONS_TRACK_SRC } from '@/lib/mediaCaptions';
 import { resolveAttachmentStreamUrl } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -15,6 +16,10 @@ import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
 const WAVEFORM_BAR_COUNT = 48;
+const DEFAULT_WAVEFORM_BARS = Array.from(
+  { length: WAVEFORM_BAR_COUNT },
+  (_, index) => ({ id: `default-waveform-${index}`, value: 0.18 })
+);
 
 export type RecordingRuntimeData = Partial<RecordingNodeData> & {
   isHidden?: boolean;
@@ -67,13 +72,16 @@ function PlaybackWaveform({
 }) {
   const bars =
     waveform && waveform.length > 0
-      ? waveform
-      : Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.18);
+      ? waveform.map((value, index) => ({
+          id: `waveform-${index}`,
+          value,
+        }))
+      : DEFAULT_WAVEFORM_BARS;
   const clamped = Math.min(1, Math.max(0, progress));
   return (
     <div className="relative flex h-full min-w-0 flex-1 items-center">
       <div className="flex h-full w-full items-center gap-[2px]">
-        {bars.map((value, index) => {
+        {bars.map(({ id, value }, index) => {
           const played = index / bars.length < clamped;
           return (
             <span
@@ -87,7 +95,7 @@ function PlaybackWaveform({
                     ? 'bg-neutral-100/25'
                     : 'bg-neutral-900/20'
               )}
-              key={`bar-${index}`}
+              key={id}
               style={{
                 height: `${Math.max(8, Math.round((0.18 + value * 0.82) * 100))}%`,
               }}
@@ -153,7 +161,7 @@ export const RecordingContent = ({
       <div className="flex items-center justify-between gap-3">
         <span
           className={cn(
-            'truncate font-medium text-[11px] uppercase tracking-[0.12em]',
+            'truncate font-medium text-[11px] uppercase tracking-wide',
             isDark ? 'text-neutral-300' : 'text-neutral-400'
           )}
           title={title}
@@ -212,8 +220,8 @@ export const RecordingContent = ({
       </div>
 
       {streamSrc ? (
-        // biome-ignore lint/a11y/useMediaCaption: Voice memos have no caption track.
         <audio
+          aria-label={`${title} audio preview`}
           onEnded={() => {
             setIsPlaying(false);
             setCurrentTime(0);
@@ -230,7 +238,14 @@ export const RecordingContent = ({
           preload="metadata"
           ref={audioRef}
           src={streamSrc}
-        />
+        >
+          <track
+            kind="captions"
+            label="Captions unavailable"
+            src={EMPTY_CAPTIONS_TRACK_SRC}
+            srcLang="en"
+          />
+        </audio>
       ) : null}
     </div>
   );
@@ -254,50 +269,85 @@ const RecordingNode = ({
   const isDark = isColorDark(recording.color);
   const title = getRecordingDisplayTitle(recording, m.menu_new_recording());
 
-  const [streamSrc, setStreamSrc] = useState<string | null>(
-    recording.previewUrl ?? null
+  const streamKey = [
+    recording.previewUrl ?? '',
+    recording.attachmentFile ?? '',
+    recording.missing ? 'missing' : 'available',
+  ].join(':');
+  const shouldLoadStream = Boolean(
+    !(recording.previewUrl || recording.missing) && recording.attachmentFile
   );
-  const [loading, setLoading] = useState(false);
+  const [streamState, setStreamState] = useState<{
+    key: string;
+    loading: boolean;
+    src: string | null;
+  }>(() => ({
+    key: streamKey,
+    loading: shouldLoadStream,
+    src: recording.previewUrl ?? null,
+  }));
+  if (streamState.key !== streamKey) {
+    setStreamState({
+      key: streamKey,
+      loading: shouldLoadStream,
+      src: recording.previewUrl ?? null,
+    });
+  }
+  const streamSrc =
+    streamState.key === streamKey
+      ? streamState.src
+      : (recording.previewUrl ?? null);
+  const loading = streamState.key === streamKey ? streamState.loading : false;
 
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [renameDraft, setRenameDraft] = useState(title);
 
   useEffect(() => {
     if (recording.previewUrl) {
-      setStreamSrc(recording.previewUrl);
       return;
     }
     if (!recording.attachmentFile || recording.missing) {
-      setStreamSrc(null);
       return;
     }
     let cancelled = false;
-    setLoading(true);
     resolveAttachmentStreamUrl(recording.attachmentFile)
       .then((url) => {
         if (!cancelled) {
-          setStreamSrc(url ?? null);
+          setStreamState((current) =>
+            current.key === streamKey
+              ? { ...current, loading: false, src: url ?? null }
+              : current
+          );
         }
       })
       .catch(() => undefined)
       .finally(() => {
         if (!cancelled) {
-          setLoading(false);
+          setStreamState((current) =>
+            current.key === streamKey ? { ...current, loading: false } : current
+          );
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [recording.attachmentFile, recording.missing, recording.previewUrl]);
+  }, [
+    recording.attachmentFile,
+    recording.missing,
+    recording.previewUrl,
+    streamKey,
+  ]);
 
   useEffect(() => {
-    if (isRenaming) {
-      setRenameDraft(title);
-      requestAnimationFrame(() => {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      });
+    if (!isRenaming) {
+      return;
     }
+    setRenameDraft(title);
+    const frame = requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [isRenaming, title]);
 
   const commitRename = useCallback(() => {
@@ -368,7 +418,7 @@ const RecordingNode = ({
           >
             <input
               aria-label="Rename recording"
-              className="w-full rounded-lg border border-black/15 bg-white px-3 py-1.5 font-semibold text-neutral-900 text-sm shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+              className="w-full rounded-lg border border-black/15 bg-white px-3 py-1.5 font-semibold text-neutral-900 text-sm shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
               onBlur={commitRename}
               onChange={(e) => setRenameDraft(e.target.value)}
               onKeyDown={(e) => {

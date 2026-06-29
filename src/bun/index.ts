@@ -123,12 +123,13 @@ const DEV_SERVER_RETRY_DELAY_MS = 250;
 const SETTINGS_WINDOW_WIDTH = 720;
 const SETTINGS_WINDOW_HEIGHT = 560;
 const UNSAFE_EXPORT_FILE_NAME_CHARS = '<>:"/\\|?*';
+const UNSAFE_EXPORT_FILE_NAME_CHAR_SET = new Set(UNSAFE_EXPORT_FILE_NAME_CHARS);
 
 function sanitizeExportBaseName(base: string): string {
   let safe = '';
   for (const char of base.trim()) {
     safe +=
-      char.charCodeAt(0) < 32 || UNSAFE_EXPORT_FILE_NAME_CHARS.includes(char)
+      char.charCodeAt(0) < 32 || UNSAFE_EXPORT_FILE_NAME_CHAR_SET.has(char)
         ? '-'
         : char;
   }
@@ -172,19 +173,22 @@ async function copyExportAttachments(
   attachments: Iterable<string>,
   destDir: string
 ): Promise<void> {
-  for (const rel of attachments) {
-    if (!EXPORT_ATTACHMENT_RE.test(rel) || rel.includes('..')) {
-      continue;
-    }
-    try {
-      await Bun.write(
-        join(destDir, basename(rel)),
-        Bun.file(resolve(wsPath, rel))
-      );
-    } catch (error) {
-      console.warn(`[export] Failed to copy attachment ${rel}:`, error);
-    }
-  }
+  await Promise.all(
+    Array.from(attachments, async (rel) => {
+      // react-doctor-disable-next-line react-doctor/js-set-map-lookups
+      if (!EXPORT_ATTACHMENT_RE.test(rel) || rel.includes('..')) {
+        return;
+      }
+      try {
+        await Bun.write(
+          join(destDir, basename(rel)),
+          Bun.file(resolve(wsPath, rel))
+        );
+      } catch (error) {
+        console.warn(`[export] Failed to copy attachment ${rel}:`, error);
+      }
+    })
+  );
 }
 
 /** Collect every noteId referenced by a canvas manifest (cards + folder kids). */
@@ -232,6 +236,8 @@ export async function sleep(ms: number) {
 export async function waitForDevServer(): Promise<boolean> {
   for (let attempt = 0; attempt < DEV_SERVER_RETRY_COUNT; attempt += 1) {
     try {
+      // Polling attempts are intentionally sequential.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       await fetch(DEV_SERVER_URL, { method: 'HEAD' });
       return true;
     } catch {
@@ -1288,12 +1294,15 @@ async function main() {
       : undefined;
   const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
-  await migrateLegacyTagsFromNotes(wsPath);
-  await loadSettings(wsPath);
+  const [, , aiCredentials] = await Promise.all([
+    migrateLegacyTagsFromNotes(wsPath),
+    loadSettings(wsPath),
+    loadAICredentials(),
+  ]);
   // The LLM API key lives outside the workspace so it never lands in
   // `<workspace>/.ghostboard/settings.json`. Cache it in memory for the
   // duration of the run; the secure file is only touched on read/write.
-  cachedAIApiKey = (await loadAICredentials()).apiKey ?? null;
+  cachedAIApiKey = aiCredentials.apiKey ?? null;
   // Local HTTP endpoint for renderer calls that do not fit Electrobun RPC
   // well. The handle holds the localhost base URL + bearer token the renderer
   // connects with. AI config is resolved per-request so settings updates take
@@ -1505,6 +1514,7 @@ async function main() {
               node.data.noteId = noteId;
               nodeLocMap.set(
                 idx,
+                // react-doctor-disable-next-line react-doctor/async-await-in-loop
                 await resolveCardLocation(
                   noteId,
                   node.data.title,
@@ -1536,6 +1546,7 @@ async function main() {
                 child.data = childData;
                 childMap.set(
                   cidx,
+                  // react-doctor-disable-next-line react-doctor/async-await-in-loop
                   await resolveCardLocation(
                     noteId,
                     childData.title,
@@ -1943,52 +1954,65 @@ async function main() {
           if (paths.length === 0) {
             return { canceled: true, failedCount: 0, notes: [] };
           }
+          const importedNotes = await Promise.all(
+            paths.map(async (path) => {
+              try {
+                const file = Bun.file(path);
+                if (!(await file.exists())) {
+                  return null;
+                }
+                const raw = await file.text();
+                const { frontmatter, body: rawBody } = parseFrontmatter(raw);
+                const title = deriveMarkdownTitle(frontmatter, rawBody, path);
+                const body = prepareImportedMarkdownBody(
+                  frontmatter,
+                  rawBody,
+                  path
+                );
+                const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
+                const now = new Date().toISOString();
+                const createdAt =
+                  typeof frontmatter.createdAt === 'string' &&
+                  frontmatter.createdAt.trim()
+                    ? frontmatter.createdAt.trim()
+                    : now;
+                const filePath = await createNote(
+                  wsPath,
+                  noteId,
+                  title,
+                  'text'
+                );
+                await saveNote(
+                  wsPath,
+                  filePath,
+                  {
+                    ...frontmatter,
+                    id: noteId,
+                    title,
+                    displayHint: 'text',
+                    createdAt,
+                    updatedAt: now,
+                  },
+                  body
+                );
+                return { noteId, title, content: body };
+              } catch (error) {
+                console.warn(
+                  `[import] Failed to import markdown file ${path}:`,
+                  error
+                );
+                return null;
+              }
+            })
+          );
           const notes: Array<{
             noteId: string;
             title: string;
             content?: string;
           }> = [];
-          for (const path of paths) {
-            try {
-              const file = Bun.file(path);
-              if (!(await file.exists())) {
-                continue;
-              }
-              const raw = await file.text();
-              const { frontmatter, body: rawBody } = parseFrontmatter(raw);
-              const title = deriveMarkdownTitle(frontmatter, rawBody, path);
-              const body = prepareImportedMarkdownBody(
-                frontmatter,
-                rawBody,
-                path
-              );
-              const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
-              const now = new Date().toISOString();
-              const createdAt =
-                typeof frontmatter.createdAt === 'string' &&
-                frontmatter.createdAt.trim()
-                  ? frontmatter.createdAt.trim()
-                  : now;
-              const filePath = await createNote(wsPath, noteId, title, 'text');
-              await saveNote(
-                wsPath,
-                filePath,
-                {
-                  ...frontmatter,
-                  id: noteId,
-                  title,
-                  displayHint: 'text',
-                  createdAt,
-                  updatedAt: now,
-                },
-                body
-              );
-              notes.push({ noteId, title, content: body });
-            } catch (error) {
-              console.warn(
-                `[import] Failed to import markdown file ${path}:`,
-                error
-              );
+          for (const note of importedNotes) {
+            if (note) {
+              notes.push(note);
             }
           }
           return { failedCount: paths.length - notes.length, notes };
@@ -2111,41 +2135,58 @@ async function main() {
           const noteIndex = await buildNoteIndex(wsPath);
           const exportedNotes: ExportedNote[] = [];
           const failures: Array<{ noteId: string; reason: string }> = [];
+          type ExportNoteResult =
+            | { exported: ExportedNote; failure?: never }
+            | {
+                exported?: never;
+                failure: { noteId: string; reason: string };
+              };
 
-          for (const id of ids) {
-            try {
-              const record = await loadNoteRecord(
-                wsPath,
-                id,
-                noteIndex.get(id)?.markdownFile
-              );
-              if (!record) {
-                failures.push({ noteId: id, reason: 'note record not found' });
-                continue;
-              }
-              if (record.corrupted) {
-                failures.push({ noteId: id, reason: 'corrupted sidecar' });
-                continue;
-              }
-              const exported = buildNoteMarkdown(record, {
-                includeFrontmatter,
-                attachmentLinkPrefix: '../attachments/',
-                exportedAt,
-              });
-              await Bun.write(
-                join(notesDir, exported.fileName),
-                exported.markdown
-              );
-              if (exported.attachments.length > 0) {
-                await copyExportAttachments(
+          const exportResults = await Promise.all(
+            ids.map(async (id): Promise<ExportNoteResult> => {
+              try {
+                const record = await loadNoteRecord(
                   wsPath,
-                  exported.attachments,
-                  attachmentsDir
+                  id,
+                  noteIndex.get(id)?.markdownFile
                 );
+                if (!record) {
+                  return {
+                    failure: { noteId: id, reason: 'note record not found' },
+                  };
+                }
+                if (record.corrupted) {
+                  return {
+                    failure: { noteId: id, reason: 'corrupted sidecar' },
+                  };
+                }
+                const exported = buildNoteMarkdown(record, {
+                  includeFrontmatter,
+                  attachmentLinkPrefix: '../attachments/',
+                  exportedAt,
+                });
+                await Bun.write(
+                  join(notesDir, exported.fileName),
+                  exported.markdown
+                );
+                if (exported.attachments.length > 0) {
+                  await copyExportAttachments(
+                    wsPath,
+                    exported.attachments,
+                    attachmentsDir
+                  );
+                }
+                return { exported };
+              } catch (error) {
+                return { failure: { noteId: id, reason: String(error) } };
               }
-              exportedNotes.push(exported);
-            } catch (error) {
-              failures.push({ noteId: id, reason: String(error) });
+            })
+          );
+          for (const result of exportResults) {
+            if (result.failure) {
+              failures.push(result.failure);
+            } else {
+              exportedNotes.push(result.exported);
             }
           }
 

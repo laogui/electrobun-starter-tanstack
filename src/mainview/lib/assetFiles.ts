@@ -278,8 +278,10 @@ export async function saveAssetFile(
   const reportProgress = createProgressReporter(file, options);
   reportProgress(0.02, 'Preparing file');
 
-  let media = await extractMediaMetadata(file, classified.kind, reportProgress);
-  const result = await copyFileIntoWorkspace(file, classified, reportProgress);
+  let [media, result] = await Promise.all([
+    extractMediaMetadata(file, classified.kind, reportProgress),
+    copyFileIntoWorkspace(file, classified, reportProgress),
+  ]);
   const attachmentFile = assertAttachmentSaved(result, file.name);
 
   if (classified.kind === 'video') {

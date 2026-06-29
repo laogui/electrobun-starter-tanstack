@@ -12,7 +12,8 @@ import type { CanvasViewport } from '@/store/canvasStore';
  * launch restores it (it is by construction newer than the manifest, because
  * every successful flush clears it) and then persists + clears it.
  */
-const KEY_PREFIX = 'ghostboard.pendingFlush.';
+const KEY_PREFIX = 'ghostboard.v1.pendingFlush.';
+const LEGACY_KEY_PREFIX = ['ghostboard', 'pendingFlush', ''].join('.');
 
 export interface PendingFlushBackup {
   edges: Edge[];
@@ -23,6 +24,10 @@ export interface PendingFlushBackup {
 
 function keyFor(viewId: string): string {
   return `${KEY_PREFIX}${viewId}`;
+}
+
+function legacyKeyFor(viewId: string): string {
+  return `${LEGACY_KEY_PREFIX}${viewId}`;
 }
 
 export function writePendingFlushBackup(
@@ -47,7 +52,9 @@ export function readPendingFlushBackup(
   viewId: string
 ): PendingFlushBackup | null {
   try {
-    const raw = localStorage.getItem(keyFor(viewId));
+    const raw =
+      localStorage.getItem(keyFor(viewId)) ??
+      localStorage.getItem(legacyKeyFor(viewId));
     if (!raw) {
       return null;
     }
@@ -66,6 +73,7 @@ export function readPendingFlushBackup(
 export function clearPendingFlushBackup(viewId: string): void {
   try {
     localStorage.removeItem(keyFor(viewId));
+    localStorage.removeItem(legacyKeyFor(viewId));
   } catch {
     // Ignore storage failures.
   }

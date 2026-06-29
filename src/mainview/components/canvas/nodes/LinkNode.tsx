@@ -115,24 +115,37 @@ export const LinkContent = ({
   const title = getLinkDisplayTitle(link);
   const openableUrl = getOpenableUrl(link.url);
   const description = link.description?.trim();
-  const [draftUrl, setDraftUrl] = useState(link.url);
-  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlState, setUrlState] = useState(() => ({
+    draftUrl: link.url,
+    sourceUrl: link.url,
+    urlError: null as string | null,
+  }));
   const [heroImageError, setHeroImageError] = useState(false);
 
-  useEffect(() => {
-    setDraftUrl(link.url);
-    setUrlError(null);
-  }, [link.url]);
+  if (urlState.sourceUrl !== link.url) {
+    setUrlState({
+      draftUrl: link.url,
+      sourceUrl: link.url,
+      urlError: null,
+    });
+  }
+
+  const draftUrl =
+    urlState.sourceUrl === link.url ? urlState.draftUrl : link.url;
+  const urlError = urlState.sourceUrl === link.url ? urlState.urlError : null;
 
   const handleUrlSubmit = useCallback(
     (event: FormEvent) => {
       event.preventDefault();
       const normalized = normalizeLinkUrl(draftUrl);
       if (!normalized) {
-        setUrlError('Enter a valid http(s) URL.');
+        setUrlState((current) => ({
+          ...current,
+          urlError: 'Enter a valid http(s) URL.',
+        }));
         return;
       }
-      setUrlError(null);
+      setUrlState((current) => ({ ...current, urlError: null }));
       if (normalized !== link.url) {
         onUrlChange?.(normalized);
       }
@@ -200,7 +213,7 @@ export const LinkContent = ({
           ) : null}
 
           <div className="mt-auto border-black/8 border-t pt-6 dark:border-white/10">
-            <p className="mb-2 flex items-center gap-1.5 font-medium text-neutral-400 text-xs uppercase tracking-wider dark:text-neutral-500">
+            <p className="mb-2 flex items-center gap-1.5 font-medium text-neutral-400 text-xs uppercase tracking-wide dark:text-neutral-500">
               <LinkIcon size={12} />
               URL
             </p>
@@ -209,9 +222,12 @@ export const LinkContent = ({
                 <div className="flex items-center gap-2">
                   <input
                     aria-label="Link URL"
-                    className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-none transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
+                    className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-hidden transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
                     onChange={(event) => {
-                      setDraftUrl(event.target.value);
+                      setUrlState((current) => ({
+                        ...current,
+                        draftUrl: event.target.value,
+                      }));
                     }}
                     value={draftUrl}
                   />
@@ -341,7 +357,6 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const isDark = isColorDark(data.color);
   const isZoomedOut = useIsZoomedOut();
   const nodeRef = useRef<HTMLDivElement | null>(null);
-  const [unfurlVisible, setUnfurlVisible] = useState(false);
 
   // Each (nodeId,url) pair is fetched at most once per session. Store the
   // attempted url so re-renders with stale `data` references do not re-issue
@@ -353,38 +368,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     updateNodeData(id, { unfurlStatus: 'idle', unfurlError: undefined });
   }, [id, updateNodeData]);
 
-  useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') {
-      setUnfurlVisible(true);
-      return;
-    }
-
-    const element = nodeRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
-          setUnfurlVisible(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: [0.5] }
-    );
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!unfurlVisible) {
-      return;
-    }
+  const startUnfurl = useCallback(() => {
     const url = typeof data.url === 'string' ? data.url : '';
     if (!url) {
       return;
@@ -440,7 +424,34 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           unfurlError: 'Could not load link preview.',
         });
       });
-  }, [data.url, data.unfurlStatus, id, unfurlVisible, updateNodeData]);
+  }, [data.url, data.unfurlStatus, id, updateNodeData]);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      startUnfurl();
+      return;
+    }
+
+    const element = nodeRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+          startUnfurl();
+          observer.disconnect();
+        }
+      },
+      { threshold: [0.5] }
+    );
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [startUnfurl]);
 
   return (
     <div

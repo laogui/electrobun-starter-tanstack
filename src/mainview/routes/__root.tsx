@@ -1,6 +1,6 @@
 import { TanStackDevtools } from '@tanstack/react-devtools';
 import { formDevtoolsPlugin } from '@tanstack/react-form-devtools';
-import type { QueryClient } from '@tanstack/react-query';
+import { type QueryClient, useQuery } from '@tanstack/react-query';
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import {
   createRootRouteWithContext,
@@ -65,6 +65,10 @@ function RootDocument() {
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
   const applyAppSettings = useAppSettingsStore((s) => s.applySettings);
   const showSearchBox = pathname === '/';
+  useQuery({
+    queryKey: ['license-status'],
+    queryFn: refreshLicense,
+  });
 
   // Centralized settings application: theme via better-themes, locale via
   // paraglide, fontFamily via inline style on <html>, and the rest stored
@@ -89,12 +93,6 @@ function RootDocument() {
       applyAll(s as AppSettings);
     });
   }, [applyAll]);
-
-  // Warm the session cache through the shared renderer RPC connection. This
-  // is intentionally fire-and-forget so license I/O never delays the shell.
-  useEffect(() => {
-    refreshLicense();
-  }, []);
 
   // Listen for live pushes from the settings window
   useEffect(() => {

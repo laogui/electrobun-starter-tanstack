@@ -305,17 +305,17 @@ export function useContextMenu({
                     n.data as any;
                   return { ...n, data: cleanData };
                 }),
-                clipboardEdges: edges
-                  .filter(
-                    (edge) =>
-                      targetIds.has(edge.source) && targetIds.has(edge.target)
-                  )
-                  .map((edge) => {
-                    const { selected: _selected, ...clean } = edge as Edge & {
-                      selected?: boolean;
-                    };
-                    return clean;
-                  }),
+                clipboardEdges: edges.flatMap((edge) => {
+                  if (
+                    !(targetIds.has(edge.source) && targetIds.has(edge.target))
+                  ) {
+                    return [];
+                  }
+                  const { selected: _selected, ...clean } = edge as Edge & {
+                    selected?: boolean;
+                  };
+                  return [clean];
+                }),
               });
             }
           }
@@ -474,10 +474,12 @@ export function useContextMenu({
           break;
         }
         case 'toggle-lock-selection': {
-          const selected = useCanvasStore
-            .getState()
-            .nodes.filter((n) => n.selected)
-            .map((n) => n.id);
+          const selected: string[] = [];
+          for (const node of useCanvasStore.getState().nodes) {
+            if (node.selected) {
+              selected.push(node.id);
+            }
+          }
           const ids = selected.length > 0 ? selected : nodeId ? [nodeId] : [];
           toggleNodesLocked(ids);
           break;

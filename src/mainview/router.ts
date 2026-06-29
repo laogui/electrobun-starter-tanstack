@@ -3,6 +3,7 @@ import {
   createHashHistory,
   createRouter as createTanStackRouter,
 } from '@tanstack/react-router';
+import { createElement } from 'react';
 
 import { ErrorBoundaryFallback } from '@/components/layout/ErrorBoundaryFallback';
 import { Loader } from '@/components/layout/Loader';
@@ -20,12 +21,11 @@ export const router = createTanStackRouter({
   scrollRestoration: true,
   defaultPreloadStaleTime: 0,
   context: { queryClient },
-  defaultPendingComponent: () => <Loader />,
+  defaultPendingComponent: () => createElement(Loader),
   defaultErrorComponent: ErrorBoundaryFallback,
-  defaultNotFoundComponent: () => <div>Not Found</div>,
-  Wrap: ({ children }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  ),
+  defaultNotFoundComponent: () => createElement('div', null, 'Not Found'),
+  Wrap: ({ children }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children),
 });
 
 declare module '@tanstack/react-router' {

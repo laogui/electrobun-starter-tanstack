@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
+import { atomicWrite } from './atomicWrite';
 import { listFilesRecursive, loadNote } from './notes';
-import { atomicWrite } from './workspace';
 
 export interface NodeMetadata {
   tag?: string;
@@ -441,13 +441,18 @@ export async function migrateLegacyTagsFromNotes(
   const s = getState(wsPath);
   const contentDir = join(wsPath, 'content');
   const files = listFilesRecursive(contentDir);
+  const markdownFiles: string[] = [];
+  for (const rel of files) {
+    if (rel.endsWith('.md')) {
+      markdownFiles.push(rel);
+    }
+  }
+  const markdownDocs = await Promise.all(
+    markdownFiles.map((rel) => loadNote(wsPath, `content/${rel}`))
+  );
   let dirty = false;
 
-  for (const rel of files) {
-    if (!rel.endsWith('.md')) {
-      continue;
-    }
-    const doc = await loadNote(wsPath, `content/${rel}`);
+  for (const doc of markdownDocs) {
     if (!doc?.frontmatter?.id) {
       continue;
     }
@@ -480,10 +485,16 @@ export async function migrateLegacyTagsFromNotes(
       meta.tagColor = fmTagColor!.trim();
     }
     if (hasTags) {
-      const clean = fmTags!
-        .filter((t): t is string => typeof t === 'string')
-        .map((t) => t.trim().slice(0, MAX_TAG_LENGTH))
-        .filter(Boolean);
+      const clean: string[] = [];
+      for (const tag of fmTags!) {
+        if (typeof tag !== 'string') {
+          continue;
+        }
+        const normalized = tag.trim().slice(0, MAX_TAG_LENGTH);
+        if (normalized) {
+          clean.push(normalized);
+        }
+      }
       if (clean.length > 0) {
         meta.tags = [...new Set(clean)];
       }

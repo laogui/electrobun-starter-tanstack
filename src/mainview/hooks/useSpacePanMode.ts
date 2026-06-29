@@ -105,14 +105,14 @@ export function useSpacePanMode(): boolean {
 }
 
 export function useEditableInteractionLock(): boolean {
-  const [editableActive, setEditableActive] = useState(false);
+  const [editableActive, setEditableActive] = useState(() =>
+    typeof document === 'undefined'
+      ? false
+      : isEditableElement(document.activeElement)
+  );
 
   useEffect(() => {
     let focusOutTimer: number | undefined;
-
-    const syncFromActiveElement = () => {
-      setEditableActive(isEditableElement(document.activeElement));
-    };
 
     const clearFocusOutTimer = () => {
       if (focusOutTimer === undefined) {
@@ -134,7 +134,9 @@ export function useEditableInteractionLock(): boolean {
         return;
       }
       clearFocusOutTimer();
-      focusOutTimer = window.setTimeout(syncFromActiveElement, 0);
+      focusOutTimer = window.setTimeout(() => {
+        setEditableActive(isEditableElement(document.activeElement));
+      }, 0);
     };
 
     const handleWindowBlur = () => {
@@ -142,7 +144,6 @@ export function useEditableInteractionLock(): boolean {
       setEditableActive(false);
     };
 
-    syncFromActiveElement();
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
     globalThis.addEventListener('blur', handleWindowBlur);

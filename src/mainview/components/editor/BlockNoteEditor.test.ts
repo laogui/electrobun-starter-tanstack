@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getBlockNoteDebounceMs } from './BlockNoteEditor';
+import { getBlockNoteDebounceMs } from './blockNoteEditorTiming';
 
 describe('getBlockNoteDebounceMs', () => {
   it('uses the auto-save setting as milliseconds without scaling it', () => {

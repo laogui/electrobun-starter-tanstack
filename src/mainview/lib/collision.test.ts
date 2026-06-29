@@ -1,7 +1,7 @@
 import type { Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
-import { CARD_H, CARD_W } from './canvasConstants';
+import { CARD_H, CARD_W } from './canvasNodeRegistry';
 import type { StoredOrigin } from './collision';
 import {
   applyRepulsion,

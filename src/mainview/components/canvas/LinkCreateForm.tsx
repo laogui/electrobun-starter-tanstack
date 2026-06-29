@@ -1,5 +1,5 @@
 import { ArrowRight, Link as LinkIcon, Loader2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { createLinkNodeData, type LinkNodeData } from '@/lib/contentTypes';
 
@@ -11,15 +11,6 @@ export function LinkCreateForm({
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   return (
     <form
@@ -38,17 +29,11 @@ export function LinkCreateForm({
         setIsSubmitting(true);
         try {
           await onCreate(data);
-          if (mountedRef.current) {
-            setValue('');
-          }
+          setValue('');
         } catch {
-          if (mountedRef.current) {
-            setError('Could not create link.');
-          }
+          setError('Could not create link.');
         } finally {
-          if (mountedRef.current) {
-            setIsSubmitting(false);
-          }
+          setIsSubmitting(false);
         }
       }}
     >
@@ -61,7 +46,7 @@ export function LinkCreateForm({
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
-          className="min-w-0 flex-1 bg-transparent text-gray-900 text-sm outline-none placeholder:text-gray-400 dark:text-gray-100"
+          className="min-w-0 flex-1 bg-transparent text-gray-900 text-sm outline-hidden placeholder:text-gray-400 dark:text-gray-100"
           data-1p-ignore
           data-form-type="other"
           data-lpignore="true"
@@ -73,7 +58,6 @@ export function LinkCreateForm({
             }
           }}
           placeholder="https://example.com"
-          ref={inputRef}
           spellCheck="false"
           type="text"
           value={value}

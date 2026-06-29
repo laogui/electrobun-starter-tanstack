@@ -55,6 +55,8 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
       setIsLoading(true);
       setError(null);
       try {
+        // The sequence guard below intentionally detects searches superseded while this request is in flight.
+        // react-doctor-disable-next-line react-doctor/async-defer-await
         const backend = await rpcSearchCanvas(q, { limit });
         if (seq !== requestSeqRef.current) {
           return;
@@ -99,10 +101,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchState {
 
   useEffect(() => {
     if (!query.trim()) {
-      setResults([]);
-      setIsLoading(false);
-      setError(null);
-      setFallback(false);
+      runSearch(query);
       return;
     }
     const handle = setTimeout(() => {
@@ -328,5 +327,5 @@ function mergeResults(
       map.set(r.id, r);
     }
   }
-  return [...map.values()].sort((a, b) => b.score - a.score);
+  return Array.from(map.values()).toSorted((a, b) => b.score - a.score);
 }

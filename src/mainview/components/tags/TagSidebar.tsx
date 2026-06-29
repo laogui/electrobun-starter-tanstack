@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Pencil, Tag as TagIcon, Trash2, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useTags } from '@/hooks/useTags';
@@ -27,6 +28,8 @@ export function TagSidebar() {
   return <AnimatePresence>{open ? <TagSidebarBody /> : null}</AnimatePresence>;
 }
 
+// The sidebar body keeps filter state, rename flow, and delete confirmation together.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 function TagSidebarBody() {
   const setOpen = useCanvasStore((s) => s.setTagSidebarOpen);
   const activeFilters = useCanvasStore((s) => s.activeTagFilters);
@@ -44,14 +47,6 @@ function TagSidebarBody() {
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [pendingDeleteTag, setPendingDeleteTag] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (editingTag !== null) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editingTag]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -60,21 +55,25 @@ function TagSidebarBody() {
   // Escape closes the palette when no inline rename is in progress and no
   // confirm dialog is open, mirroring the dismissal model of other side
   // tools without trapping focus or blocking the canvas.
+  const handleEscapeKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key !== 'Escape') {
+      return;
+    }
+    if (editingTag !== null || pendingDeleteTag !== null) {
+      return;
+    }
+    close();
+  });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') {
-        return;
-      }
-      if (editingTag !== null || pendingDeleteTag !== null) {
-        return;
-      }
-      close();
+      handleEscapeKey(e);
     };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [close, editingTag, pendingDeleteTag]);
+  }, []);
 
   const handleTagClick = useCallback(
     (tag: string) => {
@@ -211,7 +210,8 @@ function TagSidebarBody() {
                     key={t.name}
                   >
                     <input
-                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-none focus:border-primary dark:border-white/10 dark:bg-neutral-800"
+                      aria-label="Tag name"
+                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-hidden focus:border-primary dark:border-white/10 dark:bg-neutral-800"
                       onChange={(e) => {
                         setEditingName(e.target.value);
                       }}
@@ -222,7 +222,10 @@ function TagSidebarBody() {
                           cancelRename();
                         }
                       }}
-                      ref={inputRef}
+                      ref={(node) => {
+                        node?.focus();
+                        node?.select();
+                      }}
                       type="text"
                       value={editingName}
                     />

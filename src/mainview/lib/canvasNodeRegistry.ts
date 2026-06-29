@@ -6,10 +6,8 @@ import type { CanvasNodeKind } from './contentTypes';
 
 /**
  * Default node dimensions. The registry owns these directly so it can
- * initialize `CANVAS_NODE_SPECS` without depending on `canvasConstants`,
- * which sits inside the canvas-node import cycle (canvasConstants → node
- * components → useCanvasStore → registry). `canvasConstants` re-exports
- * these for backwards compatibility.
+ * initialize `CANVAS_NODE_SPECS` without depending on rendered node component
+ * registration. `canvasConstants` re-exports these for backwards compatibility.
  */
 export const CARD_W = 350;
 export const CARD_H = 450;

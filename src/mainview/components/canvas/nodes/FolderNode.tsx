@@ -143,7 +143,7 @@ export const FolderContent = ({
             ) : null}
             <button
               aria-label="Folder menu"
-              className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-slate-300/80 text-slate-500 transition-all hover:scale-110 hover:bg-slate-900/5"
+              className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-slate-300/80 text-slate-500 transition-[transform,background-color] hover:scale-110 hover:bg-slate-900/5"
               onClick={onMenuClick}
               type="button"
             >

@@ -1,6 +1,7 @@
 import { FileText, MapPin, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
+import { useCallback, useMemo, useState } from 'react';
 
 import { NotePreview } from '@/components/preview/NotePreview';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,8 @@ function makePreview(
     .trim();
 }
 
+// Component split is a broad UI refactor; keep current interaction grouping intact.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const nodes = useCanvasStore((s) => s.nodes);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
@@ -76,20 +79,15 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
     return out;
   }, [nodes]);
 
-  // Drop selection if the source node disappears (deleted, pinned back, etc.)
-  useEffect(() => {
-    if (
-      selectedNodeId &&
-      !entries.some((entry) => entry.nodeId === selectedNodeId)
-    ) {
-      setSelectedNodeId(null);
-    }
-  }, [entries, selectedNodeId]);
+  const validSelectedNodeId =
+    selectedNodeId && entries.some((entry) => entry.nodeId === selectedNodeId)
+      ? selectedNodeId
+      : null;
+  if (selectedNodeId !== validSelectedNodeId) {
+    setSelectedNodeId(validSelectedNodeId);
+  }
 
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId]
-  );
+  const selectedNode = nodes.find((n) => n.id === validSelectedNodeId) ?? null;
 
   const selectedData =
     selectedNode && (selectedNode.data as Record<string, unknown>);
@@ -102,6 +100,9 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const isImageSelection = selectedNode?.type === 'image';
   const isLinkSelection = selectedNode?.type === 'link';
   const isAssetSelection = selectedNode?.type === 'asset';
+  const toggleSelectedNode = useCallback((nodeId: string) => {
+    setSelectedNodeId((current) => (current === nodeId ? null : nodeId));
+  }, []);
 
   const handlePin = useCallback(
     (nodeId: string) => {
@@ -294,29 +295,43 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                   <li
                     aria-current={isSelected ? 'true' : undefined}
                     className={cn(
-                      'group cursor-pointer px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
+                      'group px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
                       idx > 0 && 'border-black/5 border-t dark:border-white/5',
                       isSelected &&
                         'bg-blue-50/80 hover:bg-blue-50 dark:bg-blue-500/10 dark:hover:bg-blue-500/15'
                     )}
                     draggable
                     key={entry.id}
-                    onClick={() => {
-                      setSelectedNodeId((current) =>
-                        current === entry.nodeId ? null : entry.nodeId
-                      );
-                    }}
                     onDragStart={(e) => {
                       handleDragStart(e, entry);
                     }}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="truncate font-medium text-gray-800 dark:text-gray-100">
-                        {entry.title}
-                      </h3>
+                      <button
+                        className="min-w-0 flex-1 cursor-pointer text-left outline-hidden"
+                        onClick={() => {
+                          toggleSelectedNode(entry.nodeId);
+                        }}
+                        type="button"
+                      >
+                        <h3 className="truncate font-medium text-gray-800 dark:text-gray-100">
+                          {entry.title}
+                        </h3>
+                        {entry.preview ? (
+                          <p className="mt-1 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">
+                            {entry.preview}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
+                            {entry.type === 'asset'
+                              ? 'No file metadata'
+                              : 'Empty note'}
+                          </p>
+                        )}
+                      </button>
                       <button
                         aria-label="Pin to canvas"
-                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-gray-400 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover:opacity-100 dark:hover:bg-blue-500/10 dark:hover:text-blue-400"
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-700 group-hover:opacity-100 dark:text-blue-400 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePin(entry.nodeId);
@@ -327,17 +342,6 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                         Pin
                       </button>
                     </div>
-                    {entry.preview ? (
-                      <p className="mt-1 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">
-                        {entry.preview}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
-                        {entry.type === 'asset'
-                          ? 'No file metadata'
-                          : 'Empty note'}
-                      </p>
-                    )}
                   </li>
                 );
               })}

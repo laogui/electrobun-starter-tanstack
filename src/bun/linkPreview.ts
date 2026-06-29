@@ -185,14 +185,17 @@ function readAttribute(tag: string, attribute: string): string | undefined {
 }
 
 function pickMeta(html: string, names: string[]): string | undefined {
-  for (const name of names) {
-    const propertyRe = new RegExp(
-      `<meta[^>]*?(?:property|name)\\s*=\\s*["']${name.replace(
-        REGEX_ESCAPE_RE,
-        '\\$&'
-      )}["'][^>]*>`,
-      'i'
-    );
+  const propertyPatterns = names.map(
+    (name) =>
+      new RegExp(
+        `<meta[^>]*?(?:property|name)\\s*=\\s*["']${name.replace(
+          REGEX_ESCAPE_RE,
+          '\\$&'
+        )}["'][^>]*>`,
+        'i'
+      )
+  );
+  for (const propertyRe of propertyPatterns) {
     const tag = html.match(propertyRe)?.[0];
     if (!tag) {
       continue;
@@ -266,6 +269,7 @@ async function readBoundedText(
   let text = '';
   let total = 0;
   while (total < maxBytes) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const { done, value } = await reader.read();
     if (done) {
       break;

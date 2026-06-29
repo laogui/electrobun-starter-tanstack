@@ -1,5 +1,5 @@
 import { useStore } from '@xyflow/react';
-import { createContext, type ReactNode, useContext } from 'react';
+import { createContext, type ReactNode, use } from 'react';
 
 /**
  * Zoom threshold below which nodes render their simplified "zoomed-out"
@@ -34,5 +34,5 @@ export function ZoomLevelProvider({ children }: { children: ReactNode }) {
 
 /** Returns whether the canvas is currently zoomed out past the threshold. */
 export function useIsZoomedOut(): boolean {
-  return useContext(ZoomLevelContext);
+  return use(ZoomLevelContext);
 }

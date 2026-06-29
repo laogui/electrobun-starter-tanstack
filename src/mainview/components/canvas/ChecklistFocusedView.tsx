@@ -1,5 +1,5 @@
 import { Check, Plus, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -45,8 +45,9 @@ const ItemRow = ({
     return (
       <div className="group flex items-center gap-3 pt-6 pb-1">
         <input
+          aria-label="Section title"
           className={cn(
-            'w-full border-none bg-transparent font-semibold text-sm uppercase tracking-wider outline-none',
+            'w-full border-none bg-transparent font-semibold text-sm uppercase tracking-wide outline-hidden',
             isDark
               ? 'text-white/70 placeholder-white/30'
               : 'text-neutral-500 placeholder-neutral-300'
@@ -108,8 +109,9 @@ const ItemRow = ({
         ) : null}
       </button>
       <input
+        aria-label="Checklist item text"
         className={cn(
-          'w-full border-none bg-transparent text-base outline-none transition-colors',
+          'w-full border-none bg-transparent text-base outline-hidden transition-colors',
           item.checked
             ? isDark
               ? 'text-white/45 line-through'
@@ -149,12 +151,17 @@ const ItemRow = ({
   );
 };
 
+const checklistFocusedItemKey = (item: ChecklistItem) =>
+  `${item.isHeader ? 'header' : 'item'}:${item.text ?? ''}:${
+    item.checked ? 'checked' : 'unchecked'
+  }`;
+
 export const ChecklistFocusedView = ({
   data,
   onCommit,
 }: ChecklistFocusedViewProps) => {
   const isDark = isColorDark(data.color);
-  const items = data.items ?? [];
+  const items = useMemo(() => data.items ?? [], [data.items]);
   const [newItem, setNewItem] = useState('');
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const pendingFocusIndex = useRef<number | null>(null);
@@ -253,7 +260,7 @@ export const ChecklistFocusedView = ({
         <input
           aria-label="Checklist title"
           className={cn(
-            'w-full border-none bg-transparent font-bold text-4xl leading-tight tracking-tight outline-none',
+            'w-full border-none bg-transparent font-bold text-4xl leading-tight tracking-tight outline-hidden',
             isDark ? 'placeholder-white/30' : 'placeholder-neutral-300'
           )}
           defaultValue={data.title ?? ''}
@@ -311,7 +318,7 @@ export const ChecklistFocusedView = ({
               // Text is part of the key so a committed rename remounts the row
               // with fresh local state; while typing nothing commits, so the
               // row is stable and the caret is preserved.
-              key={`${index}:${item.isHeader ? 'h' : 'i'}:${item.text ?? ''}`}
+              key={checklistFocusedItemKey(item)}
               onDelete={() => handleDelete(index, false)}
               onDeleteEmptyBackwards={() => handleDelete(index, true)}
               onEnter={(text) => handleEnter(index, text)}
@@ -338,8 +345,9 @@ export const ChecklistFocusedView = ({
               />
             </div>
             <input
+              aria-label="New checklist item"
               className={cn(
-                'w-full border-none bg-transparent text-base outline-none',
+                'w-full border-none bg-transparent text-base outline-hidden',
                 isDark ? 'placeholder-white/40' : 'placeholder-neutral-400'
               )}
               onChange={(e) => setNewItem(e.target.value)}

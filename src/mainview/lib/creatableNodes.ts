@@ -24,7 +24,7 @@ import type { CreatableCanvasNodeKind } from './contentTypes';
  * context menu historically prefixes its ids with `new-` (`new-note`); use
  * `resolveCreatableKind` so either spelling resolves to the same kind.
  */
-export const CREATABLE_KIND_BY_ACTION = {
+const CREATABLE_KIND_BY_ACTION = {
   note: 'card',
   checklist: 'checklist',
   sticky: 'sticky',

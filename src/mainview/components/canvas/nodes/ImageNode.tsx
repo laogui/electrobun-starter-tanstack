@@ -42,8 +42,6 @@ export const ImageContent = ({
   // avoid keeping the original full-resolution bitmap in memory just to draw
   // a card preview. The focused / lightbox view falls back to the original
   // and lazy-loads it from the workspace attachment when needed.
-  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
-  const [lazyLoadFailed, setLazyLoadFailed] = useState(false);
   const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
   const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);
   const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
@@ -52,30 +50,55 @@ export const ImageContent = ({
     (directImageUrl || (data.thumbnailUrl && !isFocused)
       ? undefined
       : data.imageFile);
+  const [lazyLoadState, setLazyLoadState] = useState<{
+    attachmentToLoad: string | undefined;
+    failed: boolean;
+    resolvedImageUrl: string | null;
+  }>(() => ({
+    attachmentToLoad,
+    failed: false,
+    resolvedImageUrl: null,
+  }));
+  if (lazyLoadState.attachmentToLoad !== attachmentToLoad) {
+    setLazyLoadState({
+      attachmentToLoad,
+      failed: false,
+      resolvedImageUrl: null,
+    });
+  }
+  const resolvedImageUrl =
+    lazyLoadState.attachmentToLoad === attachmentToLoad
+      ? lazyLoadState.resolvedImageUrl
+      : null;
+  const lazyLoadFailed =
+    lazyLoadState.attachmentToLoad === attachmentToLoad
+      ? lazyLoadState.failed
+      : false;
 
   useEffect(() => {
-    setResolvedImageUrl(null);
-    setLazyLoadFailed(false);
     if (!attachmentToLoad) {
       return;
     }
     let cancelled = false;
-    rpcLoadAttachment(attachmentToLoad)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        if (result?.dataUrl) {
-          setResolvedImageUrl(result.dataUrl);
-          return;
-        }
-        setLazyLoadFailed(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLazyLoadFailed(true);
-        }
-      });
+    (async () => {
+      let dataUrl: string | null = null;
+      let failed = false;
+      try {
+        const result = await rpcLoadAttachment(attachmentToLoad);
+        dataUrl = result?.dataUrl ?? null;
+        failed = dataUrl === null;
+      } catch {
+        failed = true;
+      }
+      if (cancelled) {
+        return;
+      }
+      setLazyLoadState((current) =>
+        current.attachmentToLoad === attachmentToLoad
+          ? { ...current, failed, resolvedImageUrl: dataUrl }
+          : current
+      );
+    })();
     return () => {
       cancelled = true;
     };
@@ -105,7 +128,11 @@ export const ImageContent = ({
             className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-red-300/60 bg-white/70 px-3 py-1.5 text-red-700 text-xs shadow-sm transition-colors hover:bg-white dark:border-red-400/30 dark:bg-white/10 dark:text-red-200 dark:hover:bg-white/20"
             onClick={(e) => {
               e.stopPropagation();
-              setLazyLoadFailed(false);
+              setLazyLoadState((current) =>
+                current.attachmentToLoad === attachmentToLoad
+                  ? { ...current, failed: false }
+                  : current
+              );
             }}
             type="button"
           >
@@ -166,6 +193,8 @@ export const ImageContent = ({
   );
 };
 
+// Component split is a broad UI refactor; keep image-node editing behavior intact.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -188,14 +217,16 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   );
 
   useEffect(() => {
-    if (isRenaming) {
-      setRenameDraft(data.title ?? '');
-      // Autofocus + select after mount.
-      requestAnimationFrame(() => {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      });
+    if (!isRenaming) {
+      return;
     }
+    setRenameDraft(data.title ?? '');
+    // Autofocus + select after mount.
+    const frame = requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [isRenaming, data.title]);
 
   const commitRename = useCallback(() => {
@@ -374,6 +405,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       <input
         accept="image/*"
+        aria-label="Replace image file"
         className="hidden"
         onChange={handleFileInput}
         ref={fileInputRef}
@@ -458,7 +490,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             >
               <input
                 aria-label="Rename image"
-                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => setRenameDraft(e.target.value)}
                 onKeyDown={(e) => {

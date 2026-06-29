@@ -22,7 +22,7 @@ function createWrapper() {
     defaultOptions: { queries: { retry: false } },
   });
   return ({ children }: { children: ReactNode }) =>
-    createElement(QueryClientProvider, { client: qc, children });
+    createElement(QueryClientProvider, { client: qc }, children);
 }
 
 // Use ids that are NOT registered in the TEMPLATE_I18N dictionary so

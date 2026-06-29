@@ -204,6 +204,8 @@ async function captureVideoThumbnail(
     try {
       if (target > 0) {
         video.currentTime = target;
+        // Video seeks must complete before drawing the frame for that candidate.
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
         await waitForMediaEvent(video, 'seeked');
       }
       const dataUrl = drawVideoThumbnail(video);

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { atomicWrite } from './workspace';
+import { atomicWrite } from './atomicWrite';
 
 export interface ManifestNode {
   data: Record<string, unknown>;

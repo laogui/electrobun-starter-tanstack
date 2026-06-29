@@ -78,6 +78,18 @@ function setSearch(partial: Partial<typeof searchState.current>) {
   searchState.current = { ...searchState.current, ...partial };
 }
 
+function getResultButtons(): HTMLButtonElement[] {
+  return Array.from(
+    screen
+      .getByTestId('search-results')
+      .querySelectorAll<HTMLButtonElement>('[data-result-index]')
+  );
+}
+
+function activeResult(index: number): HTMLButtonElement {
+  return getResultButtons()[index]!;
+}
+
 function buildRfInstance() {
   const setCenter = vi.fn();
   return {
@@ -171,6 +183,17 @@ describe('searchDialog', () => {
     expect(screen.getByTestId('search-results')).toBeInTheDocument();
   });
 
+  it('reads legacy unversioned search history', () => {
+    window.localStorage.setItem(
+      ['ghostboard', 'search-history'].join(':'),
+      JSON.stringify(['legacy query'])
+    );
+
+    render(<SearchDialog />);
+
+    expect(screen.getByText('legacy query')).toBeInTheDocument();
+  });
+
   it('shows the loading indicator when isLoading is true', () => {
     setSearch({ query: 'foo', isLoading: true });
     render(<SearchDialog />);
@@ -220,18 +243,11 @@ describe('searchDialog interactions', () => {
     });
     render(<SearchDialog />);
     const input = screen.getByLabelText('Search query');
-    const options = screen.getAllByRole('option');
-    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(activeResult(0)).toHaveClass('bg-blue-50');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(activeResult(1)).toHaveClass('bg-blue-50');
     fireEvent.keyDown(input, { key: 'ArrowUp' });
-    expect(screen.getAllByRole('option')[0]).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(activeResult(0)).toHaveClass('bg-blue-50');
   });
 
   it('resets active selection when results change', async () => {
@@ -256,10 +272,7 @@ describe('searchDialog interactions', () => {
     const { rerender } = render(<SearchDialog rfInstance={ref} />);
     const input = screen.getByLabelText('Search query');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(activeResult(1)).toHaveClass('bg-blue-50');
 
     setSearch({ query: 'first', results: [makeResult({ id: 'r1' })] });
     rerender(<SearchDialog rfInstance={ref} />);
@@ -308,7 +321,7 @@ describe('searchDialog interactions', () => {
       ],
     });
     render(<SearchDialog />);
-    fireEvent.click(screen.getByRole('option'));
+    fireEvent.click(getResultButtons()[0]!);
     await waitFor(() => {
       expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
     });
@@ -337,7 +350,7 @@ describe('searchDialog interactions', () => {
       ],
     });
     render(<SearchDialog />);
-    fireEvent.click(screen.getByRole('option'));
+    fireEvent.click(getResultButtons()[0]!);
     await waitFor(() => {
       expect(useCanvasStore.getState().activeViewId).toBe('other');
     });
@@ -383,7 +396,7 @@ describe('searchDialog interactions', () => {
       results: [makeResult({ title: 'tango', excerpt: 'a tan line' })],
     });
     render(<SearchDialog />);
-    const option = screen.getByRole('option');
+    const option = getResultButtons()[0]!;
     const marks = option.querySelectorAll('mark');
     expect(marks.length).toBeGreaterThanOrEqual(2);
     expect(
@@ -409,11 +422,11 @@ describe('searchDialog interactions', () => {
     // Two group headers, one per canvas.
     const collapseButtons = screen.getAllByLabelText('Collapse group');
     expect(collapseButtons).toHaveLength(2);
-    expect(screen.getAllByRole('option')).toHaveLength(2);
+    expect(getResultButtons()).toHaveLength(2);
 
     // Collapsing the first canvas hides its row.
     fireEvent.click(collapseButtons[0]!);
-    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(getResultButtons()).toHaveLength(1);
     expect(screen.getByLabelText('Expand group')).toBeInTheDocument();
   });
 
@@ -434,9 +447,9 @@ describe('searchDialog interactions', () => {
     render(<SearchDialog />);
     fireEvent.click(screen.getAllByLabelText('Collapse group')[0]!);
     // Only the Other Canvas row remains and becomes the active option.
-    const options = screen.getAllByRole('option');
+    const options = getResultButtons();
     expect(options).toHaveLength(1);
-    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(activeResult(0)).toHaveClass('bg-blue-50');
   });
 
   it('shows recent cards and canvases in the empty state (E3)', () => {
@@ -484,16 +497,13 @@ describe('searchDialog interactions', () => {
     render(<SearchDialog />);
 
     // Recent card first, then the "Other Canvas" jump target.
-    const options = screen.getAllByRole('option');
+    const options = getResultButtons();
     expect(options).toHaveLength(2);
-    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(activeResult(0)).toHaveClass('bg-blue-50');
 
     const input = screen.getByLabelText('Search query');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(screen.getAllByRole('option')[1]).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(activeResult(1)).toHaveClass('bg-blue-50');
 
     // Enter on the canvas row switches view and closes the dialog.
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -536,7 +546,7 @@ describe('searchDialog interactions', () => {
       ],
     });
     render(<SearchDialog />);
-    fireEvent.click(screen.getByRole('option'));
+    fireEvent.click(getResultButtons()[0]!);
     await waitFor(() => {
       expect(useCanvasStore.getState().activeViewId).toBe('other');
     });

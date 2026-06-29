@@ -19,11 +19,12 @@ export function applyCanvasNodeChanges(
   nodes: Node[]
 ): Node[] {
   const updatedNodes = applyNodeChanges(changes, nodes);
-  const dimensionsById = new Map(
-    changes
-      .filter(isDimensionChange)
-      .map((change) => [change.id, change.dimensions] as const)
-  );
+  const dimensionsById = new Map<string, { width: number; height: number }>();
+  for (const change of changes) {
+    if (isDimensionChange(change)) {
+      dimensionsById.set(change.id, change.dimensions);
+    }
+  }
 
   if (dimensionsById.size === 0) {
     return updatedNodes;

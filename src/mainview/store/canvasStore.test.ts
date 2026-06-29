@@ -5,6 +5,7 @@ const NODE_ID_REGEX = /^node-/;
 const NOTE_ID_REGEX = /^note_/;
 
 import {
+  CANVAS_NODE_SPECS,
   CARD_H,
   CARD_W,
   FOLDER_H,
@@ -13,8 +14,7 @@ import {
   IMAGE_W,
   STICKY_H,
   STICKY_W,
-} from '@/lib/canvasConstants';
-import { CANVAS_NODE_SPECS } from '@/lib/canvasNodeRegistry';
+} from '@/lib/canvasNodeRegistry';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const PASTE_ID_RE = /^paste-/;

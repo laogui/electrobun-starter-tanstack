@@ -77,6 +77,7 @@ export async function buildNoteIndex(
       continue;
     }
     const noteId = rel.replace(JSON_EXT_RE, '');
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups
     if (!noteId.includes('/') && NOTE_ID_RE.test(noteId)) {
       index.set(noteId, { noteId, hasSidecar: true });
     }
@@ -277,9 +278,13 @@ export async function mergeNoteMeta(
 /** Enumerate every note record in the workspace (sidecars + legacy md). */
 export async function listNoteRecords(wsPath: string): Promise<NoteRecord[]> {
   const index = await buildNoteIndex(wsPath);
+  const loadedRecords = await Promise.all(
+    Array.from(index, ([noteId, location]) =>
+      loadNoteRecord(wsPath, noteId, location.markdownFile)
+    )
+  );
   const records: NoteRecord[] = [];
-  for (const [noteId, location] of index) {
-    const record = await loadNoteRecord(wsPath, noteId, location.markdownFile);
+  for (const record of loadedRecords) {
     if (record) {
       records.push(record);
     }

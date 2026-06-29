@@ -91,6 +91,8 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
       });
     };
 
+    // Custom zoom intentionally prevents native scroll on the image surface.
+    // react-doctor-disable-next-line react-doctor/client-passive-event-listeners
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       container.removeEventListener('wheel', handleWheel);

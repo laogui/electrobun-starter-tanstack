@@ -115,6 +115,7 @@ describe('StickyNode', () => {
   });
 
   it('renders sticky content and updates edited text on blur', () => {
+    vi.useFakeTimers();
     render(
       <StickyNode
         data={{ color: '#ffee88', content: 'Remember this' }}
@@ -124,12 +125,15 @@ describe('StickyNode', () => {
 
     const content = screen.getByText('Remember this');
     fireEvent.doubleClick(content.parentElement?.parentElement!);
-    content.textContent = 'Updated note';
-    fireEvent.blur(content);
+    vi.advanceTimersByTime(20);
+    const textarea = screen.getByLabelText('Sticky note text');
+    fireEvent.change(textarea, { target: { value: 'Updated note' } });
+    fireEvent.blur(textarea);
 
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-1', {
       content: 'Updated note',
     });
+    vi.useRealTimers();
   });
 
   it('enters edit mode on a plain single click of an unselected sticky', () => {
@@ -146,7 +150,7 @@ describe('StickyNode', () => {
     // No prior selection required: a single plain click opens the editor.
     fireEvent.click(visual);
     vi.advanceTimersByTime(20);
-    expect(content.getAttribute('contenteditable')).toBe('true');
+    expect(screen.getByLabelText('Sticky note text')).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -165,7 +169,7 @@ describe('StickyNode', () => {
     fireEvent.pointerDown(visual, { shiftKey: true });
     fireEvent.click(visual, { shiftKey: true });
     vi.advanceTimersByTime(20);
-    expect(content.getAttribute('contenteditable')).toBe('false');
+    expect(screen.queryByLabelText('Sticky note text')).toBeNull();
     vi.useRealTimers();
   });
 
@@ -180,8 +184,7 @@ describe('StickyNode', () => {
     );
 
     vi.advanceTimersByTime(20);
-    const content = screen.getByText('Via Enter');
-    expect(content.getAttribute('contenteditable')).toBe('true');
+    expect(screen.getByLabelText('Sticky note text')).toBeInTheDocument();
     expect(setEditingStickyIdMock).toHaveBeenCalledWith(null);
     vi.useRealTimers();
   });
@@ -198,12 +201,13 @@ describe('StickyNode', () => {
     const content = screen.getByText('Original');
     fireEvent.doubleClick(content.parentElement?.parentElement!);
     vi.advanceTimersByTime(20);
-    expect(content.getAttribute('contenteditable')).toBe('true');
+    const textarea = screen.getByLabelText('Sticky note text');
+    expect(textarea).toBeInTheDocument();
 
-    content.textContent = 'Edited';
-    fireEvent.keyDown(content, { key: 'Escape' });
+    fireEvent.change(textarea, { target: { value: 'Edited' } });
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    fireEvent.blur(textarea);
 
-    expect(content.getAttribute('contenteditable')).toBe('false');
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-esc', {
       content: 'Edited',
     });
@@ -222,22 +226,12 @@ describe('StickyNode', () => {
     const content = screen.getByText('Line one');
     fireEvent.doubleClick(content.parentElement?.parentElement!);
     vi.advanceTimersByTime(20);
-    expect(content.getAttribute('contenteditable')).toBe('true');
-
-    // Place the caret at the end of the content.
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(content);
-    range.collapse(false);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-
-    fireEvent.keyDown(content, { key: 'Enter' });
-    expect(content.textContent).toBe('Line one\n');
+    const textarea = screen.getByLabelText('Sticky note text');
+    expect(textarea).toBeInTheDocument();
 
     // Type a second line, then commit on blur.
-    content.appendChild(document.createTextNode('Line two'));
-    fireEvent.blur(content);
+    fireEvent.change(textarea, { target: { value: 'Line one\nLine two' } });
+    fireEvent.blur(textarea);
     expect(updateNodeDataMock).toHaveBeenCalledWith('sticky-enter-newline', {
       content: 'Line one\nLine two',
     });
@@ -250,18 +244,15 @@ describe('StickyNode', () => {
       <StickyNode data={{ color: '#ffee88', content: '' }} id="sticky-empty" />
     );
 
-    // The empty contentEditable body carries the placeholder for the CSS
-    // :empty::before rule to surface once it enters edit mode.
+    // The read-only body has no textarea placeholder until it enters edit mode.
     const body = document.querySelector('.sticky-editable')!;
-    expect(body.getAttribute('contenteditable')).toBe('false');
     expect(body.getAttribute('data-placeholder')).toBeNull();
 
     fireEvent.doubleClick(body.parentElement?.parentElement!);
     vi.advanceTimersByTime(20);
 
-    expect(body.getAttribute('contenteditable')).toBe('true');
-    expect(body.getAttribute('data-placeholder')).toBe('Type something…');
-    expect(body.classList.contains('sticky-editable-empty')).toBe(true);
+    const textarea = screen.getByLabelText('Sticky note text');
+    expect(textarea).toHaveAttribute('placeholder', 'Type something…');
     vi.useRealTimers();
   });
 
@@ -277,15 +268,8 @@ describe('StickyNode', () => {
     const body = screen.getByText('Before');
     fireEvent.doubleClick(body.parentElement?.parentElement!);
     vi.advanceTimersByTime(20);
-    expect(body.getAttribute('contenteditable')).toBe('true');
-
-    // Place caret at end of existing text.
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(body);
-    range.collapse(false);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    const textarea = screen.getByLabelText('Sticky note text');
+    expect(textarea).toBeInTheDocument();
 
     // jsdom doesn't implement document.execCommand; stub it so the paste
     // handler's insertText call can be observed.
@@ -299,7 +283,7 @@ describe('StickyNode', () => {
     const clipboardData = {
       getData: (type: string) => (type === 'text/plain' ? ' pasted' : ''),
     };
-    fireEvent.paste(body, { clipboardData });
+    fireEvent.paste(textarea, { clipboardData });
 
     expect(insertTextSpy).toHaveBeenCalledWith('insertText', false, ' pasted');
     vi.useRealTimers();

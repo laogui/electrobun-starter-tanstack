@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import {
   type NodeMetadata,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/rpc';
 
 const QUERY_KEY = ['node-metadata'] as const;
+const EMPTY_NODE_METADATA: NodeMetadataMap = {};
 
 export type { NodeMetadata, NodeMetadataMap } from '@/lib/rpc';
 
@@ -50,13 +51,39 @@ function tagNamesForColors(meta: NodeMetadata): string[] {
  * 5 minutes; mutations explicitly invalidate / patch the cache.
  */
 export function useNodeMetadata() {
-  const query = useQuery<NodeMetadataMap>({
+  const {
+    data,
+    dataUpdatedAt,
+    error,
+    errorUpdateCount,
+    errorUpdatedAt,
+    failureCount,
+    failureReason,
+    fetchStatus,
+    isError,
+    isFetched,
+    isFetchedAfterMount,
+    isFetching,
+    isInitialLoading,
+    isLoading,
+    isLoadingError,
+    isPaused,
+    isPending,
+    isPlaceholderData,
+    isRefetchError,
+    isRefetching,
+    isStale,
+    isSuccess,
+    promise,
+    refetch,
+    status,
+  } = useQuery<NodeMetadataMap>({
     queryKey: QUERY_KEY,
     queryFn: async () => (await rpcLoadNodeMetadata()) ?? {},
     staleTime: 1000 * 60 * 5,
   });
 
-  const map = query.data ?? {};
+  const map = useMemo(() => data ?? EMPTY_NODE_METADATA, [data]);
 
   const get = useCallback(
     (id: string | undefined): NodeMetadata | undefined =>
@@ -64,7 +91,35 @@ export function useNodeMetadata() {
     [map]
   );
 
-  return { ...query, map, get };
+  return {
+    data,
+    dataUpdatedAt,
+    error,
+    errorUpdateCount,
+    errorUpdatedAt,
+    failureCount,
+    failureReason,
+    fetchStatus,
+    get,
+    isError,
+    isFetched,
+    isFetchedAfterMount,
+    isFetching,
+    isInitialLoading,
+    isLoading,
+    isLoadingError,
+    isPaused,
+    isPending,
+    isPlaceholderData,
+    isRefetchError,
+    isRefetching,
+    isStale,
+    isSuccess,
+    map,
+    promise,
+    refetch,
+    status,
+  };
 }
 
 /**

@@ -16,7 +16,7 @@ import {
 } from './collision';
 
 /** Padding around groups used for placement avoidance / inner bounds. */
-export const GROUP_PADDING = 20;
+const GROUP_PADDING = 20;
 
 export interface PlacementResult {
   /** True when a non-overlapping slot was found for the new node. */
@@ -62,10 +62,16 @@ export function resolveNodePlacement(
     }
   }
 
-  const nodeRects = nodes
-    .filter((n) => n.type !== 'group')
-    .map((n) => absoluteRects.get(n.id))
-    .filter((r): r is Rect => r !== undefined);
+  const nodeRects: Rect[] = [];
+  for (const node of nodes) {
+    if (node.type === 'group') {
+      continue;
+    }
+    const rect = absoluteRects.get(node.id);
+    if (rect) {
+      nodeRects.push(rect);
+    }
+  }
 
   const allGroupObstacles = Array.from(groupRectsById.values()).map((r) =>
     inflateRect(r, GROUP_PADDING)
@@ -87,9 +93,12 @@ export function resolveNodePlacement(
 
   if (targetGroup) {
     const targetRect = groupRectsById.get(targetGroup.id)!;
-    const otherGroupObstacles = Array.from(groupRectsById.entries())
-      .filter(([id]) => id !== targetGroup.id)
-      .map(([, r]) => inflateRect(r, GROUP_PADDING));
+    const otherGroupObstacles: Rect[] = [];
+    for (const [id, rect] of groupRectsById) {
+      if (id !== targetGroup.id) {
+        otherGroupObstacles.push(inflateRect(rect, GROUP_PADDING));
+      }
+    }
 
     if (isPositionAvailable(anchor, size, nodeRects, otherGroupObstacles)) {
       return { placement: anchor, parentId: targetGroup.id, canPlace: true };
@@ -126,9 +135,12 @@ export function resolveNodePlacement(
   });
   if (engulfingGroup) {
     const r = groupRectsById.get(engulfingGroup.id)!;
-    const otherObstacles = Array.from(groupRectsById.entries())
-      .filter(([id]) => id !== engulfingGroup.id)
-      .map(([, rect]) => inflateRect(rect, GROUP_PADDING));
+    const otherObstacles: Rect[] = [];
+    for (const [id, rect] of groupRectsById) {
+      if (id !== engulfingGroup.id) {
+        otherObstacles.push(inflateRect(rect, GROUP_PADDING));
+      }
+    }
     const around = findNearestFreePositionAroundBounds({
       desired: anchor,
       size,

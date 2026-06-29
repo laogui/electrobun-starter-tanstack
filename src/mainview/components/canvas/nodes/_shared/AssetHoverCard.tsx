@@ -38,7 +38,7 @@ export function AssetHoverCard({
       </PreviewCard.Trigger>
       <PreviewCard.Portal>
         <PreviewCard.Positioner align="start" side="top" sideOffset={8}>
-          <PreviewCard.Popup className="nodrag nopan z-50 w-64 origin-(--transform-origin) rounded-lg border border-black/5 bg-white p-3 text-sm shadow-xl outline-none dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-100">
+          <PreviewCard.Popup className="nodrag nopan z-50 w-64 origin-(--transform-origin) rounded-lg border border-black/5 bg-white p-3 text-sm shadow-xl outline-hidden dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-100">
             <dl className="flex flex-col gap-1.5">
               {rows.map((row) => (
                 <div

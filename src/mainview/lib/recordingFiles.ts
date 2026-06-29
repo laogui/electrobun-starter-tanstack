@@ -46,19 +46,20 @@ export async function saveRecording(
   // Compute the waveform/duration from the in-memory blob before upload so the
   // card can render its peaks immediately. Best-effort: both may be omitted.
   const file = new File([input.blob], fileName, { type: input.mimeType });
-  const media = await createAudioWaveform(file).catch(
-    () =>
-      ({}) as {
-        duration?: number;
-        waveform?: number[];
-      }
-  );
-
-  const saved = await uploadAttachmentBlob(input.blob, {
-    fileName,
-    kind: 'audio',
-    mimeType: input.mimeType,
-  });
+  const [media, saved] = await Promise.all([
+    createAudioWaveform(file).catch(
+      () =>
+        ({}) as {
+          duration?: number;
+          waveform?: number[];
+        }
+    ),
+    uploadAttachmentBlob(input.blob, {
+      fileName,
+      kind: 'audio',
+      mimeType: input.mimeType,
+    }),
+  ]);
   if (!saved.filePath) {
     throw new Error('Failed to save the recording to the workspace.');
   }

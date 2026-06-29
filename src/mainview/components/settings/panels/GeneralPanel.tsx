@@ -28,6 +28,11 @@ interface SelectOption<TValue extends string> {
 
 type CanvasSnapOptionValue = 'off' | 'on';
 
+const languageOptions: SelectOption<LocaleSetting>[] = [
+  { label: 'English', value: 'en' },
+  { label: '中文', value: 'zh' },
+];
+
 function getSelectedLabel<TValue extends string>(
   options: readonly SelectOption<TValue>[],
   value: TValue
@@ -119,10 +124,6 @@ export function GeneralPanel({
     { label: strings.system, value: 'system' },
     { label: strings.light, value: 'light' },
     { label: strings.dark, value: 'dark' },
-  ];
-  const languageOptions: SelectOption<LocaleSetting>[] = [
-    { label: 'English', value: 'en' },
-    { label: '中文', value: 'zh' },
   ];
   const fontOptions: SelectOption<FontFamilySetting>[] = [
     { label: strings.fontSystem, value: 'system' },

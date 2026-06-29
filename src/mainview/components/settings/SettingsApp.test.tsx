@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +14,8 @@ import {
   type UnlinkedFileEntry,
 } from '@/settingsClient';
 
-import { applyTheme, normalizeSettings, SettingsApp } from './SettingsApp';
+import { SettingsApp } from './SettingsApp';
+import { applyTheme, normalizeSettings } from './settingsState';
 
 interface ClientOverrides {
   clearAllTrash?: () => Promise<{ purged: number; success: boolean }>;
@@ -78,6 +80,19 @@ const createClient = (
   setAIApiKey: vi.fn().mockResolvedValue({ success: true }),
 });
 
+function renderSettingsApp(client: SettingsClient) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SettingsApp client={client} />
+    </QueryClientProvider>
+  );
+}
+
 describe('SettingsApp helpers', () => {
   beforeEach(() => {
     document.documentElement.className = '';
@@ -135,7 +150,7 @@ describe('SettingsApp', () => {
       locale: 'zh',
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
 
     expect(
       await screen.findByRole('heading', { level: 1, name: '设置' })
@@ -155,7 +170,7 @@ describe('SettingsApp', () => {
       locale: 'en',
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
 
     const user = userEvent.setup();
     const themeSelect = await screen.findByRole('combobox', { name: 'Theme' });
@@ -178,7 +193,7 @@ describe('SettingsApp', () => {
       locale: 'en',
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
 
     const user = userEvent.setup();
     const snapSelect = await screen.findByRole('combobox', {
@@ -232,7 +247,7 @@ describe('SettingsApp trash section', () => {
 
   it('shows the empty state when trash is empty', async () => {
     const client = createClient(baseSettings);
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     await openWorkspace();
 
     expect(
@@ -249,7 +264,7 @@ describe('SettingsApp trash section', () => {
         .mockResolvedValueOnce([]),
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     const user = await openWorkspace();
 
     expect(await screen.findByText('My Canvas')).toBeVisible();
@@ -272,7 +287,7 @@ describe('SettingsApp trash section', () => {
         .mockResolvedValueOnce([]),
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     const user = await openWorkspace();
 
     await user.click(
@@ -299,7 +314,7 @@ describe('SettingsApp trash section', () => {
       restoreTrash: vi.fn().mockResolvedValue({ success: false }),
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     const user = await openWorkspace();
 
     await user.click(
@@ -316,7 +331,7 @@ describe('SettingsApp trash section', () => {
       .mockResolvedValueOnce([trashEntry]);
     const client = createClient(baseSettings, { listTrash });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     await openWorkspace();
 
     expect(await screen.findByText('No deleted canvases.')).toBeVisible();
@@ -336,7 +351,7 @@ describe('SettingsApp trash section', () => {
       clearAllTrash: vi.fn().mockResolvedValue({ success: true, purged: 1 }),
     });
 
-    render(<SettingsApp client={client} />);
+    renderSettingsApp(client);
     const user = await openWorkspace();
 
     await user.click(await screen.findByRole('button', { name: 'Empty all' }));

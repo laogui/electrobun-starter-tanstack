@@ -39,16 +39,27 @@ function LabeledEdgeComponent({
   const commitEdgeData = useCanvasStore((s) => s.commitEdgeData);
   const isEditing = editingEdgeId === id;
 
-  const [draft, setDraft] = useState(label);
+  const [draftState, setDraftState] = useState(() => ({
+    draft: label,
+    isEditing,
+    label,
+  }));
+  if (isEditing && (draftState.label !== label || !draftState.isEditing)) {
+    setDraftState({ draft: label, isEditing, label });
+  } else if (!(isEditing || draftState.isEditing === isEditing)) {
+    setDraftState((current) => ({ ...current, isEditing }));
+  }
+  const draft = isEditing ? draftState.draft : label;
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isEditing) {
-      setDraft(label);
-      // Focus after render
-      requestAnimationFrame(() => inputRef.current?.focus());
+    if (!isEditing) {
+      return;
     }
-  }, [isEditing, label]);
+    // Focus after render
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isEditing]);
 
   const commitLabel = useCallback(() => {
     const trimmed = draft.trim();
@@ -141,10 +152,14 @@ function LabeledEdgeComponent({
         >
           {isEditing ? (
             <input
-              className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+              aria-label="Edge label"
+              className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
               onBlur={commitLabel}
               onChange={(e) => {
-                setDraft(e.target.value);
+                setDraftState((current) => ({
+                  ...current,
+                  draft: e.target.value,
+                }));
               }}
               onKeyDown={handleKeyDown}
               ref={inputRef}

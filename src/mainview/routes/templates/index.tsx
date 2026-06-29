@@ -84,7 +84,7 @@ function TemplatesRoute() {
           />
           <input
             aria-label={m.templates_search_placeholder()}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pr-3 pl-9 text-sm outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 focus:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:focus:border-neutral-500 dark:focus:bg-neutral-800 dark:placeholder:text-gray-500"
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pr-3 pl-9 text-sm outline-hidden transition-colors placeholder:text-gray-400 focus:border-gray-400 focus:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:focus:border-neutral-500 dark:focus:bg-neutral-800 dark:placeholder:text-gray-500"
             onChange={(e) => setSearch(e.target.value)}
             placeholder={m.templates_search_placeholder()}
             type="text"

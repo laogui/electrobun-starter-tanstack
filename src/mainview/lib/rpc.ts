@@ -435,6 +435,8 @@ export async function rpcUnfurlLink(
     return null;
   }
   for (let attempt = 1; attempt <= UNFURL_MAX_ATTEMPTS; attempt += 1) {
+    // Retry attempts are intentionally sequential so we can stop on first success/give-up.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
     const outcome = await fetchUnfurlOnce(endpoint, url);
     if (outcome.kind === 'ok') {
       return outcome.data;

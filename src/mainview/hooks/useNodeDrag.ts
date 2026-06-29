@@ -1,12 +1,11 @@
 import type { Node, OnNodeDrag } from '@xyflow/react';
 import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef, useState } from 'react';
-
-import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
 import {
   isCanvasContentNode,
   isGroupChildNode,
 } from '@/lib/canvasNodePredicates';
+import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasNodeRegistry';
 import { canAbsorbIntoFolder, sortNodesByParent } from '@/lib/canvasUtils';
 import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -27,7 +26,9 @@ export function useNodeDrag() {
   const rf = useReactFlow();
 
   /** Original positions of nodes before they were pushed aside. */
-  const pushedOriginsRef = useRef<Map<string, StoredOrigin>>(new Map());
+  const pushedOriginsRef = useRef<Map<string, StoredOrigin> | null>(null);
+  pushedOriginsRef.current ??= new Map();
+  const pushedOrigins = pushedOriginsRef.current;
 
   /** Find the folder whose bounds contain the dragged node's center. */
   const findOverlappingFolder = useCallback(
@@ -165,9 +166,18 @@ export function useNodeDrag() {
           };
         });
 
-        const draggingIds = hasReportedDraggedNodes
-          ? new Set(liveDraggedNodes.keys())
-          : new Set(highlighted.filter((n) => n.selected).map((n) => n.id));
+        const draggingIds = new Set<string>();
+        if (hasReportedDraggedNodes) {
+          for (const id of liveDraggedNodes.keys()) {
+            draggingIds.add(id);
+          }
+        } else {
+          for (const highlightedNode of highlighted) {
+            if (highlightedNode.selected) {
+              draggingIds.add(highlightedNode.id);
+            }
+          }
+        }
         if (!draggingIds.has(node.id)) {
           draggingIds.add(node.id);
         }
@@ -195,8 +205,11 @@ export function useNodeDrag() {
         // Groups can't enter anything — no exemptions
 
         // Parents of any dragging node should not be pushed
+        const nodesForRepulsionById = new Map(
+          nodesForRepulsion.map((n) => [n.id, n])
+        );
         for (const id of draggingIds) {
-          const dragging = nodesForRepulsion.find((n) => n.id === id);
+          const dragging = nodesForRepulsionById.get(id);
           if (dragging?.parentId) {
             exemptIds.add(dragging.parentId);
           }
@@ -206,19 +219,19 @@ export function useNodeDrag() {
           nodes: nodesForRepulsion,
           activeNodeId: node.id,
           activeNodeIds: draggingIds,
-          pushedOrigins: pushedOriginsRef.current,
+          pushedOrigins,
           exemptIds,
           gap: 20,
         });
       });
     },
-    [rf, setNodes, findOverlappingFolder]
+    [rf, setNodes, findOverlappingFolder, pushedOrigins]
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_, node) => {
       setDropTargetId(null);
-      pushedOriginsRef.current.clear();
+      pushedOrigins.clear();
 
       if (isContentNode(node)) {
         setNodes((nds) => {
@@ -239,22 +252,26 @@ export function useNodeDrag() {
               type: cardNode.type ?? 'card',
               data: cleanData,
             };
-            return nds
-              .filter((n) => n.id !== node.id)
-              .map((n) => {
-                if (n.id !== folder.id) {
-                  return n;
-                }
-                const d = n.data as any;
-                const children = [...(d.children || []), childEntry];
-                return {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    children,
-                  },
-                };
+            const nextNodes: Node[] = [];
+            for (const n of nds) {
+              if (n.id === node.id) {
+                continue;
+              }
+              if (n.id !== folder.id) {
+                nextNodes.push(n);
+                continue;
+              }
+              const d = n.data as any;
+              const children = [...(d.children || []), childEntry];
+              nextNodes.push({
+                ...n,
+                data: {
+                  ...n.data,
+                  children,
+                },
               });
+            }
+            return nextNodes;
           }
 
           // Check group drop
@@ -349,7 +366,7 @@ export function useNodeDrag() {
         setActiveGroupId(null);
       }
     },
-    [rf, setNodes, findOverlappingFolder]
+    [rf, setNodes, findOverlappingFolder, pushedOrigins]
   );
 
   return {

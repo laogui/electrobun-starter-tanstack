@@ -5,19 +5,19 @@ interface HelperLinesProps {
   vertical?: number;
 }
 
+const canvasStyle = {
+  position: 'absolute' as const,
+  inset: 0,
+  pointerEvents: 'none' as const,
+  zIndex: 1000,
+};
+
 export function HelperLines({ horizontal, vertical }: HelperLinesProps) {
   const { x, y, zoom } = useViewport();
 
   if (horizontal === undefined && vertical === undefined) {
     return null;
   }
-
-  const canvasStyle = {
-    position: 'absolute' as const,
-    inset: 0,
-    pointerEvents: 'none' as const,
-    zIndex: 1000,
-  };
 
   return (
     <div style={canvasStyle}>

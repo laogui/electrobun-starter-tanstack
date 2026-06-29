@@ -28,7 +28,9 @@ export function useHelperLines() {
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
   /** Track pushed origins for resize repulsion. */
-  const resizePushedRef = useRef<Map<string, StoredOrigin>>(new Map());
+  const resizePushedRef = useRef<Map<string, StoredOrigin> | null>(null);
+  resizePushedRef.current ??= new Map();
+  const resizePushedOrigins = resizePushedRef.current;
   /** Track which node is actively being resized (to save snapshot once). */
   const activeResizeIdRef = useRef<string | null>(null);
 
@@ -76,7 +78,7 @@ export function useHelperLines() {
         // Save snapshot once when resize starts
         if (activeResizeIdRef.current !== resizeChange.id) {
           activeResizeIdRef.current = resizeChange.id;
-          resizePushedRef.current.clear();
+          resizePushedOrigins.clear();
           saveSnapshot();
         }
 
@@ -98,7 +100,7 @@ export function useHelperLines() {
           next = applyRepulsion({
             nodes: next,
             activeNodeId: resizeChange.id,
-            pushedOrigins: resizePushedRef.current,
+            pushedOrigins: resizePushedOrigins,
             exemptIds,
             gap: 20,
           });
@@ -109,7 +111,7 @@ export function useHelperLines() {
         // Clean up resize state on resize end
         if (resizeEnd) {
           activeResizeIdRef.current = null;
-          resizePushedRef.current.clear();
+          resizePushedOrigins.clear();
         }
 
         setHelperLineH(undefined);
@@ -117,7 +119,7 @@ export function useHelperLines() {
         setNodes((nds) => applyCanvasNodeChanges(changes, nds));
       }
     },
-    [setNodes, saveSnapshot]
+    [setNodes, saveSnapshot, resizePushedOrigins]
   );
 
   return { helperLineH, helperLineV, onNodesChange };

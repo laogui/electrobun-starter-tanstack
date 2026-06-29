@@ -163,7 +163,12 @@ export function useCanvasKeyboard({
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { nodes } = useCanvasStore.getState();
-        const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
+        const selectedIds: string[] = [];
+        for (const node of nodes) {
+          if (node.selected) {
+            selectedIds.push(node.id);
+          }
+        }
         if (selectedIds.length > 0) {
           if (onDeleteNodes) {
             onDeleteNodes(selectedIds);
@@ -199,10 +204,12 @@ export function useCanvasKeyboard({
       if (mod && key === 'x') {
         e.preventDefault();
         if (onDeleteNodes) {
-          const selectedIds = useCanvasStore
-            .getState()
-            .nodes.filter((n) => n.selected)
-            .map((n) => n.id);
+          const selectedIds: string[] = [];
+          for (const node of useCanvasStore.getState().nodes) {
+            if (node.selected) {
+              selectedIds.push(node.id);
+            }
+          }
           if (selectedIds.length > 0) {
             copySelected();
             onDeleteNodes(selectedIds);

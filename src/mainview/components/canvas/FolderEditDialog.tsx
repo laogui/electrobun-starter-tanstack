@@ -106,7 +106,7 @@ export function FolderEditDialog() {
                 {m.folder_edit_name_label()}
               </label>
               <input
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-gray-900 outline-hidden placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100"
                 id={nameId}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -126,7 +126,7 @@ export function FolderEditDialog() {
                 {m.folder_edit_description_label()}
               </label>
               <textarea
-                className="min-h-[80px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100"
+                className="min-h-[80px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] text-gray-900 outline-hidden placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100"
                 id={descriptionId}
                 onChange={(e) => {
                   setDescription(e.target.value);

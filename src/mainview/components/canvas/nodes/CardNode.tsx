@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, PenLine } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { getNodeTagItems, NodeTagChips } from '@/components/card/NodeTagChips';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { getNodeTagItems } from '@/components/card/nodeTagItems';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
@@ -48,6 +49,11 @@ export interface CardContentProps {
   readOnly?: boolean;
 }
 
+const checklistItemKey = (item: ChecklistItem) =>
+  `${item.isHeader ? 'header' : 'item'}:${item.text ?? ''}:${
+    item.checked ? 'checked' : 'unchecked'
+  }`;
+
 export const CardContent = ({
   data,
   isFocused,
@@ -92,17 +98,18 @@ export const CardContent = ({
                   'mt-4 mb-2 font-semibold',
                   isDark ? 'text-white/95' : 'text-gray-800'
                 )}
-                key={i}
+                key={checklistItemKey(item)}
               >
                 {item.text}
               </div>
             ) : (
-              <div
+              <button
                 className={cn(
-                  'nodrag nopan group flex items-start gap-3 py-1',
+                  'nodrag nopan group flex w-full items-start gap-3 py-1 text-left',
                   readOnly ? '' : 'cursor-pointer'
                 )}
-                key={i}
+                disabled={readOnly}
+                key={checklistItemKey(item)}
                 onClick={
                   readOnly
                     ? undefined
@@ -122,6 +129,7 @@ export const CardContent = ({
                         }
                       }
                 }
+                type="button"
               >
                 <div
                   className={cn(
@@ -129,7 +137,7 @@ export const CardContent = ({
                     item.checked
                       ? isDark
                         ? 'border-white bg-white'
-                        : 'border-black bg-black'
+                        : 'border-neutral-950 bg-neutral-950'
                       : isDark
                         ? 'border-white/40 group-hover:border-white'
                         : 'border-gray-400 group-hover:border-black'
@@ -156,7 +164,7 @@ export const CardContent = ({
                 >
                   {item.text}
                 </span>
-              </div>
+              </button>
             )
           )}
           {/* Add new item input — hidden in readOnly (e.g., template previews) */}
@@ -174,8 +182,9 @@ export const CardContent = ({
                 )}
               />
               <input
+                aria-label="New checklist item"
                 className={cn(
-                  'nodrag nopan w-full border-none bg-transparent text-sm outline-none',
+                  'nodrag nopan w-full border-none bg-transparent text-sm outline-hidden',
                   isDark ? 'placeholder-white/40' : 'placeholder-gray-500'
                 )}
                 onChange={(e) => {
@@ -273,16 +282,12 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
     }),
     [data, meta?.tag, meta?.tagColor, meta?.tagColors, meta?.tags]
   );
-  const tagItems = useMemo(
-    () =>
-      getNodeTagItems({
-        tag: viewData.tag,
-        tagColor: viewData.tagColor,
-        tagColors: viewData.tagColors,
-        tags: viewData.tags,
-      }),
-    [viewData.tag, viewData.tagColor, viewData.tagColors, viewData.tags]
-  );
+  const tagItems = getNodeTagItems({
+    tag: viewData.tag,
+    tagColor: viewData.tagColor,
+    tagColors: viewData.tagColors,
+    tags: viewData.tags,
+  });
   const firstTag = tagItems[0];
 
   // OR semantics: a card is "in scope" if it carries at least one of the
@@ -302,12 +307,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   }, [activeTagFilters, viewData.tag, viewData.tags]);
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
-
-  useEffect(() => {
-    if (editingTagNodeId === id) {
-      setTagEditorOpen(true);
-    }
-  }, [editingTagNodeId, id]);
+  const tagEditorVisible = tagEditorOpen || editingTagNodeId === id;
 
   const handleTagEditorOpenChange = useCallback(
     (next: boolean) => {
@@ -344,7 +344,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
       <TagEditor
         onChange={handleTagChange}
         onOpenChange={handleTagEditorOpenChange}
-        open={tagEditorOpen}
+        open={tagEditorVisible}
         suggestions={tagSuggestions}
         tag={viewData.tag}
         tagColor={viewData.tagColor}

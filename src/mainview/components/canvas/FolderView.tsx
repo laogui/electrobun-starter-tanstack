@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 import type React from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { colorToStyle } from '@/lib/colorUtils';
@@ -70,9 +70,10 @@ export const FolderView = ({
   onMoveChildOut,
 }: FolderViewProps) => {
   const childrenRaw = folder.data.children;
-  const children: FolderChild[] = Array.isArray(childrenRaw)
-    ? (childrenRaw as FolderChild[])
-    : [];
+  const children: FolderChild[] = useMemo(
+    () => (Array.isArray(childrenRaw) ? (childrenRaw as FolderChild[]) : []),
+    [childrenRaw]
+  );
   const count = children.length;
   const cardWidth = 350;
   const cardHeight = 450;
@@ -222,6 +223,7 @@ export const FolderView = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         ref={scrollRef}
+        role="presentation"
       >
         <div
           className="flex items-center"

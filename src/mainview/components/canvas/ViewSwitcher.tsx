@@ -21,8 +21,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import * as motion from 'motion/react-m';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
@@ -76,7 +76,56 @@ const COMMON_CREATE_IDS = new Set<CreateActionId>([
  * adding a new floating control later picks up the same a11y treatment.
  */
 const TRIGGER_FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60';
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500/60';
+
+interface ViewSwitcherUiState {
+  editingId: string | null;
+  editingName: string;
+  linkFormOpen: boolean;
+  open: boolean;
+  pendingDeleteId: string | null;
+}
+
+type ViewSwitcherUiAction =
+  | { type: 'beginRename'; id: string; name: string; open?: boolean }
+  | { type: 'cancelRename' }
+  | { type: 'setEditingName'; name: string }
+  | { type: 'setLinkFormOpen'; open: boolean }
+  | { type: 'setOpen'; open: boolean }
+  | { type: 'setPendingDeleteId'; id: string | null };
+
+const initialViewSwitcherUiState: ViewSwitcherUiState = {
+  editingId: null,
+  editingName: '',
+  linkFormOpen: false,
+  open: false,
+  pendingDeleteId: null,
+};
+
+function viewSwitcherUiReducer(
+  state: ViewSwitcherUiState,
+  action: ViewSwitcherUiAction
+): ViewSwitcherUiState {
+  switch (action.type) {
+    case 'beginRename':
+      return {
+        ...state,
+        editingId: action.id,
+        editingName: action.name,
+        open: action.open ?? state.open,
+      };
+    case 'cancelRename':
+      return { ...state, editingId: null };
+    case 'setEditingName':
+      return { ...state, editingName: action.name };
+    case 'setLinkFormOpen':
+      return { ...state, linkFormOpen: action.open };
+    case 'setOpen':
+      return { ...state, open: action.open };
+    case 'setPendingDeleteId':
+      return { ...state, pendingDeleteId: action.id };
+  }
+}
 
 interface RenderCreateMenuItemDeps {
   onCreateNode: (
@@ -183,6 +232,8 @@ const getQuickTemplateItems = () => [
   },
 ];
 
+// View switching keeps the menu, restore flow, and import actions in one control.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export function ViewSwitcher({
   onCreateNode,
   onExportCanvas,
@@ -203,11 +254,12 @@ export function ViewSwitcher({
   onOpenRecorder: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-  const [linkFormOpen, setLinkFormOpen] = useState(false);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [uiState, dispatchUi] = useReducer(
+    viewSwitcherUiReducer,
+    initialViewSwitcherUiState
+  );
+  const { editingId, editingName, linkFormOpen, open, pendingDeleteId } =
+    uiState;
   const inputRef = useRef<HTMLInputElement>(null);
   const assetFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -266,12 +318,25 @@ export function ViewSwitcher({
     };
   }, [setViews]);
 
-  // Reset rename state whenever the menu closes
-  useEffect(() => {
-    if (!open) {
-      setEditingId(null);
-    }
-  }, [open]);
+  if (!(open || editingId === null)) {
+    dispatchUi({ type: 'cancelRename' });
+  }
+
+  const setOpen = useCallback((nextOpen: boolean) => {
+    dispatchUi({ type: 'setOpen', open: nextOpen });
+  }, []);
+
+  const setEditingName = useCallback((name: string) => {
+    dispatchUi({ type: 'setEditingName', name });
+  }, []);
+
+  const setLinkFormOpen = useCallback((nextOpen: boolean) => {
+    dispatchUi({ type: 'setLinkFormOpen', open: nextOpen });
+  }, []);
+
+  const setPendingDeleteId = useCallback((id: string | null) => {
+    dispatchUi({ type: 'setPendingDeleteId', id });
+  }, []);
 
   // Focus input when editing
   useEffect(() => {
@@ -297,14 +362,17 @@ export function ViewSwitcher({
       }
       setOpen(options?.keepOpen ?? false);
     },
-    [activeViewId, switchView]
+    [activeViewId, switchView, setOpen]
   );
 
   const beginInlineRename = useCallback(
     (view: { id: string; name: string }) => {
-      setOpen(true);
-      setEditingId(view.id);
-      setEditingName(view.name);
+      dispatchUi({
+        type: 'beginRename',
+        id: view.id,
+        name: view.name,
+        open: true,
+      });
     },
     []
   );
@@ -434,9 +502,12 @@ export function ViewSwitcher({
     [views, activeViewId, setViews, handleSwitchView, handleRestore]
   );
 
-  const handleDelete = useCallback((viewId: string) => {
-    setPendingDeleteId(viewId);
-  }, []);
+  const handleDelete = useCallback(
+    (viewId: string) => {
+      setPendingDeleteId(viewId);
+    },
+    [setPendingDeleteId]
+  );
 
   const pendingDeleteView = views.find((v) => v.id === pendingDeleteId);
 
@@ -446,8 +517,7 @@ export function ViewSwitcher({
       if (!view) {
         return;
       }
-      setEditingId(viewId);
-      setEditingName(view.name);
+      dispatchUi({ type: 'beginRename', id: viewId, name: view.name });
     },
     [views]
   );
@@ -478,7 +548,7 @@ export function ViewSwitcher({
 
   const handleRenameConfirm = useCallback(async () => {
     if (editingId === null || editingNameTrimmed === '') {
-      setEditingId(null);
+      dispatchUi({ type: 'cancelRename' });
       return;
     }
     // Block confirm if duplicate / too-long; the inline banner already tells
@@ -492,11 +562,11 @@ export function ViewSwitcher({
         v.id === editingId ? { ...v, name: editingNameTrimmed } : v
       )
     );
-    setEditingId(null);
+    dispatchUi({ type: 'cancelRename' });
   }, [editingId, editingNameTrimmed, renameValidationError, views, setViews]);
 
   const handleRenameCancel = useCallback(() => {
-    setEditingId(null);
+    dispatchUi({ type: 'cancelRename' });
   }, []);
 
   const activeView = views.find((v) => v.id === activeViewId);
@@ -514,7 +584,11 @@ export function ViewSwitcher({
       setCreateMenuOpen(false);
       for (const file of files) {
         try {
+          // Preserve creation order and individual failure handling for each file.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           const data = await saveAssetFileWithProgressToast(file);
+          // Preserve node insertion order in the active canvas.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await onCreateNode('asset', { data: { ...data } });
         } catch (error) {
           console.error(
@@ -531,6 +605,8 @@ export function ViewSwitcher({
     const result = await rpcImportMarkdownFiles().catch(() => null);
     const imported = handleMarkdownImportResult(result, async (notes) => {
       for (const [index, note] of notes.entries()) {
+        // Imported notes are inserted sequentially so their generated nodes keep order.
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
         await onCreateNode(
           'card',
           buildImportedCardCreateOptions(note, index, notes.length)
@@ -557,6 +633,7 @@ export function ViewSwitcher({
   return (
     <>
       <input
+        aria-label="Import asset files"
         className="hidden"
         multiple
         onChange={(event) => {
@@ -712,7 +789,7 @@ export function ViewSwitcher({
                       openRecorder: onOpenRecorder,
                     })
                   )}
-                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:border-neutral-700 dark:text-gray-500">
+                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wide dark:border-neutral-700 dark:text-gray-500">
                     {m.menu_more()}
                   </div>
                   {moreCreateItems.map((item) =>
@@ -786,7 +863,8 @@ export function ViewSwitcher({
                       <div className="flex items-center gap-2">
                         <input
                           aria-invalid={hasError}
-                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-none focus:border-blue-400 dark:bg-neutral-700 dark:text-white ${
+                          aria-label="View name"
+                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-blue-400 dark:bg-neutral-700 dark:text-white ${
                             hasError
                               ? 'border-red-400 dark:border-red-500'
                               : 'border-gray-200 dark:border-neutral-600'
@@ -867,7 +945,7 @@ export function ViewSwitcher({
                     {views.length > 1 ? (
                       <button
                         aria-label={`Delete ${view.name}`}
-                        className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-red-900/30"
+                        className="rounded-sm p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-300"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(view.id);
@@ -908,7 +986,7 @@ export function ViewSwitcher({
 
                       <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 
-                      <div className="px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wider dark:text-gray-500">
+                      <div className="px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wide dark:text-gray-500">
                         {m.view_from_template()}
                       </div>
 

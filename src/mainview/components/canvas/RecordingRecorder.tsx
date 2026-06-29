@@ -1,5 +1,5 @@
 import { Loader2, Mic, Square, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import {
   type RecorderError,
   type RecordingResult,
@@ -37,12 +37,17 @@ function formatRecorderError(error: RecorderError): string {
  * remainder — mirroring a hardware voice-recorder display.
  */
 function LiveWaveform({ levels }: { levels: number[] }) {
+  const visibleLevels = levels.map((value, index) => ({
+    id: `live-level-${index}`,
+    value,
+  }));
+
   return (
     <div className="flex h-16 items-center gap-[3px]">
-      {levels.map((value, index) => (
+      {visibleLevels.map(({ id, value }) => (
         <span
           className="block w-[3px] rounded-full bg-neutral-900 dark:bg-neutral-100"
-          key={`live-${index}`}
+          key={id}
           style={{
             height: `${Math.max(6, Math.round((0.12 + value * 0.88) * 100))}%`,
           }}
@@ -101,16 +106,20 @@ export function RecordingRecorder({
     onCancel();
   };
 
+  const handleEscapeKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      cancel();
+      onCancel();
+    }
+  });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        cancel();
-        onCancel();
-      }
+      handleEscapeKey(e);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [cancel, onCancel]);
+  }, []);
 
   const isBusy = status === 'requesting' || status === 'stopping';
 
@@ -122,14 +131,13 @@ export function RecordingRecorder({
         onClick={handleCancel}
         type="button"
       />
-      <div
+      <dialog
         aria-label={title}
-        aria-modal="true"
         className="relative w-[440px] max-w-[90vw] rounded-3xl bg-white p-6 shadow-2xl dark:bg-neutral-800"
-        role="dialog"
+        open
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="truncate font-medium text-[11px] text-neutral-400 uppercase tracking-[0.12em] dark:text-neutral-500">
+          <span className="truncate font-medium text-[11px] text-neutral-400 uppercase tracking-wide dark:text-neutral-500">
             {title}
           </span>
           <span className="shrink-0 font-medium text-[13px] text-neutral-500 tabular-nums dark:text-neutral-300">
@@ -188,7 +196,7 @@ export function RecordingRecorder({
             <X size={18} />
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

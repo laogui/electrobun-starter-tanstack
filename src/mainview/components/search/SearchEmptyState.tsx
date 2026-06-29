@@ -1,5 +1,4 @@
 import { Clock, CornerDownLeft, Layers, X } from 'lucide-react';
-import { useMemo } from 'react';
 
 import type { SearchResultKind } from '@/lib/searchTypes';
 
@@ -62,10 +61,7 @@ export function SearchEmptyState({
   onPickCard,
   onPickCanvas,
 }: SearchEmptyStateProps) {
-  const otherCanvases = useMemo(
-    () => canvases.filter((c) => c.id !== activeViewId),
-    [canvases, activeViewId]
-  );
+  const otherCanvases = canvases.filter((c) => c.id !== activeViewId);
 
   // Running flat index shared across the history / recent-card / canvas
   // sections. Must match the navigable-item order built in SearchDialog so
@@ -92,36 +88,40 @@ export function SearchEmptyState({
           {history.map((entry) => {
             const index = cursor++;
             return (
-              <button
-                aria-selected={index === activeIndex}
+              <div
                 className={rowClass(index === activeIndex)}
                 data-result-index={index}
                 key={entry}
-                onClick={() => {
-                  onPickHistory(entry);
-                }}
                 onMouseEnter={() => {
                   onHover(index);
                 }}
-                role="option"
-                type="button"
+                tabIndex={-1}
               >
-                <Clock
-                  aria-hidden
-                  className="shrink-0 text-gray-400 dark:text-gray-500"
-                  size={14}
-                />
-                <span className="flex-1 truncate">{entry}</span>
-                <X
+                <button
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left outline-hidden"
+                  onClick={() => {
+                    onPickHistory(entry);
+                  }}
+                  type="button"
+                >
+                  <Clock
+                    aria-hidden
+                    className="shrink-0 text-gray-400 dark:text-gray-500"
+                    size={14}
+                  />
+                  <span className="flex-1 truncate">{entry}</span>
+                </button>
+                <button
                   aria-label="Remove from history"
-                  className="text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  className="shrink-0 text-gray-300 outline-hidden hover:text-gray-500 focus-visible:text-gray-500 dark:text-gray-600 dark:focus-visible:text-gray-400 dark:hover:text-gray-400"
+                  onClick={() => {
                     onRemoveHistory(entry);
                   }}
-                  size={14}
-                />
-              </button>
+                  type="button"
+                >
+                  <X aria-hidden size={14} />
+                </button>
+              </div>
             );
           })}
         </section>
@@ -138,7 +138,6 @@ export function SearchEmptyState({
             const index = cursor++;
             return (
               <button
-                aria-selected={index === activeIndex}
                 className={rowClass(index === activeIndex)}
                 data-result-index={index}
                 key={card.id}
@@ -148,7 +147,6 @@ export function SearchEmptyState({
                 onMouseEnter={() => {
                   onHover(index);
                 }}
-                role="option"
                 type="button"
               >
                 <Icon
@@ -175,7 +173,6 @@ export function SearchEmptyState({
             const index = cursor++;
             return (
               <button
-                aria-selected={index === activeIndex}
                 className={rowClass(index === activeIndex)}
                 data-result-index={index}
                 key={canvas.id}
@@ -185,7 +182,6 @@ export function SearchEmptyState({
                 onMouseEnter={() => {
                   onHover(index);
                 }}
-                role="option"
                 type="button"
               >
                 <Layers

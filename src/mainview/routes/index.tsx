@@ -17,10 +17,18 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { useTheme } from 'better-themes';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
 
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useReducer,
+  useRef,
+} from 'react';
 import { toast } from 'sonner';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
@@ -225,6 +233,36 @@ function maxRecordingNumberFromNodes(nodes: Node[]): number {
   );
 }
 
+interface CanvasUiState {
+  detachedSidebarOpen: boolean;
+  dragPos: { x: number; y: number } | null;
+  isDraggingFile: boolean;
+  linkPrompt: {
+    anchorCenter?: { x: number; y: number };
+    screen?: { x: number; y: number };
+  } | null;
+  pendingFolderDeleteIds: string[] | null;
+  recorderNumber: number | null;
+}
+
+const initialCanvasUiState: CanvasUiState = {
+  detachedSidebarOpen: false,
+  dragPos: null,
+  isDraggingFile: false,
+  linkPrompt: null,
+  pendingFolderDeleteIds: null,
+  recorderNumber: null,
+};
+
+function canvasUiReducer(
+  state: CanvasUiState,
+  patch: Partial<CanvasUiState>
+): CanvasUiState {
+  return { ...state, ...patch };
+}
+
+// The canvas route wires React Flow, drag/drop, keyboard shortcuts, and modals.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 function CanvasComponent() {
   const connectionStartRef = useRef<ConnectionStartState>({
     handleId: null,
@@ -296,11 +334,14 @@ function CanvasComponent() {
           // Size the card to the image's aspect ratio (clamped) before it is
           // created, so the thumbnail shows in full. A failed read falls back
           // to the registry default size.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           const naturalSize = await readImageNaturalSize(preview.imageUrl);
           const size = naturalSize
             ? computeImageNodeSize(naturalSize.width, naturalSize.height)
             : undefined;
           try {
+            // Keep dropped files inserted in visual grid order.
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop
             const nodeId = await onCreateNode('image', {
               anchorCenter: position,
               ...(size ? { size } : {}),
@@ -334,7 +375,11 @@ function CanvasComponent() {
         }
 
         try {
+          // Keep dropped files inserted in visual grid order.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           const data = await saveAssetFileWithProgressToast(file);
+          // Keep dropped files inserted in visual grid order.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await onCreateNode('asset', {
             anchorCenter: position,
             data: { ...data },
@@ -357,11 +402,42 @@ function CanvasComponent() {
     return screenToFlowPosition(screen);
   }, [screenToFlowPosition]);
 
-  const [linkPrompt, setLinkPrompt] = useState<{
-    anchorCenter?: { x: number; y: number };
-    screen?: { x: number; y: number };
-  } | null>(null);
-  const [recorderNumber, setRecorderNumber] = useState<number | null>(null);
+  const [canvasUi, setCanvasUi] = useReducer(
+    canvasUiReducer,
+    initialCanvasUiState
+  );
+  const {
+    detachedSidebarOpen,
+    dragPos,
+    isDraggingFile,
+    linkPrompt,
+    pendingFolderDeleteIds,
+    recorderNumber,
+  } = canvasUi;
+  const setLinkPrompt = useCallback(
+    (linkPrompt: CanvasUiState['linkPrompt']) => {
+      setCanvasUi({ linkPrompt });
+    },
+    []
+  );
+  const setRecorderNumber = useCallback((recorderNumber: number | null) => {
+    setCanvasUi({ recorderNumber });
+  }, []);
+  const setDetachedSidebarOpen = useCallback((detachedSidebarOpen: boolean) => {
+    setCanvasUi({ detachedSidebarOpen });
+  }, []);
+  const setPendingFolderDeleteIds = useCallback(
+    (pendingFolderDeleteIds: string[] | null) => {
+      setCanvasUi({ pendingFolderDeleteIds });
+    },
+    []
+  );
+  const setDragState = useCallback(
+    (patch: Pick<CanvasUiState, 'dragPos' | 'isDraggingFile'>) => {
+      setCanvasUi(patch);
+    },
+    []
+  );
   const lastRecordingAnchorRef = useRef<{ x: number; y: number } | undefined>(
     undefined
   );
@@ -425,7 +501,7 @@ function CanvasComponent() {
     lastRecordingAnchorRef.current = undefined;
     lastRecordingKindRef.current = undefined;
     setRecorderNumber(null);
-  }, []);
+  }, [setRecorderNumber]);
 
   const openRecorder = useCallback(
     (anchorCenter?: { x: number; y: number }) => {
@@ -440,7 +516,7 @@ function CanvasComponent() {
       setRecorderNumber(nextNumber);
       setCreateMenuOpen(false);
     },
-    [setCreateMenuOpen]
+    [setCreateMenuOpen, setRecorderNumber]
   );
 
   const handleRecordingComplete = useCallback(
@@ -467,7 +543,7 @@ function CanvasComponent() {
         toast.error(m.toast_recording_save_failed());
       }
     },
-    [onCreateNode, recorderNumber]
+    [onCreateNode, recorderNumber, setRecorderNumber]
   );
 
   // Unified create entry point shared with the canvas right-click menu. Plain
@@ -499,7 +575,7 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [onCreateNode, openRecorder]
+    [onCreateNode, openRecorder, setLinkPrompt]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -538,14 +614,9 @@ function CanvasComponent() {
   );
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
-  const [detachedSidebarOpen, setDetachedSidebarOpen] = useState(false);
-  const [pendingFolderDeleteIds, setPendingFolderDeleteIds] = useState<
-    string[] | null
-  >(null);
-
   const onOpenNoteLibrary = useCallback(() => {
     setDetachedSidebarOpen(true);
-  }, []);
+  }, [setDetachedSidebarOpen]);
 
   const deleteNodesWithToast = useCallback(
     (ids: string[]) => {
@@ -574,7 +645,7 @@ function CanvasComponent() {
 
       deleteNodesWithToast(ids);
     },
-    [deleteNodesWithToast]
+    [deleteNodesWithToast, setPendingFolderDeleteIds]
   );
 
   const {
@@ -719,59 +790,56 @@ function CanvasComponent() {
 
   useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes, rfInstance });
 
-  useEffect(() => {
-    const handlePaste = (event: ClipboardEvent) => {
-      if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
-        return;
-      }
-      const clipboard = event.clipboardData;
-      if (!clipboard) {
-        return;
-      }
+  const handleCanvasPaste = useEffectEvent((event: ClipboardEvent) => {
+    if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
+      return;
+    }
+    const clipboard = event.clipboardData;
+    if (!clipboard) {
+      return;
+    }
 
-      // Prefer clipboard files (including screenshots pasted as image/png).
-      const files = Array.from(clipboard.files ?? []);
-      if (files.length === 0) {
-        for (const item of Array.from(clipboard.items ?? [])) {
-          if (item.kind === 'file') {
-            const file = item.getAsFile();
-            if (file) {
-              files.push(file);
-            }
+    // Prefer clipboard files (including screenshots pasted as image/png).
+    const files = Array.from(clipboard.files ?? []);
+    if (files.length === 0) {
+      for (const item of Array.from(clipboard.items ?? [])) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file);
           }
         }
       }
-      if (files.length > 0) {
-        event.preventDefault();
-        createAssetsFromFiles(files, currentPasteAnchor());
-        return;
-      }
+    }
+    if (files.length > 0) {
+      event.preventDefault();
+      createAssetsFromFiles(files, currentPasteAnchor());
+      return;
+    }
 
-      // preventDefault() must be called synchronously during the event
-      // dispatch — gate on the sync URL extractor before kicking off the async
-      // node creation so the browser does not also paste raw text.
-      const text = clipboard.getData('text/plain') ?? '';
-      if (extractLinkUrl(text)) {
-        event.preventDefault();
-        createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).catch(
-          (error) => {
-            console.error('[canvas] Failed to create pasted link:', error);
-          }
-        );
-      }
+    // preventDefault() must be called synchronously during the event
+    // dispatch — gate on the sync URL extractor before kicking off the async
+    // node creation so the browser does not also paste raw text.
+    const text = clipboard.getData('text/plain') ?? '';
+    if (extractLinkUrl(text)) {
+      event.preventDefault();
+      createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).catch(
+        (error) => {
+          console.error('[canvas] Failed to create pasted link:', error);
+        }
+      );
+    }
+  });
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      handleCanvasPaste(event);
     };
-
     globalThis.addEventListener('paste', handlePaste);
     return () => {
       globalThis.removeEventListener('paste', handlePaste);
     };
-  }, [
-    createAssetsFromFiles,
-    createLinkFromText,
-    currentPasteAnchor,
-    focusedFolder,
-    focusedNode,
-  ]);
+  }, []);
 
   const onEdgesChange = useCallback(
     (changes: any) => {
@@ -928,14 +996,14 @@ function CanvasComponent() {
   // for unchanged nodes. Without the cache, every store update (including each
   // drag frame) would hand React Flow a brand-new object per node and force the
   // whole canvas to re-render.
-  const decoratedNodesCacheRef = useRef(
-    new Map<
-      string,
-      { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
-    >()
-  );
+  const decoratedNodesCacheRef = useRef<Map<
+    string,
+    { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
+  > | null>(null);
+  decoratedNodesCacheRef.current ??= new Map();
+  const decoratedNodesCache = decoratedNodesCacheRef.current;
   const nodesWithState = useMemo(() => {
-    const cache = decoratedNodesCacheRef.current;
+    const cache = decoratedNodesCache;
     const nextCache = new Map<
       string,
       { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
@@ -982,13 +1050,11 @@ function CanvasComponent() {
     }
     decoratedNodesCacheRef.current = nextCache;
     return result;
-  }, [nodes, focusedNode, focusedFolder, dropTargetId]);
+  }, [nodes, focusedNode, focusedFolder, dropTargetId, decoratedNodesCache]);
 
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const dragDepthRef = useRef(0);
   // Cursor position (screen coords) for the drop ghost; rAF-throttled because
   // `dragover` fires very frequently.
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const dragRafRef = useRef<number | null>(null);
 
   const onPointerMoveCanvas = useCallback((e: React.MouseEvent) => {
@@ -1011,23 +1077,21 @@ function CanvasComponent() {
       return;
     }
     dragDepthRef.current += 1;
-    setIsDraggingFile(true);
+    setCanvasUi({ isDraggingFile: true });
   }, []);
 
   const onDragLeaveWindow = useCallback(() => {
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
     if (dragDepthRef.current === 0) {
-      setIsDraggingFile(false);
-      setDragPos(null);
+      setDragState({ dragPos: null, isDraggingFile: false });
     }
-  }, []);
+  }, [setDragState]);
 
   const onDropCanvas = useCallback(
     (e: React.DragEvent | DragEvent) => {
       // Reset overlay state on drop regardless of payload.
       dragDepthRef.current = 0;
-      setIsDraggingFile(false);
-      setDragPos(null);
+      setDragState({ dragPos: null, isDraggingFile: false });
       const dataTransfer = (e as React.DragEvent).dataTransfer;
       const position = screenToFlowPosition({
         x: (e as React.DragEvent).clientX,
@@ -1065,6 +1129,7 @@ function CanvasComponent() {
       createLinkFromText,
       pinNoteToCanvas,
       screenToFlowPosition,
+      setDragState,
     ]
   );
 
@@ -1074,14 +1139,14 @@ function CanvasComponent() {
     if (dragRafRef.current == null) {
       dragRafRef.current = requestAnimationFrame(() => {
         dragRafRef.current = null;
-        setDragPos({ x: clientX, y: clientY });
+        setCanvasUi({ dragPos: { x: clientX, y: clientY } });
       });
     }
     const dataTransfer = (e as React.DragEvent).dataTransfer;
     if (dataTransfer) {
       const hasFilePayload = isOsFileDrag(dataTransfer);
       if (hasFilePayload) {
-        setIsDraggingFile(true);
+        setCanvasUi({ isDraggingFile: true });
       }
       const types = Array.from(dataTransfer.types);
       const hasLinkPayload =
@@ -1349,12 +1414,14 @@ function CanvasComponent() {
       <SearchDialog rfInstance={rfInstance} />
 
       <input
+        aria-label="Import asset file"
         className="hidden"
         onChange={onAssetFileInputChange}
         ref={assetFileInputRef}
         type="file"
       />
       <input
+        aria-label="Replace asset file"
         className="hidden"
         onChange={onReplaceFileInputChange}
         ref={replaceFileInputRef}

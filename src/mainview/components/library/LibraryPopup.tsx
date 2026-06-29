@@ -1,8 +1,16 @@
 import type { ReactFlowInstance } from '@xyflow/react';
 import { Folder, Library, Search, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -94,21 +102,25 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
     setFocusedIndex(-1);
   }, []);
 
+  const handleEscapeKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close();
+    }
+  });
+
   useEffect(() => {
     if (!open) {
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        close();
-      }
+      handleEscapeKey(e);
     };
     globalThis.addEventListener('keydown', handleKey, true);
     return () => {
       globalThis.removeEventListener('keydown', handleKey, true);
     };
-  }, [open, close]);
+  }, [open]);
 
   const handleItemClick = useCallback(
     (item: LibraryItem) => {
@@ -301,7 +313,7 @@ function LibraryHeader({
         />
         <input
           aria-label={m.library_search_placeholder()}
-          className="h-full flex-1 bg-transparent text-[13px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-neutral-500"
+          className="h-full flex-1 bg-transparent text-[13px] text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-neutral-500"
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={m.library_search_placeholder()}
           ref={searchInputRef}
@@ -393,7 +405,7 @@ function LibraryBody({
         </div>
         {recentItems.length > 0 ? (
           <section className="mt-8">
-            <h3 className="mb-3 px-0.5 font-semibold text-[12px] text-gray-700 uppercase tracking-wider dark:text-neutral-300">
+            <h3 className="mb-3 px-0.5 font-semibold text-[12px] text-gray-700 uppercase tracking-wide dark:text-neutral-300">
               {m.library_recent_heading()}
             </h3>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3">
@@ -446,7 +458,7 @@ function LibraryGroupSection({
             strokeWidth={1.75}
           />
         ) : null}
-        <h3 className="font-semibold text-[12px] text-gray-700 uppercase tracking-wider dark:text-neutral-300">
+        <h3 className="font-semibold text-[12px] text-gray-700 uppercase tracking-wide dark:text-neutral-300">
           {heading}
         </h3>
         <span className="rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-[10px] text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">

@@ -15,6 +15,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   useState,
 } from 'react';
@@ -29,6 +30,7 @@ import type {
   AssetNodeData,
 } from '@/lib/contentTypes';
 import { getAssetDisplayTitle } from '@/lib/contentTypes';
+import { EMPTY_CAPTIONS_TRACK_SRC } from '@/lib/mediaCaptions';
 import {
   resolveAttachmentStreamUrl,
   rpcLoadAttachment,
@@ -42,8 +44,37 @@ import { AssetHoverCard } from './_shared/AssetHoverCard';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 import { TypeBadge } from './_shared/TypeBadge';
+import { formatDuration, formatFileSize } from './assetNodeFormat';
 
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
+
+interface MediaState {
+  error: string | null;
+  loading: boolean;
+  src: string | null;
+}
+
+type MediaAction =
+  | { message: string; type: 'failed' }
+  | { src: string | null; type: 'loaded' }
+  | { type: 'loading' }
+  | { src: string | null; type: 'ready' }
+  | { type: 'settled' };
+
+function mediaReducer(state: MediaState, action: MediaAction): MediaState {
+  switch (action.type) {
+    case 'failed':
+      return { error: action.message, loading: false, src: null };
+    case 'loaded':
+      return { ...state, loading: false, src: action.src };
+    case 'loading':
+      return { ...state, error: null, loading: true };
+    case 'ready':
+      return { error: null, loading: false, src: action.src };
+    case 'settled':
+      return { ...state, loading: false };
+  }
+}
 
 export type AssetNodeRuntimeData = Partial<AssetNodeData> & {
   isDropTarget?: boolean;
@@ -100,47 +131,6 @@ function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
     title,
     waveform: Array.isArray(data.waveform) ? data.waveform : undefined,
   };
-}
-
-export function formatFileSize(size: number | undefined): string {
-  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
-    return 'Unknown size';
-  }
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  const units = ['KB', 'MB', 'GB', 'TB'] as const;
-  let value = size / 1024;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  const precision = value >= 10 ? 0 : 1;
-  return `${value.toFixed(precision)} ${units[unitIndex]}`;
-}
-
-export function formatDuration(duration: number | undefined): string | null {
-  if (
-    typeof duration !== 'number' ||
-    !Number.isFinite(duration) ||
-    duration <= 0
-  ) {
-    return null;
-  }
-
-  const totalSeconds = Math.round(duration);
-  const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const minutes = totalMinutes % 60;
-  const hours = Math.floor(totalMinutes / 60);
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
-      .toString()
-      .padStart(2, '0')}`;
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function getAssetLabel(asset: AssetNodeData): string {
@@ -204,29 +194,28 @@ function AssetIcon({
   className?: string;
   size: number;
 }) {
-  const props = { className, size };
   if (asset.missing) {
-    return <AlertTriangle {...props} />;
+    return <AlertTriangle className={className} size={size} />;
   }
   if (asset.kind === 'video') {
-    return <FileVideo {...props} />;
+    return <FileVideo className={className} size={size} />;
   }
   if (asset.kind === 'audio') {
-    return <FileAudio {...props} />;
+    return <FileAudio className={className} size={size} />;
   }
   if (
     asset.mimeType === 'application/zip' ||
     asset.mimeType === 'application/x-zip-compressed'
   ) {
-    return <FileArchive {...props} />;
+    return <FileArchive className={className} size={size} />;
   }
   if (
     asset.mimeType.startsWith('text/') ||
     asset.mimeType === 'application/pdf'
   ) {
-    return <FileText {...props} />;
+    return <FileText className={className} size={size} />;
   }
-  return <FileQuestion {...props} />;
+  return <FileQuestion className={className} size={size} />;
 }
 
 function isPlayableMedia(asset: AssetNodeData): boolean {
@@ -267,22 +256,43 @@ function useResolvedAttachmentPreview(
   previewUrl: string | undefined,
   attachmentFile: string | undefined
 ): string | undefined {
-  const [resolvedUrl, setResolvedUrl] = useState(previewUrl);
+  const [previewState, setPreviewState] = useState(() => ({
+    attachmentFile,
+    previewUrl,
+    resolvedUrl: previewUrl,
+  }));
+
+  if (
+    previewState.previewUrl !== previewUrl ||
+    previewState.attachmentFile !== attachmentFile
+  ) {
+    setPreviewState({
+      attachmentFile,
+      previewUrl,
+      resolvedUrl: previewUrl,
+    });
+  }
+
+  const resolvedUrl =
+    previewState.previewUrl === previewUrl &&
+    previewState.attachmentFile === attachmentFile
+      ? previewState.resolvedUrl
+      : previewUrl;
 
   useEffect(() => {
-    if (previewUrl) {
-      setResolvedUrl(previewUrl);
-      return;
-    }
-    if (!attachmentFile) {
-      setResolvedUrl(undefined);
+    if (previewUrl || !attachmentFile) {
       return;
     }
     let cancelled = false;
     resolveAttachmentStreamUrl(attachmentFile)
       .then((url) => {
         if (!cancelled && url) {
-          setResolvedUrl(url);
+          setPreviewState((current) =>
+            current.previewUrl === previewUrl &&
+            current.attachmentFile === attachmentFile
+              ? { ...current, resolvedUrl: url }
+              : current
+          );
         }
       })
       .catch(() => undefined);
@@ -335,7 +345,15 @@ function VideoThumbnail({
 
 function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
   const duration = formatDuration(asset.duration);
-  const bars = asset.waveform?.length ? asset.waveform.slice(0, 32) : null;
+  const bars = asset.waveform?.length
+    ? asset.waveform.slice(0, 32).map((value, index) => ({
+        id: `audio-waveform-${index}`,
+        value,
+      }))
+    : null;
+  const placeholderBars = Array.from({ length: 24 }, (_, index) => ({
+    id: `audio-placeholder-${index}`,
+  }));
   return (
     <div className="mb-4 min-h-0 overflow-hidden rounded-2xl border border-black/10 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/8">
       <div className="flex items-center gap-3">
@@ -344,10 +362,10 @@ function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
         </div>
         <div className="flex min-w-0 flex-1 items-end gap-1">
           {bars
-            ? bars.map((value, index) => (
+            ? bars.map(({ id, value }) => (
                 <span
                   className="block w-1 flex-1 rounded-full bg-neutral-950/22 dark:bg-neutral-50/24"
-                  key={`bar-${index}`}
+                  key={id}
                   style={{
                     height: Math.max(
                       18,
@@ -356,12 +374,12 @@ function AudioThumbnail({ asset }: { asset: AssetNodeData }) {
                   }}
                 />
               ))
-            : Array.from({ length: 24 }, (_, index) => (
+            : placeholderBars.map(({ id }) => (
                 // No real waveform yet — render uniform placeholder bars
                 // instead of pseudo-random heights to avoid faking data.
                 <span
                   className="block h-5 w-1 flex-1 rounded-full bg-neutral-950/15 dark:bg-neutral-50/18"
-                  key={`bar-placeholder-${index}`}
+                  key={id}
                 />
               ))}
         </div>
@@ -503,7 +521,7 @@ function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
     <div className="relative size-full overflow-hidden bg-gradient-to-b from-rose-50/80 to-rose-100/70 dark:from-rose-950/30 dark:to-rose-950/50">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
         <FilePageGlyph badge="PDF" badgeClassName="bg-rose-600" />
-        <span className="font-semibold text-[10px] text-rose-700/90 uppercase tracking-wider dark:text-rose-300">
+        <span className="font-semibold text-[10px] text-rose-700/90 uppercase tracking-wide dark:text-rose-300">
           {asset.mimeType === 'application/pdf' ? 'PDF document' : 'Document'}
         </span>
       </div>
@@ -561,17 +579,17 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
           <FileArchive size={15} />
-          <span className="font-semibold text-[11px] uppercase tracking-wider">
+          <span className="font-semibold text-[11px] uppercase tracking-wide">
             {countLabel}
           </span>
         </div>
       </div>
       {topFiles.length > 0 ? (
         <ul className="flex flex-col gap-1">
-          {topFiles.map((name, index) => (
+          {topFiles.map((name) => (
             <li
               className="truncate rounded-md bg-white/70 px-2 py-1 font-mono text-[11px] text-neutral-700 dark:bg-black/30 dark:text-neutral-200"
-              key={`archive-entry-${index}`}
+              key={name}
               title={name}
             >
               {name}
@@ -719,6 +737,8 @@ function getMediaLoadState({
   return null;
 }
 
+// Component split is a broad UI refactor; keep asset rendering behavior intact.
+// react-doctor-disable-next-line react-doctor/no-giant-component
 export const AssetContent = ({
   data,
   isFocused = false,
@@ -736,11 +756,11 @@ export const AssetContent = ({
   const imagePreview = isImageAsFile(asset);
   const previewableFile = pdfPreview || textPreview;
   const attachmentLabel = asset.attachmentFile ?? 'Unsaved attachment';
-  const [mediaSrc, setMediaSrc] = useState<string | null>(
-    asset.previewUrl ?? null
-  );
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [mediaState, dispatchMedia] = useReducer(mediaReducer, {
+    error: null,
+    loading: false,
+    src: asset.previewUrl ?? null,
+  });
 
   const handleOpen = useCallback(async () => {
     if (!asset.attachmentFile) {
@@ -770,18 +790,14 @@ export const AssetContent = ({
       return;
     }
     if (asset.previewUrl) {
-      setMediaSrc(asset.previewUrl);
-      setMediaError(null);
-      setMediaLoading(false);
+      dispatchMedia({ src: asset.previewUrl, type: 'ready' });
       return;
     }
 
     // If a thumbnail is already available, show it immediately and load
     // the full file in the background — no loading spinner needed.
     if (imagePreview && asset.thumbnailUrl) {
-      setMediaSrc(asset.thumbnailUrl);
-      setMediaError(null);
-      setMediaLoading(false);
+      dispatchMedia({ src: asset.thumbnailUrl, type: 'ready' });
 
       let cancelled = false;
       rpcLoadAttachment(asset.attachmentFile)
@@ -789,7 +805,7 @@ export const AssetContent = ({
           if (cancelled || !result?.dataUrl) {
             return;
           }
-          setMediaSrc(result.dataUrl);
+          dispatchMedia({ src: result.dataUrl, type: 'loaded' });
         })
         .catch(() => {
           // Keep the thumbnail visible when the full attachment cannot load.
@@ -801,8 +817,7 @@ export const AssetContent = ({
     }
 
     let cancelled = false;
-    setMediaLoading(true);
-    setMediaError(null);
+    dispatchMedia({ type: 'loading' });
 
     const loadPlayableMedia = async () => {
       if (playableMedia) {
@@ -824,22 +839,26 @@ export const AssetContent = ({
         }
         if (!src) {
           if (!asset.thumbnailUrl) {
-            setMediaSrc(null);
-            setMediaError('Media file could not be loaded.');
+            dispatchMedia({
+              message: 'Media file could not be loaded.',
+              type: 'failed',
+            });
           }
           return;
         }
-        setMediaSrc(src);
+        dispatchMedia({ src, type: 'loaded' });
       })
       .catch(() => {
         if (!(cancelled || asset.thumbnailUrl)) {
-          setMediaSrc(null);
-          setMediaError('Media file could not be loaded.');
+          dispatchMedia({
+            message: 'Media file could not be loaded.',
+            type: 'failed',
+          });
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setMediaLoading(false);
+          dispatchMedia({ type: 'settled' });
         }
       });
 
@@ -858,12 +877,13 @@ export const AssetContent = ({
   ]);
 
   if (isFocused) {
-    const mediaState = getMediaLoadState({
+    const mediaLoadState = getMediaLoadState({
       asset,
-      mediaError,
-      mediaLoading,
+      mediaError: mediaState.error,
+      mediaLoading: mediaState.loading,
     });
     const duration = formatDuration(asset.duration);
+    const mediaSrc = mediaState.src;
     const imageSrc = mediaSrc ?? asset.thumbnailUrl ?? null;
 
     // Every preview branch is absolutely positioned against the relative
@@ -871,16 +891,17 @@ export const AssetContent = ({
     // unreliable in WebKit, so `size-full` here would let tall content
     // (e.g. image previews) overflow the window.
     let preview: ReactNode = null;
-    if (mediaState) {
+    if (mediaLoadState) {
       preview = (
         <div className="absolute inset-0 flex items-center justify-center p-8">
-          <div className="w-full max-w-md">{mediaState}</div>
+          <div className="w-full max-w-md">{mediaLoadState}</div>
         </div>
       );
     } else if (pdfPreview && mediaSrc) {
       preview = (
         <iframe
           className="absolute inset-0 size-full"
+          sandbox="allow-same-origin"
           src={mediaSrc}
           title={`${title} PDF preview`}
         />
@@ -896,7 +917,6 @@ export const AssetContent = ({
     } else if (asset.kind === 'video' && mediaSrc) {
       preview = (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-950 p-6">
-          {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
           <video
             aria-label={`${title} video player`}
             className="max-h-full max-w-full rounded-xl"
@@ -904,7 +924,14 @@ export const AssetContent = ({
             poster={asset.thumbnailUrl}
             preload="metadata"
             src={mediaSrc}
-          />
+          >
+            <track
+              kind="captions"
+              label="Captions unavailable"
+              src={EMPTY_CAPTIONS_TRACK_SRC}
+              srcLang="en"
+            />
+          </video>
         </div>
       );
     } else if (asset.kind === 'audio' && mediaSrc) {
@@ -912,14 +939,20 @@ export const AssetContent = ({
         <div className="absolute inset-0 flex items-center justify-center p-8">
           <div className="w-full max-w-xl">
             <AudioThumbnail asset={asset} />
-            {/* biome-ignore lint/a11y/useMediaCaption: User attachments do not include caption-track metadata yet. */}
             <audio
               aria-label={`${title} audio player`}
               className="w-full"
               controls
               preload="metadata"
               src={mediaSrc}
-            />
+            >
+              <track
+                kind="captions"
+                label="Captions unavailable"
+                src={EMPTY_CAPTIONS_TRACK_SRC}
+                srcLang="en"
+              />
+            </audio>
           </div>
         </div>
       );
@@ -1036,18 +1069,33 @@ const AssetNode = ({
   const isDark = isColorDark(asset.color);
 
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const [renameDraft, setRenameDraft] = useState(asset.title || asset.fileName);
+  const renameSource = asset.title || asset.fileName;
+  const [renameState, setRenameState] = useState(() => ({
+    draft: renameSource,
+    isRenaming,
+    source: renameSource,
+  }));
+  if (
+    isRenaming &&
+    (renameState.source !== renameSource || !renameState.isRenaming)
+  ) {
+    setRenameState({ draft: renameSource, isRenaming, source: renameSource });
+  } else if (!(isRenaming || renameState.isRenaming === isRenaming)) {
+    setRenameState((current) => ({ ...current, isRenaming }));
+  }
+  const renameDraft = isRenaming ? renameState.draft : renameSource;
 
   useEffect(() => {
-    if (isRenaming) {
-      setRenameDraft(asset.title || asset.fileName);
-      // Autofocus + select after mount.
-      requestAnimationFrame(() => {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      });
+    if (!isRenaming) {
+      return;
     }
-  }, [isRenaming, asset.title, asset.fileName]);
+    // Autofocus + select after mount.
+    const frame = requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isRenaming]);
 
   const commitRename = useCallback(() => {
     const next = renameDraft.trim();
@@ -1120,9 +1168,14 @@ const AssetNode = ({
             >
               <input
                 aria-label="Rename asset"
-                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-none focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
-                onChange={(e) => setRenameDraft(e.target.value)}
+                onChange={(e) => {
+                  setRenameState((current) => ({
+                    ...current,
+                    draft: e.target.value,
+                  }));
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();

@@ -139,6 +139,7 @@ function shouldIncludeNodeInSnapshot(node: HTMLElement): boolean {
       ? node.className
       : (node.getAttribute?.('class') ?? '');
   for (const hidden of HIDDEN_REACT_FLOW_CLASSES) {
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups
     if (className.includes(hidden)) {
       return false;
     }
@@ -205,6 +206,8 @@ async function requestBrowserSaveHandle(fileName: string) {
 }
 
 async function writeBlobToBrowserHandle(blob: Blob, handle: BrowserSaveHandle) {
+  // FileSystemWritableFileStream must be created, written, then closed in sequence.
+  // react-doctor-disable-next-line react-doctor/async-parallel
   const writable = await handle.createWritable();
   await writable.write(blob);
   await writable.close();
@@ -460,6 +463,8 @@ export async function exportReactFlowCanvasToJson({
   }
 
   if (browserSaveHandle) {
+    // FileSystemWritableFileStream must be created, written, then closed in sequence.
+    // react-doctor-disable-next-line react-doctor/async-parallel
     const writable = await browserSaveHandle.createWritable();
     await writable.write(
       new Blob([json], { type: 'application/json;charset=utf-8' })

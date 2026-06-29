@@ -44,7 +44,9 @@ describe('pendingFlushBackup', () => {
 
       writePendingFlushBackup(testViewId, { nodes, edges, viewport });
 
-      const raw = localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`);
+      const raw = localStorage.getItem(
+        `ghostboard.v1.pendingFlush.${testViewId}`
+      );
       expect(raw).toBeTruthy();
 
       const parsed = JSON.parse(raw!) as PendingFlushBackup;
@@ -96,6 +98,26 @@ describe('pendingFlushBackup', () => {
       expect(backup!.viewport).toBeNull();
     });
 
+    it('reads and clears legacy unversioned backups', () => {
+      const nodes: Node[] = [
+        { id: '1', type: 'sticky', position: { x: 0, y: 0 }, data: {} },
+      ];
+      const edges: Edge[] = [];
+      const legacyKey = ['ghostboard', 'pendingFlush', testViewId].join('.');
+
+      localStorage.setItem(
+        legacyKey,
+        JSON.stringify({ nodes, edges, savedAt: Date.now(), viewport: null })
+      );
+
+      const backup = readPendingFlushBackup(testViewId);
+      expect(backup).not.toBeNull();
+      expect(backup!.nodes).toEqual(nodes);
+
+      clearPendingFlushBackup(testViewId);
+      expect(localStorage.getItem(legacyKey)).toBeNull();
+    });
+
     it('returns null for missing backup', () => {
       const backup = readPendingFlushBackup('nonexistent-view');
       expect(backup).toBeNull();
@@ -103,66 +125,66 @@ describe('pendingFlushBackup', () => {
 
     it('clears and returns null for corrupted JSON', () => {
       localStorage.setItem(
-        `ghostboard.pendingFlush.${testViewId}`,
+        `ghostboard.v1.pendingFlush.${testViewId}`,
         'invalid-json{'
       );
 
       const backup = readPendingFlushBackup(testViewId);
       expect(backup).toBeNull();
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
 
     it('clears and returns null for malformed payload (missing nodes)', () => {
       localStorage.setItem(
-        `ghostboard.pendingFlush.${testViewId}`,
+        `ghostboard.v1.pendingFlush.${testViewId}`,
         JSON.stringify({ edges: [], savedAt: Date.now() })
       );
 
       const backup = readPendingFlushBackup(testViewId);
       expect(backup).toBeNull();
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
 
     it('clears and returns null for malformed payload (missing edges)', () => {
       localStorage.setItem(
-        `ghostboard.pendingFlush.${testViewId}`,
+        `ghostboard.v1.pendingFlush.${testViewId}`,
         JSON.stringify({ nodes: [], savedAt: Date.now() })
       );
 
       const backup = readPendingFlushBackup(testViewId);
       expect(backup).toBeNull();
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
 
     it('clears and returns null for malformed payload (non-array nodes)', () => {
       localStorage.setItem(
-        `ghostboard.pendingFlush.${testViewId}`,
+        `ghostboard.v1.pendingFlush.${testViewId}`,
         JSON.stringify({ nodes: {}, edges: [], savedAt: Date.now() })
       );
 
       const backup = readPendingFlushBackup(testViewId);
       expect(backup).toBeNull();
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
 
     it('clears and returns null for malformed payload (non-array edges)', () => {
       localStorage.setItem(
-        `ghostboard.pendingFlush.${testViewId}`,
+        `ghostboard.v1.pendingFlush.${testViewId}`,
         JSON.stringify({ nodes: [], edges: {}, savedAt: Date.now() })
       );
 
       const backup = readPendingFlushBackup(testViewId);
       expect(backup).toBeNull();
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
   });
@@ -176,12 +198,12 @@ describe('pendingFlushBackup', () => {
 
       writePendingFlushBackup(testViewId, { nodes, edges, viewport: null });
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeTruthy();
 
       clearPendingFlushBackup(testViewId);
       expect(
-        localStorage.getItem(`ghostboard.pendingFlush.${testViewId}`)
+        localStorage.getItem(`ghostboard.v1.pendingFlush.${testViewId}`)
       ).toBeNull();
     });
 

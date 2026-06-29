@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useImageZoomPan } from '@/hooks/useImageZoomPan';
 
@@ -9,17 +9,6 @@ interface ImageZoomPanProps {
 export function ImageZoomPan({ children }: ImageZoomPanProps) {
   const { containerRef, isPanning, panX, panY, reset, zoom } =
     useImageZoomPan();
-  const [showIndicator, setShowIndicator] = useState(false);
-
-  useEffect(() => {
-    if (zoom === 1) {
-      setShowIndicator(false);
-      return;
-    }
-    setShowIndicator(true);
-    const timeout = setTimeout(() => setShowIndicator(false), 1500);
-    return () => clearTimeout(timeout);
-  }, [zoom]);
 
   return (
     <div
@@ -43,8 +32,11 @@ export function ImageZoomPan({ children }: ImageZoomPanProps) {
         {children}
       </div>
 
-      {showIndicator && zoom !== 1 ? (
-        <div className="pointer-events-none absolute right-1/2 bottom-6 translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-white/80 text-xs backdrop-blur-md">
+      {zoom !== 1 ? (
+        <div
+          className="zoom-indicator pointer-events-none absolute right-1/2 bottom-6 translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-white/80 text-xs backdrop-blur-md"
+          key={zoom}
+        >
           {Math.round(zoom * 100)}%
         </div>
       ) : null}

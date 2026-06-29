@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
-
 import {
+  buildNewNodeSpec,
+  CANVAS_NODE_SPECS,
   CARD_H,
   CARD_W,
   FOLDER_H,
   FOLDER_W,
+  findSpecByNodeType,
+  getNodeSpec,
   IMAGE_H,
   IMAGE_W,
   STICKY_H,
   STICKY_W,
-} from '@/lib/canvasConstants';
-import {
-  buildNewNodeSpec,
-  CANVAS_NODE_SPECS,
-  findSpecByNodeType,
-  getNodeSpec,
 } from '@/lib/canvasNodeRegistry';
 import type { CanvasNodeKind } from '@/lib/contentTypes';
 

@@ -3,11 +3,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import AssetNode, {
-  AssetContent,
-  formatDuration,
-  formatFileSize,
-} from './AssetNode';
+import AssetNode, { AssetContent } from './AssetNode';
+import { formatDuration, formatFileSize } from './assetNodeFormat';
 
 const OPEN_FILE_RE = /open file/i;
 const resolveAttachmentStreamUrlMock = vi.hoisted(() => vi.fn());

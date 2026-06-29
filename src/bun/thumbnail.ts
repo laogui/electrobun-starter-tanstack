@@ -430,6 +430,8 @@ export async function generateVideoPosterFile(
       ],
       { stderr: 'ignore', stdout: 'ignore' }
     );
+    // qlmanage exitCode is only reliable after the process exits.
+    // react-doctor-disable-next-line react-doctor/async-defer-await
     await proc.exited;
     if (proc.exitCode !== 0) {
       return;

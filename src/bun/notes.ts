@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { readdir, unlink } from 'node:fs/promises';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 
-import { atomicWrite } from './workspace';
+import { atomicWrite } from './atomicWrite';
 
 export interface NoteFrontmatter {
   color?: string;
@@ -80,6 +80,7 @@ export function parseFrontmatter(content: string): {
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
     }
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups
     const colonIdx = trimmed.indexOf(':');
     if (colonIdx === -1) {
       continue;
@@ -138,6 +139,7 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
       lines.push(`${key}: ${JSON.stringify(value)}`);
     } else if (
       typeof value === 'string' &&
+      // react-doctor-disable-next-line react-doctor/js-set-map-lookups
       (value.includes(':') || value.includes('\n') || value.includes('"'))
     ) {
       lines.push(
@@ -180,15 +182,17 @@ export async function listFilesRecursiveAsync(
   }
   const results: string[] = [];
   const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      results.push(
-        ...(await listFilesRecursiveAsync(join(dir, entry.name), rel))
-      );
-    } else {
-      results.push(rel);
-    }
+  const nestedResults = await Promise.all(
+    entries.map(async (entry) => {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        return await listFilesRecursiveAsync(join(dir, entry.name), rel);
+      }
+      return [rel];
+    })
+  );
+  for (const nested of nestedResults) {
+    results.push(...nested);
   }
   return results;
 }

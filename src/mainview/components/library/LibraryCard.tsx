@@ -5,7 +5,7 @@ import {
   ListChecks,
   Paperclip,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
@@ -136,15 +136,9 @@ export function LibraryCard({
   onFocus,
 }: LibraryCardProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const Icon = useMemo(
-    () => iconFor(item.type, item.data),
-    [item.type, item.data]
-  );
-  const relative = useMemo(
-    () => formatRelativeTime(item.updatedAt),
-    [item.updatedAt]
-  );
-  const thumb = useMemo(() => resolveThumb(item), [item]);
+  const Icon = iconFor(item.type, item.data);
+  const relative = formatRelativeTime(item.updatedAt);
+  const thumb = resolveThumb(item);
   const hasThumb = thumb.kind !== 'none';
   const title =
     item.title.trim().length > 0 ? item.title : m.library_untitled();
@@ -168,9 +162,9 @@ export function LibraryCard({
   return (
     <button
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white text-left transition-all',
+        'group relative flex flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white text-left transition-[transform,border-color,box-shadow,background-color]',
         'hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60',
+        'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500/60',
         'dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/70',
         isFocused &&
           'border-blue-400 ring-2 ring-blue-500/60 dark:border-blue-500',

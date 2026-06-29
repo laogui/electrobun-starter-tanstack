@@ -1,7 +1,6 @@
 import type { Node } from '@xyflow/react';
 
-import { CARD_H, CARD_W } from './canvasConstants';
-import { findSpecByNodeType } from './canvasNodeRegistry';
+import { CARD_H, CARD_W, findSpecByNodeType } from './canvasNodeRegistry';
 
 export interface Point {
   x: number;
@@ -373,17 +372,21 @@ export function applyRepulsion(params: {
     const directions = getEscapeDirections(origRect, closestActive);
 
     // Build obstacle rects: all other nodes except the one being pushed and any active node
-    const obstacles = nodes
-      .filter(
-        (o) =>
-          o.id !== n.id &&
-          !activeIds.has(o.id) &&
-          // Don't treat parent group as obstacle for its own children
-          o.id !== n.parentId
-      )
-      .map((o) => rects.get(o.id))
-      .filter((r): r is Rect => r !== undefined)
-      .map((r) => inflateRect(r, 2));
+    const obstacles: Rect[] = [];
+    for (const other of nodes) {
+      if (
+        other.id === n.id ||
+        activeIds.has(other.id) ||
+        // Don't treat parent group as obstacle for its own children
+        other.id === n.parentId
+      ) {
+        continue;
+      }
+      const rect = rects.get(other.id);
+      if (rect) {
+        obstacles.push(inflateRect(rect, 2));
+      }
+    }
 
     // Use the bounds of all active nodes combined for escape positioning
     const combinedBounds: Rect = {

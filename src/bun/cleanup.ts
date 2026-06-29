@@ -65,14 +65,17 @@ async function collectReferencedIds(wsPath: string): Promise<Set<string>> {
   for (const entry of config.trash ?? []) {
     manifestFiles.push(entry.trashFile);
   }
-  for (const file of manifestFiles) {
-    let manifest: Awaited<ReturnType<typeof loadManifest>> = null;
-    try {
-      manifest = await loadManifest(wsPath, file);
-    } catch (error) {
-      console.warn(`[cleanup] Failed to load manifest ${file}:`, error);
-      continue;
-    }
+  const manifests = await Promise.all(
+    manifestFiles.map(async (file) => {
+      try {
+        return await loadManifest(wsPath, file);
+      } catch (error) {
+        console.warn(`[cleanup] Failed to load manifest ${file}:`, error);
+        return null;
+      }
+    })
+  );
+  for (const manifest of manifests) {
     if (!manifest) {
       continue;
     }
@@ -135,45 +138,43 @@ export async function scanUnlinkedNotes(
   // Orphaned BlockNote sidecars (JSON notes whose card was removed from every
   // view). Notes already surfaced via a legacy `.md` are skipped to avoid
   // double-listing during migration.
-  const seenNoteIds = new Set(
-    entries
-      .map((entry) => entry.noteId)
-      .filter((id): id is string => Boolean(id))
-  );
+  const seenNoteIds = new Set<string>();
+  for (const entry of entries) {
+    if (entry.noteId) {
+      seenNoteIds.add(entry.noteId);
+    }
+  }
   const sidecarDir = blocknoteSidecarDir(wsPath);
-  for (const rel of await listFilesRecursiveAsync(sidecarDir)) {
-    if (!rel.endsWith('.json') || rel.includes('/')) {
-      continue;
+  const sidecarEntries = await Promise.all(
+    (await listFilesRecursiveAsync(sidecarDir)).map(async (rel) => {
+      if (!rel.endsWith('.json') || rel.includes('/')) {
+        return null;
+      }
+      const noteId = rel.replace(JSON_EXT_RE, '');
+      if (referenced.has(noteId) || seenNoteIds.has(noteId)) {
+        return null;
+      }
+      const fullPath = join(sidecarDir, rel);
+      const [parsed, stats] = await Promise.all([
+        Bun.file(fullPath)
+          .json()
+          .catch(() => null) as Promise<{ title?: unknown } | null>,
+        stat(fullPath).catch(() => null),
+      ]);
+      return {
+        file: `content/.ghostboard/blocknote/${rel}`,
+        hasFrontmatterId: true,
+        modifiedAt: stats?.mtimeMs ?? 0,
+        noteId,
+        size: stats?.size ?? 0,
+        title: typeof parsed?.title === 'string' ? parsed.title : '',
+      };
+    })
+  );
+  for (const entry of sidecarEntries) {
+    if (entry) {
+      entries.push(entry);
     }
-    const noteId = rel.replace(JSON_EXT_RE, '');
-    if (referenced.has(noteId) || seenNoteIds.has(noteId)) {
-      continue;
-    }
-    const fullPath = join(sidecarDir, rel);
-    let title = '';
-    try {
-      const parsed = (await Bun.file(fullPath).json()) as { title?: unknown };
-      title = typeof parsed.title === 'string' ? parsed.title : '';
-    } catch {
-      // Unreadable / corrupted sidecar — still report it for cleanup.
-    }
-    let size = 0;
-    let modifiedAt = 0;
-    try {
-      const s = await stat(fullPath);
-      size = s.size;
-      modifiedAt = s.mtimeMs;
-    } catch {
-      // ignore — leave as 0
-    }
-    entries.push({
-      file: `content/.ghostboard/blocknote/${rel}`,
-      hasFrontmatterId: true,
-      modifiedAt,
-      noteId,
-      size,
-      title,
-    });
   }
 
   entries.sort((a, b) => a.file.localeCompare(b.file));
@@ -218,32 +219,37 @@ export async function deleteUnlinkedNotes(
   const deleted: string[] = [];
   const skipped: string[] = [];
 
-  for (const rel of files) {
-    const isAllowed = CONTENT_PATH_RE.test(rel) || SIDECAR_PATH_RE.test(rel);
-    if (!isAllowed || rel.includes('..')) {
-      skipped.push(rel);
-      continue;
-    }
-    const fullPath = join(wsPath, rel);
-    if (!existsSync(fullPath)) {
-      skipped.push(rel);
-      continue;
-    }
-    const noteId = await noteIdForCleanupPath(fullPath, rel);
-    if (noteId && referenced.has(noteId)) {
-      skipped.push(rel);
-      continue;
-    }
-    try {
-      const ok = Utils.moveToTrash(fullPath);
-      if (ok) {
-        deleted.push(rel);
-      } else {
-        skipped.push(rel);
+  const results = await Promise.all(
+    files.map(async (rel) => {
+      const isAllowed = CONTENT_PATH_RE.test(rel) || SIDECAR_PATH_RE.test(rel);
+      if (!isAllowed || rel.includes('..')) {
+        return { rel, status: 'skipped' as const };
       }
-    } catch (error) {
-      console.warn(`[cleanup] Failed to move ${rel} to Trash:`, error);
-      skipped.push(rel);
+      const fullPath = join(wsPath, rel);
+      if (!existsSync(fullPath)) {
+        return { rel, status: 'skipped' as const };
+      }
+      const noteId = await noteIdForCleanupPath(fullPath, rel);
+      if (noteId && referenced.has(noteId)) {
+        return { rel, status: 'skipped' as const };
+      }
+      try {
+        const ok = Utils.moveToTrash(fullPath);
+        return {
+          rel,
+          status: ok ? ('deleted' as const) : ('skipped' as const),
+        };
+      } catch (error) {
+        console.warn(`[cleanup] Failed to move ${rel} to Trash:`, error);
+        return { rel, status: 'skipped' as const };
+      }
+    })
+  );
+  for (const result of results) {
+    if (result.status === 'deleted') {
+      deleted.push(result.rel);
+    } else {
+      skipped.push(result.rel);
     }
   }
 

@@ -8,62 +8,11 @@ import {
   isColorDark,
   stickyPushpinBackground,
 } from '@/lib/colorUtils';
-import { editableElementToText } from '@/lib/editableText';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
-
-type CaretPositionFromPoint = (
-  x: number,
-  y: number
-) => { offsetNode: Node; offset: number } | null;
-
-const caretRangeFromPoint = (x: number, y: number): Range | null => {
-  if (typeof document.caretRangeFromPoint === 'function') {
-    return document.caretRangeFromPoint(x, y);
-  }
-  const caretPositionFromPoint = (
-    document as Document & {
-      caretPositionFromPoint?: CaretPositionFromPoint;
-    }
-  ).caretPositionFromPoint;
-  if (typeof caretPositionFromPoint === 'function') {
-    const position = caretPositionFromPoint(x, y);
-    if (position) {
-      const range = document.createRange();
-      range.setStart(position.offsetNode, position.offset);
-      range.collapse(true);
-      return range;
-    }
-  }
-  return null;
-};
-
-// Insert a literal newline at the caret. The sticky body renders with
-// `white-space: pre-wrap`, so a `\n` text node breaks the line reliably across
-// WebKit/Chromium without relying on the browser's native (and inconsistent)
-// contentEditable Enter handling, which injects block/`<br>` structure into a
-// subtree React owns as the `{data.content}` child.
-const insertNewlineAtCaret = (root: HTMLElement): boolean => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return false;
-  }
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) {
-    return false;
-  }
-  range.deleteContents();
-  const newline = document.createTextNode('\n');
-  range.insertNode(newline);
-  range.setStartAfter(newline);
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  return true;
-};
 
 export interface StickyData {
   color?: string;
@@ -73,7 +22,7 @@ export interface StickyData {
 
 export interface StickyContentProps {
   data: StickyData;
-  /** Enables contentEditable on the body text. */
+  /** Enables textarea editing on the body text. */
   editing?: boolean;
   /** When true, renders the simplified zoomed-out placeholder. */
   isZoomedOut?: boolean;
@@ -83,8 +32,8 @@ export interface StickyContentProps {
   onKeyDown?: (e: React.KeyboardEvent) => void;
   /** Paste handler for the body text (ignored unless `editing`). */
   onPaste?: (e: React.ClipboardEvent) => void;
-  /** Ref forwarded to the contentEditable body text element. */
-  textRef?: React.Ref<HTMLDivElement>;
+  /** Ref forwarded to the editable body text element. */
+  textRef?: React.Ref<HTMLTextAreaElement>;
 }
 
 /**
@@ -126,24 +75,28 @@ export const StickyContent = ({
           className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"
           style={colorToStyle(data.color)}
         >
-          <div
-            className={cn(
-              'sticky-editable wrap-break-word custom-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-none',
-              editing ? 'nodrag nopan cursor-text' : 'pointer-events-none',
-              !data.content && 'sticky-editable-empty'
-            )}
-            contentEditable={editing}
-            data-placeholder={
-              editing ? m.sticky_empty_placeholder() : undefined
-            }
-            onBlur={onBlur}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            ref={textRef}
-            suppressContentEditableWarning
-          >
-            {data.content}
-          </div>
+          {editing ? (
+            <textarea
+              aria-label="Sticky note text"
+              className="sticky-editable nodrag nopan custom-scrollbar flex-1 resize-none overflow-y-auto border-none bg-transparent p-0 text-sm/relaxed outline-hidden"
+              defaultValue={data.content ?? ''}
+              onBlur={onBlur}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              placeholder={m.sticky_empty_placeholder()}
+              ref={textRef}
+            />
+          ) : (
+            <div
+              className={cn(
+                'sticky-editable wrap-break-word custom-scrollbar pointer-events-none flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-hidden',
+                !data.content && 'sticky-editable-empty'
+              )}
+              data-placeholder={undefined}
+            >
+              {data.content}
+            </div>
+          )}
         </div>
       )}
       {/* Pushpin centered at the top, pressing the note flat against the wall.
@@ -154,38 +107,16 @@ export const StickyContent = ({
           nested glint instead of a bitmap, so it stays crisp at any zoom. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 select-none"
+        className="sticky-pushpin pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 select-none"
         data-sticky-pushpin
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: '50%',
-          // Same shading recipe as the original reference pushpin: diagonal
-          // gradient + inset highlight/shadow for the round ball, plus a soft
-          // cast shadow on the note. The gradient is derived from the sticky's
-          // own color (green default when it has none).
-          background: stickyPushpinBackground(data.color),
-          boxShadow: [
-            'inset 1px 1px 2.5px rgba(255,255,255,0.3)',
-            'inset -1.5px -1.5px 3px rgba(0,0,0,0.4)',
-            '1px 1.5px 2px rgba(0,0,0,0.25)',
-          ].join(', '),
-        }}
+        style={
+          {
+            '--sticky-pushpin-background': stickyPushpinBackground(data.color),
+          } as React.CSSProperties
+        }
       >
         {/* Edge reflection glint (the reference's ::before) */}
-        <span
-          style={{
-            position: 'absolute',
-            top: '10%',
-            left: '15%',
-            width: '40%',
-            height: '30%',
-            background: 'rgba(255,255,255,0.15)',
-            borderRadius: '50%',
-            transform: 'rotate(-20deg)',
-            filter: 'blur(1px)',
-          }}
-        />
+        <span className="sticky-pushpin-glint" />
       </div>
     </>
   );
@@ -207,10 +138,11 @@ const StickyNode = ({
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const isZoomedOut = useIsZoomedOut();
   const [editing, setEditing] = useState(false);
-  const textRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const focusAfterEditRequestRef = useRef(false);
 
   const handleBlur = useCallback(() => {
-    const text = textRef.current ? editableElementToText(textRef.current) : '';
+    const text = textRef.current?.value ?? '';
     if (text !== data.content) {
       onUpdate(id, { content: text });
     }
@@ -223,15 +155,6 @@ const StickyNode = ({
       e.stopPropagation();
       textRef.current?.blur();
       return;
-    }
-    // Enter inserts a newline (sticky notes are multi-line plain text).
-    // Skip while an IME composition is active so it can commit normally.
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      const el = textRef.current;
-      if (el && insertNewlineAtCaret(el)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
     }
   }, []);
 
@@ -252,44 +175,43 @@ const StickyNode = ({
 
   // Focus the contentEditable and place the caret: at the click point when
   // available, otherwise at the end of the text (keyboard entry).
-  const enterEditing = useCallback((caretPoint?: { x: number; y: number }) => {
-    setEditing(true);
+  const focusEditable = useCallback(() => {
     setTimeout(() => {
       const el = textRef.current;
       if (!el) {
         return;
       }
       el.focus();
-      const selection = window.getSelection();
-      const range = caretPoint
-        ? caretRangeFromPoint(caretPoint.x, caretPoint.y)
-        : null;
-      if (range) {
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      } else if (!caretPoint) {
-        const endRange = document.createRange();
-        endRange.selectNodeContents(el);
-        endRange.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(endRange);
-      }
+      const caretIndex = el.value.length;
+      el.setSelectionRange(caretIndex, caretIndex);
     }, 10);
   }, []);
+
+  const enterEditing = useCallback(
+    (_caretPoint?: { x: number; y: number }) => {
+      setEditing(true);
+      focusEditable();
+    },
+    [focusEditable]
+  );
 
   // Enter-to-edit: useCanvasKeyboard stamps `editingStickyId` when Enter is
   // pressed with this sticky as the sole selection.
   const editRequested = useCanvasStore((s) => s.editingStickyId === id);
   const setEditingStickyId = useCanvasStore((s) => s.setEditingStickyId);
-  useEffect(() => {
-    if (!editRequested) {
-      return;
+  if (editRequested) {
+    if (!editing) {
+      focusAfterEditRequestRef.current = true;
+      setEditing(true);
     }
     setEditingStickyId(null);
-    if (!editing) {
-      enterEditing();
+  }
+  useEffect(() => {
+    if (editing && focusAfterEditRequestRef.current) {
+      focusAfterEditRequestRef.current = false;
+      focusEditable();
     }
-  }, [editRequested, editing, enterEditing, setEditingStickyId]);
+  }, [editing, focusEditable]);
 
   // Single-click-to-edit model (mirrors the canvas' single-click-to-open): a
   // plain click enters edit mode directly, since editing IS a sticky's "open".
@@ -376,6 +298,13 @@ const StickyNode = ({
         )}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            enterEditing();
+          }
+        }}
+        role="presentation"
       >
         <StickyContent
           data={data}

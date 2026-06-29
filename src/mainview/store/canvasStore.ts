@@ -12,22 +12,21 @@ import { toast } from 'sonner';
 import { create } from 'zustand';
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import {
-  CARD_COLORS,
+  isFolderChildNode,
+  isGroupChildNode,
+} from '@/lib/canvasNodePredicates';
+import {
+  buildNewNodeSpec,
   CARD_H,
   CARD_W,
   FOLDER_H,
   FOLDER_W,
-  GROUP_COLORS,
-  STICKY_COLORS,
-} from '@/lib/canvasConstants';
-import {
-  isFolderChildNode,
-  isGroupChildNode,
-} from '@/lib/canvasNodePredicates';
-import { buildNewNodeSpec, findSpecByNodeType } from '@/lib/canvasNodeRegistry';
+  findSpecByNodeType,
+} from '@/lib/canvasNodeRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
@@ -117,9 +116,13 @@ function cleanEdgeForClipboard(edge: Edge): Edge {
 }
 
 function getInternalEdgesForNodes(edges: Edge[], nodeIds: Set<string>): Edge[] {
-  return edges
-    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
-    .map(cleanEdgeForClipboard);
+  const internalEdges: Edge[] = [];
+  for (const edge of edges) {
+    if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+      internalEdges.push(cleanEdgeForClipboard(edge));
+    }
+  }
+  return internalEdges;
 }
 
 function nodeZIndex(node: Node): number {
@@ -523,35 +526,38 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       : cardData;
     get().saveSnapshot();
     set((s) => ({
-      nodes: s.nodes
-        .filter((n) => n.id !== cardId)
-        .map((n) => {
-          if (n.id !== folderId) {
-            return n;
-          }
-          const existing = ((n.data as any).children ?? []) as Array<{
-            data: Record<string, unknown>;
-            id: string;
-            noteId?: string;
-            type?: string;
-          }>;
-          const children = [
-            ...existing,
-            {
-              id: card.id,
-              ...(childNoteId ? { noteId: childNoteId } : {}),
-              type: card.type,
-              data: childData,
-            },
-          ];
-          return {
+      nodes: s.nodes.flatMap((n) => {
+        if (n.id === cardId) {
+          return [];
+        }
+        if (n.id !== folderId) {
+          return [n];
+        }
+        const existing = ((n.data as any).children ?? []) as Array<{
+          data: Record<string, unknown>;
+          id: string;
+          noteId?: string;
+          type?: string;
+        }>;
+        const children = [
+          ...existing,
+          {
+            id: card.id,
+            ...(childNoteId ? { noteId: childNoteId } : {}),
+            type: card.type,
+            data: childData,
+          },
+        ];
+        return [
+          {
             ...n,
             data: {
               ...n.data,
               children,
             },
-          };
-        }),
+          },
+        ];
+      }),
       edges: s.edges.filter((e) => e.source !== cardId && e.target !== cardId),
     }));
   },
@@ -921,24 +927,31 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
 
     const selectedNodes = selectableNodes.filter((node) => node.selected);
+    const compareExtendAnchor = (a: Node, b: Node): number => {
+      const ac = centerOf(a);
+      const bc = centerOf(b);
+      if (direction === 'right') {
+        return bc.x - ac.x || ac.y - bc.y || a.id.localeCompare(b.id);
+      }
+      if (direction === 'left') {
+        return ac.x - bc.x || ac.y - bc.y || a.id.localeCompare(b.id);
+      }
+      if (direction === 'down') {
+        return bc.y - ac.y || ac.x - bc.x || a.id.localeCompare(b.id);
+      }
+      return ac.y - bc.y || ac.x - bc.x || a.id.localeCompare(b.id);
+    };
     const pickExtendAnchor = () => {
       if (selectedNodes.length === 0) {
         return selectableNodes[0]!;
       }
-      return [...selectedNodes].sort((a, b) => {
-        const ac = centerOf(a);
-        const bc = centerOf(b);
-        if (direction === 'right') {
-          return bc.x - ac.x || ac.y - bc.y || a.id.localeCompare(b.id);
+      let best = selectedNodes[0]!;
+      for (const node of selectedNodes.slice(1)) {
+        if (compareExtendAnchor(node, best) < 0) {
+          best = node;
         }
-        if (direction === 'left') {
-          return ac.x - bc.x || ac.y - bc.y || a.id.localeCompare(b.id);
-        }
-        if (direction === 'down') {
-          return bc.y - ac.y || ac.x - bc.x || a.id.localeCompare(b.id);
-        }
-        return ac.y - bc.y || ac.x - bc.x || a.id.localeCompare(b.id);
-      })[0]!;
+      }
+      return best;
     };
 
     const current =
@@ -946,33 +959,41 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ? pickExtendAnchor()
         : (selectedNodes[0] ?? selectableNodes[0]!);
     const currentCenter = centerOf(current);
-    const candidates = selectableNodes
-      .filter((node) => node.id !== current.id)
-      .map((node) => {
-        const center = centerOf(node);
-        const dx = center.x - currentCenter.x;
-        const dy = center.y - currentCenter.y;
-        const primary =
-          direction === 'right'
-            ? dx
-            : direction === 'left'
-              ? -dx
-              : direction === 'down'
-                ? dy
-                : -dy;
-        const secondary =
-          direction === 'left' || direction === 'right'
-            ? Math.abs(dy)
-            : Math.abs(dx);
-        return { node, primary, secondary };
-      })
-      .filter((candidate) => candidate.primary > 0)
-      .sort(
-        (a, b) =>
-          a.primary - b.primary ||
-          a.secondary - b.secondary ||
-          a.node.id.localeCompare(b.node.id)
-      );
+    const candidates: Array<{
+      node: Node;
+      primary: number;
+      secondary: number;
+    }> = [];
+    for (const node of selectableNodes) {
+      if (node.id === current.id) {
+        continue;
+      }
+      const center = centerOf(node);
+      const dx = center.x - currentCenter.x;
+      const dy = center.y - currentCenter.y;
+      const primary =
+        direction === 'right'
+          ? dx
+          : direction === 'left'
+            ? -dx
+            : direction === 'down'
+              ? dy
+              : -dy;
+      if (primary <= 0) {
+        continue;
+      }
+      const secondary =
+        direction === 'left' || direction === 'right'
+          ? Math.abs(dy)
+          : Math.abs(dx);
+      candidates.push({ node, primary, secondary });
+    }
+    candidates.sort(
+      (a, b) =>
+        a.primary - b.primary ||
+        a.secondary - b.secondary ||
+        a.node.id.localeCompare(b.node.id)
+    );
 
     const target = candidates[0]?.node ?? current;
     set((s) => ({
@@ -1057,17 +1078,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const { nodes } = get();
     const byId = new Map(nodes.map((node) => [node.id, node]));
     const selected = nodes.filter((node) => node.selected);
-    const selectedGroupIds = new Set(
-      selected.filter((node) => node.type === 'group').map((node) => node.id)
-    );
-    const selectedChildIds = new Set(
-      selected
-        .filter((node) => {
-          const parent = node.parentId ? byId.get(node.parentId) : null;
-          return parent?.type === 'group';
-        })
-        .map((node) => node.id)
-    );
+    const selectedGroupIds = new Set<string>();
+    const selectedChildIds = new Set<string>();
+    for (const node of selected) {
+      if (node.type === 'group') {
+        selectedGroupIds.add(node.id);
+        continue;
+      }
+      const parent = node.parentId ? byId.get(node.parentId) : null;
+      if (parent?.type === 'group') {
+        selectedChildIds.add(node.id);
+      }
+    }
 
     if (selectedGroupIds.size === 0 && selectedChildIds.size === 0) {
       return;
@@ -1284,17 +1306,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
 
     const usedTargetEdgeIds = new Set(targetEdges.map((edge) => edge.id));
-    const movedEdges = edges
-      .filter(
-        (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
-      )
-      .map((edge) => ({
+    const movedEdges: Edge[] = [];
+    for (const edge of edges) {
+      if (!(selectedIds.has(edge.source) && selectedIds.has(edge.target))) {
+        continue;
+      }
+      movedEdges.push({
         ...cleanEdgeForClipboard(edge),
         id: uniqueEdgeId(edge.id, usedTargetEdgeIds),
         source: nodeIdMap.get(edge.source)!,
         target: nodeIdMap.get(edge.target)!,
         selected: false,
-      })) as Edge[];
+      } as Edge);
+    }
 
     const sourceNodes = sortNodesByParent(
       nodes.flatMap((node) => {
@@ -1452,9 +1476,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   cutSelected: () => {
-    const selectedIds = get()
-      .nodes.filter((node) => node.selected)
-      .map((node) => node.id);
+    const selectedIds: string[] = [];
+    for (const node of get().nodes) {
+      if (node.selected) {
+        selectedIds.push(node.id);
+      }
+    }
     if (selectedIds.length === 0) {
       return;
     }
@@ -1582,9 +1609,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const idSet = new Set(ids);
     get().saveSnapshot();
     set((s) => {
-      const usedNodeIds = new Set(
-        s.nodes.filter((node) => !idSet.has(node.id)).map((node) => node.id)
-      );
+      const usedNodeIds = new Set<string>();
+      for (const node of s.nodes) {
+        if (!idSet.has(node.id)) {
+          usedNodeIds.add(node.id);
+        }
+      }
       const detachedFolderChildren = s.nodes.flatMap((node) => {
         if (!idSet.has(node.id) || node.type !== 'folder') {
           return [];
@@ -1601,15 +1631,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           (e) => !(idSet.has(e.source) || idSet.has(e.target))
         ),
         nodes: sortNodesByParent([
-          ...s.nodes
-            .filter((n) => !idSet.has(n.id))
-            .map((n) => {
-              if (n.parentId && idSet.has(n.parentId)) {
-                const { parentId, extent, ...rest } = n as any;
-                return rest as Node;
-              }
-              return n;
-            }),
+          ...s.nodes.flatMap((n) => {
+            if (idSet.has(n.id)) {
+              return [];
+            }
+            if (n.parentId && idSet.has(n.parentId)) {
+              const { parentId, extent, ...rest } = n as any;
+              return [rest as Node];
+            }
+            return [n];
+          }),
           ...detachedFolderChildren,
         ]),
       };

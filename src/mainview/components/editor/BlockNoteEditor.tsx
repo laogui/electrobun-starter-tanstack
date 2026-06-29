@@ -34,7 +34,7 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
-
+import { getBlockNoteDebounceMs } from './blockNoteEditorTiming';
 import {
   resolveBlockNoteFileUrl,
   uploadBlockNoteFile,
@@ -45,10 +45,6 @@ import {
 } from './useBlockNoteSaver';
 
 const TITLE_MAX_LENGTH = 120;
-
-export function getBlockNoteDebounceMs(autoSaveInterval: number): number {
-  return Math.round(autoSaveInterval);
-}
 
 interface BlockNoteEditorProps {
   color?: unknown;
@@ -80,6 +76,14 @@ interface InitialContent {
   revision: number | undefined;
 }
 
+function createEmptyInitialContent(): InitialContent {
+  return {
+    blocks: undefined,
+    recoveredFromMarkdown: false,
+    revision: undefined,
+  };
+}
+
 type LocalHttpEndpointInfo = Awaited<
   ReturnType<typeof rpcGetLocalHttpEndpoint>
 >;
@@ -97,17 +101,25 @@ export default function BlockNoteEditor({
   title,
 }: BlockNoteEditorProps) {
   const initialMarkdown = toText(markdown);
-  const [titleValue, setTitleValue] = useState(toText(title));
-  const [initial, setInitial] = useState<InitialContent | null>(null);
+  const noteKey = typeof noteId === 'string' ? noteId : null;
+  const [titleValue, setTitleValue] = useState(() => toText(title));
+  const [initial, setInitial] = useState<InitialContent | null>(() =>
+    noteKey === null ? createEmptyInitialContent() : null
+  );
   const [localHttpEndpoint, setLocalHttpEndpoint] = useState<
     LocalHttpEndpointInfo | undefined
   >(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
-  const [, setLastSavedAt] = useState<Date | null>(null);
   const latestMarkdownRef = useRef(initialMarkdown);
   const latestBlocksRef = useRef<PartialBlock[] | undefined>(undefined);
+  const initialNoteKeyRef = useRef<string | null>(noteKey);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
+
+  if (initialNoteKeyRef.current !== noteKey) {
+    initialNoteKeyRef.current = noteKey;
+    latestBlocksRef.current = undefined;
+    setInitial(noteKey === null ? createEmptyInitialContent() : null);
+  }
 
   const colorValue = typeof color === 'string' ? color : '#FFFFFF';
   const isDark = isColorDark(colorValue);
@@ -125,10 +137,8 @@ export default function BlockNoteEditor({
   }, [onSaveStatusChange]);
 
   const handleSaveStatusChange = useCallback((status: BlockNoteSaveStatus) => {
-    setSaveStatus(status);
     if (status === 'saved') {
       const now = new Date();
-      setLastSavedAt(now);
       onSaveStatusChangeRef.current?.(status, now);
     } else {
       onSaveStatusChangeRef.current?.(status, null);
@@ -153,13 +163,7 @@ export default function BlockNoteEditor({
   // we know whether we have JSON blocks or just markdown.
   useEffect(() => {
     let cancelled = false;
-    latestBlocksRef.current = undefined;
     if (typeof noteId !== 'string') {
-      setInitial({
-        blocks: undefined,
-        revision: undefined,
-        recoveredFromMarkdown: false,
-      });
       return () => {
         cancelled = true;
       };
@@ -367,9 +371,9 @@ function BlockNoteSurface({
   const editorRootRef = useRef<HTMLDivElement | null>(null);
 
   // If we recovered from markdown (no sidecar yet), import the markdown body
-  // once the editor mounts.
+  // once the editor surface mounts.
   const didImportMarkdownRef = useRef(false);
-  useEffect(() => {
+  const importRecoveredMarkdown = useCallback(() => {
     if (didImportMarkdownRef.current) {
       return;
     }
@@ -399,6 +403,15 @@ function BlockNoteSurface({
     initial.recoveredFromMarkdown,
     latestBlocksRef,
   ]);
+  const setEditorRoot = useCallback(
+    (element: HTMLDivElement | null) => {
+      editorRootRef.current = element;
+      if (element) {
+        importRecoveredMarkdown();
+      }
+    },
+    [importRecoveredMarkdown]
+  );
 
   const handleChange = useCallback(async () => {
     const blocks = editor.document as Block[];
@@ -462,7 +475,7 @@ function BlockNoteSurface({
         'flex h-full w-full flex-col',
         isDark ? 'text-white' : 'text-gray-900'
       )}
-      ref={editorRootRef}
+      ref={setEditorRoot}
       style={colorToStyle(color)}
     >
       {loadFailed ? (
@@ -488,7 +501,7 @@ function BlockNoteSurface({
           <TextareaAutosize
             aria-label="Note title"
             className={cn(
-              'mb-6 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-none',
+              'mb-6 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
             )}
             maxLength={TITLE_MAX_LENGTH}

@@ -8,7 +8,9 @@ import {
 import type { ToasterProps } from 'sonner';
 import { Toaster as Sonner } from 'sonner';
 
-export const Toaster = (props: ToasterProps) => (
+type AppToasterProps = Pick<ToasterProps, 'richColors'>;
+
+export const Toaster = ({ richColors }: AppToasterProps) => (
   <Sonner
     className="group"
     icons={{
@@ -18,6 +20,7 @@ export const Toaster = (props: ToasterProps) => (
       error: <OctagonXIcon className="size-4" />,
       loading: <Loader2Icon className="size-4 animate-spin" />,
     }}
+    richColors={richColors}
     style={
       {
         '--normal-bg': 'var(--popover)',
@@ -32,6 +35,5 @@ export const Toaster = (props: ToasterProps) => (
         toast: 'cn-toast',
       },
     }}
-    {...props}
   />
 );

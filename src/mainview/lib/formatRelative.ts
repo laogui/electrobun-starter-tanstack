@@ -11,6 +11,10 @@ const RELATIVE_TIME_UNITS: Array<{
   { limit: 31_536_000_000, divisor: 2_592_000_000, unit: 'month' },
 ];
 
+const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, {
+  numeric: 'auto',
+});
+
 export function formatRelativeTime(input: string | number): string {
   const timestamp =
     typeof input === 'string' ? new Date(input).getTime() : input;
@@ -19,11 +23,13 @@ export function formatRelativeTime(input: string | number): string {
   }
   const diff = timestamp - Date.now();
   const absDiff = Math.abs(diff);
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
   for (const { limit, divisor, unit } of RELATIVE_TIME_UNITS) {
     if (absDiff < limit) {
-      return rtf.format(Math.round(diff / divisor), unit);
+      return relativeTimeFormatter.format(Math.round(diff / divisor), unit);
     }
   }
-  return rtf.format(Math.round(diff / 31_536_000_000), 'year');
+  return relativeTimeFormatter.format(
+    Math.round(diff / 31_536_000_000),
+    'year'
+  );
 }

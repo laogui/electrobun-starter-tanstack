@@ -8,7 +8,15 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type MouseEventHandler,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from 'react';
 
 import {
   type LocaleSetting,
@@ -180,25 +188,17 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <SecondaryButton onClick={handleReveal} type="button">
+        <SecondaryButton onClick={handleReveal}>
           <ExternalLink size={13} /> {strings.workspaceOpenInFinder}
         </SecondaryButton>
-        <SecondaryButton onClick={handleCopy} type="button">
+        <SecondaryButton onClick={handleCopy}>
           {copied ? <Check size={13} /> : null}
           {copied ? strings.workspaceCopyPathDone : strings.workspaceCopyPath}
         </SecondaryButton>
-        <SecondaryButton
-          disabled={busy === 'switch'}
-          onClick={handleSwitch}
-          type="button"
-        >
+        <SecondaryButton disabled={busy === 'switch'} onClick={handleSwitch}>
           <Folder size={13} /> {strings.workspaceSwitch}
         </SecondaryButton>
-        <SecondaryButton
-          disabled={busy === 'export'}
-          onClick={handleExport}
-          type="button"
-        >
+        <SecondaryButton disabled={busy === 'export'} onClick={handleExport}>
           <Archive size={13} />{' '}
           {busy === 'export'
             ? strings.workspaceExportInProgress
@@ -223,15 +223,25 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
   );
 }
 
+interface SecondaryButtonProps {
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+}
+
 function SecondaryButton({
   children,
   className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  disabled,
+  onClick,
+}: SecondaryButtonProps) {
   return (
     <button
       className={`inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-700 transition-colors [-webkit-app-region:no-drag] hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-blue-500/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800 ${className ?? ''}`}
-      {...props}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
     >
       {children}
     </button>
@@ -244,13 +254,44 @@ interface TrashSectionProps {
   strings: SettingsLocaleStrings;
 }
 
+interface TrashSectionState {
+  actionError: string | null;
+  confirmClearAll: boolean;
+  entries: TrashEntry[];
+  loaded: boolean;
+  loadFailed: boolean;
+  pendingPurge: TrashEntry | null;
+}
+
+const initialTrashSectionState: TrashSectionState = {
+  actionError: null,
+  confirmClearAll: false,
+  entries: [],
+  loaded: false,
+  loadFailed: false,
+  pendingPurge: null,
+};
+
+function trashSectionReducer(
+  state: TrashSectionState,
+  patch: Partial<TrashSectionState>
+): TrashSectionState {
+  return { ...state, ...patch };
+}
+
 function TrashSection({ client, locale, strings }: TrashSectionProps) {
-  const [entries, setEntries] = useState<TrashEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingPurge, setPendingPurge] = useState<TrashEntry | null>(null);
-  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [trashState, setTrashState] = useReducer(
+    trashSectionReducer,
+    initialTrashSectionState
+  );
+  const {
+    actionError,
+    confirmClearAll,
+    entries,
+    loaded,
+    loadFailed,
+    pendingPurge,
+  } = trashState;
 
   const dateFormatter = useMemo(
     () =>
@@ -266,13 +307,10 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
       const data = await client.listTrash();
       // Sort newest first — matches the user expectation of "most recently
       // deleted" rising to the top.
-      const sorted = [...data].sort((a, b) => b.deletedAt - a.deletedAt);
-      setEntries(sorted);
-      setLoaded(true);
-      setLoadFailed(false);
+      const sorted = data.toSorted((a, b) => b.deletedAt - a.deletedAt);
+      setTrashState({ entries: sorted, loaded: true, loadFailed: false });
     } catch {
-      setLoaded(true);
-      setLoadFailed(true);
+      setTrashState({ loaded: true, loadFailed: true });
     }
   }, [client]);
 
@@ -298,16 +336,16 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
 
   const handleRestore = useCallback(
     async (entry: TrashEntry) => {
-      setActionError(null);
+      setTrashState({ actionError: null });
       try {
         const result = await client.restoreTrash(entry.trashId);
         if (!result.success) {
-          setActionError(strings.trashRestoreFailed);
+          setTrashState({ actionError: strings.trashRestoreFailed });
           return;
         }
         await reload();
       } catch {
-        setActionError(strings.trashRestoreFailed);
+        setTrashState({ actionError: strings.trashRestoreFailed });
       }
     },
     [client, reload, strings.trashRestoreFailed]
@@ -315,34 +353,32 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
 
   const handlePurge = useCallback(
     async (entry: TrashEntry) => {
-      setActionError(null);
-      setPendingPurge(null);
+      setTrashState({ actionError: null, pendingPurge: null });
       try {
         const result = await client.purgeTrash(entry.trashId);
         if (!result.success) {
-          setActionError(strings.trashPurgeFailed);
+          setTrashState({ actionError: strings.trashPurgeFailed });
           return;
         }
         await reload();
       } catch {
-        setActionError(strings.trashPurgeFailed);
+        setTrashState({ actionError: strings.trashPurgeFailed });
       }
     },
     [client, reload, strings.trashPurgeFailed]
   );
 
   const handleClearAll = useCallback(async () => {
-    setActionError(null);
-    setConfirmClearAll(false);
+    setTrashState({ actionError: null, confirmClearAll: false });
     try {
       const result = await client.clearAllTrash();
       if (!result.success) {
-        setActionError(strings.trashClearAllFailed);
+        setTrashState({ actionError: strings.trashClearAllFailed });
         return;
       }
       await reload();
     } catch {
-      setActionError(strings.trashClearAllFailed);
+      setTrashState({ actionError: strings.trashClearAllFailed });
     }
   }, [client, reload, strings.trashClearAllFailed]);
 
@@ -362,7 +398,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
         {entries.length > 0 ? (
           <button
             className="inline-flex h-7 items-center gap-1 rounded-md px-2 font-medium text-[12px] text-red-600 transition-colors [-webkit-app-region:no-drag] hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-            onClick={() => setConfirmClearAll(true)}
+            onClick={() => setTrashState({ confirmClearAll: true })}
             type="button"
           >
             {strings.trashClearAll}
@@ -384,7 +420,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
               dateFormatter={dateFormatter}
               entry={entry}
               key={entry.trashId}
-              onPurge={() => setPendingPurge(entry)}
+              onPurge={() => setTrashState({ pendingPurge: entry })}
               onRestore={() => handleRestore(entry)}
               strings={strings}
             />
@@ -398,7 +434,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
       ) : null}
       <PurgeConfirmDialog
         entry={pendingPurge}
-        onCancel={() => setPendingPurge(null)}
+        onCancel={() => setTrashState({ pendingPurge: null })}
         onConfirm={(entry) => {
           handlePurge(entry);
         }}
@@ -406,7 +442,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
       />
       <ClearAllConfirmDialog
         count={entries.length}
-        onCancel={() => setConfirmClearAll(false)}
+        onCancel={() => setTrashState({ confirmClearAll: false })}
         onConfirm={handleClearAll}
         open={confirmClearAll}
         strings={strings}
@@ -597,6 +633,36 @@ interface ContentCleanupSectionProps {
   strings: SettingsLocaleStrings;
 }
 
+interface ContentCleanupState {
+  confirmOpen: boolean;
+  deleteError: number | null;
+  entries: UnlinkedFileEntry[] | null;
+  scanError: boolean;
+  scanning: boolean;
+  selected: Set<string>;
+}
+
+const initialContentCleanupState: ContentCleanupState = {
+  confirmOpen: false,
+  deleteError: null,
+  entries: null,
+  scanError: false,
+  scanning: false,
+  selected: new Set(),
+};
+
+type ContentCleanupPatch =
+  | Partial<ContentCleanupState>
+  | ((state: ContentCleanupState) => Partial<ContentCleanupState>);
+
+function contentCleanupReducer(
+  state: ContentCleanupState,
+  patch: ContentCleanupPatch
+): ContentCleanupState {
+  const resolvedPatch = typeof patch === 'function' ? patch(state) : patch;
+  return { ...state, ...resolvedPatch };
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -612,12 +678,12 @@ function ContentCleanupSection({
   locale,
   strings,
 }: ContentCleanupSectionProps) {
-  const [entries, setEntries] = useState<UnlinkedFileEntry[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState(false);
-  const [deleteError, setDeleteError] = useState<number | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cleanupState, setCleanupState] = useReducer(
+    contentCleanupReducer,
+    initialContentCleanupState
+  );
+  const { confirmOpen, deleteError, entries, scanError, scanning, selected } =
+    cleanupState;
 
   const dateFormatter = useMemo(
     () =>
@@ -629,33 +695,36 @@ function ContentCleanupSection({
   );
 
   const runScan = useCallback(async () => {
-    setScanning(true);
-    setScanError(false);
-    setDeleteError(null);
+    setCleanupState({
+      deleteError: null,
+      scanError: false,
+      scanning: true,
+    });
     try {
       const data = await client.scanUnlinkedNotes();
-      setEntries(data);
       // Default selection: only files that have a frontmatter id (safer set).
-      setSelected(
-        new Set(data.filter((e) => e.hasFrontmatterId).map((e) => e.file))
-      );
+      setCleanupState({
+        entries: data,
+        selected: new Set(
+          data.flatMap((e) => (e.hasFrontmatterId ? [e.file] : []))
+        ),
+      });
     } catch {
-      setScanError(true);
-      setEntries([]);
+      setCleanupState({ entries: [], scanError: true });
     } finally {
-      setScanning(false);
+      setCleanupState({ scanning: false });
     }
   }, [client]);
 
   const toggleOne = useCallback((file: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
+    setCleanupState((current) => {
+      const next = new Set(current.selected);
       if (next.has(file)) {
         next.delete(file);
       } else {
         next.add(file);
       }
-      return next;
+      return { selected: next };
     });
   }, []);
 
@@ -668,11 +737,13 @@ function ContentCleanupSection({
     if (!entries) {
       return;
     }
-    setSelected(allSelected ? new Set() : new Set(entries.map((e) => e.file)));
+    setCleanupState({
+      selected: allSelected ? new Set() : new Set(entries.map((e) => e.file)),
+    });
   }, [allSelected, entries]);
 
   const performDelete = useCallback(async () => {
-    setConfirmOpen(false);
+    setCleanupState({ confirmOpen: false });
     if (selected.size === 0) {
       return;
     }
@@ -680,13 +751,13 @@ function ContentCleanupSection({
     try {
       const result = await client.deleteUnlinkedNotes(targets);
       if (result.skipped.length > 0) {
-        setDeleteError(result.skipped.length);
+        setCleanupState({ deleteError: result.skipped.length });
       } else {
-        setDeleteError(null);
+        setCleanupState({ deleteError: null });
       }
       await runScan();
     } catch {
-      setDeleteError(targets.length);
+      setCleanupState({ deleteError: targets.length });
     }
   }, [client, runScan, selected]);
 
@@ -739,7 +810,7 @@ function ContentCleanupSection({
           allSelected={allSelected}
           dateFormatter={dateFormatter}
           entries={entries}
-          onConfirmDelete={() => setConfirmOpen(true)}
+          onConfirmDelete={() => setCleanupState({ confirmOpen: true })}
           onToggleAll={toggleAll}
           onToggleOne={toggleOne}
           selected={selected}
@@ -756,7 +827,7 @@ function ContentCleanupSection({
 
       <CleanupConfirmDialog
         count={selectedCount}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => setCleanupState({ confirmOpen: false })}
         onConfirm={performDelete}
         open={confirmOpen}
         strings={strings}

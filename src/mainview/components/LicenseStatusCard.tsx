@@ -1,6 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { Check, Sparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { LicenseInfo } from '@/lib/rpc-license';
+import { formatLicenseActivationDate } from '@/lib/licenseDates';
 import { refreshLicense } from '@/lib/rpc-license';
 
 interface LicenseStatusCardProps {
@@ -8,24 +8,12 @@ interface LicenseStatusCardProps {
 }
 
 export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
-  const [license, setLicense] = useState<LicenseInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: license, isLoading } = useQuery({
+    queryKey: ['license-status'],
+    queryFn: refreshLicense,
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    refreshLicense()
-      .then((status) => {
-        setLicense(status);
-      })
-      .catch((error) => {
-        console.error('[License] Failed to load:', error);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="animate-pulse rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
         <div className="mb-2 h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-700" />
@@ -56,7 +44,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
             </p>
             {license.activatedAt && (
               <p className="text-green-600 text-xs dark:text-green-400">
-                Activated {new Date(license.activatedAt).toLocaleDateString()}
+                Activated {formatLicenseActivationDate(license.activatedAt)}
               </p>
             )}
           </div>
@@ -94,19 +82,16 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
 
 // 简化版组件,用于设置页面以外的地方
 export function LicenseStatusBadge() {
-  const [licensed, setLicensed] = useState<boolean | null>(null);
+  const { data: license, isLoading } = useQuery({
+    queryKey: ['license-status'],
+    queryFn: refreshLicense,
+  });
 
-  useEffect(() => {
-    refreshLicense().then((status) => {
-      setLicensed(Boolean(status?.activated));
-    });
-  }, []);
-
-  if (licensed === null) {
+  if (isLoading) {
     return null;
   }
 
-  if (licensed) {
+  if (license?.activated) {
     return (
       <div className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-100 px-2 py-1 font-medium text-green-700 text-xs dark:border-green-800 dark:bg-green-900/30 dark:text-green-300">
         <Check size={12} />

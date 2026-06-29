@@ -3,10 +3,8 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  AssetImportProgressToast,
-  saveAssetFileWithProgressToast,
-} from '@/lib/assetImportProgress';
+import { AssetImportProgressToast } from '@/lib/AssetImportProgressToast';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 
 const saveAssetFileMock = vi.hoisted(() => vi.fn());
 const toastCustomMock = vi.hoisted(() => vi.fn());

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -93,6 +94,15 @@ const loadRootDocument = async () => {
   return module.Route.options.component as () => ReactElement;
 };
 
+function renderRoot(children: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+}
+
 describe('__root route', () => {
   beforeEach(() => {
     rpcMocks.rpcGetSettings.mockReset();
@@ -115,7 +125,7 @@ describe('__root route', () => {
 
   it('loads persisted settings on mount', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     await waitFor(() => {
       expect(rpcMocks.rpcGetSettings).toHaveBeenCalledTimes(1);
@@ -126,7 +136,7 @@ describe('__root route', () => {
 
   it('prefetches the license status on mount', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     await waitFor(() => {
       expect(rpcMocks.refreshLicense).toHaveBeenCalledTimes(1);
@@ -135,7 +145,7 @@ describe('__root route', () => {
 
   it('reacts to settings-updated events', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     globalThis.dispatchEvent(
       new CustomEvent('settings-updated', {
@@ -151,7 +161,7 @@ describe('__root route', () => {
 
   it('opens the settings window when clicking the settings button', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
@@ -162,7 +172,7 @@ describe('__root route', () => {
 
   it('renders shared shell elements', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     expect(screen.getByText('Outlet content')).toBeInTheDocument();
     expect(screen.getByText('Toaster')).toBeInTheDocument();
@@ -174,7 +184,7 @@ describe('__root route', () => {
 
   it('renders the titlebar with a blur treatment', async () => {
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     const titlebar = screen.getByTestId('app-titlebar');
 
@@ -201,7 +211,7 @@ describe('__root route', () => {
     );
 
     const RootDocument = await loadRootDocument();
-    const view = render(<RootDocument />);
+    const view = renderRoot(<RootDocument />);
 
     await waitFor(() => {
       expect(setPropertySpy).toHaveBeenCalledWith(
@@ -216,7 +226,7 @@ describe('__root route', () => {
   it('renders a fake search trigger on the canvas route that opens the search dialog', async () => {
     useRouterStateMock.mockReturnValue('/');
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     const trigger = screen.getByTestId('titlebar-search-trigger');
     expect(trigger).toBeInTheDocument();
@@ -229,7 +239,7 @@ describe('__root route', () => {
   it('hides the titlebar search trigger off the canvas route', async () => {
     useRouterStateMock.mockReturnValue('/templates');
     const RootDocument = await loadRootDocument();
-    render(<RootDocument />);
+    renderRoot(<RootDocument />);
 
     expect(
       screen.queryByTestId('titlebar-search-trigger')
@@ -239,7 +249,7 @@ describe('__root route', () => {
   it('removes the event listener on unmount', async () => {
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
     const RootDocument = await loadRootDocument();
-    const view = render(<RootDocument />);
+    const view = renderRoot(<RootDocument />);
 
     view.unmount();
 

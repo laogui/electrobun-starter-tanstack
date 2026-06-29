@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
+import { atomicWrite } from './atomicWrite';
 import type { CanvasManifest } from './manifest';
 import { saveManifest } from './manifest';
 import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
@@ -90,6 +91,8 @@ export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
     return;
   }
 
+  // The default workspace config must be written even when template seeding is disabled.
+  // react-doctor-disable-next-line react-doctor/async-defer-await
   await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
 
   if (!FIRST_RUN_SEED_TEMPLATE_ID) {
@@ -121,15 +124,7 @@ export async function loadWorkspaceConfig(
   return DEFAULT_CONFIG;
 }
 
-/** Atomic write: write to a unique .tmp then rename */
-export async function atomicWrite(
-  filePath: string,
-  data: string
-): Promise<void> {
-  const tmp = `${filePath}.${crypto.randomUUID().slice(0, 8)}.tmp`;
-  await Bun.write(tmp, data);
-  await rename(tmp, filePath);
-}
+export { atomicWrite } from './atomicWrite';
 
 /** Save workspace config to disk (atomic write). */
 export async function saveWorkspaceConfig(
@@ -286,7 +281,7 @@ export async function restoreView(
 /** List soft-deleted views, newest first. */
 export async function listTrash(wsPath: string): Promise<TrashEntry[]> {
   const config = await loadWorkspaceConfig(wsPath);
-  return [...(config.trash ?? [])].sort((a, b) => b.deletedAt - a.deletedAt);
+  return (config.trash ?? []).toSorted((a, b) => b.deletedAt - a.deletedAt);
 }
 
 /**
@@ -405,33 +400,35 @@ async function populateViewFromTemplate(
     noteIdMap.set(placeholderId, realId);
   }
 
-  for (const [placeholderId, realId] of noteIdMap) {
-    const content = noteContents[placeholderId];
-    if (!content) {
-      continue;
-    }
-    const filePath = await createNote(
-      wsPath,
-      realId,
-      content.title,
-      content.displayHint
-    );
-    if (content.body) {
-      const now = new Date().toISOString();
-      await saveNote(
+  await Promise.all(
+    Array.from(noteIdMap, async ([placeholderId, realId]) => {
+      const content = noteContents[placeholderId];
+      if (!content) {
+        return;
+      }
+      const filePath = await createNote(
         wsPath,
-        filePath,
-        {
-          id: realId,
-          title: content.title,
-          displayHint: content.displayHint,
-          createdAt: now,
-          updatedAt: now,
-        },
-        content.body
+        realId,
+        content.title,
+        content.displayHint
       );
-    }
-  }
+      if (content.body) {
+        const now = new Date().toISOString();
+        await saveNote(
+          wsPath,
+          filePath,
+          {
+            id: realId,
+            title: content.title,
+            displayHint: content.displayHint,
+            createdAt: now,
+            updatedAt: now,
+          },
+          content.body
+        );
+      }
+    })
+  );
 
   const nodes = template.nodes.map((node) => {
     const noteId = node.data.noteId as string | undefined;
@@ -448,12 +445,12 @@ async function populateViewFromTemplate(
   // are remapped to their real noteIds; non-card keys (node.id) flow through
   // unchanged.
   if (template.nodeMetadata) {
-    for (const [placeholderKey, meta] of Object.entries(
-      template.nodeMetadata
-    )) {
-      const realKey = noteIdMap.get(placeholderKey) ?? placeholderKey;
-      await setNodeMetadata(wsPath, realKey, meta);
-    }
+    await Promise.all(
+      Object.entries(template.nodeMetadata).map(([placeholderKey, meta]) => {
+        const realKey = noteIdMap.get(placeholderKey) ?? placeholderKey;
+        return setNodeMetadata(wsPath, realKey, meta);
+      })
+    );
     await flushNodeMetadata(wsPath);
   }
 

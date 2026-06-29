@@ -140,6 +140,8 @@ export function useBlockNoteSaver({
       setStatus('saving');
 
       try {
+        // The stale-request guard below needs the response and request ordering after this save settles.
+        // react-doctor-disable-next-line react-doctor/async-defer-await
         const response = await rpcSaveBlockNote(
           currentNoteId,
           frontmatterRef.current,

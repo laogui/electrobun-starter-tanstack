@@ -2,13 +2,17 @@ import type { Node, OnNodeDrag } from '@xyflow/react';
 import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef, useState } from 'react';
 
-import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasConstants';
 import {
   canAbsorbIntoFolder,
   GROUP_CHILD_TYPES,
   sortNodesByParent,
 } from '@/lib/canvasUtils';
-import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
+import {
+  applyRepulsion,
+  buildAbsoluteRects,
+  getNodeSize,
+  type StoredOrigin,
+} from '@/lib/collision';
 import { useCanvasStore } from '@/store/canvasStore';
 
 /** Node types that can be placed inside a Group or absorbed into a Folder. */
@@ -25,35 +29,39 @@ export function useNodeDrag() {
   /** Original positions of nodes before they were pushed aside. */
   const pushedOriginsRef = useRef<Map<string, StoredOrigin>>(new Map());
 
-  /** Find the folder whose bounds contain the dragged node's center. */
+  /** Find the folder whose bounds contain the dragged node's center.
+   *  Uses absolute coordinates so nodes inside groups are compared correctly. */
   const findOverlappingFolder = useCallback(
     (draggedNode: Node, allNodes: Node[]) => {
       if (!canAbsorbIntoFolder(draggedNode)) {
         return null;
       }
-      const nodeW =
-        (draggedNode.measured?.width ?? (draggedNode.style?.width as number)) ||
-        CARD_W;
-      const nodeH =
-        (draggedNode.measured?.height ??
-          (draggedNode.style?.height as number)) ||
-        CARD_H;
-      const dx = draggedNode.position.x + nodeW / 2;
-      const dy = draggedNode.position.y + nodeH / 2;
+      // Build absolute rects to handle nodes parented inside groups
+      const absRects = buildAbsoluteRects(allNodes);
+      const draggedSize = getNodeSize(draggedNode);
+
+      // Use the live dragged position (which is already absolute after
+      // onNodeDragStart detaches group children).
+      const draggedRect = absRects.get(draggedNode.id);
+      const dx = (draggedRect?.left ?? draggedNode.position.x) + draggedSize.width / 2;
+      const dy = (draggedRect?.top ?? draggedNode.position.y) + draggedSize.height / 2;
+
       return (
-        allNodes.find(
-          (n) =>
-            n.type === 'folder' &&
-            n.id !== draggedNode.id &&
-            dx >= n.position.x &&
-            dx <=
-              n.position.x +
-                (n.measured?.width ?? (n.style?.width as number) ?? FOLDER_W) &&
-            dy >= n.position.y &&
-            dy <=
-              n.position.y +
-                (n.measured?.height ?? (n.style?.height as number) ?? FOLDER_H)
-        ) || null
+        allNodes.find((n) => {
+          if (n.type !== 'folder' || n.id === draggedNode.id) {
+            return false;
+          }
+          const folderRect = absRects.get(n.id);
+          if (!folderRect) {
+            return false;
+          }
+          return (
+            dx >= folderRect.left &&
+            dx <= folderRect.right &&
+            dy >= folderRect.top &&
+            dy <= folderRect.bottom
+          );
+        }) || null
       );
     },
     []
@@ -102,66 +110,41 @@ export function useNodeDrag() {
 
       // --- Determine drop target ---
       let targetGroupId: string | null = null;
-      let targetFolderId: string | null = null;
 
-      // Content nodes (card/image/sticky) can go into groups or folders
-      if (isContentNode(node)) {
+      if (isContentNode(node) || node.type === 'folder') {
         const group = rf
           .getIntersectingNodes(node)
           .find((n) => n.type === 'group');
         targetGroupId = group?.id ?? null;
-        setNodes((nds) => {
-          const folder = findOverlappingFolder(node, nds);
-          targetFolderId = folder?.id || null;
-          setDropTargetId(targetFolderId);
-          return nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
-              : n
-          );
-        });
-      }
-      // Folders can go into groups but NOT into other folders
-      else if (node.type === 'folder') {
-        const group = rf
-          .getIntersectingNodes(node)
-          .find((n) => n.type === 'group');
-        targetGroupId = group?.id ?? null;
-        setDropTargetId(null);
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
-              : n
-          )
-        );
-      }
-      // Groups cannot go into anything
-      else if (node.type === 'group') {
-        setDropTargetId(null);
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: false } }
-              : n
-          )
-        );
       }
 
       setActiveGroupId(targetGroupId);
 
-      // --- Repulsion: push all overlapping nodes away ---
-      // Exempt all potential drop-target containers so the dragged node can
-      // approach and enter them without pushing them away.
+      // --- Single atomic setNodes: drop-target highlighting + repulsion ---
+      // Merging these into one call avoids intermediate inconsistent state
+      // that could cause missed repulsion or stale node positions.
       setNodes((nds) => {
-        const exemptIds = new Set<string>();
+        // 1. Merge live drag positions into store nodes FIRST so that
+        //    folder overlap and repulsion both see accurate coordinates.
         const hasReportedDraggedNodes = draggedNodes.length > 0;
-        const nodesForRepulsion = nds.map((n) => {
+        const nodesWithLivePositions = nds.map((n) => {
           const draggedNode = liveDraggedNodes.get(n.id);
           if (!draggedNode) {
+            // Update group active state in the same pass
+            if (n.type === 'group') {
+              const shouldBeActive =
+                node.type !== 'group' && n.id === targetGroupId;
+              if ((n.data as any).active !== shouldBeActive) {
+                return {
+                  ...n,
+                  data: { ...n.data, active: shouldBeActive },
+                };
+              }
+            }
             return n;
           }
-          return {
+          // Merge live dragged position + update group active state
+          const merged: Node = {
             ...n,
             parentId: draggedNode.parentId,
             extent: draggedNode.extent,
@@ -169,14 +152,42 @@ export function useNodeDrag() {
             position: { ...draggedNode.position },
             style: draggedNode.style ?? n.style,
           };
+          if (n.type === 'group') {
+            const shouldBeActive =
+              node.type !== 'group' && merged.id === targetGroupId;
+            return {
+              ...merged,
+              data: { ...merged.data, active: shouldBeActive },
+            };
+          }
+          return merged;
         });
 
+        // 2. Determine folder drop target using merged positions
+        let targetFolderId: string | null = null;
+        if (isContentNode(node)) {
+          // Find the dragged node with its live position for overlap check
+          const liveNode = nodesWithLivePositions.find(
+            (n) => n.id === node.id
+          );
+          const folder = findOverlappingFolder(
+            liveNode ?? node,
+            nodesWithLivePositions
+          );
+          targetFolderId = folder?.id || null;
+        }
+        setDropTargetId(targetFolderId);
+
+        // 3. Build dragging ID set
         const draggingIds = hasReportedDraggedNodes
           ? new Set(liveDraggedNodes.keys())
           : new Set(nds.filter((n) => n.selected).map((n) => n.id));
         if (!draggingIds.has(node.id)) {
           draggingIds.add(node.id);
         }
+
+        // 4. Build exempt IDs for repulsion
+        const exemptIds = new Set<string>();
 
         // Content nodes can enter any group; only those absorbable by folders
         // (e.g. card/image but not sticky) are exempt from folder repulsion.
@@ -202,14 +213,15 @@ export function useNodeDrag() {
 
         // Parents of any dragging node should not be pushed
         for (const id of draggingIds) {
-          const dragging = nodesForRepulsion.find((n) => n.id === id);
+          const dragging = nodesWithLivePositions.find((n) => n.id === id);
           if (dragging?.parentId) {
             exemptIds.add(dragging.parentId);
           }
         }
 
+        // 5. Apply repulsion
         return applyRepulsion({
-          nodes: nodesForRepulsion,
+          nodes: nodesWithLivePositions,
           activeNodeId: node.id,
           activeNodeIds: draggingIds,
           pushedOrigins: pushedOriginsRef.current,
@@ -221,10 +233,28 @@ export function useNodeDrag() {
     [rf, setNodes, findOverlappingFolder]
   );
 
+  /** Restore all previously pushed nodes to their original positions. */
+  const restorePushedNodes = useCallback(
+    (nds: Node[]): Node[] => {
+      if (pushedOriginsRef.current.size === 0) {
+        return nds;
+      }
+      const result = nds.map((n) => {
+        const orig = pushedOriginsRef.current.get(n.id);
+        if (!orig) {
+          return n;
+        }
+        return { ...n, position: { ...orig.position } };
+      });
+      pushedOriginsRef.current.clear();
+      return result;
+    },
+    []
+  );
+
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_, node) => {
       setDropTargetId(null);
-      pushedOriginsRef.current.clear();
 
       if (isContentNode(node)) {
         setNodes((nds) => {
@@ -233,6 +263,7 @@ export function useNodeDrag() {
           if (folder) {
             const cardNode = nds.find((n) => n.id === node.id);
             if (!cardNode) {
+              pushedOriginsRef.current.clear();
               return nds;
             }
             const {
@@ -245,7 +276,10 @@ export function useNodeDrag() {
               type: cardNode.type ?? 'card',
               data: cleanData,
             };
-            return nds
+            // Card absorbed into folder: restore pushed nodes since the
+            // source of repulsion (the dragged card) is being removed.
+            const restored = restorePushedNodes(nds);
+            return restored
               .filter((n) => n.id !== node.id)
               .map((n) => {
                 if (n.id !== folder.id) {
@@ -268,6 +302,10 @@ export function useNodeDrag() {
           const targetGroup = rf
             .getIntersectingNodes(node)
             .find((n) => n.type === 'group');
+
+          // Clear pushed origins — pushed nodes stay at their new positions
+          // because the dragged node is now placed near them.
+          pushedOriginsRef.current.clear();
 
           const updated = nds.map((n) => {
             if (n.id !== node.id) {
@@ -305,6 +343,7 @@ export function useNodeDrag() {
 
       // Folder can be dropped into a group
       if (node.type === 'folder') {
+        pushedOriginsRef.current.clear();
         setNodes((nds) => {
           const targetGroup = rf
             .getIntersectingNodes(node)
@@ -346,6 +385,7 @@ export function useNodeDrag() {
 
       // Groups stay top-level — no nesting into other groups or folders
       if (node.type === 'group') {
+        pushedOriginsRef.current.clear();
         setNodes((nds) =>
           nds.map((n) =>
             n.type === 'group'
@@ -356,7 +396,7 @@ export function useNodeDrag() {
         setActiveGroupId(null);
       }
     },
-    [rf, setNodes, findOverlappingFolder]
+    [rf, setNodes, findOverlappingFolder, restorePushedNodes]
   );
 
   return {

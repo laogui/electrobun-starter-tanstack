@@ -42,6 +42,13 @@ import {
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
 import {
+  applyRepulsion,
+  buildAbsoluteRects,
+  inflateRect,
+  rectsIntersect,
+  type StoredOrigin,
+} from '@/lib/collision';
+import {
   isRpcAvailable,
   loadCanvas,
   rpcGetSettings,
@@ -207,6 +214,97 @@ function CanvasComponent() {
   );
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
+  // Track previous zoom level for zoom-end repulsion
+  const prevZoomRef = useRef<number>(savedViewport?.zoom ?? 1);
+
+  /**
+   * After a viewport move/zoom ends, check if the zoom level changed.
+   * If so, run a single repulsion pass to push apart any nodes that
+   * visually overlap at the new zoom level (e.g. after pinch-zoom).
+   */
+  const onMoveEndWithRepulsion = useCallback(
+    (_: unknown, viewport: { x: number; y: number; zoom: number }) => {
+      setViewport(viewport);
+
+      const prevZoom = prevZoomRef.current;
+      prevZoomRef.current = viewport.zoom;
+
+      // Only run repulsion if the zoom actually changed
+      if (Math.abs(viewport.zoom - prevZoom) < 0.001) {
+        return;
+      }
+
+      // Check if any nodes overlap and resolve with repulsion
+      setNodes((nds) => {
+        const rects = buildAbsoluteRects(nds);
+        const GAP = 20;
+
+        // Quick scan: do any non-child top-level nodes overlap?
+        let hasOverlap = false;
+        for (let i = 0; i < nds.length && !hasOverlap; i++) {
+          const a = nds[i];
+          if (a.parentId) {
+            continue;
+          }
+          const ra = rects.get(a.id);
+          if (!ra) {
+            continue;
+          }
+          const inflatedA = inflateRect(ra, GAP / 2);
+          for (let j = i + 1; j < nds.length; j++) {
+            const b = nds[j];
+            if (b.parentId) {
+              continue;
+            }
+            const rb = rects.get(b.id);
+            if (rb && rectsIntersect(inflatedA, inflateRect(rb, GAP / 2))) {
+              hasOverlap = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasOverlap) {
+          return nds;
+        }
+
+        // Apply repulsion for each overlapping pair — use the first
+        // node as the "active" node so the others get pushed.
+        const pushedOrigins = new Map<string, StoredOrigin>();
+        let result = nds;
+        for (const node of nds) {
+          if (node.parentId) {
+            continue;
+          }
+          const nr = rects.get(node.id);
+          if (!nr) {
+            continue;
+          }
+          const inflated = inflateRect(nr, GAP);
+          const overlaps = nds.some((other) => {
+            if (other.id === node.id || other.parentId) {
+              return false;
+            }
+            const or = rects.get(other.id);
+            return or ? rectsIntersect(inflated, or) : false;
+          });
+          if (overlaps) {
+            result = applyRepulsion({
+              nodes: result,
+              activeNodeId: node.id,
+              pushedOrigins,
+              exemptIds: new Set<string>(),
+              gap: GAP,
+            });
+            break; // One repulsion pass is enough per zoom event
+          }
+        }
+        return result;
+      });
+    },
+    [setViewport, setNodes]
+  );
+
   const [detachedSidebarOpen, setDetachedSidebarOpen] = useState(false);
   const [pendingFolderDeleteIds, setPendingFolderDeleteIds] = useState<
     string[] | null
@@ -254,6 +352,18 @@ function CanvasComponent() {
     onEdgeContextMenu,
     handleContextMenuAction,
   } = useContextMenu({ onDeleteNodes: requestDeleteNodes, rfInstance });
+
+  // Close context menu when a node drag begins to prevent stuck menu state
+  // that blocks subsequent right-click events.
+  const onNodeDragStartWithMenuCleanup: typeof onNodeDragStart = useCallback(
+    (event, node, nodes) => {
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+      onNodeDragStart(event, node, nodes);
+    },
+    [onNodeDragStart, contextMenu, setContextMenu]
+  );
 
   useCanvasPersistence();
 
@@ -574,14 +684,12 @@ function CanvasComponent() {
         onInit={(instance) => {
           rfInstance.current = instance;
         }}
-        onMoveEnd={(_, viewport) => {
-          setViewport(viewport);
-        }}
+        onMoveEnd={onMoveEndWithRepulsion}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeDrag={onNodeDrag}
-        onNodeDragStart={onNodeDragStart}
+        onNodeDragStart={onNodeDragStartWithMenuCleanup}
         onNodeDragStop={onNodeDragStop}
         onNodesChange={onNodesChange}
         onPaneContextMenu={onPaneContextMenu}

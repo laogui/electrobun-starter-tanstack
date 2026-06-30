@@ -91,6 +91,34 @@ vi.mock('@xyflow/react', () => ({
 
 vi.mock('@/lib/collision', () => ({
   applyRepulsion: applyRepulsionMock,
+  buildAbsoluteRects: (nodes: { id: string; position: { x: number; y: number }; parentId?: string; measured?: { width?: number; height?: number }; style?: { width?: number; height?: number } }[]) => {
+    // Simple mock: absolute rect = position + size (ignoring parent offsets for basic tests)
+    const byId = new Map<string, { id: string; position: { x: number; y: number }; parentId?: string }>();
+    for (const n of nodes) {
+      byId.set(n.id, n);
+    }
+    const result = new Map<string, { left: number; top: number; right: number; bottom: number }>();
+    for (const node of nodes) {
+      // Resolve absolute position accounting for parent
+      let x = node.position.x;
+      let y = node.position.y;
+      if (node.parentId) {
+        const parent = byId.get(node.parentId);
+        if (parent) {
+          x += parent.position.x;
+          y += parent.position.y;
+        }
+      }
+      const w = node.measured?.width ?? (node.style?.width as number) ?? 350;
+      const h = node.measured?.height ?? (node.style?.height as number) ?? 450;
+      result.set(node.id, { left: x, top: y, right: x + w, bottom: y + h });
+    }
+    return result;
+  },
+  getNodeSize: (node: { measured?: { width?: number; height?: number }; style?: Record<string, unknown> }) => ({
+    width: node.measured?.width ?? (node.style?.width as number) ?? 350,
+    height: node.measured?.height ?? (node.style?.height as number) ?? 450,
+  }),
 }));
 
 vi.mock('@/store/canvasStore', () => ({

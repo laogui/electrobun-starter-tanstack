@@ -383,6 +383,10 @@ function SettingsApp({ client }: SettingsAppProps) {
       <header
         className="mb-6 pt-2 [-webkit-app-region:drag]"
         onPointerDown={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('[-webkit-app-region\\:no-drag]') || target.closest('.electrobun-webkit-app-region-no-drag')) {
+            return;
+          }
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         }}
       >

@@ -35,7 +35,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
-import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
+import { edgeTypes, nodeTypes, REPULSION_GAP } from '@/lib/canvasConstants';
 import {
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
@@ -229,15 +229,15 @@ function CanvasComponent() {
       const prevZoom = prevZoomRef.current;
       prevZoomRef.current = viewport.zoom;
 
+      const ZOOM_CHANGE_THRESHOLD = 0.001;
       // Only run repulsion if the zoom actually changed
-      if (Math.abs(viewport.zoom - prevZoom) < 0.001) {
+      if (Math.abs(viewport.zoom - prevZoom) < ZOOM_CHANGE_THRESHOLD) {
         return;
       }
 
       // Check if any nodes overlap and resolve with repulsion
       setNodes((nds) => {
         const rects = buildAbsoluteRects(nds);
-        const GAP = 20;
 
         // Quick scan: do any non-child top-level nodes overlap?
         let hasOverlap = false;
@@ -250,14 +250,14 @@ function CanvasComponent() {
           if (!ra) {
             continue;
           }
-          const inflatedA = inflateRect(ra, GAP / 2);
+          const inflatedA = inflateRect(ra, REPULSION_GAP / 2);
           for (let j = i + 1; j < nds.length; j++) {
             const b = nds[j];
             if (b.parentId) {
               continue;
             }
             const rb = rects.get(b.id);
-            if (rb && rectsIntersect(inflatedA, inflateRect(rb, GAP / 2))) {
+            if (rb && rectsIntersect(inflatedA, inflateRect(rb, REPULSION_GAP / 2))) {
               hasOverlap = true;
               break;
             }
@@ -280,7 +280,7 @@ function CanvasComponent() {
           if (!nr) {
             continue;
           }
-          const inflated = inflateRect(nr, GAP);
+          const inflated = inflateRect(nr, REPULSION_GAP);
           const overlaps = nds.some((other) => {
             if (other.id === node.id || other.parentId) {
               return false;
@@ -294,7 +294,7 @@ function CanvasComponent() {
               activeNodeId: node.id,
               pushedOrigins,
               exemptIds: new Set<string>(),
-              gap: GAP,
+              gap: REPULSION_GAP,
             });
             break; // One repulsion pass is enough per zoom event
           }

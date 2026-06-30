@@ -7,6 +7,7 @@ import {
   GROUP_CHILD_TYPES,
   sortNodesByParent,
 } from '@/lib/canvasUtils';
+import { REPULSION_GAP } from '@/lib/canvasConstants';
 import {
   applyRepulsion,
   buildAbsoluteRects,
@@ -41,7 +42,9 @@ export function useNodeDrag() {
       const draggedSize = getNodeSize(draggedNode);
 
       // Use the live dragged position (which is already absolute after
-      // onNodeDragStart detaches group children).
+      // onNodeDragStart detaches group children). The fallback to
+      // draggedNode.position is safe because detached nodes are top-level
+      // (no parent), so position is already absolute.
       const draggedRect = absRects.get(draggedNode.id);
       const dx = (draggedRect?.left ?? draggedNode.position.x) + draggedSize.width / 2;
       const dy = (draggedRect?.top ?? draggedNode.position.y) + draggedSize.height / 2;
@@ -226,7 +229,7 @@ export function useNodeDrag() {
           activeNodeIds: draggingIds,
           pushedOrigins: pushedOriginsRef.current,
           exemptIds,
-          gap: 20,
+          gap: REPULSION_GAP,
         });
       });
     },

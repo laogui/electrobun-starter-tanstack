@@ -6,6 +6,7 @@ import type {
 import { useCallback, useRef, useState } from 'react';
 
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
+import { REPULSION_GAP } from '@/lib/canvasConstants';
 import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
 import { getHelperLines } from '@/lib/getHelperLines';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -100,7 +101,7 @@ export function useHelperLines() {
             activeNodeId: resizeChange.id,
             pushedOrigins: resizePushedRef.current,
             exemptIds,
-            gap: 20,
+            gap: REPULSION_GAP,
           });
 
           return next;

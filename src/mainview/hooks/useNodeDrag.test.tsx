@@ -121,6 +121,10 @@ vi.mock('@/lib/collision', () => ({
   }),
 }));
 
+vi.mock('@/lib/canvasConstants', () => ({
+  REPULSION_GAP: 20,
+}));
+
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({

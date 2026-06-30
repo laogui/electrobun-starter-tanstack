@@ -29,6 +29,9 @@ export const FOLDER_H = 280;
 export const STICKY_W = 200;
 export const STICKY_H = 200;
 
+/** Gap (in pixels) between nodes enforced by the repulsion system. */
+export const REPULSION_GAP = 20;
+
 export const nodeTypes = {
   card: CardNode,
   folder: FolderNode,

@@ -380,7 +380,12 @@ function SettingsApp({ client }: SettingsAppProps) {
 
   return (
     <main className="min-h-screen bg-neutral-50 px-7 py-6 text-neutral-950 transition-colors dark:bg-neutral-950 dark:text-neutral-50">
-      <header className="mb-6 pt-2 [-webkit-app-region:drag]">
+      <header
+        className="mb-6 pt-2 [-webkit-app-region:drag]"
+        onPointerDown={(e) => {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }}
+      >
         <h1 className="font-semibold text-xl tracking-normal">
           {strings.title}
         </h1>

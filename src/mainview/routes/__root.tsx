@@ -166,6 +166,17 @@ function RootDocument() {
       <div
         className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"
         data-testid="app-titlebar"
+        onPointerDown={(e) => {
+          // Capture the pointer so that the subsequent mouseup always targets
+          // this element, even if the cursor leaves the titlebar while the
+          // window is being dragged.  Without this, Electrobun's preload
+          // never sends "stopWindowMove" and the window sticks to the mouse.
+          const target = e.target as HTMLElement;
+          if (target.closest('.electrobun-webkit-app-region-no-drag')) {
+            return;
+          }
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }}
         ref={titlebarRef}
       >
         <div className="flex-1" />

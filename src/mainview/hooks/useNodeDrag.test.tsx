@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { Node } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeDrag } from '@/hooks/useNodeDrag';
 
-const applyRepulsionMock = vi.hoisted(() =>
-  vi.fn(({ nodes }: { nodes: unknown[] }) => nodes)
+const applyDragRepulsionMock = vi.hoisted(() =>
+  vi.fn(({ nodes }: { nodes: Node[] }) => nodes)
 );
 
 const state = {
@@ -89,8 +90,18 @@ vi.mock('@xyflow/react', () => ({
   useReactFlow: () => rfMock,
 }));
 
-vi.mock('@/lib/collision', () => ({
-  applyRepulsion: applyRepulsionMock,
+vi.mock('@/lib/repulsion', () => ({
+  REPULSION_GAP: 20,
+  applyDragRepulsion: applyDragRepulsionMock,
+  captureRepulsionOrigins: (nodes: Node[]) => {
+    const origins = new Map<string, { x: number; y: number }>();
+    for (const node of nodes) {
+      if (!node.parentId) {
+        origins.set(node.id, { x: node.position.x, y: node.position.y });
+      }
+    }
+    return origins;
+  },
 }));
 
 vi.mock('@/store/canvasStore', () => {
@@ -115,6 +126,7 @@ const Harness = () => {
   const {
     dropTargetId,
     activeGroupId,
+    repelAnimationActive,
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,
@@ -342,6 +354,9 @@ const Harness = () => {
       </button>
       <output aria-label="drop-target">{dropTargetId ?? 'none'}</output>
       <output aria-label="active-group">{activeGroupId ?? 'none'}</output>
+      <output aria-label="repel-anim">
+        {repelAnimationActive ? 'on' : 'off'}
+      </output>
     </div>
   );
 };
@@ -358,6 +373,7 @@ describe('useNodeDrag', () => {
       position: { x: 140, y: 160 },
     });
     expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+    expect(screen.getByLabelText('repel-anim')).toHaveTextContent('on');
   });
 
   it('tracks active targets while dragging and nests into folder on stop', () => {
@@ -384,6 +400,7 @@ describe('useNodeDrag', () => {
     });
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
     expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+    expect(screen.getByLabelText('repel-anim')).toHaveTextContent('off');
   });
 });
 
@@ -424,6 +441,7 @@ describe('useNodeDrag – group and folder interactions', () => {
   beforeEach(() => {
     state.nodes = initialNodes() as typeof state.nodes;
     vi.clearAllMocks();
+    applyDragRepulsionMock.mockImplementation(({ nodes }) => nodes);
     rfMock.getInternalNode.mockImplementation((id: string) => {
       const node = state.nodes.find((n) => n.id === id);
       if (!node) {
@@ -492,9 +510,54 @@ describe('useNodeDrag – group and folder interactions', () => {
     });
   });
 
-  it('uses the live dragged position for repulsion checks', () => {
+  it('passes store nodes, dragged ids and origins to the repulsion solver', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([] as never[]);
+
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'dragging-live-position' })
+    );
+
+    const lastCall = applyDragRepulsionMock.mock.calls.at(-1);
+    const params = lastCall?.[0] as {
+      activeIds: Set<string>;
+      nodes: typeof state.nodes;
+      origins: Map<string, { x: number; y: number }>;
+      paused: boolean;
+    };
+    expect(params.activeIds).toEqual(new Set(['card-1']));
+    // Store positions are authoritative (helper-line snapping already ran).
+    expect(params.nodes.find((n) => n.id === 'card-1')?.position).toEqual({
+      x: 80,
+      y: 90,
+    });
+    expect(params.origins.get('card-1')).toEqual({ x: 80, y: 90 });
+    expect(params.paused).toBe(false);
+  });
+
+  it('pauses repulsion while hovering a folder drop target', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([] as never[]);
+
+    render(<Harness />);
+    // card-1 at (40,60) has its center inside folder-1 → drop target active.
+    fireEvent.click(screen.getByRole('button', { name: 'dragging' }));
+
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('folder-1');
+    const params = applyDragRepulsionMock.mock.calls.at(-1)?.[0] as unknown as {
+      paused: boolean;
+    };
+    expect(params.paused).toBe(true);
+  });
+
+  it('pauses repulsion while hovering a group drop target', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([
+      { id: 'group-1', type: 'group', position: { x: 100, y: 100 } } as never,
+    ]);
+    // Move the folder away so only the group is a candidate.
     state.nodes = state.nodes.map((node) =>
-      node.id === 'group-2' ? { ...node, selected: true } : node
+      node.id === 'folder-1'
+        ? { ...node, position: { x: 2000, y: 2000 } }
+        : node
     ) as typeof state.nodes;
 
     render(<Harness />);
@@ -502,19 +565,45 @@ describe('useNodeDrag – group and folder interactions', () => {
       screen.getByRole('button', { name: 'dragging-live-position' })
     );
 
-    const lastCall = applyRepulsionMock.mock.calls.at(-1);
-    const params = lastCall?.[0] as {
-      activeNodeIds: Set<string>;
-      nodes: typeof state.nodes;
+    const params = applyDragRepulsionMock.mock.calls.at(-1)?.[0] as unknown as {
+      paused: boolean;
     };
-    expect(params.nodes.find((n) => n.id === 'card-1')?.position).toEqual({
-      x: 900,
-      y: 920,
-    });
-    expect(params.activeNodeIds).toEqual(new Set(['card-1']));
+    expect(params.paused).toBe(true);
   });
 
-  it('keeps top-level group unchanged on drag start', () => {
+  it('restores pushed nodes to their origins when dropping into a folder', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([] as never[]);
+    state.nodes = [
+      ...initialNodes(),
+      {
+        id: 'card-2',
+        type: 'card',
+        position: { x: 600, y: 600 },
+        data: { title: 'Neighbor', color: '#fff' },
+        measured: { width: 350, height: 450 },
+        style: { width: 350, height: 450 },
+      },
+    ] as typeof state.nodes;
+
+    render(<Harness />);
+    // First drag frame captures origins (card-2 at 600,600).
+    fireEvent.click(screen.getByRole('button', { name: 'dragging' }));
+    // Simulate card-2 having been pushed aside during the drag.
+    state.nodes = state.nodes.map((node) =>
+      node.id === 'card-2' ? { ...node, position: { x: 700, y: 700 } } : node
+    ) as typeof state.nodes;
+
+    // Drop into the folder → card absorbed, pushed neighbor restored.
+    fireEvent.click(screen.getByRole('button', { name: 'drag-stop' }));
+
+    expect(state.nodes.find((n) => n.id === 'card-1')).toBeUndefined();
+    expect(state.nodes.find((n) => n.id === 'card-2')?.position).toEqual({
+      x: 600,
+      y: 600,
+    });
+  });
+
+  it('keeps top-level group unchanged on drag start and skips repel animation', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'drag-start-group' }));
 
@@ -523,6 +612,7 @@ describe('useNodeDrag – group and folder interactions', () => {
       position: { x: 100, y: 100 },
       data: { active: false },
     });
+    expect(screen.getByLabelText('repel-anim')).toHaveTextContent('off');
   });
 
   it('clears active groups while dragging a group node', () => {

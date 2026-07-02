@@ -91,6 +91,7 @@ import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
+import { cn } from '@/lib/utils';
 import type { CanvasBackgroundSetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -289,8 +290,13 @@ function CanvasComponent() {
   const spacePanActive = useSpacePanMode();
   const editableInteractionLocked = useEditableInteractionLock();
 
-  const { dropTargetId, onNodeDragStart, onNodeDrag, onNodeDragStop } =
-    useNodeDrag();
+  const {
+    dropTargetId,
+    repelAnimationActive,
+    onNodeDragStart,
+    onNodeDrag,
+    onNodeDragStop,
+  } = useNodeDrag();
 
   const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
 
@@ -1239,7 +1245,10 @@ function CanvasComponent() {
 
   return (
     <div
-      className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]"
+      className={cn(
+        'relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]',
+        repelAnimationActive && 'canvas-repel-anim'
+      )}
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
       onMouseMove={onPointerMoveCanvas}

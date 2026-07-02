@@ -6,8 +6,13 @@ import type {
 import { useCallback, useRef, useState } from 'react';
 
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
-import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
+import type { Point } from '@/lib/collision';
 import { getHelperLines } from '@/lib/getHelperLines';
+import {
+  applyDragRepulsion,
+  captureRepulsionOrigins,
+  REPULSION_GAP,
+} from '@/lib/repulsion';
 import { useCanvasStore } from '@/store/canvasStore';
 
 function isResizingChange(change: NodeChange): change is NodeDimensionChange & {
@@ -21,16 +26,18 @@ function isResizingChange(change: NodeChange): change is NodeDimensionChange & {
   );
 }
 
+function isPositionChange(change: NodeChange): change is NodePositionChange {
+  return change.type === 'position';
+}
+
 export function useHelperLines() {
   const setNodes = useCanvasStore((s) => s.setNodes);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [helperLineH, setHelperLineH] = useState<number | undefined>();
   const [helperLineV, setHelperLineV] = useState<number | undefined>();
 
-  /** Track pushed origins for resize repulsion. */
-  const resizePushedRef = useRef<Map<string, StoredOrigin> | null>(null);
-  resizePushedRef.current ??= new Map();
-  const resizePushedOrigins = resizePushedRef.current;
+  /** Gesture-start origins for resize repulsion (`null` = capture lazily). */
+  const resizeOriginsRef = useRef<Map<string, Point> | null>(null);
   /** Track which node is actively being resized (to save snapshot once). */
   const activeResizeIdRef = useRef<string | null>(null);
 
@@ -47,71 +54,90 @@ export function useHelperLines() {
           activeResizeIdRef.current !== null
       );
 
-      const positionChange = changes.find(
-        (c): c is NodePositionChange =>
-          c.type === 'position' && c.dragging === true
+      // Node-drag position changes always carry an explicit `dragging`
+      // boolean (from XYDrag). Resize-induced position changes do not, and
+      // fall through to the resize branch below.
+      const positionChanges = changes.filter(isPositionChange);
+      const draggingChanges = positionChanges.filter(
+        (c) => c.dragging === true && c.position !== undefined
+      );
+      const releaseChanges = positionChanges.filter(
+        (c) => c.dragging === false
       );
 
-      if (positionChange?.position) {
+      if (draggingChanges.length > 0) {
         setNodes((nds) => {
+          const reference = draggingChanges[0]!;
+          // Exclude every co-dragged node from snap candidates.
+          const excludeIds = new Set(positionChanges.map((c) => c.id));
           const { horizontal, vertical, snapPosition } = getHelperLines(
-            positionChange,
-            nds
+            reference,
+            nds,
+            excludeIds
           );
           setHelperLineH(horizontal);
           setHelperLineV(vertical);
 
-          if (snapPosition.x !== undefined) {
-            positionChange.position!.x = snapPosition.x;
+          // Apply the snap as a delta to all dragged nodes so multi-select
+          // formations stay rigid.
+          const dx =
+            snapPosition.x === undefined
+              ? 0
+              : snapPosition.x - reference.position!.x;
+          const dy =
+            snapPosition.y === undefined
+              ? 0
+              : snapPosition.y - reference.position!.y;
+          if (dx !== 0 || dy !== 0) {
+            for (const change of draggingChanges) {
+              change.position!.x += dx;
+              change.position!.y += dy;
+            }
           }
-          if (snapPosition.y !== undefined) {
-            positionChange.position!.y = snapPosition.y;
-          }
 
-          const next = applyCanvasNodeChanges(changes, nds);
-
-          // Drag repulsion is handled by useNodeDrag, not here
-
-          return next;
+          // Drag repulsion is handled by useNodeDrag (onNodeDrag), which
+          // React Flow invokes right after this change is applied.
+          return applyCanvasNodeChanges(changes, nds);
         });
+      } else if (releaseChanges.length > 0) {
+        // Drag release: the store already holds the final (snapped) position
+        // from the last drag frame, while this change carries the raw
+        // unsnapped one. Strip positions so releasing never causes a jump,
+        // and only the `dragging` flag is cleared.
+        setHelperLineH(undefined);
+        setHelperLineV(undefined);
+        const stripped = changes.map((c) =>
+          isPositionChange(c) && c.dragging === false
+            ? { ...c, position: undefined }
+            : c
+        );
+        setNodes((nds) => applyCanvasNodeChanges(stripped, nds));
       } else if (resizeChange) {
         // Save snapshot once when resize starts
         if (activeResizeIdRef.current !== resizeChange.id) {
           activeResizeIdRef.current = resizeChange.id;
-          resizePushedOrigins.clear();
+          resizeOriginsRef.current = null;
           saveSnapshot();
         }
 
         setHelperLineH(undefined);
         setHelperLineV(undefined);
         setNodes((nds) => {
-          let next = applyCanvasNodeChanges(changes, nds);
-
-          // Exempt the parent of the resized node so a group containing the
-          // active child isn't pushed by repulsion (which would feed back into
-          // the child via `extent: 'parent'` and cause flicker).
-          const exemptIds = new Set<string>();
-          const active = next.find((n) => n.id === resizeChange.id);
-          if (active?.parentId) {
-            exemptIds.add(active.parentId);
-          }
-
-          // Apply repulsion for resize
-          next = applyRepulsion({
+          // Capture origins before this frame's resize is applied.
+          resizeOriginsRef.current ??= captureRepulsionOrigins(nds);
+          const next = applyCanvasNodeChanges(changes, nds);
+          return applyDragRepulsion({
             nodes: next,
-            activeNodeId: resizeChange.id,
-            pushedOrigins: resizePushedOrigins,
-            exemptIds,
-            gap: 20,
+            activeIds: new Set([resizeChange.id]),
+            origins: resizeOriginsRef.current,
+            gap: REPULSION_GAP,
           });
-
-          return next;
         });
       } else {
         // Clean up resize state on resize end
         if (resizeEnd) {
           activeResizeIdRef.current = null;
-          resizePushedOrigins.clear();
+          resizeOriginsRef.current = null;
         }
 
         setHelperLineH(undefined);
@@ -119,7 +145,7 @@ export function useHelperLines() {
         setNodes((nds) => applyCanvasNodeChanges(changes, nds));
       }
     },
-    [setNodes, saveSnapshot, resizePushedOrigins]
+    [setNodes, saveSnapshot]
   );
 
   return { helperLineH, helperLineV, onNodesChange };

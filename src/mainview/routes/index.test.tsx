@@ -423,6 +423,7 @@ vi.mock('@/hooks/useCanvasPersistence', () => ({
 vi.mock('@/hooks/useNodeDrag', () => ({
   useNodeDrag: () => ({
     dropTargetId: null,
+    repelAnimationActive: false,
     onNodeDragStart: vi.fn(),
     onNodeDrag: vi.fn(),
     onNodeDragStop: vi.fn(),

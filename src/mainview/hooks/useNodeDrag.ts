@@ -7,7 +7,12 @@ import {
 } from '@/lib/canvasNodePredicates';
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasNodeRegistry';
 import { canAbsorbIntoFolder, sortNodesByParent } from '@/lib/canvasUtils';
-import { applyRepulsion, type StoredOrigin } from '@/lib/collision';
+import type { Point } from '@/lib/collision';
+import {
+  applyDragRepulsion,
+  captureRepulsionOrigins,
+  REPULSION_GAP,
+} from '@/lib/repulsion';
 import { useCanvasStore } from '@/store/canvasStore';
 
 /**
@@ -23,12 +28,21 @@ export function useNodeDrag() {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  /** True while dragging a single content/folder node — drives the CSS class
+   *  that animates repelled neighbors. Group drags are excluded because their
+   *  children re-render each frame and would visibly lag inside the group;
+   *  multi-select drags are excluded because only the grabbed node carries
+   *  React Flow's `.dragging` class (the transition opt-out). */
+  const [repelAnimationActive, setRepelAnimationActive] = useState(false);
   const rf = useReactFlow();
 
-  /** Original positions of nodes before they were pushed aside. */
-  const pushedOriginsRef = useRef<Map<string, StoredOrigin> | null>(null);
-  pushedOriginsRef.current ??= new Map();
-  const pushedOrigins = pushedOriginsRef.current;
+  /**
+   * Top-level node positions captured on the first drag frame of a gesture.
+   * The repulsion solver re-solves from these origins on every frame, which
+   * keeps results path-independent and lets pushed nodes flow back to their
+   * spot when the pressure is gone. `null` means "capture on next frame".
+   */
+  const originsRef = useRef<Map<string, Point> | null>(null);
 
   /** Find the folder whose bounds contain the dragged node's center. */
   const findOverlappingFolder = useCallback(
@@ -64,9 +78,39 @@ export function useNodeDrag() {
     []
   );
 
+  /** Restore every pushed (non-dragged) node to its gesture-start origin.
+   *  Used when the dragged node is absorbed by a folder/group: the canvas
+   *  space it was going to occupy is no longer needed. */
+  const restorePushedNodes = useCallback(
+    (nds: Node[], excludeIds: Set<string>): Node[] => {
+      const origins = originsRef.current;
+      if (!origins) {
+        return nds;
+      }
+      return nds.map((n) => {
+        if (n.parentId || excludeIds.has(n.id)) {
+          return n;
+        }
+        const origin = origins.get(n.id);
+        if (
+          !origin ||
+          (origin.x === n.position.x && origin.y === n.position.y)
+        ) {
+          return n;
+        }
+        return { ...n, position: { x: origin.x, y: origin.y } };
+      });
+    },
+    []
+  );
+
   const onNodeDragStart: OnNodeDrag = useCallback(
-    (_, node) => {
+    (_, node, draggedNodes = []) => {
       saveSnapshot();
+      originsRef.current = null;
+      const draggingGroup =
+        node.type === 'group' || draggedNodes.some((n) => n.type === 'group');
+      setRepelAnimationActive(!draggingGroup && draggedNodes.length <= 1);
       // Detach from parent group if the node is a group child type
       if (!(node.parentId && isGroupChildNode(node.type))) {
         return;
@@ -99,12 +143,6 @@ export function useNodeDrag() {
 
   const onNodeDrag: OnNodeDrag = useCallback(
     (_, node, draggedNodes = []) => {
-      const liveDraggedNodes = new Map<string, Node>();
-      for (const draggedNode of draggedNodes) {
-        liveDraggedNodes.set(draggedNode.id, draggedNode);
-      }
-      liveDraggedNodes.set(node.id, node);
-
       // --- Determine drop target ---
       let targetGroupId: string | null = null;
       let targetFolderId: string | null = null;
@@ -137,101 +175,67 @@ export function useNodeDrag() {
 
       setActiveGroupId(targetGroupId);
 
-      // --- Combined: group highlighting + repulsion in single setNodes ---
-      // Exempt all potential drop-target containers so the dragged node can
-      // approach and enter them without pushing them away.
-      setNodes((nds) => {
-        // First pass: apply group highlighting
-        const highlighted = nds.map((n) =>
-          n.type === 'group'
-            ? { ...n, data: { ...n.data, active: n.id === targetGroupId } }
-            : n
-        );
+      // While hovering a container the node is about to enter, repulsion is
+      // paused: nothing should be shoved aside for space the node won't use,
+      // and previously pushed nodes flow back to their origins.
+      const paused = targetGroupId !== null || targetFolderId !== null;
 
-        // Second pass: prepare nodes for repulsion with live drag positions
-        const exemptIds = new Set<string>();
-        const hasReportedDraggedNodes = draggedNodes.length > 0;
-        const nodesForRepulsion = highlighted.map((n) => {
-          const draggedNode = liveDraggedNodes.get(n.id);
-          if (!draggedNode) {
+      setNodes((nds) => {
+        // Capture gesture-start origins lazily on the first drag frame. Only
+        // the dragged node has moved at this point, and it is exempt from
+        // origin-based solving anyway.
+        originsRef.current ??= captureRepulsionOrigins(nds);
+
+        // Group drop-target highlighting (clone only on actual flag changes).
+        const highlighted = nds.map((n) => {
+          if (n.type !== 'group') {
             return n;
           }
-          return {
-            ...n,
-            parentId: draggedNode.parentId,
-            extent: draggedNode.extent,
-            measured: draggedNode.measured ?? n.measured,
-            position: { ...draggedNode.position },
-            style: draggedNode.style ?? n.style,
-          };
+          const nextActive = n.id === targetGroupId;
+          if (Boolean(n.data.active) === nextActive) {
+            return n;
+          }
+          return { ...n, data: { ...n.data, active: nextActive } };
         });
 
+        // The dragged node ids. React Flow reports them via the third
+        // callback arg; fall back to the current selection when absent.
         const draggingIds = new Set<string>();
-        if (hasReportedDraggedNodes) {
-          for (const id of liveDraggedNodes.keys()) {
-            draggingIds.add(id);
+        if (draggedNodes.length > 0) {
+          for (const draggedNode of draggedNodes) {
+            draggingIds.add(draggedNode.id);
           }
         } else {
-          for (const highlightedNode of highlighted) {
-            if (highlightedNode.selected) {
-              draggingIds.add(highlightedNode.id);
-            }
-          }
-        }
-        if (!draggingIds.has(node.id)) {
-          draggingIds.add(node.id);
-        }
-
-        // Content nodes can enter any group; only those absorbable by folders
-        // (e.g. card/image but not sticky) are exempt from folder repulsion.
-        if (isContentNode(node)) {
-          const canEnterFolder = canAbsorbIntoFolder(node);
           for (const n of highlighted) {
-            if (n.type === 'group') {
-              exemptIds.add(n.id);
-            } else if (n.type === 'folder' && canEnterFolder) {
-              exemptIds.add(n.id);
+            if (n.selected) {
+              draggingIds.add(n.id);
             }
           }
         }
-        // Folders can enter any group
-        else if (node.type === 'folder') {
-          for (const n of highlighted) {
-            if (n.type === 'group') {
-              exemptIds.add(n.id);
-            }
-          }
-        }
-        // Groups can't enter anything — no exemptions
+        draggingIds.add(node.id);
 
-        // Parents of any dragging node should not be pushed
-        const nodesForRepulsionById = new Map(
-          nodesForRepulsion.map((n) => [n.id, n])
-        );
-        for (const id of draggingIds) {
-          const dragging = nodesForRepulsionById.get(id);
-          if (dragging?.parentId) {
-            exemptIds.add(dragging.parentId);
-          }
-        }
-
-        return applyRepulsion({
-          nodes: nodesForRepulsion,
-          activeNodeId: node.id,
-          activeNodeIds: draggingIds,
-          pushedOrigins,
-          exemptIds,
-          gap: 20,
+        // Positions in the store are already live: React Flow dispatches the
+        // position changes (including helper-line snapping) synchronously
+        // before this callback runs.
+        return applyDragRepulsion({
+          nodes: highlighted,
+          activeIds: draggingIds,
+          origins: originsRef.current,
+          paused,
+          gap: REPULSION_GAP,
         });
       });
     },
-    [rf, setNodes, findOverlappingFolder, pushedOrigins]
+    [rf, setNodes, findOverlappingFolder]
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
-    (_, node) => {
+    (_, node, draggedNodes = []) => {
       setDropTargetId(null);
-      pushedOrigins.clear();
+      setRepelAnimationActive(false);
+
+      const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
+      draggingIds.add(node.id);
 
       if (isContentNode(node)) {
         setNodes((nds) => {
@@ -253,7 +257,7 @@ export function useNodeDrag() {
               data: cleanData,
             };
             const nextNodes: Node[] = [];
-            for (const n of nds) {
+            for (const n of restorePushedNodes(nds, draggingIds)) {
               if (n.id === node.id) {
                 continue;
               }
@@ -279,7 +283,8 @@ export function useNodeDrag() {
             .getIntersectingNodes(node)
             .find((n) => n.type === 'group');
 
-          const updated = nds.map((n) => {
+          const base = targetGroup ? restorePushedNodes(nds, draggingIds) : nds;
+          const updated = base.map((n) => {
             if (n.id !== node.id) {
               if (n.type === 'group') {
                 return { ...n, data: { ...n.data, active: false } };
@@ -310,6 +315,7 @@ export function useNodeDrag() {
           return sortNodesByParent(updated);
         });
         setActiveGroupId(null);
+        originsRef.current = null;
         return;
       }
 
@@ -320,7 +326,8 @@ export function useNodeDrag() {
             .getIntersectingNodes(node)
             .find((n) => n.type === 'group');
 
-          const updated = nds.map((n) => {
+          const base = targetGroup ? restorePushedNodes(nds, draggingIds) : nds;
+          const updated = base.map((n) => {
             if (n.id !== node.id) {
               if (n.type === 'group') {
                 return { ...n, data: { ...n.data, active: false } };
@@ -351,6 +358,7 @@ export function useNodeDrag() {
           return sortNodesByParent(updated);
         });
         setActiveGroupId(null);
+        originsRef.current = null;
         return;
       }
 
@@ -365,13 +373,15 @@ export function useNodeDrag() {
         );
         setActiveGroupId(null);
       }
+      originsRef.current = null;
     },
-    [rf, setNodes, findOverlappingFolder, pushedOrigins]
+    [rf, setNodes, findOverlappingFolder, restorePushedNodes]
   );
 
   return {
     dropTargetId,
     activeGroupId,
+    repelAnimationActive,
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,

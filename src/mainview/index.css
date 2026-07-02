@@ -275,6 +275,19 @@ body.resizing-nwse * {
   isolation: isolate;
 }
 
+/* While dragging a single content/folder node, repelled neighbors glide to
+   their solved positions instead of teleporting (masks the axis flips of the
+   collision solver). The dragged node itself must track the pointer 1:1, so
+   `.dragging` is excluded. Group and multi-select drags never set this class:
+   dragged-group children and co-dragged nodes move every frame without a
+   `.dragging` marker and would visibly lag behind. */
+.canvas-repel-anim .react-flow__node {
+  transition: transform 120ms ease-out;
+}
+.canvas-repel-anim .react-flow__node.dragging {
+  transition: none;
+}
+
 /* Pin text to grayscale antialiasing so opacity transitions on sibling
    elements (handles, resize icon) don't cause WebKit to switch between
    subpixel and grayscale rendering — which reads as a blur/sharpen flicker. */

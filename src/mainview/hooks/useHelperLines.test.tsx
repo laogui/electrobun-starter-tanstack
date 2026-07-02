@@ -9,7 +9,7 @@ const setNodesMock = vi.fn();
 const saveSnapshotMock = vi.fn();
 const applyCanvasNodeChangesMock = vi.fn();
 const getHelperLinesMock = vi.fn();
-const applyRepulsionMock = vi.fn();
+const applyDragRepulsionMock = vi.fn();
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
@@ -20,9 +20,25 @@ vi.mock('@/store/canvasStore', () => ({
   ) => selector({ setNodes: setNodesMock, saveSnapshot: saveSnapshotMock }),
 }));
 
-vi.mock('@/lib/collision', () => ({
-  applyRepulsion: (...args: Parameters<typeof applyRepulsionMock>) =>
-    applyRepulsionMock(...args),
+vi.mock('@/lib/repulsion', () => ({
+  REPULSION_GAP: 20,
+  applyDragRepulsion: (...args: Parameters<typeof applyDragRepulsionMock>) =>
+    applyDragRepulsionMock(...args),
+  captureRepulsionOrigins: (
+    nodes: Array<{
+      id: string;
+      parentId?: string;
+      position: { x: number; y: number };
+    }>
+  ) => {
+    const origins = new Map<string, { x: number; y: number }>();
+    for (const node of nodes) {
+      if (!node.parentId) {
+        origins.set(node.id, { x: node.position.x, y: node.position.y });
+      }
+    }
+    return origins;
+  },
 }));
 
 vi.mock('@/lib/applyCanvasNodeChanges', () => ({
@@ -119,7 +135,8 @@ describe('useHelperLines', () => {
         id: 'node-1',
         position: { x: 100, y: 200 },
       }),
-      nodes
+      nodes,
+      new Set(['node-1'])
     );
     expect(applyCanvasNodeChangesMock).toHaveBeenCalledWith(
       [
@@ -136,7 +153,7 @@ describe('useHelperLines', () => {
     expect(screen.getByLabelText('helper-v')).toHaveTextContent('100');
   });
 
-  it('clears helper lines and still applies node changes when dragging stops', () => {
+  it('clears helper lines and strips the release position so snapping sticks', () => {
     getHelperLinesMock.mockReset();
     applyCanvasNodeChangesMock.mockImplementation((changes) => changes);
     setNodesMock.mockImplementation(
@@ -149,12 +166,14 @@ describe('useHelperLines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'stop-drag' }));
 
     expect(getHelperLinesMock).not.toHaveBeenCalled();
+    // The store already holds the last (snapped) drag position; the release
+    // change only clears the dragging flag.
     expect(applyCanvasNodeChangesMock).toHaveBeenCalledWith(
       [
         {
           id: 'node-1',
           type: 'position',
-          position: { x: 150, y: 150 },
+          position: undefined,
           dragging: false,
         },
       ],
@@ -166,7 +185,7 @@ describe('useHelperLines', () => {
 
   it('applies repulsion when a node is being resized', () => {
     applyCanvasNodeChangesMock.mockImplementation((_changes, nds) => nds);
-    applyRepulsionMock.mockImplementation(({ nodes }) => nodes);
+    applyDragRepulsionMock.mockImplementation(({ nodes: nds }) => nds);
     setNodesMock.mockImplementation(
       (updater: (value: typeof nodes) => unknown) => {
         updater(nodes);
@@ -177,9 +196,10 @@ describe('useHelperLines', () => {
     fireEvent.click(screen.getByRole('button', { name: 'resize' }));
 
     expect(saveSnapshotMock).toHaveBeenCalled();
-    expect(applyRepulsionMock).toHaveBeenCalledWith(
+    expect(applyDragRepulsionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        activeNodeId: 'node-1',
+        activeIds: new Set(['node-1']),
+        origins: expect.any(Map),
       })
     );
   });
@@ -238,6 +258,6 @@ describe('useHelperLines', () => {
 
     expect(screen.getByLabelText('helper-h')).toHaveTextContent('none');
     expect(screen.getByLabelText('helper-v')).toHaveTextContent('none');
-    expect(applyRepulsionMock).toHaveBeenCalledTimes(1);
+    expect(applyDragRepulsionMock).toHaveBeenCalledTimes(1);
   });
 });

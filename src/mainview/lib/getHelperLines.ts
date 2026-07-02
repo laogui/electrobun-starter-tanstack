@@ -32,7 +32,8 @@ function getNodeDimensions(node: Node) {
 
 export function getHelperLines(
   change: NodePositionChange,
-  nodes: Node[]
+  nodes: Node[],
+  excludeIds?: Set<string>
 ): HelperLineResult {
   const result: HelperLineResult = {
     horizontal: undefined,
@@ -61,6 +62,11 @@ export function getHelperLines(
 
   for (const node of nodes) {
     if (node.id === change.id) {
+      continue;
+    }
+    // Skip co-dragged nodes (they move with the reference node) and group
+    // children (their positions are parent-relative, not canvas coords).
+    if (excludeIds?.has(node.id) || node.parentId) {
       continue;
     }
 

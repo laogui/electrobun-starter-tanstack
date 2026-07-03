@@ -113,6 +113,12 @@ const CANVAS_BG_DARK = '#141414';
 const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
 const CANVAS_GRID_SIZE = 24;
+const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
+const DRAGGING_OVER_FOLDER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
+
+function nodeZIndex(node: Node): number {
+  return typeof node.zIndex === 'number' ? node.zIndex : 0;
+}
 
 /** Layout for importing multiple files at once (drop / paste). */
 const ASSET_DROP_GRID_COLS = 3;
@@ -292,6 +298,7 @@ function CanvasComponent() {
 
   const {
     dropTargetId,
+    draggingNodeIds,
     repelAnimationActive,
     onNodeDragStart,
     onNodeDrag,
@@ -1030,15 +1037,43 @@ function CanvasComponent() {
   // whole canvas to re-render.
   const decoratedNodesCacheRef = useRef<Map<
     string,
-    { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
+    {
+      dragZIndex: number | undefined;
+      isDropTarget: boolean;
+      isHidden: boolean;
+      result: Node;
+      source: Node;
+    }
   > | null>(null);
   decoratedNodesCacheRef.current ??= new Map();
   const decoratedNodesCache = decoratedNodesCacheRef.current;
+  const draggingOverFolderIds = useMemo(() => {
+    if (!(dropTargetId && draggingNodeIds.length > 0)) {
+      return null;
+    }
+    return new Set(draggingNodeIds);
+  }, [dropTargetId, draggingNodeIds]);
+  const dragLayerZIndex = useMemo(() => {
+    if (!draggingOverFolderIds) {
+      return;
+    }
+    // React Flow adds 1000 to selected nodes by default. Use +1001 so a
+    // dragged card still renders above a selected folder that was brought front.
+    return (
+      Math.max(0, ...nodes.map(nodeZIndex)) + DRAGGING_OVER_FOLDER_Z_OFFSET
+    );
+  }, [nodes, draggingOverFolderIds]);
   const nodesWithState = useMemo(() => {
     const cache = decoratedNodesCache;
     const nextCache = new Map<
       string,
-      { isDropTarget: boolean; isHidden: boolean; result: Node; source: Node }
+      {
+        dragZIndex: number | undefined;
+        isDropTarget: boolean;
+        isHidden: boolean;
+        result: Node;
+        source: Node;
+      }
     >();
     const result: Node[] = [];
     for (const node of nodes) {
@@ -1048,12 +1083,16 @@ function CanvasComponent() {
       const isHidden =
         focusedNode?.id === node.id || focusedFolder?.id === node.id;
       const isDropTarget = dropTargetId === node.id;
+      const dragZIndex = draggingOverFolderIds?.has(node.id)
+        ? dragLayerZIndex
+        : undefined;
       const cached = cache.get(node.id);
       if (
         cached &&
         cached.source === node &&
         cached.isHidden === isHidden &&
-        cached.isDropTarget === isDropTarget
+        cached.isDropTarget === isDropTarget &&
+        cached.dragZIndex === dragZIndex
       ) {
         nextCache.set(node.id, cached);
         result.push(cached.result);
@@ -1063,6 +1102,7 @@ function CanvasComponent() {
       const decorated: Node = {
         ...node,
         data: { ...node.data, isHidden, isDropTarget },
+        ...(dragZIndex === undefined ? {} : { zIndex: dragZIndex }),
         ...(locked
           ? {
               draggable: false,
@@ -1073,6 +1113,7 @@ function CanvasComponent() {
           : {}),
       };
       nextCache.set(node.id, {
+        dragZIndex,
         isDropTarget,
         isHidden,
         result: decorated,
@@ -1082,7 +1123,15 @@ function CanvasComponent() {
     }
     decoratedNodesCacheRef.current = nextCache;
     return result;
-  }, [nodes, focusedNode, focusedFolder, dropTargetId, decoratedNodesCache]);
+  }, [
+    nodes,
+    focusedNode,
+    focusedFolder,
+    dropTargetId,
+    decoratedNodesCache,
+    draggingOverFolderIds,
+    dragLayerZIndex,
+  ]);
 
   const dragDepthRef = useRef(0);
   // Cursor position (screen coords) for the drop ghost; rAF-throttled because

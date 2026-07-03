@@ -58,6 +58,11 @@ const helperLineMocks = vi.hoisted(() => ({
   onNodesChange: vi.fn(),
 }));
 
+const nodeDragMocks = vi.hoisted(() => ({
+  draggingNodeIds: [] as string[],
+  dropTargetId: null as string | null,
+}));
+
 const toastMocks = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -269,8 +274,10 @@ vi.mock('@xyflow/react', async () => {
       connectionLineComponent?: React.ComponentType;
       nodes: Array<{
         id: string;
+        selected?: boolean;
         type?: string;
         data: Record<string, unknown>;
+        zIndex?: number;
       }>;
       onInit?: (instance: {
         getViewport: () => { x: number; y: number; zoom: number };
@@ -292,7 +299,12 @@ vi.mock('@xyflow/react', async () => {
       snapGrid?: [number, number];
       snapToGrid?: boolean;
     }) => {
-      reactFlowMocks.props({ connectionLineComponent, snapGrid, snapToGrid });
+      reactFlowMocks.props({
+        connectionLineComponent,
+        nodes,
+        snapGrid,
+        snapToGrid,
+      });
       onInit?.({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }) });
       return (
         <div>
@@ -422,7 +434,8 @@ vi.mock('@/hooks/useCanvasPersistence', () => ({
 
 vi.mock('@/hooks/useNodeDrag', () => ({
   useNodeDrag: () => ({
-    dropTargetId: null,
+    draggingNodeIds: nodeDragMocks.draggingNodeIds,
+    dropTargetId: nodeDragMocks.dropTargetId,
     repelAnimationActive: false,
     onNodeDragStart: vi.fn(),
     onNodeDrag: vi.fn(),
@@ -560,6 +573,8 @@ describe('routes/index', () => {
       (name: string) => `safe-${name}`
     );
     reactFlowMocks.props.mockReset();
+    nodeDragMocks.draggingNodeIds = [];
+    nodeDragMocks.dropTargetId = null;
     helperLineMocks.onNodesChange.mockReset();
     toastMocks.error.mockReset();
     toastMocks.success.mockReset();
@@ -817,6 +832,62 @@ describe('routes/index', () => {
         })
       );
     });
+  });
+
+  it('temporarily elevates dragged cards above a folder drop target without changing stored z-order', async () => {
+    nodeDragMocks.dropTargetId = 'folder-high';
+    nodeDragMocks.draggingNodeIds = ['card-low'];
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'card-low',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          zIndex: 1,
+          data: { title: 'Low Card', content: '', color: '#fff' },
+        },
+        {
+          id: 'folder-high',
+          type: 'folder',
+          position: { x: 100, y: 100 },
+          selected: true,
+          zIndex: 5000,
+          data: { title: 'High Folder', subtitle: '', children: [] },
+        },
+      ],
+      edges: [],
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      const calls = reactFlowMocks.props.mock.calls;
+      const lastProps = calls.at(-1)?.[0] as
+        | {
+            nodes: Array<{
+              id: string;
+              zIndex?: number;
+            }>;
+          }
+        | undefined;
+      const renderedCard = lastProps?.nodes.find(
+        (node) => node.id === 'card-low'
+      );
+      const renderedFolder = lastProps?.nodes.find(
+        (node) => node.id === 'folder-high'
+      );
+
+      expect(renderedCard?.zIndex).toBeGreaterThan(
+        (renderedFolder?.zIndex ?? 0) + 1000
+      );
+    });
+
+    expect(
+      useCanvasStore.getState().nodes.find((node) => node.id === 'card-low')
+    ).toMatchObject({ zIndex: 1 });
   });
 
   it('shows an empty canvas guide for empty manifests', async () => {

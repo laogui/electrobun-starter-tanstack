@@ -23,11 +23,21 @@ import { useCanvasStore } from '@/store/canvasStore';
  */
 const isContentNode = (node: Node) => isCanvasContentNode(node.type);
 
+function getDraggingNodeIds(node: Node, draggedNodes: Node[]): string[] {
+  const ids = new Set<string>();
+  for (const draggedNode of draggedNodes) {
+    ids.add(draggedNode.id);
+  }
+  ids.add(node.id);
+  return [...ids];
+}
+
 export function useNodeDrag() {
   const setNodes = useCanvasStore((s) => s.setNodes);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [draggingNodeIds, setDraggingNodeIds] = useState<string[]>([]);
   /** True while dragging a single content/folder node — drives the CSS class
    *  that animates repelled neighbors. Group drags are excluded because their
    *  children re-render each frame and would visibly lag inside the group;
@@ -108,6 +118,7 @@ export function useNodeDrag() {
     (_, node, draggedNodes = []) => {
       saveSnapshot();
       originsRef.current = null;
+      setDraggingNodeIds(getDraggingNodeIds(node, draggedNodes));
       const draggingGroup =
         node.type === 'group' || draggedNodes.some((n) => n.type === 'group');
       setRepelAnimationActive(!draggingGroup && draggedNodes.length <= 1);
@@ -233,6 +244,7 @@ export function useNodeDrag() {
     (_, node, draggedNodes = []) => {
       setDropTargetId(null);
       setRepelAnimationActive(false);
+      setDraggingNodeIds([]);
 
       const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
       draggingIds.add(node.id);
@@ -381,6 +393,7 @@ export function useNodeDrag() {
   return {
     dropTargetId,
     activeGroupId,
+    draggingNodeIds,
     repelAnimationActive,
     onNodeDragStart,
     onNodeDrag,

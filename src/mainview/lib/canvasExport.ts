@@ -25,21 +25,12 @@ export interface CanvasExportDocument {
 const EXPORT_PADDING = 64;
 const EXPORT_MIN_ZOOM = 0.1;
 const EXPORT_MAX_ZOOM = 2;
-/**
- * Oversampling factor for hi-DPI ("retina") PNG exports.
- * The final bitmap dimensions are
- *   logicalWidth  * max(devicePixelRatio * MULTIPLIER, MIN)
- *   logicalHeight * max(devicePixelRatio * MULTIPLIER, MIN)
- * so a Retina (dpr=2) screen exports at ~4x and a standard screen at 3x.
- */
-const EXPORT_PIXEL_RATIO_MULTIPLIER = 2;
-const EXPORT_PIXEL_RATIO_MIN = 3;
 
-function getDefaultExportPixelRatio() {
-  const dpr =
-    typeof window === 'undefined' ? 1 : Math.max(window.devicePixelRatio, 1);
-  return Math.max(dpr * EXPORT_PIXEL_RATIO_MULTIPLIER, EXPORT_PIXEL_RATIO_MIN);
-}
+/**
+ * Fixed 2x pixel ratio for screenshot-style exports.
+ * This produces sharp output on standard screens while keeping file sizes reasonable.
+ */
+const EXPORT_SCREENSHOT_PIXEL_RATIO = 2;
 
 const HIDDEN_REACT_FLOW_CLASSES = [
   'react-flow__minimap',
@@ -129,6 +120,10 @@ export function prepareCanvasExport(
   return { dimensions, nodeBounds, viewport };
 }
 
+function findReactFlowContainerElement(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.react-flow');
+}
+
 function findReactFlowViewportElement(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.react-flow__viewport');
 }
@@ -147,10 +142,60 @@ function shouldIncludeNodeInSnapshot(node: HTMLElement): boolean {
   return true;
 }
 
+/**
+ * Wait for a specified number of milliseconds.
+ */
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Screenshot-style capture: captures the `.react-flow` container element
+ * as it is currently rendered on screen, at 2x pixel ratio for sharpness.
+ * This avoids the shadow/ghosting artifacts caused by re-computing transforms.
+ */
+async function screenshotContainerToPngBlob({
+  backgroundColor,
+  pixelRatio = EXPORT_SCREENSHOT_PIXEL_RATIO,
+}: {
+  backgroundColor: string;
+  pixelRatio?: number;
+}) {
+  const containerEl = findReactFlowContainerElement();
+  if (!containerEl) {
+    throw new Error('Unable to locate React Flow container for export.');
+  }
+
+  const { width, height } = containerEl.getBoundingClientRect();
+
+  const blob = await toBlob(containerEl, {
+    backgroundColor,
+    width,
+    height,
+    pixelRatio,
+    cacheBust: true,
+    filter: (domNode) => {
+      if (!(domNode instanceof HTMLElement)) {
+        return true;
+      }
+      return shouldIncludeNodeInSnapshot(domNode);
+    },
+  });
+
+  if (!blob) {
+    throw new Error('Unable to encode canvas export as PNG.');
+  }
+  return blob;
+}
+
+/**
+ * Legacy viewport-transform-based capture. Used by the thumbnail pipeline
+ * where we need specific output dimensions regardless of what's on screen.
+ */
 async function renderViewportToPngBlob({
   backgroundColor,
   dimensions,
-  pixelRatio = getDefaultExportPixelRatio(),
+  pixelRatio = EXPORT_SCREENSHOT_PIXEL_RATIO,
   viewport,
 }: {
   backgroundColor: string;
@@ -245,8 +290,7 @@ export async function exportReactFlowCanvasToPng({
   pixelRatio,
 }: ExportCanvasOptions) {
   const nodes = getVisibleExportNodes(instance);
-  const prepared = prepareCanvasExport(instance, nodes);
-  if (!prepared) {
+  if (nodes.length === 0) {
     throw new Error('Canvas has no visible nodes to export.');
   }
 
@@ -260,12 +304,27 @@ export async function exportReactFlowCanvasToPng({
     throw error;
   }
 
-  const pngBlob = await renderViewportToPngBlob({
-    backgroundColor,
-    dimensions: prepared.dimensions,
-    pixelRatio,
-    viewport: prepared.viewport,
+  // Screenshot-style export: fit all nodes into the visible viewport,
+  // wait for render, then capture what's actually on screen at 2x.
+  const savedViewport = instance.getViewport();
+
+  // Fit all visible nodes into view with padding
+  instance.fitView({
+    nodes,
+    padding: 0.08,
+    duration: 0,
   });
+
+  // Wait for the viewport change to be painted
+  await waitMs(150);
+
+  const pngBlob = await screenshotContainerToPngBlob({
+    backgroundColor,
+    pixelRatio: pixelRatio ?? EXPORT_SCREENSHOT_PIXEL_RATIO,
+  });
+
+  // Restore the original viewport so the user doesn't see a jump
+  instance.setViewport(savedViewport, { duration: 0 });
 
   if (browserSaveHandle) {
     await writeBlobToBrowserHandle(pngBlob, browserSaveHandle);

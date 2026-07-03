@@ -1,4 +1,4 @@
-import { NodeResizer, useUpdateNodeInternals } from '@xyflow/react';
+import { useUpdateNodeInternals } from '@xyflow/react';
 import * as motion from 'motion/react-m';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
@@ -7,6 +7,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
+import { ResizeHandle } from './_shared/ResizeHandle';
 
 export interface GroupData {
   active?: boolean;
@@ -16,7 +17,7 @@ export interface GroupData {
 }
 
 export interface GroupContentProps {
-  /** Slot for Handles / NodeResizer when wrapped inside a React Flow node. */
+  /** Slot for Handles / resize control when wrapped inside a React Flow node. */
   children?: React.ReactNode;
   data: GroupData;
   /** Enables contentEditable on the label. */
@@ -34,7 +35,7 @@ export interface GroupContentProps {
 /**
  * Pure presentational group container: the translucent colored panel plus the
  * label in the top-left. No store / RPC coupling — reusable for template
- * previews. The `children` slot receives Handles and NodeResizer from the
+ * previews. The `children` slot receives handles and resize controls from the
  * wrapper component.
  */
 export const GroupContent = ({
@@ -138,13 +139,12 @@ const GroupNode = ({
       onLabelDoubleClick={handleDoubleClick}
       selected={selected}
     >
-      <NodeResizer
-        handleClassName="!w-3 !h-3 !bg-blue-500 !border-2 !border-white !rounded-full !-translate-x-1/2 !-translate-y-1/2"
-        isVisible={selected}
-        lineClassName="!border-transparent"
+      <ResizeHandle
+        hoverClassName="group-hover/group-node:opacity-100"
         minHeight={200}
         minWidth={300}
-        onResizeStart={() => saveSnapshot()}
+        nodeId={id}
+        onResizeStart={saveSnapshot}
       />
 
       <NodeHandles />

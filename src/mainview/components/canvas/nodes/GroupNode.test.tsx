@@ -18,8 +18,38 @@ vi.mock('motion/react', () => ({
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
-  NodeResizer: ({ isVisible }: { isVisible: boolean }) => (
-    <div data-testid="node-resizer">{isVisible ? 'visible' : 'hidden'}</div>
+  NodeResizeControl: ({
+    children,
+    maxHeight,
+    maxWidth,
+    minHeight,
+    minWidth,
+    onResizeEnd,
+    onResizeStart,
+  }: {
+    children: React.ReactNode;
+    maxHeight?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    minWidth?: number;
+    onResizeEnd?: () => void;
+    onResizeStart?: () => void;
+  }) => (
+    <div
+      data-max-height={maxHeight}
+      data-max-width={maxWidth}
+      data-min-height={minHeight}
+      data-min-width={minWidth}
+      data-testid="resize-control"
+    >
+      <button onClick={onResizeStart} type="button">
+        start resize
+      </button>
+      <button onClick={onResizeEnd} type="button">
+        end resize
+      </button>
+      {children}
+    </div>
   ),
   useUpdateNodeInternals: () => updateNodeInternalsMock,
   Position: {
@@ -49,6 +79,7 @@ describe('GroupNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
     updateNodeInternalsMock.mockReset();
+    document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -63,12 +94,43 @@ describe('GroupNode', () => {
     );
 
     expect(screen.getByText('Planning')).toBeInTheDocument();
-    expect(screen.getByTestId('node-resizer')).toHaveTextContent('visible');
+    expect(screen.getByTestId('resize-control')).toBeInTheDocument();
     expect(container.querySelector('.selected')).not.toBeNull();
     expect(container.querySelector('.ring-2')).not.toBeNull();
     await waitFor(() => {
       expect(updateNodeInternalsMock).toHaveBeenCalledWith('group-1');
     });
+  });
+
+  it('renders a hover resize affordance for unselected groups', () => {
+    const { container } = render(
+      <GroupNode
+        data={{ active: false, color: 'blue', label: 'Unselected group' }}
+        id="group-3"
+        selected={false}
+      />
+    );
+
+    expect(screen.getByTestId('resize-control')).toBeInTheDocument();
+    expect(screen.getByTestId('resize-control')).toHaveAttribute(
+      'data-min-width',
+      '300'
+    );
+    expect(screen.getByTestId('resize-control')).toHaveAttribute(
+      'data-min-height',
+      '200'
+    );
+    expect(screen.getByTitle('Resize handle')).toBeInTheDocument();
+    expect(
+      container.querySelector('.group-hover\\/group-node\\:opacity-100')
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(document.body.classList.contains('resizing-nwse')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'end resize' }));
+    expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
 
   it('updates label on blur and falls back to default label when cleared', () => {

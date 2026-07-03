@@ -1171,7 +1171,6 @@ describe('src/bun/index helpers', () => {
     });
 
     expect(openFileDialogMock).toHaveBeenCalledWith({
-      allowedFileTypes: 'png',
       allowsMultipleSelection: false,
       canChooseDirectory: true,
       canChooseFiles: false,
@@ -1214,6 +1213,18 @@ describe('src/bun/index helpers', () => {
       '/tmp/exports/Unsafe Canvas.json',
       '{"ok":true}'
     );
+    expect(openFileDialogMock).toHaveBeenNthCalledWith(1, {
+      allowsMultipleSelection: false,
+      canChooseDirectory: true,
+      canChooseFiles: false,
+      startingFolder: '~/Desktop',
+    });
+    expect(openFileDialogMock).toHaveBeenNthCalledWith(2, {
+      allowsMultipleSelection: false,
+      canChooseDirectory: true,
+      canChooseFiles: false,
+      startingFolder: '~/Desktop',
+    });
   });
 
   it('exportPng handles cancel and rejects invalid data urls', async () => {

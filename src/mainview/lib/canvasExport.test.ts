@@ -4,6 +4,7 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T/;
+const IMAGE_PLACEHOLDER_RE = /^data:image\/gif;base64,/;
 const NO_VISIBLE_NODES_RE = /no visible nodes/i;
 const RHF_CONTAINER_RE = /React Flow container/i;
 
@@ -144,6 +145,8 @@ describe('canvas export helpers', () => {
       width: 800,
       height: 600,
       pixelRatio: 2,
+      imagePlaceholder: expect.stringMatching(IMAGE_PLACEHOLDER_RE),
+      onImageErrorHandler: expect.any(Function),
     });
     // No style.transform override — screenshot captures what's on screen
     expect(options.style).toBeUndefined();
@@ -207,6 +210,33 @@ describe('canvas export helpers', () => {
     expect(filter(make('react-flow__controls'))).toBe(false);
     expect(filter(make('react-flow__attribution'))).toBe(false);
     expect(filter(make('react-flow__panel some-extra'))).toBe(false);
+  });
+
+  it('restores the original viewport when PNG screenshot capture fails', async () => {
+    const containerEl = document.createElement('div');
+    containerEl.className = 'react-flow';
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ width: 800, height: 600, x: 0, y: 0, top: 0, left: 0 }),
+    });
+    document.body.appendChild(containerEl);
+
+    htmlToImageMocks.toBlob.mockRejectedValue('screenshot-failed');
+
+    const instance = createInstance([createNode('node-1')]);
+
+    await expect(
+      exportReactFlowCanvasToPng({
+        backgroundColor: '#fff',
+        fileName: 'restore-on-failure',
+        instance,
+        pixelRatio: 2,
+      })
+    ).rejects.toBe('screenshot-failed');
+
+    expect(instance.setViewport).toHaveBeenCalledWith(
+      { x: 0, y: 0, zoom: 1 },
+      { duration: 0 }
+    );
   });
 
   it('builds a self-contained JSON document and skips detached / hidden nodes plus dangling edges', () => {

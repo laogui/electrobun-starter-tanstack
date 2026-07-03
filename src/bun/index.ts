@@ -2024,14 +2024,7 @@ async function main() {
             throw new Error('Invalid PNG data URL');
           }
 
-          const selectedFolders = await Utils.openFileDialog({
-            allowedFileTypes: 'png',
-            allowsMultipleSelection: false,
-            canChooseDirectory: true,
-            canChooseFiles: false,
-            startingFolder: '~/Desktop',
-          });
-          const selectedFolder = selectedFolders.find(Boolean);
+          const selectedFolder = await pickExportFolder();
           if (!selectedFolder) {
             return { canceled: true, success: false };
           }
@@ -2045,14 +2038,7 @@ async function main() {
         },
 
         exportJson: async ({ json, fileName }) => {
-          const selectedFolders = await Utils.openFileDialog({
-            allowedFileTypes: 'json',
-            allowsMultipleSelection: false,
-            canChooseDirectory: true,
-            canChooseFiles: false,
-            startingFolder: '~/Desktop',
-          });
-          const selectedFolder = selectedFolders.find(Boolean);
+          const selectedFolder = await pickExportFolder();
           if (!selectedFolder) {
             return { canceled: true, success: false };
           }

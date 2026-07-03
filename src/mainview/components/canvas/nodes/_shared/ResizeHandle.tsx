@@ -9,8 +9,8 @@ interface ResizeHandleProps {
    * detect it; the matching `group/<name>` marker lives on the node wrapper.
    */
   hoverClassName: string;
-  maxHeight: number;
-  maxWidth: number;
+  maxHeight?: number;
+  maxWidth?: number;
   minHeight: number;
   minWidth: number;
   nodeId: string;

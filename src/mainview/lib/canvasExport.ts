@@ -52,6 +52,9 @@ const HIDDEN_REACT_FLOW_CLASSES = [
   'react-flow__panel',
 ];
 
+const TRANSPARENT_IMAGE_PLACEHOLDER =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
 interface ExportCanvasOptions {
   backgroundColor: string;
   fileName: string;
@@ -162,6 +165,8 @@ function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function ignoreSnapshotImageError() {}
+
 /**
  * Screenshot-style capture: captures the `.react-flow` container element
  * as it is currently rendered on screen, at 2x pixel ratio for sharpness.
@@ -187,6 +192,8 @@ async function screenshotContainerToPngBlob({
     height,
     pixelRatio,
     cacheBust: true,
+    imagePlaceholder: TRANSPARENT_IMAGE_PLACEHOLDER,
+    onImageErrorHandler: ignoreSnapshotImageError,
     filter: (domNode) => {
       if (!(domNode instanceof HTMLElement)) {
         return true;
@@ -227,6 +234,8 @@ async function renderViewportToPngBlob({
     height: dimensions.height,
     pixelRatio,
     cacheBust: true,
+    imagePlaceholder: TRANSPARENT_IMAGE_PLACEHOLDER,
+    onImageErrorHandler: ignoreSnapshotImageError,
     style: {
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
@@ -322,22 +331,27 @@ export async function exportReactFlowCanvasToPng({
   const savedViewport = instance.getViewport();
 
   // Fit all visible nodes into view with padding
-  instance.fitView({
-    nodes,
-    padding: EXPORT_FIT_VIEW_PADDING,
-    duration: 0,
-  });
+  const pngBlob = await (async () => {
+    try {
+      instance.fitView({
+        nodes,
+        padding: EXPORT_FIT_VIEW_PADDING,
+        duration: 0,
+      });
 
-  // Wait for the viewport change to be painted
-  await waitMs(VIEWPORT_RENDER_DELAY_MS);
+      // Wait for the viewport change to be painted
+      await waitMs(VIEWPORT_RENDER_DELAY_MS);
 
-  const pngBlob = await screenshotContainerToPngBlob({
-    backgroundColor,
-    pixelRatio: pixelRatio ?? EXPORT_SCREENSHOT_PIXEL_RATIO,
-  });
-
-  // Restore the original viewport so the user doesn't see a jump
-  instance.setViewport(savedViewport, { duration: 0 });
+      return await screenshotContainerToPngBlob({
+        backgroundColor,
+        pixelRatio: pixelRatio ?? EXPORT_SCREENSHOT_PIXEL_RATIO,
+      });
+    } finally {
+      // Restore the original viewport so export failures do not leave the canvas
+      // stuck at the temporary fit-to-export view.
+      instance.setViewport(savedViewport, { duration: 0 });
+    }
+  })();
 
   if (browserSaveHandle) {
     await writeBlobToBrowserHandle(pngBlob, browserSaveHandle);

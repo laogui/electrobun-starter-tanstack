@@ -32,6 +32,19 @@ const EXPORT_MAX_ZOOM = 2;
  */
 const EXPORT_SCREENSHOT_PIXEL_RATIO = 2;
 
+/**
+ * Padding ratio for fitView when capturing the screenshot export.
+ * Gives a small margin around all nodes in the captured frame.
+ */
+const EXPORT_FIT_VIEW_PADDING = 0.08;
+
+/**
+ * Time in ms to wait after programmatic viewport changes before capturing.
+ * React Flow applies transforms synchronously but the browser needs a
+ * repaint cycle to commit the CSS changes to the rendered layer.
+ */
+const VIEWPORT_RENDER_DELAY_MS = 150;
+
 const HIDDEN_REACT_FLOW_CLASSES = [
   'react-flow__minimap',
   'react-flow__controls',
@@ -311,12 +324,12 @@ export async function exportReactFlowCanvasToPng({
   // Fit all visible nodes into view with padding
   instance.fitView({
     nodes,
-    padding: 0.08,
+    padding: EXPORT_FIT_VIEW_PADDING,
     duration: 0,
   });
 
   // Wait for the viewport change to be painted
-  await waitMs(150);
+  await waitMs(VIEWPORT_RENDER_DELAY_MS);
 
   const pngBlob = await screenshotContainerToPngBlob({
     backgroundColor,

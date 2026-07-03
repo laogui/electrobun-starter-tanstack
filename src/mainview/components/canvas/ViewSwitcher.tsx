@@ -133,6 +133,7 @@ interface RenderCreateMenuItemDeps {
     options?: CreateNodeOptions
   ) => void;
   openAssetPicker: () => void;
+  openImagePicker: () => void;
   openRecorder: () => void;
   setLinkFormOpen: (open: boolean) => void;
 }
@@ -147,6 +148,7 @@ function renderCreateMenuItem(
   {
     onCreateNode,
     openAssetPicker,
+    openImagePicker,
     openRecorder,
     setLinkFormOpen,
   }: RenderCreateMenuItemDeps
@@ -173,6 +175,10 @@ function renderCreateMenuItem(
           }
           if (type === 'asset') {
             openAssetPicker();
+            return;
+          }
+          if (type === 'image') {
+            openImagePicker();
             return;
           }
           if (type === 'recording') {
@@ -238,6 +244,7 @@ export function ViewSwitcher({
   onCreateNode,
   onExportCanvas,
   onExportCanvasJson,
+  onOpenImagePicker,
   onOpenNoteLibrary,
   onOpenRecorder,
   createMenuOpen,
@@ -250,6 +257,7 @@ export function ViewSwitcher({
   ) => void;
   onExportCanvas?: () => void;
   onExportCanvasJson?: () => void;
+  onOpenImagePicker: () => void;
   onOpenNoteLibrary?: () => void;
   onOpenRecorder: () => void;
   setCreateMenuOpen: (v: boolean) => void;
@@ -786,6 +794,7 @@ export function ViewSwitcher({
                       onCreateNode,
                       setLinkFormOpen,
                       openAssetPicker: () => assetFileInputRef.current?.click(),
+                      openImagePicker: onOpenImagePicker,
                       openRecorder: onOpenRecorder,
                     })
                   )}
@@ -797,6 +806,7 @@ export function ViewSwitcher({
                       onCreateNode,
                       setLinkFormOpen,
                       openAssetPicker: () => assetFileInputRef.current?.click(),
+                      openImagePicker: onOpenImagePicker,
                       openRecorder: onOpenRecorder,
                     })
                   )}

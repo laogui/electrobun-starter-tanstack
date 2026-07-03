@@ -153,6 +153,7 @@ const resetStore = () => {
 const renderViewSwitcher = ({
   createMenuOpen = false,
   onCreateNode = vi.fn(),
+  onOpenImagePicker = vi.fn(),
   onOpenRecorder = vi.fn(),
   setCreateMenuOpen = vi.fn(),
 }: {
@@ -161,6 +162,7 @@ const renderViewSwitcher = ({
     type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
+  onOpenImagePicker?: () => void;
   onOpenRecorder?: () => void;
   setCreateMenuOpen?: (v: boolean) => void;
 } = {}) =>
@@ -168,6 +170,7 @@ const renderViewSwitcher = ({
     <ViewSwitcher
       createMenuOpen={createMenuOpen}
       onCreateNode={onCreateNode}
+      onOpenImagePicker={onOpenImagePicker}
       onOpenRecorder={onOpenRecorder}
       setCreateMenuOpen={setCreateMenuOpen}
     />
@@ -622,15 +625,22 @@ describe('viewSwitcher', () => {
 
   it('creates supported nodes from the create menu', async () => {
     const onCreateNode = vi.fn();
+    const onOpenImagePicker = vi.fn();
     const onOpenRecorder = vi.fn();
-    renderViewSwitcher({ createMenuOpen: true, onCreateNode, onOpenRecorder });
+    renderViewSwitcher({
+      createMenuOpen: true,
+      onCreateNode,
+      onOpenImagePicker,
+      onOpenRecorder,
+    });
 
     await waitFor(() => {
       expect(rpcMocks.rpcListViews).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Image' }));
-    expect(onCreateNode).toHaveBeenCalledWith('image');
+    expect(onOpenImagePicker).toHaveBeenCalledTimes(1);
+    expect(onCreateNode).not.toHaveBeenCalledWith('image');
 
     const fileItem = screen.getByRole('menuitem', { name: 'File' });
     expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');

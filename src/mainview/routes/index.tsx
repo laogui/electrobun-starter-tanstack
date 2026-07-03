@@ -552,10 +552,34 @@ function CanvasComponent() {
     [onCreateNode, recorderNumber, setRecorderNumber]
   );
 
+  // Opens the shared hidden file input used by asset/image creation. The
+  // picked file flows through `onAssetFileInputChange` into
+  // `createAssetsFromFiles`, whose image branch sizes the card to the
+  // image's aspect ratio and persists it.
+  const openAssetFilePicker = useCallback(
+    (accept: string, anchorCenter?: { x: number; y: number }) => {
+      pendingAssetAnchorRef.current = anchorCenter;
+      const input = assetFileInputRef.current;
+      if (!input) {
+        return;
+      }
+      input.accept = accept;
+      input.click();
+    },
+    []
+  );
+
+  // Bottom create menu's "Image" entry: pick a file first, then create the
+  // card at the viewport center (the picker-change handler's default anchor).
+  const openImagePicker = useCallback(() => {
+    openAssetFilePicker('image/*');
+  }, [openAssetFilePicker]);
+
   // Unified create entry point shared with the canvas right-click menu. Plain
-  // kinds are created immediately; `link` opens the URL popover, `asset`
-  // opens the file picker, and `recording` opens the microphone dialog —
-  // mirroring the bottom create menu's special flows.
+  // kinds are created immediately; `link` opens the URL popover, `asset` and
+  // `image` open the file picker (image restricted to image files), and
+  // `recording` opens the microphone dialog — mirroring the bottom create
+  // menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
       if (kind === 'link') {
@@ -565,9 +589,11 @@ function CanvasComponent() {
         });
         return;
       }
-      if (kind === 'asset') {
-        pendingAssetAnchorRef.current = request?.anchorCenter;
-        assetFileInputRef.current?.click();
+      if (kind === 'asset' || kind === 'image') {
+        openAssetFilePicker(
+          kind === 'image' ? 'image/*' : '',
+          request?.anchorCenter
+        );
         return;
       }
       if (kind === 'recording') {
@@ -581,7 +607,7 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [onCreateNode, openRecorder, setLinkPrompt]
+    [onCreateNode, openAssetFilePicker, openRecorder, setLinkPrompt]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -1409,6 +1435,7 @@ function CanvasComponent() {
         onCreateNode={onCreateNode}
         onExportCanvas={onExportCanvas}
         onExportCanvasJson={onExportCanvasJson}
+        onOpenImagePicker={openImagePicker}
         onOpenNoteLibrary={onOpenNoteLibrary}
         onOpenRecorder={openRecorder}
         setCreateMenuOpen={setCreateMenuOpen}

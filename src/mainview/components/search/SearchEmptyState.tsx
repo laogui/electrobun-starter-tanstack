@@ -38,7 +38,7 @@ interface SearchEmptyStateProps {
 function rowClass(active: boolean): string {
   return `flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm outline-hidden transition-colors ${
     active
-      ? 'bg-blue-50 text-blue-900 dark:bg-blue-500/10 dark:text-blue-100'
+      ? 'bg-accent-softer text-accent-strong'
       : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
   }`;
 }
@@ -196,7 +196,7 @@ export function SearchEmptyState({
         </section>
       ) : null}
 
-      <div className="flex items-center gap-4 border-gray-100 border-t px-4 py-2.5 text-[11px] text-gray-400 dark:border-neutral-800 dark:text-gray-500">
+      <div className="flex items-center gap-4 border-gray-100 border-t px-4 py-2.5 text-2xs text-gray-500 dark:border-neutral-800 dark:text-gray-400">
         <span className="flex items-center gap-1">
           <Kbd>↑</Kbd>
           <Kbd>↓</Kbd>
@@ -239,7 +239,7 @@ function SectionHeader({
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex min-w-[18px] items-center justify-center gap-0.5 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-sans text-[10px] text-gray-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-400">
+    <kbd className="inline-flex min-w-[18px] items-center justify-center gap-0.5 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-sans text-3xs text-gray-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-400">
       {children}
     </kbd>
   );

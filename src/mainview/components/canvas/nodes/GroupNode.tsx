@@ -1,13 +1,13 @@
-import { useUpdateNodeInternals } from '@xyflow/react';
-import * as motion from 'motion/react-m';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useUpdateNodeInternals } from "@xyflow/react";
+import * as motion from "motion/react-m";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
-import { cn } from '@/lib/utils';
-import { useCanvasStore } from '@/store/canvasStore';
+import { cn } from "@/lib/utils";
+import { useCanvasStore } from "@/store/canvasStore";
 
-import * as m from '../../../../paraglide/messages.js';
-import { NodeHandles } from './_shared/NodeHandles';
-import { ResizeHandle } from './_shared/ResizeHandle';
+import * as m from "../../../../paraglide/messages.js";
+import { NodeHandles } from "./_shared/NodeHandles";
+import { ResizeHandle } from "./_shared/ResizeHandle";
 
 export interface GroupData {
   active?: boolean;
@@ -50,10 +50,10 @@ export const GroupContent = ({
   <motion.div
     animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
     className={cn(
-      `group/group-node canvas-group group-${data.color || 'blue'} size-full`,
-      selected && 'selected',
-      data.active && 'ring-2 ring-blue-400 ring-offset-2',
-      data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+      `group/group-node canvas-group group-${data.color || "blue"} size-full`,
+      selected && "selected",
+      data.active && "ring-2 ring-accent ring-offset-2",
+      data.isHidden ? "pointer-events-none opacity-0" : "opacity-100",
     )}
     initial={{ opacity: 0, scale: 0.95 }}
     transition={{ duration: 0.2 }}
@@ -63,9 +63,9 @@ export const GroupContent = ({
     <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
       <div
         className={cn(
-          'nodrag nopan font-semibold text-xs tracking-wide outline-hidden',
-          'text-gray-600',
-          editingLabel && 'rounded-sm px-0.5 ring-1 ring-blue-400/40'
+          "nodrag nopan font-semibold text-xs tracking-wide outline-hidden",
+          "text-gray-600",
+          editingLabel && "rounded-sm px-0.5 ring-1 ring-accent/40",
         )}
         contentEditable={editingLabel}
         onBlur={onLabelBlur}
@@ -78,10 +78,10 @@ export const GroupContent = ({
       <span
         aria-hidden="true"
         className={cn(
-          'text-gray-300 text-xs transition-opacity duration-150',
+          "text-gray-300 text-xs transition-opacity duration-150",
           selected || editingLabel
-            ? 'opacity-100'
-            : 'opacity-0 group-hover/group-node:opacity-100'
+            ? "opacity-100"
+            : "opacity-0 group-hover/group-node:opacity-100",
         )}
       >
         ⋮⋮

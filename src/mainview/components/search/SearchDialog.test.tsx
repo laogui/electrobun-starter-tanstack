@@ -243,11 +243,11 @@ describe('searchDialog interactions', () => {
     });
     render(<SearchDialog />);
     const input = screen.getByLabelText('Search query');
-    expect(activeResult(0)).toHaveClass('bg-blue-50');
+    expect(activeResult(0)).toHaveClass('bg-accent-softer');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(activeResult(1)).toHaveClass('bg-blue-50');
+    expect(activeResult(1)).toHaveClass('bg-accent-softer');
     fireEvent.keyDown(input, { key: 'ArrowUp' });
-    expect(activeResult(0)).toHaveClass('bg-blue-50');
+    expect(activeResult(0)).toHaveClass('bg-accent-softer');
   });
 
   it('resets active selection when results change', async () => {
@@ -272,7 +272,7 @@ describe('searchDialog interactions', () => {
     const { rerender } = render(<SearchDialog rfInstance={ref} />);
     const input = screen.getByLabelText('Search query');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(activeResult(1)).toHaveClass('bg-blue-50');
+    expect(activeResult(1)).toHaveClass('bg-accent-softer');
 
     setSearch({ query: 'first', results: [makeResult({ id: 'r1' })] });
     rerender(<SearchDialog rfInstance={ref} />);
@@ -449,7 +449,7 @@ describe('searchDialog interactions', () => {
     // Only the Other Canvas row remains and becomes the active option.
     const options = getResultButtons();
     expect(options).toHaveLength(1);
-    expect(activeResult(0)).toHaveClass('bg-blue-50');
+    expect(activeResult(0)).toHaveClass('bg-accent-softer');
   });
 
   it('shows recent cards and canvases in the empty state (E3)', () => {
@@ -499,11 +499,11 @@ describe('searchDialog interactions', () => {
     // Recent card first, then the "Other Canvas" jump target.
     const options = getResultButtons();
     expect(options).toHaveLength(2);
-    expect(activeResult(0)).toHaveClass('bg-blue-50');
+    expect(activeResult(0)).toHaveClass('bg-accent-softer');
 
     const input = screen.getByLabelText('Search query');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(activeResult(1)).toHaveClass('bg-blue-50');
+    expect(activeResult(1)).toHaveClass('bg-accent-softer');
 
     // Enter on the canvas row switches view and closes the dialog.
     fireEvent.keyDown(input, { key: 'Enter' });

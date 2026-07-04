@@ -108,7 +108,7 @@ function ShortcutGroupSection({
   return (
     <section aria-labelledby={`shortcuts-${heading}`} className="space-y-2">
       <h3
-        className="font-medium text-[11px] text-neutral-500 uppercase tracking-wide dark:text-neutral-400"
+        className="font-medium text-2xs text-neutral-500 uppercase tracking-wide dark:text-neutral-400"
         id={`shortcuts-${heading}`}
       >
         {heading}
@@ -132,11 +132,11 @@ function ShortcutGroupSection({
                   <div className="flex flex-wrap items-center gap-1.5">
                     {entry.keys.map((key, keyIndex) => (
                       <span className="inline-flex items-center" key={key}>
-                        <kbd className="inline-flex h-6 items-center rounded border border-neutral-300 bg-neutral-50 px-1.5 font-mono text-[11px] text-neutral-700 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+                        <kbd className="inline-flex h-6 items-center rounded border border-neutral-300 bg-neutral-50 px-1.5 font-mono text-2xs text-neutral-700 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
                           {key}
                         </kbd>
                         {keyIndex < entry.keys.length - 1 ? (
-                          <span className="mx-1 text-[11px] text-neutral-400 dark:text-neutral-500">
+                          <span className="mx-1 text-2xs text-neutral-400 dark:text-neutral-500">
                             /
                           </span>
                         ) : null}

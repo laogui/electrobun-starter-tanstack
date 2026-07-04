@@ -20,7 +20,7 @@ export function TypeBadge({
   return (
     <span
       className={cn(
-        'rounded-full border px-2 py-1 font-semibold text-[11px] uppercase tracking-normal',
+        'rounded-full border px-2 py-1 font-semibold text-2xs uppercase tracking-normal',
         missing
           ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200'
           : 'border-black/10 bg-white/60 text-neutral-500 dark:border-white/10 dark:bg-white/10 dark:text-neutral-300',

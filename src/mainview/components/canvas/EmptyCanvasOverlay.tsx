@@ -9,7 +9,7 @@ import {
 import * as m from '../../../paraglide/messages.js';
 
 const FOCUS_RING =
-  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
 
 export function EmptyCanvasOverlay({
   onCreateNote,
@@ -22,7 +22,7 @@ export function EmptyCanvasOverlay({
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6">
       <div className="pointer-events-auto w-full max-w-[560px] rounded-lg border border-black/10 bg-white/90 p-6 shadow-black/10 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/88 dark:shadow-black/30">
         <div className="mb-5 flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-accent-softer text-accent-strong">
             <FilePlus size={22} />
           </div>
           <div className="min-w-0">
@@ -37,7 +37,7 @@ export function EmptyCanvasOverlay({
 
         <div className="grid gap-2 sm:grid-cols-3">
           <button
-            className={`flex min-h-22 flex-col items-start justify-between rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-left text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-400/25 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/25 ${FOCUS_RING}`}
+            className={`flex min-h-22 flex-col items-start justify-between rounded-md border border-accent-soft bg-accent-softer px-4 py-3 text-left text-accent-strong transition-colors hover:bg-accent-soft ${FOCUS_RING}`}
             onClick={onCreateNote}
             type="button"
           >

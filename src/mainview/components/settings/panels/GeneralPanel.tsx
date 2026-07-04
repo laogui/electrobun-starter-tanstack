@@ -85,7 +85,7 @@ function SettingsSelect<TValue extends string>({
         </div>
         <SelectTrigger
           aria-labelledby={id}
-          className="inline-flex h-8 w-full max-w-[240px] items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-blue-500/60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+          className="inline-flex h-8 w-full max-w-[240px] items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-accent/60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
         >
           <SelectValue>{getSelectedLabel(options, value)}</SelectValue>
         </SelectTrigger>

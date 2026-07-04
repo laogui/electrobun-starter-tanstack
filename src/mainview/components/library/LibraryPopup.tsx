@@ -300,7 +300,7 @@ function LibraryHeader({
           <h2 className="font-semibold text-[15px] text-gray-900 leading-tight tracking-tight dark:text-gray-100">
             {m.library_title()}
           </h2>
-          <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+          <span className="text-2xs text-gray-400 dark:text-neutral-500">
             {m.library_item_count({ count: totalItems })}
           </span>
         </div>
@@ -461,7 +461,7 @@ function LibraryGroupSection({
         <h3 className="font-semibold text-[12px] text-gray-700 uppercase tracking-wide dark:text-neutral-300">
           {heading}
         </h3>
-        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-[10px] text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-3xs text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
           {group.items.length}
         </span>
       </div>

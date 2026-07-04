@@ -297,8 +297,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                     className={cn(
                       'group px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
                       idx > 0 && 'border-black/5 border-t dark:border-white/5',
-                      isSelected &&
-                        'bg-blue-50/80 hover:bg-blue-50 dark:bg-blue-500/10 dark:hover:bg-blue-500/15'
+                      isSelected && 'bg-accent-softer hover:bg-accent-soft'
                     )}
                     draggable
                     key={entry.id}
@@ -331,7 +330,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                       </button>
                       <button
                         aria-label="Pin to canvas"
-                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-700 group-hover:opacity-100 dark:text-blue-400 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-2xs text-accent-strong opacity-0 transition-opacity hover:bg-accent-softer group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePin(entry.nodeId);

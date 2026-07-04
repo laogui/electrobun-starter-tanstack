@@ -45,7 +45,7 @@ export function DeleteFolderConfirmDialog({
           </div>
           <div className="flex justify-end gap-2">
             <button
-              className="h-8 rounded-md px-3 font-medium text-[13px] text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:text-gray-300 dark:hover:bg-white/10 dark:hover:text-white"
+              className="h-8 rounded-md px-3 font-medium text-[13px] text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 dark:text-gray-300 dark:hover:bg-white/10 dark:hover:text-white"
               onClick={onCancel}
               ref={cancelRef}
               type="button"

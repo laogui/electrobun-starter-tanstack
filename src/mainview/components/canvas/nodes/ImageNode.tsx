@@ -490,7 +490,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             >
               <input
                 aria-label="Rename image"
-                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => setRenameDraft(e.target.value)}
                 onKeyDown={(e) => {

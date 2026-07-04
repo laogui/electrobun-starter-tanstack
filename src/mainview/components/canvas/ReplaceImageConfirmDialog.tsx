@@ -1,8 +1,8 @@
-import { Dialog } from '@base-ui/react/dialog';
-import { ImagePlus } from 'lucide-react';
-import { useRef } from 'react';
+import { Dialog } from "@base-ui/react/dialog";
+import { ImagePlus } from "lucide-react";
+import { useRef } from "react";
 
-import * as m from '../../../paraglide/messages.js';
+import * as m from "../../../paraglide/messages.js";
 
 export function ReplaceImageConfirmDialog({
   onCancel,
@@ -31,7 +31,7 @@ export function ReplaceImageConfirmDialog({
           initialFocus={confirmRef}
         >
           <div className="mb-4 flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-softer text-accent-strong">
               <ImagePlus size={17} />
             </div>
             <div className="min-w-0">
@@ -52,7 +52,7 @@ export function ReplaceImageConfirmDialog({
               {m.replace_image_confirm_cancel()}
             </button>
             <button
-              className="h-8 rounded-md bg-blue-600 px-3 font-medium text-[13px] text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:bg-blue-500 dark:hover:bg-blue-400"
+              className="focus-visible:offset-2 h-8 rounded-md bg-accent px-3 font-medium text-[13px] text-accent-foreground transition-colors hover:bg-accent-strong focus-visible:outline-2 focus-visible:outline-accent dark:hover:bg-accent"
               onClick={onConfirm}
               ref={confirmRef}
               type="button"

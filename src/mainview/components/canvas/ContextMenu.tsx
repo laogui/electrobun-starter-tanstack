@@ -810,7 +810,7 @@ export function CanvasContextMenu({
                     size={14}
                   />
                 ) : item.shortcut ? (
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  <span className="text-2xs text-gray-400 dark:text-gray-500">
                     {item.shortcut}
                   </span>
                 ) : null}

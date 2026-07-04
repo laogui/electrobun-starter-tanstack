@@ -137,7 +137,7 @@ export function RecordingRecorder({
         open
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="truncate font-medium text-[11px] text-neutral-400 uppercase tracking-wide dark:text-neutral-500">
+          <span className="truncate font-medium text-2xs text-neutral-400 uppercase tracking-wide dark:text-neutral-500">
             {title}
           </span>
           <span className="shrink-0 font-medium text-[13px] text-neutral-500 tabular-nums dark:text-neutral-300">

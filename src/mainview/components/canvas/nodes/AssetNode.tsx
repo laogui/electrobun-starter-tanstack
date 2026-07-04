@@ -335,7 +335,7 @@ function VideoThumbnail({
         </div>
       </div>
       {duration ? (
-        <span className="absolute right-2 bottom-2 rounded-md bg-black/70 px-2 py-1 font-medium text-[11px] text-white">
+        <span className="absolute right-2 bottom-2 rounded-md bg-black/70 px-2 py-1 font-medium text-2xs text-white">
           {duration}
         </span>
       ) : null}
@@ -521,7 +521,7 @@ function PdfThumbnail({ asset }: { asset: AssetNodeData }) {
     <div className="relative size-full overflow-hidden bg-gradient-to-b from-rose-50/80 to-rose-100/70 dark:from-rose-950/30 dark:to-rose-950/50">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
         <FilePageGlyph badge="PDF" badgeClassName="bg-rose-600" />
-        <span className="font-semibold text-[10px] text-rose-700/90 uppercase tracking-wide dark:text-rose-300">
+        <span className="font-semibold text-3xs text-rose-700/90 uppercase tracking-wide dark:text-rose-300">
           {asset.mimeType === 'application/pdf' ? 'PDF document' : 'Document'}
         </span>
       </div>
@@ -548,7 +548,7 @@ function TextThumbnail({ asset }: { asset: AssetNodeData }) {
   return (
     <div className="relative size-full overflow-hidden bg-neutral-50 p-4 dark:bg-black/20">
       {hasExcerpt ? (
-        <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-neutral-700 leading-relaxed dark:text-neutral-200">
+        <pre className="whitespace-pre-wrap break-words font-mono text-2xs text-neutral-700 leading-relaxed dark:text-neutral-200">
           {excerpt}
         </pre>
       ) : (
@@ -579,7 +579,7 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
           <FileArchive size={15} />
-          <span className="font-semibold text-[11px] uppercase tracking-wide">
+          <span className="font-semibold text-2xs uppercase tracking-wide">
             {countLabel}
           </span>
         </div>
@@ -588,7 +588,7 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
         <ul className="flex flex-col gap-1">
           {topFiles.map((name) => (
             <li
-              className="truncate rounded-md bg-white/70 px-2 py-1 font-mono text-[11px] text-neutral-700 dark:bg-black/30 dark:text-neutral-200"
+              className="truncate rounded-md bg-white/70 px-2 py-1 font-mono text-2xs text-neutral-700 dark:bg-black/30 dark:text-neutral-200"
               key={name}
               title={name}
             >
@@ -596,7 +596,7 @@ function ArchiveThumbnail({ asset }: { asset: AssetNodeData }) {
             </li>
           ))}
           {hiddenCount > 0 ? (
-            <li className="px-2 text-[11px] text-neutral-500 dark:text-neutral-400">
+            <li className="px-2 text-2xs text-neutral-500 dark:text-neutral-400">
               +{hiddenCount} more
             </li>
           ) : null}
@@ -1168,7 +1168,7 @@ const AssetNode = ({
             >
               <input
                 aria-label="Rename asset"
-                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+                className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => {
                   setRenameState((current) => ({

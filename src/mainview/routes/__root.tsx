@@ -25,8 +25,10 @@ import { setLocale } from '../../paraglide/runtime.js';
 
 /**
  * Map font preference → font-family stack applied via inline style on
- * `<html>`. `system` falls through to the global Inter stack defined in
- * `index.css` (we simply remove the override).
+ * `<html>`. `system` removes the override so the document falls back to the
+ * `--font-sans` token defined in `index.css` (a tuned system-UI stack, not a
+ * bundled webfont). The `serif` and `mono` stacks mirror the `--font-serif`
+ * and `--font-mono` tokens there; keep them in sync.
  */
 const FONT_FAMILY_STACKS: Record<FontFamilySetting, string | null> = {
   system: null,
@@ -188,7 +190,7 @@ function RootDocument() {
               <span className="flex-1 truncate">
                 {m.titlebar_search_placeholder()}
               </span>
-              <kbd className="hidden text-[10px] text-neutral-400 sm:inline dark:text-neutral-500">
+              <kbd className="hidden text-3xs text-neutral-500 sm:inline dark:text-neutral-400">
                 {isMac ? '⌘K' : '⌃K'}
               </kbd>
             </button>

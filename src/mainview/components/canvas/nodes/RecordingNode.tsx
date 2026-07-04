@@ -161,7 +161,7 @@ export const RecordingContent = ({
       <div className="flex items-center justify-between gap-3">
         <span
           className={cn(
-            'truncate font-medium text-[11px] uppercase tracking-wide',
+            'truncate font-medium text-2xs uppercase tracking-wide',
             isDark ? 'text-neutral-300' : 'text-neutral-400'
           )}
           title={title}
@@ -170,7 +170,7 @@ export const RecordingContent = ({
         </span>
         <span
           className={cn(
-            'shrink-0 font-medium text-[11px] tabular-nums tracking-wide',
+            'shrink-0 font-medium text-2xs tabular-nums tracking-wide',
             isDark ? 'text-neutral-300' : 'text-neutral-400'
           )}
         >
@@ -418,7 +418,7 @@ const RecordingNode = ({
           >
             <input
               aria-label="Rename recording"
-              className="w-full rounded-lg border border-black/15 bg-white px-3 py-1.5 font-semibold text-neutral-900 text-sm shadow-md outline-hidden focus:border-blue-400 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+              className="w-full rounded-lg border border-black/15 bg-white px-3 py-1.5 font-semibold text-neutral-900 text-sm shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
               onBlur={commitRename}
               onChange={(e) => setRenameDraft(e.target.value)}
               onKeyDown={(e) => {

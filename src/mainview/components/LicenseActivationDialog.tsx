@@ -1,8 +1,8 @@
-import { X } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { mockLicenseAPI } from '@/lib/license-api-mock';
-import { rpcActivateLicense } from '@/lib/rpc-license';
+import { X } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { mockLicenseAPI } from "@/lib/license-api-mock";
+import { rpcActivateLicense } from "@/lib/rpc-license";
 
 interface LicenseActivationDialogProps {
   onClose: () => void;
@@ -21,7 +21,7 @@ function showTestKeys() {
         </div>
       ))}
     </div>,
-    { duration: 10_000 }
+    { duration: 10_000 },
   );
 }
 
@@ -30,7 +30,7 @@ export function LicenseActivationDialog({
   onClose,
   onSuccess,
 }: LicenseActivationDialogProps) {
-  const [key, setKey] = useState('');
+  const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [useMock, setUseMock] = useState(false);
 
@@ -38,7 +38,7 @@ export function LicenseActivationDialog({
     const trimmedKey = key.trim().toUpperCase();
 
     if (!trimmedKey) {
-      toast.error('Please enter a license key');
+      toast.error("Please enter a license key");
       return;
     }
 
@@ -60,16 +60,16 @@ export function LicenseActivationDialog({
       }
 
       if (result?.success) {
-        toast.success('License activated successfully!');
-        setKey('');
+        toast.success("License activated successfully!");
+        setKey("");
         onSuccess?.();
         onClose();
       } else {
-        toast.error(result?.error || 'Invalid license key');
+        toast.error(result?.error || "Invalid license key");
       }
     } catch (error: any) {
-      console.error('[License] Activation error:', error);
-      toast.error(error?.message || 'Failed to activate license');
+      console.error("[License] Activation error:", error);
+      toast.error(error?.message || "Failed to activate license");
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export function LicenseActivationDialog({
 
   const handleKeyInput = (value: string) => {
     // 自动格式化输入: GHOST-XXXX-XXXX-XXXX-XXXX
-    const cleaned = value.replace(/[^A-F0-9-]/gi, '').toUpperCase();
+    const cleaned = value.replace(/[^A-F0-9-]/gi, "").toUpperCase();
     setKey(cleaned);
   };
 
@@ -117,11 +117,11 @@ export function LicenseActivationDialog({
               License Key
             </label>
             <input
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-gray-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-gray-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-accent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               id="license-key"
               maxLength={29}
               onChange={(e) => handleKeyInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
+              onKeyDown={(e) => e.key === "Enter" && handleActivate()}
               placeholder="GHOST-XXXX-XXXX-XXXX-XXXX"
               type="text"
               value={key}
@@ -158,12 +158,12 @@ export function LicenseActivationDialog({
         {/* Footer */}
         <div className="flex gap-3 border-gray-200 border-t p-6 dark:border-gray-700">
           <button
-            className="flex-1 rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-lg bg-accent px-4 py-2 font-medium text-accent-foreground transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-accent"
             disabled={loading || !key.trim()}
             onClick={handleActivate}
             type="button"
           >
-            {loading ? 'Activating...' : 'Activate'}
+            {loading ? "Activating..." : "Activate"}
           </button>
           <button
             className="rounded-lg border border-gray-300 px-4 py-2 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"

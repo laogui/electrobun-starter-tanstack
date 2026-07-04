@@ -137,7 +137,7 @@ export const FolderContent = ({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {childCountLabel ? (
-              <span className="rounded-full border border-slate-300/70 bg-slate-900/5 px-2.5 py-1 font-semibold text-[11px] text-slate-600">
+              <span className="rounded-full border border-slate-300/70 bg-slate-900/5 px-2.5 py-1 font-semibold text-2xs text-slate-600">
                 {childCountLabel}
               </span>
             ) : null}

@@ -1,6 +1,62 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ── Design tokens ── */
+/* Font families and the micro type scale live here as the single source of
+   truth. The `font-sans` / `font-serif` / `font-mono` utilities and the
+   `text-2xs` / `text-3xs` sizes resolve to these variables. The serif and
+   mono stacks mirror the inline stacks applied by `applyFontFamily` in
+   `routes/__root.tsx` — keep them in sync. */
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-serif:
+    "Iowan Old Style", "Apple Garamond", Baskerville, "Times New Roman",
+    "Droid Serif", Times, serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+
+  /* Micro type scale — labels, metadata, kbd hints. Sized below text-xs
+     (12px) for dense product chrome; tight line-heights keep them scannable
+     in rows and badges. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 1.15;
+  --text-3xs: 0.625rem; /* 10px */
+  --text-3xs--line-height: 1.1;
+
+  /* ── Accent role tokens ──
+     One authored accent ("ink blue") for the whole product: primary action,
+     selection, focus, connection edges, and active state. Replaces the
+     raw `blue-*` utilities and unifies the previously divergent UI blue
+     (Tailwind blue-500), connection-active blue (HSL 220), and the teal
+     selected-edge color (#1a7f74) onto a single hue.
+
+     `accent` and `accent-foreground` are fixed across themes (solid fills +
+     the white text on them). `accent-softer`, `accent-soft`, and
+     `accent-strong` are adaptive: their light-theme value is a light/dark
+     tint or dark text, their dark-theme value flips so a single utility
+     (e.g. `text-accent-strong`) renders correctly in both themes without a
+     `dark:` variant. Values track the previous Tailwind blue scale
+     lightness so the migration is visually continuous; shift the hue/chroma
+     here to re-author the accent everywhere at once. */
+  --color-accent: oklch(0.62 0.19 255);
+  --color-accent-foreground: oklch(0.99 0.01 255);
+  --color-accent-softer: oklch(0.97 0.02 255);
+  --color-accent-soft: oklch(0.88 0.07 255);
+  --color-accent-strong: oklch(0.5 0.16 255);
+}
+
+/* Dark-theme overrides for the adaptive accent roles. Light text/tints in
+   light mode become dark tints / light text in dark mode. `accent` (base)
+   and `accent-foreground` stay fixed. */
+.dark {
+  --color-accent-softer: oklch(0.27 0.05 255);
+  --color-accent-soft: oklch(0.35 0.07 255);
+  --color-accent-strong: oklch(0.83 0.08 255);
+}
+
 @layer utilities {
   /* Layered, soft card shadow — gives a sense of depth on the canvas */
   .shadow-card {
@@ -221,8 +277,11 @@ body.resizing-nwse * {
   --group-pink-border: 340 75% 80%;
   --group-orange: 28 90% 93%;
   --group-orange-border: 28 90% 78%;
-  --connection: 220 15% 55%;
-  --connection-active: 220 90% 52%;
+  /* Unified with the `--color-accent` ink-blue (hue 255) so canvas edges,
+     selection, and the UI accent read as one color. Kept as HSL because the
+     React Flow consumers below compose it with alpha via `hsl(var(...) / X)`. */
+  --connection: 255 15% 55%;
+  --connection-active: 255 60% 52%;
 }
 
 /* ── Group styles ── */
@@ -388,14 +447,14 @@ body.resizing-nwse * {
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: var(--xy-edge-selected, #1a7f74);
+  stroke: hsl(var(--connection-active));
   stroke-width: 2;
 }
 
 .react-flow__edge.selected .react-flow__marker-arrowhead polyline,
 .react-flow__edge.selected #compact-arrow path {
-  fill: var(--xy-edge-selected, #1a7f74);
-  stroke: var(--xy-edge-selected, #1a7f74);
+  fill: hsl(var(--connection-active));
+  stroke: hsl(var(--connection-active));
 }
 
 /* Connection line while dragging */

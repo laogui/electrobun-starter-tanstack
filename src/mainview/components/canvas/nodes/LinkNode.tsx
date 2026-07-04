@@ -5,7 +5,7 @@ import {
   Link as LinkIcon,
   Loader2,
   RefreshCw,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   type FormEvent,
   memo,
@@ -13,26 +13,26 @@ import {
   useEffect,
   useRef,
   useState,
-} from 'react';
-import { NodeTagChips } from '@/components/card/NodeTagChips';
-import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
-import { colorToStyle, isColorDark } from '@/lib/colorUtils';
-import type { LinkNodeData } from '@/lib/contentTypes';
+} from "react";
+import { NodeTagChips } from "@/components/card/NodeTagChips";
+import { useNodeTagEditing } from "@/components/card/useNodeTagEditing";
+import { useIsZoomedOut } from "@/contexts/ZoomLevelContext";
+import { colorToStyle, isColorDark } from "@/lib/colorUtils";
+import type { LinkNodeData } from "@/lib/contentTypes";
 import {
   getLinkDisplayTitle,
   getLinkHost,
   normalizeLinkUrl,
-} from '@/lib/contentTypes';
-import { rpcUnfurlLink } from '@/lib/rpc';
-import { cn } from '@/lib/utils';
-import { useCanvasStore } from '@/store/canvasStore';
+} from "@/lib/contentTypes";
+import { rpcUnfurlLink } from "@/lib/rpc";
+import { cn } from "@/lib/utils";
+import { useCanvasStore } from "@/store/canvasStore";
 
-import { NodeHandles } from './_shared/NodeHandles';
-import { ResizeHandle } from './_shared/ResizeHandle';
-import { TypeBadge } from './_shared/TypeBadge';
+import { NodeHandles } from "./_shared/NodeHandles";
+import { ResizeHandle } from "./_shared/ResizeHandle";
+import { TypeBadge } from "./_shared/TypeBadge";
 
-const DEFAULT_LINK_COLOR = '#FFFFFF';
+const DEFAULT_LINK_COLOR = "#FFFFFF";
 
 export type LinkNodeRuntimeData = Partial<LinkNodeData> & {
   isDropTarget?: boolean;
@@ -40,24 +40,24 @@ export type LinkNodeRuntimeData = Partial<LinkNodeData> & {
 };
 
 function resolveLinkData(data: LinkNodeRuntimeData): LinkNodeData {
-  const url = typeof data.url === 'string' ? data.url : '';
+  const url = typeof data.url === "string" ? data.url : "";
   return {
     url,
-    title: typeof data.title === 'string' ? data.title : '',
-    color: typeof data.color === 'string' ? data.color : DEFAULT_LINK_COLOR,
+    title: typeof data.title === "string" ? data.title : "",
+    color: typeof data.color === "string" ? data.color : DEFAULT_LINK_COLOR,
     description:
-      typeof data.description === 'string' ? data.description : undefined,
+      typeof data.description === "string" ? data.description : undefined,
     faviconUrl:
-      typeof data.faviconUrl === 'string' ? data.faviconUrl : undefined,
-    imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : undefined,
-    siteName: typeof data.siteName === 'string' ? data.siteName : undefined,
+      typeof data.faviconUrl === "string" ? data.faviconUrl : undefined,
+    imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
+    siteName: typeof data.siteName === "string" ? data.siteName : undefined,
     unfurlError:
-      typeof data.unfurlError === 'string' ? data.unfurlError : undefined,
+      typeof data.unfurlError === "string" ? data.unfurlError : undefined,
     unfurlStatus:
-      data.unfurlStatus === 'idle' ||
-      data.unfurlStatus === 'loading' ||
-      data.unfurlStatus === 'ready' ||
-      data.unfurlStatus === 'failed'
+      data.unfurlStatus === "idle" ||
+      data.unfurlStatus === "loading" ||
+      data.unfurlStatus === "ready" ||
+      data.unfurlStatus === "failed"
         ? data.unfurlStatus
         : undefined,
   };
@@ -79,8 +79,8 @@ function LinkFaviconBadge({
   return (
     <div
       className={cn(
-        'grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200',
-        className
+        "grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 bg-white/75 text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-neutral-200",
+        className,
       )}
     >
       {showImage ? (
@@ -141,7 +141,7 @@ export const LinkContent = ({
       if (!normalized) {
         setUrlState((current) => ({
           ...current,
-          urlError: 'Enter a valid http(s) URL.',
+          urlError: "Enter a valid http(s) URL.",
         }));
         return;
       }
@@ -150,7 +150,7 @@ export const LinkContent = ({
         onUrlChange?.(normalized);
       }
     },
-    [draftUrl, link.url, onUrlChange]
+    [draftUrl, link.url, onUrlChange],
   );
 
   if (isFocused) {
@@ -175,7 +175,7 @@ export const LinkContent = ({
               <LinkFaviconBadge faviconUrl={link.faviconUrl} />
               <div className="min-w-0">
                 <p className="truncate font-medium text-sm">
-                  {link.siteName || host || 'Link'}
+                  {link.siteName || host || "Link"}
                 </p>
                 {link.siteName && host ? (
                   <p className="truncate text-neutral-400 text-xs dark:text-neutral-500">
@@ -186,7 +186,7 @@ export const LinkContent = ({
             </div>
             {openableUrl ? (
               <a
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-blue-500 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-accent dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
                 href={openableUrl}
                 rel="noopener noreferrer"
                 target="_blank"
@@ -205,7 +205,7 @@ export const LinkContent = ({
               {description}
             </p>
           ) : null}
-          {link.unfurlStatus === 'failed' ? (
+          {link.unfurlStatus === "failed" ? (
             <div className="mt-6 inline-flex items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 text-xs dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
               <AlertTriangle size={13} />
               Preview unavailable
@@ -222,7 +222,7 @@ export const LinkContent = ({
                 <div className="flex items-center gap-2">
                   <input
                     aria-label="Link URL"
-                    className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-hidden transition-colors focus:border-blue-400 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
+                    className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-hidden transition-colors focus:border-accent dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
                     onChange={(event) => {
                       setUrlState((current) => ({
                         ...current,
@@ -249,7 +249,7 @@ export const LinkContent = ({
                 className="break-all font-mono text-neutral-500 text-sm dark:text-neutral-300"
                 title={link.url || undefined}
               >
-                {link.url || 'No URL'}
+                {link.url || "No URL"}
               </p>
             )}
           </div>
@@ -295,7 +295,7 @@ export const LinkContent = ({
       <div className="flex min-h-0 flex-1 flex-col p-5 pb-4">
         <div className="mb-3 flex shrink-0 items-start gap-3">
           <LinkFaviconBadge faviconUrl={link.faviconUrl} />
-          {link.unfurlStatus === 'loading' ? (
+          {link.unfurlStatus === "loading" ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
               <Loader2 className="shrink-0 animate-spin" size={16} />
               <span>Loading preview...</span>
@@ -304,11 +304,11 @@ export const LinkContent = ({
             <div className="min-w-0 flex-1">
               <h3
                 className={cn(
-                  'line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6',
-                  !title && 'text-neutral-400'
+                  "line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6",
+                  !title && "text-neutral-400",
                 )}
               >
-                {title || 'Untitled link'}
+                {title || "Untitled link"}
               </h3>
               {link.siteName && host ? (
                 <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
@@ -318,12 +318,12 @@ export const LinkContent = ({
             </div>
           )}
         </div>
-        {description && link.unfurlStatus !== 'loading' ? (
+        {description && link.unfurlStatus !== "loading" ? (
           <p className="line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400">
             {description}
           </p>
         ) : null}
-        {link.unfurlStatus === 'failed' ? (
+        {link.unfurlStatus === "failed" ? (
           <button
             className="nodrag nopan mt-3 inline-flex items-center gap-1.5 self-start rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 text-xs transition-colors hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200"
             onClick={(e) => {
@@ -365,11 +365,11 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
 
   const handleRetry = useCallback(() => {
     unfurlAttemptRef.current = null;
-    updateNodeData(id, { unfurlStatus: 'idle', unfurlError: undefined });
+    updateNodeData(id, { unfurlStatus: "idle", unfurlError: undefined });
   }, [id, updateNodeData]);
 
   const startUnfurl = useCallback(() => {
-    const url = typeof data.url === 'string' ? data.url : '';
+    const url = typeof data.url === "string" ? data.url : "";
     if (!url) {
       return;
     }
@@ -377,14 +377,14 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     if (!normalized) {
       return;
     }
-    if (data.unfurlStatus === 'ready') {
+    if (data.unfurlStatus === "ready") {
       return;
     }
     if (unfurlAttemptRef.current === normalized) {
       return;
     }
     unfurlAttemptRef.current = normalized;
-    updateNodeData(id, { unfurlStatus: 'loading' });
+    updateNodeData(id, { unfurlStatus: "loading" });
 
     // Apply the result only while this url is still the active attempt. The
     // effect re-runs when we set the status to 'loading' above (and again when
@@ -396,16 +396,16 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         if (unfurlAttemptRef.current !== normalized) {
           return;
         }
-        if (!result || result.status === 'failed') {
+        if (!result || result.status === "failed") {
           updateNodeData(id, {
-            unfurlStatus: 'failed',
-            unfurlError: 'Could not load link preview.',
+            unfurlStatus: "failed",
+            unfurlError: "Could not load link preview.",
           });
           return;
         }
         const { status: _status, url: _url, ...meta } = result;
         updateNodeData(id, {
-          unfurlStatus: 'ready',
+          unfurlStatus: "ready",
           unfurlError: undefined,
           ...(meta.title ? { title: meta.title } : {}),
           ...(meta.description ? { description: meta.description } : {}),
@@ -418,16 +418,16 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         if (unfurlAttemptRef.current !== normalized) {
           return;
         }
-        console.warn('[LinkNode] Unfurl failed for', normalized, error);
+        console.warn("[LinkNode] Unfurl failed for", normalized, error);
         updateNodeData(id, {
-          unfurlStatus: 'failed',
-          unfurlError: 'Could not load link preview.',
+          unfurlStatus: "failed",
+          unfurlError: "Could not load link preview.",
         });
       });
   }, [data.url, data.unfurlStatus, id, updateNodeData]);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') {
+    if (typeof IntersectionObserver === "undefined") {
       startUnfurl();
       return;
     }
@@ -444,7 +444,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
           observer.disconnect();
         }
       },
-      { threshold: [0.5] }
+      { threshold: [0.5] },
     );
     observer.observe(element);
 
@@ -456,12 +456,12 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   return (
     <div
       className={cn(
-        'group/link size-full transition-opacity',
+        "group/link size-full transition-opacity",
         data.isHidden
-          ? 'pointer-events-none opacity-0'
+          ? "pointer-events-none opacity-0"
           : dimmedByFilter
-            ? 'opacity-30'
-            : 'opacity-100'
+            ? "opacity-30"
+            : "opacity-100",
       )}
       ref={nodeRef}
     >

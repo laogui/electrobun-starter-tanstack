@@ -1,10 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 import type {
   Connection,
   Node,
   NodeChange,
   ReactFlowInstance,
-} from '@xyflow/react';
+} from "@xyflow/react";
 import {
   Background,
   BackgroundVariant,
@@ -15,12 +15,12 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useReactFlow,
-} from '@xyflow/react';
-import { useTheme } from 'better-themes';
-import { AnimatePresence } from 'motion/react';
-import * as motion from 'motion/react-m';
+} from "@xyflow/react";
+import { useTheme } from "better-themes";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 
-import '@xyflow/react/dist/style.css';
+import "@xyflow/react/dist/style.css";
 import {
   useCallback,
   useEffect,
@@ -28,54 +28,54 @@ import {
   useMemo,
   useReducer,
   useRef,
-} from 'react';
-import { toast } from 'sonner';
-import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
-import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
-import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
-import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
-import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
-import { FocusedView } from '@/components/canvas/FocusedView';
-import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
-import { FolderView } from '@/components/canvas/FolderView';
-import { HelperLines } from '@/components/canvas/HelperLines';
-import { LibraryButton } from '@/components/canvas/LibraryButton';
-import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
-import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
-import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
-import { Loader } from '@/components/layout/Loader';
-import { LibraryPopup } from '@/components/library/LibraryPopup';
-import { SearchDialog } from '@/components/search/SearchDialog';
-import { TagSidebar } from '@/components/tags/TagSidebar';
-import { TagSidebarButton } from '@/components/tags/TagSidebarButton';
-import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
-import { initialEdges, initialNodes } from '@/data/initialNodes';
-import type { RecordingResult } from '@/hooks/useAudioRecorder';
-import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
-import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
-import { useContextMenu } from '@/hooks/useContextMenu';
-import { useHelperLines } from '@/hooks/useHelperLines';
-import { useNodeCreation } from '@/hooks/useNodeCreation';
-import { useNodeDrag } from '@/hooks/useNodeDrag';
+} from "react";
+import { toast } from "sonner";
+import { CanvasContextMenu } from "@/components/canvas/ContextMenu";
+import { DeleteFolderConfirmDialog } from "@/components/canvas/DeleteFolderConfirmDialog";
+import { DetachedNotesSidebar } from "@/components/canvas/DetachedNotesSidebar";
+import { EmptyCanvasOverlay } from "@/components/canvas/EmptyCanvasOverlay";
+import ConnectionPreviewLine from "@/components/canvas/edges/ConnectionPreviewLine";
+import { FocusedView } from "@/components/canvas/FocusedView";
+import { FolderEditDialog } from "@/components/canvas/FolderEditDialog";
+import { FolderView } from "@/components/canvas/FolderView";
+import { HelperLines } from "@/components/canvas/HelperLines";
+import { LibraryButton } from "@/components/canvas/LibraryButton";
+import { LinkCreatePopover } from "@/components/canvas/LinkCreatePopover";
+import { RecordingRecorder } from "@/components/canvas/RecordingRecorder";
+import { ViewSwitcher } from "@/components/canvas/ViewSwitcher";
+import { Loader } from "@/components/layout/Loader";
+import { LibraryPopup } from "@/components/library/LibraryPopup";
+import { SearchDialog } from "@/components/search/SearchDialog";
+import { TagSidebar } from "@/components/tags/TagSidebar";
+import { TagSidebarButton } from "@/components/tags/TagSidebarButton";
+import { ZoomLevelProvider } from "@/contexts/ZoomLevelContext";
+import { initialEdges, initialNodes } from "@/data/initialNodes";
+import type { RecordingResult } from "@/hooks/useAudioRecorder";
+import { useCanvasKeyboard } from "@/hooks/useCanvasKeyboard";
+import { useCanvasPersistence } from "@/hooks/useCanvasPersistence";
+import { useContextMenu } from "@/hooks/useContextMenu";
+import { useHelperLines } from "@/hooks/useHelperLines";
+import { useNodeCreation } from "@/hooks/useNodeCreation";
+import { useNodeDrag } from "@/hooks/useNodeDrag";
 import {
   useEditableInteractionLock,
   useSpacePanMode,
-} from '@/hooks/useSpacePanMode';
-import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
-import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
+} from "@/hooks/useSpacePanMode";
+import { saveAssetFileWithProgressToast } from "@/lib/assetImportProgress";
+import { edgeTypes, nodeTypes } from "@/lib/canvasConstants";
 import {
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
-} from '@/lib/canvasExport';
-import { isFocusableNode } from '@/lib/canvasNodePredicates';
-import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+} from "@/lib/canvasExport";
+import { isFocusableNode } from "@/lib/canvasNodePredicates";
+import { sanitizeForPersistence } from "@/lib/canvasNodeSerialization";
 import {
   type CreatableCanvasNodeKind,
   createLinkNodeData,
   extractLinkUrl,
-} from '@/lib/contentTypes';
-import type { CanvasCreateRequest } from '@/lib/creatableNodes';
+} from "@/lib/contentTypes";
+import type { CanvasCreateRequest } from "@/lib/creatableNodes";
 import {
   computeImageNodeSize,
   createImageDropPreview,
@@ -84,40 +84,40 @@ import {
   persistImportedImage,
   readImageNaturalSize,
   revokeImageDropPreview,
-} from '@/lib/importCanvasFiles';
-import { saveRecording } from '@/lib/recordingFiles';
-import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
+} from "@/lib/importCanvasFiles";
+import { saveRecording } from "@/lib/recordingFiles";
+import { isRpcAvailable, loadCanvas, rpcSaveManifest } from "@/lib/rpc";
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
-} from '@/lib/shouldReverseEdgeDirection';
-import { cn } from '@/lib/utils';
-import type { CanvasBackgroundSetting } from '@/settingsClient';
-import { useAppSettingsStore } from '@/store/appSettingsStore';
-import { useCanvasStore } from '@/store/canvasStore';
+} from "@/lib/shouldReverseEdgeDirection";
+import { cn } from "@/lib/utils";
+import type { CanvasBackgroundSetting } from "@/settingsClient";
+import { useAppSettingsStore } from "@/store/appSettingsStore";
+import { useCanvasStore } from "@/store/canvasStore";
 
-import * as m from '../../paraglide/messages.js';
+import * as m from "../../paraglide/messages.js";
 
 // ─── 画布颜色 ────────────────────────────────────────────────────────────────
 // 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
 
 /** 画布主背景色 (light theme presets — selected via Settings → General). */
 const CANVAS_BG_LIGHT_PRESETS = {
-  default: '#EFF3F4',
-  paper: '#F6F0E4', // warm beige
-  mono: '#F4F4F4', // neutral gray
+  default: "#EFF3F4",
+  paper: "#F6F0E4", // warm beige
+  mono: "#F4F4F4", // neutral gray
 } as const satisfies Record<CanvasBackgroundSetting, string>;
-const CANVAS_BG_DARK = '#141414';
+const CANVAS_BG_DARK = "#141414";
 
 /** 背景网格点颜色 */
-const GRID_COLOR_LIGHT = '#D8DCDF';
-const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
+const GRID_COLOR_LIGHT = "#D8DCDF";
+const GRID_COLOR_DARK = "rgba(255, 255, 255, 0.14)";
 const CANVAS_GRID_SIZE = 24;
 const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
 const DRAGGING_OVER_FOLDER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
 
 function nodeZIndex(node: Node): number {
-  return typeof node.zIndex === 'number' ? node.zIndex : 0;
+  return typeof node.zIndex === "number" ? node.zIndex : 0;
 }
 
 /** Layout for importing multiple files at once (drop / paste). */
@@ -125,29 +125,29 @@ const ASSET_DROP_GRID_COLS = 3;
 const ASSET_DROP_GRID_GAP = 180;
 
 /** 小地图背景色 */
-const MINIMAP_BG_LIGHT = 'rgba(255, 255, 255, 0.92)';
-const MINIMAP_BG_DARK = 'rgba(28, 28, 28, 0.92)';
+const MINIMAP_BG_LIGHT = "rgba(255, 255, 255, 0.92)";
+const MINIMAP_BG_DARK = "rgba(28, 28, 28, 0.92)";
 
 /** 小地图边框 */
-const MINIMAP_BORDER_LIGHT = '1px solid rgba(0, 0, 0, 0.08)';
-const MINIMAP_BORDER_DARK = '1px solid rgba(255, 255, 255, 0.08)';
+const MINIMAP_BORDER_LIGHT = "1px solid rgba(0, 0, 0, 0.08)";
+const MINIMAP_BORDER_DARK = "1px solid rgba(255, 255, 255, 0.08)";
 
 /** 小地图遮罩（视口外区域的蒙层） */
-const MINIMAP_MASK_LIGHT = 'rgba(240, 239, 237, 0.7)';
-const MINIMAP_MASK_DARK = 'rgba(20, 20, 20, 0.7)';
+const MINIMAP_MASK_LIGHT = "rgba(240, 239, 237, 0.7)";
+const MINIMAP_MASK_DARK = "rgba(20, 20, 20, 0.7)";
 
 /** 小地图节点填充色 */
-const MINIMAP_NODE_COLOR = '#ddd';
+const MINIMAP_NODE_COLOR = "#ddd";
 
-/** 小地图选中节点填充色 */
-const MINIMAP_NODE_SELECTED_COLOR = '#3b82f6';
+/** 小地图选中节点填充色 — unified with the canvas accent (hue 255). */
+const MINIMAP_NODE_SELECTED_COLOR = "hsl(255 60% 52%)";
 
 /** 小地图节点描边色 */
-const MINIMAP_NODE_STROKE_COLOR = '#999';
+const MINIMAP_NODE_STROKE_COLOR = "#999";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute("/")({
   component: CanvasRoute,
 });
 
@@ -156,7 +156,7 @@ export const Route = createFileRoute('/')({
  * left behind by the previous document-mode persistence. Safe to run on every
  * mount: once cleared, subsequent runs find nothing to do.
  */
-const LEGACY_LAYOUT_MODE_KEY_PREFIX = 'ghostboard.layoutMode.';
+const LEGACY_LAYOUT_MODE_KEY_PREFIX = "ghostboard.layoutMode.";
 
 function sweepLegacyLayoutModeStorage(): void {
   try {
@@ -188,12 +188,12 @@ function isEditablePasteTarget(target: EventTarget | null): boolean {
 
 function getDroppedText(dataTransfer: DataTransfer | null): string {
   if (!dataTransfer) {
-    return '';
+    return "";
   }
   return (
-    dataTransfer.getData('text/uri-list') ||
-    dataTransfer.getData('text/plain') ||
-    dataTransfer.getData('text')
+    dataTransfer.getData("text/uri-list") ||
+    dataTransfer.getData("text/plain") ||
+    dataTransfer.getData("text")
   );
 }
 
@@ -212,15 +212,15 @@ interface RecordingNumberEntry {
 function readRecordingNumber(data: unknown): number {
   const value = (data as { recordingNumber?: unknown } | undefined)
     ?.recordingNumber;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
+  return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value
     : 0;
 }
 
 function maxRecordingNumberFromEntry(entry: RecordingNumberEntry): number {
-  let max = entry.type === 'recording' ? readRecordingNumber(entry.data) : 0;
+  let max = entry.type === "recording" ? readRecordingNumber(entry.data) : 0;
 
-  if (entry.type === 'folder') {
+  if (entry.type === "folder") {
     const children = (entry.data as { children?: unknown } | undefined)
       ?.children;
     if (Array.isArray(children)) {
@@ -236,7 +236,7 @@ function maxRecordingNumberFromEntry(entry: RecordingNumberEntry): number {
 function maxRecordingNumberFromNodes(nodes: Node[]): number {
   return nodes.reduce(
     (max, node) => Math.max(max, maxRecordingNumberFromEntry(node)),
-    0
+    0,
   );
 }
 
@@ -263,7 +263,7 @@ const initialCanvasUiState: CanvasUiState = {
 
 function canvasUiReducer(
   state: CanvasUiState,
-  patch: Partial<CanvasUiState>
+  patch: Partial<CanvasUiState>,
 ): CanvasUiState {
   return { ...state, ...patch };
 }
@@ -313,7 +313,7 @@ function CanvasComponent() {
   const createLinkFromText = useCallback(
     async (
       text: string,
-      options?: { anchorCenter?: { x: number; y: number } }
+      options?: { anchorCenter?: { x: number; y: number } },
     ): Promise<boolean> => {
       const url = extractLinkUrl(text);
       if (!url) {
@@ -323,13 +323,13 @@ function CanvasComponent() {
       if (!data) {
         return false;
       }
-      await onCreateNode('link', {
+      await onCreateNode("link", {
         ...options,
         data: { ...data },
       });
       return true;
     },
-    [onCreateNode]
+    [onCreateNode],
   );
 
   const createAssetsFromFiles = useCallback(
@@ -355,7 +355,7 @@ function CanvasComponent() {
           try {
             // Keep dropped files inserted in visual grid order.
             // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            const nodeId = await onCreateNode('image', {
+            const nodeId = await onCreateNode("image", {
               anchorCenter: position,
               ...(size ? { size } : {}),
               data: {
@@ -372,17 +372,17 @@ function CanvasComponent() {
             persistImportedImage(nodeId, file, updateNodeData)
               .catch((error) => {
                 console.error(
-                  '[canvas] Failed to persist dropped image:',
-                  error
+                  "[canvas] Failed to persist dropped image:",
+                  error,
                 );
-                toast.error('Image could not be saved.');
+                toast.error("Image could not be saved.");
               })
               .finally(() => {
                 revokeImageDropPreview(preview.imageUrl);
               });
           } catch (error) {
             revokeImageDropPreview(preview.imageUrl);
-            console.error('[canvas] Failed to import dropped image:', error);
+            console.error("[canvas] Failed to import dropped image:", error);
           }
           continue;
         }
@@ -393,16 +393,16 @@ function CanvasComponent() {
           const data = await saveAssetFileWithProgressToast(file);
           // Keep dropped files inserted in visual grid order.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await onCreateNode('asset', {
+          await onCreateNode("asset", {
             anchorCenter: position,
             data: { ...data },
           });
         } catch (error) {
-          console.error('[canvas] Failed to import dropped file:', error);
+          console.error("[canvas] Failed to import dropped file:", error);
         }
       }
     },
-    [onCreateNode, updateNodeData]
+    [onCreateNode, updateNodeData],
   );
 
   // Flow-space anchor for pasted content: prefer the last cursor position so
@@ -417,7 +417,7 @@ function CanvasComponent() {
 
   const [canvasUi, setCanvasUi] = useReducer(
     canvasUiReducer,
-    initialCanvasUiState
+    initialCanvasUiState,
   );
   const {
     detachedSidebarOpen,
@@ -428,10 +428,10 @@ function CanvasComponent() {
     recorderNumber,
   } = canvasUi;
   const setLinkPrompt = useCallback(
-    (linkPrompt: CanvasUiState['linkPrompt']) => {
+    (linkPrompt: CanvasUiState["linkPrompt"]) => {
       setCanvasUi({ linkPrompt });
     },
-    []
+    [],
   );
   const setRecorderNumber = useCallback((recorderNumber: number | null) => {
     setCanvasUi({ recorderNumber });
@@ -443,48 +443,48 @@ function CanvasComponent() {
     (pendingFolderDeleteIds: string[] | null) => {
       setCanvasUi({ pendingFolderDeleteIds });
     },
-    []
+    [],
   );
   const setDragState = useCallback(
-    (patch: Pick<CanvasUiState, 'dragPos' | 'isDraggingFile'>) => {
+    (patch: Pick<CanvasUiState, "dragPos" | "isDraggingFile">) => {
       setCanvasUi(patch);
     },
-    []
+    [],
   );
   const lastRecordingAnchorRef = useRef<{ x: number; y: number } | undefined>(
-    undefined
+    undefined,
   );
   const lastRecordingKindRef = useRef<CreatableCanvasNodeKind | undefined>(
-    undefined
+    undefined,
   );
   const reservedRecordingNumberRef = useRef(0);
   const assetFileInputRef = useRef<HTMLInputElement>(null);
   const pendingAssetAnchorRef = useRef<{ x: number; y: number } | undefined>(
-    undefined
+    undefined,
   );
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const replaceTargetRef = useRef<{
     nodeId: string;
-    kind: 'image' | 'asset';
+    kind: "image" | "asset";
   } | null>(null);
 
   const onReplaceNodeFile = useCallback(
-    (nodeId: string, kind: 'image' | 'asset') => {
+    (nodeId: string, kind: "image" | "asset") => {
       replaceTargetRef.current = { nodeId, kind };
       const input = replaceFileInputRef.current;
       if (!input) {
         return;
       }
-      input.accept = kind === 'image' ? 'image/*' : '';
+      input.accept = kind === "image" ? "image/*" : "";
       input.click();
     },
-    []
+    [],
   );
 
   const onReplaceFileInputChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      event.target.value = '';
+      event.target.value = "";
       const target = replaceTargetRef.current;
       replaceTargetRef.current = null;
       if (!(file && target)) {
@@ -492,7 +492,7 @@ function CanvasComponent() {
       }
       try {
         const saved = await saveAssetFileWithProgressToast(file);
-        if (target.kind === 'image') {
+        if (target.kind === "image") {
           updateNodeData(target.nodeId, {
             imageFile: saved.attachmentFile,
             imageUrl: undefined,
@@ -503,11 +503,11 @@ function CanvasComponent() {
           updateNodeData(target.nodeId, { ...saved });
         }
       } catch (error) {
-        console.error('[canvas] replace file failed:', error);
+        console.error("[canvas] replace file failed:", error);
         toast.error(m.toast_replace_failed());
       }
     },
-    [updateNodeData]
+    [updateNodeData],
   );
 
   const closeRecorder = useCallback(() => {
@@ -519,24 +519,24 @@ function CanvasComponent() {
   const openRecorder = useCallback(
     (anchorCenter?: { x: number; y: number }) => {
       lastRecordingAnchorRef.current = anchorCenter;
-      lastRecordingKindRef.current = 'recording';
+      lastRecordingKindRef.current = "recording";
       const maxNumber = Math.max(
         reservedRecordingNumberRef.current,
-        maxRecordingNumberFromNodes(useCanvasStore.getState().nodes)
+        maxRecordingNumberFromNodes(useCanvasStore.getState().nodes),
       );
       const nextNumber = maxNumber + 1;
       reservedRecordingNumberRef.current = nextNumber;
       setRecorderNumber(nextNumber);
       setCreateMenuOpen(false);
     },
-    [setCreateMenuOpen, setRecorderNumber]
+    [setCreateMenuOpen, setRecorderNumber],
   );
 
   const handleRecordingComplete = useCallback(
     async (result: RecordingResult) => {
       const number = recorderNumber ?? 1;
       setRecorderNumber(null);
-      const targetKind = lastRecordingKindRef.current ?? 'recording';
+      const targetKind = lastRecordingKindRef.current ?? "recording";
       const anchorCenter = lastRecordingAnchorRef.current;
       lastRecordingAnchorRef.current = undefined;
       lastRecordingKindRef.current = undefined;
@@ -552,11 +552,11 @@ function CanvasComponent() {
           data: { ...data },
         });
       } catch (error) {
-        console.error('[index] Failed to save recording:', error);
+        console.error("[index] Failed to save recording:", error);
         toast.error(m.toast_recording_save_failed());
       }
     },
-    [onCreateNode, recorderNumber, setRecorderNumber]
+    [onCreateNode, recorderNumber, setRecorderNumber],
   );
 
   // Opens the shared hidden file input used by asset/image creation. The
@@ -573,13 +573,13 @@ function CanvasComponent() {
       input.accept = accept;
       input.click();
     },
-    []
+    [],
   );
 
   // Bottom create menu's "Image" entry: pick a file first, then create the
   // card at the viewport center (the picker-change handler's default anchor).
   const openImagePicker = useCallback(() => {
-    openAssetFilePicker('image/*');
+    openAssetFilePicker("image/*");
   }, [openAssetFilePicker]);
 
   // Unified create entry point shared with the canvas right-click menu. Plain
@@ -589,21 +589,21 @@ function CanvasComponent() {
   // menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
-      if (kind === 'link') {
+      if (kind === "link") {
         setLinkPrompt({
           anchorCenter: request?.anchorCenter,
           screen: request?.screen,
         });
         return;
       }
-      if (kind === 'asset' || kind === 'image') {
+      if (kind === "asset" || kind === "image") {
         openAssetFilePicker(
-          kind === 'image' ? 'image/*' : '',
-          request?.anchorCenter
+          kind === "image" ? "image/*" : "",
+          request?.anchorCenter,
         );
         return;
       }
-      if (kind === 'recording') {
+      if (kind === "recording") {
         openRecorder(request?.anchorCenter);
         return;
       }
@@ -611,16 +611,16 @@ function CanvasComponent() {
         kind,
         request?.anchorCenter
           ? { anchorCenter: request.anchorCenter }
-          : undefined
+          : undefined,
       );
     },
-    [onCreateNode, openAssetFilePicker, openRecorder, setLinkPrompt]
+    [onCreateNode, openAssetFilePicker, openRecorder, setLinkPrompt],
   );
 
   const onAssetFileInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      event.target.value = '';
+      event.target.value = "";
       if (!file) {
         return;
       }
@@ -633,7 +633,7 @@ function CanvasComponent() {
       pendingAssetAnchorRef.current = undefined;
       createAssetsFromFiles([file], anchor);
     },
-    [createAssetsFromFiles, screenToFlowPosition]
+    [createAssetsFromFiles, screenToFlowPosition],
   );
 
   const hydrate = useCanvasStore((s) => s.hydrate);
@@ -644,12 +644,12 @@ function CanvasComponent() {
   const views = useCanvasStore((s) => s.views);
   const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
   const setPendingSearchTarget = useCanvasStore(
-    (s) => s.setPendingSearchTarget
+    (s) => s.setPendingSearchTarget,
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
   const setEdges = useCanvasStore((s) => s.setEdges);
   const moveFolderChildToCanvas = useCanvasStore(
-    (s) => s.moveFolderChildToCanvas
+    (s) => s.moveFolderChildToCanvas,
   );
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
@@ -664,10 +664,10 @@ function CanvasComponent() {
         ids.length > 1
           ? m.toast_nodes_deleted({ count: ids.length })
           : m.toast_node_deleted(),
-        { action: { label: m.toast_undo(), onClick: () => undo() } }
+        { action: { label: m.toast_undo(), onClick: () => undo() } },
       );
     },
-    [deleteNodes, undo]
+    [deleteNodes, undo],
   );
 
   const requestDeleteNodes = useCallback(
@@ -675,7 +675,7 @@ function CanvasComponent() {
       const idSet = new Set(ids);
       const hasFolder = useCanvasStore
         .getState()
-        .nodes.some((node) => idSet.has(node.id) && node.type === 'folder');
+        .nodes.some((node) => idSet.has(node.id) && node.type === "folder");
 
       if (hasFolder) {
         setPendingFolderDeleteIds(ids);
@@ -684,7 +684,7 @@ function CanvasComponent() {
 
       deleteNodesWithToast(ids);
     },
-    [deleteNodesWithToast, setPendingFolderDeleteIds]
+    [deleteNodesWithToast, setPendingFolderDeleteIds],
   );
 
   const {
@@ -720,7 +720,7 @@ function CanvasComponent() {
     if (pendingSearchTarget.nodeId) {
       const nodeId = pendingSearchTarget.nodeId;
       setNodes((prev) =>
-        prev.map((n) => ({ ...n, selected: n.id === nodeId }))
+        prev.map((n) => ({ ...n, selected: n.id === nodeId })),
       );
       const target = inst
         ?.getNodes?.()
@@ -745,7 +745,7 @@ function CanvasComponent() {
     } else if (pendingSearchTarget.edgeId) {
       const edgeId = pendingSearchTarget.edgeId;
       setEdges((prev) =>
-        prev.map((e) => ({ ...e, selected: e.id === edgeId }))
+        prev.map((e) => ({ ...e, selected: e.id === edgeId })),
       );
       const edge = inst
         ?.getEdges?.()
@@ -819,7 +819,7 @@ function CanvasComponent() {
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('[persistence] Failed to load canvas:', error);
+          console.error("[persistence] Failed to load canvas:", error);
         }
       });
     return () => {
@@ -842,7 +842,7 @@ function CanvasComponent() {
     const files = Array.from(clipboard.files ?? []);
     if (files.length === 0) {
       for (const item of Array.from(clipboard.items ?? [])) {
-        if (item.kind === 'file') {
+        if (item.kind === "file") {
           const file = item.getAsFile();
           if (file) {
             files.push(file);
@@ -859,13 +859,13 @@ function CanvasComponent() {
     // preventDefault() must be called synchronously during the event
     // dispatch — gate on the sync URL extractor before kicking off the async
     // node creation so the browser does not also paste raw text.
-    const text = clipboard.getData('text/plain') ?? '';
+    const text = clipboard.getData("text/plain") ?? "";
     if (extractLinkUrl(text)) {
       event.preventDefault();
       createLinkFromText(text, { anchorCenter: currentPasteAnchor() }).catch(
         (error) => {
-          console.error('[canvas] Failed to create pasted link:', error);
-        }
+          console.error("[canvas] Failed to create pasted link:", error);
+        },
       );
     }
   });
@@ -874,9 +874,9 @@ function CanvasComponent() {
     const handlePaste = (event: ClipboardEvent) => {
       handleCanvasPaste(event);
     };
-    globalThis.addEventListener('paste', handlePaste);
+    globalThis.addEventListener("paste", handlePaste);
     return () => {
-      globalThis.removeEventListener('paste', handlePaste);
+      globalThis.removeEventListener("paste", handlePaste);
     };
   }, []);
 
@@ -884,7 +884,7 @@ function CanvasComponent() {
     (changes: any) => {
       applyEdgesChange(changes);
     },
-    [applyEdgesChange]
+    [applyEdgesChange],
   );
 
   const onConnect = useCallback(
@@ -892,24 +892,24 @@ function CanvasComponent() {
       addConnection(connection, {
         reverseVisualDirection: shouldReverseEdgeDirection(
           connectionStartRef.current,
-          connection
+          connection,
         ),
       });
     },
-    [addConnection]
+    [addConnection],
   );
 
   const onConnectStart = useCallback(
     (
       _event: MouseEvent | TouchEvent,
-      params: { handleId?: string | null; nodeId: string | null }
+      params: { handleId?: string | null; nodeId: string | null },
     ) => {
       connectionStartRef.current = {
         handleId: params.handleId ?? null,
         nodeId: params.nodeId,
       };
     },
-    []
+    [],
   );
 
   const onConnectEnd = useCallback(() => {
@@ -926,13 +926,13 @@ function CanvasComponent() {
       if (!rect) {
         return;
       }
-      if (node.type === 'folder') {
+      if (node.type === "folder") {
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (isFocusableNode(node.type)) {
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
       }
     },
-    [setFocusedNode, setFocusedFolder]
+    [setFocusedNode, setFocusedFolder],
   );
 
   // Single-click-to-open model: a plain (no-modifier) click on a node opens
@@ -946,7 +946,7 @@ function CanvasComponent() {
   const onCanvasPointerDownCapture = useCallback((e: React.PointerEvent) => {
     const hasModifier = e.shiftKey || e.metaKey || e.ctrlKey || e.altKey;
     const onNode = Boolean(
-      (e.target as Element | null)?.closest?.('.react-flow__node')
+      (e.target as Element | null)?.closest?.(".react-flow__node"),
     );
     suppressClickSelectRef.current = onNode && !hasModifier;
   }, []);
@@ -957,7 +957,7 @@ function CanvasComponent() {
       // click opens. Folders open their focused view too. Skip nodes that have
       // no focused view and the one that is already open.
       const state = useCanvasStore.getState();
-      const isOpenable = node.type === 'folder' || isFocusableNode(node.type);
+      const isOpenable = node.type === "folder" || isFocusableNode(node.type);
       const alreadyOpen =
         state.focusedNode?.id === node.id ||
         state.focusedFolder?.id === node.id;
@@ -973,7 +973,7 @@ function CanvasComponent() {
       }
       openNodeFocusedView(node);
     },
-    [openNodeFocusedView]
+    [openNodeFocusedView],
   );
 
   // Double-click stays as a redundant open path in case a first click is
@@ -990,7 +990,7 @@ function CanvasComponent() {
       }
       openNodeFocusedView(node);
     },
-    [openNodeFocusedView]
+    [openNodeFocusedView],
   );
 
   // Drop the pure-selection changes a plain node click produces so clicking a
@@ -1004,14 +1004,14 @@ function CanvasComponent() {
       if (
         suppressClickSelectRef.current &&
         changes.length > 0 &&
-        changes.every((change) => change.type === 'select')
+        changes.every((change) => change.type === "select")
       ) {
         suppressClickSelectRef.current = false;
         return;
       }
       onNodesChange(changes);
     },
-    [onNodesChange]
+    [onNodesChange],
   );
 
   const onMoveFolderChildOut = useCallback(
@@ -1028,7 +1028,7 @@ function CanvasComponent() {
         },
       });
     },
-    [focusedFolder, moveFolderChildToCanvas]
+    [focusedFolder, moveFolderChildToCanvas],
   );
 
   // Decorate nodes with render-only flags while keeping object identity stable
@@ -1108,7 +1108,7 @@ function CanvasComponent() {
               draggable: false,
               connectable: false,
               deletable: false,
-              className: `${node.className ?? ''} is-locked`.trim(),
+              className: `${node.className ?? ""} is-locked`.trim(),
             }
           : {}),
       };
@@ -1148,7 +1148,7 @@ function CanvasComponent() {
         cancelAnimationFrame(dragRafRef.current);
       }
     },
-    []
+    [],
   );
 
   const onDragEnterWindow = useCallback((e: React.DragEvent) => {
@@ -1179,7 +1179,7 @@ function CanvasComponent() {
         y: (e as React.DragEvent).clientY,
       });
       const nodeId = dataTransfer?.getData(
-        'application/ghostboard-detached-note'
+        "application/ghostboard-detached-note",
       );
       if (nodeId) {
         e.preventDefault();
@@ -1201,7 +1201,7 @@ function CanvasComponent() {
       if (extractLinkUrl(text)) {
         e.preventDefault();
         createLinkFromText(text, { anchorCenter: position }).catch((error) => {
-          console.error('[canvas] Failed to create dropped link:', error);
+          console.error("[canvas] Failed to create dropped link:", error);
         });
       }
     },
@@ -1211,7 +1211,7 @@ function CanvasComponent() {
       pinNoteToCanvas,
       screenToFlowPosition,
       setDragState,
-    ]
+    ],
   );
 
   const onDragOverCanvas = useCallback((e: React.DragEvent | DragEvent) => {
@@ -1231,16 +1231,16 @@ function CanvasComponent() {
       }
       const types = Array.from(dataTransfer.types);
       const hasLinkPayload =
-        types.includes('text/uri-list') ||
-        types.includes('text/plain') ||
-        types.includes('text');
+        types.includes("text/uri-list") ||
+        types.includes("text/plain") ||
+        types.includes("text");
       dataTransfer.dropEffect =
-        hasFilePayload || hasLinkPayload ? 'copy' : 'move';
+        hasFilePayload || hasLinkPayload ? "copy" : "move";
     }
   }, []);
 
   const isDarkTheme =
-    theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+    theme === "dark" || (theme === "system" && systemTheme === "dark");
   const canvasBackgroundPreset = useAppSettingsStore((s) => s.canvasBackground);
   const canvasSnapToGrid = useAppSettingsStore((s) => s.canvasSnapToGrid);
   const canvasBackground = isDarkTheme
@@ -1256,10 +1256,10 @@ function CanvasComponent() {
   const miniMapNodeColor = useCallback(
     (node: Node) =>
       node.selected ? MINIMAP_NODE_SELECTED_COLOR : MINIMAP_NODE_COLOR,
-    []
+    [],
   );
   const activeViewName =
-    views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
+    views.find((view) => view.id === activeViewId)?.name ?? "Canvas";
 
   const onExportCanvas = useCallback(async () => {
     const instance = rfInstance.current;
@@ -1321,8 +1321,8 @@ function CanvasComponent() {
   return (
     <div
       className={cn(
-        'relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]',
-        repelAnimationActive && 'canvas-repel-anim'
+        "relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]",
+        repelAnimationActive && "canvas-repel-anim",
       )}
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
@@ -1330,82 +1330,88 @@ function CanvasComponent() {
       onPointerDownCapture={onCanvasPointerDownCapture}
     >
       <ZoomLevelProvider>
-        <ReactFlow
-          connectionLineComponent={ConnectionPreviewLine}
-          connectionMode={ConnectionMode.Loose}
-          connectionRadius={30}
-          defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
-          defaultViewport={savedViewport ?? undefined}
-          disableKeyboardA11y
-          edges={edges}
-          edgeTypes={edgeTypes}
-          elevateEdgesOnSelect
-          fitView={!savedViewport}
-          maxZoom={4}
-          minZoom={0.1}
-          nodes={nodesWithState}
-          nodesDraggable={!(spacePanActive || editableInteractionLocked)}
-          nodesFocusable={false}
-          nodeTypes={nodeTypes}
-          onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
-          onConnectStart={onConnectStart}
-          onDragOver={onDragOverCanvas}
-          onDrop={onDropCanvas}
-          onEdgeContextMenu={onEdgeContextMenu}
-          onEdgesChange={onEdgesChange}
-          onInit={(instance) => {
-            rfInstance.current = instance;
-          }}
-          onMoveEnd={(_, viewport) => {
-            setViewport(viewport);
-          }}
-          onNodeClick={onNodeClick}
-          onNodeContextMenu={onNodeContextMenu}
-          onNodeDoubleClick={onNodeDoubleClick}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDragStop={onNodeDragStop}
-          onNodesChange={handleNodesChange}
-          onPaneContextMenu={onPaneContextMenu}
-          panOnDrag={spacePanActive}
-          panOnScroll={true}
-          proOptions={{ hideAttribution: true }}
-          selectionMode={SelectionMode.Partial}
-          selectionOnDrag={!(spacePanActive || editableInteractionLocked)}
-          snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-          snapToGrid={canvasSnapToGrid}
-          style={{ backgroundColor: canvasBackground }}
-          zoomOnPinch={true}
+        <div
+          aria-label={activeViewName}
+          className="h-full w-full"
+          role="application"
         >
-          <Background
-            color={gridColor}
-            gap={CANVAS_GRID_SIZE}
-            size={1.5}
-            variant={BackgroundVariant.Dots}
-          />
-          <Controls position="bottom-left" />
-          <HelperLines horizontal={helperLineH} vertical={helperLineV} />
-          <MiniMap
-            maskColor={miniMapMask}
-            nodeColor={miniMapNodeColor}
-            nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
-            pannable
-            position="bottom-right"
-            style={{
-              backgroundColor: miniMapBackground,
-              border: miniMapBorder,
-              borderRadius: 8,
+          <ReactFlow
+            connectionLineComponent={ConnectionPreviewLine}
+            connectionMode={ConnectionMode.Loose}
+            connectionRadius={30}
+            defaultEdgeOptions={{ type: "labeledEdge", zIndex: 1 }}
+            defaultViewport={savedViewport ?? undefined}
+            disableKeyboardA11y
+            edges={edges}
+            edgeTypes={edgeTypes}
+            elevateEdgesOnSelect
+            fitView={!savedViewport}
+            maxZoom={4}
+            minZoom={0.1}
+            nodes={nodesWithState}
+            nodesDraggable={!(spacePanActive || editableInteractionLocked)}
+            nodesFocusable={false}
+            nodeTypes={nodeTypes}
+            onConnect={onConnect}
+            onConnectEnd={onConnectEnd}
+            onConnectStart={onConnectStart}
+            onDragOver={onDragOverCanvas}
+            onDrop={onDropCanvas}
+            onEdgeContextMenu={onEdgeContextMenu}
+            onEdgesChange={onEdgesChange}
+            onInit={(instance) => {
+              rfInstance.current = instance;
             }}
-            zoomable
-          />
-        </ReactFlow>
+            onMoveEnd={(_, viewport) => {
+              setViewport(viewport);
+            }}
+            onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
+            onNodesChange={handleNodesChange}
+            onPaneContextMenu={onPaneContextMenu}
+            panOnDrag={spacePanActive}
+            panOnScroll={true}
+            proOptions={{ hideAttribution: true }}
+            selectionMode={SelectionMode.Partial}
+            selectionOnDrag={!(spacePanActive || editableInteractionLocked)}
+            snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
+            snapToGrid={canvasSnapToGrid}
+            style={{ backgroundColor: canvasBackground }}
+            zoomOnPinch={true}
+          >
+            <Background
+              color={gridColor}
+              gap={CANVAS_GRID_SIZE}
+              size={1.5}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls position="bottom-left" />
+            <HelperLines horizontal={helperLineH} vertical={helperLineV} />
+            <MiniMap
+              maskColor={miniMapMask}
+              nodeColor={miniMapNodeColor}
+              nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
+              pannable
+              position="bottom-right"
+              style={{
+                backgroundColor: miniMapBackground,
+                border: miniMapBorder,
+                borderRadius: 8,
+              }}
+              zoomable
+            />
+          </ReactFlow>
+        </div>
       </ZoomLevelProvider>
 
       {nodesWithState.length === 0 ? (
         <EmptyCanvasOverlay
           onCreateNote={async () => {
-            await onCreateNode('card');
+            await onCreateNode("card");
           }}
           onOpenNoteLibrary={onOpenNoteLibrary}
         />
@@ -1519,7 +1525,7 @@ function CanvasComponent() {
             setLinkPrompt(null);
           }}
           onCreate={async (data) => {
-            await onCreateNode('link', {
+            await onCreateNode("link", {
               ...(linkPrompt.anchorCenter
                 ? { anchorCenter: linkPrompt.anchorCenter }
                 : {}),
@@ -1535,24 +1541,24 @@ function CanvasComponent() {
         {isDraggingFile ? (
           <motion.div
             animate={{ opacity: 1 }}
-            className="pointer-events-none fixed inset-0 z-[200] bg-blue-500/10 backdrop-blur-[2px]"
+            className="pointer-events-none fixed inset-0 z-[200] bg-accent/10 backdrop-blur-[2px]"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
           >
             {dragPos ? (
               <div
-                className="absolute flex items-center gap-2 rounded-xl border-2 border-blue-400 border-dashed bg-white/90 px-4 py-2.5 font-medium text-blue-600 text-sm shadow-xl dark:bg-neutral-900/90 dark:text-blue-300"
+                className="absolute flex items-center gap-2 rounded-xl border-2 border-accent border-dashed bg-white/90 px-4 py-2.5 font-medium text-accent-strong text-sm shadow-xl dark:bg-neutral-900/90"
                 style={{
                   left: dragPos.x,
                   top: dragPos.y,
-                  transform: 'translate(-50%, -50%)',
+                  transform: "translate(-50%, -50%)",
                 }}
               >
                 {m.drop_to_add()}
               </div>
             ) : (
               <div className="flex h-full items-center justify-center">
-                <div className="rounded-2xl border-2 border-blue-400 border-dashed bg-white/90 px-8 py-6 font-medium text-blue-600 text-lg shadow-xl dark:bg-neutral-900/90 dark:text-blue-300">
+                <div className="rounded-2xl border-2 border-accent border-dashed bg-white/90 px-8 py-6 font-medium text-accent-strong text-lg shadow-xl dark:bg-neutral-900/90">
                   {m.drop_to_add()}
                 </div>
               </div>

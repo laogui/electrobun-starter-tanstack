@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostBoard - Review Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .report-section {
+      position: relative;
+      background: #0a0a0b;
+      border: 1px solid #222226;
+    }
+    .corner-box {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #000;
+      border: 1px solid #222226;
+    }
+    </style>
+  </head>
+  <body class="bg-black text-[#fafafa]">
+    <main class="mx-auto w-full max-w-6xl px-5 py-8 md:px-10 md:py-12">
+      <header class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between"
+        >
+          <div>
+            <div class="mono mb-2 text-xs tracking-widest text-[#666]">
+              // REVIEW
+            </div>
+            <h1 class="text-4xl font-bold tracking-tight md:text-6xl">
+              GhostBoard
+            </h1>
+          </div>
+          <div class="mono text-left text-xs text-[#666] md:text-right">
+            <div>COMMANDCODE REPORT</div>
+            <div class="text-[#444]">2026-07-04</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div class="grid gap-8 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div>
+            <div class="mono mb-2 text-xs tracking-widest text-[#666]">
+              // OVERALL
+            </div>
+            <div class="text-6xl font-bold tracking-tight md:text-7xl">35</div>
+            <div class="mt-1 text-lg text-[#666]">/ 50</div>
+            <div
+              class="mt-4 inline-flex border border-[#fbbf24]/30 bg-[#fbbf24]/10 px-3 py-1 text-sm text-[#fbbf24]"
+            >
+              MIDDLE &mdash; focused interventions
+            </div>
+          </div>
+          <div>
+            <div class="mono mb-3 text-xs tracking-widest text-[#666]">
+              // TL;DR
+            </div>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              A sticky-note canvas tool with a real point of view: pure-CSS
+              pushpins, zoomed-out skeletons, undo-over-confirm, a comprehensive
+              keyboard layer, and an honest type system. Hierarchy and
+              interaction coverage are strong. The active failure is an
+              interrupted recolor that broke the build (check error + 4 test
+              failures) and left the accent half-tokenized (26 files on raw
+              blue-*, 8 on tokens). Color voice is the weakest lens;
+              screen-reader access on the canvas is the second gap.
+            </p>
+            <p class="mt-4 text-sm leading-6 text-[#fbbf24]">
+              Finish the recolor first (P0: fix build + tests + migrate 18
+              files), then /design surface for SR semantics, then /design refine
+              for neutral tints + authored dark mode.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div class="mono mb-6 text-xs tracking-widest text-[#666]">
+          // DESIGN LENSES
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[720px] border-collapse text-sm">
+            <thead>
+              <tr
+                class="border-b border-[#222226] text-left mono text-xs text-[#666]"
+              >
+                <th class="py-3 pr-4 font-normal">#</th>
+                <th class="py-3 pr-4 font-normal">LENS</th>
+                <th class="py-3 pr-4 font-normal">SCORE</th>
+                <th class="py-3 font-normal">VERDICT</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-[#1a1a1e]">
+                <td class="py-4 pr-4 text-[#555]">1</td>
+                <td class="py-4 pr-4 text-[#fafafa]">First impression</td>
+                <td class="py-4 pr-4 text-[#34d399]">7/10</td>
+                <td class="py-4 text-[#a0a0a0]">
+                  Clear POV, authored pushpin detail; generic accent
+                  mid-re-authoring.
+                </td>
+              </tr>
+              <tr class="border-b border-[#1a1a1e]">
+                <td class="py-4 pr-4 text-[#555]">2</td>
+                <td class="py-4 pr-4 text-[#fafafa]">Hierarchy</td>
+                <td class="py-4 pr-4 text-[#34d399]">8/10</td>
+                <td class="py-4 text-[#a0a0a0]">
+                  Strong 3-level chain; zoomed-out skeletons; FocusedView
+                  full-bleed vs shell.
+                </td>
+              </tr>
+              <tr class="border-b border-[#1a1a1e]">
+                <td class="py-4 pr-4 text-[#555]">3</td>
+                <td class="py-4 pr-4 text-[#fafafa]">Color voice</td>
+                <td class="py-4 pr-4 text-[#fbbf24]">5/10</td>
+                <td class="py-4 text-[#a0a0a0]">
+                  Accent half-tokenized + build broken; neutrals untinted; dark
+                  mode inversion.
+                </td>
+              </tr>
+              <tr class="border-b border-[#1a1a1e]">
+                <td class="py-4 pr-4 text-[#555]">4</td>
+                <td class="py-4 pr-4 text-[#fafafa]">Type voice</td>
+                <td class="py-4 pr-4 text-[#34d399]">8/10</td>
+                <td class="py-4 text-[#a0a0a0]">
+                  Honest system stack, micro scale tokenized; 12/13px density
+                  layer pending.
+                </td>
+              </tr>
+              <tr class="border-b border-[#1a1a1e]">
+                <td class="py-4 pr-4 text-[#555]">5</td>
+                <td class="py-4 pr-4 text-[#fafafa]">Interaction feel</td>
+                <td class="py-4 pr-4 text-[#fbbf24]">7/10</td>
+                <td class="py-4 text-[#a0a0a0]">
+                  Comprehensive keyboard + undo; SR semantics weak; recolor
+                  regression.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div class="mono mb-6 text-xs tracking-widest text-[#666]">
+          // COGNITIVE LOAD / RISK
+        </div>
+        <div class="grid gap-6 md:grid-cols-2">
+          <div>
+            <div class="mb-3 text-xl font-semibold">
+              Moderate &mdash; one active regression
+            </div>
+            <ul class="space-y-3 text-sm text-[#a0a0a0]">
+              <li>
+                <span class="mono mr-2 text-[#34d399]">PASS</span>Flow holds
+                end-to-end; multiple paths to every action; undo safety net;
+                authored details; honest type.
+              </li>
+              <li>
+                <span class="mono mr-2 text-[#fbbf24]">WATCH</span>Accent
+                inconsistency (transient); SR access; dark-mode authorship;
+                density tokenization; motion control.
+              </li>
+              <li>
+                <span class="mono mr-2 text-[#ef4444]">FAIL</span>Build broken
+                from interrupted recolor (P0, transient): check error + 4 test
+                failures.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div class="mono mb-3 text-xs tracking-widest text-[#666]">
+              // NEXT MODES (ordered)
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <span
+                class="border border-[#f43f5e]/40 px-3 py-1 text-sm text-[#f43f5e]"
+                >/design recolor (finish) &mdash; P0</span
+              >
+              <span
+                class="border border-[#333] px-3 py-1 text-sm text-[#a0a0a0]"
+                >/design surface</span
+              >
+              <span
+                class="border border-[#333] px-3 py-1 text-sm text-[#a0a0a0]"
+                >/design refine</span
+              >
+              <span
+                class="border border-[#333] px-3 py-1 text-sm text-[#a0a0a0]"
+                >/design typeset</span
+              >
+              <span
+                class="border border-[#333] px-3 py-1 text-sm text-[#a0a0a0]"
+                >/design responsive</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div class="mono mb-6 text-xs tracking-widest text-[#666]">
+          // WHAT'S WORKING
+        </div>
+        <div class="grid gap-4 md:grid-cols-3">
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">Pure-CSS pushpin</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              Metallic ball (gradient + inset highlight + cast shadow + glint)
+              on each sticky. Authored, domain-specific, crisp at any zoom.
+            </p>
+          </article>
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">Zoomed-out skeletons</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              Cards swap full preview for title + skeleton bars at low zoom.
+              Stays scannable instead of unreadable tiny text.
+            </p>
+          </article>
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">Undo over confirm</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              Node/view deletes emit Undo toasts; only folder deletes confirm.
+              The right split.
+            </p>
+          </article>
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">Keyboard layer</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              Spatial Arrow nav + auto-center, Enter opens, clipboard,
+              undo/redo, search. Offsets React Flow disableKeyboardA11y.
+            </p>
+          </article>
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">FocusedView distinction</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              Full-bleed for text/checklist/image vs centered rounded shell for
+              asset/link, with Cmd+arrow nav and traffic-light-aware chrome.
+            </p>
+          </article>
+          <article class="border border-[#1f1f24] p-4">
+            <h2 class="mb-2 text-sm font-semibold">Honest type system</h2>
+            <p class="text-sm leading-6 text-[#a0a0a0]">
+              System-UI stack declared explicitly (not a fake Inter claim),
+              micro scale tokenized, coherent weight hierarchy.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="report-section mb-8 p-6 md:p-8">
+        <div
+          class="corner-box left-0 top-0 -translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div
+          class="corner-box right-0 top-0 translate-x-1/2 -translate-y-1/2"
+        ></div>
+        <div class="mono mb-6 text-xs tracking-widest text-[#666]">
+          // PRIORITY ISSUES
+        </div>
+        <div class="space-y-5">
+          <article class="border border-[#3a1d22] bg-[#150b0d] p-5">
+            <div class="mono mb-2 text-xs text-[#f43f5e]">P0</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              Recolor left the build broken
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              bun run check emits 1 formatting error (DetachedNotesSidebar line
+              301, from the migration). bun run test shows 4 new failures in
+              SearchDialog.test.tsx (assertions expect bg-blue-50, now
+              bg-accent-softer). The recolor migrated ~8 of 26 blue-using files
+              then stopped.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: Complete /design recolor &mdash; fix formatting, update the 4
+              test assertions, migrate the remaining 18 blue-* files, re-run
+              check + test. Nothing else should proceed until green.
+            </div>
+          </article>
+          <article class="border border-[#2a1d22] bg-[#110b0d] p-5">
+            <div class="mono mb-2 text-xs text-[#f43f5e]">P1</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              Accent system half-tokenized
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              26 files on raw blue-*, 8 on accent tokens. CSS unification (3
+              divergent accent colors onto one hue) is done. The accent now
+              reads as two slightly different blues depending on which surface
+              you view.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: Finish /design recolor &mdash; migrate remaining files
+              (License, ReplaceImage, About, Library, Workspace, AI, Tag,
+              Link/Group nodes, Settings, Confirm dialogs, drop overlay).
+            </div>
+          </article>
+          <article class="border border-[#2a1d22] bg-[#110b0d] p-5">
+            <div class="mono mb-2 text-xs text-[#f43f5e]">P1</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              Canvas screen-reader semantics still weak
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              role="application" landmark was added (good), but node visuals use
+              role="presentation" on interactive divs and there is no aria-live
+              region. Screen-reader users cannot traverse or count canvas
+              contents.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: /design surface &mdash; add a polite aria-live region
+              announcing selection/counts, fix node roles, document search as
+              the accessible path from the empty state.
+            </div>
+          </article>
+          <article class="border border-[#222226] bg-[#0c0c0e] p-5">
+            <div class="mono mb-2 text-xs text-[#fbbf24]">P2</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              Neutrals not tinted toward brand hue
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              Stone/neutral surfaces are pure gray. Next to the ink-blue accent
+              they read cold and unrelated.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: /design refine &mdash; add a trace of chroma (&lt;0.02) to
+              the neutral scale, clamped at lightness extremes.
+            </div>
+          </article>
+          <article class="border border-[#222226] bg-[#0c0c0e] p-5">
+            <div class="mono mb-2 text-xs text-[#fbbf24]">P2</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              12/13px density layer not tokenized
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              text-[12px]x31 and text-[13px]x47 remain arbitrary, concentrated
+              in settings/panels. The micro scale (10/11px) was tokenized; this
+              mid layer wasn't.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: /design typeset follow-up &mdash; decide whether 13px aligns
+              to text-sm (14px) or gets its own token, then migrate.
+            </div>
+          </article>
+          <article class="border border-[#222226] bg-[#0c0c0e] p-5">
+            <div class="mono mb-2 text-xs text-[#fbbf24]">P2</div>
+            <h2 class="mb-2 text-lg font-semibold">
+              Dark mode is inversion, not authored
+            </h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              Dark surfaces are light-mode surfaces inverted. No accent chroma
+              reduction (accents glow), no neutral hue cast, no line-height
+              compensation for light-on-dark.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: /design refine &mdash; reduce accent chroma 10-15% in dark,
+              tint dark neutrals, add line-height/letter-spacing compensation to
+              light-on-dark text.
+            </div>
+          </article>
+          <article class="border border-[#222226] bg-[#0c0c0e] p-5">
+            <div class="mono mb-2 text-xs text-[#fbbf24]">P2</div>
+            <h2 class="mb-2 text-lg font-semibold">No in-app motion control</h2>
+            <p class="mb-4 text-sm leading-6 text-[#a0a0a0]">
+              prefers-reduced-motion is honored via OS media query only; no
+              Settings toggle.
+            </p>
+            <div
+              class="border-l border-[#fbbf24] pl-4 text-sm leading-6 text-[#fbbf24]"
+            >
+              FIX: /design responsive or /design motion &mdash; add a Settings
+              motion preference (None / Reduced / Standard) defaulting to OS.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="mono py-8 text-center text-xs tracking-widest text-[#444]">
+        Generated with CommandCode - 2026-07-04
+      </footer>
+    </main>
+  </body>
+</html>

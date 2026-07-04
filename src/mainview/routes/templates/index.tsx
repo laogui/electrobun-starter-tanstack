@@ -178,7 +178,7 @@ function TemplateCard({ template }: { template: TemplateMeta }) {
           <div className="mt-2 flex flex-wrap gap-1">
             {template.tags.map((tag) => (
               <span
-                className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-neutral-700 dark:text-gray-400"
+                className="rounded-full bg-gray-100 px-2 py-0.5 text-3xs text-gray-500 dark:bg-neutral-700 dark:text-gray-400"
                 key={tag}
               >
                 {tag}

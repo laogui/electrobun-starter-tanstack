@@ -129,7 +129,7 @@ function LabeledEdgeComponent({
         className={cn(
           'transition-[stroke-width] duration-150',
           animated && 'react-flow__edge-animated-dash',
-          selected && !customColor && 'stroke-blue-500!'
+          selected && !customColor && 'stroke-accent!'
         )}
         id={id}
         markerEnd={markerEnd}
@@ -153,7 +153,7 @@ function LabeledEdgeComponent({
           {isEditing ? (
             <input
               aria-label="Edge label"
-              className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+              className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-hidden focus:border-accent focus:ring-1 focus:ring-accent dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
               onBlur={commitLabel}
               onChange={(e) => {
                 setDraftState((current) => ({

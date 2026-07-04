@@ -77,7 +77,7 @@ function SelectTrigger({
       aria-label={ariaLabel}
       aria-labelledby={labelId}
       className={cn(
-        'flex h-9 w-full items-center justify-between rounded-md border border-neutral-300 bg-white px-3 text-left text-neutral-950 text-sm shadow-sm outline-hidden transition-colors hover:bg-neutral-50 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 data-[popup-open]:border-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50 dark:hover:bg-neutral-800',
+        'flex h-9 w-full items-center justify-between rounded-md border border-neutral-300 bg-white px-3 text-left text-neutral-950 text-sm shadow-sm outline-hidden transition-colors hover:bg-neutral-50 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 data-[popup-open]:border-accent dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50 dark:hover:bg-neutral-800',
         className
       )}
       data-slot="select-trigger"
@@ -153,7 +153,7 @@ function SelectItem({ className, children, label, value }: SelectItemProps) {
       label={label}
       value={value}
     >
-      <SelectPrimitive.ItemIndicator className="flex size-4 items-center justify-center text-blue-600 dark:text-blue-400">
+      <SelectPrimitive.ItemIndicator className="flex size-4 items-center justify-center text-accent">
         <CheckIcon aria-hidden className="size-3.5" />
       </SelectPrimitive.ItemIndicator>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

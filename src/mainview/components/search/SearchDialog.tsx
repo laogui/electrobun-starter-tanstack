@@ -674,7 +674,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
                 aria-selected={filter === chip.id}
                 className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
                   filter === chip.id
-                    ? 'bg-blue-500/10 font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-200'
+                    ? 'bg-accent-softer font-medium text-accent-strong'
                     : 'text-gray-500 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5'
                 }`}
                 key={chip.id}
@@ -723,7 +723,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
             trimmedQuery &&
             filteredResults.length === 0 &&
             !isLoading ? (
-              <div className="px-4 py-10 text-center text-gray-400 text-sm dark:text-gray-500">
+              <div className="px-4 py-10 text-center text-gray-500 text-sm dark:text-gray-400">
                 {m.search_no_matches()}
               </div>
             ) : null}
@@ -763,7 +763,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
                         <span className="truncate font-medium">
                           {group.viewName}
                         </span>
-                        <span className="text-gray-400 dark:text-gray-500">
+                        <span className="text-gray-500 dark:text-gray-400">
                           {group.results.length}
                         </span>
                       </button>
@@ -825,7 +825,7 @@ function ResultRow({
     <button
       className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm outline-hidden transition-colors ${
         active
-          ? 'bg-blue-50 text-blue-900 dark:bg-blue-500/10 dark:text-blue-100'
+          ? 'bg-accent-softer text-accent-strong'
           : 'text-gray-800 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/5'
       }`}
       data-result-index={index}
@@ -846,7 +846,7 @@ function ResultRow({
           {highlightMatches(result.excerpt, query)}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-gray-400 text-xs dark:text-gray-500">
+      <div className="flex shrink-0 items-center gap-1 text-gray-500 text-xs dark:text-gray-400">
         <span>{result.viewName}</span>
         <ArrowRight aria-hidden size={12} />
         <span className="capitalize">{result.matchField}</span>

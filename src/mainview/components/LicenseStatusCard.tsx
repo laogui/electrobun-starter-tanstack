@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
-import { Check, Sparkles } from 'lucide-react';
-import { formatLicenseActivationDate } from '@/lib/licenseDates';
-import { refreshLicense } from '@/lib/rpc-license';
+import { useQuery } from "@tanstack/react-query";
+import { Check, Sparkles } from "lucide-react";
+import { formatLicenseActivationDate } from "@/lib/licenseDates";
+import { refreshLicense } from "@/lib/rpc-license";
 
 interface LicenseStatusCardProps {
   onActivateClick: () => void;
@@ -9,7 +9,7 @@ interface LicenseStatusCardProps {
 
 export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
   const { data: license, isLoading } = useQuery({
-    queryKey: ['license-status'],
+    queryKey: ["license-status"],
     queryFn: refreshLicense,
   });
 
@@ -54,20 +54,20 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
   }
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 dark:border-blue-800 dark:from-blue-900/20 dark:to-indigo-900/20">
+    <div className="rounded-lg border border-accent-soft bg-accent-softer p-4">
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 rounded-full bg-blue-100 p-1.5 dark:bg-blue-800">
-          <Sparkles className="text-blue-600 dark:text-blue-200" size={16} />
+        <div className="mt-0.5 rounded-full bg-accent-soft p-1.5">
+          <Sparkles className="text-accent-strong" size={16} />
         </div>
         <div className="flex-1">
-          <h3 className="mb-1 font-semibold text-blue-900 dark:text-blue-100">
+          <h3 className="mb-1 font-semibold text-accent-strong">
             Free Version
           </h3>
-          <p className="mb-3 text-blue-700 text-sm dark:text-blue-300">
+          <p className="mb-3 text-accent-strong text-sm">
             Limited to 100 cards
           </p>
           <button
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 font-medium text-sm text-white transition-colors hover:bg-blue-600"
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 font-medium text-accent-foreground text-sm transition-colors hover:bg-accent-strong dark:hover:bg-accent"
             onClick={onActivateClick}
             type="button"
           >
@@ -83,7 +83,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
 // 简化版组件,用于设置页面以外的地方
 export function LicenseStatusBadge() {
   const { data: license, isLoading } = useQuery({
-    queryKey: ['license-status'],
+    queryKey: ["license-status"],
     queryFn: refreshLicense,
   });
 

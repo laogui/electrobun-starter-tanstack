@@ -209,7 +209,7 @@ function Sidebar({ activeSection, onSelect, strings, title }: SidebarProps) {
           return (
             <button
               aria-current={isActive ? 'page' : undefined}
-              className={`flex h-8 items-center gap-2 rounded-md px-2 font-medium text-[12px] transition-colors [-webkit-app-region:no-drag] focus-visible:outline-2 focus-visible:outline-blue-500/60 ${
+              className={`flex h-8 items-center gap-2 rounded-md px-2 font-medium text-[12px] transition-colors [-webkit-app-region:no-drag] focus-visible:outline-2 focus-visible:outline-accent/60 ${
                 isActive
                   ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-50'
                   : 'text-neutral-600 hover:bg-black/5 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-neutral-50'

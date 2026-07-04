@@ -76,7 +76,7 @@ const COMMON_CREATE_IDS = new Set<CreateActionId>([
  * adding a new floating control later picks up the same a11y treatment.
  */
 const TRIGGER_FOCUS_RING =
-  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500/60';
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60';
 
 interface ViewSwitcherUiState {
   editingId: string | null;
@@ -693,7 +693,7 @@ export function ViewSwitcher({
             <span className="flex max-w-50 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
               <span className="truncate">{activeView?.name ?? 'Canvas'}</span>
               <span
-                className="shrink-0 font-normal text-[11px] text-gray-400 dark:text-gray-500"
+                className="shrink-0 font-normal text-2xs text-gray-500 dark:text-gray-400"
                 title={activeViewNodeCountLabel}
               >
                 · {activeViewNodeCountLabel}
@@ -798,7 +798,7 @@ export function ViewSwitcher({
                       openRecorder: onOpenRecorder,
                     })
                   )}
-                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wide dark:border-neutral-700 dark:text-gray-500">
+                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:border-neutral-700 dark:text-gray-400">
                     {m.menu_more()}
                   </div>
                   {moreCreateItems.map((item) =>
@@ -874,7 +874,7 @@ export function ViewSwitcher({
                         <input
                           aria-invalid={hasError}
                           aria-label="View name"
-                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-blue-400 dark:bg-neutral-700 dark:text-white ${
+                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-accent dark:bg-neutral-700 dark:text-white ${
                             hasError
                               ? 'border-red-400 dark:border-red-500'
                               : 'border-gray-200 dark:border-neutral-600'
@@ -912,7 +912,7 @@ export function ViewSwitcher({
                       </div>
                       {hasError ? (
                         <p
-                          className="px-1 text-[11px] text-red-500 dark:text-red-400"
+                          className="px-1 text-2xs text-red-500 dark:text-red-400"
                           role="alert"
                         >
                           {renameValidationError}
@@ -996,7 +996,7 @@ export function ViewSwitcher({
 
                       <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 
-                      <div className="px-4 pt-2 pb-1 font-medium text-[11px] text-gray-400 uppercase tracking-wide dark:text-gray-500">
+                      <div className="px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:text-gray-400">
                         {m.view_from_template()}
                       </div>
 

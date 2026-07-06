@@ -320,6 +320,25 @@ body.resizing-nwse * {
 
 /* ── React Flow node overrides ── */
 
+.react-flow__controls {
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.react-flow__controls-button {
+  border-radius: 0;
+}
+
+.react-flow__controls-button:first-child {
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom-right-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+
 /* Selected card/folder node styling — outline on the visual card itself
    so border + card share the same element, radius, and stacking context */
 .react-flow__node.selected:not(.react-flow__node-group) .node-visual {

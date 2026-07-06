@@ -9,8 +9,7 @@ import {
 /**
  * App-level settings store. Kept separate from `canvasStore` because these
  * settings live across all canvases, persist outside React Flow, and are
- * mutated by the settings window via a webview-to-webview RPC message
- * (`settings-updated`).
+ * shared by the main window and the in-window Settings dialog.
  *
  * Components that care about a specific field (FocusedView for
  * `autoSaveInterval`, routes/index.tsx for `canvasBackground`, …) subscribe
@@ -19,12 +18,11 @@ import {
 export interface AppSettingsState extends AppSettings {
   /**
    * Replace the entire settings record. Used by `__root.tsx` after loading
-   * the initial settings or after a `settings-updated` push.
+   * the initial settings or after a Settings dialog change.
    */
   applySettings: (settings: Partial<AppSettings>) => void;
   /**
-   * Update a single field. Used internally by listeners; the actual
-   * persistence still flows through the settings window.
+   * Update a single field when a component already owns persistence.
    */
   setField: <K extends keyof AppSettings>(
     key: K,

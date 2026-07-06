@@ -10,11 +10,12 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
 import { Search, Settings } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTitlebarDragReleaseFix } from '@/hooks/useTitlebarDragReleaseFix';
-import { rpcGetSettings, rpcOpenSettings } from '@/lib/rpc';
+import { rpcGetSettings } from '@/lib/rpc';
 import { refreshLicense } from '@/lib/rpc-license';
 import type { AppSettings, FontFamilySetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
@@ -62,6 +63,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const { setTheme } = useTheme();
   const titlebarRef = useTitlebarHeightVar();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useTitlebarDragReleaseFix();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
@@ -80,6 +82,7 @@ function RootDocument() {
     (settings: AppSettings) => {
       setTheme(settings.theme);
       setLocale(settings.locale as 'en' | 'zh');
+      document.documentElement.lang = settings.locale;
       applyFontFamily(settings.fontFamily);
       applyAppSettings(settings);
     },
@@ -201,7 +204,8 @@ function RootDocument() {
             aria-label="Settings"
             className="electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200"
             onClick={() => {
-              rpcOpenSettings();
+              setSearchOpen(false);
+              setSettingsOpen(true);
             }}
             type="button"
           >
@@ -210,6 +214,11 @@ function RootDocument() {
         </div>
       </div>
       <Outlet />
+      <SettingsDialog
+        onOpenChange={setSettingsOpen}
+        onSettingsChange={applyAll}
+        open={settingsOpen}
+      />
       <Toaster richColors />
 
       <TanStackDevtools

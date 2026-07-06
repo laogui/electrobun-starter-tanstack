@@ -24,7 +24,6 @@ import {
 import { en as aiEn } from '@blocknote/xl-ai/locales';
 import '@blocknote/xl-ai/style.css';
 import { DefaultChatTransport } from 'ai';
-import 'overlayscrollbars/overlayscrollbars.css';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';

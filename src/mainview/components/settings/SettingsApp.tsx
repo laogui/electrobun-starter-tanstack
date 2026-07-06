@@ -5,6 +5,7 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -43,11 +44,29 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'about', icon: Info, labelKey: 'navAbout' },
 ];
 
+const SETTINGS_SCROLLBAR_OPTIONS = {
+  overflow: { x: 'hidden' },
+  scrollbars: {
+    autoHide: 'leave',
+    autoHideDelay: 450,
+    clickScroll: true,
+    theme: 'os-theme-settings',
+  },
+} as const;
+
 interface SettingsAppProps {
   client: SettingsClient;
+  manageDocument?: boolean;
+  onSettingsChange?: (settings: AppSettings) => void;
+  variant?: 'dialog' | 'window';
 }
 
-export function SettingsApp({ client }: SettingsAppProps) {
+export function SettingsApp({
+  client,
+  manageDocument = true,
+  onSettingsChange,
+  variant = 'window',
+}: SettingsAppProps) {
   const [settingsState, setSettingsState] = useState(() => ({
     loadFailed: false,
     saveFailed: false,
@@ -76,6 +95,7 @@ export function SettingsApp({ client }: SettingsAppProps) {
           loadFailed: false,
           settings: normalizedSettings,
         }));
+        onSettingsChange?.(normalizedSettings);
       })
       .catch(() => {
         if (mounted) {
@@ -86,14 +106,17 @@ export function SettingsApp({ client }: SettingsAppProps) {
     return () => {
       mounted = false;
     };
-  }, [client]);
+  }, [client, onSettingsChange]);
 
   useEffect(() => {
     settingsRef.current = settings;
+    if (!manageDocument) {
+      return;
+    }
     applyTheme(settings.theme);
     document.documentElement.lang = settings.locale;
     document.title = strings.title;
-  }, [settings, strings.title]);
+  }, [manageDocument, settings, strings.title]);
 
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
@@ -107,6 +130,7 @@ export function SettingsApp({ client }: SettingsAppProps) {
         saveFailed: false,
         settings: nextSettings,
       }));
+      onSettingsChange?.(nextSettings);
 
       client
         .saveSettings(nextSettings)
@@ -120,7 +144,7 @@ export function SettingsApp({ client }: SettingsAppProps) {
           setSettingsState((current) => ({ ...current, saveFailed: true }));
         });
     },
-    [client]
+    [client, onSettingsChange]
   );
 
   const errorMessage = loadFailed
@@ -129,75 +153,145 @@ export function SettingsApp({ client }: SettingsAppProps) {
       ? strings.saveError
       : null;
 
+  const Shell = variant === 'window' ? 'main' : 'div';
+
   return (
-    <main className="flex h-screen min-h-0 bg-neutral-50 text-neutral-950 transition-colors dark:bg-neutral-950 dark:text-neutral-50">
+    <Shell
+      className={`flex min-h-0 bg-neutral-50 text-neutral-950 transition-colors dark:bg-neutral-950 dark:text-neutral-50 ${
+        variant === 'window' ? 'h-screen' : 'h-full'
+      }`}
+    >
       <Sidebar
         activeSection={activeSection}
+        draggableHeader={variant === 'window'}
         onSelect={setActiveSection}
         strings={strings}
         title={strings.title}
       />
 
-      <section
-        aria-labelledby="settings-active-section-heading"
-        className="min-w-0 flex-1 overflow-y-auto px-7 pt-12 pb-8"
-      >
-        <h2 className="sr-only" id="settings-active-section-heading">
-          {
-            strings[
-              NAV_ITEMS.find((n) => n.id === activeSection)?.labelKey ??
-                'navGeneral'
-            ]
-          }
-        </h2>
-        {activeSection === 'general' ? (
-          <GeneralPanel
+      {variant === 'dialog' ? (
+        <OverlayScrollbarsComponent
+          aria-labelledby="settings-active-section-heading"
+          className="settings-scrollbar min-h-0 min-w-0 flex-1"
+          defer
+          element="section"
+          options={SETTINGS_SCROLLBAR_OPTIONS}
+        >
+          <div className="px-7 pt-12 pb-8">
+            <SettingsContent
+              activeSection={activeSection}
+              client={client}
+              errorMessage={errorMessage}
+              locale={settings.locale}
+              onUpdate={updateSettings}
+              settings={settings}
+              strings={strings}
+            />
+          </div>
+        </OverlayScrollbarsComponent>
+      ) : (
+        <section
+          aria-labelledby="settings-active-section-heading"
+          className="min-w-0 flex-1 overflow-y-auto px-7 pt-12 pb-8"
+        >
+          <SettingsContent
+            activeSection={activeSection}
+            client={client}
             errorMessage={errorMessage}
-            onUpdate={updateSettings}
-            settings={settings}
-            strings={strings}
-          />
-        ) : null}
-        {activeSection === 'workspace' ? (
-          <WorkspacePanel
-            client={client}
             locale={settings.locale}
-            strings={strings}
-          />
-        ) : null}
-        {activeSection === 'ai' ? (
-          <AIPanel
-            client={client}
             onUpdate={updateSettings}
             settings={settings}
             strings={strings}
           />
-        ) : null}
-        {activeSection === 'shortcuts' ? (
-          <ShortcutsPanel strings={strings} />
-        ) : null}
-        {activeSection === 'about' ? (
-          <AboutPanel client={client} strings={strings} />
-        ) : null}
-      </section>
-    </main>
+        </section>
+      )}
+    </Shell>
+  );
+}
+
+interface SettingsContentProps {
+  activeSection: SettingsSection;
+  client: SettingsClient;
+  errorMessage: string | null;
+  locale: AppSettings['locale'];
+  onUpdate: (patch: Partial<AppSettings>) => void;
+  settings: AppSettings;
+  strings: SettingsLocaleStrings;
+}
+
+function SettingsContent({
+  activeSection,
+  client,
+  errorMessage,
+  locale,
+  onUpdate,
+  settings,
+  strings,
+}: SettingsContentProps) {
+  return (
+    <>
+      <h2 className="sr-only" id="settings-active-section-heading">
+        {
+          strings[
+            NAV_ITEMS.find((n) => n.id === activeSection)?.labelKey ??
+              'navGeneral'
+          ]
+        }
+      </h2>
+      {activeSection === 'general' ? (
+        <GeneralPanel
+          errorMessage={errorMessage}
+          onUpdate={onUpdate}
+          settings={settings}
+          strings={strings}
+        />
+      ) : null}
+      {activeSection === 'workspace' ? (
+        <WorkspacePanel client={client} locale={locale} strings={strings} />
+      ) : null}
+      {activeSection === 'ai' ? (
+        <AIPanel
+          client={client}
+          onUpdate={onUpdate}
+          settings={settings}
+          strings={strings}
+        />
+      ) : null}
+      {activeSection === 'shortcuts' ? (
+        <ShortcutsPanel strings={strings} />
+      ) : null}
+      {activeSection === 'about' ? (
+        <AboutPanel client={client} strings={strings} />
+      ) : null}
+    </>
   );
 }
 
 interface SidebarProps {
   activeSection: SettingsSection;
+  draggableHeader: boolean;
   onSelect: (section: SettingsSection) => void;
   strings: SettingsLocaleStrings;
   title: string;
 }
 
-function Sidebar({ activeSection, onSelect, strings, title }: SidebarProps) {
+function Sidebar({
+  activeSection,
+  draggableHeader,
+  onSelect,
+  strings,
+  title,
+}: SidebarProps) {
   return (
     <aside
       aria-label={title}
       className="flex w-44 shrink-0 flex-col border-neutral-200 border-r bg-neutral-100/60 pt-9 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-950/40"
     >
-      <header className="flex items-center px-4 pt-2 pb-3 [-webkit-app-region:drag]">
+      <header
+        className={`flex items-center px-4 pt-2 pb-3 ${
+          draggableHeader ? '[-webkit-app-region:drag]' : ''
+        }`}
+      >
         <h1 className="font-semibold text-[14px] text-neutral-900 tracking-normal dark:text-neutral-50">
           {title}
         </h1>

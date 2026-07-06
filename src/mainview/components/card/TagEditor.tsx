@@ -1,12 +1,12 @@
-import { Popover } from "@base-ui/react/popover";
-import { Check, X } from "lucide-react";
-import type { KeyboardEvent, ReactNode, SyntheticEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Popover } from '@base-ui/react/popover';
+import { Check, X } from 'lucide-react';
+import type { KeyboardEvent, ReactNode, SyntheticEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CARD_COLORS, colorToStyle } from "@/lib/colorUtils";
-import { cn } from "@/lib/utils";
+import { CARD_COLORS, colorToStyle } from '@/lib/colorUtils';
+import { cn } from '@/lib/utils';
 
-import * as m from "../../../paraglide/messages.js";
+import * as m from '../../../paraglide/messages.js';
 
 const MAX_TAGS = 8;
 const MAX_TAG_LENGTH = 32;
@@ -37,7 +37,7 @@ const MAX_VISIBLE_SUGGESTIONS = 6;
 function filterSuggestions(
   pool: string[],
   draft: string,
-  exclude: string[],
+  exclude: string[]
 ): string[] {
   const needle = draft.trim().toLowerCase();
   if (!needle) {
@@ -90,11 +90,11 @@ function mergeTagNames(tag: string | undefined, tags: string[] | undefined) {
 
 function colorForTag(
   tagColors: Record<string, string> | undefined,
-  name: string,
+  name: string
 ): string | undefined {
   const key = name.toLowerCase();
   return Object.entries(tagColors ?? {}).find(
-    ([tagName]) => tagName.toLowerCase() === key,
+    ([tagName]) => tagName.toLowerCase() === key
   )?.[1];
 }
 
@@ -118,7 +118,7 @@ function buildTagColorMap({
   }
   if (tag && tagColor) {
     const canonical = tags.find(
-      (name) => name.toLowerCase() === tag.toLowerCase(),
+      (name) => name.toLowerCase() === tag.toLowerCase()
     );
     if (canonical) {
       out[canonical] = tagColor;
@@ -129,7 +129,7 @@ function buildTagColorMap({
 
 function pruneTagColorMap(
   tagColors: Record<string, string>,
-  tags: string[],
+  tags: string[]
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const name of tags) {
@@ -177,17 +177,17 @@ export function TagEditor({
   const safeTags = useMemo(() => mergeTagNames(tag, tags), [tag, tags]);
   const safeTagColors = useMemo(
     () => buildTagColorMap({ tag, tagColor, tagColors, tags: safeTags }),
-    [tag, tagColor, tagColors, safeTags],
+    [tag, tagColor, tagColors, safeTags]
   );
   const [draftState, setDraftState] = useState(() => ({
     activeSuggestion: 0,
-    draft: "",
+    draft: '',
     open,
   }));
   if (draftState.open !== open) {
-    setDraftState({ activeSuggestion: 0, draft: "", open });
+    setDraftState({ activeSuggestion: 0, draft: '', open });
   }
-  const draft = draftState.open === open ? draftState.draft : "";
+  const draft = draftState.open === open ? draftState.draft : '';
   const activeSuggestion =
     draftState.open === open ? draftState.activeSuggestion : 0;
   const setDraft = useCallback((next: string) => {
@@ -198,20 +198,20 @@ export function TagEditor({
       setDraftState((current) => ({
         ...current,
         activeSuggestion:
-          typeof next === "function" ? next(current.activeSuggestion) : next,
+          typeof next === 'function' ? next(current.activeSuggestion) : next,
       }));
     },
-    [],
+    []
   );
   const resetDraft = useCallback(() => {
     setDraftState((current) => ({
       ...current,
       activeSuggestion: 0,
-      draft: "",
+      draft: '',
     }));
   }, []);
   const [selectedTagState, setSelectedTag] = useState<string | null>(
-    () => safeTags[0] ?? null,
+    () => safeTags[0] ?? null
   );
   const selectedTag =
     safeTags.length === 0
@@ -229,7 +229,7 @@ export function TagEditor({
 
   const filteredSuggestions = useMemo(
     () => filterSuggestions(suggestions ?? [], draft, safeTags),
-    [suggestions, draft, safeTags],
+    [suggestions, draft, safeTags]
   );
 
   useEffect(() => {
@@ -273,7 +273,7 @@ export function TagEditor({
 
   const commitDraft = () => {
     const parts: string[] = [];
-    for (const part of draft.split(",")) {
+    for (const part of draft.split(',')) {
       const trimmed = part.trim();
       if (trimmed) {
         parts.push(trimmed);
@@ -300,26 +300,25 @@ export function TagEditor({
       return;
     }
     if (filteredSuggestions.length > 0) {
-      if (e.key === "ArrowDown") {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         setActiveSuggestion((prev) => (prev + 1) % filteredSuggestions.length);
         return;
       }
-      if (e.key === "ArrowUp") {
+      if (e.key === 'ArrowUp') {
         e.preventDefault();
         setActiveSuggestion(
           (prev) =>
-            (prev - 1 + filteredSuggestions.length) %
-            filteredSuggestions.length,
+            (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length
         );
         return;
       }
     }
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       return;
     }
-    if (e.key === "Escape" && filteredSuggestions.length > 0) {
+    if (e.key === 'Escape' && filteredSuggestions.length > 0) {
       e.preventDefault();
       resetDraft();
       return;
@@ -354,13 +353,13 @@ export function TagEditor({
               {safeTags.map((value) => (
                 <span
                   className={cn(
-                    "inline-flex items-center overflow-hidden rounded-md border text-xs",
+                    'inline-flex items-center overflow-hidden rounded-md border text-xs',
                     selectedTag === value
-                      ? "border-accent ring-2 ring-accent/20"
-                      : "border-black/5 dark:border-white/10",
+                      ? 'border-accent ring-2 ring-accent/20'
+                      : 'border-black/5 dark:border-white/10',
                     safeTagColors[value]
-                      ? "text-neutral-800"
-                      : "bg-neutral-100 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
+                      ? 'text-neutral-800'
+                      : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
                   )}
                   key={value}
                   style={colorToStyle(safeTagColors[value])}
@@ -392,8 +391,8 @@ export function TagEditor({
                     <button
                       aria-label={color}
                       className={cn(
-                        "flex size-5 items-center justify-center rounded-full border border-black/10 transition-transform hover:scale-110 dark:border-white/15",
-                        selected && "ring-2 ring-accent ring-offset-1",
+                        'flex size-5 items-center justify-center rounded-full border border-black/10 transition-transform hover:scale-110 dark:border-white/15',
+                        selected && 'ring-2 ring-accent ring-offset-1'
                       )}
                       key={color}
                       onClick={() => updateSelectedColor(color)}
@@ -412,8 +411,8 @@ export function TagEditor({
               <input
                 aria-label="Tag name"
                 className={cn(
-                  "min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm outline-hidden focus:border-black/30 dark:border-white/10 dark:bg-neutral-900 dark:focus:border-white/30",
-                  limitReached && "cursor-not-allowed opacity-50",
+                  'min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm outline-hidden focus:border-black/30 dark:border-white/10 dark:bg-neutral-900 dark:focus:border-white/30',
+                  limitReached && 'cursor-not-allowed opacity-50'
                 )}
                 disabled={limitReached}
                 onChange={(e) => {
@@ -435,7 +434,7 @@ export function TagEditor({
               <button
                 aria-label={m.tag_editor_add()}
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-md border border-black/10 bg-neutral-900 text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 dark:border-white/10 dark:bg-neutral-100 dark:text-neutral-900 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400 dark:hover:bg-white",
+                  'flex size-8 shrink-0 items-center justify-center rounded-md border border-black/10 bg-neutral-900 text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 dark:border-white/10 dark:bg-neutral-100 dark:text-neutral-900 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400 dark:hover:bg-white'
                 )}
                 disabled={!canCommitDraft}
                 onClick={commitDraft}
@@ -459,10 +458,10 @@ export function TagEditor({
                       <button
                         aria-selected={isActive}
                         className={cn(
-                          "flex w-full items-center px-2 py-1 text-left text-sm",
+                          'flex w-full items-center px-2 py-1 text-left text-sm',
                           isActive
-                            ? "bg-neutral-100 dark:bg-neutral-800"
-                            : "hover:bg-neutral-50 dark:hover:bg-neutral-800/60",
+                            ? 'bg-neutral-100 dark:bg-neutral-800'
+                            : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/60'
                         )}
                         onClick={() => addTagValue(name)}
                         onMouseDown={(e) => {

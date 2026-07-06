@@ -13,6 +13,11 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import {
+  SkeletonChecklist,
+  SkeletonLines,
+  ZoomedOutPlaceholder,
+} from './_shared/ZoomedOutPlaceholder';
 
 export interface ChecklistItem {
   checked?: boolean;
@@ -377,30 +382,25 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
         )}
       >
         {isZoomedOut ? (
-          <div
-            className={cn(
-              'flex size-full flex-col p-6',
-              isColorDark(data.color) && 'text-white'
-            )}
-            style={colorToStyle(data.color)}
+          <ZoomedOutPlaceholder
+            color={data.color}
+            leading={
+              firstTag ? (
+                <div
+                  className="h-4 w-12 rounded-md"
+                  style={colorToStyle(firstTag.color)}
+                />
+              ) : null
+            }
+            padding="lg"
+            title={data.title || 'Untitled'}
           >
-            {firstTag ? (
-              <div
-                className="mb-4 h-4 w-12 rounded-md"
-                style={colorToStyle(firstTag.color)}
-              />
-            ) : null}
-            <h2 className="font-bold text-2xl/tight">
-              {data.title || 'Untitled'}
-            </h2>
-            <div className="mt-6 space-y-3 opacity-30">
-              <div className="h-3 w-full rounded-full bg-current" />
-              <div className="h-3 w-5/6 rounded-full bg-current" />
-              <div className="h-3 w-4/6 rounded-full bg-current" />
-              <div className="h-3 w-full rounded-full bg-current" />
-              <div className="h-3 w-3/4 rounded-full bg-current" />
-            </div>
-          </div>
+            {data.type === 'checklist' ? (
+              <SkeletonChecklist className="mt-6" />
+            ) : (
+              <SkeletonLines className="mt-6" />
+            )}
+          </ZoomedOutPlaceholder>
         ) : (
           <CardContent
             data={viewData}

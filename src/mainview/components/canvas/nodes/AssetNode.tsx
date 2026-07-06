@@ -44,6 +44,10 @@ import { AssetHoverCard } from './_shared/AssetHoverCard';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 import { TypeBadge } from './_shared/TypeBadge';
+import {
+  SkeletonLines,
+  ZoomedOutPlaceholder,
+} from './_shared/ZoomedOutPlaceholder';
 import { formatDuration, formatFileSize } from './assetNodeFormat';
 
 const DEFAULT_ASSET_COLOR = '#FFFFFF';
@@ -1147,16 +1151,16 @@ const AssetNode = ({
       >
         <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
           {isZoomedOut ? (
-            <div
-              className="flex size-full flex-col justify-center p-5"
-              style={colorToStyle(asset.color)}
+            <ZoomedOutPlaceholder
+              align="center"
+              color={asset.color}
+              leading={
+                <AssetIcon asset={asset} className="opacity-70" size={30} />
+              }
+              title={getAssetDisplayTitle(asset)}
             >
-              <AssetIcon asset={asset} className="mb-4 opacity-70" size={30} />
-              <h3 className="line-clamp-2 font-bold text-2xl/tight">
-                {getAssetDisplayTitle(asset)}
-              </h3>
-              <div className="mt-5 h-3 w-3/4 rounded-full bg-current opacity-20" />
-            </div>
+              <SkeletonLines className="mt-5" widths={['w-3/4']} />
+            </ZoomedOutPlaceholder>
           ) : (
             <AssetContent data={data} />
           )}

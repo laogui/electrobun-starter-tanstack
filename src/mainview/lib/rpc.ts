@@ -5,6 +5,18 @@
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
+import type {
+  AICredentialStatus,
+  AppInfo,
+  AppSettings,
+  ExportArchiveResult,
+  SwitchWorkspaceResult,
+  TrashEntry,
+  UnlinkedFileEntry,
+  UpdateCheckResult,
+  WorkspaceInfo,
+} from '@/settingsClient';
+
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
 // a second WebSocket to Bun; Bun's socketMap[webviewId] then points at the
@@ -42,7 +54,7 @@ async function initElectrobun() {
     const { Electroview } = mod;
 
     const rpc = Electroview.defineRPC({
-      maxRequestTime: 10_000,
+      maxRequestTime: Number.POSITIVE_INFINITY,
       handlers: {
         requests: {},
         messages: {
@@ -63,6 +75,9 @@ async function initElectrobun() {
           },
           viewsUpdated: () => {
             globalThis.dispatchEvent(new CustomEvent('views-updated'));
+          },
+          trashUpdated: () => {
+            globalThis.dispatchEvent(new CustomEvent('trash-updated'));
           },
         } as any,
       },
@@ -509,6 +524,139 @@ export async function rpcGetSettings() {
   return eb.rpc.request.getSettings({});
 }
 
+export async function rpcSaveSettings(settings: AppSettings) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.saveSettings(settings);
+}
+
+export async function rpcListTrash(): Promise<TrashEntry[]> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return [];
+  }
+  return eb.rpc.request.listTrash({});
+}
+
+export async function rpcRestoreTrash(trashId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.restoreTrash({ trashId });
+}
+
+export async function rpcPurgeTrash(trashId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.purgeTrash({ trashId });
+}
+
+export async function rpcClearAllTrash() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { purged: 0, success: false };
+  }
+  return eb.rpc.request.clearAllTrash({});
+}
+
+export async function rpcScanUnlinkedNotes(): Promise<UnlinkedFileEntry[]> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return [];
+  }
+  const result = await eb.rpc.request.scanUnlinkedNotes({});
+  return result.entries;
+}
+
+export async function rpcDeleteUnlinkedNotes(files: string[]) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { deleted: [], skipped: files };
+  }
+  return eb.rpc.request.deleteUnlinkedNotes({ files });
+}
+
+export async function rpcGetWorkspaceInfo(): Promise<WorkspaceInfo> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { path: '', isDefault: true };
+  }
+  return eb.rpc.request.getWorkspaceInfo({});
+}
+
+export async function rpcOpenWorkspaceFolder() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.openWorkspaceFolder({});
+}
+
+export async function rpcSwitchWorkspace(): Promise<SwitchWorkspaceResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.switchWorkspace({});
+}
+
+export async function rpcExportWorkspaceArchive(): Promise<ExportArchiveResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.exportWorkspaceArchive({});
+}
+
+export async function rpcGetAppInfo(): Promise<AppInfo> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return {
+      channel: 'dev',
+      hash: '',
+      identifier: 'dev.ghostboard',
+      name: 'GhostBoard',
+      version: '0.0.0',
+    };
+  }
+  return eb.rpc.request.getAppInfo({});
+}
+
+export async function rpcCheckForUpdate(): Promise<UpdateCheckResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return {
+      currentHash: '',
+      hash: '',
+      updateAvailable: false,
+      version: '',
+      error: 'RPC unavailable',
+    };
+  }
+  return eb.rpc.request.checkForUpdate({});
+}
+
+export async function rpcGetAICredentialStatus(): Promise<AICredentialStatus> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { hasApiKey: false };
+  }
+  return eb.rpc.request.getAICredentialStatus({});
+}
+
+export async function rpcSetAIApiKey(apiKey: string | null) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.setAIApiKey({ apiKey });
+}
+
 export async function rpcCheckLicense(): Promise<LicenseInfo | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
@@ -560,14 +708,6 @@ export async function resolveAttachmentStreamUrl(
   url.searchParams.set('path', attachmentFile);
   url.searchParams.set('token', endpoint.token);
   return url.toString();
-}
-
-export async function rpcOpenSettings() {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.openSettings({});
 }
 
 export async function rpcListViews() {

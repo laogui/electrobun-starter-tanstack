@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpcMocks = vi.hoisted(() => ({
   rpcGetSettings: vi.fn(),
-  rpcOpenSettings: vi.fn(),
   refreshLicense: vi.fn(),
 }));
 const setThemeMock = vi.fn();
@@ -21,7 +20,6 @@ vi.mock('better-themes', () => ({
 
 vi.mock('@/lib/rpc', () => ({
   rpcGetSettings: rpcMocks.rpcGetSettings,
-  rpcOpenSettings: rpcMocks.rpcOpenSettings,
 }));
 
 vi.mock('@/lib/rpc-license', () => ({
@@ -82,6 +80,41 @@ vi.mock('@/components/ui/Toaster', () => ({
   Toaster: () => <div>Toaster</div>,
 }));
 
+vi.mock('@/components/settings/SettingsDialog', () => ({
+  SettingsDialog: ({
+    onOpenChange,
+    onSettingsChange,
+    open,
+  }: {
+    onOpenChange: (open: boolean) => void;
+    onSettingsChange: (settings: {
+      fontFamily: 'mono' | 'serif' | 'system';
+      locale: 'en' | 'zh';
+      theme: 'dark' | 'light' | 'system';
+    }) => void;
+    open: boolean;
+  }) =>
+    open ? (
+      <div aria-label="Settings" role="dialog">
+        <button
+          onClick={() =>
+            onSettingsChange({
+              fontFamily: 'serif',
+              locale: 'en',
+              theme: 'light',
+            })
+          }
+          type="button"
+        >
+          Apply settings
+        </button>
+        <button onClick={() => onOpenChange(false)} type="button">
+          Close settings
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('lucide-react', () => ({
   Settings: () => <svg aria-hidden="true" />,
   LayoutGrid: () => <svg aria-hidden="true" />,
@@ -106,7 +139,6 @@ function renderRoot(children: ReactElement) {
 describe('__root route', () => {
   beforeEach(() => {
     rpcMocks.rpcGetSettings.mockReset();
-    rpcMocks.rpcOpenSettings.mockReset();
     rpcMocks.refreshLicense.mockReset();
     setThemeMock.mockReset();
     setLocaleMock.mockReset();
@@ -114,7 +146,6 @@ describe('__root route', () => {
     useRouterStateMock.mockReset();
     useRouterStateMock.mockReturnValue('/');
     rpcMocks.rpcGetSettings.mockResolvedValue({ theme: 'dark', locale: 'zh' });
-    rpcMocks.rpcOpenSettings.mockResolvedValue({ success: true });
     rpcMocks.refreshLicense.mockResolvedValue({ activated: false });
   });
 
@@ -159,14 +190,25 @@ describe('__root route', () => {
     });
   });
 
-  it('opens the settings window when clicking the settings button', async () => {
+  it('opens the in-window settings dialog when clicking the settings button', async () => {
     const RootDocument = await loadRootDocument();
     renderRoot(<RootDocument />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  });
+
+  it('applies settings changes from the in-window settings dialog', async () => {
+    const RootDocument = await loadRootDocument();
+    renderRoot(<RootDocument />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply settings' }));
+
     await waitFor(() => {
-      expect(rpcMocks.rpcOpenSettings).toHaveBeenCalledTimes(1);
+      expect(setThemeMock).toHaveBeenCalledWith('light');
+      expect(setLocaleMock).toHaveBeenCalledWith('en');
     });
   });
 

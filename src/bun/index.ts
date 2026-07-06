@@ -115,13 +115,9 @@ import {
 
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
-const SETTINGS_DEV_SERVER_URL = `${DEV_SERVER_URL}/settings.html`;
-const SETTINGS_VIEW_URL = 'views://settingsview/index.html';
 const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
-const SETTINGS_WINDOW_WIDTH = 720;
-const SETTINGS_WINDOW_HEIGHT = 560;
 const UNSAFE_EXPORT_FILE_NAME_CHARS = '<>:"/\\|?*';
 const UNSAFE_EXPORT_FILE_NAME_CHAR_SET = new Set(UNSAFE_EXPORT_FILE_NAME_CHARS);
 
@@ -226,9 +222,6 @@ async function pickExportFolder(): Promise<string | null> {
   });
   return selected.find(Boolean) ?? null;
 }
-const FALLBACK_SETTINGS_WINDOW_X = 350;
-const FALLBACK_SETTINGS_WINDOW_Y = 250;
-
 export async function sleep(ms: number) {
   return await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -387,12 +380,6 @@ async function hydrateImageData(
 
 function hasAttachmentRuntimeData(type: string | undefined): boolean {
   return type === 'asset' || type === 'recording';
-}
-
-export function getSettingsViewUrl(mainViewUrl: string): string {
-  return mainViewUrl === DEV_SERVER_URL
-    ? SETTINGS_DEV_SERVER_URL
-    : SETTINGS_VIEW_URL;
 }
 
 const asNoteString = (value: unknown, fallback: string): string =>
@@ -603,13 +590,77 @@ interface CanvasRPC {
           success: boolean;
         };
       };
-      openSettings: {
-        params: Record<string, unknown>;
-        response: { success: boolean };
-      };
       getSettings: {
         params: Record<string, unknown>;
         response: AppSettings;
+      };
+      saveSettings: {
+        params: AppSettings;
+        response: { success: boolean };
+      };
+      getAICredentialStatus: {
+        params: Record<string, unknown>;
+        response: { hasApiKey: boolean };
+      };
+      setAIApiKey: {
+        params: { apiKey: string | null };
+        response: { success: boolean };
+      };
+      listTrash: {
+        params: Record<string, unknown>;
+        response: TrashEntry[];
+      };
+      restoreTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      purgeTrash: {
+        params: { trashId: string };
+        response: { success: boolean };
+      };
+      clearAllTrash: {
+        params: Record<string, unknown>;
+        response: { purged: number; success: boolean };
+      };
+      scanUnlinkedNotes: {
+        params: Record<string, unknown>;
+        response: { entries: UnlinkedFileEntry[] };
+      };
+      deleteUnlinkedNotes: {
+        params: { files: string[] };
+        response: { deleted: string[]; skipped: string[] };
+      };
+      getWorkspaceInfo: {
+        params: Record<string, unknown>;
+        response: WorkspaceInfoResponse;
+      };
+      openWorkspaceFolder: {
+        params: Record<string, unknown>;
+        response: { success: boolean };
+      };
+      switchWorkspace: {
+        params: Record<string, unknown>;
+        response: SwitchWorkspaceResponse;
+      };
+      exportWorkspaceArchive: {
+        params: Record<string, unknown>;
+        response: ExportArchiveResponse;
+      };
+      getAppInfo: {
+        params: Record<string, unknown>;
+        response: AppInfoResponse;
+      };
+      checkForUpdate: {
+        params: Record<string, unknown>;
+        response: UpdateCheckResponse;
+      };
+      checkLicense: {
+        params: Record<string, unknown>;
+        response: LicenseInfo;
+      };
+      activateLicense: {
+        params: { key: string };
+        response: { success: boolean; error?: string };
       };
       getLocalHttpEndpoint: {
         params: Record<string, unknown>;
@@ -706,6 +757,7 @@ interface CanvasRPC {
     messages: {
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;
+      trashUpdated: Record<never, unknown>;
       viewsUpdated: Record<never, unknown>;
     };
   };
@@ -743,92 +795,6 @@ interface SwitchWorkspaceResponse {
   canceled?: boolean;
   path?: string;
   success: boolean;
-}
-
-interface SettingsRPC {
-  bun: {
-    requests: {
-      checkForUpdate: {
-        params: Record<string, unknown>;
-        response: UpdateCheckResponse;
-      };
-      clearAllTrash: {
-        params: Record<string, unknown>;
-        response: { purged: number; success: boolean };
-      };
-      deleteUnlinkedNotes: {
-        params: { files: string[] };
-        response: { deleted: string[]; skipped: string[] };
-      };
-      exportWorkspaceArchive: {
-        params: Record<string, unknown>;
-        response: ExportArchiveResponse;
-      };
-      getAICredentialStatus: {
-        params: Record<string, unknown>;
-        response: { hasApiKey: boolean };
-      };
-      getAppInfo: {
-        params: Record<string, unknown>;
-        response: AppInfoResponse;
-      };
-      getSettings: {
-        params: Record<string, unknown>;
-        response: AppSettings;
-      };
-      getWorkspaceInfo: {
-        params: Record<string, unknown>;
-        response: WorkspaceInfoResponse;
-      };
-      listTrash: {
-        params: Record<string, unknown>;
-        response: TrashEntry[];
-      };
-      openWorkspaceFolder: {
-        params: Record<string, unknown>;
-        response: { success: boolean };
-      };
-      purgeTrash: {
-        params: { trashId: string };
-        response: { success: boolean };
-      };
-      restoreTrash: {
-        params: { trashId: string };
-        response: { success: boolean };
-      };
-      saveSettings: {
-        params: AppSettings;
-        response: { success: boolean };
-      };
-      scanUnlinkedNotes: {
-        params: Record<string, unknown>;
-        response: { entries: UnlinkedFileEntry[] };
-      };
-      setAIApiKey: {
-        params: { apiKey: string | null };
-        response: { success: boolean };
-      };
-      switchWorkspace: {
-        params: Record<string, unknown>;
-        response: SwitchWorkspaceResponse;
-      };
-      checkLicense: {
-        params: Record<string, unknown>;
-        response: LicenseInfo;
-      };
-      activateLicense: {
-        params: { key: string };
-        response: { success: boolean; error?: string };
-      };
-    };
-    messages: Record<never, unknown>;
-  };
-  webview: {
-    requests: Record<string, { params: unknown; response: unknown }>;
-    messages: {
-      trashUpdated: Record<never, unknown>;
-    };
-  };
 }
 
 const FONT_FAMILY_VALUES = ['system', 'serif', 'mono'] as const;
@@ -914,8 +880,6 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
 // Cached in memory, backed by settings.json on disk
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
 let settingsFilePath = '';
-let settingsViewUrl = SETTINGS_VIEW_URL;
-let settingsWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
 // Streaming responses cannot travel over RPC, so it runs on 127.0.0.1.
@@ -924,10 +888,6 @@ let localHttpServer: LocalHttpServerHandle | null = null;
 let cachedAIApiKey: string | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
-// Reference to settings window RPC — set when the settings window is opened.
-// The main window uses this to push trash-list refresh hints into settings.
-let settingsRpc: ReturnType<typeof BrowserView.defineRPC<SettingsRPC>> | null =
-  null;
 
 export async function loadSettings(wsPath: string): Promise<AppSettings> {
   settingsFilePath = join(wsPath, '.ghostboard', 'settings.json');
@@ -973,30 +933,6 @@ function buildAIConfig(): AIServerConfig | null {
     model: cachedSettings.aiModel,
     apiKey: apiKey ?? undefined,
     baseUrl: cachedSettings.aiBaseUrl || undefined,
-  };
-}
-
-function getCenteredSettingsWindowFrame(parentWindow: BrowserWindow | null) {
-  if (!parentWindow) {
-    return {
-      width: SETTINGS_WINDOW_WIDTH,
-      height: SETTINGS_WINDOW_HEIGHT,
-      x: FALLBACK_SETTINGS_WINDOW_X,
-      y: FALLBACK_SETTINGS_WINDOW_Y,
-    };
-  }
-
-  const parentFrame = parentWindow.getFrame();
-
-  return {
-    width: SETTINGS_WINDOW_WIDTH,
-    height: SETTINGS_WINDOW_HEIGHT,
-    x: Math.round(
-      parentFrame.x + (parentFrame.width - SETTINGS_WINDOW_WIDTH) / 2
-    ),
-    y: Math.round(
-      parentFrame.y + (parentFrame.height - SETTINGS_WINDOW_HEIGHT) / 2
-    ),
   };
 }
 
@@ -1152,82 +1088,6 @@ async function switchWorkspaceImpl(): Promise<SwitchWorkspaceResponse> {
   return { success: true, path: target };
 }
 
-function createSettingsWindow(
-  parentWindow: BrowserWindow | null,
-  wsPath: string
-): BrowserWindow {
-  settingsRpc = BrowserView.defineRPC<SettingsRPC>({
-    maxRequestTime: 5000,
-    handlers: {
-      requests: {
-        getSettings: () => cachedSettings,
-        saveSettings: async (settings) => {
-          await persistSettings(settings);
-          // Push update to main window so all settings (theme/locale/font/
-          // canvas background/auto-save) apply immediately.
-          mainRpc?.send?.settingsUpdated(cachedSettings);
-          return { success: true };
-        },
-        getAICredentialStatus: () => ({ hasApiKey: cachedAIApiKey != null }),
-        setAIApiKey: async ({ apiKey }) => {
-          await saveAIApiKey(apiKey);
-          cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
-          mainRpc?.send?.settingsUpdated(cachedSettings);
-          return { success: true };
-        },
-        listTrash: async () => await listTrash(wsPath),
-        restoreTrash: async ({ trashId }) => {
-          const result = await restoreView(wsPath, trashId);
-          if (result.success) {
-            // Notify the main window so its view switcher shows the
-            // restored canvas immediately, without requiring a restart.
-            mainRpc?.send?.viewsUpdated({});
-          }
-          return { success: result.success };
-        },
-        purgeTrash: async ({ trashId }) => await purgeTrash(wsPath, trashId),
-        clearAllTrash: async () => await clearAllTrash(wsPath),
-        scanUnlinkedNotes: async () => {
-          const entries = await scanUnlinkedNotes(wsPath);
-          return { entries };
-        },
-        deleteUnlinkedNotes: async ({ files }) =>
-          await deleteUnlinkedNotes(wsPath, files),
-        getWorkspaceInfo: async () => {
-          const defaultPath = getDefaultWorkspacePath();
-          return {
-            path: wsPath,
-            isDefault: resolve(wsPath) === resolve(defaultPath),
-          };
-        },
-        openWorkspaceFolder: () => {
-          Utils.showItemInFolder(wsPath);
-          return { success: true };
-        },
-        switchWorkspace: () => switchWorkspaceImpl(),
-        exportWorkspaceArchive: () => exportWorkspaceArchiveImpl(wsPath),
-        getAppInfo: () => getAppInfoData(),
-        checkForUpdate: () => checkForUpdateImpl(),
-      },
-      messages: {},
-    },
-  });
-
-  const win = new BrowserWindow({
-    title: 'Settings',
-    url: settingsViewUrl,
-    rpc: settingsRpc,
-    frame: getCenteredSettingsWindowFrame(parentWindow),
-  });
-
-  win.on('close', () => {
-    settingsWindow = null;
-    settingsRpc = null;
-  });
-
-  return win;
-}
-
 async function main() {
   // NOTE on accelerators: Electrobun only auto-attaches standard macOS
   // shortcuts for the text-editing roles (undo, redo, cut, copy, paste,
@@ -1312,11 +1172,10 @@ async function main() {
     getWorkspacePath: () => wsPath,
   });
   const url = await getMainViewUrl();
-  settingsViewUrl = getSettingsViewUrl(url);
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
-    maxRequestTime: 10_000,
+    maxRequestTime: Number.POSITIVE_INFINITY,
     handlers: {
       requests: {
         loadCanvas: async ({ viewId }) => {
@@ -2194,16 +2053,64 @@ async function main() {
           };
         },
 
-        openSettings: () => {
-          if (settingsWindow) {
-            settingsWindow.focus();
-            return { success: true };
-          }
-          settingsWindow = createSettingsWindow(mainWindow, wsPath);
+        getSettings: () => cachedSettings,
+
+        saveSettings: async (settings) => {
+          await persistSettings(settings);
           return { success: true };
         },
 
-        getSettings: () => cachedSettings,
+        getAICredentialStatus: () => ({ hasApiKey: cachedAIApiKey != null }),
+
+        setAIApiKey: async ({ apiKey }) => {
+          await saveAIApiKey(apiKey);
+          cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
+          return { success: true };
+        },
+
+        listTrash: async () => await listTrash(wsPath),
+
+        restoreTrash: async ({ trashId }) => {
+          const result = await restoreView(wsPath, trashId);
+          if (result.success) {
+            mainRpc?.send?.viewsUpdated({});
+            mainRpc?.send?.trashUpdated({});
+          }
+          return { success: result.success };
+        },
+
+        purgeTrash: async ({ trashId }) => await purgeTrash(wsPath, trashId),
+
+        clearAllTrash: async () => await clearAllTrash(wsPath),
+
+        scanUnlinkedNotes: async () => {
+          const entries = await scanUnlinkedNotes(wsPath);
+          return { entries };
+        },
+
+        deleteUnlinkedNotes: async ({ files }) =>
+          await deleteUnlinkedNotes(wsPath, files),
+
+        getWorkspaceInfo: async () => {
+          const defaultPath = getDefaultWorkspacePath();
+          return {
+            path: wsPath,
+            isDefault: resolve(wsPath) === resolve(defaultPath),
+          };
+        },
+
+        openWorkspaceFolder: () => {
+          Utils.showItemInFolder(wsPath);
+          return { success: true };
+        },
+
+        switchWorkspace: () => switchWorkspaceImpl(),
+
+        exportWorkspaceArchive: () => exportWorkspaceArchiveImpl(wsPath),
+
+        getAppInfo: () => getAppInfoData(),
+
+        checkForUpdate: () => checkForUpdateImpl(),
 
         getLocalHttpEndpoint: () => ({
           baseUrl: localHttpServer?.baseUrl ?? '',
@@ -2233,8 +2140,8 @@ async function main() {
           if (!result.success) {
             return { success: false };
           }
-          // Notify settings window so its trash list refreshes immediately.
-          settingsRpc?.send?.trashUpdated({});
+          // Notify the main renderer so an open Settings dialog refreshes Trash.
+          mainRpc?.send?.trashUpdated({});
           return {
             success: true,
             activeViewId: result.activeViewId,
@@ -2247,7 +2154,7 @@ async function main() {
           if (!result.success) {
             return { success: false };
           }
-          settingsRpc?.send?.trashUpdated({});
+          mainRpc?.send?.trashUpdated({});
           return {
             success: true,
             view: result.view,
@@ -2305,7 +2212,6 @@ async function main() {
           return await writeTemplateThumbnail(templateId, pngBase64);
         },
 
-        // @ts-expect-error - Type inference issue with Electrobun RPC
         checkLicense: async () => await checkLicenseStatus(),
 
         activateLicense: async (params: { key: string }) =>

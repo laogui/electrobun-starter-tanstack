@@ -1,4 +1,4 @@
-import { Dialog } from "@base-ui/react/dialog";
+import { Dialog } from '@base-ui/react/dialog';
 import {
   AlertTriangle,
   Archive,
@@ -7,7 +7,7 @@ import {
   Folder,
   RotateCcw,
   Trash2,
-} from "lucide-react";
+} from 'lucide-react';
 import {
   type MouseEventHandler,
   type ReactNode,
@@ -16,7 +16,7 @@ import {
   useMemo,
   useReducer,
   useState,
-} from "react";
+} from 'react';
 
 import {
   type LocaleSetting,
@@ -25,9 +25,9 @@ import {
   type TrashEntry,
   type UnlinkedFileEntry,
   type WorkspaceInfo,
-} from "@/settingsClient";
+} from '@/settingsClient';
 
-import type { SettingsLocaleStrings } from "../i18n/getLocaleStrings";
+import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 interface WorkspacePanelProps {
   client: SettingsClient;
@@ -70,9 +70,9 @@ interface WorkspacePathSectionProps {
 function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
   const [info, setInfo] = useState<WorkspaceInfo | null>(null);
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState<"export" | "switch" | null>(null);
+  const [busy, setBusy] = useState<'export' | 'switch' | null>(null);
   const [feedback, setFeedback] = useState<{
-    kind: "error" | "info" | "success";
+    kind: 'error' | 'info' | 'success';
     message: string;
   } | null>(null);
 
@@ -107,7 +107,7 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
   }, [client]);
 
   const handleSwitch = useCallback(async () => {
-    setBusy("switch");
+    setBusy('switch');
     setFeedback(null);
     try {
       const result = await client.switchWorkspace();
@@ -115,11 +115,11 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
         return;
       }
       if (!(result.success && result.path)) {
-        setFeedback({ kind: "error", message: strings.workspaceSwitchFailed });
+        setFeedback({ kind: 'error', message: strings.workspaceSwitchFailed });
         return;
       }
       setFeedback({
-        kind: "info",
+        kind: 'info',
         message: `${strings.workspaceSwitchSuccess(result.path)} ${strings.workspaceRestartRequired}`,
       });
       // Refresh the displayed path even though the new path won't take
@@ -138,7 +138,7 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
   ]);
 
   const handleExport = useCallback(async () => {
-    setBusy("export");
+    setBusy('export');
     setFeedback(null);
     try {
       const result = await client.exportWorkspaceArchive();
@@ -146,15 +146,15 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
         return;
       }
       if (!(result.success && result.filePath)) {
-        setFeedback({ kind: "error", message: strings.workspaceExportFailed });
+        setFeedback({ kind: 'error', message: strings.workspaceExportFailed });
         return;
       }
       setFeedback({
-        kind: "success",
+        kind: 'success',
         message: strings.workspaceExportSuccess(result.filePath),
       });
     } catch {
-      setFeedback({ kind: "error", message: strings.workspaceExportFailed });
+      setFeedback({ kind: 'error', message: strings.workspaceExportFailed });
     } finally {
       setBusy(null);
     }
@@ -176,9 +176,9 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
           />
           <p
             className="min-w-0 flex-1 truncate font-mono text-[12px] text-neutral-800 dark:text-neutral-100"
-            title={info?.path ?? ""}
+            title={info?.path ?? ''}
           >
-            {info?.path ?? "…"}
+            {info?.path ?? '…'}
           </p>
           {info?.isDefault ? (
             <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 font-medium text-3xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -195,12 +195,12 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
           {copied ? <Check size={13} /> : null}
           {copied ? strings.workspaceCopyPathDone : strings.workspaceCopyPath}
         </SecondaryButton>
-        <SecondaryButton disabled={busy === "switch"} onClick={handleSwitch}>
+        <SecondaryButton disabled={busy === 'switch'} onClick={handleSwitch}>
           <Folder size={13} /> {strings.workspaceSwitch}
         </SecondaryButton>
-        <SecondaryButton disabled={busy === "export"} onClick={handleExport}>
-          <Archive size={13} />{" "}
-          {busy === "export"
+        <SecondaryButton disabled={busy === 'export'} onClick={handleExport}>
+          <Archive size={13} />{' '}
+          {busy === 'export'
             ? strings.workspaceExportInProgress
             : strings.workspaceExportArchive}
         </SecondaryButton>
@@ -208,13 +208,13 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
       {feedback ? (
         <p
           className={
-            feedback.kind === "error"
-              ? "text-red-600 text-sm dark:text-red-400"
-              : feedback.kind === "success"
-                ? "text-emerald-700 text-sm dark:text-emerald-400"
-                : "text-accent-strong text-sm"
+            feedback.kind === 'error'
+              ? 'text-red-600 text-sm dark:text-red-400'
+              : feedback.kind === 'success'
+                ? 'text-emerald-700 text-sm dark:text-emerald-400'
+                : 'text-accent-strong text-sm'
           }
-          role={feedback.kind === "error" ? "alert" : "status"}
+          role={feedback.kind === 'error' ? 'alert' : 'status'}
         >
           {feedback.message}
         </p>
@@ -238,7 +238,7 @@ function SecondaryButton({
 }: SecondaryButtonProps) {
   return (
     <button
-      className={`inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-700 transition-colors [-webkit-app-region:no-drag] hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800 ${className ?? ""}`}
+      className={`inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-700 transition-colors [-webkit-app-region:no-drag] hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800 ${className ?? ''}`}
       disabled={disabled}
       onClick={onClick}
       type="button"
@@ -274,7 +274,7 @@ const initialTrashSectionState: TrashSectionState = {
 
 function trashSectionReducer(
   state: TrashSectionState,
-  patch: Partial<TrashSectionState>,
+  patch: Partial<TrashSectionState>
 ): TrashSectionState {
   return { ...state, ...patch };
 }
@@ -282,7 +282,7 @@ function trashSectionReducer(
 function TrashSection({ client, locale, strings }: TrashSectionProps) {
   const [trashState, setTrashState] = useReducer(
     trashSectionReducer,
-    initialTrashSectionState,
+    initialTrashSectionState
   );
   const {
     actionError,
@@ -295,11 +295,11 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
 
   const dateFormatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
+      new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
       }),
-    [locale],
+    [locale]
   );
 
   const reload = useCallback(async () => {
@@ -320,17 +320,17 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
       reload();
     };
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === 'visible') {
         reload();
       }
     };
     globalThis.addEventListener(TRASH_UPDATED_EVENT, handleTrashUpdated);
-    document.addEventListener("visibilitychange", handleVisibility);
-    globalThis.addEventListener("focus", handleTrashUpdated);
+    document.addEventListener('visibilitychange', handleVisibility);
+    globalThis.addEventListener('focus', handleTrashUpdated);
     return () => {
       globalThis.removeEventListener(TRASH_UPDATED_EVENT, handleTrashUpdated);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      globalThis.removeEventListener("focus", handleTrashUpdated);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      globalThis.removeEventListener('focus', handleTrashUpdated);
     };
   }, [reload]);
 
@@ -348,7 +348,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
         setTrashState({ actionError: strings.trashRestoreFailed });
       }
     },
-    [client, reload, strings.trashRestoreFailed],
+    [client, reload, strings.trashRestoreFailed]
   );
 
   const handlePurge = useCallback(
@@ -365,7 +365,7 @@ function TrashSection({ client, locale, strings }: TrashSectionProps) {
         setTrashState({ actionError: strings.trashPurgeFailed });
       }
     },
-    [client, reload, strings.trashPurgeFailed],
+    [client, reload, strings.trashPurgeFailed]
   );
 
   const handleClearAll = useCallback(async () => {
@@ -535,7 +535,7 @@ function PurgeConfirmDialog({
                 {strings.purgeConfirmTitle}
               </Dialog.Title>
               <Dialog.Description className="mt-2 text-[13px] text-gray-600 leading-5 dark:text-gray-300">
-                {entry ? strings.purgeConfirmBody(entry.view.name) : ""}
+                {entry ? strings.purgeConfirmBody(entry.view.name) : ''}
               </Dialog.Description>
             </div>
           </div>
@@ -657,9 +657,9 @@ type ContentCleanupPatch =
 
 function contentCleanupReducer(
   state: ContentCleanupState,
-  patch: ContentCleanupPatch,
+  patch: ContentCleanupPatch
 ): ContentCleanupState {
-  const resolvedPatch = typeof patch === "function" ? patch(state) : patch;
+  const resolvedPatch = typeof patch === 'function' ? patch(state) : patch;
   return { ...state, ...resolvedPatch };
 }
 
@@ -680,18 +680,18 @@ function ContentCleanupSection({
 }: ContentCleanupSectionProps) {
   const [cleanupState, setCleanupState] = useReducer(
     contentCleanupReducer,
-    initialContentCleanupState,
+    initialContentCleanupState
   );
   const { confirmOpen, deleteError, entries, scanError, scanning, selected } =
     cleanupState;
 
   const dateFormatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
+      new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
       }),
-    [locale],
+    [locale]
   );
 
   const runScan = useCallback(async () => {
@@ -706,7 +706,7 @@ function ContentCleanupSection({
       setCleanupState({
         entries: data,
         selected: new Set(
-          data.flatMap((e) => (e.hasFrontmatterId ? [e.file] : [])),
+          data.flatMap((e) => (e.hasFrontmatterId ? [e.file] : []))
         ),
       });
     } catch {
@@ -943,7 +943,7 @@ function CleanupRow({
           )}
         </div>
         <div className="mt-0.5 truncate text-2xs text-neutral-500 dark:text-neutral-400">
-          {entry.file} · {formatBytes(entry.size)} ·{" "}
+          {entry.file} · {formatBytes(entry.size)} ·{' '}
           {strings.cleanupModified(dateFormatter.format(entry.modifiedAt))}
         </div>
       </div>

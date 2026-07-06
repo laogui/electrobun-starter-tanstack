@@ -7,11 +7,9 @@ export default {
     version: '1.0.0',
   },
   build: {
-    // Vite builds both renderer HTML entries to dist/, we copy from there.
-    // The settings HTML references the shared Vite assets under mainview.
+    // Vite builds the renderer HTML entry to dist/, we copy from there.
     copy: {
       'dist/index.html': 'views/mainview/index.html',
-      'dist/settings.html': 'views/settingsview/index.html',
       'dist/assets': 'views/mainview/assets',
     },
     // Ignore Vite output in watch mode — HMR handles view rebuilds separately

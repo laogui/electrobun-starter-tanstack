@@ -9,6 +9,8 @@ interface RpcHandlerMap {
 }
 const localInfoChannelMock = vi.fn();
 const settingsUpdatedMock = vi.fn();
+const trashUpdatedMock = vi.fn();
+const viewsUpdatedMock = vi.fn();
 const defineRpcMock = vi.fn<
   (config: {
     handlers: {
@@ -16,17 +18,31 @@ const defineRpcMock = vi.fn<
       messages?: RpcHandlerMap;
     };
     maxRequestTime?: number;
-  }) => { send: { settingsUpdated: typeof settingsUpdatedMock } }
+  }) => {
+    send: {
+      settingsUpdated: typeof settingsUpdatedMock;
+      trashUpdated: typeof trashUpdatedMock;
+      viewsUpdated: typeof viewsUpdatedMock;
+    };
+  }
 >(() => ({
-  send: { settingsUpdated: settingsUpdatedMock },
+  send: {
+    settingsUpdated: settingsUpdatedMock,
+    trashUpdated: trashUpdatedMock,
+    viewsUpdated: viewsUpdatedMock,
+  },
 }));
 const browserWindowFocusMock = vi.fn();
 const browserWindowOnMock = vi.fn();
 const browserWindowMock = vi.fn();
 const setApplicationMenuMock = vi.fn();
 const openFileDialogMock = vi.fn();
+const showItemInFolderMock = vi.fn();
 const openPathMock = vi.fn();
+const openExternalMock = vi.fn();
 const bunSpawnMock = vi.fn();
+const updaterGetLocalInfoMock = vi.fn();
+const updaterCheckForUpdateMock = vi.fn();
 
 interface BrowserWindowOptions {
   frame?: {
@@ -60,13 +76,18 @@ vi.mock('electrobun/bun', () => ({
   },
   BrowserWindow: BrowserWindowMock,
   Updater: {
+    checkForUpdate: updaterCheckForUpdateMock,
+    getLocallocalInfo: updaterGetLocalInfoMock,
     localInfo: {
       channel: localInfoChannelMock,
+      hash: vi.fn(async () => 'current-hash'),
     },
   },
   Utils: {
     openFileDialog: openFileDialogMock,
     openPath: openPathMock,
+    openExternal: openExternalMock,
+    showItemInFolder: showItemInFolderMock,
   },
 }));
 
@@ -89,6 +110,11 @@ const noteMocks = {
 const previewMocks = {
   buildNotePreviewFromBlocks: vi.fn(),
   writeNoteWithPreview: vi.fn(),
+};
+
+const cleanupMocks = {
+  deleteUnlinkedNotes: vi.fn(async () => ({ deleted: [], skipped: [] })),
+  scanUnlinkedNotes: vi.fn(async () => []),
 };
 
 const noteStoreMocks = {
@@ -159,6 +185,15 @@ vi.mock('./preview', () => ({
   writeNoteWithPreview: (
     ...args: Parameters<typeof previewMocks.writeNoteWithPreview>
   ) => previewMocks.writeNoteWithPreview(...args),
+}));
+
+vi.mock('./cleanup', () => ({
+  deleteUnlinkedNotes: (
+    ...args: Parameters<typeof cleanupMocks.deleteUnlinkedNotes>
+  ) => cleanupMocks.deleteUnlinkedNotes(...args),
+  scanUnlinkedNotes: (
+    ...args: Parameters<typeof cleanupMocks.scanUnlinkedNotes>
+  ) => cleanupMocks.scanUnlinkedNotes(...args),
 }));
 
 vi.mock('./noteStore', () => ({
@@ -262,32 +297,41 @@ const loadIndexModule = async () => {
 // payloads. Explicit keys (no index signature) avoid `noUncheckedIndexedAccess`.
 type AnyHandler = (payload?: unknown) => unknown | Promise<unknown>;
 interface CanvasHandlers {
+  checkForUpdate: AnyHandler;
+  clearAllTrash: AnyHandler;
   createNote: AnyHandler;
   createView: AnyHandler;
   deleteNote: AnyHandler;
+  deleteUnlinkedNotes: AnyHandler;
   deleteView: AnyHandler;
   exportJson: AnyHandler;
   exportNoteMarkdown: AnyHandler;
   exportNotesMarkdown: AnyHandler;
   exportPng: AnyHandler;
+  exportWorkspaceArchive: AnyHandler;
+  getAICredentialStatus: AnyHandler;
+  getAppInfo: AnyHandler;
   getSettings: AnyHandler;
+  getWorkspaceInfo: AnyHandler;
   importMarkdownFiles: AnyHandler;
+  listTrash: AnyHandler;
   listViews: AnyHandler;
   loadAttachment: AnyHandler;
   loadBlockNote: AnyHandler;
   loadCanvas: AnyHandler;
   openAttachment: AnyHandler;
-  openSettings: AnyHandler;
+  openWorkspaceFolder: AnyHandler;
+  purgeTrash: AnyHandler;
   renameView: AnyHandler;
+  restoreTrash: AnyHandler;
   saveAttachment: AnyHandler;
   saveBlockNote: AnyHandler;
   saveManifest: AnyHandler;
   saveNote: AnyHandler;
-}
-interface SettingsHandlers {
-  exportWorkspaceArchive: AnyHandler;
-  getSettings: AnyHandler;
   saveSettings: AnyHandler;
+  scanUnlinkedNotes: AnyHandler;
+  setAIApiKey: AnyHandler;
+  switchWorkspace: AnyHandler;
 }
 
 const getCanvasHandlers = (): CanvasHandlers => {
@@ -298,21 +342,28 @@ const getCanvasHandlers = (): CanvasHandlers => {
   return call[0].handlers.requests as unknown as CanvasHandlers;
 };
 
-const getSettingsHandlers = (): SettingsHandlers => {
-  const call = defineRpcMock.mock.calls.at(-1);
-  if (!call) {
-    throw new Error('defineRPC was not called');
-  }
-  return call[0].handlers.requests as unknown as SettingsHandlers;
-};
-
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   localInfoChannelMock.mockResolvedValue('prod');
+  updaterGetLocalInfoMock.mockResolvedValue({
+    channel: 'prod',
+    hash: 'abcdef0123456789',
+    identifier: 'com.ghostboard.app',
+    name: 'GhostBoard',
+    version: '1.0.0',
+  });
+  updaterCheckForUpdateMock.mockResolvedValue({
+    hash: 'next-hash',
+    updateAvailable: true,
+    version: '1.1.0',
+  });
   openFileDialogMock.mockResolvedValue(['/tmp/exports']);
+  showItemInFolderMock.mockReset();
   openPathMock.mockReset();
   openPathMock.mockReturnValue(true);
+  openExternalMock.mockReset();
+  openExternalMock.mockReturnValue(true);
   fetchMock.mockReset();
   bunFileMock.mockReset();
   bunSpawnMock.mockReset();
@@ -336,6 +387,14 @@ beforeEach(() => {
   });
   workspaceMocks.renameView.mockResolvedValue(true);
   workspaceMocks.restoreView.mockResolvedValue({ success: false });
+  workspaceMocks.listTrash.mockResolvedValue([]);
+  workspaceMocks.purgeTrash.mockResolvedValue({ success: true });
+  workspaceMocks.clearAllTrash.mockResolvedValue({ success: true, purged: 0 });
+  cleanupMocks.scanUnlinkedNotes.mockResolvedValue([]);
+  cleanupMocks.deleteUnlinkedNotes.mockResolvedValue({
+    deleted: [],
+    skipped: [],
+  });
   manifestMocks.saveManifest.mockResolvedValue(undefined);
   previewMocks.writeNoteWithPreview.mockResolvedValue({
     html: '<p>Body</p>',
@@ -369,14 +428,8 @@ describe('src/bun/index helpers', () => {
     fetchMock.mockResolvedValue({ ok: true });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const { getMainViewUrl, getSettingsViewUrl } = await loadIndexModule();
+    const { getMainViewUrl } = await loadIndexModule();
     await expect(getMainViewUrl()).resolves.toBe('http://localhost:5173');
-    expect(getSettingsViewUrl('http://localhost:5173')).toBe(
-      'http://localhost:5173/settings.html'
-    );
-    expect(getSettingsViewUrl('views://mainview/index.html')).toBe(
-      'views://settingsview/index.html'
-    );
 
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:5173', {
       method: 'HEAD',
@@ -419,14 +472,14 @@ describe('src/bun/index helpers', () => {
     );
   });
 
-  it('uses a finite main-window RPC request timeout', async () => {
+  it('allows long-lived main-window RPC requests for settings native dialogs', async () => {
     await loadIndexModule();
 
     const canvasRpcCall = defineRpcMock.mock.calls.find(
       ([config]) => 'loadCanvas' in config.handlers.requests
     );
 
-    expect(canvasRpcCall?.[0].maxRequestTime).toBe(10_000);
+    expect(canvasRpcCall?.[0].maxRequestTime).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('persistSettings writes through atomicWrite after settings file is known', async () => {
@@ -529,6 +582,7 @@ describe('src/bun/index helpers', () => {
       activeViewId: 'default',
       trashId: 'trash_123',
     });
+    expect(trashUpdatedMock).toHaveBeenCalledWith({});
 
     workspaceMocks.removeView.mockResolvedValueOnce({ success: false });
     await expect(
@@ -555,36 +609,16 @@ describe('src/bun/index helpers', () => {
     });
   });
 
-  it('openSettings focuses an existing window and otherwise creates a new settings window', async () => {
+  it('does not expose an openSettings handler or create a second settings window', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
 
-    expect(canvasHandlers.openSettings()).toEqual({ success: true });
-    expect(browserWindowMock).toHaveBeenCalledTimes(2);
-    expect(browserWindowMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        title: 'Settings',
-        url: expect.stringContaining('settingsview'),
-        rpc: expect.objectContaining({
-          send: expect.objectContaining({
-            settingsUpdated: expect.any(Function),
-          }),
-        }),
-        frame: {
-          width: 720,
-          height: 560,
-          x: 290,
-          y: 270,
-        },
-      })
-    );
-
-    expect(canvasHandlers.openSettings()).toEqual({ success: true });
-    expect(browserWindowFocusMock).toHaveBeenCalled();
-    expect(browserWindowMock).toHaveBeenCalledTimes(2);
+    expect('openSettings' in canvasHandlers).toBe(false);
+    expect(browserWindowMock).toHaveBeenCalledTimes(1);
+    expect(browserWindowFocusMock).not.toHaveBeenCalled();
   });
 
-  it('settings RPC returns cached settings and saveSettings pushes updates', async () => {
+  it('main RPC returns cached settings and saves settings without cross-window pushes', async () => {
     const { loadSettings } = await loadIndexModule();
     bunFileMock.mockReturnValueOnce({
       exists: vi.fn().mockResolvedValue(false),
@@ -593,14 +627,11 @@ describe('src/bun/index helpers', () => {
     await loadSettings('/workspace-settings');
 
     const canvasHandlers = getCanvasHandlers();
-    expect(canvasHandlers.openSettings()).toEqual({ success: true });
-
     const { DEFAULT_SETTINGS } = await loadIndexModule();
-    const settingsHandlers = getSettingsHandlers();
-    expect(settingsHandlers.getSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(canvasHandlers.getSettings()).toEqual(DEFAULT_SETTINGS);
 
     await expect(
-      settingsHandlers.saveSettings({
+      canvasHandlers.saveSettings({
         theme: 'dark',
         locale: 'zh',
       })
@@ -615,11 +646,126 @@ describe('src/bun/index helpers', () => {
         2
       )
     );
-    expect(settingsUpdatedMock).toHaveBeenCalledWith({
-      ...DEFAULT_SETTINGS,
-      theme: 'dark',
-      locale: 'zh',
+    expect(settingsUpdatedMock).not.toHaveBeenCalled();
+  });
+
+  it('main RPC exposes settings workspace, trash, cleanup, AI, and about handlers', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    const trashEntry = {
+      deletedAt: 1,
+      trashFile: 'trash/trash_1.canvas.json',
+      trashId: 'trash_1',
+      view: {
+        file: 'views/old.canvas.json',
+        id: 'old',
+        name: 'Old Canvas',
+      },
+    };
+    workspaceMocks.listTrash.mockResolvedValueOnce([trashEntry] as never[]);
+    cleanupMocks.scanUnlinkedNotes.mockResolvedValueOnce([
+      {
+        file: 'content/orphan.md',
+        hasFrontmatterId: true,
+        modifiedAt: 2,
+        noteId: 'note_orphan',
+        size: 10,
+        title: 'Orphan',
+      },
+    ] as never[]);
+    cleanupMocks.deleteUnlinkedNotes.mockResolvedValueOnce({
+      deleted: ['content/orphan.md'] as never[],
+      skipped: [],
     });
+    workspaceMocks.restoreView.mockResolvedValueOnce({
+      activeViewId: 'default',
+      success: true,
+      view: {
+        file: 'views/old.canvas.json',
+        id: 'old',
+        name: 'Old Canvas',
+      },
+    });
+    workspaceMocks.clearAllTrash.mockResolvedValueOnce({
+      purged: 1,
+      success: true,
+    });
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/next-workspace']);
+
+    await expect(canvasHandlers.listTrash()).resolves.toEqual([trashEntry]);
+    await expect(
+      canvasHandlers.restoreTrash({ trashId: 'trash_1' })
+    ).resolves.toEqual({ success: true });
+    expect(viewsUpdatedMock).toHaveBeenCalledWith({});
+    expect(trashUpdatedMock).toHaveBeenCalledWith({});
+
+    await expect(
+      canvasHandlers.purgeTrash({ trashId: 'trash_1' })
+    ).resolves.toEqual({ success: true });
+    expect(workspaceMocks.purgeTrash).toHaveBeenCalledWith(
+      '/tmp/workspace',
+      'trash_1'
+    );
+
+    await expect(canvasHandlers.clearAllTrash()).resolves.toEqual({
+      purged: 1,
+      success: true,
+    });
+    await expect(canvasHandlers.scanUnlinkedNotes()).resolves.toEqual({
+      entries: [
+        {
+          file: 'content/orphan.md',
+          hasFrontmatterId: true,
+          modifiedAt: 2,
+          noteId: 'note_orphan',
+          size: 10,
+          title: 'Orphan',
+        },
+      ],
+    });
+    await expect(
+      canvasHandlers.deleteUnlinkedNotes({ files: ['content/orphan.md'] })
+    ).resolves.toEqual({
+      deleted: ['content/orphan.md'],
+      skipped: [],
+    });
+
+    await expect(canvasHandlers.getWorkspaceInfo()).resolves.toEqual({
+      isDefault: false,
+      path: '/tmp/workspace',
+    });
+    expect(canvasHandlers.openWorkspaceFolder()).toEqual({ success: true });
+    expect(showItemInFolderMock).toHaveBeenCalledWith('/tmp/workspace');
+
+    await expect(canvasHandlers.switchWorkspace()).resolves.toEqual({
+      path: '/tmp/next-workspace',
+      success: true,
+    });
+    expect(userPrefsMocks.saveUserPrefs).toHaveBeenCalledWith({
+      workspacePath: '/tmp/next-workspace',
+    });
+
+    await expect(canvasHandlers.getAppInfo()).resolves.toEqual({
+      channel: 'prod',
+      hash: 'abcdef0123456789',
+      identifier: 'com.ghostboard.app',
+      name: 'GhostBoard',
+      version: '1.0.0',
+    });
+    await expect(canvasHandlers.checkForUpdate()).resolves.toEqual({
+      currentHash: 'current-hash',
+      hash: 'next-hash',
+      updateAvailable: true,
+      version: '1.1.0',
+    });
+
+    expect(canvasHandlers.getAICredentialStatus()).toEqual({
+      hasApiKey: false,
+    });
+    await expect(
+      canvasHandlers.setAIApiKey({ apiKey: 'sk-test' })
+    ).resolves.toEqual({ success: true });
+    expect(aiCredentialsMocks.saveAIApiKey).toHaveBeenCalledWith('sk-test');
   });
 
   it('exportWorkspaceArchive refuses to write archives inside the workspace', async () => {
@@ -628,8 +774,6 @@ describe('src/bun/index helpers', () => {
     workspaceMocks.initWorkspace.mockReturnValueOnce(workspacePath);
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
-    expect(canvasHandlers.openSettings()).toEqual({ success: true });
-    const settingsHandlers = getSettingsHandlers();
     openFileDialogMock.mockResolvedValueOnce([`${workspacePath}/archives`]);
     bunSpawnMock.mockReturnValueOnce({
       exited: Promise.resolve(0),
@@ -641,7 +785,7 @@ describe('src/bun/index helpers', () => {
       size: 123,
     });
 
-    await expect(settingsHandlers.exportWorkspaceArchive()).resolves.toEqual({
+    await expect(canvasHandlers.exportWorkspaceArchive()).resolves.toEqual({
       success: false,
     });
     expect(bunSpawnMock).not.toHaveBeenCalled();

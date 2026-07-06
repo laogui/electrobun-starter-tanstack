@@ -107,6 +107,38 @@
     background: rgba(0, 0, 0, 0.2);
   }
 
+  .os-theme-settings {
+    --os-size: 8px;
+    --os-padding-perpendicular: 2px;
+    --os-padding-axis: 8px;
+    --os-track-border-radius: 999px;
+    --os-track-bg: transparent;
+    --os-track-bg-hover: transparent;
+    --os-track-bg-active: transparent;
+    --os-track-border: none;
+    --os-track-border-hover: none;
+    --os-track-border-active: none;
+    --os-handle-border-radius: 999px;
+    --os-handle-bg: rgba(15, 23, 42, 0.22);
+    --os-handle-bg-hover: rgba(15, 23, 42, 0.34);
+    --os-handle-bg-active: rgba(15, 23, 42, 0.46);
+    --os-handle-border: none;
+    --os-handle-border-hover: none;
+    --os-handle-border-active: none;
+    --os-handle-min-size: 36px;
+    --os-handle-max-size: none;
+    --os-handle-perpendicular-size: 6px;
+    --os-handle-perpendicular-size-hover: 7px;
+    --os-handle-perpendicular-size-active: 8px;
+    --os-handle-interactive-area-offset: 4px;
+  }
+
+  .dark .os-theme-settings {
+    --os-handle-bg: rgba(255, 255, 255, 0.28);
+    --os-handle-bg-hover: rgba(255, 255, 255, 0.4);
+    --os-handle-bg-active: rgba(255, 255, 255, 0.52);
+  }
+
   /* Empty-sticky placeholder. Toggled via the `sticky-editable-empty` class
      (driven by React's `data.content`) rather than `:empty`, because the
      contentEditable can hold a stray <br> after the user clears all text in

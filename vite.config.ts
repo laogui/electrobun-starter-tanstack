@@ -47,7 +47,6 @@ export default defineConfig(async ({ command }) => {
       rollupOptions: {
         input: {
           main: resolve(projectRoot, 'src/mainview/index.html'),
-          settings: resolve(projectRoot, 'src/mainview/settings.html'),
         },
       },
     },

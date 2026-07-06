@@ -17,6 +17,39 @@ import {
 import { SettingsApp } from './SettingsApp';
 import { applyTheme, normalizeSettings } from './settingsState';
 
+const overlayScrollbarsPropsMock = vi.hoisted(() => vi.fn());
+
+vi.mock('overlayscrollbars-react', async () => {
+  const React = await import('react');
+
+  return {
+    OverlayScrollbarsComponent: ({
+      children,
+      defer,
+      element = 'div',
+      options,
+      ...props
+    }: {
+      children: React.ReactNode;
+      defer?: unknown;
+      element?: keyof React.JSX.IntrinsicElements;
+      options?: unknown;
+      [key: string]: unknown;
+    }) => {
+      overlayScrollbarsPropsMock({ defer, element, options, ...props });
+
+      return React.createElement(
+        element,
+        {
+          ...props,
+          'data-testid': 'settings-overlay-scrollbars',
+        },
+        children
+      );
+    },
+  };
+});
+
 interface ClientOverrides {
   clearAllTrash?: () => Promise<{ purged: number; success: boolean }>;
   deleteUnlinkedNotes?: (
@@ -80,7 +113,13 @@ const createClient = (
   setAIApiKey: vi.fn().mockResolvedValue({ success: true }),
 });
 
-function renderSettingsApp(client: SettingsClient) {
+function renderSettingsApp(
+  client: SettingsClient,
+  props: {
+    onSettingsChange?: (settings: AppSettings) => void;
+    variant?: 'dialog' | 'window';
+  } = {}
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -88,7 +127,7 @@ function renderSettingsApp(client: SettingsClient) {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SettingsApp client={client} />
+      <SettingsApp client={client} {...props} />
     </QueryClientProvider>
   );
 }
@@ -100,6 +139,7 @@ describe('SettingsApp helpers', () => {
     document.documentElement.removeAttribute('data-base-ui-scroll-locked');
     document.documentElement.removeAttribute('style');
     document.body.removeAttribute('style');
+    overlayScrollbarsPropsMock.mockClear();
   });
 
   it('normalizes invalid persisted settings back to defaults', () => {
@@ -141,6 +181,7 @@ describe('SettingsApp', () => {
     document.documentElement.removeAttribute('style');
     document.body.removeAttribute('style');
     document.title = '';
+    overlayScrollbarsPropsMock.mockClear();
   });
 
   it('loads settings into localized Tailwind/Base UI controls', async () => {
@@ -163,6 +204,38 @@ describe('SettingsApp', () => {
     expect(document.title).toBe('设置');
   });
 
+  it('uses OverlayScrollbars for dialog content with the settings scrollbar theme', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      theme: 'system',
+      locale: 'en',
+    });
+
+    renderSettingsApp(client, { variant: 'dialog' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Settings' })
+    ).toBeVisible();
+
+    const scrollArea = screen.getByTestId('settings-overlay-scrollbars');
+    expect(scrollArea.tagName).toBe('SECTION');
+    expect(scrollArea).toHaveClass('settings-scrollbar');
+    expect(scrollArea).not.toHaveClass('overflow-y-auto');
+    expect(overlayScrollbarsPropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defer: true,
+        element: 'section',
+        options: expect.objectContaining({
+          overflow: { x: 'hidden' },
+          scrollbars: expect.objectContaining({
+            autoHide: 'leave',
+            theme: 'os-theme-settings',
+          }),
+        }),
+      })
+    );
+  });
+
   it('saves when a setting changes', async () => {
     const client = createClient({
       ...DEFAULT_SETTINGS,
@@ -179,6 +252,30 @@ describe('SettingsApp', () => {
 
     await waitFor(() => {
       expect(client.saveSettings).toHaveBeenCalledWith({
+        ...DEFAULT_SETTINGS,
+        theme: 'dark',
+        locale: 'en',
+      });
+    });
+  });
+
+  it('notifies the host when a setting changes so the main window can share UI state', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      theme: 'system',
+      locale: 'en',
+    });
+    const onSettingsChange = vi.fn();
+
+    renderSettingsApp(client, { onSettingsChange });
+
+    const user = userEvent.setup();
+    const themeSelect = await screen.findByRole('combobox', { name: 'Theme' });
+    await user.click(themeSelect);
+    await user.click(await screen.findByRole('option', { name: 'Dark' }));
+
+    await waitFor(() => {
+      expect(onSettingsChange).toHaveBeenCalledWith({
         ...DEFAULT_SETTINGS,
         theme: 'dark',
         locale: 'en',

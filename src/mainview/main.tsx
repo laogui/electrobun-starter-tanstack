@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 
 import { router } from '@/router';
 
+import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
 
 const rootElement = document.querySelector('#root');

@@ -11,7 +11,21 @@ const request = {
   openAttachment: vi.fn(),
   getSettings: vi.fn(),
   getLocalHttpEndpoint: vi.fn(),
-  openSettings: vi.fn(),
+  saveSettings: vi.fn(),
+  listTrash: vi.fn(),
+  restoreTrash: vi.fn(),
+  purgeTrash: vi.fn(),
+  clearAllTrash: vi.fn(),
+  scanUnlinkedNotes: vi.fn(),
+  deleteUnlinkedNotes: vi.fn(),
+  getWorkspaceInfo: vi.fn(),
+  openWorkspaceFolder: vi.fn(),
+  switchWorkspace: vi.fn(),
+  exportWorkspaceArchive: vi.fn(),
+  getAppInfo: vi.fn(),
+  checkForUpdate: vi.fn(),
+  getAICredentialStatus: vi.fn(),
+  setAIApiKey: vi.fn(),
   listViews: vi.fn(),
   createView: vi.fn(),
   deleteView: vi.fn(),
@@ -86,9 +100,62 @@ describe('rpc', () => {
       success: false,
     });
     await expect(rpc.rpcGetSettings()).resolves.toBeNull();
+    await expect(rpc.rpcSaveSettings({} as never)).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcListTrash()).resolves.toEqual([]);
+    await expect(rpc.rpcRestoreTrash('trash-1')).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcPurgeTrash('trash-1')).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcClearAllTrash()).resolves.toEqual({
+      purged: 0,
+      success: false,
+    });
+    await expect(rpc.rpcScanUnlinkedNotes()).resolves.toEqual([]);
+    await expect(rpc.rpcDeleteUnlinkedNotes(['content/a.md'])).resolves.toEqual(
+      {
+        deleted: [],
+        skipped: ['content/a.md'],
+      }
+    );
+    await expect(rpc.rpcGetWorkspaceInfo()).resolves.toEqual({
+      path: '',
+      isDefault: true,
+    });
+    await expect(rpc.rpcOpenWorkspaceFolder()).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcSwitchWorkspace()).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcExportWorkspaceArchive()).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcGetAppInfo()).resolves.toEqual({
+      channel: 'dev',
+      hash: '',
+      identifier: 'dev.ghostboard',
+      name: 'GhostBoard',
+      version: '0.0.0',
+    });
+    await expect(rpc.rpcCheckForUpdate()).resolves.toEqual({
+      currentHash: '',
+      error: 'RPC unavailable',
+      hash: '',
+      updateAvailable: false,
+      version: '',
+    });
+    await expect(rpc.rpcGetAICredentialStatus()).resolves.toEqual({
+      hasApiKey: false,
+    });
+    await expect(rpc.rpcSetAIApiKey('sk-test')).resolves.toEqual({
+      success: false,
+    });
     await expect(rpc.rpcCheckLicense()).resolves.toBeNull();
     await expect(rpc.rpcActivateLicense('GHOST-TEST')).resolves.toBeNull();
-    await expect(rpc.rpcOpenSettings()).resolves.toEqual({ success: false });
     await expect(rpc.rpcListViews()).resolves.toBeNull();
     await expect(rpc.rpcCreateView('Inbox')).resolves.toBeNull();
     await expect(rpc.rpcDeleteView('view-1')).resolves.toBeNull();
@@ -125,7 +192,7 @@ describe('rpc', () => {
     expect(request.checkLicense).toHaveBeenCalledWith({});
   });
 
-  it('uses a finite renderer-side RPC request timeout', async () => {
+  it('uses an unbounded renderer-side RPC request timeout for native settings operations', async () => {
     vi.stubGlobal('__electrobunWebviewId', 'webview-1');
     const rpc = await loadModule();
 
@@ -133,7 +200,7 @@ describe('rpc', () => {
 
     expect(defineRPC).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxRequestTime: 10_000,
+        maxRequestTime: Number.POSITIVE_INFINITY,
       })
     );
   });
@@ -141,6 +208,7 @@ describe('rpc', () => {
   it('forwards all RPC calls with the expected payloads', async () => {
     vi.stubGlobal('__electrobunWebviewId', 'webview-1');
     const rpc = await loadModule();
+    request.scanUnlinkedNotes.mockResolvedValue({ entries: [] });
 
     await rpc.loadCanvas('focus');
     await rpc.rpcSaveManifest('focus', [{ id: 'n1' }], [{ id: 'e1' }], {
@@ -159,7 +227,32 @@ describe('rpc', () => {
     });
     await rpc.rpcLoadAttachment('images/a.png');
     await rpc.rpcOpenAttachment('attachments/file_abc.pdf');
-    await rpc.rpcOpenSettings();
+    await rpc.rpcSaveSettings({
+      theme: 'dark',
+      locale: 'zh',
+      fontFamily: 'system',
+      canvasBackground: 'default',
+      canvasSnapToGrid: true,
+      autoSaveInterval: 800,
+      aiEnabled: false,
+      aiProvider: 'openai',
+      aiModel: 'gpt-4.1-mini',
+      aiBaseUrl: '',
+    });
+    await rpc.rpcListTrash();
+    await rpc.rpcRestoreTrash('trash-1');
+    await rpc.rpcPurgeTrash('trash-1');
+    await rpc.rpcClearAllTrash();
+    await rpc.rpcScanUnlinkedNotes();
+    await rpc.rpcDeleteUnlinkedNotes(['content/orphan.md']);
+    await rpc.rpcGetWorkspaceInfo();
+    await rpc.rpcOpenWorkspaceFolder();
+    await rpc.rpcSwitchWorkspace();
+    await rpc.rpcExportWorkspaceArchive();
+    await rpc.rpcGetAppInfo();
+    await rpc.rpcCheckForUpdate();
+    await rpc.rpcGetAICredentialStatus();
+    await rpc.rpcSetAIApiKey('sk-test');
     await rpc.rpcCheckLicense();
     await rpc.rpcActivateLicense('GHOST-ABCD-EFGH-IJKL-1234');
     await rpc.rpcCreateView('Inbox');
@@ -205,7 +298,34 @@ describe('rpc', () => {
     expect(request.openAttachment).toHaveBeenCalledWith({
       filePath: 'attachments/file_abc.pdf',
     });
-    expect(request.openSettings).toHaveBeenCalledWith({});
+    expect(request.saveSettings).toHaveBeenCalledWith({
+      theme: 'dark',
+      locale: 'zh',
+      fontFamily: 'system',
+      canvasBackground: 'default',
+      canvasSnapToGrid: true,
+      autoSaveInterval: 800,
+      aiEnabled: false,
+      aiProvider: 'openai',
+      aiModel: 'gpt-4.1-mini',
+      aiBaseUrl: '',
+    });
+    expect(request.listTrash).toHaveBeenCalledWith({});
+    expect(request.restoreTrash).toHaveBeenCalledWith({ trashId: 'trash-1' });
+    expect(request.purgeTrash).toHaveBeenCalledWith({ trashId: 'trash-1' });
+    expect(request.clearAllTrash).toHaveBeenCalledWith({});
+    expect(request.scanUnlinkedNotes).toHaveBeenCalledWith({});
+    expect(request.deleteUnlinkedNotes).toHaveBeenCalledWith({
+      files: ['content/orphan.md'],
+    });
+    expect(request.getWorkspaceInfo).toHaveBeenCalledWith({});
+    expect(request.openWorkspaceFolder).toHaveBeenCalledWith({});
+    expect(request.switchWorkspace).toHaveBeenCalledWith({});
+    expect(request.exportWorkspaceArchive).toHaveBeenCalledWith({});
+    expect(request.getAppInfo).toHaveBeenCalledWith({});
+    expect(request.checkForUpdate).toHaveBeenCalledWith({});
+    expect(request.getAICredentialStatus).toHaveBeenCalledWith({});
+    expect(request.setAIApiKey).toHaveBeenCalledWith({ apiKey: 'sk-test' });
     expect(request.checkLicense).toHaveBeenCalledWith({});
     expect(request.activateLicense).toHaveBeenCalledWith({
       key: 'GHOST-ABCD-EFGH-IJKL-1234',

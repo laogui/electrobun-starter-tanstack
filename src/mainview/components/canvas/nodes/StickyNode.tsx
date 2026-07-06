@@ -13,6 +13,10 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
+import {
+  SkeletonLines,
+  ZoomedOutPlaceholder,
+} from './_shared/ZoomedOutPlaceholder';
 
 export interface StickyData {
   color?: string;
@@ -53,9 +57,10 @@ export const StickyContent = ({
   return (
     <>
       {isZoomedOut ? (
-        <div
-          className="size-full overflow-hidden rounded-sm p-3"
-          style={colorToStyle(data.color)}
+        <ZoomedOutPlaceholder
+          className="overflow-hidden rounded-sm"
+          color={data.color}
+          padding="sm"
         >
           {data.content ? (
             <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
@@ -64,12 +69,13 @@ export const StickyContent = ({
                 : data.content}
             </p>
           ) : (
-            <div className="mt-1 space-y-2 opacity-30">
-              <div className="h-2 w-full rounded-full bg-current" />
-              <div className="h-2 w-4/6 rounded-full bg-current" />
-            </div>
+            <SkeletonLines
+              className="mt-1"
+              size="sm"
+              widths={['w-full', 'w-4/6']}
+            />
           )}
-        </div>
+        </ZoomedOutPlaceholder>
       ) : (
         <div
           className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"

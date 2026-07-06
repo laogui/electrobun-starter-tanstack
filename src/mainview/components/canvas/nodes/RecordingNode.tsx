@@ -14,6 +14,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
+import { ZoomedOutPlaceholder } from './_shared/ZoomedOutPlaceholder';
 
 const WAVEFORM_BAR_COUNT = 48;
 const DEFAULT_WAVEFORM_BARS = Array.from(
@@ -392,16 +393,18 @@ const RecordingNode = ({
 
       <div className="node-visual relative size-full overflow-hidden rounded-2xl border border-black/5 bg-neutral-50 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:bg-neutral-900">
         {isZoomedOut ? (
-          <div
-            className="flex size-full flex-col justify-center gap-3 p-5"
-            style={colorToStyle(recording.color)}
-          >
-            <Mic
-              className={isDark ? 'text-neutral-200' : 'text-neutral-500'}
-              size={26}
-            />
-            <h3 className="line-clamp-2 font-bold text-xl/tight">{title}</h3>
-          </div>
+          <ZoomedOutPlaceholder
+            align="center"
+            color={recording.color}
+            leading={
+              <Mic
+                className={isDark ? 'text-neutral-200' : 'text-neutral-500'}
+                size={26}
+              />
+            }
+            title={title}
+            titleClassName="text-xl/tight"
+          />
         ) : (
           <RecordingContent
             data={data}

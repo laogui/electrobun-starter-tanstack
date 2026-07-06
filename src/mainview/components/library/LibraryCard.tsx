@@ -4,14 +4,14 @@ import {
   Link2,
   ListChecks,
   Paperclip,
-} from "lucide-react";
-import { useEffect, useRef } from "react";
+} from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
-import { formatRelativeTime } from "@/lib/formatRelative";
-import { cn } from "@/lib/utils";
+import { formatRelativeTime } from '@/lib/formatRelative';
+import { cn } from '@/lib/utils';
 
-import * as m from "../../../paraglide/messages.js";
-import type { LibraryItem } from "./useLibraryData";
+import * as m from '../../../paraglide/messages.js';
+import type { LibraryItem } from './useLibraryData';
 
 interface LibraryCardProps {
   /** Whether this card is the keyboard-focused entry (drives the focus ring
@@ -25,16 +25,16 @@ interface LibraryCardProps {
 }
 
 function iconFor(type: string, data: Record<string, unknown>) {
-  if (type === "image") {
+  if (type === 'image') {
     return ImageIcon;
   }
-  if (type === "asset") {
+  if (type === 'asset') {
     return Paperclip;
   }
-  if (type === "link") {
+  if (type === 'link') {
     return Link2;
   }
-  if (type === "card" && data.type === "checklist") {
+  if (type === 'card' && data.type === 'checklist') {
     return ListChecks;
   }
   return FileText;
@@ -42,15 +42,15 @@ function iconFor(type: string, data: Record<string, unknown>) {
 
 function readStr(data: Record<string, unknown>, key: string): string {
   const v = data[key];
-  return typeof v === "string" && v.trim().length > 0 ? v : "";
+  return typeof v === 'string' && v.trim().length > 0 ? v : '';
 }
 
 /** A renderable preview for the card's 16:9 header region. */
 type Thumb =
-  | { kind: "image"; src: string }
-  | { kind: "favicon"; src: string }
-  | { kind: "excerpt"; text: string }
-  | { kind: "none" };
+  | { kind: 'image'; src: string }
+  | { kind: 'favicon'; src: string }
+  | { kind: 'excerpt'; text: string }
+  | { kind: 'none' };
 
 /**
  * Derive the best available preview for a library item from its node data.
@@ -61,37 +61,37 @@ type Thumb =
  */
 function resolveThumb(item: LibraryItem): Thumb {
   const data = item.data;
-  if (item.type === "image") {
-    const src = readStr(data, "thumbnailUrl") || readStr(data, "imageUrl");
-    return src ? { kind: "image", src } : { kind: "none" };
+  if (item.type === 'image') {
+    const src = readStr(data, 'thumbnailUrl') || readStr(data, 'imageUrl');
+    return src ? { kind: 'image', src } : { kind: 'none' };
   }
-  if (item.type === "asset") {
-    const src = readStr(data, "thumbnailUrl") || readStr(data, "previewUrl");
+  if (item.type === 'asset') {
+    const src = readStr(data, 'thumbnailUrl') || readStr(data, 'previewUrl');
     if (src) {
-      return { kind: "image", src };
+      return { kind: 'image', src };
     }
-    const excerpt = readStr(data, "previewExcerpt");
-    return excerpt ? { kind: "excerpt", text: excerpt } : { kind: "none" };
+    const excerpt = readStr(data, 'previewExcerpt');
+    return excerpt ? { kind: 'excerpt', text: excerpt } : { kind: 'none' };
   }
-  if (item.type === "link") {
-    const image = readStr(data, "imageUrl");
+  if (item.type === 'link') {
+    const image = readStr(data, 'imageUrl');
     if (image) {
-      return { kind: "image", src: image };
+      return { kind: 'image', src: image };
     }
-    const favicon = readStr(data, "faviconUrl");
-    return favicon ? { kind: "favicon", src: favicon } : { kind: "none" };
+    const favicon = readStr(data, 'faviconUrl');
+    return favicon ? { kind: 'favicon', src: favicon } : { kind: 'none' };
   }
   // Text / checklist cards: prefer the persisted excerpt, fall back to the
   // raw stored markdown/plain content.
-  const excerpt = readStr(data, "previewExcerpt") || readStr(data, "content");
-  return excerpt ? { kind: "excerpt", text: excerpt } : { kind: "none" };
+  const excerpt = readStr(data, 'previewExcerpt') || readStr(data, 'content');
+  return excerpt ? { kind: 'excerpt', text: excerpt } : { kind: 'none' };
 }
 
 function ThumbRegion({ thumb }: { thumb: Thumb }) {
-  if (thumb.kind === "none") {
+  if (thumb.kind === 'none') {
     return null;
   }
-  if (thumb.kind === "image") {
+  if (thumb.kind === 'image') {
     return (
       <div className="aspect-[16/9] w-full overflow-hidden bg-gray-100 dark:bg-neutral-800">
         <img
@@ -105,7 +105,7 @@ function ThumbRegion({ thumb }: { thumb: Thumb }) {
       </div>
     );
   }
-  if (thumb.kind === "favicon") {
+  if (thumb.kind === 'favicon') {
     return (
       <div className="flex aspect-[16/9] w-full items-center justify-center bg-gray-50 dark:bg-neutral-800/60">
         <img
@@ -139,13 +139,13 @@ export function LibraryCard({
   const Icon = iconFor(item.type, item.data);
   const relative = formatRelativeTime(item.updatedAt);
   const thumb = resolveThumb(item);
-  const hasThumb = thumb.kind !== "none";
+  const hasThumb = thumb.kind !== 'none';
   const title =
     item.title.trim().length > 0 ? item.title : m.library_untitled();
   // Only treat hex colors as renderable; semantic tokens (e.g. group "blue")
   // don't apply to focusable library items but guard anyway.
   const hexColor =
-    typeof item.color === "string" && item.color.startsWith("#")
+    typeof item.color === 'string' && item.color.startsWith('#')
       ? item.color
       : undefined;
   const hasColor = Boolean(hexColor);
@@ -155,19 +155,19 @@ export function LibraryCard({
   useEffect(() => {
     if (isFocused && buttonRef.current) {
       buttonRef.current.focus({ preventScroll: true });
-      buttonRef.current.scrollIntoView({ block: "nearest" });
+      buttonRef.current.scrollIntoView({ block: 'nearest' });
     }
   }, [isFocused]);
 
   return (
     <button
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white text-left transition-[transform,border-color,box-shadow,background-color]",
-        "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]",
-        "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60",
-        "dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/70",
-        isFocused && "border-accent ring-2 ring-accent/60",
-        !hasThumb && "min-h-[108px]",
+        'group relative flex flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white text-left transition-[transform,border-color,box-shadow,background-color]',
+        'hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]',
+        'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60',
+        'dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/70',
+        isFocused && 'border-accent ring-2 ring-accent/60',
+        !hasThumb && 'min-h-[108px]'
       )}
       onClick={() => onClick(item)}
       onFocus={() => onFocus?.(item)}
@@ -186,10 +186,10 @@ export function LibraryCard({
         <span
           aria-hidden
           className={cn(
-            "flex size-7 items-center justify-center rounded-md text-gray-600 transition-colors dark:text-neutral-300",
+            'flex size-7 items-center justify-center rounded-md text-gray-600 transition-colors dark:text-neutral-300',
             hasColor
-              ? "group-hover:opacity-90"
-              : "bg-gray-100 group-hover:bg-gray-200/70 dark:bg-neutral-800 dark:group-hover:bg-neutral-700",
+              ? 'group-hover:opacity-90'
+              : 'bg-gray-100 group-hover:bg-gray-200/70 dark:bg-neutral-800 dark:group-hover:bg-neutral-700'
           )}
           style={hasColor ? { backgroundColor: `${hexColor}66` } : undefined}
         >

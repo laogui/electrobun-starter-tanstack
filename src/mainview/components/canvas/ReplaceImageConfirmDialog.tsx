@@ -1,8 +1,8 @@
-import { Dialog } from "@base-ui/react/dialog";
-import { ImagePlus } from "lucide-react";
-import { useRef } from "react";
+import { Dialog } from '@base-ui/react/dialog';
+import { ImagePlus } from 'lucide-react';
+import { useRef } from 'react';
 
-import * as m from "../../../paraglide/messages.js";
+import * as m from '../../../paraglide/messages.js';
 
 export function ReplaceImageConfirmDialog({
   onCancel,

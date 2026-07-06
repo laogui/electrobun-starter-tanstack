@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { Check, Sparkles } from "lucide-react";
-import { formatLicenseActivationDate } from "@/lib/licenseDates";
-import { refreshLicense } from "@/lib/rpc-license";
+import { useQuery } from '@tanstack/react-query';
+import { Check, Sparkles } from 'lucide-react';
+import { formatLicenseActivationDate } from '@/lib/licenseDates';
+import { refreshLicense } from '@/lib/rpc-license';
 
 interface LicenseStatusCardProps {
   onActivateClick: () => void;
@@ -9,7 +9,7 @@ interface LicenseStatusCardProps {
 
 export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
   const { data: license, isLoading } = useQuery({
-    queryKey: ["license-status"],
+    queryKey: ['license-status'],
     queryFn: refreshLicense,
   });
 
@@ -83,7 +83,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
 // 简化版组件,用于设置页面以外的地方
 export function LicenseStatusBadge() {
   const { data: license, isLoading } = useQuery({
-    queryKey: ["license-status"],
+    queryKey: ['license-status'],
     queryFn: refreshLicense,
   });
 

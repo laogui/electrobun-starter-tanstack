@@ -5,7 +5,7 @@ import { createContext, type ReactNode, use } from 'react';
  * Zoom threshold below which nodes render their simplified "zoomed-out"
  * placeholder. Kept here so the value lives next to its single source of truth.
  */
-export const ZOOMED_OUT_THRESHOLD = 0.4;
+export const ZOOMED_OUT_THRESHOLD = 0.3;
 
 const ZoomLevelContext = createContext(false);
 

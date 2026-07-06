@@ -4,6 +4,10 @@ import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
+import {
+  resetViewportPersistSuppression,
+  suppressViewportPersist,
+} from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const rpcMocks = vi.hoisted(() => ({
@@ -40,6 +44,7 @@ const resetStore = () => {
 describe('useCanvasPersistence', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    resetViewportPersistSuppression();
     resetStore();
     rpcMocks.isRpcAvailable.mockReset();
     rpcMocks.rpcSaveManifest.mockReset();
@@ -50,6 +55,7 @@ describe('useCanvasPersistence', () => {
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+    resetViewportPersistSuppression();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -112,14 +118,31 @@ describe('useCanvasPersistence', () => {
     useCanvasStore.getState().setViewport({ x: 50, y: 60, zoom: 1 });
     useCanvasStore.getState().setViewport({ x: 100, y: 200, zoom: 1.5 });
 
-    vi.advanceTimersByTime(2500);
+    vi.advanceTimersByTime(499);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
 
+    vi.advanceTimersByTime(1);
     expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
     expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith('default', [], [], {
       x: 100,
       y: 200,
       zoom: 1.5,
     });
+  });
+
+  it('does not schedule persistence when only the runtime viewport changes', async () => {
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore.setState({
+      persistedViewport: { x: 0, y: 0, zoom: 1 },
+    });
+    suppressViewportPersist(300);
+    useCanvasStore.getState().setViewport({ x: 900, y: 900, zoom: 0.25 });
+
+    vi.advanceTimersByTime(600);
+
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 
   it('flushes pending changes when the window blurs', async () => {
@@ -157,7 +180,7 @@ describe('useCanvasPersistence', () => {
     );
   });
 
-  it('includes the latest viewport when flushing on blur', async () => {
+  it('includes the latest persisted viewport when flushing on blur', async () => {
     render(<TestComponent />);
     await vi.runAllTicks();
 
@@ -165,6 +188,11 @@ describe('useCanvasPersistence', () => {
       .getState()
       .setNodes([
         { id: 'node-1', type: 'card', position: { x: 0, y: 0 }, data: {} },
+      ]);
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 10, y: 10 }, data: {} },
       ]);
     useCanvasStore.getState().setViewport({ x: 50, y: 60, zoom: 0.75 });
 

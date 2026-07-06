@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useSearch } from '@/hooks/useSearch';
 import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
 import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -426,6 +427,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
           const center = nodeCenter(node, result.position);
           if (center) {
             const zoom = inst.getViewport?.()?.zoom ?? 1;
+            suppressViewportPersist(300);
             inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
           }
         }
@@ -442,6 +444,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
         const center = edgeMidpoint(inst, edgeId);
         if (center) {
           const zoom = inst.getViewport?.()?.zoom ?? 1;
+          suppressViewportPersist(300);
           inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
         }
       }

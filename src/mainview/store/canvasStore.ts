@@ -45,6 +45,10 @@ import {
   redo as redoSnapshot,
   undo as undoSnapshot,
 } from '@/lib/undoRedo';
+import {
+  shouldPersistViewport,
+  suppressViewportPersist,
+} from '@/lib/viewportPersist';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -349,6 +353,8 @@ export interface CanvasState {
   // Search
   pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
+  /** User-confirmed viewport written to the canvas manifest. */
+  persistedViewport: CanvasViewport | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
   /** Asset/image card id whose displayName is in inline-rename mode. */
@@ -392,7 +398,10 @@ export interface CanvasState {
   setRenamingNodeId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
-  setViewport: (viewport: CanvasViewport | null) => void;
+  setViewport: (
+    viewport: CanvasViewport | null,
+    options?: { persist?: boolean }
+  ) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
   /**
    * Flush the current canvas to disk, then switch to `viewId`. Resolves to
@@ -421,7 +430,7 @@ export interface CanvasState {
   ) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
 
-  // Persisted ReactFlow viewport (zoom + pan) for the active canvas.
+  /** Live React Flow camera — may differ from persistedViewport after programmatic moves. */
   viewport: CanvasViewport | null;
   views: Array<{ id: string; name: string }>;
 }
@@ -455,6 +464,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   tagSidebarOpen: false,
   activeTagFilters: [],
   viewport: null,
+  persistedViewport: null,
 
   setLibraryOpen: (v) => {
     set((s) => ({
@@ -643,6 +653,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
       edges,
       viewport,
+      persistedViewport: viewport,
       _hydrated: true,
     });
   },
@@ -652,6 +663,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [],
       edges: [],
       viewport: null,
+      persistedViewport: null,
       _hydrated: false,
       focusedNode: null,
       focusedFolder: null,
@@ -664,16 +676,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
-  setViewport: (viewport) => {
-    const current = get().viewport;
-    if (
+  setViewport: (viewport, options) => {
+    const persist = options?.persist ?? shouldPersistViewport();
+    const { viewport: current, persistedViewport: currentPersisted } = get();
+    const viewportUnchanged =
       current?.x === viewport?.x &&
       current?.y === viewport?.y &&
-      current?.zoom === viewport?.zoom
-    ) {
+      current?.zoom === viewport?.zoom;
+    const persistedUnchanged =
+      !persist ||
+      (currentPersisted?.x === viewport?.x &&
+        currentPersisted?.y === viewport?.y &&
+        currentPersisted?.zoom === viewport?.zoom);
+
+    if (viewportUnchanged && persistedUnchanged) {
       return;
     }
-    set({ viewport });
+
+    set({
+      viewport,
+      ...(persist ? { persistedViewport: viewport } : {}),
+    });
   },
 
   // -- core actions ---------------------------------------------------------
@@ -1189,6 +1212,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [],
       edges: [],
       viewport: null,
+      persistedViewport: null,
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
@@ -1197,7 +1221,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   switchView: async (viewId) => {
-    const { activeViewId, edges, nodes, viewport, _hydrated } = get();
+    const { activeViewId, edges, nodes, persistedViewport, _hydrated } = get();
     if (viewId === activeViewId) {
       return true;
     }
@@ -1212,7 +1236,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         activeViewId,
         sanitized.nodes,
         sanitized.edges,
-        viewport ?? undefined
+        persistedViewport ?? undefined
       ).catch((error) => {
         console.error('[canvasStore] Failed to flush before switch:', error);
         return { success: false };
@@ -1239,7 +1263,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   moveSelectedToView: async (targetViewId) => {
-    const { activeViewId, edges, nodes, viewport } = get();
+    const { activeViewId, edges, nodes, persistedViewport } = get();
     if (targetViewId === activeViewId) {
       return false;
     }
@@ -1376,7 +1400,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeViewId,
       sanitizedSource.nodes,
       sanitizedSource.edges,
-      viewport ?? undefined
+      persistedViewport ?? undefined
     ).catch((error) => {
       console.error('[canvasStore] Failed to save source canvas:', error);
       return { success: false };
@@ -1595,6 +1619,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       options?.focusViewport !== false &&
       typeof rfInstance?.setCenter === 'function'
     ) {
+      suppressViewportPersist(300);
       rfInstance.setCenter(
         placement.x + size.width / 2,
         placement.y + size.height / 2,

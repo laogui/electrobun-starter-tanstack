@@ -9,16 +9,17 @@ import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const LAYOUT_DEBOUNCE_MS = 2500;
+const VIEWPORT_DEBOUNCE_MS = 500;
 
 async function saveManifestNow(viewId: string): Promise<boolean> {
-  const { nodes, edges, viewport } = useCanvasStore.getState();
+  const { nodes, edges, persistedViewport } = useCanvasStore.getState();
   const sanitized = sanitizeForPersistence(nodes, edges);
   try {
     const result = await rpcSaveManifest(
       viewId,
       sanitized.nodes,
       sanitized.edges,
-      viewport ?? undefined
+      persistedViewport ?? undefined
     );
     if (result?.success) {
       clearPendingFlushBackup(viewId);
@@ -50,6 +51,8 @@ export function useCanvasPersistence() {
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAvailable = useRef<boolean | null>(null);
   const dirty = useRef(false);
+  const layoutDirty = useRef(false);
+  const viewportDirty = useRef(false);
   const skipHydrate = useRef(true);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const viewIdRef = useRef(activeViewId);
@@ -66,6 +69,8 @@ export function useCanvasPersistence() {
         pendingTimer.current = null;
       }
       dirty.current = false;
+      layoutDirty.current = false;
+      viewportDirty.current = false;
       viewIdRef.current = activeViewId;
       skipHydrate.current = true;
     }
@@ -80,6 +85,8 @@ export function useCanvasPersistence() {
       flushNow(pendingTimer, viewIdRef.current).then((success) => {
         if (success) {
           dirty.current = false;
+          layoutDirty.current = false;
+          viewportDirty.current = false;
         }
       });
     };
@@ -87,11 +94,14 @@ export function useCanvasPersistence() {
       if (scheduledTimer) {
         clearTimeout(scheduledTimer);
       }
+      const delay = layoutDirty.current
+        ? LAYOUT_DEBOUNCE_MS
+        : VIEWPORT_DEBOUNCE_MS;
       scheduledTimer = setTimeout(() => {
         scheduledTimer = null;
         scheduledViewId = null;
         flushAndMarkClean();
-      }, LAYOUT_DEBOUNCE_MS);
+      }, delay);
       scheduledViewId = viewIdRef.current;
       pendingTimer.current = scheduledTimer;
     };
@@ -108,12 +118,15 @@ export function useCanvasPersistence() {
             '[persistence] Restoring from pending flush backup:',
             viewIdRef.current
           );
+          const restoredViewport = backup.viewport ?? null;
           useCanvasStore.setState({
             nodes: backup.nodes,
             edges: backup.edges,
-            viewport: backup.viewport ?? undefined,
+            viewport: restoredViewport,
+            persistedViewport: restoredViewport,
           });
           dirty.current = true;
+          layoutDirty.current = true;
         }
       }
 
@@ -124,11 +137,12 @@ export function useCanvasPersistence() {
     });
 
     const unsub = useCanvasStore.subscribe((state, prevState) => {
-      if (
-        state.nodes === prevState?.nodes &&
-        state.edges === prevState.edges &&
-        state.viewport === prevState?.viewport
-      ) {
+      const layoutChanged =
+        state.nodes !== prevState?.nodes || state.edges !== prevState.edges;
+      const viewportChanged =
+        state.persistedViewport !== prevState?.persistedViewport;
+
+      if (!(layoutChanged || viewportChanged)) {
         return;
       }
 
@@ -143,6 +157,12 @@ export function useCanvasPersistence() {
       }
 
       dirty.current = true;
+      if (layoutChanged) {
+        layoutDirty.current = true;
+      }
+      if (viewportChanged) {
+        viewportDirty.current = true;
+      }
 
       if (!rpcReady) {
         earlyDirty = true;
@@ -161,8 +181,12 @@ export function useCanvasPersistence() {
 
     const handleBeforeUnload = () => {
       if (dirty.current) {
-        const { nodes, edges, viewport } = useCanvasStore.getState();
-        writePendingFlushBackup(viewIdRef.current, { nodes, edges, viewport });
+        const { nodes, edges, persistedViewport } = useCanvasStore.getState();
+        writePendingFlushBackup(viewIdRef.current, {
+          nodes,
+          edges,
+          viewport: persistedViewport,
+        });
       }
     };
 

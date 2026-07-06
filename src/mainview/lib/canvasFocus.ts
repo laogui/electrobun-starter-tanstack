@@ -1,5 +1,5 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
-
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import { isFocusableNode } from './canvasNodePredicates';
@@ -73,6 +73,7 @@ export async function openFocusedById({
   // 1. Trigger flight animation.
   const viewport = rfInstance?.getViewport?.();
   const zoom = viewport?.zoom ?? 1;
+  suppressViewportPersist(centerDurationMs + 50);
   rfInstance?.setCenter?.(
     node.position.x + width / 2,
     node.position.y + height / 2,

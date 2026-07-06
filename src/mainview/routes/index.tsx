@@ -92,6 +92,7 @@ import {
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
 import { cn } from '@/lib/utils';
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { CanvasBackgroundSetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -638,7 +639,7 @@ function CanvasComponent() {
 
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
-  const savedViewport = useCanvasStore((s) => s.viewport);
+  const savedViewport = useCanvasStore((s) => s.persistedViewport);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
@@ -737,6 +738,7 @@ function CanvasComponent() {
         const h = target.measured?.height ?? target.height ?? 160;
         const viewport = inst.getViewport?.();
         const zoom = viewport?.zoom ?? 1;
+        suppressViewportPersist(300);
         inst.setCenter?.(target.position.x + w / 2, target.position.y + h / 2, {
           zoom,
           duration: 240,
@@ -770,6 +772,7 @@ function CanvasComponent() {
           const cx = (src.position.x + sw / 2 + (tgt.position.x + tw / 2)) / 2;
           const cy = (src.position.y + sh / 2 + (tgt.position.y + th / 2)) / 2;
           const zoom = inst.getViewport?.()?.zoom ?? 1;
+          suppressViewportPersist(300);
           inst.setCenter?.(cx, cy, { zoom, duration: 240 });
         }
       }
@@ -1362,8 +1365,8 @@ function CanvasComponent() {
             onInit={(instance) => {
               rfInstance.current = instance;
             }}
-            onMoveEnd={(_, viewport) => {
-              setViewport(viewport);
+            onMoveEnd={(event, viewport) => {
+              setViewport(viewport, { persist: event != null });
             }}
             onNodeClick={onNodeClick}
             onNodeContextMenu={onNodeContextMenu}

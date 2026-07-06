@@ -21,6 +21,7 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
 import { cn } from '@/lib/utils';
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -330,6 +331,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       const screenR = screenL + window.innerWidth / vp.zoom;
       const screenB = screenT + window.innerHeight / vp.zoom;
       if (cx < screenL || cx > screenR || cy < screenT || cy > screenB) {
+        suppressViewportPersist(50);
         setCenter(cx, cy, { zoom: vp.zoom, duration: 0 });
       }
     }

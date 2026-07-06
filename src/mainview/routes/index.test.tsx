@@ -2,7 +2,10 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import {
+  resetViewportPersistSuppression,
+  suppressViewportPersist,
+} from '@/lib/viewportPersist';
 import { DEFAULT_SETTINGS } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -266,6 +269,7 @@ vi.mock('@xyflow/react', async () => {
       onNodeClick,
       onNodeDoubleClick,
       onNodesChange,
+      onMoveEnd,
       snapGrid,
       snapToGrid,
       children,
@@ -296,12 +300,17 @@ vi.mock('@xyflow/react', async () => {
       onNodesChange?: (
         changes: Array<{ id: string; type: string; selected?: boolean }>
       ) => void;
+      onMoveEnd?: (
+        event: MouseEvent | TouchEvent | null,
+        viewport: { x: number; y: number; zoom: number }
+      ) => void;
       snapGrid?: [number, number];
       snapToGrid?: boolean;
     }) => {
       reactFlowMocks.props({
         connectionLineComponent,
         nodes,
+        onMoveEnd,
         snapGrid,
         snapToGrid,
       });
@@ -537,6 +546,7 @@ const resetStore = () => {
 
 describe('routes/index', () => {
   beforeEach(() => {
+    resetViewportPersistSuppression();
     resetStore();
     rpcMocks.loadCanvas.mockReset();
     rpcMocks.isRpcAvailable.mockReset();
@@ -619,6 +629,7 @@ describe('routes/index', () => {
   });
 
   afterEach(() => {
+    resetViewportPersistSuppression();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -1307,6 +1318,49 @@ describe('routes/index', () => {
         y: 84,
         zoom: 1.25,
       });
+      expect(useCanvasStore.getState().persistedViewport).toEqual({
+        x: 42,
+        y: 84,
+        zoom: 1.25,
+      });
+    });
+  });
+
+  it('persists user-driven viewport moves during suppression windows', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
+    });
+
+    const initialViewport = { x: 0, y: 0, zoom: 1 };
+    useCanvasStore.setState({
+      viewport: initialViewport,
+      persistedViewport: initialViewport,
+    });
+
+    suppressViewportPersist(300);
+    const lastProps = reactFlowMocks.props.mock.calls.at(-1)?.[0] as {
+      onMoveEnd?: (
+        event: MouseEvent | TouchEvent | null,
+        viewport: { x: number; y: number; zoom: number }
+      ) => void;
+    };
+    lastProps.onMoveEnd?.({} as MouseEvent, { x: 500, y: 600, zoom: 0.5 });
+
+    expect(useCanvasStore.getState().viewport).toEqual({
+      x: 500,
+      y: 600,
+      zoom: 0.5,
+    });
+    expect(useCanvasStore.getState().persistedViewport).toEqual({
+      x: 500,
+      y: 600,
+      zoom: 0.5,
     });
   });
 

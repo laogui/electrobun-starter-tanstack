@@ -281,6 +281,7 @@ describe('viewSwitcher', () => {
   it('flushes the current viewport when switching views', async () => {
     useCanvasStore.setState({
       viewport: { x: 12, y: 34, zoom: 0.8 },
+      persistedViewport: { x: 12, y: 34, zoom: 0.8 },
     });
     renderViewSwitcher();
 

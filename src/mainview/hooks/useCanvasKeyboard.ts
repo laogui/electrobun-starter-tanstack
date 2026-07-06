@@ -3,6 +3,7 @@ import { type MutableRefObject, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
@@ -57,6 +58,7 @@ function centerNodeIfNeeded(
     return;
   }
 
+  suppressViewportPersist(200);
   rf.setCenter(center.x, center.y, {
     duration: 180,
     zoom: viewport.zoom,

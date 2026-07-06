@@ -42,8 +42,10 @@ export const FolderContent = ({
   return (
     <div
       className={cn(
-        'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-transform duration-200 ease-out will-change-transform',
-        data.isDropTarget ? 'scale-105' : 'group-hover/folder:-translate-y-1.5'
+        'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-[transform,box-shadow] duration-200 ease-out will-change-transform',
+        data.isDropTarget
+          ? 'scale-105 ring-2 ring-accent ring-offset-2'
+          : 'group-hover/folder:-translate-y-1.5'
       )}
       style={{ transform: 'translateZ(0)' }}
     >

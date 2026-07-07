@@ -9,8 +9,8 @@ import {
 } from '@tanstack/react-router';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 import { useTheme } from 'better-themes';
-import { Search, Settings } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
@@ -63,7 +63,8 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const { setTheme } = useTheme();
   const titlebarRef = useTitlebarHeightVar();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useCanvasStore((s) => s.settingsOpen);
+  const setSettingsOpen = useCanvasStore((s) => s.setSettingsOpen);
   useTitlebarDragReleaseFix();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
@@ -171,9 +172,9 @@ function RootDocument() {
         </defs>
       </svg>
 
-      {/* Draggable titlebar — traffic lights (macOS) + settings */}
+      {/* Draggable titlebar — transparent; hosts the centered search box */}
       <div
-        className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 border-black/5 border-b bg-stone-50/55 px-3 backdrop-blur-md dark:border-white/5 dark:bg-[#141414]/45"
+        className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 bg-transparent px-3"
         data-testid="app-titlebar"
         ref={titlebarRef}
       >
@@ -182,36 +183,24 @@ function RootDocument() {
           {showSearchBox ? (
             <button
               aria-label={m.search_button_aria()}
-              className="electrobun-webkit-app-region-no-drag flex h-7 w-full min-w-[14rem] max-w-md items-center gap-2 rounded-md border border-black/5 bg-white/70 px-2.5 text-left text-neutral-500 text-xs shadow-sm transition-colors hover:bg-white hover:text-neutral-700 dark:border-white/5 dark:bg-neutral-800/70 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              className="electrobun-webkit-app-region-no-drag flex h-8 w-full min-w-[14rem] max-w-md items-center gap-2 rounded-2xl border border-black/5 bg-white/80 px-3.5 text-left text-neutral-500 text-xs shadow-xs backdrop-blur-md transition-colors hover:bg-white hover:text-neutral-700 dark:border-white/10 dark:bg-neutral-800/80 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
               data-testid="titlebar-search-trigger"
               onClick={() => {
                 setSearchOpen(true);
               }}
               type="button"
             >
-              <Search size={13} strokeWidth={1.8} />
+              <Search size={14} strokeWidth={1.8} />
               <span className="flex-1 truncate">
                 {m.titlebar_search_placeholder()}
               </span>
-              <kbd className="hidden text-3xs text-neutral-500 sm:inline dark:text-neutral-400">
+              <kbd className="hidden rounded bg-black/5 px-1.5 py-0.5 text-3xs text-neutral-500 sm:inline dark:bg-white/10 dark:text-neutral-400">
                 {isMac ? '⌘K' : '⌃K'}
               </kbd>
             </button>
           ) : null}
         </div>
-        <div className="flex flex-1 justify-end">
-          <button
-            aria-label="Settings"
-            className="electrobun-webkit-app-region-no-drag flex items-center justify-center rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-200"
-            onClick={() => {
-              setSearchOpen(false);
-              setSettingsOpen(true);
-            }}
-            type="button"
-          >
-            <Settings size={16} />
-          </button>
-        </div>
+        <div className="flex-1" />
       </div>
       <Outlet />
       <SettingsDialog

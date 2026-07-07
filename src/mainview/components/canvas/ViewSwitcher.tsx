@@ -684,7 +684,7 @@ export function ViewSwitcher({
         }}
         open={open}
       >
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl bg-white/80 p-1 shadow-sm backdrop-blur-md dark:bg-neutral-800/80">
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-black/5 bg-white/80 p-1 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/80">
           <Menu.Trigger
             className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors hover:bg-white data-popup-open:bg-white dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
             render={<motion.button whileTap={{ scale: 0.95 }} />}

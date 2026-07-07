@@ -43,15 +43,21 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 const setSearchOpenMock = vi.fn();
+const setSettingsOpenMock = vi.fn();
+let mockSettingsOpen = false;
 
 interface MockedCanvasStore {
   setSearchOpen: typeof setSearchOpenMock;
+  setSettingsOpen: typeof setSettingsOpenMock;
+  settingsOpen: boolean;
 }
 
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (selector: (state: MockedCanvasStore) => unknown) =>
     selector({
       setSearchOpen: setSearchOpenMock,
+      setSettingsOpen: setSettingsOpenMock,
+      settingsOpen: mockSettingsOpen,
     }),
 }));
 
@@ -143,6 +149,8 @@ describe('__root route', () => {
     setThemeMock.mockReset();
     setLocaleMock.mockReset();
     setSearchOpenMock.mockReset();
+    setSettingsOpenMock.mockReset();
+    mockSettingsOpen = false;
     useRouterStateMock.mockReset();
     useRouterStateMock.mockReturnValue('/');
     rpcMocks.rpcGetSettings.mockResolvedValue({ theme: 'dark', locale: 'zh' });
@@ -190,20 +198,19 @@ describe('__root route', () => {
     });
   });
 
-  it('opens the in-window settings dialog when clicking the settings button', async () => {
+  it('renders the in-window settings dialog when settingsOpen is set', async () => {
+    mockSettingsOpen = true;
     const RootDocument = await loadRootDocument();
     renderRoot(<RootDocument />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeVisible();
   });
 
   it('applies settings changes from the in-window settings dialog', async () => {
+    mockSettingsOpen = true;
     const RootDocument = await loadRootDocument();
     renderRoot(<RootDocument />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply settings' }));
 
     await waitFor(() => {
@@ -219,20 +226,17 @@ describe('__root route', () => {
     expect(screen.getByText('Outlet content')).toBeInTheDocument();
     expect(screen.getByText('Toaster')).toBeInTheDocument();
     expect(screen.getByText('Devtools')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Settings' })
-    ).toBeInTheDocument();
   });
 
-  it('renders the titlebar with a blur treatment', async () => {
+  it('renders a transparent titlebar', async () => {
     const RootDocument = await loadRootDocument();
     renderRoot(<RootDocument />);
 
     const titlebar = screen.getByTestId('app-titlebar');
 
-    expect(titlebar.className).toContain('backdrop-blur-md');
-    expect(titlebar.className).toContain('bg-stone-50/55');
-    expect(titlebar.className).toContain('dark:bg-[#141414]/45');
+    expect(titlebar.className).toContain('bg-transparent');
+    expect(titlebar.className).not.toContain('bg-stone-50/55');
+    expect(titlebar.className).not.toContain('backdrop-blur-md');
   });
 
   it('publishes the measured titlebar height for overlays', async () => {

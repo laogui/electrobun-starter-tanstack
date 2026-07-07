@@ -238,6 +238,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   library_detached_toast: () => 'This note is not placed on the canvas yet.',
   library_detached_pin_action: () => 'Place on canvas',
   tags_button_aria: () => 'Tag Filter',
+  settings_title: () => 'Settings',
   tags_sidebar_title: () => 'Tags',
   tags_sidebar_close: () => 'Close',
   tags_sidebar_empty: () => 'No tags yet.',

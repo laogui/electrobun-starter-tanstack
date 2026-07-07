@@ -397,7 +397,11 @@ export interface CanvasState {
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingNodeId: (id: string | null) => void;
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setSettingsOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+
+  // In-window settings dialog
+  settingsOpen: boolean;
   setViewport: (
     viewport: CanvasViewport | null,
     options?: { persist?: boolean }
@@ -458,6 +462,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
+  settingsOpen: false,
   pendingSearchQuery: null,
   pendingSearchTarget: null,
   libraryOpen: false,
@@ -1181,6 +1186,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setSearchOpen: (v) => {
     set((s) => ({
       searchOpen: typeof v === 'function' ? v(s.searchOpen) : v,
+    }));
+  },
+
+  setSettingsOpen: (v) => {
+    set((s) => ({
+      settingsOpen: typeof v === 'function' ? v(s.settingsOpen) : v,
     }));
   },
 

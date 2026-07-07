@@ -30,6 +30,7 @@ import {
   useRef,
 } from 'react';
 import { toast } from 'sonner';
+import { CanvasToolbar } from '@/components/canvas/CanvasToolbar';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
@@ -39,7 +40,6 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
 import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
-import { LibraryButton } from '@/components/canvas/LibraryButton';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
@@ -47,7 +47,6 @@ import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { TagSidebar } from '@/components/tags/TagSidebar';
-import { TagSidebarButton } from '@/components/tags/TagSidebarButton';
 import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
 import { initialEdges, initialNodes } from '@/data/initialNodes';
 import type { RecordingResult } from '@/hooks/useAudioRecorder';
@@ -1482,10 +1481,9 @@ function CanvasComponent() {
 
       <FolderEditDialog />
 
-      <LibraryButton />
+      <CanvasToolbar />
       <LibraryPopup rfInstance={rfInstance} />
 
-      <TagSidebarButton />
       <TagSidebar />
 
       <ViewSwitcher

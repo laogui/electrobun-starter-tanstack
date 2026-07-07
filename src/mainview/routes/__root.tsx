@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTitlebarDragReleaseFix } from '@/hooks/useTitlebarDragReleaseFix';
-import { rpcGetSettings } from '@/lib/rpc';
+import { rpcGetSettings, rpcToggleWindowMaximize } from '@/lib/rpc';
 import { refreshLicense } from '@/lib/rpc-license';
 import type { AppSettings, FontFamilySetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
@@ -70,6 +70,20 @@ function RootDocument() {
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
   const applyAppSettings = useAppSettingsStore((s) => s.applySettings);
   const showSearchBox = pathname === '/';
+  const handleTitlebarDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest('.electrobun-webkit-app-region-no-drag')
+      ) {
+        return;
+      }
+
+      rpcToggleWindowMaximize().catch(() => undefined);
+    },
+    []
+  );
   useQuery({
     queryKey: ['license-status'],
     queryFn: refreshLicense,
@@ -176,6 +190,7 @@ function RootDocument() {
       <div
         className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 bg-transparent px-3"
         data-testid="app-titlebar"
+        onDoubleClick={handleTitlebarDoubleClick}
         ref={titlebarRef}
       >
         <div className="flex-1" />
@@ -183,7 +198,7 @@ function RootDocument() {
           {showSearchBox ? (
             <button
               aria-label={m.search_button_aria()}
-              className="electrobun-webkit-app-region-no-drag flex h-8 w-full min-w-[14rem] max-w-md items-center gap-2 rounded-2xl border border-black/5 bg-white/80 px-3.5 text-left text-neutral-500 text-xs shadow-xs backdrop-blur-md transition-colors hover:bg-white hover:text-neutral-700 dark:border-white/10 dark:bg-neutral-800/80 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              className="canvas-floating-surface electrobun-webkit-app-region-no-drag flex h-8 w-full min-w-[14rem] max-w-md items-center gap-2 px-3.5 text-left text-neutral-500 text-xs transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
               data-testid="titlebar-search-trigger"
               onClick={() => {
                 setSearchOpen(true);

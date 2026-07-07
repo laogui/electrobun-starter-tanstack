@@ -550,6 +550,10 @@ interface CanvasRPC {
         params: { url: string };
         response: { success: boolean };
       };
+      toggleWindowMaximize: {
+        params: Record<string, unknown>;
+        response: { maximized: boolean; success: boolean };
+      };
       importMarkdownFiles: {
         params: Record<string, unknown>;
         response: {
@@ -1780,6 +1784,20 @@ async function main() {
 
         revealAttachment: async ({ filePath }) =>
           revealWorkspaceAttachment(wsPath, filePath),
+
+        toggleWindowMaximize: () => {
+          if (!mainWindow) {
+            return { success: false, maximized: false };
+          }
+
+          if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+            return { success: true, maximized: false };
+          }
+
+          mainWindow.maximize();
+          return { success: true, maximized: true };
+        },
 
         openExternalUrl: ({ url }) => {
           // Restrict to common safe schemes. file:// / javascript: / custom

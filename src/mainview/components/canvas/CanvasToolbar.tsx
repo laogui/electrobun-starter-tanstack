@@ -20,7 +20,7 @@ export function CanvasToolbar() {
 
   return (
     <div
-      className="absolute z-30 flex flex-col gap-1 rounded-2xl border border-black/5 bg-white/80 p-1 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/80"
+      className="canvas-floating-surface absolute z-30 flex flex-col gap-1 p-1"
       style={{
         top: 'calc(var(--app-titlebar-height, 2.5rem) + 8px)',
         left: 12,

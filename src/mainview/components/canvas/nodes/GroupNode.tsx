@@ -50,10 +50,10 @@ export const GroupContent = ({
   <motion.div
     animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
     className={cn(
-      `group/group-node canvas-group group-${data.color || 'blue'} size-full`,
-      selected && 'selected',
-      data.active && 'ring-2 ring-accent ring-offset-2',
-      data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+      `group/group-node canvas-group group-${data.color || "blue"} size-full`,
+      selected && "selected",
+      data.active && "ring-2 ring-accent ring-offset-2 scale-[1.02] transition-transform duration-200 ease-out",
+      data.isHidden ? "pointer-events-none opacity-0" : "opacity-100",
     )}
     initial={{ opacity: 0, scale: 0.95 }}
     transition={{ duration: 0.2 }}

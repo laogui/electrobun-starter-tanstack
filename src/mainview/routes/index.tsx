@@ -114,7 +114,7 @@ const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
 const CANVAS_GRID_SIZE = 24;
 const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
-const DRAGGING_OVER_FOLDER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
+const DRAGGING_OVER_CONTAINER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
 
 function nodeZIndex(node: Node): number {
   return typeof node.zIndex === 'number' ? node.zIndex : 0;
@@ -299,6 +299,7 @@ function CanvasComponent() {
 
   const {
     dropTargetId,
+    activeGroupId,
     draggingNodeIds,
     repelAnimationActive,
     onNodeDragStart,
@@ -1055,22 +1056,22 @@ function CanvasComponent() {
   > | null>(null);
   decoratedNodesCacheRef.current ??= new Map();
   const decoratedNodesCache = decoratedNodesCacheRef.current;
-  const draggingOverFolderIds = useMemo(() => {
-    if (!(dropTargetId && draggingNodeIds.length > 0)) {
+  const draggingOverContainerIds = useMemo(() => {
+    if (!((dropTargetId || activeGroupId) && draggingNodeIds.length > 0)) {
       return null;
     }
     return new Set(draggingNodeIds);
-  }, [dropTargetId, draggingNodeIds]);
+  }, [dropTargetId, activeGroupId, draggingNodeIds]);
   const dragLayerZIndex = useMemo(() => {
-    if (!draggingOverFolderIds) {
+    if (!draggingOverContainerIds) {
       return;
     }
     // React Flow adds 1000 to selected nodes by default. Use +1001 so a
     // dragged card still renders above a selected folder that was brought front.
     return (
-      Math.max(0, ...nodes.map(nodeZIndex)) + DRAGGING_OVER_FOLDER_Z_OFFSET
+      Math.max(0, ...nodes.map(nodeZIndex)) + DRAGGING_OVER_CONTAINER_Z_OFFSET
     );
-  }, [nodes, draggingOverFolderIds]);
+  }, [nodes, draggingOverContainerIds]);
   const nodesWithState = useMemo(() => {
     const cache = decoratedNodesCache;
     const nextCache = new Map<
@@ -1091,7 +1092,7 @@ function CanvasComponent() {
       const isHidden =
         focusedNode?.id === node.id || focusedFolder?.id === node.id;
       const isDropTarget = dropTargetId === node.id;
-      const dragZIndex = draggingOverFolderIds?.has(node.id)
+      const dragZIndex = draggingOverContainerIds?.has(node.id)
         ? dragLayerZIndex
         : undefined;
       const cached = cache.get(node.id);
@@ -1137,7 +1138,7 @@ function CanvasComponent() {
     focusedFolder,
     dropTargetId,
     decoratedNodesCache,
-    draggingOverFolderIds,
+    draggingOverContainerIds,
     dragLayerZIndex,
   ]);
 

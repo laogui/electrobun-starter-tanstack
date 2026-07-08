@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpcMocks = vi.hoisted(() => ({
   rpcGetSettings: vi.fn(),
+  rpcToggleWindowMaximize: vi.fn(),
   refreshLicense: vi.fn(),
 }));
 const setThemeMock = vi.fn();
@@ -20,6 +21,7 @@ vi.mock('better-themes', () => ({
 
 vi.mock('@/lib/rpc', () => ({
   rpcGetSettings: rpcMocks.rpcGetSettings,
+  rpcToggleWindowMaximize: rpcMocks.rpcToggleWindowMaximize,
 }));
 
 vi.mock('@/lib/rpc-license', () => ({
@@ -145,6 +147,7 @@ function renderRoot(children: ReactElement) {
 describe('__root route', () => {
   beforeEach(() => {
     rpcMocks.rpcGetSettings.mockReset();
+    rpcMocks.rpcToggleWindowMaximize.mockReset();
     rpcMocks.refreshLicense.mockReset();
     setThemeMock.mockReset();
     setLocaleMock.mockReset();
@@ -290,6 +293,24 @@ describe('__root route', () => {
     expect(
       screen.queryByTestId('titlebar-search-trigger')
     ).not.toBeInTheDocument();
+  });
+
+  it('toggles window maximize when double-clicking the titlebar drag region', async () => {
+    const RootDocument = await loadRootDocument();
+    renderRoot(<RootDocument />);
+
+    fireEvent.doubleClick(screen.getByTestId('app-titlebar'));
+
+    expect(rpcMocks.rpcToggleWindowMaximize).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not toggle window maximize when double-clicking the search trigger', async () => {
+    const RootDocument = await loadRootDocument();
+    renderRoot(<RootDocument />);
+
+    fireEvent.doubleClick(screen.getByTestId('titlebar-search-trigger'));
+
+    expect(rpcMocks.rpcToggleWindowMaximize).not.toHaveBeenCalled();
   });
 
   it('removes the event listener on unmount', async () => {

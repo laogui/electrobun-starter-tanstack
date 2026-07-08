@@ -330,6 +330,14 @@ export async function rpcOpenExternalUrl(url: string) {
   return eb.rpc.request.openExternalUrl({ url });
 }
 
+export async function rpcToggleWindowMaximize() {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.toggleWindowMaximize({});
+}
+
 export async function rpcImportMarkdownFiles(): Promise<{
   canceled?: boolean;
   failedCount?: number;

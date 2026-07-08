@@ -20,7 +20,6 @@ import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 
-import '@xyflow/react/dist/style.css';
 import {
   useCallback,
   useEffect,
@@ -52,6 +51,7 @@ import { initialEdges, initialNodes } from '@/data/initialNodes';
 import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
+import { useCanvasViewportResize } from '@/hooks/useCanvasViewportResize';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
@@ -292,6 +292,7 @@ function CanvasComponent() {
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const { screenToFlowPosition } = useReactFlow();
   const spacePanActive = useSpacePanMode();
   const editableInteractionLocked = useEditableInteractionLock();
@@ -702,6 +703,11 @@ function CanvasComponent() {
   });
 
   useCanvasPersistence();
+  useCanvasViewportResize({
+    containerRef: canvasContainerRef,
+    enabled: hydrated,
+    rfInstance,
+  });
 
   // Cross-view search target: locate node or edge after hydration completes.
   useEffect(() => {
@@ -1335,6 +1341,7 @@ function CanvasComponent() {
         <div
           aria-label={activeViewName}
           className="h-full w-full"
+          ref={canvasContainerRef}
           role="application"
         >
           <ReactFlow
@@ -1391,7 +1398,10 @@ function CanvasComponent() {
               size={1.5}
               variant={BackgroundVariant.Dots}
             />
-            <Controls position="bottom-left" />
+            <Controls
+              className="canvas-floating-surface"
+              position="bottom-left"
+            />
             <HelperLines horizontal={helperLineH} vertical={helperLineV} />
             <MiniMap
               maskColor={miniMapMask}

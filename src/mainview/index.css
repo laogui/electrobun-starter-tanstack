@@ -57,6 +57,52 @@
   --color-accent-strong: oklch(0.83 0.08 255);
 }
 
+/* Shared frosted panel for canvas chrome: search, toolbar, bottom bar, zoom.
+   Unlayered so it wins over @xyflow/react's default control styles. */
+.canvas-floating-surface {
+  background-color: rgb(255 255 255 / 0.8);
+  border: 1px solid rgb(0 0 0 / 0.05);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.dark .canvas-floating-surface {
+  background-color: rgb(38 38 38 / 0.8);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+.canvas-floating-surface.react-flow__controls {
+  overflow: hidden;
+}
+
+.canvas-floating-surface .react-flow__controls-button {
+  color: rgb(82 82 82);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgb(0 0 0 / 0.05);
+  border-radius: 0;
+  fill: currentColor;
+}
+
+.canvas-floating-surface .react-flow__controls-button:hover {
+  background: rgb(0 0 0 / 0.05);
+}
+
+.canvas-floating-surface .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.dark .canvas-floating-surface .react-flow__controls-button {
+  color: rgb(212 212 212);
+  border-bottom-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .canvas-floating-surface .react-flow__controls-button:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
 @layer utilities {
   /* Layered, soft card shadow — gives a sense of depth on the canvas */
   .shadow-card {
@@ -351,49 +397,6 @@ body.resizing-nwse * {
 }
 
 /* ── React Flow node overrides ── */
-
-/* Bottom-left zoom controls — unified with the app's other floating surfaces
-   (search box, top-left toolbar, bottom action bar): frosted white/80 panel,
-   hairline border, and a whisper of shadow. */
-.react-flow__controls {
-  overflow: hidden;
-  background: rgb(255 255 255 / 0.8);
-  border: 1px solid rgb(0 0 0 / 0.05);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  backdrop-filter: blur(12px);
-}
-
-.dark .react-flow__controls {
-  background: rgb(38 38 38 / 0.8);
-  border-color: rgb(255 255 255 / 0.1);
-}
-
-.react-flow__controls-button {
-  color: rgb(82 82 82);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgb(0 0 0 / 0.05);
-  border-radius: 0;
-  fill: currentColor;
-}
-
-.react-flow__controls-button:hover {
-  background: rgb(0 0 0 / 0.05);
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none;
-}
-
-.dark .react-flow__controls-button {
-  color: rgb(212 212 212);
-  border-bottom-color: rgb(255 255 255 / 0.1);
-}
-
-.dark .react-flow__controls-button:hover {
-  background: rgb(255 255 255 / 0.1);
-}
 
 /* Selected card/folder node styling — outline on the visual card itself
    so border + card share the same element, radius, and stacking context */

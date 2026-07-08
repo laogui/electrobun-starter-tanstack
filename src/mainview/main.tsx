@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 
 import { router } from '@/router';
 
+import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
 

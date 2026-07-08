@@ -81,6 +81,7 @@
   "menu_import_markdown": "Import Markdown…",
   "menu_note_library": "Note Library",
   "menu_more": "More",
+  "menu_create_button_aria": "Create",
   "empty_canvas_title": "Start this canvas",
   "empty_canvas_description": "Add a note, open your library, or start from a reusable canvas template.",
   "empty_canvas_create_note": "Create first note",

@@ -77,6 +77,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_group: () => 'Group',
   menu_file: () => 'File',
   menu_more: () => 'More',
+  menu_create_button_aria: () => 'Create',
   menu_note_library: () => 'Note Library',
   menu_import_markdown: () => 'Import Markdown',
   toast_markdown_imported: ({ count }: { count: number }) =>

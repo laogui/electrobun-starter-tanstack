@@ -684,14 +684,20 @@ export function ViewSwitcher({
         }}
         open={open}
       >
-        <div className="canvas-floating-surface fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 p-1">
+        {/* Deliberately its own pill (not `.canvas-floating-surface`) — this
+            is the primary action bar, so it earns a fully-rounded shape and
+            a standalone accent-filled create button instead of the flatter
+            rounded-2xl chrome used by the toolbar/search/zoom panels. */}
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-black/5 bg-white/70 p-1.5 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/70">
           <Menu.Trigger
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors hover:bg-black/5 data-popup-open:bg-black/5 dark:data-popup-open:bg-white/10 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
+            className={`flex items-center gap-2 rounded-full bg-white/90 px-4 py-2.5 text-sm shadow-xs transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-900/60 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
             render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
-            <Layers className="text-gray-500 dark:text-gray-400" size={16} />
+            <Layers className="text-accent" size={16} />
             <span className="flex max-w-50 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
-              <span className="truncate">{activeView?.name ?? 'Canvas'}</span>
+              <span className="truncate font-semibold text-gray-900 dark:text-white">
+                {activeView?.name ?? 'Canvas'}
+              </span>
               <span
                 className="shrink-0 font-normal text-2xs text-gray-500 dark:text-gray-400"
                 title={activeViewNodeCountLabel}
@@ -711,13 +717,10 @@ export function ViewSwitcher({
             <Menu.Root>
               <Menu.Trigger
                 aria-label="Export canvas"
-                className={`flex size-8 items-center justify-center rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
+                className={`flex size-9 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
                 render={<motion.button whileTap={{ scale: 0.9 }} />}
               >
-                <Download
-                  className="text-gray-500 dark:text-gray-400"
-                  size={16}
-                />
+                <Download size={16} />
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Positioner
@@ -769,7 +772,8 @@ export function ViewSwitcher({
             open={createMenuOpen}
           >
             <Menu.Trigger
-              className={`flex size-8 items-center justify-center rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
+              aria-label={m.menu_create_button_aria()}
+              className={`flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong ${TRIGGER_FOCUS_RING}`}
               render={<motion.button whileTap={{ scale: 0.9 }} />}
             >
               <motion.span
@@ -777,7 +781,7 @@ export function ViewSwitcher({
                 className="flex items-center justify-center"
                 transition={{ type: 'spring', damping: 20, stiffness: 300 }}
               >
-                <Plus className="text-gray-500 dark:text-gray-400" size={16} />
+                <Plus size={20} />
               </motion.span>
             </Menu.Trigger>
 

@@ -127,6 +127,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   menu_file: () => 'File',
   menu_recording: () => 'Recording',
   menu_more: () => 'More',
+  menu_create_button_aria: () => 'Create',
   menu_note_library: () => 'Note Library',
   menu_import_markdown: () => 'Import Markdown',
   empty_canvas_title: () => 'Start this canvas',

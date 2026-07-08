@@ -24,6 +24,8 @@ const rpcMocks = vi.hoisted(() => ({
   rpcRenameView: vi.fn(),
   rpcGetSettings: vi.fn(),
   rpcImportMarkdownFiles: vi.fn(),
+  rpcCreateWidget: vi.fn(),
+  rpcSaveWidget: vi.fn(),
   rpcSetActiveView: vi.fn(),
 }));
 
@@ -86,10 +88,14 @@ vi.mock('@/lib/rpc', () => ({
   rpcRenameView: rpcMocks.rpcRenameView,
   rpcGetSettings: rpcMocks.rpcGetSettings,
   rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
+  rpcCreateWidget: rpcMocks.rpcCreateWidget,
+  rpcSaveWidget: rpcMocks.rpcSaveWidget,
+  rpcCloneWidget: vi.fn(),
   rpcSetActiveView: rpcMocks.rpcSetActiveView,
 }));
 
 vi.mock('@/lib/canvasExport', () => ({
+  CANVAS_EXPORT_SCHEMA: 'ghostboard-canvas-export/v1',
   exportReactFlowCanvasToJson: exportMocks.exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng: exportMocks.exportReactFlowCanvasToPng,
   sanitizeExportFileName: exportMocks.sanitizeExportFileName,
@@ -119,6 +125,8 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   view_from_template: () => 'From Template',
   menu_note: () => 'Note',
   menu_checklist: () => 'Checklist',
+  menu_pomodoro: () => 'Pomodoro',
+  menu_reminder: () => 'Reminder',
   menu_sticky: () => 'Sticky',
   menu_image: () => 'Image',
   menu_link: () => 'Link',
@@ -140,6 +148,8 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   empty_canvas_hint_create_menu: () => 'Cmd+N opens the create menu',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
+  menu_new_pomodoro: () => 'New pomodoro',
+  menu_new_reminder: () => 'New reminder',
   menu_new_sticky: () => 'New sticky',
   menu_new_image: () => 'New image',
   menu_new_link: () => 'New link',
@@ -200,6 +210,7 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   toast_export_failed: () => 'Export failed',
   toast_move_selection_failed: () => 'Could not move selection',
   toast_recording_save_failed: () => 'Localized recording save failed',
+  toast_widget_create_failed: () => 'Could not create widget.',
   menu_duplicate: () => 'Duplicate',
   menu_move_to_view: () => 'Move to canvas…',
   templates_browse_all: () => 'Browse all templates…',
@@ -351,6 +362,65 @@ vi.mock('@xyflow/react', async () => {
             type="button"
           >
             Drop file
+          </button>
+          <button
+            onClick={() => {
+              const file = new File(
+                [
+                  JSON.stringify({
+                    schema: 'ghostboard-canvas-export/v1',
+                    exportedAt: '2026-07-08T00:00:00.000Z',
+                    nodes: [
+                      {
+                        id: 'exported-widget-node',
+                        type: 'widget',
+                        position: { x: 10, y: 20 },
+                        data: {
+                          widgetId: 'widget_exported',
+                          kind: 'checklist',
+                        },
+                      },
+                    ],
+                    edges: [],
+                    widgets: {
+                      widget_exported: {
+                        schema: 'ghostboard-widget/v1',
+                        id: 'widget_exported',
+                        kind: 'checklist',
+                        title: 'Imported Checklist',
+                        createdAt: '2026-07-08T00:00:00.000Z',
+                        updatedAt: '2026-07-08T00:00:00.000Z',
+                        data: {
+                          items: [
+                            {
+                              id: 'item_exported',
+                              text: 'Imported task',
+                              checked: false,
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  }),
+                ],
+                'canvas.json',
+                { type: 'application/json' }
+              );
+              const event = {
+                clientX: 320,
+                clientY: 420,
+                dataTransfer: {
+                  files: [file],
+                  getData: () => '',
+                  types: ['Files'],
+                },
+                preventDefault: vi.fn(),
+              } as unknown as DragEvent;
+              onDrop?.(event);
+            }}
+            type="button"
+          >
+            Drop canvas JSON
           </button>
           <button
             onClick={() => {
@@ -564,6 +634,26 @@ describe('routes/index', () => {
       canceled: true,
       notes: [],
     });
+    rpcMocks.rpcCreateWidget.mockReset();
+    rpcMocks.rpcCreateWidget.mockImplementation(
+      async (kind: string, title?: string) => ({
+        success: true,
+        widget: {
+          schema: 'ghostboard-widget/v1',
+          id:
+            title === 'Prio before launch'
+              ? 'widget_seed_prio'
+              : 'widget_seed_bugs',
+          kind,
+          title: title ?? kind,
+          createdAt: '2026-07-08T00:00:00.000Z',
+          updatedAt: '2026-07-08T00:00:00.000Z',
+          data: { items: [] },
+        },
+      })
+    );
+    rpcMocks.rpcSaveWidget.mockReset();
+    rpcMocks.rpcSaveWidget.mockResolvedValue({ success: true });
     interactionMocks.onCreateNode.mockReset();
     assetFileMocks.saveAssetFileWithProgressToast.mockReset();
     recordingMocks.saveRecording.mockReset();
@@ -1009,6 +1099,52 @@ describe('routes/index', () => {
     ).toBeInTheDocument();
   });
 
+  it('creates widget records from the bottom create menu', async () => {
+    rpcMocks.rpcCreateWidget.mockResolvedValueOnce({
+      success: true,
+      widget: {
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_menu_pomodoro',
+        kind: 'pomodoro',
+        title: 'pomodoro',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: {
+          mode: 'focus',
+          status: 'idle',
+          durationMs: 1_500_000,
+          remainingMs: 1_500_000,
+          focusDurationMs: 1_500_000,
+          shortBreakMs: 300_000,
+          longBreakMs: 900_000,
+          completedFocusCount: 0,
+        },
+      },
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getAllByRole('button').at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pomodoro' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcCreateWidget).toHaveBeenCalledWith(
+        'pomodoro',
+        undefined
+      );
+      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('pomodoro', {
+        data: { widgetId: 'widget_menu_pomodoro', kind: 'pomodoro' },
+      });
+    });
+  });
+
   it('creates completed recordings at the canvas context-menu anchor', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
@@ -1262,6 +1398,68 @@ describe('routes/index', () => {
     });
   });
 
+  it('imports canvas JSON files with cloned widget records', async () => {
+    rpcMocks.rpcCreateWidget.mockResolvedValueOnce({
+      success: true,
+      widget: {
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_imported_new',
+        kind: 'checklist',
+        title: 'Imported Checklist',
+        createdAt: '2026-07-08T01:00:00.000Z',
+        updatedAt: '2026-07-08T01:00:00.000Z',
+        data: { items: [] },
+      },
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(rpcMocks.loadCanvas).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drop canvas JSON' }));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcCreateWidget).toHaveBeenCalledWith(
+        'checklist',
+        'Imported Checklist'
+      );
+      expect(rpcMocks.rpcSaveWidget).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'widget_imported_new',
+          title: 'Imported Checklist',
+          data: {
+            items: [
+              {
+                id: 'item_exported',
+                text: 'Imported task',
+                checked: false,
+              },
+            ],
+          },
+        })
+      );
+    });
+
+    expect(
+      assetFileMocks.saveAssetFileWithProgressToast
+    ).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'widget',
+          position: { x: 320, y: 420 },
+          data: { widgetId: 'widget_imported_new', kind: 'checklist' },
+          selected: true,
+        }),
+      ])
+    );
+  });
+
   it('logs dropped file import failures instead of swallowing them', async () => {
     const importError = new Error('import failed');
     assetFileMocks.saveAssetFileWithProgressToast.mockRejectedValueOnce(
@@ -1439,7 +1637,31 @@ describe('routes/index', () => {
     // Missing manifests still seed the first-run canvas; explicit empty
     // manifests stay empty and show the empty-canvas guide.
     expect(useCanvasStore.getState().nodes.length).toBeGreaterThan(0);
+    expect(rpcMocks.rpcCreateWidget).toHaveBeenCalledWith(
+      'checklist',
+      'Prio before launch'
+    );
+    expect(rpcMocks.rpcCreateWidget).toHaveBeenCalledWith('checklist', 'Bugs');
     expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    const savedNodes = rpcMocks.rpcSaveManifest.mock.calls[0]?.[1] as Array<{
+      data: Record<string, unknown>;
+      id: string;
+      type: string;
+    }>;
+    expect(savedNodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'node-init0003',
+          type: 'widget',
+          data: { widgetId: 'widget_seed_prio', kind: 'checklist' },
+        }),
+        expect.objectContaining({
+          id: 'node-init0008',
+          type: 'widget',
+          data: { widgetId: 'widget_seed_bugs', kind: 'checklist' },
+        }),
+      ])
+    );
   });
 
   it('keeps loading state when load fails and does not focus without rect', async () => {

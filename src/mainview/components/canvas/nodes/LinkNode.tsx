@@ -361,6 +361,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const isDark = isColorDark(data.color);
   const isZoomedOut = useIsZoomedOut();
   const nodeRef = useRef<HTMLDivElement | null>(null);
+  const isVisibleRef = useRef(false);
 
   // Each (nodeId,url) pair is fetched at most once per session. Store the
   // attempted url so re-renders with stale `data` references do not re-issue
@@ -432,6 +433,12 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') {
+      isVisibleRef.current = true;
+      startUnfurl();
+      return;
+    }
+
+    if (isVisibleRef.current) {
       startUnfurl();
       return;
     }
@@ -444,6 +451,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
       (entries) => {
         const entry = entries[0];
         if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+          isVisibleRef.current = true;
           startUnfurl();
           observer.disconnect();
         }

@@ -32,6 +32,7 @@ const {
   isRpcAvailableMock,
   rpcCheckLicenseMock,
   getCachedLicenseMock,
+  cloneWidgetMock,
 } = vi.hoisted(() => ({
   loadCanvasMock: vi.fn(),
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
@@ -44,6 +45,7 @@ const {
   getCachedLicenseMock: vi.fn<
     () => { activated: boolean; email?: string } | null
   >(() => null),
+  cloneWidgetMock: vi.fn(),
 }));
 
 vi.mock('@/lib/rpc', () => ({
@@ -58,6 +60,14 @@ vi.mock('@/lib/rpc-license', () => ({
   getCachedLicense: getCachedLicenseMock,
   refreshLicense: rpcCheckLicenseMock,
   rpcCheckLicense: rpcCheckLicenseMock,
+}));
+
+vi.mock('@/store/widgetStore', () => ({
+  useWidgetStore: {
+    getState: () => ({
+      cloneWidget: cloneWidgetMock,
+    }),
+  },
 }));
 
 vi.mock('../../paraglide/messages.js', () => ({
@@ -101,6 +111,26 @@ function makeNode(id: string, overrides?: Partial<Node>): Node {
   };
 }
 
+function makeWidgetNode(id: string, widgetId: string): Node {
+  return makeNode(id, {
+    type: 'widget',
+    data: { widgetId, kind: 'checklist' },
+    style: { height: 180, width: 260 },
+  });
+}
+
+function makeWidgetRecord(id: string) {
+  return {
+    schema: 'ghostboard-widget/v1' as const,
+    id,
+    kind: 'checklist' as const,
+    title: 'List clone',
+    createdAt: '2026-07-08T00:00:00.000Z',
+    updatedAt: '2026-07-08T00:00:00.000Z',
+    data: { items: [] },
+  };
+}
+
 function createRfInstance(viewport: {
   x: number;
   y: number;
@@ -137,6 +167,8 @@ afterEach(() => {
   rpcSetActiveViewMock.mockResolvedValue({ success: true });
   isRpcAvailableMock.mockReset();
   isRpcAvailableMock.mockResolvedValue(true);
+  cloneWidgetMock.mockReset();
+  cloneWidgetMock.mockResolvedValue(null);
 });
 
 describe('canvasStore — node operations', () => {
@@ -503,13 +535,13 @@ describe('canvasStore — clipboard', () => {
     expect(useCanvasStore.getState().clipboard).toHaveLength(0);
   });
 
-  it('pasteClipboard creates new nodes with unique ids and offset', () => {
+  it('pasteClipboard creates new nodes with unique ids and offset', async () => {
     useCanvasStore.setState({
       nodes: [makeNode('a')],
       clipboard: [makeNode('copied', { position: { x: 10, y: 20 } })],
     });
 
-    useCanvasStore.getState().pasteClipboard();
+    await useCanvasStore.getState().pasteClipboard();
     const state = useCanvasStore.getState();
 
     expect(state.nodes).toHaveLength(2);
@@ -521,7 +553,7 @@ describe('canvasStore — clipboard', () => {
     expect(pasted.selected).toBe(true);
   });
 
-  it('pasteClipboard remaps copied internal edges', () => {
+  it('pasteClipboard remaps copied internal edges', async () => {
     useCanvasStore.setState({
       nodes: [],
       clipboard: [
@@ -539,7 +571,7 @@ describe('canvasStore — clipboard', () => {
       ],
     });
 
-    useCanvasStore.getState().pasteClipboard();
+    await useCanvasStore.getState().pasteClipboard();
     const state = useCanvasStore.getState();
     const pastedIds = state.nodes.map((node) => node.id);
 
@@ -550,7 +582,7 @@ describe('canvasStore — clipboard', () => {
     expect(state.edges[0]?.data).toEqual({ label: 'depends on' });
   });
 
-  it('duplicateSelected duplicates selected nodes and their internal edges', () => {
+  it('duplicateSelected duplicates selected nodes and their internal edges', async () => {
     useCanvasStore.setState({
       nodes: [
         { ...makeNode('a', { position: { x: 0, y: 0 } }), selected: true },
@@ -559,7 +591,7 @@ describe('canvasStore — clipboard', () => {
       edges: [{ id: 'e1', source: 'a', target: 'b' }],
     });
 
-    useCanvasStore.getState().duplicateSelected();
+    await useCanvasStore.getState().duplicateSelected();
     const state = useCanvasStore.getState();
 
     expect(state.nodes).toHaveLength(4);
@@ -567,6 +599,52 @@ describe('canvasStore — clipboard', () => {
     expect(state.nodes.filter((node) => node.selected)).toHaveLength(2);
     expect(state.edges[1]?.source).not.toBe('a');
     expect(state.edges[1]?.target).not.toBe('b');
+  });
+
+  it('duplicateSelected clones widget backing records', async () => {
+    cloneWidgetMock.mockResolvedValueOnce(
+      makeWidgetRecord('widget_source_clone')
+    );
+    useCanvasStore.setState({
+      nodes: [
+        {
+          ...makeWidgetNode('widget-node', 'widget_source'),
+          selected: true,
+        },
+      ],
+    });
+
+    await useCanvasStore.getState().duplicateSelected();
+
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_source');
+    const widgetIds = useCanvasStore
+      .getState()
+      .nodes.filter((node) => node.type === 'widget')
+      .map((node) => (node.data as Record<string, unknown>).widgetId);
+    expect(widgetIds).toEqual(['widget_source', 'widget_source_clone']);
+  });
+
+  it('pasteClipboard clones widget backing records', async () => {
+    cloneWidgetMock.mockResolvedValueOnce(
+      makeWidgetRecord('widget_source_clone')
+    );
+    useCanvasStore.setState({
+      nodes: [],
+      clipboard: [makeWidgetNode('widget-node', 'widget_source')],
+      clipboardEdges: [],
+    });
+
+    await useCanvasStore.getState().pasteClipboard();
+
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_source');
+    const pasted = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.type === 'widget');
+    expect(pasted?.id).not.toBe('widget-node');
+    expect(pasted?.data).toMatchObject({
+      widgetId: 'widget_source_clone',
+      kind: 'checklist',
+    });
   });
 
   it('cutSelected copies selected nodes then deletes them from the canvas', () => {
@@ -587,10 +665,10 @@ describe('canvasStore — clipboard', () => {
     expect(state.edges).toHaveLength(0);
   });
 
-  it('pasteClipboard does nothing with empty clipboard', () => {
+  it('pasteClipboard does nothing with empty clipboard', async () => {
     useCanvasStore.setState({ nodes: [makeNode('a')], clipboard: [] });
 
-    useCanvasStore.getState().pasteClipboard();
+    await useCanvasStore.getState().pasteClipboard();
 
     expect(useCanvasStore.getState().nodes).toHaveLength(1);
   });
@@ -1107,7 +1185,6 @@ describe('canvasStore — createNode', () => {
   it.each([
     'card',
     'sticky',
-    'checklist',
   ] as const)('blocks an unlicensed user from creating %s beyond the free card limit', async (kind) => {
     fillFreeCardLimit();
     rpcCheckLicenseMock.mockResolvedValue({ activated: false });
@@ -1119,6 +1196,23 @@ describe('canvasStore — createNode', () => {
     expect(result).toBeUndefined();
     expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
     expect(useCanvasStore.getState().nodes).toHaveLength(100);
+  });
+
+  it.each([
+    'checklist',
+    'pomodoro',
+    'reminder',
+  ] as const)('does not check the license for widget kind %s at the card limit', async (kind) => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockResolvedValue({ activated: false });
+
+    const result = await useCanvasStore
+      .getState()
+      .createNode(kind, createRfInstance({ x: 0, y: 0, zoom: 1 }));
+
+    expect(result).toMatch(NODE_ID_REGEX);
+    expect(rpcCheckLicenseMock).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toHaveLength(101);
   });
 
   it('allows a licensed user to create beyond the free card limit', async () => {
@@ -1219,7 +1313,7 @@ describe('canvasStore — createNode', () => {
     expect(node.data).toMatchObject({ subtitle: '', children: [] });
   });
 
-  it('creates a checklist card node using the card dimensions', async () => {
+  it('creates a checklist widget node using the shared widget dimensions', async () => {
     vi.stubGlobal('window', {
       innerWidth: 1200,
       innerHeight: 900,
@@ -1231,17 +1325,18 @@ describe('canvasStore — createNode', () => {
     const node = useCanvasStore.getState().nodes.at(-1)!;
 
     expect(node.id).toMatch(NODE_ID_REGEX);
-    expect(node.type).toBe('card');
+    expect(node.type).toBe('widget');
     expect(node.position).toEqual({
-      x: (600 - 100) / 2 - CARD_W / 2,
-      y: (450 - 50) / 2 - CARD_H / 2,
+      x: (600 - 100) / 2 - CANVAS_NODE_SPECS.checklist.size.width / 2,
+      y: (450 - 50) / 2 - CANVAS_NODE_SPECS.checklist.size.height / 2,
     });
-    expect(node.style).toEqual({ width: CARD_W, height: CARD_H });
+    expect(node.style).toEqual({
+      width: CANVAS_NODE_SPECS.checklist.size.width,
+      height: CANVAS_NODE_SPECS.checklist.size.height,
+    });
     expect(node.data).toEqual({
-      type: 'checklist',
-      title: '',
-      items: [],
-      color: '#FFFFFF',
+      widgetId: '',
+      kind: 'checklist',
     });
   });
 

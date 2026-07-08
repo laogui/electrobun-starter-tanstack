@@ -2,7 +2,15 @@ import type { Node } from '@xyflow/react';
 import { useMemo } from 'react';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import type {
+  ChecklistWidgetData,
+  ReminderWidgetData,
+  WidgetLoadError,
+  WidgetRecord,
+} from '@/lib/widgetTypes';
+import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore } from '@/store/widgetStore';
 
 export type LibrarySortKey = 'recent' | 'name' | 'created';
 
@@ -69,14 +77,76 @@ function fallbackTitle(data: Record<string, unknown>, type: string): string {
   return '';
 }
 
+function dateMs(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function checklistExcerpt(data: ChecklistWidgetData): string {
+  return data.items
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function widgetRecordToLibraryData(
+  data: Record<string, unknown>,
+  widgets: Record<string, WidgetRecord | WidgetLoadError>
+): Record<string, unknown> {
+  const widgetId = readString(data, 'widgetId');
+  const record = widgetId ? widgets[widgetId] : undefined;
+  if (!record || isWidgetLoadError(record)) {
+    return data;
+  }
+
+  const next: Record<string, unknown> = {
+    ...data,
+    title: record.title,
+    createdAt: dateMs(record.createdAt),
+    updatedAt: dateMs(record.updatedAt),
+  };
+
+  switch (record.kind) {
+    case 'checklist':
+      next.previewExcerpt = checklistExcerpt(
+        record.data as ChecklistWidgetData
+      );
+      break;
+    case 'pomodoro':
+      next.previewExcerpt = '';
+      break;
+    case 'reminder': {
+      const reminder = record.data as ReminderWidgetData;
+      next.previewExcerpt = [reminder.note, reminder.dueAt]
+        .filter(Boolean)
+        .join('\n');
+      break;
+    }
+    default: {
+      const _exhaustive: never = record.kind;
+      return _exhaustive;
+    }
+  }
+
+  return next;
+}
+
 function toItem(params: {
   nodeId: string;
   type: string;
   data: Record<string, unknown>;
+  widgets: Record<string, WidgetRecord | WidgetLoadError>;
   folderId?: string;
   childId?: string;
 }): LibraryItem {
-  const { nodeId, type, data, folderId, childId } = params;
+  const { nodeId, type, folderId, childId, widgets } = params;
+  const data =
+    type === 'widget'
+      ? widgetRecordToLibraryData(params.data, widgets)
+      : params.data;
   const id =
     folderId && childId ? `child:${folderId}:${childId}` : `node:${nodeId}`;
   const title = fallbackTitle(data, type);
@@ -111,21 +181,33 @@ function matchesQuery(item: LibraryItem, normalizedQuery: string): boolean {
   if (!normalizedQuery) {
     return true;
   }
-  return item.title.toLowerCase().includes(normalizedQuery);
+  const haystack = [
+    item.title,
+    readString(item.data, 'previewExcerpt'),
+    readString(item.data, 'content'),
+  ]
+    .join('\n')
+    .toLowerCase();
+  return haystack.includes(normalizedQuery);
 }
 
 export function useLibraryData(
   options: UseLibraryDataOptions = {}
 ): UseLibraryDataResult {
   const nodes = useCanvasStore((s) => s.nodes);
+  const widgets = useWidgetStore((s) => s.records);
   const { query = '', sort = 'recent' } = options;
-  return useMemo(() => buildLibrary(nodes, query, sort), [nodes, query, sort]);
+  return useMemo(
+    () => buildLibrary(nodes, query, sort, widgets),
+    [nodes, query, sort, widgets]
+  );
 }
 
 export function buildLibrary(
   nodes: Node[],
   query: string,
-  sort: LibrarySortKey
+  sort: LibrarySortKey,
+  widgets: Record<string, WidgetRecord | WidgetLoadError> = {}
 ): UseLibraryDataResult {
   const normalizedQuery = query.trim().toLowerCase();
   const sortFn = comparator(sort);
@@ -154,6 +236,7 @@ export function buildLibrary(
           nodeId: node.id,
           type: child.type as string,
           data: child.data,
+          widgets,
           folderId: node.id,
           childId: child.id,
         })
@@ -180,6 +263,7 @@ export function buildLibrary(
       nodeId: node.id,
       type: node.type as string,
       data,
+      widgets,
     });
     if (data.detached) {
       if (matchesQuery(item, normalizedQuery)) {

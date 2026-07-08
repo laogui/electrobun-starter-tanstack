@@ -13,6 +13,7 @@ export type SearchResultKind =
   | 'asset'
   | 'link'
   | 'edge'
+  | 'widget'
   | 'view';
 
 export type SearchMatchField =
@@ -42,4 +43,6 @@ export interface SearchResult {
   title: string;
   viewId: string;
   viewName: string;
+  widgetId?: string;
+  widgetKind?: 'checklist' | 'pomodoro' | 'reminder';
 }

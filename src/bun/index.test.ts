@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NOTE_ID_RE = /^note_/;
+const WIDGET_ID_RE = /^widget_/;
+const WIDGET_ITEM_ID_RE = /^item_/;
 
 interface RpcHandlerMap {
   [key: string]: (payload: never) => Promise<unknown> | unknown;
@@ -146,6 +148,13 @@ const userPrefsMocks = {
   loadUserPrefs: vi.fn(async () => ({})),
   saveUserPrefs: vi.fn(async () => undefined),
 };
+
+const atomicWriteMock = vi.fn();
+
+vi.mock('./atomicWrite', () => ({
+  atomicWrite: (...args: Parameters<typeof atomicWriteMock>) =>
+    atomicWriteMock(...args),
+}));
 
 vi.mock('./manifest', () => ({
   loadManifest: (...args: Parameters<typeof manifestMocks.loadManifest>) =>
@@ -369,6 +378,7 @@ beforeEach(() => {
   bunSpawnMock.mockReset();
   bunWriteMock.mockReset();
   workspaceMocks.atomicWrite.mockResolvedValue(undefined);
+  atomicWriteMock.mockResolvedValue(undefined);
   workspaceMocks.loadWorkspaceConfig.mockResolvedValue({
     activeViewId: 'default',
     views: [
@@ -1034,7 +1044,7 @@ describe('src/bun/index helpers', () => {
     expect(previewMocks.writeNoteWithPreview).not.toHaveBeenCalled();
 
     // The note record is persisted as a JSON sidecar via atomicWrite.
-    const sidecarCall = workspaceMocks.atomicWrite.mock.calls.find((call) =>
+    const sidecarCall = atomicWriteMock.mock.calls.find((call) =>
       String(call[0]).endsWith('/content/.ghostboard/blocknote/note_x.json')
     );
     expect(sidecarCall).toBeDefined();
@@ -1511,6 +1521,70 @@ describe('src/bun/index helpers', () => {
     expect(String(indexCall?.[1])).toContain('Documents: 2');
   });
 
+  it('exportNotesMarkdown (view) includes checklist widget content', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/exports']);
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'widget-node-1',
+          type: 'widget',
+          position: { x: 10, y: 20 },
+          data: { widgetId: 'widget_check', kind: 'checklist' },
+        },
+      ],
+      edges: [],
+    });
+    bunFileMock.mockImplementation((path: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          path.endsWith('/.ghostboard/widgets/widget_check.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_check',
+        kind: 'checklist',
+        title: 'Widget Checklist',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: {
+          items: [
+            { id: 'item_1', text: 'First task', checked: false },
+            { id: 'item_2', text: 'Done task', checked: true },
+          ],
+        },
+      }),
+      size: 123,
+    }));
+
+    const result = (await canvasHandlers.exportNotesMarkdown({
+      scope: 'view',
+      viewId: 'default',
+      includeFrontmatter: false,
+    })) as { success: boolean; exported?: number; failed?: number };
+
+    expect(result.success).toBe(true);
+    expect(result.exported).toBe(1);
+    expect(result.failed).toBe(0);
+    const widgetWrite = bunWriteMock.mock.calls.find((call: unknown[]) => {
+      const path = String(call[0]);
+      const body = String(call[1]);
+      return path.includes('/notes/') && body.includes('- [ ] First task');
+    });
+    expect(widgetWrite).toBeDefined();
+    expect(String(widgetWrite?.[1])).toContain('# Widget Checklist');
+    expect(String(widgetWrite?.[1])).toContain('- [ ] First task');
+    expect(String(widgetWrite?.[1])).toContain('- [x] Done task');
+    const indexCall = bunWriteMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).endsWith('/index.md')
+    );
+    expect(String(indexCall?.[1])).toContain('Widget Checklist');
+  });
+
   it('exportNoteMarkdown refuses a corrupted sidecar instead of writing an empty file', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -1798,6 +1872,90 @@ describe('src/bun/index helpers', () => {
     );
   });
 
+  it('saveManifest strips widget runtime data from top-level nodes and folder children', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'widget-node-1',
+            type: 'widget',
+            position: { x: 10, y: 20 },
+            data: {
+              widgetId: 'widget_abc',
+              kind: 'checklist',
+              items: [{ id: 'item_1', text: 'Leak', checked: false }],
+              title: 'Runtime title',
+            },
+          },
+          {
+            id: 'widget-node-missing',
+            type: 'widget',
+            position: { x: 30, y: 40 },
+            data: {
+              widgetId: 42,
+              kind: null,
+              items: [{ id: 'item_2', text: 'Also leak', checked: true }],
+            },
+          },
+          {
+            id: 'folder-1',
+            type: 'folder',
+            position: { x: 0, y: 0 },
+            data: {
+              title: 'Folder',
+              children: [
+                {
+                  id: 'child-widget-1',
+                  type: 'widget',
+                  data: {
+                    widgetId: 'widget_child',
+                    kind: 'reminder',
+                    dueAt: '2026-07-08T10:00:00.000Z',
+                  },
+                },
+                {
+                  id: 'child-widget-missing',
+                  type: 'widget',
+                  data: {
+                    dueAt: '2026-07-08T11:00:00.000Z',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: true });
+
+    const savedManifest = manifestMocks.saveManifest.mock.calls.at(-1)?.[2] as {
+      nodes: Array<{ data: Record<string, unknown> }>;
+    };
+    expect(savedManifest.nodes[0]?.data).toEqual({
+      widgetId: 'widget_abc',
+      kind: 'checklist',
+    });
+    expect(savedManifest.nodes[1]?.data).toEqual({ widgetId: '', kind: '' });
+    const folderChildren = savedManifest.nodes[2]?.data.children as Array<{
+      data: Record<string, unknown>;
+    }>;
+    expect(folderChildren[0]?.data).toEqual({
+      widgetId: 'widget_child',
+      kind: 'reminder',
+    });
+    expect(folderChildren[1]?.data).toEqual({ widgetId: '', kind: '' });
+    expect(noteMocks.createNote).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringMatching(WIDGET_ID_RE),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('saveManifest persists transient image data urls before stripping runtime imageUrl', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -2034,6 +2192,233 @@ describe('src/bun/index helpers', () => {
     expect(child.data.title).toBe('Hydrated');
     expect(child.data.content).toBe('hydrated body');
     expect(child.data.noteId).toBe('note_abc');
+  });
+
+  it('loadCanvas lazily migrates legacy checklist cards into widget nodes', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'checklist-card-1',
+          type: 'card',
+          position: { x: 10, y: 20 },
+          data: {
+            noteId: 'note_abc123',
+            file: 'content/note_abc123.md',
+            type: 'checklist',
+          },
+        },
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Folder',
+            children: [
+              {
+                id: 'child-checklist-1',
+                noteId: 'note_child456',
+                type: 'card',
+                data: {
+                  noteId: 'note_child456',
+                  file: 'content/note_child456.md',
+                  type: 'checklist',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_abc123',
+          {
+            noteId: 'note_abc123',
+            hasSidecar: false,
+            markdownFile: 'content/note_abc123.md',
+          },
+        ],
+        [
+          'note_child456',
+          {
+            noteId: 'note_child456',
+            hasSidecar: false,
+            markdownFile: 'content/note_child456.md',
+          },
+        ],
+      ])
+    );
+    noteStoreMocks.loadNoteRecord
+      .mockResolvedValueOnce({
+        noteId: 'note_abc123',
+        source: 'markdown',
+        title: 'Top Checklist',
+        displayHint: 'checklist',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      })
+      .mockResolvedValueOnce({
+        noteId: 'note_child456',
+        source: 'markdown',
+        title: 'Child Checklist',
+        displayHint: 'checklist',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      });
+    noteStoreMocks.noteRecordToCardData
+      .mockReturnValueOnce({
+        type: 'checklist',
+        title: 'Top Checklist',
+        items: [
+          { text: 'First migrated item', checked: false },
+          { text: 'Done migrated item', checked: true },
+        ],
+        file: 'content/note_abc123.md',
+      })
+      .mockReturnValueOnce({
+        type: 'checklist',
+        title: 'Child Checklist',
+        items: [{ text: 'Child migrated item', checked: false }],
+        file: 'content/note_child456.md',
+      });
+
+    const result = (await canvasHandlers.loadCanvas({
+      viewId: 'default',
+    })) as {
+      nodes: Record<string, any>[];
+      widgets?: Record<string, any>;
+    };
+
+    expect(result.nodes[0]).toMatchObject({
+      id: 'checklist-card-1',
+      type: 'widget',
+      data: { widgetId: 'widget_abc123', kind: 'checklist' },
+    });
+    const child = result.nodes[1]?.data.children[0];
+    expect(child).toMatchObject({
+      id: 'child-checklist-1',
+      noteId: 'note_child456',
+      type: 'widget',
+      data: { widgetId: 'widget_child456', kind: 'checklist' },
+    });
+    expect(result.widgets?.widget_abc123).toMatchObject({
+      id: 'widget_abc123',
+      kind: 'checklist',
+      title: 'Top Checklist',
+      data: {
+        items: [
+          expect.objectContaining({
+            id: expect.stringMatching(WIDGET_ITEM_ID_RE),
+            text: 'First migrated item',
+            checked: false,
+          }),
+          expect.objectContaining({
+            id: expect.stringMatching(WIDGET_ITEM_ID_RE),
+            text: 'Done migrated item',
+            checked: true,
+          }),
+        ],
+      },
+    });
+    expect(result.widgets?.widget_child456).toMatchObject({
+      id: 'widget_child456',
+      kind: 'checklist',
+      title: 'Child Checklist',
+    });
+    const widgetWritePaths = atomicWriteMock.mock.calls.map((call) =>
+      String(call[0])
+    );
+    expect(widgetWritePaths).toEqual(
+      expect.arrayContaining([
+        '/tmp/workspace/.ghostboard/widgets/widget_abc123.json',
+        '/tmp/workspace/.ghostboard/widgets/widget_child456.json',
+      ])
+    );
+  });
+
+  it('loadCanvas keeps a hydrated checklist card when widget migration fails', async () => {
+    await loadIndexModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'checklist-card-1',
+          type: 'card',
+          position: { x: 10, y: 20 },
+          data: {
+            noteId: 'note_fail',
+            file: 'content/note_fail.md',
+            type: 'checklist',
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_fail',
+          {
+            noteId: 'note_fail',
+            hasSidecar: false,
+            markdownFile: 'content/note_fail.md',
+          },
+        ],
+      ])
+    );
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_fail',
+      source: 'markdown',
+      title: 'Fallback Checklist',
+      displayHint: 'checklist',
+      color: '',
+      revision: 0,
+      blocks: null,
+      preview: null,
+      corrupted: false,
+    });
+    noteStoreMocks.noteRecordToCardData.mockReturnValueOnce({
+      type: 'checklist',
+      title: 'Fallback Checklist',
+      items: [{ text: 'Still visible', checked: false }],
+      file: 'content/note_fail.md',
+    });
+    atomicWriteMock.mockRejectedValueOnce(new Error('disk full'));
+
+    const result = (await canvasHandlers.loadCanvas({
+      viewId: 'default',
+    })) as { nodes: Record<string, any>[]; widgets?: Record<string, any> };
+
+    expect(result.nodes[0]).toMatchObject({
+      id: 'checklist-card-1',
+      type: 'card',
+      data: {
+        noteId: 'note_fail',
+        type: 'checklist',
+        title: 'Fallback Checklist',
+        items: [{ text: 'Still visible', checked: false }],
+      },
+    });
+    expect(result.widgets).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to migrate checklist noteId=note_fail'),
+      expect.any(Error)
+    );
   });
 
   it('loadCanvas marks asset nodes and folder children missing without reading full attachments', async () => {

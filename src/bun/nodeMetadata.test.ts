@@ -33,6 +33,7 @@ const {
   getNodeMetadata,
   listAllTagsFromMetadata,
   loadAllMetadata,
+  moveNodeMetadataKey,
   renameTagEverywhere,
   resetNodeMetadataCacheForTests,
   sanitizeTagList,
@@ -138,6 +139,54 @@ describe('nodeMetadata: load / set / get / delete', () => {
       tagColor: '#fcd34d',
       tagColors: { api: '#FDF2F8', h1: '#EAF2B8' },
       tags: ['api', 'h1'],
+    });
+  });
+
+  it('moves checklist note metadata to the migrated widget id', async () => {
+    await setNodeMetadata(ws, 'note_abc123', {
+      tag: 'Launch',
+      tagColor: '#D4E08B',
+      tags: ['Inbox'],
+      tagColors: { Inbox: '#EAF2B8' },
+    });
+
+    await expect(
+      moveNodeMetadataKey(ws, 'note_abc123', 'widget_abc123')
+    ).resolves.toEqual({ updated: 1 });
+    await flushNodeMetadata(ws);
+
+    expect(getNodeMetadata(ws, 'note_abc123')).toBeUndefined();
+    expect(getNodeMetadata(ws, 'widget_abc123')).toEqual({
+      tag: 'Launch',
+      tagColor: '#D4E08B',
+      tags: ['Inbox'],
+      tagColors: { Inbox: '#EAF2B8' },
+    });
+  });
+
+  it('merges moved note metadata into an existing widget metadata entry', async () => {
+    await setNodeMetadata(ws, 'note_abc123', {
+      tag: 'Launch',
+      tagColor: '#D4E08B',
+      tags: ['Inbox', 'QA'],
+      tagColors: { Inbox: '#EAF2B8', QA: '#FBCFE8' },
+    });
+    await setNodeMetadata(ws, 'widget_abc123', {
+      tag: 'Widget',
+      tagColor: '#DBEAFE',
+      tags: ['Inbox'],
+      tagColors: { Inbox: '#BBF7D0' },
+    });
+
+    await moveNodeMetadataKey(ws, 'note_abc123', 'widget_abc123');
+    await flushNodeMetadata(ws);
+
+    expect(getNodeMetadata(ws, 'note_abc123')).toBeUndefined();
+    expect(getNodeMetadata(ws, 'widget_abc123')).toEqual({
+      tag: 'Widget',
+      tagColor: '#DBEAFE',
+      tags: ['Inbox', 'QA'],
+      tagColors: { Inbox: '#BBF7D0', QA: '#FBCFE8' },
     });
   });
 

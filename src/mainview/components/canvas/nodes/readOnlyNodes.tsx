@@ -32,6 +32,11 @@ import type { RecordingRuntimeData } from './RecordingNode';
 import { RecordingContent } from './RecordingNode';
 import type { StickyData } from './StickyNode';
 import { StickyContent } from './StickyNode';
+import type { WidgetNodeData } from './WidgetNode';
+import { WidgetNodeReadOnly } from './WidgetNode';
+
+export type { WidgetNodeData };
+export { WidgetNodeReadOnly };
 
 const handleClassName = 'conn-handle nodrag';
 

@@ -1,5 +1,6 @@
 import type { Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
+import type { WidgetRecord } from '@/lib/widgetTypes';
 
 import { buildLibrary } from './useLibraryData';
 
@@ -104,5 +105,43 @@ describe('buildLibrary', () => {
     const titles = groups[0]!.items.map((i) => i.title);
     expect(titles).toContain('spec.pdf');
     expect(titles).toContain('https://example.com');
+  });
+
+  it('hydrates widget titles and checklist excerpts from widget records', () => {
+    const widget = {
+      schema: 'ghostboard-widget/v1',
+      id: 'widget_check',
+      kind: 'checklist',
+      title: 'Launch list',
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T01:30:00.000Z',
+      data: {
+        items: [
+          { id: 'item_1', text: 'Draft release notes', checked: false },
+          { id: 'item_2', text: 'Ship build', checked: true },
+        ],
+      },
+    } satisfies WidgetRecord;
+    const nodes: Node[] = [
+      makeNode('widget-1', 'widget', {
+        widgetId: 'widget_check',
+        kind: 'checklist',
+      }),
+    ];
+
+    const { groups } = buildLibrary(nodes, 'release', 'recent', {
+      widget_check: widget,
+    });
+
+    expect(groups[0]?.items[0]).toMatchObject({
+      type: 'widget',
+      title: 'Launch list',
+      data: {
+        kind: 'checklist',
+        previewExcerpt: 'Draft release notes\nShip build',
+        title: 'Launch list',
+        updatedAt: new Date('2026-07-08T01:30:00.000Z').getTime(),
+      },
+    });
   });
 });

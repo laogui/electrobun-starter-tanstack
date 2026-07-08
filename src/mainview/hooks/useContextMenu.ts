@@ -196,7 +196,9 @@ export function useContextMenu({
 
       switch (action) {
         case 'duplicate': {
-          duplicateSelected();
+          Promise.resolve(duplicateSelected()).catch((error) => {
+            console.error('[canvas] Failed to duplicate selection:', error);
+          });
           break;
         }
         case 'group-selection': {
@@ -204,7 +206,9 @@ export function useContextMenu({
           break;
         }
         case 'paste': {
-          pasteClipboard();
+          Promise.resolve(pasteClipboard()).catch((error) => {
+            console.error('[canvas] Failed to paste clipboard:', error);
+          });
           break;
         }
         case 'reset-zoom': {

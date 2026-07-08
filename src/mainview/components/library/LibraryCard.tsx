@@ -1,4 +1,6 @@
 import {
+  Bell,
+  Clock3,
   FileText,
   ImageIcon,
   Link2,
@@ -37,6 +39,17 @@ function iconFor(type: string, data: Record<string, unknown>) {
   if (type === 'card' && data.type === 'checklist') {
     return ListChecks;
   }
+  if (type === 'widget') {
+    if (data.kind === 'checklist') {
+      return ListChecks;
+    }
+    if (data.kind === 'pomodoro') {
+      return Clock3;
+    }
+    if (data.kind === 'reminder') {
+      return Bell;
+    }
+  }
   return FileText;
 }
 
@@ -57,7 +70,7 @@ type Thumb =
  * - image / asset → hydrated `thumbnailUrl` (falls back to `imageUrl` /
  *   `previewUrl`); text assets fall back to their persisted excerpt.
  * - link → OG `imageUrl`, then `faviconUrl`.
- * - text cards → 2–3 line excerpt from `previewExcerpt` / `content`.
+ * - text cards / widgets → 2–3 line excerpt from `previewExcerpt` / `content`.
  */
 function resolveThumb(item: LibraryItem): Thumb {
   const data = item.data;

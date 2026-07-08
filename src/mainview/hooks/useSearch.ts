@@ -162,6 +162,8 @@ function nodeKindFor(nodeType: string | undefined): SearchResultKind {
       return 'asset';
     case 'link':
       return 'link';
+    case 'widget':
+      return 'widget';
     default:
       return 'card';
   }

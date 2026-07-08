@@ -189,6 +189,37 @@ function buildPastedClipboard(
   return { edges, nodes };
 }
 
+async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
+  const { useWidgetStore } = await import('@/store/widgetStore');
+  const cloneWidget = useWidgetStore.getState().cloneWidget;
+
+  return await Promise.all(
+    nodes.map(async (node) => {
+      if (node.type !== 'widget') {
+        return node;
+      }
+
+      const data = node.data as Record<string, unknown>;
+      const widgetId = data.widgetId;
+      if (typeof widgetId !== 'string' || !widgetId) {
+        return node;
+      }
+
+      // Cloning keeps duplicated widgets independent; fallback preserves the
+      // visible node if the backing record cannot be cloned.
+      const record = await cloneWidget(widgetId);
+      return {
+        ...node,
+        data: {
+          ...data,
+          widgetId: record?.id ?? widgetId,
+          kind: record?.kind ?? data.kind,
+        },
+      };
+    })
+  );
+}
+
 function uniqueDetachedNodeId(
   candidateId: string,
   usedNodeIds: Set<string>
@@ -313,7 +344,7 @@ export interface CanvasState {
   deleteNodes: (ids: string[]) => void;
   deselectAll: () => void;
   detachNoteFromCanvas: (nodeId: string) => void;
-  duplicateSelected: (offset?: number) => void;
+  duplicateSelected: (offset?: number) => Promise<void>;
   edges: Edge[];
 
   // Actions – edge
@@ -348,7 +379,7 @@ export interface CanvasState {
   nextNodeId: () => string;
   // Core data
   nodes: Node[];
-  pasteClipboard: (offset?: number) => void;
+  pasteClipboard: (offset?: number) => Promise<void>;
 
   // Search
   pendingSearchQuery: string | null;
@@ -1466,7 +1497,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
-  pasteClipboard: (offset = 30) => {
+  pasteClipboard: async (offset = 30) => {
     const { clipboard, clipboardEdges, nodes: currentNodes } = get();
     if (clipboard.length === 0) {
       return;
@@ -1478,16 +1509,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       currentNodes,
       offset
     );
+    const pastedNodes = pasted.nodes.some((node) => node.type === 'widget')
+      ? await cloneWidgetReferences(pasted.nodes)
+      : pasted.nodes;
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
         ...s.nodes.map((n) => ({ ...n, selected: false })),
-        ...pasted.nodes,
+        ...pastedNodes,
       ]),
     }));
   },
 
-  duplicateSelected: (offset = DUPLICATE_OFFSET) => {
+  duplicateSelected: async (offset = DUPLICATE_OFFSET) => {
     const { edges, nodes } = get();
     const selected = nodes.filter((node) => node.selected);
     if (selected.length === 0) {
@@ -1501,11 +1535,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       offset
     );
     get().saveSnapshot();
+    const pastedNodes = pasted.nodes.some((node) => node.type === 'widget')
+      ? await cloneWidgetReferences(pasted.nodes)
+      : pasted.nodes;
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
         ...s.nodes.map((node) => ({ ...node, selected: false })),
-        ...pasted.nodes,
+        ...pastedNodes,
       ]),
     }));
   },

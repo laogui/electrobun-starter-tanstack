@@ -15,6 +15,8 @@
 export type CanvasNodeKind =
   | 'card'
   | 'checklist'
+  | 'pomodoro'
+  | 'reminder'
   | 'sticky'
   | 'folder'
   | 'group'

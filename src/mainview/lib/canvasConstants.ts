@@ -15,8 +15,10 @@ import {
   LinkNodeReadOnly,
   RecordingNodeReadOnly,
   StickyNodeReadOnly,
+  WidgetNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
+import WidgetNode from '@/components/canvas/nodes/WidgetNode';
 
 /**
  * Default node dimensions. These now live in `canvasNodeRegistry` (the spec
@@ -50,6 +52,7 @@ export const nodeTypes = {
   link: LinkNode,
   recording: RecordingNode,
   sticky: StickyNode,
+  widget: WidgetNode,
 };
 
 /**
@@ -67,6 +70,7 @@ export const readOnlyNodeTypes = {
   link: LinkNodeReadOnly,
   recording: RecordingNodeReadOnly,
   sticky: StickyNodeReadOnly,
+  widget: WidgetNodeReadOnly,
 };
 
 export const edgeTypes = {

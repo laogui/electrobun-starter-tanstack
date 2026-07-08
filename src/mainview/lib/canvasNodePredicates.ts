@@ -49,6 +49,7 @@ const CANVAS_CONTENT_NODE_TYPES = new Set<string>([
   'asset',
   'link',
   'recording',
+  'widget',
 ]);
 
 /** React Flow node types that open a focused/zoom view on double-click.
@@ -59,6 +60,7 @@ const FOCUSABLE_NODE_TYPES = new Set<string>([
   'image',
   'asset',
   'link',
+  'widget',
 ]);
 
 export function isCanvasContentNode(type: string | undefined): boolean {

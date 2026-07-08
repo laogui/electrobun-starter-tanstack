@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 
 import type { ManifestEdge, ManifestNode } from './manifest';
 import type { NodeMetadata } from './nodeMetadata';
+import type { WidgetRecord } from './widgets';
 
 // ---------------------------------------------------------------------------
 // Inline template data — imported at build time so the bundler embeds them
@@ -58,6 +59,7 @@ export interface TemplateManifest {
   nodeMetadata?: Record<string, NodeMetadata>;
   nodes: ManifestNode[];
   noteContents?: Record<string, TemplateNoteContent>;
+  widgets?: Record<string, WidgetRecord>;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +135,7 @@ export function loadTemplate(id: string): TemplateManifest | null {
     edges: entry.manifest.edges ?? [],
     noteContents: entry.manifest.noteContents,
     nodeMetadata: entry.manifest.nodeMetadata,
+    widgets: entry.manifest.widgets,
   };
 }
 

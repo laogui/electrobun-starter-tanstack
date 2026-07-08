@@ -1,6 +1,13 @@
 import { blocksToPlainText } from './blocknotePreview';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
 import { buildNoteIndex, loadNoteRecord, type NoteRecord } from './noteStore';
+import {
+  type ChecklistWidgetData,
+  loadWidgets,
+  type ReminderWidgetData,
+  type WidgetKind,
+  type WidgetRecord,
+} from './widgets';
 import { loadWorkspaceConfig } from './workspace';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +25,7 @@ export type SearchResultKind =
   | 'recording'
   | 'link'
   | 'edge'
+  | 'widget'
   | 'view';
 
 export type SearchMatchField =
@@ -47,6 +55,8 @@ export interface SearchResult {
   title: string;
   viewId: string;
   viewName: string;
+  widgetId?: string;
+  widgetKind?: WidgetKind;
 }
 
 export interface SearchParams {
@@ -189,6 +199,7 @@ export async function searchWorkspace(
   // noteId → nodes (across views) so a markdown body match can fan out to
   // every node referencing that note.
   const noteIdToNodes = new Map<string, NodeRef[]>();
+  const widgetIdToNodes = new Map<string, NodeRef[]>();
 
   // Walk manifests once: collect noteId → node mapping AND search short text.
   const loadedManifests = await Promise.all(
@@ -235,6 +246,7 @@ export async function searchWorkspace(
         list.push(ref);
         noteIdToNodes.set(noteId, list);
       }
+      collectWidgetRefs(node, view.id, view.name, widgetIdToNodes);
 
       addManifestNodeMatches(results, ref, queryLower);
     }
@@ -250,6 +262,7 @@ export async function searchWorkspace(
 
   // Scan content/**/*.md and join with noteIdToNodes
   await scanNotes(wsPath, queryLower, noteIdToNodes, results);
+  await scanWidgets(wsPath, queryLower, widgetIdToNodes, results);
 
   results.sort((a, b) => b.score - a.score);
 
@@ -265,6 +278,70 @@ export async function searchWorkspace(
   return Array.from(dedup.values())
     .toSorted((a, b) => b.score - a.score)
     .slice(0, limit);
+}
+
+function addWidgetRef(
+  map: Map<string, NodeRef[]>,
+  widgetId: string,
+  ref: NodeRef
+): void {
+  const list = map.get(widgetId) ?? [];
+  list.push(ref);
+  map.set(widgetId, list);
+}
+
+function collectWidgetRefs(
+  node: ManifestNode,
+  viewId: string,
+  viewName: string,
+  out: Map<string, NodeRef[]>
+): void {
+  const data = (node.data ?? {}) as Record<string, unknown>;
+  if (node.type === 'widget') {
+    const widgetId = asString(data.widgetId);
+    if (widgetId) {
+      addWidgetRef(out, widgetId, { node, viewId, viewName });
+    }
+    return;
+  }
+
+  if (node.type !== 'folder') {
+    return;
+  }
+
+  const children = data.children;
+  if (!Array.isArray(children)) {
+    return;
+  }
+  for (const rawChild of children) {
+    if (!rawChild || typeof rawChild !== 'object') {
+      continue;
+    }
+    const child = rawChild as {
+      data?: Record<string, unknown>;
+      id?: unknown;
+      type?: unknown;
+    };
+    if (child.type !== 'widget') {
+      continue;
+    }
+    const childData = (child.data ?? {}) as Record<string, unknown>;
+    const widgetId = asString(childData.widgetId);
+    const childId = asString(child.id);
+    if (!(widgetId && childId)) {
+      continue;
+    }
+    addWidgetRef(out, widgetId, {
+      node: {
+        ...node,
+        id: childId,
+        type: 'widget',
+        data: childData,
+      },
+      viewId,
+      viewName,
+    });
+  }
 }
 
 function addManifestNodeMatches(
@@ -405,10 +482,97 @@ function nodeKind(nodeType: string): SearchResultKind {
       return 'recording';
     case 'link':
       return 'link';
+    case 'widget':
+      return 'widget';
     case 'card':
       return 'card';
     default:
       return 'card';
+  }
+}
+
+function isWidgetRecord(record: unknown): record is WidgetRecord {
+  return !!record && typeof record === 'object' && !('error' in record);
+}
+
+function widgetCandidates(record: WidgetRecord): Array<{
+  field: SearchMatchField;
+  value: string;
+}> {
+  const candidates: Array<{ field: SearchMatchField; value: string }> = [
+    { field: 'title', value: record.title },
+  ];
+
+  switch (record.kind) {
+    case 'checklist': {
+      const data = record.data as ChecklistWidgetData;
+      for (const item of data.items ?? []) {
+        candidates.push({ field: 'content', value: item.text });
+      }
+      break;
+    }
+    case 'pomodoro': {
+      break;
+    }
+    case 'reminder': {
+      const data = record.data as ReminderWidgetData;
+      candidates.push({ field: 'content', value: data.note ?? '' });
+      candidates.push({ field: 'content', value: data.dueAt });
+      break;
+    }
+    default: {
+      const _exhaustive: never = record.kind;
+      return _exhaustive;
+    }
+  }
+
+  return candidates;
+}
+
+async function scanWidgets(
+  wsPath: string,
+  queryLower: string,
+  widgetIdToNodes: Map<string, NodeRef[]>,
+  results: SearchResult[]
+): Promise<void> {
+  if (widgetIdToNodes.size === 0) {
+    return;
+  }
+
+  const widgetIds = Array.from(widgetIdToNodes.keys());
+  const widgets = await loadWidgets(wsPath, widgetIds);
+  for (const widgetId of widgetIds) {
+    const record = widgets[widgetId];
+    if (!isWidgetRecord(record)) {
+      continue;
+    }
+
+    for (const { field, value } of widgetCandidates(record)) {
+      if (!value) {
+        continue;
+      }
+      const idx = indexOfCi(value, queryLower);
+      if (idx === -1) {
+        continue;
+      }
+      const refs = widgetIdToNodes.get(widgetId) ?? [];
+      for (const ref of refs) {
+        results.push({
+          id: `widget:${ref.viewId}:${ref.node.id}:${widgetId}:${field}`,
+          kind: 'widget',
+          viewId: ref.viewId,
+          viewName: ref.viewName,
+          nodeId: ref.node.id,
+          widgetId,
+          widgetKind: record.kind,
+          title: shortTextExcerpt(record.title || value),
+          excerpt: shortTextExcerpt(value),
+          matchField: field,
+          score: scoreFor(field, idx === 0),
+          position: ref.node.position,
+        });
+      }
+    }
   }
 }
 

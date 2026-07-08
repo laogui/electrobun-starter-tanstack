@@ -355,6 +355,81 @@ describe('sanitizeForPersistence', () => {
     expect(children[1]?.data.title).toBe('Pic');
   });
 
+  it('strips widget runtime data from top-level nodes and folder children', () => {
+    const result = sanitizeForPersistence(
+      [
+        {
+          id: 'widget-1',
+          type: 'widget',
+          position: { x: 0, y: 0 },
+          data: {
+            widgetId: 'widget_1',
+            kind: 'checklist',
+            items: [{ id: 'item_1', text: 'No leak', checked: false }],
+            title: 'Runtime title',
+          },
+        } as unknown as Node,
+        {
+          id: 'widget-missing',
+          type: 'widget',
+          position: { x: 10, y: 20 },
+          data: {
+            widgetId: 42,
+            kind: null,
+            items: [{ id: 'item_2', text: 'Also no leak', checked: true }],
+          },
+        } as unknown as Node,
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 20, y: 30 },
+          data: {
+            title: 'Folder',
+            children: [
+              {
+                id: 'child-widget-1',
+                type: 'widget',
+                data: {
+                  widgetId: 'widget_2',
+                  kind: 'pomodoro',
+                  timer: {
+                    durationMs: 1000,
+                    startedAt: '2026-07-08T10:00:00.000Z',
+                    state: 'running',
+                  },
+                },
+              },
+              {
+                id: 'child-widget-missing',
+                type: 'widget',
+                data: {
+                  widgetId: undefined,
+                  kind: undefined,
+                  dueAt: '2026-07-08T10:00:00.000Z',
+                },
+              },
+            ],
+          },
+        } as unknown as Node,
+      ],
+      []
+    );
+
+    expect(result.nodes[0]?.data).toEqual({
+      widgetId: 'widget_1',
+      kind: 'checklist',
+    });
+    expect(result.nodes[1]?.data).toEqual({ widgetId: '', kind: '' });
+    const folderData = result.nodes[2]?.data as {
+      children: Array<{ data: Record<string, unknown> }>;
+    };
+    expect(folderData.children[0]?.data).toEqual({
+      widgetId: 'widget_2',
+      kind: 'pomodoro',
+    });
+    expect(folderData.children[1]?.data).toEqual({ widgetId: '', kind: '' });
+  });
+
   it('preserves folder-child non-runtime metadata on recursion', () => {
     const folder = createNode({
       type: 'folder',

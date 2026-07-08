@@ -51,6 +51,7 @@ import {
   listAllTagsFromMetadata,
   loadAllMetadata,
   migrateLegacyTagsFromNotes,
+  moveNodeMetadataKey,
   type NodeMetadata,
   type NodeMetadataMap,
   renameTagEverywhere,
@@ -75,6 +76,7 @@ import {
   parseFrontmatter,
   prepareImportedMarkdownBody,
   saveNote,
+  serializeChecklistItems,
 } from './notes';
 import {
   buildNotePreviewFromBlocks,
@@ -95,6 +97,22 @@ import {
 } from './templates';
 import { generateFileMetadata, generateVideoPosterFile } from './thumbnail';
 import { loadUserPrefs, saveUserPrefs } from './userprefs';
+import type {
+  ChecklistWidgetData,
+  ChecklistWidgetItem,
+  WidgetKind,
+  WidgetLoadError,
+  WidgetRecord,
+} from './widgets';
+import {
+  cloneWidget,
+  createWidget,
+  deleteWidget,
+  loadWidget,
+  loadWidgets,
+  saveWidget,
+  WIDGET_SCHEMA,
+} from './widgets';
 import {
   addView,
   addViewFromTemplate,
@@ -116,6 +134,7 @@ import {
 const DEV_SERVER_PORT = '5173';
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
+const NOTE_ID_PREFIX_RE = /^note_/;
 const DEV_SERVER_RETRY_COUNT = 20;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 const UNSAFE_EXPORT_FILE_NAME_CHARS = '<>:"/\\|?*';
@@ -135,7 +154,10 @@ function sanitizeExportBaseName(base: string): string {
     .slice(0, 80);
 }
 
-function safeExportFileName(fileName: string, extension: 'json' | 'png') {
+function safeExportFileName(
+  fileName: string,
+  extension: 'json' | 'md' | 'png'
+) {
   const normalized = fileName.replaceAll('\\', '/');
   const leaf =
     normalized
@@ -187,13 +209,25 @@ async function copyExportAttachments(
   );
 }
 
-/** Collect every noteId referenced by a canvas manifest (cards + folder kids). */
-function collectViewNoteIds(manifest: CanvasManifest | null): string[] {
-  const ids = new Set<string>();
+interface ViewExportRefs {
+  noteIds: string[];
+  widgetIds: string[];
+}
+
+/** Collect note and widget references from a canvas manifest. */
+function collectViewExportRefs(
+  manifest: CanvasManifest | null
+): ViewExportRefs {
+  const noteIds = new Set<string>();
+  const widgetIds = new Set<string>();
   for (const node of manifest?.nodes ?? []) {
     const data = (node.data ?? {}) as Record<string, unknown>;
-    if (typeof data.noteId === 'string' && data.noteId) {
-      ids.add(data.noteId);
+    if (node.type === 'widget') {
+      if (typeof data.widgetId === 'string' && data.widgetId) {
+        widgetIds.add(data.widgetId);
+      }
+    } else if (typeof data.noteId === 'string' && data.noteId) {
+      noteIds.add(data.noteId);
     }
     const children = data.children;
     if (!Array.isArray(children)) {
@@ -201,16 +235,64 @@ function collectViewNoteIds(manifest: CanvasManifest | null): string[] {
     }
     for (const child of children) {
       const c = (child ?? {}) as Record<string, unknown>;
-      if (typeof c.noteId === 'string' && c.noteId) {
-        ids.add(c.noteId);
-      }
       const childData = c.data as Record<string, unknown> | undefined;
+      if (c.type === 'widget') {
+        if (typeof childData?.widgetId === 'string' && childData.widgetId) {
+          widgetIds.add(childData.widgetId);
+        }
+        continue;
+      }
+      if (typeof c.noteId === 'string' && c.noteId) {
+        noteIds.add(c.noteId);
+      }
       if (typeof childData?.noteId === 'string' && childData.noteId) {
-        ids.add(childData.noteId);
+        noteIds.add(childData.noteId);
       }
     }
   }
-  return [...ids];
+  return { noteIds: [...noteIds], widgetIds: [...widgetIds] };
+}
+
+function buildChecklistWidgetMarkdown(
+  record: WidgetRecord,
+  options: {
+    exportedAt: string;
+    includeFrontmatter?: boolean;
+  }
+): ExportedNote | null {
+  if (record.kind !== 'checklist') {
+    return null;
+  }
+
+  const title = record.title || record.id;
+  const body = serializeChecklistItems(
+    (record.data as ChecklistWidgetData).items
+  );
+  const includeFrontmatter = options.includeFrontmatter !== false;
+  const markdown = includeFrontmatter
+    ? [
+        '---',
+        `id: ${record.id}`,
+        `title: ${JSON.stringify(title)}`,
+        'source: ghostboard',
+        'widgetKind: checklist',
+        `createdAt: ${record.createdAt}`,
+        `updatedAt: ${record.updatedAt}`,
+        `exportedAt: ${options.exportedAt}`,
+        '---',
+        '',
+        body,
+        '',
+      ].join('\n')
+    : `# ${title}\n\n${body}\n`;
+
+  return {
+    noteId: record.id,
+    title,
+    fileName: safeExportFileName(`${title}-${record.id}.md`, 'md'),
+    markdown,
+    attachments: [],
+  };
 }
 
 async function pickExportFolder(): Promise<string | null> {
@@ -269,6 +351,15 @@ function stripAttachmentRuntimeData(
     ...restData
   } = data;
   return restData;
+}
+
+function serializeWidgetReference(data: unknown): Record<string, string> {
+  const record =
+    data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  return {
+    widgetId: typeof record.widgetId === 'string' ? record.widgetId : '',
+    kind: typeof record.kind === 'string' ? record.kind : '',
+  };
 }
 
 const IMAGE_DATA_URL_RE = /^data:image\//i;
@@ -445,6 +536,94 @@ async function hydrateCardNoteData(
   return { ...existingData, ...noteRecordToCardData(record), noteId };
 }
 
+function widgetIdForChecklistNote(noteId: string): string {
+  return `widget_${noteId.replace(NOTE_ID_PREFIX_RE, '')}`;
+}
+
+function isWidgetLoadFailure(
+  record: WidgetRecord | WidgetLoadError
+): record is WidgetLoadError {
+  return 'error' in record;
+}
+
+function normalizeChecklistWidgetItems(items: unknown): ChecklistWidgetItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map((item) => {
+    const raw = (item ?? {}) as Record<string, unknown>;
+    return {
+      id:
+        typeof raw.id === 'string' && raw.id
+          ? raw.id
+          : `item_${crypto.randomUUID().replaceAll('-', '').slice(0, 8)}`,
+      text: typeof raw.text === 'string' ? raw.text : '',
+      checked: raw.checked === true,
+      ...(raw.isHeader === true ? { isHeader: true } : {}),
+      ...(typeof raw.createdAt === 'string'
+        ? { createdAt: raw.createdAt }
+        : {}),
+      ...(typeof raw.completedAt === 'string'
+        ? { completedAt: raw.completedAt }
+        : {}),
+    };
+  });
+}
+
+function checklistRecordFromCard(
+  noteId: string,
+  cardData: Record<string, unknown>
+): WidgetRecord {
+  const now = new Date().toISOString();
+  return {
+    schema: WIDGET_SCHEMA,
+    id: widgetIdForChecklistNote(noteId),
+    kind: 'checklist',
+    title: typeof cardData.title === 'string' ? cardData.title : '',
+    createdAt: now,
+    updatedAt: now,
+    data: {
+      items: normalizeChecklistWidgetItems(cardData.items),
+    },
+  };
+}
+
+async function migrateChecklistCardToWidgetReference(
+  wsPath: string,
+  noteId: string,
+  cardData: Record<string, unknown>,
+  migratedWidgets: Record<string, WidgetRecord>
+): Promise<{ kind: 'checklist'; widgetId: string } | null> {
+  if (cardData.type !== 'checklist') {
+    return null;
+  }
+
+  const widgetId = widgetIdForChecklistNote(noteId);
+  try {
+    const existing = await loadWidget(wsPath, widgetId);
+    if (!isWidgetLoadFailure(existing)) {
+      migratedWidgets[existing.id] = existing;
+      await moveNodeMetadataKey(wsPath, noteId, existing.id);
+      return { widgetId: existing.id, kind: 'checklist' };
+    }
+    if (existing.error === 'corrupted') {
+      throw new Error(`Existing widget ${widgetId} is corrupted.`);
+    }
+
+    const record = checklistRecordFromCard(noteId, cardData);
+    await saveWidget(wsPath, record);
+    migratedWidgets[record.id] = record;
+    await moveNodeMetadataKey(wsPath, noteId, record.id);
+    return { widgetId: record.id, kind: 'checklist' };
+  } catch (error) {
+    console.warn(
+      `[persistence] Failed to migrate checklist noteId=${noteId}`,
+      error
+    );
+    return null;
+  }
+}
+
 interface CanvasRPC {
   bun: {
     requests: {
@@ -454,6 +633,7 @@ interface CanvasRPC {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
+          widgets?: Record<string, WidgetRecord | WidgetLoadError>;
         } | null;
       };
       saveManifest: {
@@ -463,6 +643,22 @@ interface CanvasRPC {
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
         };
+        response: { success: boolean };
+      };
+      createWidget: {
+        params: { kind: WidgetKind; title?: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      cloneWidget: {
+        params: { widgetId: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      saveWidget: {
+        params: { widget: WidgetRecord };
+        response: { success: boolean };
+      };
+      deleteWidget: {
+        params: { widgetId: string };
         response: { success: boolean };
       };
       saveNote: {
@@ -1195,6 +1391,7 @@ async function main() {
           }
 
           const noteIndex = await buildNoteIndex(wsPath);
+          const migratedWidgets: Record<string, WidgetRecord> = {};
 
           const hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
@@ -1226,6 +1423,20 @@ async function main() {
                   node.data
                 );
                 if (hydrated) {
+                  const widgetReference =
+                    await migrateChecklistCardToWidgetReference(
+                      wsPath,
+                      node.data.noteId as string,
+                      hydrated,
+                      migratedWidgets
+                    );
+                  if (widgetReference) {
+                    return {
+                      ...node,
+                      type: 'widget',
+                      data: widgetReference,
+                    };
+                  }
                   return { ...node, data: hydrated };
                 }
                 console.warn(
@@ -1287,6 +1498,21 @@ async function main() {
                       childData
                     );
                     if (hydrated) {
+                      const widgetReference =
+                        await migrateChecklistCardToWidgetReference(
+                          wsPath,
+                          existingNoteId,
+                          hydrated,
+                          migratedWidgets
+                        );
+                      if (widgetReference) {
+                        return {
+                          ...child,
+                          noteId: existingNoteId,
+                          type: 'widget',
+                          data: widgetReference,
+                        };
+                      }
                       return {
                         ...child,
                         noteId: existingNoteId,
@@ -1315,10 +1541,43 @@ async function main() {
             })
           );
 
+          // Collect widgetIds referenced by top-level widget nodes and
+          // folder-child widget entries, then batch-load their records.
+          const widgetIds = new Set<string>();
+          for (const node of hydratedNodes) {
+            if (node.type === 'widget' && node.data?.widgetId) {
+              widgetIds.add(node.data.widgetId as string);
+            }
+            if (node.type === 'folder') {
+              const nodeData = node.data as Record<string, unknown>;
+              const children = (nodeData.children ?? []) as Array<{
+                data?: Record<string, unknown>;
+                type?: string;
+              }>;
+              for (const child of children) {
+                if (
+                  child.type === 'widget' &&
+                  (child.data?.widgetId as string | undefined)
+                ) {
+                  widgetIds.add(child.data?.widgetId as string);
+                }
+              }
+            }
+          }
+          const widgets =
+            widgetIds.size > 0
+              ? await loadWidgets(wsPath, [...widgetIds])
+              : undefined;
+          const hydratedWidgets =
+            Object.keys(migratedWidgets).length > 0
+              ? { ...(widgets ?? {}), ...migratedWidgets }
+              : widgets;
+
           return {
             nodes: hydratedNodes,
             edges: manifest.edges,
             viewport: manifest.viewport,
+            widgets: hydratedWidgets,
           };
         },
 
@@ -1485,6 +1744,13 @@ async function main() {
                         ),
                       };
                     }
+                    if (child.type === 'widget') {
+                      return {
+                        id: child.id,
+                        type: child.type,
+                        data: serializeWidgetReference(child.data),
+                      };
+                    }
                     if (child.type !== 'card') {
                       return child;
                     }
@@ -1534,6 +1800,17 @@ async function main() {
               }
 
               // Only extract content for card nodes
+              if (node.type === 'widget') {
+                return {
+                  id: node.id,
+                  type: node.type,
+                  position: node.position,
+                  ...(node.style ? { style: node.style } : {}),
+                  ...(node.parentId ? { parentId: node.parentId } : {}),
+                  ...(node.extent ? { extent: node.extent } : {}),
+                  data: serializeWidgetReference(node.data),
+                };
+              }
               if (node.type !== 'card') {
                 return node;
               }
@@ -1587,6 +1864,49 @@ async function main() {
           };
           await writeManifest(wsPath, viewEntry.file, manifest);
           return { success: true };
+        },
+
+        createWidget: async ({ kind, title }) => {
+          try {
+            const widget = await createWidget(wsPath, kind, title);
+            return { success: true, widget };
+          } catch (error) {
+            console.error('[widgets] createWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        cloneWidget: async ({ widgetId }) => {
+          try {
+            const widget = await cloneWidget(wsPath, widgetId);
+            if (!widget) {
+              return { success: false };
+            }
+            return { success: true, widget };
+          } catch (error) {
+            console.error('[widgets] cloneWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        saveWidget: async ({ widget }) => {
+          try {
+            await saveWidget(wsPath, widget);
+            return { success: true };
+          } catch (error) {
+            console.error('[widgets] saveWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        deleteWidget: async ({ widgetId }) => {
+          try {
+            await deleteWidget(wsPath, widgetId);
+            return { success: true };
+          } catch (error) {
+            console.error('[widgets] deleteWidget failed', error);
+            return { success: false };
+          }
         },
 
         saveNote: async ({ noteId, frontmatter, body }) => {
@@ -1970,6 +2290,7 @@ async function main() {
         }) => {
           // Resolve the set of notes to export based on the requested scope.
           let ids: string[] = [];
+          let widgetIds: string[] = [];
           let source = 'All notes';
           if (scope === 'selected') {
             ids = Array.isArray(noteIds) ? noteIds : [];
@@ -1978,7 +2299,11 @@ async function main() {
             const config = await loadWorkspaceConfig(wsPath);
             const view = config.views.find((v) => v.id === viewId);
             if (view) {
-              ids = collectViewNoteIds(await loadManifest(wsPath, view.file));
+              const refs = collectViewExportRefs(
+                await loadManifest(wsPath, view.file)
+              );
+              ids = refs.noteIds;
+              widgetIds = refs.widgetIds;
               source = `Canvas: ${view.name}`;
             }
           } else {
@@ -2050,6 +2375,64 @@ async function main() {
               failures.push(result.failure);
             } else {
               exportedNotes.push(result.exported);
+            }
+          }
+
+          if (widgetIds.length > 0) {
+            const widgetRecords = await loadWidgets(wsPath, widgetIds);
+            const widgetExportResults = await Promise.all(
+              widgetIds.map(async (widgetId): Promise<ExportNoteResult> => {
+                try {
+                  const record = widgetRecords[widgetId];
+                  if (!record) {
+                    return {
+                      failure: {
+                        noteId: widgetId,
+                        reason: 'widget record not found',
+                      },
+                    };
+                  }
+                  if ('error' in record) {
+                    return {
+                      failure: {
+                        noteId: widgetId,
+                        reason:
+                          record.error === 'corrupted'
+                            ? 'corrupted widget'
+                            : 'widget record not found',
+                      },
+                    };
+                  }
+                  const exported = buildChecklistWidgetMarkdown(record, {
+                    includeFrontmatter,
+                    exportedAt,
+                  });
+                  if (!exported) {
+                    return {
+                      failure: {
+                        noteId: widgetId,
+                        reason: `unsupported widget kind: ${record.kind}`,
+                      },
+                    };
+                  }
+                  await Bun.write(
+                    join(notesDir, exported.fileName),
+                    exported.markdown
+                  );
+                  return { exported };
+                } catch (error) {
+                  return {
+                    failure: { noteId: widgetId, reason: String(error) },
+                  };
+                }
+              })
+            );
+            for (const result of widgetExportResults) {
+              if (result.failure) {
+                failures.push(result.failure);
+              } else {
+                exportedNotes.push(result.exported);
+              }
             }
           }
 

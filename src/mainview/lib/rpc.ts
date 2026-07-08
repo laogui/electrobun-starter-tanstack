@@ -5,6 +5,7 @@
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
+import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import type {
   AICredentialStatus,
   AppInfo,
@@ -143,6 +144,38 @@ export async function rpcSaveNote(
     return { success: false };
   }
   return eb.rpc.request.saveNote({ noteId, frontmatter, body });
+}
+
+export async function rpcCreateWidget(kind: WidgetKind, title?: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false as const };
+  }
+  return eb.rpc.request.createWidget({ kind, title });
+}
+
+export async function rpcCloneWidget(widgetId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false as const };
+  }
+  return eb.rpc.request.cloneWidget({ widgetId });
+}
+
+export async function rpcSaveWidget(widget: WidgetRecord) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.saveWidget({ widget });
+}
+
+export async function rpcDeleteWidget(widgetId: string) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.deleteWidget({ widgetId });
 }
 
 export async function rpcLoadBlockNote(noteId: string) {

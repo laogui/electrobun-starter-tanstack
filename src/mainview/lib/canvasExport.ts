@@ -9,6 +9,7 @@ import { getViewportForBounds } from '@xyflow/react';
 import { toBlob } from 'html-to-image';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { rpcExportJson, rpcExportPng } from '@/lib/rpc';
+import type { WidgetLoadError, WidgetRecord } from '@/lib/widgetTypes';
 
 export const CANVAS_EXPORT_SCHEMA = 'ghostboard-canvas-export/v1' as const;
 
@@ -20,6 +21,7 @@ export interface CanvasExportDocument {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
+  widgets?: Record<string, WidgetRecord>;
 }
 
 const EXPORT_PADDING = 64;
@@ -426,6 +428,51 @@ interface BuildCanvasExportJsonInput {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
+  widgets?: Record<string, WidgetRecord | WidgetLoadError>;
+}
+
+function isWidgetRecord(
+  record: WidgetRecord | WidgetLoadError | undefined
+): record is WidgetRecord {
+  return !!record && !('error' in record);
+}
+
+function collectWidgetIdsFromNodes(nodes: Node[]): string[] {
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    const data = (node.data ?? {}) as CanvasNodeData;
+    if (node.type === 'widget') {
+      const widgetId = data.widgetId;
+      if (typeof widgetId === 'string' && widgetId) {
+        ids.add(widgetId);
+      }
+      continue;
+    }
+    if (node.type !== 'folder') {
+      continue;
+    }
+    const children = data.children;
+    if (!Array.isArray(children)) {
+      continue;
+    }
+    for (const rawChild of children) {
+      if (!rawChild || typeof rawChild !== 'object') {
+        continue;
+      }
+      const child = rawChild as {
+        data?: Record<string, unknown>;
+        type?: unknown;
+      };
+      if (child.type !== 'widget') {
+        continue;
+      }
+      const widgetId = child.data?.widgetId;
+      if (typeof widgetId === 'string' && widgetId) {
+        ids.add(widgetId);
+      }
+    }
+  }
+  return [...ids];
 }
 
 /**
@@ -440,6 +487,7 @@ export function buildCanvasExportJson({
   viewId,
   viewName,
   viewport,
+  widgets = {},
 }: BuildCanvasExportJsonInput): CanvasExportDocument {
   const visibleNodes = nodes.filter((node) => {
     const data = node.data as CanvasNodeData | undefined;
@@ -451,6 +499,13 @@ export function buildCanvasExportJson({
   );
 
   const sanitized = sanitizeForPersistence(visibleNodes, visibleEdges);
+  const exportedWidgets: Record<string, WidgetRecord> = {};
+  for (const widgetId of collectWidgetIdsFromNodes(visibleNodes)) {
+    const record = widgets[widgetId];
+    if (isWidgetRecord(record)) {
+      exportedWidgets[widgetId] = record;
+    }
+  }
 
   return {
     schema: CANVAS_EXPORT_SCHEMA,
@@ -460,6 +515,9 @@ export function buildCanvasExportJson({
     ...(viewport ? { viewport } : {}),
     nodes: sanitized.nodes,
     edges: sanitized.edges,
+    ...(Object.keys(exportedWidgets).length > 0
+      ? { widgets: exportedWidgets }
+      : {}),
   };
 }
 
@@ -502,6 +560,7 @@ interface ExportCanvasJsonOptions {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
+  widgets?: Record<string, WidgetRecord | WidgetLoadError>;
 }
 
 /**
@@ -521,6 +580,7 @@ export async function exportReactFlowCanvasToJson({
   viewId,
   viewName,
   viewport,
+  widgets,
 }: ExportCanvasJsonOptions) {
   const document_ = buildCanvasExportJson({
     edges,
@@ -528,6 +588,7 @@ export async function exportReactFlowCanvasToJson({
     viewId,
     viewName,
     viewport,
+    widgets,
   });
 
   if (document_.nodes.length === 0) {

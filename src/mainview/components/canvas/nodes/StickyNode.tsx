@@ -98,6 +98,7 @@ export const StickyContent = ({
                 'sticky-editable wrap-break-word custom-scrollbar pointer-events-none flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-hidden',
                 !data.content && 'sticky-editable-empty'
               )}
+              contentEditable={false}
               data-placeholder={undefined}
             >
               {data.content}
@@ -118,6 +119,7 @@ export const StickyContent = ({
         style={
           {
             '--sticky-pushpin-background': stickyPushpinBackground(data.color),
+            borderRadius: '50%',
           } as React.CSSProperties
         }
       >

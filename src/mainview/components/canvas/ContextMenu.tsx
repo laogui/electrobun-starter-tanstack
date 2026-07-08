@@ -29,6 +29,7 @@ import {
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import {
+  type ElementType,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -46,7 +47,7 @@ import * as m from '../../../paraglide/messages.js';
 interface MenuItem {
   danger?: boolean;
   disabled?: boolean;
-  icon: React.ElementType;
+  icon: ElementType;
   id: string;
   label: string;
   shortcut?: string;

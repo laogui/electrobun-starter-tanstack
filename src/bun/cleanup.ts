@@ -26,6 +26,7 @@ export interface DeleteUnlinkedResult {
 const CONTENT_PATH_RE = /^content\/[^/][^\\]*\.md$/;
 const SIDECAR_PATH_RE =
   /^content\/\.ghostboard\/blocknote\/[A-Za-z0-9_-]+\.json$/;
+const WIDGET_PATH_RE = /^\.ghostboard\/widgets\/[A-Za-z0-9_-]+\.json$/;
 const JSON_EXT_RE = /\.json$/;
 
 function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
@@ -33,6 +34,10 @@ function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
   const noteId = data.noteId;
   if (typeof noteId === 'string' && noteId) {
     out.add(noteId);
+  }
+  const widgetId = data.widgetId;
+  if (node.type === 'widget' && typeof widgetId === 'string' && widgetId) {
+    out.add(widgetId);
   }
   const children = data.children;
   if (!Array.isArray(children)) {
@@ -47,10 +52,18 @@ function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
     if (typeof cid === 'string' && cid) {
       out.add(cid);
     }
+    const cWidgetId = c.widgetId;
+    if (typeof cWidgetId === 'string' && cWidgetId) {
+      out.add(cWidgetId);
+    }
     const cdata = c.data as Record<string, unknown> | undefined;
     const cdataId = cdata?.noteId;
     if (typeof cdataId === 'string' && cdataId) {
       out.add(cdataId);
+    }
+    const cdataWidgetId = cdata?.widgetId;
+    if (typeof cdataWidgetId === 'string' && cdataWidgetId) {
+      out.add(cdataWidgetId);
     }
   }
 }
@@ -177,6 +190,39 @@ export async function scanUnlinkedNotes(
     }
   }
 
+  const widgetsDir = join(wsPath, '.ghostboard', 'widgets');
+  const widgetEntries = await Promise.all(
+    (await listFilesRecursiveAsync(widgetsDir)).map(async (rel) => {
+      if (!rel.endsWith('.json') || rel.includes('/')) {
+        return null;
+      }
+      const widgetId = rel.replace(JSON_EXT_RE, '');
+      if (referenced.has(widgetId)) {
+        return null;
+      }
+      const fullPath = join(widgetsDir, rel);
+      const [parsed, stats] = await Promise.all([
+        Bun.file(fullPath)
+          .json()
+          .catch(() => null) as Promise<{ title?: unknown } | null>,
+        stat(fullPath).catch(() => null),
+      ]);
+      return {
+        file: `.ghostboard/widgets/${rel}`,
+        hasFrontmatterId: true,
+        modifiedAt: stats?.mtimeMs ?? 0,
+        noteId: widgetId,
+        size: stats?.size ?? 0,
+        title: typeof parsed?.title === 'string' ? parsed.title : '',
+      };
+    })
+  );
+  for (const entry of widgetEntries) {
+    if (entry) {
+      entries.push(entry);
+    }
+  }
+
   entries.sort((a, b) => a.file.localeCompare(b.file));
   return entries;
 }
@@ -191,6 +237,9 @@ async function noteIdForCleanupPath(
   rel: string
 ): Promise<string | null> {
   if (SIDECAR_PATH_RE.test(rel)) {
+    return rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? null;
+  }
+  if (WIDGET_PATH_RE.test(rel)) {
     return rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? null;
   }
   try {
@@ -208,8 +257,9 @@ async function noteIdForCleanupPath(
  * Move the listed unlinked files to the system Trash via Electrobun's
  * `Utils.moveToTrash`. Re-validates against the current reference set so
  * files that became referenced after a stale scan are not touched. Paths
- * must be a `content/*.md` note or a `content/.ghostboard/blocknote/*.json`
- * sidecar.
+ * must be a `content/*.md` note, a
+ * `content/.ghostboard/blocknote/*.json` sidecar, or a widget JSON file under
+ * `.ghostboard/widgets/`.
  */
 export async function deleteUnlinkedNotes(
   wsPath: string,
@@ -221,7 +271,10 @@ export async function deleteUnlinkedNotes(
 
   const results = await Promise.all(
     files.map(async (rel) => {
-      const isAllowed = CONTENT_PATH_RE.test(rel) || SIDECAR_PATH_RE.test(rel);
+      const isAllowed =
+        CONTENT_PATH_RE.test(rel) ||
+        SIDECAR_PATH_RE.test(rel) ||
+        WIDGET_PATH_RE.test(rel);
       if (!isAllowed || rel.includes('..')) {
         return { rel, status: 'skipped' as const };
       }

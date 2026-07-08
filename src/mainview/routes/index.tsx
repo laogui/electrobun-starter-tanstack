@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type {
   Connection,
+  Edge,
   Node,
   NodeChange,
   ReactFlowInstance,
@@ -19,6 +20,7 @@ import {
 import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
+import { nanoid } from 'nanoid';
 
 import {
   useCallback,
@@ -47,7 +49,11 @@ import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { TagSidebar } from '@/components/tags/TagSidebar';
 import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
-import { initialEdges, initialNodes } from '@/data/initialNodes';
+import {
+  initialEdges,
+  initialNodes,
+  initialWidgetSeeds,
+} from '@/data/initialNodes';
 import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -63,12 +69,14 @@ import {
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
+  type CanvasExportDocument,
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+import { sortNodesByParent } from '@/lib/canvasUtils';
 import {
   type CreatableCanvasNodeKind,
   createLinkNodeData,
@@ -81,6 +89,7 @@ import {
   isImageFile,
   isOsFileDrag,
   persistImportedImage,
+  readCanvasExportJsonFile,
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
@@ -92,9 +101,11 @@ import {
 } from '@/lib/shouldReverseEdgeDirection';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
+import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import type { CanvasBackgroundSetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
-import { useCanvasStore } from '@/store/canvasStore';
+import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -150,6 +161,269 @@ const MINIMAP_NODE_SELECTED_COLOR = 'hsl(255 60% 52%)';
 const MINIMAP_NODE_STROKE_COLOR = '#999';
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+const WIDGET_CREATE_KINDS = new Set<CreatableCanvasNodeKind>([
+  'checklist',
+  'pomodoro',
+  'reminder',
+]);
+
+function isWidgetCreateKind(kind: CreatableCanvasNodeKind): kind is WidgetKind {
+  return WIDGET_CREATE_KINDS.has(kind);
+}
+
+async function materializeInitialWidgetSeeds(
+  nodes: Node[],
+  createWidgetRecord: (
+    kind: WidgetKind,
+    title?: string
+  ) => Promise<WidgetRecord | null>,
+  updateWidgetRecord: WidgetStoreState['updateWidget'],
+  saveWidgetNow: WidgetStoreState['saveWidgetNow']
+): Promise<Node[]> {
+  const seededNodes: Node[] = [];
+  for (const node of nodes) {
+    if (node.type !== 'widget') {
+      seededNodes.push(node);
+      continue;
+    }
+    const seed = initialWidgetSeeds[node.id];
+    if (!seed) {
+      seededNodes.push(node);
+      continue;
+    }
+    const existingWidgetId =
+      typeof node.data.widgetId === 'string' ? node.data.widgetId : '';
+    if (existingWidgetId) {
+      seededNodes.push(node);
+      continue;
+    }
+
+    const widget = await createWidgetRecord(seed.kind, seed.title);
+    if (!widget) {
+      throw new Error(`Failed to create initial widget for node ${node.id}.`);
+    }
+    updateWidgetRecord(
+      widget.id,
+      (current) => ({
+        ...current,
+        title: seed.title,
+        data: seed.data,
+        updatedAt: new Date().toISOString(),
+      }),
+      { recordHistory: false }
+    );
+    await saveWidgetNow(widget.id);
+
+    seededNodes.push({
+      ...node,
+      data: {
+        ...node.data,
+        widgetId: widget.id,
+        kind: widget.kind,
+      },
+    });
+  }
+  return seededNodes;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readCanvasPoint(value: unknown): { x: number; y: number } {
+  if (!isRecord(value)) {
+    return { x: 0, y: 0 };
+  }
+  const { x, y } = value;
+  return {
+    x: typeof x === 'number' && Number.isFinite(x) ? x : 0,
+    y: typeof y === 'number' && Number.isFinite(y) ? y : 0,
+  };
+}
+
+function uniqueImportedId(prefix: string, usedIds: Set<string>): string {
+  let id = `${prefix}-${nanoid(8)}`;
+  while (usedIds.has(id)) {
+    id = `${prefix}-${nanoid(8)}`;
+  }
+  usedIds.add(id);
+  return id;
+}
+
+function collectWidgetIdsFromImportedData(
+  type: unknown,
+  data: unknown,
+  ids: Set<string>
+): void {
+  if (!isRecord(data)) {
+    return;
+  }
+  if (type === 'widget') {
+    const widgetId = data.widgetId;
+    if (typeof widgetId === 'string' && widgetId) {
+      ids.add(widgetId);
+    }
+    return;
+  }
+  if (type !== 'folder') {
+    return;
+  }
+  const children = data.children;
+  if (!Array.isArray(children)) {
+    return;
+  }
+  for (const child of children) {
+    if (!isRecord(child)) {
+      continue;
+    }
+    collectWidgetIdsFromImportedData(child.type, child.data, ids);
+  }
+}
+
+function collectWidgetIdsFromCanvasExport(
+  document_: CanvasExportDocument
+): string[] {
+  const ids = new Set<string>();
+  for (const node of document_.nodes) {
+    if (!isRecord(node)) {
+      continue;
+    }
+    collectWidgetIdsFromImportedData(node.type, node.data, ids);
+  }
+  return [...ids];
+}
+
+function remapImportedWidgetData(
+  type: unknown,
+  data: unknown,
+  widgetIdMap: Map<string, string>
+): Record<string, unknown> {
+  if (!isRecord(data)) {
+    return {};
+  }
+
+  if (type === 'widget') {
+    const widgetId = data.widgetId;
+    return {
+      ...data,
+      ...(typeof widgetId === 'string' && widgetIdMap.has(widgetId)
+        ? { widgetId: widgetIdMap.get(widgetId) }
+        : {}),
+    };
+  }
+
+  if (type !== 'folder' || !Array.isArray(data.children)) {
+    return { ...data };
+  }
+
+  return {
+    ...data,
+    children: data.children.map((child) => {
+      if (!isRecord(child)) {
+        return child;
+      }
+      return {
+        ...child,
+        data: remapImportedWidgetData(child.type, child.data, widgetIdMap),
+      };
+    }),
+  };
+}
+
+function buildImportedCanvasPayload(
+  document_: CanvasExportDocument,
+  anchorCenter: { x: number; y: number },
+  currentNodes: Node[],
+  currentEdges: Edge[],
+  widgetIdMap: Map<string, string>
+): { edges: Edge[]; nodes: Node[] } {
+  const rawNodes = document_.nodes.filter(
+    (node): node is Record<string, unknown> =>
+      isRecord(node) && typeof node.id === 'string' && node.id.length > 0
+  );
+  const usedNodeIds = new Set(currentNodes.map((node) => node.id));
+  const usedEdgeIds = new Set(currentEdges.map((edge) => edge.id));
+  const nodeIdMap = new Map<string, string>();
+  for (const node of rawNodes) {
+    nodeIdMap.set(
+      node.id as string,
+      uniqueImportedId('import-node', usedNodeIds)
+    );
+  }
+
+  const topLevelPositions = rawNodes
+    .filter((node) => {
+      const parentId = node.parentId;
+      return !(typeof parentId === 'string' && nodeIdMap.has(parentId));
+    })
+    .map((node) => readCanvasPoint(node.position));
+  const minX =
+    topLevelPositions.length > 0
+      ? Math.min(...topLevelPositions.map((point) => point.x))
+      : 0;
+  const minY =
+    topLevelPositions.length > 0
+      ? Math.min(...topLevelPositions.map((point) => point.y))
+      : 0;
+  const offset = { x: anchorCenter.x - minX, y: anchorCenter.y - minY };
+
+  const nodes = rawNodes.map((node) => {
+    const {
+      data: rawData,
+      extent,
+      id,
+      parentId: rawParentId,
+      position: rawPosition,
+      ...rest
+    } = node;
+    const nextParentId =
+      typeof rawParentId === 'string' ? nodeIdMap.get(rawParentId) : undefined;
+    const position = readCanvasPoint(rawPosition);
+    const nextPosition = nextParentId
+      ? position
+      : { x: position.x + offset.x, y: position.y + offset.y };
+
+    return {
+      ...rest,
+      id: nodeIdMap.get(id as string) as string,
+      position: nextPosition,
+      data: remapImportedWidgetData(node.type, rawData, widgetIdMap),
+      selected: true,
+      ...(nextParentId
+        ? { parentId: nextParentId, extent: extent ?? 'parent' }
+        : {}),
+    } as Node;
+  });
+
+  const edges = document_.edges.flatMap((rawEdge) => {
+    if (
+      !(
+        isRecord(rawEdge) &&
+        typeof rawEdge.source === 'string' &&
+        typeof rawEdge.target === 'string'
+      )
+    ) {
+      return [];
+    }
+    const source = nodeIdMap.get(rawEdge.source);
+    const target = nodeIdMap.get(rawEdge.target);
+    if (!(source && target)) {
+      return [];
+    }
+    return [
+      {
+        ...rawEdge,
+        id: uniqueImportedId('import-edge', usedEdgeIds),
+        source,
+        target,
+        selected: false,
+      } as Edge,
+    ];
+  });
+
+  return { edges, nodes: sortNodesByParent(nodes) };
+}
 
 export const Route = createFileRoute('/')({
   component: CanvasRoute,
@@ -315,6 +589,9 @@ function CanvasComponent() {
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const createWidgetRecord = useWidgetStore((s) => s.createWidget);
+  const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
+  const saveWidgetNow = useWidgetStore((s) => s.saveWidgetNow);
 
   const createLinkFromText = useCallback(
     async (
@@ -338,6 +615,71 @@ function CanvasComponent() {
     [onCreateNode]
   );
 
+  const importCanvasExportDocument = useCallback(
+    async (
+      document_: CanvasExportDocument,
+      anchorCenter: { x: number; y: number }
+    ) => {
+      const widgetIdMap = new Map<string, string>();
+      for (const widgetId of collectWidgetIdsFromCanvasExport(document_)) {
+        const sourceWidget = document_.widgets?.[widgetId];
+        if (!sourceWidget) {
+          continue;
+        }
+
+        // Imported widgets must be independent of the source canvas, matching
+        // duplicate/paste semantics for widget-backed nodes.
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
+        const createdWidget = await createWidgetRecord(
+          sourceWidget.kind,
+          sourceWidget.title
+        );
+        if (!createdWidget) {
+          continue;
+        }
+
+        const now = new Date().toISOString();
+        updateWidgetRecord(
+          createdWidget.id,
+          () => ({
+            ...sourceWidget,
+            id: createdWidget.id,
+            createdAt: now,
+            updatedAt: now,
+          }),
+          { recordHistory: false }
+        );
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
+        await saveWidgetNow(createdWidget.id);
+        widgetIdMap.set(widgetId, createdWidget.id);
+      }
+
+      const state = useCanvasStore.getState();
+      const imported = buildImportedCanvasPayload(
+        document_,
+        anchorCenter,
+        state.nodes,
+        state.edges,
+        widgetIdMap
+      );
+      if (imported.nodes.length === 0) {
+        toast.error('Canvas JSON did not contain importable nodes.');
+        return;
+      }
+
+      state.saveSnapshot();
+      state.setNodes((prev) =>
+        sortNodesByParent([
+          ...prev.map((node) => ({ ...node, selected: false })),
+          ...imported.nodes,
+        ])
+      );
+      state.setEdges((prev) => [...prev, ...imported.edges]);
+      toast.success('Canvas JSON imported.');
+    },
+    [createWidgetRecord, saveWidgetNow, updateWidgetRecord]
+  );
+
   const createAssetsFromFiles = useCallback(
     async (files: File[], anchorCenter: { x: number; y: number }) => {
       for (const [index, file] of files.entries()) {
@@ -347,6 +689,20 @@ function CanvasComponent() {
           x: anchorCenter.x + col * ASSET_DROP_GRID_GAP,
           y: anchorCenter.y + row * ASSET_DROP_GRID_GAP,
         };
+
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
+        const canvasExportDocument = await readCanvasExportJsonFile(file);
+        if (canvasExportDocument) {
+          try {
+            // Keep dropped files inserted in visual grid order.
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop
+            await importCanvasExportDocument(canvasExportDocument, position);
+          } catch (error) {
+            console.error('[canvas] Failed to import canvas JSON:', error);
+            toast.error('Canvas JSON could not be imported.');
+          }
+          continue;
+        }
 
         if (isImageFile(file)) {
           const preview = createImageDropPreview(file);
@@ -408,7 +764,7 @@ function CanvasComponent() {
         }
       }
     },
-    [onCreateNode, updateNodeData]
+    [importCanvasExportDocument, onCreateNode, updateNodeData]
   );
 
   // Flow-space anchor for pasted content: prefer the last cursor position so
@@ -613,6 +969,20 @@ function CanvasComponent() {
         openRecorder(request?.anchorCenter);
         return;
       }
+      if (isWidgetCreateKind(kind)) {
+        const widget = await createWidgetRecord(kind);
+        if (!widget) {
+          toast.error(m.toast_widget_create_failed());
+          return;
+        }
+        await onCreateNode(kind, {
+          ...(request?.anchorCenter
+            ? { anchorCenter: request.anchorCenter }
+            : {}),
+          data: { widgetId: widget.id, kind: widget.kind },
+        });
+        return;
+      }
       await onCreateNode(
         kind,
         request?.anchorCenter
@@ -620,7 +990,40 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [onCreateNode, openAssetFilePicker, openRecorder, setLinkPrompt]
+    [
+      createWidgetRecord,
+      onCreateNode,
+      openAssetFilePicker,
+      openRecorder,
+      setLinkPrompt,
+    ]
+  );
+
+  const createFromBottomMenu = useCallback(
+    async (kind: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
+      if (isWidgetCreateKind(kind)) {
+        const widget = await createWidgetRecord(kind);
+        if (!widget) {
+          toast.error(m.toast_widget_create_failed());
+          return;
+        }
+        await onCreateNode(kind, {
+          ...options,
+          data: {
+            ...(options?.data ?? {}),
+            widgetId: widget.id,
+            kind: widget.kind,
+          },
+        });
+        return;
+      }
+      if (options) {
+        await onCreateNode(kind, options);
+        return;
+      }
+      await onCreateNode(kind);
+    },
+    [createWidgetRecord, onCreateNode]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -647,6 +1050,7 @@ function CanvasComponent() {
   const savedViewport = useCanvasStore((s) => s.persistedViewport);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
+  const hydrateWidgets = useWidgetStore((s) => s.hydrate);
   const views = useCanvasStore((s) => s.views);
   const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
   const setPendingSearchTarget = useCanvasStore(
@@ -812,6 +1216,9 @@ function CanvasComponent() {
         }
         if (data) {
           hydrate(data.nodes, data.edges, data.viewport ?? null);
+          if (data.widgets) {
+            hydrateWidgets(data.widgets);
+          }
         } else if (await isRpcAvailable()) {
           if (cancelled) {
             return;
@@ -819,10 +1226,16 @@ function CanvasComponent() {
           // First run: seed workspace with initialNodes + initialEdges.
           // Don't persist a viewport yet — fitView frames the seed nodes,
           // and the user's first pan/zoom will save the real viewport.
-          const sanitized = sanitizeForPersistence(initialNodes, initialEdges);
+          const seededNodes = await materializeInitialWidgetSeeds(
+            initialNodes,
+            createWidgetRecord,
+            updateWidgetRecord,
+            saveWidgetNow
+          );
+          const sanitized = sanitizeForPersistence(seededNodes, initialEdges);
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
           if (!cancelled) {
-            hydrate(initialNodes, initialEdges);
+            hydrate(seededNodes, initialEdges);
           }
         } else {
           // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
@@ -838,7 +1251,15 @@ function CanvasComponent() {
     return () => {
       cancelled = true;
     };
-  }, [hydrate, hydrated, activeViewId]);
+  }, [
+    hydrate,
+    hydrateWidgets,
+    hydrated,
+    activeViewId,
+    createWidgetRecord,
+    updateWidgetRecord,
+    saveWidgetNow,
+  ]);
 
   useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes, rfInstance });
 
@@ -1313,6 +1734,7 @@ function CanvasComponent() {
         viewId: activeViewId,
         viewName: activeViewName,
         viewport: instance.getViewport?.(),
+        widgets: useWidgetStore.getState().records,
       });
       if (exported) {
         toast.success(m.toast_json_exported());
@@ -1504,7 +1926,7 @@ function CanvasComponent() {
 
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
-        onCreateNode={onCreateNode}
+        onCreateNode={createFromBottomMenu}
         onExportCanvas={onExportCanvas}
         onExportCanvasJson={onExportCanvasJson}
         onOpenImagePicker={openImagePicker}

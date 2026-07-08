@@ -903,6 +903,62 @@ describe('routes/index', () => {
     ).toMatchObject({ zIndex: 1 });
   });
 
+  it('temporarily elevates dragged cards above a group drop target without changing stored z-order', async () => {
+    nodeDragMocks.dropTargetId = 'group-high';
+    nodeDragMocks.draggingNodeIds = ['card-low'];
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'card-low',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          zIndex: 1,
+          data: { title: 'Low Card', content: '', color: '#fff' },
+        },
+        {
+          id: 'group-high',
+          type: 'group',
+          position: { x: 100, y: 100 },
+          selected: true,
+          zIndex: 5000,
+          data: { label: 'High Group', color: 'blue' },
+        },
+      ],
+      edges: [],
+    });
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      const calls = reactFlowMocks.props.mock.calls;
+      const lastProps = calls.at(-1)?.[0] as
+        | {
+            nodes: Array<{
+              id: string;
+              zIndex?: number;
+            }>;
+          }
+        | undefined;
+      const renderedCard = lastProps?.nodes.find(
+        (node) => node.id === 'card-low'
+      );
+      const renderedGroup = lastProps?.nodes.find(
+        (node) => node.id === 'group-high'
+      );
+
+      expect(renderedCard?.zIndex).toBeGreaterThan(
+        (renderedGroup?.zIndex ?? 0) + 1000
+      );
+    });
+
+    expect(
+      useCanvasStore.getState().nodes.find((node) => node.id === 'card-low')
+    ).toMatchObject({ zIndex: 1 });
+  });
+
   it('shows an empty canvas guide for empty manifests', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
     const module = await import('./index');

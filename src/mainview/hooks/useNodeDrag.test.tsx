@@ -503,7 +503,10 @@ describe('useNodeDrag – group and folder interactions', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'dragging-folder' }));
 
-    expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
+    // A folder can't be absorbed by another folder, but it can be nested into
+    // a group - so the group acts as the drop target (driving z-index
+    // elevation) as well as the active group (driving the highlight).
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('group-1');
     expect(screen.getByLabelText('active-group')).toHaveTextContent('group-1');
     expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
       data: { active: true },

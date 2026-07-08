@@ -169,7 +169,10 @@ export function useNodeDrag() {
           useCanvasStore.getState().nodes
         );
         targetFolderId = folder?.id || null;
-        setDropTargetId(targetFolderId);
+        // Folder takes precedence (matches onNodeDragStop ordering); when no
+        // folder is under the cursor, the group acts as the drop target so the
+        // dragged card is elevated above the group like it is above a folder.
+        setDropTargetId(targetFolderId ?? targetGroupId);
       }
       // Folders can go into groups but NOT into other folders
       else if (node.type === 'folder') {
@@ -177,7 +180,8 @@ export function useNodeDrag() {
           .getIntersectingNodes(node)
           .find((n) => n.type === 'group');
         targetGroupId = group?.id ?? null;
-        setDropTargetId(null);
+        // Elevate the dragged folder above the group it is about to enter.
+        setDropTargetId(targetGroupId);
       }
       // Groups cannot go into anything
       else if (node.type === 'group') {

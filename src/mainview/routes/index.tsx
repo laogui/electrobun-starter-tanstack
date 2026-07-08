@@ -114,6 +114,10 @@ const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
 const CANVAS_GRID_SIZE = 24;
 const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
+// React Flow adds REACT_FLOW_SELECTED_NODE_Z_OFFSET to selected nodes. Use
+// +1 more so a dragged card still renders above a selected container (folder
+// or group) that was brought to front - regardless of which container type
+// the card is about to drop onto.
 const DRAGGING_OVER_CONTAINER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
 
 function nodeZIndex(node: Node): number {
@@ -1067,7 +1071,8 @@ function CanvasComponent() {
       return;
     }
     // React Flow adds 1000 to selected nodes by default. Use +1001 so a
-    // dragged card still renders above a selected folder that was brought front.
+    // dragged card still renders above a selected container (folder/group)
+    // that was brought front.
     return (
       Math.max(0, ...nodes.map(nodeZIndex)) + DRAGGING_OVER_CONTAINER_Z_OFFSET
     );

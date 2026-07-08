@@ -95,6 +95,7 @@ import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { CanvasBackgroundSetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore } from '@/store/widgetStore';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -310,6 +311,7 @@ function CanvasComponent() {
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const createWidgetRecord = useWidgetStore((s) => s.createWidget);
 
   const createLinkFromText = useCallback(
     async (
@@ -608,6 +610,20 @@ function CanvasComponent() {
         openRecorder(request?.anchorCenter);
         return;
       }
+      if (kind === 'widget') {
+        const widget = await createWidgetRecord('checklist');
+        if (!widget) {
+          toast.error('Could not create widget.');
+          return;
+        }
+        await onCreateNode(kind, {
+          ...(request?.anchorCenter
+            ? { anchorCenter: request.anchorCenter }
+            : {}),
+          data: { widgetId: widget.id, kind: widget.kind },
+        });
+        return;
+      }
       await onCreateNode(
         kind,
         request?.anchorCenter
@@ -615,7 +631,13 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [onCreateNode, openAssetFilePicker, openRecorder, setLinkPrompt]
+    [
+      createWidgetRecord,
+      onCreateNode,
+      openAssetFilePicker,
+      openRecorder,
+      setLinkPrompt,
+    ]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -642,6 +664,7 @@ function CanvasComponent() {
   const savedViewport = useCanvasStore((s) => s.persistedViewport);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
+  const hydrateWidgets = useWidgetStore((s) => s.hydrate);
   const views = useCanvasStore((s) => s.views);
   const pendingSearchTarget = useCanvasStore((s) => s.pendingSearchTarget);
   const setPendingSearchTarget = useCanvasStore(
@@ -807,6 +830,9 @@ function CanvasComponent() {
         }
         if (data) {
           hydrate(data.nodes, data.edges, data.viewport ?? null);
+          if (data.widgets) {
+            hydrateWidgets(data.widgets);
+          }
         } else if (await isRpcAvailable()) {
           if (cancelled) {
             return;
@@ -833,7 +859,7 @@ function CanvasComponent() {
     return () => {
       cancelled = true;
     };
-  }, [hydrate, hydrated, activeViewId]);
+  }, [hydrate, hydrateWidgets, hydrated, activeViewId]);
 
   useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes, rfInstance });
 

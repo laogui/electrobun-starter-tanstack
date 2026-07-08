@@ -21,6 +21,8 @@
   "menu_file": "File",
   "menu_recording": "Recording",
   "menu_new_recording": "New Recording",
+  "menu_checklist_widget": "Checklist widget",
+  "menu_new_checklist_widget": "New Checklist widget",
   "recording_node_play_aria": "Play recording",
   "recording_node_pause_aria": "Pause recording",
   "recording_recorder_cancel_aria": "Cancel recording",

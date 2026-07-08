@@ -68,6 +68,7 @@ export function initWorkspace(workspacePath?: string): string {
     join(wsPath, '.ghostboard'),
     join(wsPath, '.ghostboard', 'views'),
     join(wsPath, '.ghostboard', 'trash'),
+    join(wsPath, '.ghostboard', 'widgets'),
     join(wsPath, 'content'),
     join(wsPath, 'attachments'),
   ];

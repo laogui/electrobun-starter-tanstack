@@ -46,6 +46,8 @@ const DEFAULT_LINK_W = 380;
 const DEFAULT_LINK_H = 360;
 const DEFAULT_RECORDING_W = 380;
 const DEFAULT_RECORDING_H = 150;
+const DEFAULT_WIDGET_W = 320;
+const DEFAULT_WIDGET_H = 340;
 
 function pickRandom<T>(values: readonly T[]): T {
   // Falls back to first entry when array is empty (which the canvas color
@@ -162,6 +164,20 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       mimeType: 'audio/mp4',
       recordingNumber: 1,
       title: '',
+    }),
+    canEnterGroup: true,
+    canEnterFolder: true,
+  },
+  widget: {
+    kind: 'widget',
+    nodeType: 'widget',
+    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
+    // `widgetId` is assigned by the caller once the backing widget file has
+    // been created via RPC (see `requestCreate` in routes/index.tsx) — the
+    // registry only supplies a placeholder shape.
+    defaultData: () => ({
+      widgetId: '',
+      kind: 'checklist',
     }),
     canEnterGroup: true,
     canEnterFolder: true,

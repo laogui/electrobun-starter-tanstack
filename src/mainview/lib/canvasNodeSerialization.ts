@@ -93,6 +93,11 @@ function serializeFolderChild(child: FolderChildLike): FolderChildLike {
   for (const [k, v] of Object.entries(child)) {
     clean[k] = v;
   }
+  if (clean.type === 'widget' && clean.data && typeof clean.data === 'object') {
+    const data = clean.data as { kind?: unknown; widgetId?: unknown };
+    clean.data = { widgetId: data.widgetId, kind: data.kind };
+    return clean;
+  }
   if (clean.data && typeof clean.data === 'object') {
     clean.data = serializeNodeDataForManifest(
       clean.data as Record<string, unknown>
@@ -108,6 +113,11 @@ export function serializeNodeForManifest(node: Node): Record<string, unknown> {
     if (!RUNTIME_NODE_KEYS.has(k)) {
       clean[k] = v;
     }
+  }
+  if (node.type === 'widget' && clean.data && typeof clean.data === 'object') {
+    const data = clean.data as { kind?: unknown; widgetId?: unknown };
+    clean.data = { widgetId: data.widgetId, kind: data.kind };
+    return clean;
   }
   if (clean.data && typeof clean.data === 'object') {
     clean.data = serializeNodeDataForManifest(

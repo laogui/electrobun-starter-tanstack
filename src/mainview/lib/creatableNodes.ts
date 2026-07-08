@@ -34,6 +34,7 @@ const CREATABLE_KIND_BY_ACTION = {
   group: 'group',
   file: 'asset',
   recording: 'recording',
+  checklistWidget: 'widget',
 } as const satisfies Record<string, CreatableCanvasNodeKind>;
 
 /** Canonical (prefix-free) creation action id. */
@@ -104,6 +105,14 @@ const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
     labels: {
       short: () => m.menu_recording(),
       new: () => m.menu_new_recording(),
+    },
+  },
+  {
+    id: 'checklistWidget',
+    icon: ListChecks,
+    labels: {
+      short: () => m.menu_checklist_widget(),
+      new: () => m.menu_new_checklist_widget(),
     },
   },
 ];

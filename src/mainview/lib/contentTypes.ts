@@ -21,7 +21,8 @@ export type CanvasNodeKind =
   | 'image'
   | 'asset'
   | 'link'
-  | 'recording';
+  | 'recording'
+  | 'widget';
 
 /**
  * Subset of `CanvasNodeKind` that user-facing creation entry points (menus,

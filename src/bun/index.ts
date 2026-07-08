@@ -95,6 +95,14 @@ import {
 } from './templates';
 import { generateFileMetadata, generateVideoPosterFile } from './thumbnail';
 import { loadUserPrefs, saveUserPrefs } from './userprefs';
+import type { WidgetKind, WidgetLoadError, WidgetRecord } from './widgets';
+import {
+  cloneWidget,
+  createWidget,
+  deleteWidget,
+  loadWidgets,
+  saveWidget,
+} from './widgets';
 import {
   addView,
   addViewFromTemplate,
@@ -454,6 +462,7 @@ interface CanvasRPC {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
+          widgets?: Record<string, WidgetRecord | WidgetLoadError>;
         } | null;
       };
       saveManifest: {
@@ -463,6 +472,22 @@ interface CanvasRPC {
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
         };
+        response: { success: boolean };
+      };
+      createWidget: {
+        params: { kind: WidgetKind; title?: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      cloneWidget: {
+        params: { widgetId: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      saveWidget: {
+        params: { widget: WidgetRecord };
+        response: { success: boolean };
+      };
+      deleteWidget: {
+        params: { widgetId: string };
         response: { success: boolean };
       };
       saveNote: {
@@ -1315,10 +1340,38 @@ async function main() {
             })
           );
 
+          // Collect widgetIds referenced by top-level widget nodes and
+          // folder-child widget entries, then batch-load their records.
+          const widgetIds = new Set<string>();
+          for (const node of hydratedNodes) {
+            if (node.type === 'widget' && node.data?.widgetId) {
+              widgetIds.add(node.data.widgetId as string);
+            }
+            if (node.type === 'folder') {
+              const children = (node.data.children ?? []) as Array<{
+                data?: Record<string, unknown>;
+                type?: string;
+              }>;
+              for (const child of children) {
+                if (
+                  child.type === 'widget' &&
+                  (child.data?.widgetId as string | undefined)
+                ) {
+                  widgetIds.add(child.data?.widgetId as string);
+                }
+              }
+            }
+          }
+          const widgets =
+            widgetIds.size > 0
+              ? await loadWidgets(wsPath, [...widgetIds])
+              : undefined;
+
           return {
             nodes: hydratedNodes,
             edges: manifest.edges,
             viewport: manifest.viewport,
+            widgets,
           };
         },
 
@@ -1485,6 +1538,17 @@ async function main() {
                         ),
                       };
                     }
+                    if (child.type === 'widget') {
+                      const widgetId = (child.data as Record<string, unknown>)
+                        ?.widgetId as string | undefined;
+                      const kind = (child.data as Record<string, unknown>)
+                        ?.kind as string | undefined;
+                      return {
+                        id: child.id,
+                        type: child.type,
+                        data: { widgetId, kind },
+                      };
+                    }
                     if (child.type !== 'card') {
                       return child;
                     }
@@ -1534,6 +1598,22 @@ async function main() {
               }
 
               // Only extract content for card nodes
+              if (node.type === 'widget') {
+                const widgetId = (node.data as Record<string, unknown>)
+                  ?.widgetId as string | undefined;
+                const kind = (node.data as Record<string, unknown>)?.kind as
+                  | string
+                  | undefined;
+                return {
+                  id: node.id,
+                  type: node.type,
+                  position: node.position,
+                  ...(node.style ? { style: node.style } : {}),
+                  ...(node.parentId ? { parentId: node.parentId } : {}),
+                  ...(node.extent ? { extent: node.extent } : {}),
+                  data: { widgetId, kind },
+                };
+              }
               if (node.type !== 'card') {
                 return node;
               }
@@ -1587,6 +1667,49 @@ async function main() {
           };
           await writeManifest(wsPath, viewEntry.file, manifest);
           return { success: true };
+        },
+
+        createWidget: async ({ kind, title }) => {
+          try {
+            const widget = await createWidget(wsPath, kind, title);
+            return { success: true, widget };
+          } catch (error) {
+            console.error('[widgets] createWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        cloneWidget: async ({ widgetId }) => {
+          try {
+            const widget = await cloneWidget(wsPath, widgetId);
+            if (!widget) {
+              return { success: false };
+            }
+            return { success: true, widget };
+          } catch (error) {
+            console.error('[widgets] cloneWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        saveWidget: async ({ widget }) => {
+          try {
+            await saveWidget(wsPath, widget);
+            return { success: true };
+          } catch (error) {
+            console.error('[widgets] saveWidget failed', error);
+            return { success: false };
+          }
+        },
+
+        deleteWidget: async ({ widgetId }) => {
+          try {
+            await deleteWidget(wsPath, widgetId);
+            return { success: true };
+          } catch (error) {
+            console.error('[widgets] deleteWidget failed', error);
+            return { success: false };
+          }
         },
 
         saveNote: async ({ noteId, frontmatter, body }) => {

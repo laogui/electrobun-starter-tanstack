@@ -21,6 +21,8 @@
   "menu_file": "文件",
   "menu_recording": "录音",
   "menu_new_recording": "新建录音",
+  "menu_checklist_widget": "清单小组件",
+  "menu_new_checklist_widget": "新建清单小组件",
   "recording_node_play_aria": "播放录音",
   "recording_node_pause_aria": "暂停录音",
   "recording_recorder_cancel_aria": "取消录音",

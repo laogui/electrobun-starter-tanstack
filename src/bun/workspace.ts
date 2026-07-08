@@ -11,6 +11,7 @@ import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
 import { createNote, saveNote } from './notes';
 import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
+import { saveWidget } from './widgets';
 
 // Default workspace is inside the app's userData directory
 export function getDefaultWorkspacePath(): string {
@@ -388,17 +389,23 @@ export interface AddViewFromTemplateResult {
  * Used both for first-run seeding (the default view) and for creating new
  * views from the templates browser.
  */
-async function populateViewFromTemplate(
+export async function populateViewFromTemplate(
   wsPath: string,
   view: ViewEntry,
   template: TemplateManifest
 ): Promise<void> {
   const noteIdMap = new Map<string, string>();
   const noteContents = template.noteContents ?? {};
+  const widgetIdMap = new Map<string, string>();
+  const widgetSeeds = template.widgets ?? {};
 
   for (const placeholderId of Object.keys(noteContents)) {
     const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
     noteIdMap.set(placeholderId, realId);
+  }
+  for (const placeholderId of Object.keys(widgetSeeds)) {
+    const realId = `widget_${crypto.randomUUID().slice(0, 8)}`;
+    widgetIdMap.set(placeholderId, realId);
   }
 
   await Promise.all(
@@ -430,16 +437,68 @@ async function populateViewFromTemplate(
       }
     })
   );
+  await Promise.all(
+    Array.from(widgetIdMap, async ([placeholderId, realId]) => {
+      const seed = widgetSeeds[placeholderId];
+      if (!seed) {
+        return;
+      }
+      const now = new Date().toISOString();
+      await saveWidget(wsPath, {
+        ...seed,
+        id: realId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    })
+  );
 
   const nodes = template.nodes.map((node) => {
     const noteId = node.data.noteId as string | undefined;
+    const widgetId = node.data.widgetId as string | undefined;
+    const nextData = { ...node.data };
     if (noteId && noteIdMap.has(noteId)) {
-      return {
-        ...node,
-        data: { ...node.data, noteId: noteIdMap.get(noteId) },
-      };
+      nextData.noteId = noteIdMap.get(noteId);
     }
-    return node;
+    if (widgetId && widgetIdMap.has(widgetId)) {
+      nextData.widgetId = widgetIdMap.get(widgetId);
+    }
+    if (node.type !== 'folder') {
+      return { ...node, data: nextData };
+    }
+    const children = Array.isArray(nextData.children)
+      ? nextData.children.map((rawChild) => {
+          if (!rawChild || typeof rawChild !== 'object') {
+            return rawChild;
+          }
+          const child = rawChild as {
+            data?: Record<string, unknown>;
+            noteId?: string;
+            type?: string;
+          };
+          const childData = { ...(child.data ?? {}) };
+          const childNoteId =
+            child.noteId ?? (childData.noteId as string | undefined);
+          const childWidgetId = childData.widgetId as string | undefined;
+          if (childNoteId && noteIdMap.has(childNoteId)) {
+            childData.noteId = noteIdMap.get(childNoteId);
+          }
+          if (childWidgetId && widgetIdMap.has(childWidgetId)) {
+            childData.widgetId = widgetIdMap.get(childWidgetId);
+          }
+          return {
+            ...child,
+            ...(childNoteId && noteIdMap.has(childNoteId)
+              ? { noteId: noteIdMap.get(childNoteId) }
+              : {}),
+            data: childData,
+          };
+        })
+      : nextData.children;
+    return {
+      ...node,
+      data: { ...nextData, children },
+    };
   });
 
   // Write per-node tag metadata to the workspace sidecar. Card placeholders
@@ -448,7 +507,10 @@ async function populateViewFromTemplate(
   if (template.nodeMetadata) {
     await Promise.all(
       Object.entries(template.nodeMetadata).map(([placeholderKey, meta]) => {
-        const realKey = noteIdMap.get(placeholderKey) ?? placeholderKey;
+        const realKey =
+          noteIdMap.get(placeholderKey) ??
+          widgetIdMap.get(placeholderKey) ??
+          placeholderKey;
         return setNodeMetadata(wsPath, realKey, meta);
       })
     );

@@ -1,4 +1,82 @@
 import type { Edge, Node } from '@xyflow/react';
+import type { ChecklistWidgetData } from '@/lib/widgetTypes';
+
+export interface InitialWidgetSeed {
+  data: ChecklistWidgetData;
+  kind: 'checklist';
+  title: string;
+}
+
+export const initialWidgetSeeds: Record<string, InitialWidgetSeed> = {
+  'node-init0003': {
+    kind: 'checklist',
+    title: 'Prio before launch',
+    data: {
+      items: [
+        {
+          id: 'item_seed_prio_1',
+          text: 'Lingering bugs',
+          checked: false,
+          isHeader: true,
+        },
+        {
+          id: 'item_seed_prio_2',
+          text: 'Dragging should not let stickies become too small',
+          checked: true,
+        },
+        {
+          id: 'item_seed_prio_3',
+          text: 'when pasting images/webclips',
+          checked: true,
+        },
+        {
+          id: 'item_seed_prio_4',
+          text: 'Drop area on desktop reported by some',
+          checked: false,
+        },
+        {
+          id: 'item_seed_prio_5',
+          text: "Sometimes, the highlight border around webclips isn't being removed after undoing a resize",
+          checked: false,
+        },
+      ],
+    },
+  },
+  'node-init0008': {
+    kind: 'checklist',
+    title: 'Bugs',
+    data: {
+      items: [
+        {
+          id: 'item_seed_bugs_1',
+          text: 'Alpha feedback',
+          checked: false,
+          isHeader: true,
+        },
+        {
+          id: 'item_seed_bugs_2',
+          text: 'Reply to all emails from Feb 14, to get their feedback',
+          checked: true,
+        },
+        {
+          id: 'item_seed_bugs_3',
+          text: 'Click picture to dismiss context',
+          checked: true,
+        },
+        {
+          id: 'item_seed_bugs_4',
+          text: 'Resize handles overlaps tags, and dismisses context',
+          checked: true,
+        },
+        {
+          id: 'item_seed_bugs_5',
+          text: 'Back button padding is funky',
+          checked: true,
+        },
+      ],
+    },
+  },
+};
 
 export const initialNodes: Node[] = [
   {
@@ -35,26 +113,10 @@ export const initialNodes: Node[] = [
     id: 'node-init0003',
     position: { x: 900, y: 100 },
     data: {
-      type: 'checklist',
-      title: 'Prio before launch',
-      tag: 'Inbox',
-      tagColor: '#D4E08B',
-      color: '#EAF2B8',
-      items: [
-        { text: 'Lingering bugs', checked: false, isHeader: true },
-        {
-          text: 'Dragging should not let stickies become too small',
-          checked: true,
-        },
-        { text: 'when pasting images/webclips', checked: true },
-        { text: 'Drop area on desktop reported by some', checked: false },
-        {
-          text: "Sometimes, the highlight border around webclips isn't being removed after undoing a resize",
-          checked: false,
-        },
-      ],
+      kind: 'checklist',
+      widgetId: '',
     },
-    type: 'card',
+    type: 'widget',
     style: { height: 450, width: 350 },
   },
   {
@@ -137,26 +199,10 @@ export const initialNodes: Node[] = [
     id: 'node-init0008',
     position: { x: 1300, y: 100 },
     data: {
-      type: 'checklist',
-      title: 'Bugs',
-      tag: 'Bugs',
-      tagColor: '#FBCFE8',
-      color: '#FDF2F8',
-      items: [
-        { text: 'Alpha feedback', checked: false, isHeader: true },
-        {
-          text: 'Reply to all emails from Feb 14, to get their feedback',
-          checked: true,
-        },
-        { text: 'Click picture to dismiss context', checked: true },
-        {
-          text: 'Resize handles overlaps tags, and dismisses context',
-          checked: true,
-        },
-        { text: 'Back button padding is funky', checked: true },
-      ],
+      kind: 'checklist',
+      widgetId: '',
     },
-    type: 'card',
+    type: 'widget',
     style: { height: 450, width: 350 },
   },
   {

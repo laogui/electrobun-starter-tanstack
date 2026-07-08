@@ -60,6 +60,7 @@ const FOCUSABLE_NODE_TYPES = new Set<string>([
   'image',
   'asset',
   'link',
+  'widget',
 ]);
 
 export function isCanvasContentNode(type: string | undefined): boolean {

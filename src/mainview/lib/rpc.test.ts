@@ -28,8 +28,12 @@ const request = {
   setAIApiKey: vi.fn(),
   listViews: vi.fn(),
   createView: vi.fn(),
+  createWidget: vi.fn(),
   deleteView: vi.fn(),
+  deleteWidget: vi.fn(),
   renameView: vi.fn(),
+  cloneWidget: vi.fn(),
+  saveWidget: vi.fn(),
   searchCanvas: vi.fn(),
   listTemplates: vi.fn(),
   getTemplate: vi.fn(),
@@ -169,6 +173,26 @@ describe('rpc', () => {
     await expect(
       rpc.rpcCreateViewFromTemplate('My Board', 'kanban')
     ).resolves.toBeNull();
+    await expect(rpc.rpcCreateWidget('checklist')).resolves.toEqual({
+      success: false,
+    });
+    await expect(rpc.rpcCloneWidget('widget_1')).resolves.toEqual({
+      success: false,
+    });
+    await expect(
+      rpc.rpcSaveWidget({
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_1',
+        kind: 'checklist',
+        title: 'List',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: { items: [] },
+      })
+    ).resolves.toEqual({ success: false });
+    await expect(rpc.rpcDeleteWidget('widget_1')).resolves.toEqual({
+      success: false,
+    });
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
   });
 
@@ -262,6 +286,19 @@ describe('rpc', () => {
     await rpc.rpcListTemplates();
     await rpc.rpcGetTemplate('kanban');
     await rpc.rpcCreateViewFromTemplate('My Kanban', 'kanban');
+    const widgetRecord = {
+      schema: 'ghostboard-widget/v1' as const,
+      id: 'widget_1',
+      kind: 'checklist' as const,
+      title: 'List',
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+      data: { items: [] },
+    };
+    await rpc.rpcCreateWidget('checklist');
+    await rpc.rpcCloneWidget('widget_1');
+    await rpc.rpcSaveWidget(widgetRecord);
+    await rpc.rpcDeleteWidget('widget_1');
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -346,6 +383,17 @@ describe('rpc', () => {
     expect(request.createViewFromTemplate).toHaveBeenCalledWith({
       name: 'My Kanban',
       templateId: 'kanban',
+    });
+    expect(request.createWidget).toHaveBeenCalledWith({
+      kind: 'checklist',
+      title: undefined,
+    });
+    expect(request.cloneWidget).toHaveBeenCalledWith({
+      widgetId: 'widget_1',
+    });
+    expect(request.saveWidget).toHaveBeenCalledWith({ widget: widgetRecord });
+    expect(request.deleteWidget).toHaveBeenCalledWith({
+      widgetId: 'widget_1',
     });
   });
 

@@ -15,14 +15,15 @@
 export type CanvasNodeKind =
   | 'card'
   | 'checklist'
+  | 'pomodoro'
+  | 'reminder'
   | 'sticky'
   | 'folder'
   | 'group'
   | 'image'
   | 'asset'
   | 'link'
-  | 'recording'
-  | 'widget';
+  | 'recording';
 
 /**
  * Subset of `CanvasNodeKind` that user-facing creation entry points (menus,

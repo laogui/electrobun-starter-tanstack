@@ -65,6 +65,7 @@ describe('isFocusableNode', () => {
   it('reserves a true branch for asset / link', () => {
     expect(isFocusableNode('asset')).toBe(true);
     expect(isFocusableNode('link')).toBe(true);
+    expect(isFocusableNode('widget')).toBe(true);
   });
 
   it('rejects structural and undefined types', () => {

@@ -1,14 +1,27 @@
 {
-  "viewport": { "x": 40, "y": 40, "zoom": 0.7 },
+  "viewport": {
+    "x": 40,
+    "y": 40,
+    "zoom": 0.7
+  },
   "nodeMetadata": {
-    "tpl-wp-review": { "tag": "复盘", "tagColor": "#FED7AA" }
+    "tpl-wp-review": {
+      "tag": "复盘",
+      "tagColor": "#FED7AA"
+    }
   },
   "nodes": [
     {
       "id": "wp-sticky-goal",
       "type": "sticky",
-      "position": { "x": 60, "y": 20 },
-      "style": { "width": 360, "height": 130 },
+      "position": {
+        "x": 60,
+        "y": 20
+      },
+      "style": {
+        "width": 360,
+        "height": 130
+      },
       "data": {
         "content": "🎯 本周目标\n\n用一句话写下这周最想推进的事，再把它拆成每天的待办。",
         "color": "#FEF08A"
@@ -17,148 +30,252 @@
     {
       "id": "wp-group-mon",
       "type": "group",
-      "position": { "x": 60, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周一 · Mon", "color": "blue" }
+      "position": {
+        "x": 60,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周一 · Mon",
+        "color": "blue"
+      }
     },
     {
       "id": "wp-card-mon",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-mon",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-mon",
-        "type": "checklist",
-        "color": "#EFF6FF"
+        "widgetId": "widget_tpl-wp-mon",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-tue",
       "type": "group",
-      "position": { "x": 320, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周二 · Tue", "color": "green" }
+      "position": {
+        "x": 320,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周二 · Tue",
+        "color": "green"
+      }
     },
     {
       "id": "wp-card-tue",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-tue",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-tue",
-        "type": "checklist",
-        "color": "#F0FDF4"
+        "widgetId": "widget_tpl-wp-tue",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-wed",
       "type": "group",
-      "position": { "x": 580, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周三 · Wed", "color": "orange" }
+      "position": {
+        "x": 580,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周三 · Wed",
+        "color": "orange"
+      }
     },
     {
       "id": "wp-card-wed",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-wed",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-wed",
-        "type": "checklist",
-        "color": "#FFF7ED"
+        "widgetId": "widget_tpl-wp-wed",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-thu",
       "type": "group",
-      "position": { "x": 840, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周四 · Thu", "color": "purple" }
+      "position": {
+        "x": 840,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周四 · Thu",
+        "color": "purple"
+      }
     },
     {
       "id": "wp-card-thu",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-thu",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-thu",
-        "type": "checklist",
-        "color": "#FAF5FF"
+        "widgetId": "widget_tpl-wp-thu",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-fri",
       "type": "group",
-      "position": { "x": 1100, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周五 · Fri", "color": "pink" }
+      "position": {
+        "x": 1100,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周五 · Fri",
+        "color": "pink"
+      }
     },
     {
       "id": "wp-card-fri",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-fri",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-fri",
-        "type": "checklist",
-        "color": "#FDF2F8"
+        "widgetId": "widget_tpl-wp-fri",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-sat",
       "type": "group",
-      "position": { "x": 1360, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周六 · Sat", "color": "yellow" }
+      "position": {
+        "x": 1360,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周六 · Sat",
+        "color": "yellow"
+      }
     },
     {
       "id": "wp-card-sat",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-sat",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-sat",
-        "type": "checklist",
-        "color": "#FEFCE8"
+        "widgetId": "widget_tpl-wp-sat",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-group-sun",
       "type": "group",
-      "position": { "x": 1620, "y": 180 },
-      "style": { "width": 240, "height": 500 },
-      "data": { "label": "周日 · Sun", "color": "gray" }
+      "position": {
+        "x": 1620,
+        "y": 180
+      },
+      "style": {
+        "width": 240,
+        "height": 500
+      },
+      "data": {
+        "label": "周日 · Sun",
+        "color": "gray"
+      }
     },
     {
       "id": "wp-card-sun",
-      "type": "card",
+      "type": "widget",
       "parentId": "wp-group-sun",
       "extent": "parent",
-      "position": { "x": 20, "y": 60 },
-      "style": { "width": 200, "height": 420 },
+      "position": {
+        "x": 20,
+        "y": 60
+      },
+      "style": {
+        "width": 200,
+        "height": 420
+      },
       "data": {
-        "noteId": "tpl-wp-sun",
-        "type": "checklist",
-        "color": "#F9FAFB"
+        "widgetId": "widget_tpl-wp-sun",
+        "kind": "checklist"
       }
     },
     {
       "id": "wp-card-review",
       "type": "card",
-      "position": { "x": 60, "y": 720 },
-      "style": { "width": 540, "height": 240 },
+      "position": {
+        "x": 60,
+        "y": 720
+      },
+      "style": {
+        "width": 540,
+        "height": 240
+      },
       "data": {
         "noteId": "tpl-wp-review",
         "type": "text",
@@ -168,45 +285,206 @@
   ],
   "edges": [],
   "noteContents": {
-    "tpl-wp-mon": {
-      "title": "周一",
-      "displayHint": "checklist",
-      "body": "- [ ] 确认本周关键目标\n- [ ] 重要任务 1\n- [ ] 沟通 / 同步 1 件\n- [ ] 阅读 / 输入 30 分钟"
-    },
-    "tpl-wp-tue": {
-      "title": "周二",
-      "displayHint": "checklist",
-      "body": "- [ ] 重要任务 2\n- [ ] 处理一件搁置已久的小事\n- [ ] 写下今天的 1 个想法"
-    },
-    "tpl-wp-wed": {
-      "title": "周三",
-      "displayHint": "checklist",
-      "body": "- [ ] 中期项目推进\n- [ ] 一次结构化思考（30 分钟不被打扰）\n- [ ] 复盘前两天的产出"
-    },
-    "tpl-wp-thu": {
-      "title": "周四",
-      "displayHint": "checklist",
-      "body": "- [ ] 重要任务 3\n- [ ] 主动联系一个朋友 / 同事\n- [ ] 整理收件箱"
-    },
-    "tpl-wp-fri": {
-      "title": "周五",
-      "displayHint": "checklist",
-      "body": "- [ ] 收尾本周遗留\n- [ ] 清理未完成的 todo（删 / 移 / 完成）\n- [ ] 写一段周报或工作总结"
-    },
-    "tpl-wp-sat": {
-      "title": "周六",
-      "displayHint": "checklist",
-      "body": "- [ ] 长时间深度学习 / 创作\n- [ ] 见一个人 / 走一个地方\n- [ ] 不工作的事一件"
-    },
-    "tpl-wp-sun": {
-      "title": "周日",
-      "displayHint": "checklist",
-      "body": "- [ ] 静一会儿，整理思绪\n- [ ] 列下周清单\n- [ ] 提前为周一准备好一件事"
-    },
     "tpl-wp-review": {
       "title": "本周复盘",
       "displayHint": "note",
       "body": "## 本周复盘\n\n**做完了什么** \n- \n\n**学到了什么** \n- \n\n**下周想改变的一件事** \n- "
+    }
+  },
+  "widgets": {
+    "widget_tpl-wp-mon": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-mon",
+      "kind": "checklist",
+      "title": "周一",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-mon_1",
+            "text": "确认本周关键目标",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-mon_2",
+            "text": "重要任务 1",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-mon_3",
+            "text": "沟通 / 同步 1 件",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-mon_4",
+            "text": "阅读 / 输入 30 分钟",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-tue": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-tue",
+      "kind": "checklist",
+      "title": "周二",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-tue_1",
+            "text": "重要任务 2",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-tue_2",
+            "text": "处理一件搁置已久的小事",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-tue_3",
+            "text": "写下今天的 1 个想法",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-wed": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-wed",
+      "kind": "checklist",
+      "title": "周三",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-wed_1",
+            "text": "中期项目推进",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-wed_2",
+            "text": "一次结构化思考（30 分钟不被打扰）",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-wed_3",
+            "text": "复盘前两天的产出",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-thu": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-thu",
+      "kind": "checklist",
+      "title": "周四",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-thu_1",
+            "text": "重要任务 3",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-thu_2",
+            "text": "主动联系一个朋友 / 同事",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-thu_3",
+            "text": "整理收件箱",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-fri": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-fri",
+      "kind": "checklist",
+      "title": "周五",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-fri_1",
+            "text": "收尾本周遗留",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-fri_2",
+            "text": "清理未完成的 todo（删 / 移 / 完成）",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-fri_3",
+            "text": "写一段周报或工作总结",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-sat": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-sat",
+      "kind": "checklist",
+      "title": "周六",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-sat_1",
+            "text": "长时间深度学习 / 创作",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-sat_2",
+            "text": "见一个人 / 走一个地方",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-sat_3",
+            "text": "不工作的事一件",
+            "checked": false
+          }
+        ]
+      }
+    },
+    "widget_tpl-wp-sun": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-wp-sun",
+      "kind": "checklist",
+      "title": "周日",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-wp-sun_1",
+            "text": "静一会儿，整理思绪",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-sun_2",
+            "text": "列下周清单",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-wp-sun_3",
+            "text": "提前为周一准备好一件事",
+            "checked": false
+          }
+        ]
+      }
     }
   }
 }

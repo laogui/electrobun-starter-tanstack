@@ -5,6 +5,8 @@ import * as creatableNodes from '@/lib/creatableNodes';
 vi.mock('../../paraglide/messages.js', () => ({
   menu_note: () => 'Note',
   menu_checklist: () => 'Checklist',
+  menu_pomodoro: () => 'Pomodoro',
+  menu_reminder: () => 'Reminder',
   menu_sticky: () => 'Sticky',
   menu_image: () => 'Image',
   menu_link: () => 'Link',
@@ -14,6 +16,8 @@ vi.mock('../../paraglide/messages.js', () => ({
   menu_recording: () => 'Recording',
   menu_new_note: () => 'New note',
   menu_new_checklist: () => 'New checklist',
+  menu_new_pomodoro: () => 'New pomodoro',
+  menu_new_reminder: () => 'New reminder',
   menu_new_sticky: () => 'New sticky',
   menu_new_image: () => 'New image',
   menu_new_link: () => 'New link',
@@ -27,6 +31,11 @@ describe('resolveCreatableKind', () => {
   it('resolves canonical and context-menu-prefixed creation actions', () => {
     expect(creatableNodes.resolveCreatableKind('note')).toBe('card');
     expect(creatableNodes.resolveCreatableKind('new-note')).toBe('card');
+    expect(creatableNodes.resolveCreatableKind('checklist')).toBe('checklist');
+    expect(creatableNodes.resolveCreatableKind('new-pomodoro')).toBe(
+      'pomodoro'
+    );
+    expect(creatableNodes.resolveCreatableKind('reminder')).toBe('reminder');
     expect(creatableNodes.resolveCreatableKind('file')).toBe('asset');
     expect(creatableNodes.resolveCreatableKind('new-file')).toBe('asset');
   });
@@ -42,6 +51,8 @@ describe('getCreatableMenuItems', () => {
     expect(bottomItems.map((item) => item.id)).toEqual([
       'note',
       'checklist',
+      'pomodoro',
+      'reminder',
       'sticky',
       'image',
       'link',
@@ -65,6 +76,8 @@ describe('getCreatableMenuItems', () => {
     expect(bottomItems.map((item) => item.label)).toEqual([
       'Note',
       'Checklist',
+      'Pomodoro',
+      'Reminder',
       'Sticky',
       'Image',
       'Link',
@@ -76,6 +89,8 @@ describe('getCreatableMenuItems', () => {
     expect(contextItems.map((item) => item.label)).toEqual([
       'New note',
       'New checklist',
+      'New pomodoro',
+      'New reminder',
       'New sticky',
       'New image',
       'New link',

@@ -1,3 +1,7 @@
+import {
+  CANVAS_EXPORT_SCHEMA,
+  type CanvasExportDocument,
+} from '@/lib/canvasExport';
 import { IMAGE_H, IMAGE_W } from '@/lib/canvasNodeRegistry';
 import { classifyFile } from '@/lib/contentTypes';
 import { rpcSaveAttachment } from '@/lib/rpc';
@@ -87,6 +91,78 @@ export function readImageNaturalSize(
 
 export function isImageFile(file: File): boolean {
   return classifyFile(file).mimeType.startsWith('image/');
+}
+
+export function isCanvasExportJsonFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.json') ||
+    file.type === 'application/json' ||
+    file.type.endsWith('+json')
+  );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function parseCanvasExportJson(
+  text: string
+): CanvasExportDocument | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  if (!isPlainObject(parsed)) {
+    return null;
+  }
+  if (parsed.schema !== CANVAS_EXPORT_SCHEMA) {
+    return null;
+  }
+  if (!(Array.isArray(parsed.nodes) && Array.isArray(parsed.edges))) {
+    return null;
+  }
+  if (parsed.widgets !== undefined && !isPlainObject(parsed.widgets)) {
+    return null;
+  }
+  return parsed as unknown as CanvasExportDocument;
+}
+
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Unable to read file as text.'));
+    });
+    reader.addEventListener('error', () => {
+      reject(new Error('Unable to read file.'));
+    });
+    reader.readAsText(file);
+  });
+}
+
+export async function readCanvasExportJsonFile(
+  file: File
+): Promise<CanvasExportDocument | null> {
+  if (!isCanvasExportJsonFile(file)) {
+    return null;
+  }
+
+  try {
+    return parseCanvasExportJson(await readFileAsText(file));
+  } catch {
+    return null;
+  }
 }
 
 /** Detect drags that carry OS files (Finder, Explorer, etc.). */

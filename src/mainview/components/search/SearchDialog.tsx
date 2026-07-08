@@ -39,7 +39,7 @@ const FILTER_KIND_MAP: Record<
   Exclude<SearchFilter, 'all'>,
   SearchResultKind[]
 > = {
-  notes: ['note', 'card'],
+  notes: ['note', 'card', 'widget'],
   folders: ['folder'],
   links: ['link'],
   images: ['image'],
@@ -160,6 +160,8 @@ function contentNodeKind(type: string | undefined): SearchResultKind {
       return 'asset';
     case 'link':
       return 'link';
+    case 'widget':
+      return 'widget';
     default:
       return 'card';
   }
@@ -822,7 +824,7 @@ function ResultRow({
   onClick: () => void;
   onMouseEnter: () => void;
 }) {
-  const Icon = iconFor(result.kind);
+  const Icon = iconFor(result.kind, result.widgetKind);
   const title = result.title || 'Untitled';
   return (
     <button

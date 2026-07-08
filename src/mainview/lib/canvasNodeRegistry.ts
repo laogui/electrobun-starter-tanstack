@@ -25,8 +25,8 @@ export const STICKY_H = 200;
  * of redeclaring their own size constants or type unions.
  *
  * Note: `CanvasNodeKind` is the *creation* kind. It does not always match
- * React Flow `node.type`. For example, `kind: 'checklist'` produces a node
- * with `type: 'card'` but `data.type === 'checklist'`.
+ * React Flow `node.type`. For example, widget creation kinds produce nodes
+ * with `type: 'widget'` and `data.kind` identifying the specific widget.
  */
 export interface CanvasNodeSpec {
   canEnterFolder: boolean;
@@ -71,13 +71,33 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
   },
   checklist: {
     kind: 'checklist',
-    nodeType: 'card',
-    size: { width: CARD_W, height: CARD_H },
+    nodeType: 'widget',
+    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
     defaultData: () => ({
-      type: 'checklist',
-      title: '',
-      items: [],
-      color: '#FFFFFF',
+      widgetId: '',
+      kind: 'checklist',
+    }),
+    canEnterGroup: true,
+    canEnterFolder: true,
+  },
+  pomodoro: {
+    kind: 'pomodoro',
+    nodeType: 'widget',
+    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
+    defaultData: () => ({
+      widgetId: '',
+      kind: 'pomodoro',
+    }),
+    canEnterGroup: true,
+    canEnterFolder: true,
+  },
+  reminder: {
+    kind: 'reminder',
+    nodeType: 'widget',
+    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
+    defaultData: () => ({
+      widgetId: '',
+      kind: 'reminder',
     }),
     canEnterGroup: true,
     canEnterFolder: true,
@@ -168,20 +188,6 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
     canEnterGroup: true,
     canEnterFolder: true,
   },
-  widget: {
-    kind: 'widget',
-    nodeType: 'widget',
-    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
-    // `widgetId` is assigned by the caller once the backing widget file has
-    // been created via RPC (see `requestCreate` in routes/index.tsx) — the
-    // registry only supplies a placeholder shape.
-    defaultData: () => ({
-      widgetId: '',
-      kind: 'checklist',
-    }),
-    canEnterGroup: true,
-    canEnterFolder: true,
-  },
 };
 
 /** Look up the spec for a `CanvasNodeKind`. */
@@ -192,9 +198,8 @@ export function getNodeSpec(kind: CanvasNodeKind): CanvasNodeSpec {
 /** Look up a spec by React Flow `node.type`, returns the first matching entry.
  *  Used by helpers like `collision.getNodeSize` that only see `node.type`. */
 export function findSpecByNodeType(nodeType: string): CanvasNodeSpec | null {
-  // `card` and `checklist` share `nodeType: 'card'`; either kind's size is
-  // identical so returning the first match is safe. Kind-specific data
-  // differences are not exposed via this lookup.
+  // Multiple widget creation kinds share `nodeType: 'widget'`; callers that
+  // only have the runtime node type need the shared size/eligibility only.
   for (const spec of Object.values(CANVAS_NODE_SPECS)) {
     if (spec.nodeType === nodeType) {
       return spec;

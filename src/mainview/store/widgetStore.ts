@@ -1,6 +1,9 @@
+import { toast } from 'sonner';
 import { create } from 'zustand';
 import { rpcCloneWidget, rpcCreateWidget, rpcSaveWidget } from '@/lib/rpc';
 import type {
+  PomodoroWidgetData,
+  ReminderWidgetData,
   WidgetKind,
   WidgetLoadError,
   WidgetRecord,
@@ -19,6 +22,10 @@ interface PendingSave {
   timer: ReturnType<typeof setTimeout>;
 }
 
+interface UpdateWidgetOptions {
+  recordHistory?: boolean;
+}
+
 export interface WidgetStoreState {
   cloneWidget: (widgetId: string) => Promise<WidgetRecord | null>;
   createWidget: (
@@ -33,7 +40,8 @@ export interface WidgetStoreState {
   undoWidget: (widgetId: string) => void;
   updateWidget: (
     widgetId: string,
-    updater: (record: WidgetRecord) => WidgetRecord
+    updater: (record: WidgetRecord) => WidgetRecord,
+    options?: UpdateWidgetOptions
   ) => void;
 }
 
@@ -55,16 +63,109 @@ function scheduleSave(widgetId: string, save: () => Promise<void>): void {
   pendingSaves.set(widgetId, { timer });
 }
 
+function isExpiredRunningPomodoro(record: WidgetRecord): boolean {
+  if (record.kind !== 'pomodoro') {
+    return false;
+  }
+  const data = record.data as PomodoroWidgetData;
+  if (data.timer.state !== 'running') {
+    return false;
+  }
+  const startedAt = Date.parse(data.timer.startedAt);
+  if (!Number.isFinite(startedAt)) {
+    return false;
+  }
+  return Date.now() >= startedAt + data.timer.durationMs;
+}
+
+function completeExpiredPomodoro(record: WidgetRecord): WidgetRecord {
+  const data = record.data as PomodoroWidgetData;
+  return {
+    ...record,
+    data: {
+      ...data,
+      completedSessions: data.completedSessions + 1,
+      timer: { state: 'idle' },
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function reminderDueAtMs(data: ReminderWidgetData): number {
+  const dueAt =
+    data.status === 'snoozed' && data.snoozedUntil
+      ? data.snoozedUntil
+      : data.dueAt;
+  const parsed = Date.parse(dueAt);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function isDueReminder(record: WidgetRecord): boolean {
+  if (record.kind !== 'reminder') {
+    return false;
+  }
+  const data = record.data as ReminderWidgetData;
+  if (data.status === 'done' || data.status === 'missed') {
+    return false;
+  }
+  return reminderDueAtMs(data) <= Date.now();
+}
+
+function markReminderMissed(record: WidgetRecord): WidgetRecord {
+  return {
+    ...record,
+    data: {
+      ...(record.data as ReminderWidgetData),
+      status: 'missed',
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
   records: {},
   history: {},
 
   hydrate: (records) => {
-    set((s) => ({
-      records: { ...s.records, ...records },
-      // History is in-memory only; reloading always starts with empty stacks.
-      history: { ...s.history },
-    }));
+    const normalizedRecords = { ...records };
+    const saveAfterHydrateIds: string[] = [];
+    const dueReminderRecords: WidgetRecord[] = [];
+    for (const [id, record] of Object.entries(records)) {
+      if (isWidgetLoadError(record)) {
+        continue;
+      }
+      if (isExpiredRunningPomodoro(record)) {
+        normalizedRecords[id] = completeExpiredPomodoro(record);
+        saveAfterHydrateIds.push(id);
+        continue;
+      }
+      if (isDueReminder(record)) {
+        const missed = markReminderMissed(record);
+        normalizedRecords[id] = missed;
+        saveAfterHydrateIds.push(id);
+        dueReminderRecords.push(missed);
+      }
+    }
+    set((s) => {
+      const nextHistory = { ...s.history };
+      for (const id of Object.keys(normalizedRecords)) {
+        delete nextHistory[id];
+      }
+      return {
+        records: { ...s.records, ...normalizedRecords },
+        // History is in-memory only; reloading starts fresh per hydrated id.
+        history: nextHistory,
+      };
+    });
+    for (const record of dueReminderRecords) {
+      const data = record.data as ReminderWidgetData;
+      toast.info(`Reminder due: ${record.title || record.id}`, {
+        ...(data.note ? { description: data.note } : {}),
+      });
+    }
+    for (const id of saveAfterHydrateIds) {
+      scheduleSave(id, () => get().saveWidgetNow(id));
+    }
   },
 
   createWidget: async (kind, title) => {
@@ -89,21 +190,28 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
     return result.widget;
   },
 
-  updateWidget: (widgetId, updater) => {
+  updateWidget: (widgetId, updater, options = {}) => {
     const current = get().records[widgetId];
     if (!current || isWidgetLoadError(current)) {
       return;
     }
     const updated = updater(current);
+    const shouldRecordHistory = options.recordHistory !== false;
     set((s) => {
-      const entry = s.history[widgetId] ?? { past: [], future: [] };
-      const past = [...entry.past, current].slice(-MAX_HISTORY_DEPTH);
+      const entry = s.history[widgetId];
       return {
         records: { ...s.records, [widgetId]: updated },
-        history: {
-          ...s.history,
-          [widgetId]: { past, future: [] },
-        },
+        history: shouldRecordHistory
+          ? {
+              ...s.history,
+              [widgetId]: {
+                past: [...(entry?.past ?? []), current].slice(
+                  -MAX_HISTORY_DEPTH
+                ),
+                future: [],
+              },
+            }
+          : s.history,
       };
     });
     scheduleSave(widgetId, () => get().saveWidgetNow(widgetId));

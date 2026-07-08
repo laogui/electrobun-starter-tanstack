@@ -8,6 +8,7 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 const commitFolderChildDataMock = vi.fn();
 const commitNodeDataMock = vi.fn();
 const setFocusedNodeMock = vi.fn();
+const updateWidgetMock = vi.fn();
 let nodesMock: Array<{
   data: Record<string, unknown>;
   id: string;
@@ -19,6 +20,7 @@ let nodesMock: Array<{
 }> = [];
 const updateFolderChildDataMock = vi.fn();
 const updateNodeDataMock = vi.fn();
+let widgetRecordsMock: Record<string, Record<string, unknown>> = {};
 let viewsMock: Array<{ id: string; name: string }> = [];
 let activeViewIdMock = 'default';
 
@@ -56,6 +58,19 @@ vi.mock('@/store/canvasStore', () => ({
       updateFolderChildData: updateFolderChildDataMock,
       updateNodeData: updateNodeDataMock,
       views: viewsMock,
+    }),
+}));
+
+vi.mock('@/store/widgetStore', () => ({
+  useWidgetStore: (
+    selector: (state: {
+      records: typeof widgetRecordsMock;
+      updateWidget: typeof updateWidgetMock;
+    }) => unknown
+  ) =>
+    selector({
+      records: widgetRecordsMock,
+      updateWidget: updateWidgetMock,
     }),
 }));
 
@@ -212,6 +227,8 @@ describe('focusedView', () => {
     activeViewIdMock = 'default';
     updateFolderChildDataMock.mockReset();
     updateNodeDataMock.mockReset();
+    updateWidgetMock.mockReset();
+    widgetRecordsMock = {};
     document.body.style.overflow = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -413,6 +430,68 @@ describe('focusedView', () => {
       unfurlStatus: 'idle',
       url: 'https://new.example/',
     });
+  });
+
+  it('renders checklist widgets from widgetStore and commits edits there only', () => {
+    const record = {
+      schema: 'ghostboard-widget/v1',
+      id: 'widget_1',
+      kind: 'checklist',
+      title: 'Widget List',
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+      data: {
+        items: [
+          {
+            id: 'item_1',
+            text: 'First task',
+            checked: false,
+            createdAt: '2026-07-08T00:00:00.000Z',
+          },
+        ],
+      },
+    };
+    widgetRecordsMock = { widget_1: record };
+
+    render(
+      <FocusedView
+        node={{
+          id: 'widget-node-1',
+          type: 'widget',
+          data: { widgetId: 'widget_1', kind: 'checklist' },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByDisplayValue('Widget List')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('First task')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as done' }));
+
+    expect(updateWidgetMock).toHaveBeenCalledWith(
+      'widget_1',
+      expect.any(Function)
+    );
+    const updater = updateWidgetMock.mock.calls.at(-1)?.[1] as
+      | ((current: typeof record) => typeof record)
+      | undefined;
+    expect(updater?.(record)).toMatchObject({
+      id: 'widget_1',
+      title: 'Widget List',
+      data: {
+        items: [
+          {
+            id: 'item_1',
+            text: 'First task',
+            checked: true,
+          },
+        ],
+      },
+    });
+    expect(commitNodeDataMock).not.toHaveBeenCalled();
+    expect(commitFolderChildDataMock).not.toHaveBeenCalled();
   });
 
   it('navigates to adjacent focused items on the same canvas', () => {

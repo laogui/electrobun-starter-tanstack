@@ -8,6 +8,49 @@ vi.mock('electrobun/bun', () => ({
   },
 }));
 
+function collectWidgetRefs(nodes: Array<{ data: any; type?: string }>) {
+  const refs: string[] = [];
+  for (const node of nodes) {
+    if (node.type === 'widget' && typeof node.data?.widgetId === 'string') {
+      refs.push(node.data.widgetId);
+      continue;
+    }
+    if (node.type !== 'folder' || !Array.isArray(node.data?.children)) {
+      continue;
+    }
+    for (const child of node.data.children) {
+      if (
+        child?.type === 'widget' &&
+        typeof child.data?.widgetId === 'string'
+      ) {
+        refs.push(child.data.widgetId);
+      }
+    }
+  }
+  return refs;
+}
+
+function collectLegacyChecklistCards(
+  nodes: Array<{ data: any; type?: string }>
+) {
+  const legacy: string[] = [];
+  for (const node of nodes) {
+    if (node.type === 'card' && node.data?.type === 'checklist') {
+      legacy.push(String(node.data.noteId ?? node.data.title ?? 'unknown'));
+      continue;
+    }
+    if (node.type !== 'folder' || !Array.isArray(node.data?.children)) {
+      continue;
+    }
+    for (const child of node.data.children) {
+      if (child?.type === 'card' && child.data?.type === 'checklist') {
+        legacy.push(String(child.data.noteId ?? child.id ?? 'unknown'));
+      }
+    }
+  }
+  return legacy;
+}
+
 describe('templates', () => {
   it('listAllTemplates returns the built-in kanban template', () => {
     const templates = listAllTemplates();
@@ -75,13 +118,13 @@ describe('templates', () => {
     expect(template?.meta.id).toBe('kanban');
     expect(template?.nodes.length).toBeGreaterThan(0);
     expect(template?.edges).toBeDefined();
-    expect(template?.noteContents).toBeDefined();
+    expect(template?.widgets).toBeDefined();
 
-    // Should have 3 groups + 6 cards + 1 sticky = 10 nodes
+    // Should have 3 groups + 6 checklist widgets + 1 sticky = 10 nodes.
     expect(template?.nodes).toHaveLength(10);
 
-    // Should have 6 note contents (one per card)
-    expect(Object.keys(template?.noteContents ?? {})).toHaveLength(6);
+    // Should have 6 widget records (one per checklist widget).
+    expect(Object.keys(template?.widgets ?? {})).toHaveLength(6);
   });
 
   it('loadTemplate returns null for a non-existent template', () => {
@@ -99,16 +142,15 @@ describe('templates', () => {
     }
   });
 
-  it('every card node references a valid noteContent key', () => {
+  it('kanban checklist widgets reference valid widget records', () => {
     const template = loadTemplate('kanban');
-    const noteKeys = new Set(Object.keys(template?.noteContents ?? {}));
+    const widgetKeys = new Set(Object.keys(template?.widgets ?? {}));
+    const refs = collectWidgetRefs(template?.nodes ?? []);
 
-    const cardNodes = template?.nodes.filter((n) => n.type === 'card') ?? [];
-    expect(cardNodes.length).toBeGreaterThan(0);
-
-    for (const card of cardNodes) {
-      const noteId = card.data.noteId as string;
-      expect(noteKeys.has(noteId)).toBe(true);
+    expect(refs).toHaveLength(6);
+    for (const widgetId of refs) {
+      expect(widgetKeys.has(widgetId)).toBe(true);
+      expect(template?.widgets?.[widgetId]?.kind).toBe('checklist');
     }
   });
 
@@ -168,6 +210,33 @@ describe('templates', () => {
       expect(content.displayHint).toBeTruthy();
       expect(typeof content.body).toBe('string');
     }
+
+    const widgetKeys = new Set(Object.keys(template?.widgets ?? {}));
+    for (const widgetId of collectWidgetRefs(template?.nodes ?? [])) {
+      expect(widgetKeys.has(widgetId)).toBe(true);
+    }
+  });
+
+  it.each(
+    P0_TEMPLATES.filter((t) => t.id !== 'blank')
+  )('template "$id" does not ship legacy checklist cards', ({ id }) => {
+    const template = loadTemplate(id);
+    expect(template).not.toBeNull();
+    expect(collectLegacyChecklistCards(template?.nodes ?? [])).toEqual([]);
+    for (const [, content] of Object.entries(template?.noteContents ?? {})) {
+      expect(content.displayHint).not.toBe('checklist');
+    }
+  });
+
+  it('demo and kanban checklist templates use widget seed records', () => {
+    for (const id of ['demo', 'kanban'] as const) {
+      const template = loadTemplate(id);
+      expect(template).not.toBeNull();
+      expect(collectWidgetRefs(template?.nodes ?? []).length).toBeGreaterThan(
+        0
+      );
+      expect(Object.keys(template?.widgets ?? {}).length).toBeGreaterThan(0);
+    }
   });
 
   it('quick-start showcases the core node primitives + at least one edge', () => {
@@ -197,14 +266,16 @@ describe('templates', () => {
 
     const groups = template?.nodes.filter((n) => n.type === 'group') ?? [];
     const cards = template?.nodes.filter((n) => n.type === 'card') ?? [];
+    const widgets = template?.nodes.filter((n) => n.type === 'widget') ?? [];
 
     expect(groups).toHaveLength(7);
-    // 7 daily checklist cards + 1 weekly review card.
-    expect(cards.length).toBeGreaterThanOrEqual(8);
+    // 7 daily checklist widgets + 1 weekly review card.
+    expect(widgets).toHaveLength(7);
+    expect(cards).toHaveLength(1);
 
-    // Each daily card is parented to its day group.
-    const childCards = cards.filter((c) => typeof c.parentId === 'string');
-    expect(childCards.length).toBeGreaterThanOrEqual(7);
+    // Each daily widget is parented to its day group.
+    const childWidgets = widgets.filter((w) => typeof w.parentId === 'string');
+    expect(childWidgets).toHaveLength(7);
   });
 
   it('brainstorm-mindmap relies heavily on labeled connections', () => {
@@ -245,5 +316,6 @@ describe('templates', () => {
     expect(types).toContain('folder');
     expect(types).toContain('card');
     expect(types).toContain('sticky');
+    expect(types).toContain('widget');
   });
 });

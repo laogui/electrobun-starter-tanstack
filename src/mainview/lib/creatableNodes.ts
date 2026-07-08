@@ -1,4 +1,5 @@
 import {
+  Bell,
   File,
   Folder,
   Group,
@@ -8,6 +9,7 @@ import {
   Mic,
   NotebookPen,
   StickyNote,
+  Timer,
 } from 'lucide-react';
 import type { ElementType } from 'react';
 import * as m from '../../paraglide/messages.js';
@@ -27,6 +29,8 @@ import type { CreatableCanvasNodeKind } from './contentTypes';
 const CREATABLE_KIND_BY_ACTION = {
   note: 'card',
   checklist: 'checklist',
+  pomodoro: 'pomodoro',
+  reminder: 'reminder',
   sticky: 'sticky',
   image: 'image',
   link: 'link',
@@ -34,7 +38,6 @@ const CREATABLE_KIND_BY_ACTION = {
   group: 'group',
   file: 'asset',
   recording: 'recording',
-  checklistWidget: 'widget',
 } as const satisfies Record<string, CreatableCanvasNodeKind>;
 
 /** Canonical (prefix-free) creation action id. */
@@ -67,6 +70,22 @@ const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
     labels: {
       short: () => m.menu_checklist(),
       new: () => m.menu_new_checklist(),
+    },
+  },
+  {
+    id: 'pomodoro',
+    icon: Timer,
+    labels: {
+      short: () => m.menu_pomodoro(),
+      new: () => m.menu_new_pomodoro(),
+    },
+  },
+  {
+    id: 'reminder',
+    icon: Bell,
+    labels: {
+      short: () => m.menu_reminder(),
+      new: () => m.menu_new_reminder(),
     },
   },
   {
@@ -105,14 +124,6 @@ const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
     labels: {
       short: () => m.menu_recording(),
       new: () => m.menu_new_recording(),
-    },
-  },
-  {
-    id: 'checklistWidget',
-    icon: ListChecks,
-    labels: {
-      short: () => m.menu_checklist_widget(),
-      new: () => m.menu_new_checklist_widget(),
     },
   },
 ];

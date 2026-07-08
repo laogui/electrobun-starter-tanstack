@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore } from '@/store/widgetStore';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -129,6 +130,20 @@ export function useCanvasKeyboard({
       }
 
       if (mod && key === 'z') {
+        const focused = useCanvasStore.getState().focusedNode;
+        if (focused?.type === 'widget') {
+          const widgetId = focused.data.widgetId;
+          if (typeof widgetId === 'string' && widgetId) {
+            e.preventDefault();
+            const widgetStore = useWidgetStore.getState();
+            if (e.shiftKey) {
+              widgetStore.redoWidget(widgetId);
+            } else {
+              widgetStore.undoWidget(widgetId);
+            }
+            return;
+          }
+        }
         if (isEditing()) {
           return;
         }
@@ -224,7 +239,9 @@ export function useCanvasKeyboard({
 
       if (mod && key === 'd') {
         e.preventDefault();
-        duplicateSelected();
+        Promise.resolve(duplicateSelected()).catch((error) => {
+          console.error('[canvas] Failed to duplicate selection:', error);
+        });
         return;
       }
 
@@ -241,7 +258,9 @@ export function useCanvasKeyboard({
       if (mod && key === 'v') {
         if (useCanvasStore.getState().clipboard.length > 0) {
           e.preventDefault();
-          pasteClipboard();
+          Promise.resolve(pasteClipboard()).catch((error) => {
+            console.error('[canvas] Failed to paste clipboard:', error);
+          });
         }
         return;
       }

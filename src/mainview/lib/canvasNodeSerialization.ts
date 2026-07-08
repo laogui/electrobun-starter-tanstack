@@ -88,14 +88,22 @@ export function serializeNodeDataForManifest(
   return cleanData;
 }
 
+function serializeWidgetReference(data: unknown): Record<string, string> {
+  const record =
+    data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  return {
+    widgetId: typeof record.widgetId === 'string' ? record.widgetId : '',
+    kind: typeof record.kind === 'string' ? record.kind : '',
+  };
+}
+
 function serializeFolderChild(child: FolderChildLike): FolderChildLike {
   const clean: FolderChildLike = {};
   for (const [k, v] of Object.entries(child)) {
     clean[k] = v;
   }
   if (clean.type === 'widget' && clean.data && typeof clean.data === 'object') {
-    const data = clean.data as { kind?: unknown; widgetId?: unknown };
-    clean.data = { widgetId: data.widgetId, kind: data.kind };
+    clean.data = serializeWidgetReference(clean.data);
     return clean;
   }
   if (clean.data && typeof clean.data === 'object') {
@@ -115,8 +123,7 @@ export function serializeNodeForManifest(node: Node): Record<string, unknown> {
     }
   }
   if (node.type === 'widget' && clean.data && typeof clean.data === 'object') {
-    const data = clean.data as { kind?: unknown; widgetId?: unknown };
-    clean.data = { widgetId: data.widgetId, kind: data.kind };
+    clean.data = serializeWidgetReference(clean.data);
     return clean;
   }
   if (clean.data && typeof clean.data === 'object') {

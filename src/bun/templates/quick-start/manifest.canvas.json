@@ -1,14 +1,27 @@
 {
-  "viewport": { "x": 40, "y": 40, "zoom": 0.9 },
+  "viewport": {
+    "x": 40,
+    "y": 40,
+    "zoom": 0.9
+  },
   "nodeMetadata": {
-    "tpl-qs-try": { "tag": "上手", "tagColor": "#A7F3D0" }
+    "widget_tpl-qs-try": {
+      "tag": "上手",
+      "tagColor": "#A7F3D0"
+    }
   },
   "nodes": [
     {
       "id": "qs-sticky-welcome",
       "type": "sticky",
-      "position": { "x": 60, "y": 20 },
-      "style": { "width": 340, "height": 140 },
+      "position": {
+        "x": 60,
+        "y": 20
+      },
+      "style": {
+        "width": 340,
+        "height": 140
+      },
       "data": {
         "content": "👋 欢迎使用 GhostBoard\n\n这是你的第一张画布。每个区块都是可点、可拖、可改的，试试看 ↓",
         "color": "#FEF08A"
@@ -16,20 +29,31 @@
     },
     {
       "id": "qs-card-try",
-      "type": "card",
-      "position": { "x": 60, "y": 200 },
-      "style": { "width": 360, "height": 440 },
+      "type": "widget",
+      "position": {
+        "x": 60,
+        "y": 200
+      },
+      "style": {
+        "width": 360,
+        "height": 440
+      },
       "data": {
-        "noteId": "tpl-qs-try",
-        "type": "checklist",
-        "color": "#ECFDF5"
+        "widgetId": "widget_tpl-qs-try",
+        "kind": "checklist"
       }
     },
     {
       "id": "qs-sticky-connect",
       "type": "sticky",
-      "position": { "x": 460, "y": 200 },
-      "style": { "width": 220, "height": 110 },
+      "position": {
+        "x": 460,
+        "y": 200
+      },
+      "style": {
+        "width": 220,
+        "height": 110
+      },
       "data": {
         "content": "→ 把鼠标移到下面的卡片边缘，会出现连接点，拖一下试试",
         "color": "#FBCFE8"
@@ -38,8 +62,14 @@
     {
       "id": "qs-card-idea-a",
       "type": "card",
-      "position": { "x": 460, "y": 340 },
-      "style": { "width": 220, "height": 120 },
+      "position": {
+        "x": 460,
+        "y": 340
+      },
+      "style": {
+        "width": 220,
+        "height": 120
+      },
       "data": {
         "noteId": "tpl-qs-idea-a",
         "type": "text",
@@ -49,8 +79,14 @@
     {
       "id": "qs-card-idea-b",
       "type": "card",
-      "position": { "x": 460, "y": 500 },
-      "style": { "width": 220, "height": 140 },
+      "position": {
+        "x": 460,
+        "y": 500
+      },
+      "style": {
+        "width": 220,
+        "height": 140
+      },
       "data": {
         "noteId": "tpl-qs-idea-b",
         "type": "text",
@@ -60,8 +96,14 @@
     {
       "id": "qs-folder",
       "type": "folder",
-      "position": { "x": 740, "y": 200 },
-      "style": { "width": 280, "height": 280 },
+      "position": {
+        "x": 740,
+        "y": 200
+      },
+      "style": {
+        "width": 280,
+        "height": 280
+      },
       "data": {
         "title": "3 items",
         "subtitle": "📚 收纳示例：双击展开",
@@ -99,8 +141,14 @@
     {
       "id": "qs-card-whatsnext",
       "type": "card",
-      "position": { "x": 60, "y": 700 },
-      "style": { "width": 360, "height": 240 },
+      "position": {
+        "x": 60,
+        "y": 700
+      },
+      "style": {
+        "width": 360,
+        "height": 240
+      },
       "data": {
         "noteId": "tpl-qs-whatsnext",
         "type": "text",
@@ -110,8 +158,14 @@
     {
       "id": "qs-group-first",
       "type": "group",
-      "position": { "x": 460, "y": 700 },
-      "style": { "width": 560, "height": 240 },
+      "position": {
+        "x": 460,
+        "y": 700
+      },
+      "style": {
+        "width": 560,
+        "height": 240
+      },
       "data": {
         "label": "🪴 我的第一个分组",
         "color": "blue"
@@ -122,8 +176,14 @@
       "type": "sticky",
       "parentId": "qs-group-first",
       "extent": "parent",
-      "position": { "x": 30, "y": 50 },
-      "style": { "width": 220, "height": 130 },
+      "position": {
+        "x": 30,
+        "y": 50
+      },
+      "style": {
+        "width": 220,
+        "height": 130
+      },
       "data": {
         "content": "拖一张卡片进来，它会自动成为这个分组的成员。",
         "color": "#DBEAFE"
@@ -141,11 +201,6 @@
     }
   ],
   "noteContents": {
-    "tpl-qs-try": {
-      "title": "试试这些操作",
-      "displayHint": "checklist",
-      "body": "## 5 分钟入门\n\n- [ ] 双指/中键拖动空白处平移画布\n- [ ] `Cmd/Ctrl + 滚轮` 缩放画布\n- [ ] 双击此卡片进入聚焦阅读模式（按 `Esc` 退出）\n- [ ] 单击卡片选中，按 `Delete` 移出画布\n- [ ] 按 `Cmd/Ctrl + K` 搜索任意内容\n- [ ] 在画布右下角点 `+` 新建任意类型卡片"
-    },
     "tpl-qs-idea-a": {
       "title": "想法 A",
       "displayHint": "note",
@@ -160,6 +215,50 @@
       "title": "下一步去哪？",
       "displayHint": "note",
       "body": "## 下一步\n\n1. **更多模板**：底部画布切换器 → `+` → 选择模板，挑一个适合你的开始。\n2. **笔记库**：画布左上角 📚 按钮打开，按 Folder 分组浏览当前画布的所有笔记。\n3. **画布并存**：同一份内容可以在多个画布里被引用，像知识的多视角。\n\n准备好了就把这张卡片删掉，开始创作吧。"
+    }
+  },
+  "widgets": {
+    "widget_tpl-qs-try": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-qs-try",
+      "kind": "checklist",
+      "title": "试试这些操作",
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-qs-try_1",
+            "text": "双指/中键拖动空白处平移画布",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-qs-try_2",
+            "text": "`Cmd/Ctrl + 滚轮` 缩放画布",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-qs-try_3",
+            "text": "双击此卡片进入聚焦阅读模式（按 `Esc` 退出）",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-qs-try_4",
+            "text": "单击卡片选中，按 `Delete` 移出画布",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-qs-try_5",
+            "text": "按 `Cmd/Ctrl + K` 搜索任意内容",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-qs-try_6",
+            "text": "在画布右下角点 `+` 新建任意类型卡片",
+            "checked": false
+          }
+        ]
+      }
     }
   }
 }

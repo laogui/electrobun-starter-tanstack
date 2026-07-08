@@ -20,12 +20,15 @@ describe('CANVAS_NODE_SPECS', () => {
     const expected: CanvasNodeKind[] = [
       'card',
       'checklist',
+      'pomodoro',
+      'reminder',
       'sticky',
       'folder',
       'group',
       'image',
       'asset',
       'link',
+      'recording',
     ];
     for (const kind of expected) {
       expect(CANVAS_NODE_SPECS[kind]).toBeDefined();
@@ -35,12 +38,22 @@ describe('CANVAS_NODE_SPECS', () => {
 
   it.each([
     ['card', { width: CARD_W, height: CARD_H }],
-    ['checklist', { width: CARD_W, height: CARD_H }],
     ['sticky', { width: STICKY_W, height: STICKY_H }],
     ['folder', { width: FOLDER_W, height: FOLDER_H }],
     ['image', { width: IMAGE_W, height: IMAGE_H }],
   ] as const)('uses canonical size for %s', (kind, size) => {
     expect(CANVAS_NODE_SPECS[kind].size).toEqual(size);
+  });
+
+  it('uses one shared widget size for all widget creation kinds', () => {
+    expect(CANVAS_NODE_SPECS.checklist.size).toEqual(
+      CANVAS_NODE_SPECS.pomodoro.size
+    );
+    expect(CANVAS_NODE_SPECS.reminder.size).toEqual(
+      CANVAS_NODE_SPECS.checklist.size
+    );
+    expect(CANVAS_NODE_SPECS.checklist.size.width).toBeGreaterThan(0);
+    expect(CANVAS_NODE_SPECS.checklist.size.height).toBeGreaterThan(0);
   });
 
   it('encodes group/folder eligibility per docs §11', () => {
@@ -49,6 +62,10 @@ describe('CANVAS_NODE_SPECS', () => {
 
     expect(CANVAS_NODE_SPECS.checklist.canEnterGroup).toBe(true);
     expect(CANVAS_NODE_SPECS.checklist.canEnterFolder).toBe(true);
+    expect(CANVAS_NODE_SPECS.pomodoro.canEnterGroup).toBe(true);
+    expect(CANVAS_NODE_SPECS.pomodoro.canEnterFolder).toBe(true);
+    expect(CANVAS_NODE_SPECS.reminder.canEnterGroup).toBe(true);
+    expect(CANVAS_NODE_SPECS.reminder.canEnterFolder).toBe(true);
 
     expect(CANVAS_NODE_SPECS.image.canEnterGroup).toBe(true);
     expect(CANVAS_NODE_SPECS.image.canEnterFolder).toBe(true);
@@ -70,9 +87,11 @@ describe('CANVAS_NODE_SPECS', () => {
     expect(CANVAS_NODE_SPECS.link.canEnterFolder).toBe(true);
   });
 
-  it('keeps `card` and `checklist` on the same React Flow node type', () => {
+  it('maps widget creation kinds to the shared widget React Flow node type', () => {
     expect(CANVAS_NODE_SPECS.card.nodeType).toBe('card');
-    expect(CANVAS_NODE_SPECS.checklist.nodeType).toBe('card');
+    expect(CANVAS_NODE_SPECS.checklist.nodeType).toBe('widget');
+    expect(CANVAS_NODE_SPECS.pomodoro.nodeType).toBe('widget');
+    expect(CANVAS_NODE_SPECS.reminder.nodeType).toBe('widget');
   });
 });
 
@@ -108,12 +127,18 @@ describe('buildNewNodeSpec', () => {
     expect(data.color).toBe('#FFFFFF');
   });
 
-  it('produces a card-typed checklist node for checklist kind', () => {
+  it('produces widget-typed nodes with kind-specific data', () => {
     const spec = buildNewNodeSpec('checklist');
-    expect(spec.base.type).toBe('card');
-    const data = spec.base.data as Record<string, unknown>;
-    expect(data.type).toBe('checklist');
-    expect(data.items).toEqual([]);
+    expect(spec.base.type).toBe('widget');
+    expect(spec.base.data).toEqual({ widgetId: '', kind: 'checklist' });
+
+    const pomodoro = buildNewNodeSpec('pomodoro');
+    expect(pomodoro.base.type).toBe('widget');
+    expect(pomodoro.base.data).toEqual({ widgetId: '', kind: 'pomodoro' });
+
+    const reminder = buildNewNodeSpec('reminder');
+    expect(reminder.base.type).toBe('widget');
+    expect(reminder.base.data).toEqual({ widgetId: '', kind: 'reminder' });
   });
 
   it('builds an image node with empty url defaults', () => {

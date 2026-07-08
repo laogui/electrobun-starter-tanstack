@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore } from '@/store/widgetStore';
 
 const PASTE_ID_RE = /^paste-/;
 
@@ -169,6 +170,51 @@ describe('useCanvasKeyboard', () => {
 
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes undo and redo to the focused widget when a widget is focused', () => {
+    const canvasUndo = vi.spyOn(useCanvasStore.getState(), 'undo');
+    const canvasRedo = vi.spyOn(useCanvasStore.getState(), 'redo');
+    const undoWidget = vi
+      .spyOn(useWidgetStore.getState(), 'undoWidget')
+      .mockImplementation(() => undefined);
+    const redoWidget = vi
+      .spyOn(useWidgetStore.getState(), 'redoWidget')
+      .mockImplementation(() => undefined);
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 100,
+      bottom: 100,
+      toJSON: () => ({}),
+    } as DOMRect;
+    useCanvasStore.setState({
+      focusedNode: {
+        id: 'widget-node-1',
+        type: 'widget',
+        data: { widgetId: 'widget_1', kind: 'checklist' },
+        rect,
+      },
+    });
+
+    render(<TestComponent />);
+
+    dispatchKeyboard({ key: 'z', metaKey: true, cancelable: true });
+    dispatchKeyboard({
+      key: 'Z',
+      metaKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+
+    expect(undoWidget).toHaveBeenCalledWith('widget_1');
+    expect(redoWidget).toHaveBeenCalledWith('widget_1');
+    expect(canvasUndo).not.toHaveBeenCalled();
+    expect(canvasRedo).not.toHaveBeenCalled();
   });
 
   it('does not trigger global shortcuts while typing in inputs', () => {

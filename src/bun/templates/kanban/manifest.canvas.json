@@ -3,76 +3,139 @@
     {
       "id": "group-todo",
       "type": "group",
-      "position": { "x": 0, "y": 0 },
-      "style": { "width": 320, "height": 520 },
-      "data": { "label": "📋 To Do" }
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "style": {
+        "width": 320,
+        "height": 520
+      },
+      "data": {
+        "label": "📋 To Do"
+      }
     },
     {
       "id": "group-inprogress",
       "type": "group",
-      "position": { "x": 360, "y": 0 },
-      "style": { "width": 320, "height": 520 },
-      "data": { "label": "🔨 In Progress" }
+      "position": {
+        "x": 360,
+        "y": 0
+      },
+      "style": {
+        "width": 320,
+        "height": 520
+      },
+      "data": {
+        "label": "🔨 In Progress"
+      }
     },
     {
       "id": "group-done",
       "type": "group",
-      "position": { "x": 720, "y": 0 },
-      "style": { "width": 320, "height": 520 },
-      "data": { "label": "✅ Done" }
+      "position": {
+        "x": 720,
+        "y": 0
+      },
+      "style": {
+        "width": 320,
+        "height": 520
+      },
+      "data": {
+        "label": "✅ Done"
+      }
     },
     {
       "id": "card-todo-1",
-      "type": "card",
-      "position": { "x": 20, "y": 60 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
       "parentId": "group-todo",
       "extent": "parent",
-      "data": { "noteId": "tpl-todo-1", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-todo-1",
+        "kind": "checklist"
+      }
     },
     {
       "id": "card-todo-2",
-      "type": "card",
-      "position": { "x": 20, "y": 280 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 280
+      },
       "parentId": "group-todo",
       "extent": "parent",
-      "data": { "noteId": "tpl-todo-2", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-todo-2",
+        "kind": "checklist"
+      }
     },
     {
       "id": "card-ip-1",
-      "type": "card",
-      "position": { "x": 20, "y": 60 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
       "parentId": "group-inprogress",
       "extent": "parent",
-      "data": { "noteId": "tpl-ip-1", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-ip-1",
+        "kind": "checklist"
+      }
     },
     {
       "id": "card-ip-2",
-      "type": "card",
-      "position": { "x": 20, "y": 280 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 280
+      },
       "parentId": "group-inprogress",
       "extent": "parent",
-      "data": { "noteId": "tpl-ip-2", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-ip-2",
+        "kind": "checklist"
+      }
     },
     {
       "id": "card-done-1",
-      "type": "card",
-      "position": { "x": 20, "y": 60 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 60
+      },
       "parentId": "group-done",
       "extent": "parent",
-      "data": { "noteId": "tpl-done-1", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-done-1",
+        "kind": "checklist"
+      }
     },
     {
       "id": "card-done-2",
-      "type": "card",
-      "position": { "x": 20, "y": 280 },
+      "type": "widget",
+      "position": {
+        "x": 20,
+        "y": 280
+      },
       "parentId": "group-done",
       "extent": "parent",
-      "data": { "noteId": "tpl-done-2", "type": "checklist" }
+      "data": {
+        "widgetId": "widget_tpl-done-2",
+        "kind": "checklist"
+      }
     },
     {
       "id": "sticky-intro",
       "type": "sticky",
-      "position": { "x": 380, "y": -120 },
+      "position": {
+        "x": 380,
+        "y": -120
+      },
       "data": {
         "body": "🎯 Drag cards between columns to track progress. Double-click to edit.",
         "color": "#fef9c3"
@@ -80,36 +143,168 @@
     }
   ],
   "edges": [],
-  "noteContents": {
-    "tpl-todo-1": {
+  "widgets": {
+    "widget_tpl-todo-1": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-todo-1",
+      "kind": "checklist",
       "title": "Research & Planning",
-      "displayHint": "checklist",
-      "body": "- [ ] Define project scope\n- [ ] Gather requirements\n- [ ] Create timeline"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-todo-1_1",
+            "text": "Define project scope",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-todo-1_2",
+            "text": "Gather requirements",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-todo-1_3",
+            "text": "Create timeline",
+            "checked": false
+          }
+        ]
+      }
     },
-    "tpl-todo-2": {
+    "widget_tpl-todo-2": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-todo-2",
+      "kind": "checklist",
       "title": "Design Phase",
-      "displayHint": "checklist",
-      "body": "- [ ] Wireframe mockups\n- [ ] Design review\n- [ ] Finalize assets"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-todo-2_1",
+            "text": "Wireframe mockups",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-todo-2_2",
+            "text": "Design review",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-todo-2_3",
+            "text": "Finalize assets",
+            "checked": false
+          }
+        ]
+      }
     },
-    "tpl-ip-1": {
+    "widget_tpl-ip-1": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-ip-1",
+      "kind": "checklist",
       "title": "Build Core Features",
-      "displayHint": "checklist",
-      "body": "- [x] Set up project\n- [x] Create data models\n- [ ] Implement API"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-ip-1_1",
+            "text": "Set up project",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-ip-1_2",
+            "text": "Create data models",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-ip-1_3",
+            "text": "Implement API",
+            "checked": false
+          }
+        ]
+      }
     },
-    "tpl-ip-2": {
+    "widget_tpl-ip-2": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-ip-2",
+      "kind": "checklist",
       "title": "Testing Setup",
-      "displayHint": "checklist",
-      "body": "- [x] Configure test framework\n- [ ] Write unit tests\n- [ ] Set up CI pipeline"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-ip-2_1",
+            "text": "Configure test framework",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-ip-2_2",
+            "text": "Write unit tests",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-ip-2_3",
+            "text": "Set up CI pipeline",
+            "checked": false
+          }
+        ]
+      }
     },
-    "tpl-done-1": {
+    "widget_tpl-done-1": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-done-1",
+      "kind": "checklist",
       "title": "Project Kickoff",
-      "displayHint": "checklist",
-      "body": "- [x] Team meeting\n- [x] Assign roles\n- [x] Set up repository"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-done-1_1",
+            "text": "Team meeting",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-done-1_2",
+            "text": "Assign roles",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-done-1_3",
+            "text": "Set up repository",
+            "checked": true
+          }
+        ]
+      }
     },
-    "tpl-done-2": {
+    "widget_tpl-done-2": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-done-2",
+      "kind": "checklist",
       "title": "Environment Setup",
-      "displayHint": "checklist",
-      "body": "- [x] Install dependencies\n- [x] Configure dev tools\n- [x] Document setup steps"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-done-2_1",
+            "text": "Install dependencies",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-done-2_2",
+            "text": "Configure dev tools",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-done-2_3",
+            "text": "Document setup steps",
+            "checked": true
+          }
+        ]
+      }
     }
   }
 }

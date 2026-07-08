@@ -80,7 +80,7 @@ function RootDocument() {
         return;
       }
 
-      rpcToggleWindowMaximize().catch(() => undefined);
+      Promise.resolve(rpcToggleWindowMaximize()).catch(() => undefined);
     },
     []
   );

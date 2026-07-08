@@ -22,13 +22,19 @@ import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
+import type {
+  ChecklistWidgetData,
+  ChecklistWidgetItem,
+} from '@/lib/widgetTypes';
+import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
+import { useWidgetStore } from '@/store/widgetStore';
 
 import * as m from '../../../paraglide/messages.js';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
-import type { CardContentData } from './nodes/CardNode';
+import type { CardContentData, ChecklistItem } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
 import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
@@ -139,6 +145,33 @@ function domRectForItem(item: FocusedItem): DOMRect {
   return el?.getBoundingClientRect() ?? item.rect;
 }
 
+function generateChecklistWidgetItemId(): string {
+  return `item_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function normalizeChecklistWidgetItems(
+  items: ChecklistItem[] | undefined
+): ChecklistWidgetItem[] {
+  return (items ?? []).map((item) => {
+    const source = item as ChecklistItem & Partial<ChecklistWidgetItem>;
+    return {
+      id:
+        typeof source.id === 'string' && source.id
+          ? source.id
+          : generateChecklistWidgetItemId(),
+      text: typeof source.text === 'string' ? source.text : '',
+      checked: Boolean(source.checked),
+      ...(source.isHeader ? { isHeader: true } : {}),
+      ...(typeof source.createdAt === 'string'
+        ? { createdAt: source.createdAt }
+        : {}),
+      ...(typeof source.completedAt === 'string'
+        ? { completedAt: source.completedAt }
+        : {}),
+    };
+  });
+}
+
 // This orchestrates focus navigation and delegates the per-kind editing UI below.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
@@ -160,6 +193,29 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const content = typeof contentRaw === 'string' ? contentRaw : undefined;
   const dataTypeRaw = node.data.type;
   const isFolderChild = Boolean(folderId);
+  const widgetId =
+    node.type === 'widget' && typeof node.data.widgetId === 'string'
+      ? node.data.widgetId
+      : undefined;
+  const widgetRecord = useWidgetStore((s) =>
+    widgetId ? s.records[widgetId] : undefined
+  );
+  const updateWidget = useWidgetStore((s) => s.updateWidget);
+  const checklistWidgetRecord =
+    widgetRecord &&
+    !isWidgetLoadError(widgetRecord) &&
+    widgetRecord.kind === 'checklist'
+      ? widgetRecord
+      : null;
+  const checklistWidgetFocusedData: CardContentData | null =
+    checklistWidgetRecord
+      ? {
+          ...(node.data as CardContentData),
+          type: 'checklist',
+          title: checklistWidgetRecord.title,
+          items: (checklistWidgetRecord.data as ChecklistWidgetData).items,
+        }
+      : null;
 
   const updateFocusedData = useCallback(
     (updates: Record<string, unknown>) => {
@@ -181,6 +237,33 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       commitNodeData(node.id, updates);
     },
     [commitFolderChildData, commitNodeData, folderId, node.id]
+  );
+
+  const commitChecklistWidgetData = useCallback(
+    (updates: Partial<CardContentData>) => {
+      if (!widgetId) {
+        return;
+      }
+      updateWidget(widgetId, (current) => {
+        if (current.kind !== 'checklist') {
+          return current;
+        }
+        const currentData = current.data as ChecklistWidgetData;
+        return {
+          ...current,
+          title:
+            typeof updates.title === 'string' ? updates.title : current.title,
+          data: {
+            ...currentData,
+            ...(updates.items
+              ? { items: normalizeChecklistWidgetItems(updates.items) }
+              : {}),
+          },
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    },
+    [updateWidget, widgetId]
   );
 
   const handleLinkUrlChange = useCallback(
@@ -270,6 +353,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   );
 
   const isText =
+    node.type !== 'widget' &&
     node.type !== 'image' &&
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
@@ -281,7 +365,8 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     dataTypeRaw === 'checklist';
   // Full-bleed surfaces own their entire layout; the others render inside the
   // centered detail shell.
-  const isFullBleed = isText || isChecklist || isImage;
+  const isChecklistWidget = Boolean(checklistWidgetFocusedData && widgetId);
+  const isFullBleed = isText || isChecklist || isChecklistWidget || isImage;
   const chromeButtonClass = isImage
     ? 'bg-white/10 text-zinc-300 hover:bg-white/20'
     : 'bg-black/5 text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20';
@@ -496,6 +581,11 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 data={node.data}
                 isFocused={true}
                 onUrlChange={handleLinkUrlChange}
+              />
+            ) : isChecklistWidget && checklistWidgetFocusedData ? (
+              <ChecklistFocusedView
+                data={checklistWidgetFocusedData}
+                onCommit={commitChecklistWidgetData}
               />
             ) : isText ? (
               <Suspense fallback={<FocusedSkeleton color={color} />}>

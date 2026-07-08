@@ -59,13 +59,14 @@ import { LinkCreateForm } from './LinkCreateForm';
 const VIEW_NAME_MAX_LENGTH = 80;
 
 /**
- * Create-menu items shown in the top "common" group. Everything else falls
- * under the "More" header. Keep this aligned with the icons on the empty
- * canvas onboarding so the same four entry points feel like first-class
- * actions across the app.
+ * Create-menu items shown in the top "common" group. Widgets are first-class
+ * creation actions, so keep them visible instead of hiding them behind "More".
  */
 const COMMON_CREATE_IDS = new Set<CreateActionId>([
   'note',
+  'checklist',
+  'pomodoro',
+  'reminder',
   'sticky',
   'link',
   'image',

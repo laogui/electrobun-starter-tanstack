@@ -357,6 +357,67 @@ export async function deleteNodeMetadata(
   }
 }
 
+function mergeMetadataForMovedKey(
+  source: NodeMetadata,
+  target: NodeMetadata | undefined
+): NodeMetadata {
+  const next: NodeMetadata = { ...(target ?? {}) };
+  if (!next.tag && source.tag) {
+    next.tag = source.tag;
+  }
+  if (!next.tagColor && source.tagColor) {
+    next.tagColor = source.tagColor;
+  }
+
+  const mergedTags = sanitizeTagList([
+    ...(target?.tags ?? []),
+    ...(source.tags ?? []),
+  ]);
+  if (mergedTags.length > 0) {
+    next.tags = mergedTags;
+  }
+
+  const mergedColors = normalizeTagColorMap(
+    {
+      ...(source.tagColors ?? {}),
+      ...(target?.tagColors ?? {}),
+    },
+    tagNamesForColors(next)
+  );
+  if (mergedColors) {
+    next.tagColors = mergedColors;
+  }
+
+  return compactEntry(next) ?? {};
+}
+
+/**
+ * Move metadata from one backing object id to another. Used by checklist card
+ * lazy migration, where legacy tags keyed by `note_xxx` must follow the new
+ * `widget_xxx` record. Existing target metadata wins for primary tag/color,
+ * while secondary tags and per-tag colors are merged.
+ */
+export async function moveNodeMetadataKey(
+  wsPath: string,
+  fromId: string,
+  toId: string
+): Promise<TagMutationResult> {
+  if (!(fromId && toId) || fromId === toId) {
+    return { updated: 0 };
+  }
+
+  const entries = await loadAllMetadata(wsPath);
+  const source = entries[fromId];
+  if (!source) {
+    return { updated: 0 };
+  }
+
+  entries[toId] = mergeMetadataForMovedKey(source, entries[toId]);
+  delete entries[fromId];
+  scheduleFlush(wsPath);
+  return { updated: 1 };
+}
+
 /** Cancel pending flush and write immediately. Use on shutdown / in tests. */
 export async function flushNodeMetadata(wsPath: string): Promise<void> {
   const s = getState(wsPath);

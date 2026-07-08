@@ -262,4 +262,88 @@ describe('cleanup', () => {
       join(blocknoteDir, 'orphan-side.json')
     );
   });
+
+  it('scans and deletes orphaned widget files while protecting active and trashed references', async () => {
+    const { scanUnlinkedNotes, deleteUnlinkedNotes } = await import(
+      './cleanup'
+    );
+    const widgetDir = join(workspaceRoot, '.ghostboard', 'widgets');
+    mkdirSync(widgetDir, { recursive: true });
+
+    const defaultManifestPath = join(
+      workspaceRoot,
+      '.ghostboard',
+      'views',
+      'default.canvas.json'
+    );
+    const defaultManifest = JSON.parse(
+      readFileSync(defaultManifestPath, 'utf8')
+    ) as { nodes: Record<string, unknown>[] };
+    defaultManifest.nodes.push({
+      id: 'widget-active',
+      type: 'widget',
+      position: { x: 2, y: 2 },
+      data: { widgetId: 'widget_keep_active', kind: 'checklist' },
+    });
+    writeFileSync(defaultManifestPath, JSON.stringify(defaultManifest));
+
+    const trashManifestPath = join(
+      workspaceRoot,
+      '.ghostboard',
+      'views',
+      'trash-1.canvas.json'
+    );
+    const trashManifest = JSON.parse(
+      readFileSync(trashManifestPath, 'utf8')
+    ) as { nodes: Record<string, unknown>[] };
+    trashManifest.nodes.push({
+      id: 'widget-trash',
+      type: 'widget',
+      position: { x: 3, y: 3 },
+      data: { widgetId: 'widget_keep_trash', kind: 'reminder' },
+    });
+    writeFileSync(trashManifestPath, JSON.stringify(trashManifest));
+
+    for (const id of [
+      'widget_keep_active',
+      'widget_keep_trash',
+      'widget_orphan',
+    ]) {
+      writeFileSync(
+        join(widgetDir, `${id}.json`),
+        JSON.stringify({
+          schema: 'ghostboard-widget/v1',
+          id,
+          kind: 'checklist',
+          title: id,
+          createdAt: '2026-07-08T00:00:00.000Z',
+          updatedAt: '2026-07-08T00:00:00.000Z',
+          data: { items: [] },
+        })
+      );
+    }
+
+    const scan = await scanUnlinkedNotes(workspaceRoot);
+    const files = scan.map((entry) => entry.file);
+    expect(files).toContain('.ghostboard/widgets/widget_orphan.json');
+    expect(files).not.toContain('.ghostboard/widgets/widget_keep_active.json');
+    expect(files).not.toContain('.ghostboard/widgets/widget_keep_trash.json');
+
+    const del = await deleteUnlinkedNotes(workspaceRoot, [
+      '.ghostboard/widgets/widget_orphan.json',
+      '.ghostboard/widgets/widget_keep_active.json',
+      '.ghostboard/widgets/widget_keep_trash.json',
+      '.ghostboard/widgets/../escape.json',
+    ]);
+
+    expect(del.deleted).toEqual(['.ghostboard/widgets/widget_orphan.json']);
+    expect(del.skipped).toEqual([
+      '.ghostboard/widgets/widget_keep_active.json',
+      '.ghostboard/widgets/widget_keep_trash.json',
+      '.ghostboard/widgets/../escape.json',
+    ]);
+    expect(moveToTrashMock).toHaveBeenCalledWith(
+      join(widgetDir, 'widget_orphan.json')
+    );
+  });
 });

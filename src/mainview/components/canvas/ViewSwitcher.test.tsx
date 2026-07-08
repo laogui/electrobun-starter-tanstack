@@ -70,6 +70,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   view_from_template: () => 'From Template',
   menu_note: () => 'Note',
   menu_checklist: () => 'Checklist',
+  menu_pomodoro: () => 'Pomodoro',
+  menu_reminder: () => 'Reminder',
   menu_sticky: () => 'Sticky',
   menu_image: () => 'Image',
   menu_link: () => 'Link',
@@ -91,6 +93,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   }) => `Imported ${imported}, failed ${failed}`,
   menu_new_note: () => 'New Note',
   menu_new_checklist: () => 'New Checklist',
+  menu_new_pomodoro: () => 'New Pomodoro',
+  menu_new_reminder: () => 'New Reminder',
   menu_new_sticky: () => 'New Sticky',
   menu_new_image: () => 'New Image',
   menu_new_link: () => 'New Link',
@@ -642,6 +646,13 @@ describe('viewSwitcher', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Image' }));
     expect(onOpenImagePicker).toHaveBeenCalledTimes(1);
     expect(onCreateNode).not.toHaveBeenCalledWith('image');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Checklist' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pomodoro' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reminder' }));
+    expect(onCreateNode).toHaveBeenCalledWith('checklist');
+    expect(onCreateNode).toHaveBeenCalledWith('pomodoro');
+    expect(onCreateNode).toHaveBeenCalledWith('reminder');
 
     const fileItem = screen.getByRole('menuitem', { name: 'File' });
     expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');

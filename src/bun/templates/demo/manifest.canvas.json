@@ -1,31 +1,61 @@
 {
   "nodeMetadata": {
-    "tpl-demo-3": { "tag": "Inbox", "tagColor": "#D4E08B" },
-    "tpl-demo-4": { "tag": "Bugs", "tagColor": "#FBCFE8" }
+    "widget_tpl-demo-3": {
+      "tag": "Inbox",
+      "tagColor": "#D4E08B"
+    },
+    "widget_tpl-demo-4": {
+      "tag": "Bugs",
+      "tagColor": "#FBCFE8"
+    }
   },
   "nodes": [
     {
       "id": "demo-card-1",
       "type": "card",
-      "position": { "x": 100, "y": 100 },
-      "style": { "height": 450, "width": 350 },
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "style": {
+        "height": 450,
+        "width": 350
+      },
       "data": {
         "noteId": "tpl-demo-1",
         "type": "image",
         "color": "#1A1A1A",
         "pieData": [
-          { "label": "Designers", "color": "#555" },
-          { "label": "Thinkers", "color": "#888" },
-          { "label": "Academics", "color": "#BBB" },
-          { "label": "Creatives", "color": "#EEE" }
+          {
+            "label": "Designers",
+            "color": "#555"
+          },
+          {
+            "label": "Thinkers",
+            "color": "#888"
+          },
+          {
+            "label": "Academics",
+            "color": "#BBB"
+          },
+          {
+            "label": "Creatives",
+            "color": "#EEE"
+          }
         ]
       }
     },
     {
       "id": "demo-card-2",
       "type": "card",
-      "position": { "x": 500, "y": 100 },
-      "style": { "height": 450, "width": 350 },
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "style": {
+        "height": 450,
+        "width": 350
+      },
       "data": {
         "noteId": "tpl-demo-2",
         "type": "text",
@@ -34,20 +64,31 @@
     },
     {
       "id": "demo-card-3",
-      "type": "card",
-      "position": { "x": 900, "y": 100 },
-      "style": { "height": 450, "width": 350 },
+      "type": "widget",
+      "position": {
+        "x": 900,
+        "y": 100
+      },
+      "style": {
+        "height": 450,
+        "width": 350
+      },
       "data": {
-        "noteId": "tpl-demo-3",
-        "type": "checklist",
-        "color": "#EAF2B8"
+        "widgetId": "widget_tpl-demo-3",
+        "kind": "checklist"
       }
     },
     {
       "id": "demo-folder-1",
       "type": "folder",
-      "position": { "x": 900, "y": 600 },
-      "style": { "height": 280, "width": 280 },
+      "position": {
+        "x": 900,
+        "y": 600
+      },
+      "style": {
+        "height": 280,
+        "width": 280
+      },
       "data": {
         "title": "3 items",
         "subtitle": "The really great ideas to implement",
@@ -85,8 +126,14 @@
     {
       "id": "demo-group-1",
       "type": "group",
-      "position": { "x": 100, "y": 600 },
-      "style": { "height": 400, "width": 800 },
+      "position": {
+        "x": 100,
+        "y": 600
+      },
+      "style": {
+        "height": 400,
+        "width": 800
+      },
       "data": {
         "label": "Design Research",
         "color": "blue"
@@ -95,10 +142,16 @@
     {
       "id": "demo-sticky-1",
       "type": "sticky",
-      "position": { "x": 380, "y": 20 },
+      "position": {
+        "x": 380,
+        "y": 20
+      },
       "parentId": "demo-group-1",
       "extent": "parent",
-      "style": { "height": 200, "width": 200 },
+      "style": {
+        "height": 200,
+        "width": 200
+      },
       "data": {
         "content": "Remember to review the onboarding flow before next sprint!",
         "color": "#FEF08A"
@@ -107,10 +160,16 @@
     {
       "id": "demo-sticky-2",
       "type": "sticky",
-      "position": { "x": 600, "y": 20 },
+      "position": {
+        "x": 600,
+        "y": 20
+      },
       "parentId": "demo-group-1",
       "extent": "parent",
-      "style": { "height": 200, "width": 200 },
+      "style": {
+        "height": 200,
+        "width": 200
+      },
       "data": {
         "content": "Ask design team about new color palette 🎨",
         "color": "#BBF7D0"
@@ -118,20 +177,31 @@
     },
     {
       "id": "demo-card-4",
-      "type": "card",
-      "position": { "x": 1300, "y": 100 },
-      "style": { "height": 450, "width": 350 },
+      "type": "widget",
+      "position": {
+        "x": 1300,
+        "y": 100
+      },
+      "style": {
+        "height": 450,
+        "width": 350
+      },
       "data": {
-        "noteId": "tpl-demo-4",
-        "type": "checklist",
-        "color": "#FDF2F8"
+        "widgetId": "widget_tpl-demo-4",
+        "kind": "checklist"
       }
     },
     {
       "id": "demo-folder-2",
       "type": "folder",
-      "position": { "x": 1300, "y": 600 },
-      "style": { "height": 280, "width": 280 },
+      "position": {
+        "x": 1300,
+        "y": 600
+      },
+      "style": {
+        "height": 280,
+        "width": 280
+      },
       "data": {
         "title": "5 items",
         "subtitle": "The critical bug reports to fix asap",
@@ -187,8 +257,14 @@
     {
       "id": "demo-image-1",
       "type": "image",
-      "position": { "x": 100, "y": 1100 },
-      "style": { "height": 350, "width": 350 },
+      "position": {
+        "x": 100,
+        "y": 1100
+      },
+      "style": {
+        "height": 350,
+        "width": 350
+      },
       "data": {
         "title": "Drop an image here",
         "color": "#FFFFFF"
@@ -206,16 +282,72 @@
       "title": "Who GhostBoard is for",
       "displayHint": "note",
       "body": "1. The Designer\nProduct designers, graphic designers, UX designers, brand designers, creative directors. They need to collect visual references, build moodboards, and organize project materials. They're currently cobbling together Figma, Pinterest, Milanote, and mymind — and none of it feels right. They're also the most opinionated about aesthetics and interaction quality, which is partly why they're drawn to GhostBoard in the first place.\n\n2. The Thinker\nProduct managers, researchers, writers, strategists, consultants. They're dealing with complex problems and oceans of information. They often feel overwhelmed by the sheer volume of data they need to process. GhostBoard helps them map out relationships and see the big picture.\n\n3. The Academics\nUniversity students, PhD researchers, MBA students, architecture students. They're reading dense academic journals, writing papers, and studying for exams. They use GhostBoard to visually organize their research and connect concepts."
-    },
-    "tpl-demo-3": {
+    }
+  },
+  "widgets": {
+    "widget_tpl-demo-3": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-demo-3",
+      "kind": "checklist",
       "title": "Prio before launch",
-      "displayHint": "checklist",
-      "body": "## Lingering bugs\n- [x] Dragging should not let stickies become too small\n- [x] when pasting images/webclips\n- [ ] Drop area on desktop reported by some\n- [ ] Sometimes, the highlight border around webclips isn't being removed after undoing a resize"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-demo-3_1",
+            "text": "Dragging should not let stickies become too small",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-demo-3_2",
+            "text": "when pasting images/webclips",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-demo-3_3",
+            "text": "Drop area on desktop reported by some",
+            "checked": false
+          },
+          {
+            "id": "item_widget_tpl-demo-3_4",
+            "text": "Sometimes, the highlight border around webclips isn't being removed after undoing a resize",
+            "checked": false
+          }
+        ]
+      }
     },
-    "tpl-demo-4": {
+    "widget_tpl-demo-4": {
+      "schema": "ghostboard-widget/v1",
+      "id": "widget_tpl-demo-4",
+      "kind": "checklist",
       "title": "Bugs",
-      "displayHint": "checklist",
-      "body": "## Alpha feedback\n- [x] Reply to all emails from Feb 14, to get their feedback\n- [x] Click picture to dismiss context\n- [x] Resize handles overlaps tags, and dismisses context\n- [x] Back button padding is funky"
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "id": "item_widget_tpl-demo-4_1",
+            "text": "Reply to all emails from Feb 14, to get their feedback",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-demo-4_2",
+            "text": "Click picture to dismiss context",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-demo-4_3",
+            "text": "Resize handles overlaps tags, and dismisses context",
+            "checked": true
+          },
+          {
+            "id": "item_widget_tpl-demo-4_4",
+            "text": "Back button padding is funky",
+            "checked": true
+          }
+        ]
+      }
     }
   }
 }

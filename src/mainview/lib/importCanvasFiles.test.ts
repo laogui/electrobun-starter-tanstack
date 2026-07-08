@@ -5,15 +5,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   computeImageNodeSize,
   createImageDropPreview,
+  isCanvasExportJsonFile,
   isImageFile,
   isOsFileDrag,
+  parseCanvasExportJson,
   persistImportedImage,
+  readCanvasExportJsonFile,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
 
 const rpcSaveAttachmentMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/rpc', () => ({
+  rpcExportJson: vi.fn(),
+  rpcExportPng: vi.fn(),
   rpcSaveAttachment: rpcSaveAttachmentMock,
 }));
 
@@ -114,6 +119,41 @@ describe('computeImageNodeSize', () => {
 describe('isImageFile', () => {
   it('classifies images by extension when MIME is missing', () => {
     expect(isImageFile(new File(['x'], 'photo.png'))).toBe(true);
+  });
+});
+
+describe('canvas export JSON detection', () => {
+  it('parses GhostBoard canvas export documents', async () => {
+    const text = JSON.stringify({
+      schema: 'ghostboard-canvas-export/v1',
+      exportedAt: '2026-07-08T00:00:00.000Z',
+      nodes: [{ id: 'node-1', type: 'widget', data: {} }],
+      edges: [],
+      widgets: {},
+    });
+    const file = new File([text], 'canvas.json', {
+      type: 'application/json',
+    });
+
+    expect(isCanvasExportJsonFile(file)).toBe(true);
+    expect(parseCanvasExportJson(text)).toMatchObject({
+      schema: 'ghostboard-canvas-export/v1',
+      nodes: [{ id: 'node-1', type: 'widget', data: {} }],
+    });
+    await expect(readCanvasExportJsonFile(file)).resolves.toMatchObject({
+      schema: 'ghostboard-canvas-export/v1',
+      nodes: [{ id: 'node-1', type: 'widget', data: {} }],
+    });
+  });
+
+  it('returns null for regular JSON files', async () => {
+    const file = new File([JSON.stringify({ ok: true })], 'data.json', {
+      type: 'application/json',
+    });
+
+    expect(parseCanvasExportJson('{bad')).toBeNull();
+    expect(parseCanvasExportJson(JSON.stringify({ ok: true }))).toBeNull();
+    await expect(readCanvasExportJsonFile(file)).resolves.toBeNull();
   });
 });
 

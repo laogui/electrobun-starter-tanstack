@@ -682,6 +682,153 @@ describe('search', () => {
     );
   });
 
+  it('matches referenced widget records and skips corrupted widget files', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'widget-check',
+              type: 'widget',
+              position: { x: 0, y: 0 },
+              data: { widgetId: 'widget_check', kind: 'checklist' },
+            },
+            {
+              id: 'folder-1',
+              type: 'folder',
+              position: { x: 10, y: 10 },
+              data: {
+                title: 'Folder',
+                children: [
+                  {
+                    id: 'widget-reminder-child',
+                    type: 'widget',
+                    data: { widgetId: 'widget_reminder', kind: 'reminder' },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'widget-pomodoro',
+              type: 'widget',
+              position: { x: 20, y: 20 },
+              data: { widgetId: 'widget_pomodoro', kind: 'pomodoro' },
+            },
+            {
+              id: 'widget-broken',
+              type: 'widget',
+              position: { x: 30, y: 30 },
+              data: { widgetId: 'widget_broken', kind: 'checklist' },
+            },
+          ],
+        },
+      },
+    });
+    mkdirSync(join(workspaceRoot, '.ghostboard', 'widgets'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(workspaceRoot, '.ghostboard', 'widgets', 'widget_check.json'),
+      JSON.stringify({
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_check',
+        kind: 'checklist',
+        title: 'Launch Checklist',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: {
+          items: [
+            { id: 'item_1', text: 'Resolve launch blocker', checked: false },
+          ],
+        },
+      })
+    );
+    writeFileSync(
+      join(workspaceRoot, '.ghostboard', 'widgets', 'widget_reminder.json'),
+      JSON.stringify({
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_reminder',
+        kind: 'reminder',
+        title: 'Invoice reminder',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: {
+          dueAt: '2026-07-09T09:30:00.000Z',
+          timezone: 'Asia/Singapore',
+          status: 'scheduled',
+          note: 'Send the renewal invoice',
+        },
+      })
+    );
+    writeFileSync(
+      join(workspaceRoot, '.ghostboard', 'widgets', 'widget_pomodoro.json'),
+      JSON.stringify({
+        schema: 'ghostboard-widget/v1',
+        id: 'widget_pomodoro',
+        kind: 'pomodoro',
+        title: 'Deep focus timer',
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        data: {
+          mode: 'focus',
+          focusMinutes: 25,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          sessionsBeforeLongBreak: 4,
+          completedSessions: 0,
+          timer: { state: 'idle' },
+        },
+      })
+    );
+    writeFileSync(
+      join(workspaceRoot, '.ghostboard', 'widgets', 'widget_broken.json'),
+      '{not json'
+    );
+
+    const { searchWorkspace } = await import('./search');
+
+    const checklistHits = await searchWorkspace(workspaceRoot, {
+      query: 'launch blocker',
+    });
+    expect(checklistHits[0]).toMatchObject({
+      kind: 'widget',
+      widgetId: 'widget_check',
+      widgetKind: 'checklist',
+      nodeId: 'widget-check',
+      excerpt: 'Resolve launch blocker',
+    });
+
+    const reminderHits = await searchWorkspace(workspaceRoot, {
+      query: 'renewal invoice',
+    });
+    expect(reminderHits[0]).toMatchObject({
+      kind: 'widget',
+      widgetId: 'widget_reminder',
+      widgetKind: 'reminder',
+      nodeId: 'widget-reminder-child',
+    });
+
+    const dueHits = await searchWorkspace(workspaceRoot, {
+      query: '2026-07-09',
+    });
+    expect(dueHits[0]).toMatchObject({
+      kind: 'widget',
+      widgetId: 'widget_reminder',
+      widgetKind: 'reminder',
+    });
+
+    const pomodoroHits = await searchWorkspace(workspaceRoot, {
+      query: 'deep focus',
+    });
+    expect(pomodoroHits[0]).toMatchObject({
+      kind: 'widget',
+      widgetId: 'widget_pomodoro',
+      widgetKind: 'pomodoro',
+    });
+  });
+
   it('cleanMarkdown strips fences, links, headings, bold/italic, lists', async () => {
     const { cleanMarkdown } = await import('./search');
     expect(cleanMarkdown('# Heading\n**bold** and _x_')).toBe(

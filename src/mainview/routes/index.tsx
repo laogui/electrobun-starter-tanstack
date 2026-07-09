@@ -861,7 +861,7 @@ function CanvasComponent() {
 
   const hydrate = useCanvasStore((s) => s.hydrate);
   const hydrated = useCanvasStore((s) => s._hydrated);
-  const savedViewport = useCanvasStore((s) => s.persistedViewport);
+  const sessionViewport = useCanvasStore((s) => s.sessionViewport);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const hydrateWidgets = useWidgetStore((s) => s.hydrate);
@@ -1029,7 +1029,8 @@ function CanvasComponent() {
           return;
         }
         if (data) {
-          hydrate(data.nodes, data.edges, data.viewport ?? null);
+          // Viewport is session-only; loadCanvas no longer carries camera state.
+          hydrate(data.nodes, data.edges);
           // Always hydrate (even when widgets is absent/empty) so switching to
           // a canvas with zero widgets still prunes records from the previous
           // view. Pass the referenced id set so unreferenced entries are dropped.
@@ -1042,8 +1043,8 @@ function CanvasComponent() {
             return;
           }
           // First run: seed workspace with initialNodes + initialEdges.
-          // Don't persist a viewport yet — fitView frames the seed nodes,
-          // and the user's first pan/zoom will save the real viewport.
+          // fitView frames the seed nodes; the user's first pan/zoom fills the
+          // session camera cache for this view.
           const seededNodes = await materializeInitialWidgetSeeds(
             initialNodes,
             createWidgetRecord,
@@ -1595,12 +1596,12 @@ function CanvasComponent() {
             connectionMode={ConnectionMode.Loose}
             connectionRadius={30}
             defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
-            defaultViewport={savedViewport ?? undefined}
+            defaultViewport={sessionViewport ?? undefined}
             disableKeyboardA11y
             edges={edges}
             edgeTypes={edgeTypes}
             elevateEdgesOnSelect
-            fitView={!savedViewport}
+            fitView={!sessionViewport}
             maxZoom={4}
             minZoom={0.1}
             nodes={nodesWithState}

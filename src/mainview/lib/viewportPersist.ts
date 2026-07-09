@@ -1,11 +1,15 @@
 let suppressedUntil = 0;
 
-/** Suppress persisting viewport changes triggered by programmatic camera moves. */
+/**
+ * Suppress writing the next viewport updates to the in-memory session cache.
+ * Used around programmatic camera moves (search jump, focus, export fit) so
+ * they do not become the view's "last intentional" pan/zoom for the session.
+ */
 export function suppressViewportPersist(ms: number): void {
   suppressedUntil = Date.now() + ms;
 }
 
-/** Whether the next viewport update should be written to the manifest. */
+/** Whether the next viewport update should update the session camera cache. */
 export function shouldPersistViewport(): boolean {
   return Date.now() >= suppressedUntil;
 }

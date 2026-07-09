@@ -19,11 +19,11 @@ interface UseCanvasViewportResizeOptions {
 /**
  * Keep the user's focal point stable when the canvas pane resizes.
  *
- * - Saved viewport: pan re-anchored to the previous screen center and zoom
+ * - Session viewport: pan re-anchored to the previous screen center and zoom
  *   scaled with the pane's width/height change (e.g. maximize / restore).
- * - No saved viewport (fitView mode): re-fit nodes into the new pane.
+ * - No session viewport (fitView mode): re-fit nodes into the new pane.
  *
- * Resize-driven camera moves are never persisted.
+ * Resize-driven camera moves are never written to the session cache.
  */
 export function useCanvasViewportResize({
   containerRef,
@@ -63,9 +63,9 @@ export function useCanvasViewportResize({
 
       suppressViewportPersist(100);
 
-      const { persistedViewport, setViewport } = useCanvasStore.getState();
+      const { sessionViewport, setViewport } = useCanvasStore.getState();
 
-      if (!persistedViewport) {
+      if (!sessionViewport) {
         instance.fitView({ duration: 0 });
         setViewport(instance.getViewport(), { persist: false });
         return;

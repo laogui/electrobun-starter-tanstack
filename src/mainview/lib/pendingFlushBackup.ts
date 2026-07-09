@@ -19,6 +19,7 @@ export interface PendingFlushBackup {
   edges: Edge[];
   nodes: Node[];
   savedAt: number;
+  /** @deprecated Viewport is session-only; ignored on restore. */
   viewport?: CanvasViewport | null;
 }
 

@@ -750,7 +750,6 @@ interface CanvasRPC {
         response: {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
-          viewport?: { x: number; y: number; zoom: number };
           widgets?: Record<string, WidgetRecord | WidgetLoadError>;
         } | null;
       };
@@ -759,7 +758,6 @@ interface CanvasRPC {
           viewId: string;
           nodes: ManifestNode[];
           edges: ManifestEdge[];
-          viewport?: { x: number; y: number; zoom: number };
         };
         response: { success: boolean };
       };
@@ -1715,15 +1713,16 @@ async function main() {
             }
           }
 
+          // Viewport is intentionally omitted: camera state is session-only
+          // in the renderer and is never restored from disk.
           return {
             nodes: hydratedNodes,
             edges: manifest.edges,
-            viewport: manifest.viewport,
             widgets: hydratedWidgets,
           };
         },
 
-        saveManifest: async ({ viewId, nodes, edges, viewport }) => {
+        saveManifest: async ({ viewId, nodes, edges }) => {
           const config = await loadWorkspaceConfig(wsPath);
           const viewEntry = config.views.find((v) => v.id === viewId);
           if (!viewEntry) {
@@ -1997,10 +1996,10 @@ async function main() {
             })
           );
 
+          // Omit viewport so legacy values are stripped on the next save.
           const manifest: CanvasManifest = {
             schema: 'ghostboard-canvas/v1',
             viewId,
-            viewport,
             nodes: manifestNodes,
             edges,
           };

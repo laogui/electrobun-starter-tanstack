@@ -1018,9 +1018,38 @@ describe('canvasStore — multi-view', () => {
     expect(state.focusedFolder).toBeNull();
     expect(state._hydrated).toBe(false);
     expect(state.viewport).toBeNull();
-    expect(state.persistedViewport).toBeNull();
+    expect(state.sessionViewport).toBeNull();
     expect(state._undoRedo.past).toEqual([]);
     expect(state._undoRedo.future).toEqual([]);
+  });
+
+  it('setActiveView restores the session viewport when re-entering a view', async () => {
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      _hydrated: true,
+      sessionViewport: { x: 10, y: 20, zoom: 1.5 },
+      _sessionViewports: {},
+    });
+
+    await useCanvasStore.getState().setActiveView('focus');
+    expect(useCanvasStore.getState().sessionViewport).toBeNull();
+    expect(useCanvasStore.getState()._sessionViewports.default).toEqual({
+      x: 10,
+      y: 20,
+      zoom: 1.5,
+    });
+
+    await useCanvasStore.getState().setActiveView('default');
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
+      x: 10,
+      y: 20,
+      zoom: 1.5,
+    });
+    expect(useCanvasStore.getState().viewport).toEqual({
+      x: 10,
+      y: 20,
+      zoom: 1.5,
+    });
   });
 
   it('switchView does not clear local state when persisting active view fails', async () => {
@@ -1031,7 +1060,7 @@ describe('canvasStore — multi-view', () => {
       nodes: [makeNode('a')],
       edges: [],
       viewport: { x: 1, y: 2, zoom: 1 },
-      persistedViewport: { x: 1, y: 2, zoom: 1 },
+      sessionViewport: { x: 1, y: 2, zoom: 1 },
     });
 
     await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
@@ -1042,8 +1071,7 @@ describe('canvasStore — multi-view', () => {
     expect(rpcSaveManifestMock).toHaveBeenCalledWith(
       'default',
       [expect.objectContaining({ id: 'a' })],
-      [],
-      { x: 1, y: 2, zoom: 1 }
+      []
     );
     expect(rpcSetActiveViewMock).toHaveBeenCalledWith('focus');
     expect(state.activeViewId).toBe('default');
@@ -1054,12 +1082,11 @@ describe('canvasStore — multi-view', () => {
     loadCanvasMock.mockResolvedValueOnce({
       nodes: [makeNode('existing', { position: { x: 500, y: 500 } })],
       edges: [],
-      viewport: { x: 10, y: 20, zoom: 1.25 },
     });
     useCanvasStore.setState({
       activeViewId: 'default',
       viewport: { x: 1, y: 2, zoom: 0.75 },
-      persistedViewport: { x: 1, y: 2, zoom: 0.75 },
+      sessionViewport: { x: 1, y: 2, zoom: 0.75 },
       nodes: [
         makeNode('a', { selected: true, position: { x: 10, y: 20 } }),
         makeNode('b', { selected: true, position: { x: 140, y: 20 } }),
@@ -1084,14 +1111,12 @@ describe('canvasStore — multi-view', () => {
         expect.objectContaining({ id: 'a' }),
         expect.objectContaining({ id: 'b' }),
       ]),
-      [expect.objectContaining({ id: 'edge-ab', source: 'a', target: 'b' })],
-      { x: 10, y: 20, zoom: 1.25 }
+      [expect.objectContaining({ id: 'edge-ab', source: 'a', target: 'b' })]
     );
     const firstSaveCall = rpcSaveManifestMock.mock.calls[0] as unknown as [
       string,
       Record<string, unknown>[],
       Record<string, unknown>[],
-      unknown,
     ];
     expect(firstSaveCall[1].find((node) => node.id === 'a')).not.toHaveProperty(
       'selected'
@@ -1100,8 +1125,7 @@ describe('canvasStore — multi-view', () => {
       2,
       'default',
       [expect.objectContaining({ id: 'c' })],
-      [],
-      { x: 1, y: 2, zoom: 0.75 }
+      []
     );
     expect(useCanvasStore.getState().nodes.map((node) => node.id)).toEqual([
       'c',
@@ -1122,28 +1146,35 @@ describe('canvasStore — hydration', () => {
     expect(state.nodes).toEqual(nodes);
     expect(state.edges).toEqual(edges);
     expect(state.viewport).toBeNull();
-    expect(state.persistedViewport).toBeNull();
+    expect(state.sessionViewport).toBeNull();
   });
 
-  it('hydrate stores the viewport when one is provided', () => {
+  it('hydrate restores the session viewport for the active view', () => {
     const viewport = { x: 100, y: 200, zoom: 1.25 };
-
-    useCanvasStore.getState().hydrate([], [], viewport);
-
-    expect(useCanvasStore.getState().viewport).toEqual(viewport);
-    expect(useCanvasStore.getState().persistedViewport).toEqual(viewport);
-  });
-
-  it('hydrate clears any previously hydrated viewport when none is provided', () => {
     useCanvasStore.setState({
-      viewport: { x: 1, y: 2, zoom: 3 },
-      persistedViewport: { x: 1, y: 2, zoom: 3 },
+      activeViewId: 'default',
+      sessionViewport: null,
+      _sessionViewports: { default: viewport },
     });
 
     useCanvasStore.getState().hydrate([], []);
 
-    expect(useCanvasStore.getState().viewport).toBeNull();
-    expect(useCanvasStore.getState().persistedViewport).toBeNull();
+    expect(useCanvasStore.getState().viewport).toEqual(viewport);
+    expect(useCanvasStore.getState().sessionViewport).toEqual(viewport);
+  });
+
+  it('hydrate keeps an already-restored session viewport', () => {
+    const viewport = { x: 1, y: 2, zoom: 3 };
+    useCanvasStore.setState({
+      viewport,
+      sessionViewport: viewport,
+      _sessionViewports: { default: viewport },
+    });
+
+    useCanvasStore.getState().hydrate([], []);
+
+    expect(useCanvasStore.getState().viewport).toEqual(viewport);
+    expect(useCanvasStore.getState().sessionViewport).toEqual(viewport);
   });
 
   it('hydrate normalizes invalid parent relationships', () => {
@@ -1183,12 +1214,13 @@ describe('canvasStore — hydration', () => {
     expect(state._hydrated).toBe(false);
     expect(state.focusedNode).toBeNull();
     expect(state.viewport).toBeNull();
-    expect(state.persistedViewport).toBeNull();
+    expect(state.sessionViewport).toBeNull();
+    expect(state._sessionViewports).toEqual({});
   });
 });
 
 describe('canvasStore — viewport', () => {
-  it('setViewport stores the viewport and persisted viewport by default', () => {
+  it('setViewport stores the live and session viewport by default', () => {
     useCanvasStore.getState().setViewport({ x: 10, y: 20, zoom: 1.5 });
 
     expect(useCanvasStore.getState().viewport).toEqual({
@@ -1196,7 +1228,12 @@ describe('canvasStore — viewport', () => {
       y: 20,
       zoom: 1.5,
     });
-    expect(useCanvasStore.getState().persistedViewport).toEqual({
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
+      x: 10,
+      y: 20,
+      zoom: 1.5,
+    });
+    expect(useCanvasStore.getState()._sessionViewports.default).toEqual({
       x: 10,
       y: 20,
       zoom: 1.5,
@@ -1207,31 +1244,34 @@ describe('canvasStore — viewport', () => {
     const initial = { x: 1, y: 2, zoom: 3 };
     useCanvasStore.setState({
       viewport: initial,
-      persistedViewport: initial,
+      sessionViewport: initial,
     });
 
     useCanvasStore.getState().setViewport({ x: 1, y: 2, zoom: 3 });
 
     // Reference identity preserved — no redundant set call.
     expect(useCanvasStore.getState().viewport).toBe(initial);
-    expect(useCanvasStore.getState().persistedViewport).toBe(initial);
+    expect(useCanvasStore.getState().sessionViewport).toBe(initial);
   });
 
   it('setViewport accepts null to clear the stored viewport', () => {
     useCanvasStore.setState({
       viewport: { x: 1, y: 2, zoom: 3 },
-      persistedViewport: { x: 1, y: 2, zoom: 3 },
+      sessionViewport: { x: 1, y: 2, zoom: 3 },
+      _sessionViewports: { default: { x: 1, y: 2, zoom: 3 } },
     });
 
     useCanvasStore.getState().setViewport(null);
 
     expect(useCanvasStore.getState().viewport).toBeNull();
-    expect(useCanvasStore.getState().persistedViewport).toBeNull();
+    expect(useCanvasStore.getState().sessionViewport).toBeNull();
+    expect(useCanvasStore.getState()._sessionViewports).toEqual({});
   });
 
-  it('setViewport skips persistedViewport while suppression is active', () => {
+  it('setViewport skips sessionViewport while suppression is active', () => {
     useCanvasStore.setState({
-      persistedViewport: { x: 0, y: 0, zoom: 1 },
+      sessionViewport: { x: 0, y: 0, zoom: 1 },
+      _sessionViewports: { default: { x: 0, y: 0, zoom: 1 } },
     });
 
     suppressViewportPersist(300);
@@ -1242,20 +1282,25 @@ describe('canvasStore — viewport', () => {
       y: 600,
       zoom: 0.5,
     });
-    expect(useCanvasStore.getState().persistedViewport).toEqual({
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
       x: 0,
       y: 0,
       zoom: 1,
     });
   });
 
-  it('setViewport can force persistence while suppression is active', () => {
+  it('setViewport can force session cache update while suppression is active', () => {
     suppressViewportPersist(300);
     useCanvasStore
       .getState()
       .setViewport({ x: 12, y: 34, zoom: 2 }, { persist: true });
 
-    expect(useCanvasStore.getState().persistedViewport).toEqual({
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
+      x: 12,
+      y: 34,
+      zoom: 2,
+    });
+    expect(useCanvasStore.getState()._sessionViewports.default).toEqual({
       x: 12,
       y: 34,
       zoom: 2,

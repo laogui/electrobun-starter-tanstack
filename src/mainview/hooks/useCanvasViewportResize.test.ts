@@ -75,7 +75,7 @@ describe('useCanvasViewportResize', () => {
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     resetViewportPersistSuppression();
     useCanvasStore.setState({
-      persistedViewport: { x: 0, y: 0, zoom: 1 },
+      sessionViewport: { x: 0, y: 0, zoom: 1 },
       viewport: { x: 100, y: 50, zoom: 2 },
       _hydrated: true,
     });
@@ -117,7 +117,7 @@ describe('useCanvasViewportResize', () => {
       { duration: 0 }
     );
     expect(useCanvasStore.getState().viewport?.zoom).toBeCloseTo(expectedZoom);
-    expect(useCanvasStore.getState().persistedViewport).toEqual({
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
       x: 0,
       y: 0,
       zoom: 1,
@@ -125,7 +125,7 @@ describe('useCanvasViewportResize', () => {
   });
 
   it('re-fits the canvas when no viewport has been persisted yet', () => {
-    useCanvasStore.setState({ persistedViewport: null });
+    useCanvasStore.setState({ sessionViewport: null });
     const container = document.createElement('div');
     const containerRef = { current: container };
     const { ref, fitView } = buildRfInstance();
@@ -149,7 +149,7 @@ describe('useCanvasViewportResize', () => {
       y: 34,
       zoom: 0.8,
     });
-    expect(useCanvasStore.getState().persistedViewport).toBeNull();
+    expect(useCanvasStore.getState().sessionViewport).toBeNull();
   });
 
   it('does not observe while disabled', () => {

@@ -124,14 +124,13 @@ export async function loadCanvas(viewId: string) {
 export async function rpcSaveManifest(
   viewId: string,
   nodes: any[],
-  edges: any[],
-  viewport?: any
+  edges: any[]
 ) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false };
   }
-  return eb.rpc.request.saveManifest({ viewId, nodes, edges, viewport });
+  return eb.rpc.request.saveManifest({ viewId, nodes, edges });
 }
 
 export async function rpcSaveNote(

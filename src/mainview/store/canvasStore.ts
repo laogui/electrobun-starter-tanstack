@@ -444,11 +444,7 @@ export interface CanvasState {
   // UI state
   focusedNode: FocusedItem | null;
   groupSelected: () => void;
-  hydrate: (
-    nodes: Node[],
-    edges: Edge[],
-    viewport?: CanvasViewport | null
-  ) => void;
+  hydrate: (nodes: Node[], edges: Edge[]) => void;
 
   // Library popup (browse notes on the current canvas)
   libraryOpen: boolean;
@@ -468,8 +464,6 @@ export interface CanvasState {
   // Search
   pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
-  /** User-confirmed viewport written to the canvas manifest. */
-  persistedViewport: CanvasViewport | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => void;
   /** Asset/image card id whose displayName is in inline-rename mode. */
@@ -517,6 +511,12 @@ export interface CanvasState {
 
   // In-window settings dialog
   settingsOpen: boolean;
+  /**
+   * User-confirmed camera for the active view. Session-only (in-memory):
+   * restored when re-entering a view in the same app session; cold start fits
+   * the canvas to the window instead. Never written to disk.
+   */
+  sessionViewport: CanvasViewport | null;
   setViewport: (
     viewport: CanvasViewport | null,
     options?: { persist?: boolean }
@@ -549,9 +549,17 @@ export interface CanvasState {
   ) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
 
-  /** Live React Flow camera — may differ from persistedViewport after programmatic moves. */
+  /**
+   * Live React Flow camera — may differ from sessionViewport after
+   * programmatic moves (search jump, focus, export fit).
+   */
   viewport: CanvasViewport | null;
   views: Array<{ id: string; name: string }>;
+  /**
+   * Per-view session camera cache. Survives view switches within the process;
+   * cleared on full reset / app quit (never disk-backed).
+   */
+  _sessionViewports: Record<string, CanvasViewport>;
 }
 
 // ---------------------------------------------------------------------------
@@ -584,7 +592,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   tagSidebarOpen: false,
   activeTagFilters: [],
   viewport: null,
-  persistedViewport: null,
+  sessionViewport: null,
+  _sessionViewports: {},
 
   setLibraryOpen: (v) => {
     set((s) => ({
@@ -783,12 +792,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // -- hydration ------------------------------------------------------------
-  hydrate: (nodes, edges, viewport = null) => {
+  hydrate: (nodes, edges) => {
+    // Viewport is session-only: restore from the in-memory cache for this view
+    // (set by setActiveView / setViewport). Disk manifests are never consulted.
+    const { activeViewId, _sessionViewports, sessionViewport } = get();
+    const restored =
+      sessionViewport ?? _sessionViewports[activeViewId] ?? null;
     set({
       nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
       edges,
-      viewport,
-      persistedViewport: viewport,
+      viewport: restored,
+      sessionViewport: restored,
       _hydrated: true,
     });
   },
@@ -798,7 +812,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [],
       edges: [],
       viewport: null,
-      persistedViewport: null,
+      sessionViewport: null,
+      _sessionViewports: {},
       _hydrated: false,
       focusedNode: null,
       focusedFolder: null,
@@ -812,25 +827,44 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   setViewport: (viewport, options) => {
+    // `persist` means "remember in the session cache", not disk.
     const persist = options?.persist ?? shouldPersistViewport();
-    const { viewport: current, persistedViewport: currentPersisted } = get();
+    const {
+      activeViewId,
+      viewport: current,
+      sessionViewport: currentSession,
+      _sessionViewports,
+    } = get();
     const viewportUnchanged =
       current?.x === viewport?.x &&
       current?.y === viewport?.y &&
       current?.zoom === viewport?.zoom;
-    const persistedUnchanged =
+    const sessionUnchanged =
       !persist ||
-      (currentPersisted?.x === viewport?.x &&
-        currentPersisted?.y === viewport?.y &&
-        currentPersisted?.zoom === viewport?.zoom);
+      (currentSession?.x === viewport?.x &&
+        currentSession?.y === viewport?.y &&
+        currentSession?.zoom === viewport?.zoom);
 
-    if (viewportUnchanged && persistedUnchanged) {
+    if (viewportUnchanged && sessionUnchanged) {
       return;
+    }
+
+    if (!persist) {
+      set({ viewport });
+      return;
+    }
+
+    const nextSessionMap = { ..._sessionViewports };
+    if (viewport) {
+      nextSessionMap[activeViewId] = viewport;
+    } else {
+      delete nextSessionMap[activeViewId];
     }
 
     set({
       viewport,
-      ...(persist ? { persistedViewport: viewport } : {}),
+      sessionViewport: viewport,
+      _sessionViewports: nextSessionMap,
     });
   },
 
@@ -1347,13 +1381,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return;
     }
 
+    const { sessionViewport, _sessionViewports } = get();
+    // Stash the outgoing view's confirmed camera so re-entering this session
+    // restores pan/zoom without reading disk.
+    const nextSessionMap = { ..._sessionViewports };
+    if (sessionViewport) {
+      nextSessionMap[current] = sessionViewport;
+    }
+    const restored = nextSessionMap[viewId] ?? null;
+
     // Clear canvas data AND UI state for view switch (keep clipboard for cross-view paste)
     set({
       activeViewId: viewId,
       nodes: [],
       edges: [],
-      viewport: null,
-      persistedViewport: null,
+      viewport: restored,
+      sessionViewport: restored,
+      _sessionViewports: nextSessionMap,
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
@@ -1362,7 +1406,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   switchView: async (viewId) => {
-    const { activeViewId, edges, nodes, persistedViewport, _hydrated } = get();
+    const { activeViewId, edges, nodes, _hydrated } = get();
     if (viewId === activeViewId) {
       return true;
     }
@@ -1371,13 +1415,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // Flush the outgoing canvas first; abort the switch when the save fails so
     // clearing the store can never drop unsaved edits. Skip the flush when the
     // canvas was never hydrated — saving an empty store would wipe the manifest.
+    // Viewport is session-only and is never written to the manifest.
     if (_hydrated && rpcAvailable) {
       const sanitized = sanitizeForPersistence(nodes, edges);
       const saved = await rpcSaveManifest(
         activeViewId,
         sanitized.nodes,
-        sanitized.edges,
-        persistedViewport ?? undefined
+        sanitized.edges
       ).catch((error) => {
         console.error('[canvasStore] Failed to flush before switch:', error);
         return { success: false };
@@ -1404,7 +1448,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   moveSelectedToView: async (targetViewId) => {
-    const { activeViewId, edges, nodes, persistedViewport } = get();
+    const { activeViewId, edges, nodes } = get();
     if (targetViewId === activeViewId) {
       return false;
     }
@@ -1425,10 +1469,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const targetEdges = Array.isArray(targetManifest?.edges)
       ? (targetManifest.edges as Edge[])
       : [];
-    const targetViewport =
-      targetManifest && 'viewport' in targetManifest
-        ? (targetManifest.viewport as CanvasViewport | undefined)
-        : undefined;
 
     const absoluteRects = buildAbsoluteRects(nodes);
     const usedTargetNodeIds = new Set(targetNodes.map((node) => node.id));
@@ -1526,8 +1566,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const targetSave = await rpcSaveManifest(
       targetViewId,
       sanitizedTarget.nodes,
-      sanitizedTarget.edges,
-      targetViewport
+      sanitizedTarget.edges
     ).catch((error) => {
       console.error('[canvasStore] Failed to save target canvas:', error);
       return { success: false };
@@ -1540,8 +1579,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const sourceSave = await rpcSaveManifest(
       activeViewId,
       sanitizedSource.nodes,
-      sanitizedSource.edges,
-      persistedViewport ?? undefined
+      sanitizedSource.edges
     ).catch((error) => {
       console.error('[canvasStore] Failed to save source canvas:', error);
       return { success: false };
@@ -1554,8 +1592,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       await rpcSaveManifest(
         targetViewId,
         sanitizedOriginalTarget.nodes,
-        sanitizedOriginalTarget.edges,
-        targetViewport
+        sanitizedOriginalTarget.edges
       ).catch((error) => {
         console.error(
           '[canvasStore] Failed to roll back target canvas:',
@@ -2056,10 +2093,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
-  // Note: undo/redo intentionally leave `viewport` untouched. The React Flow
-  // camera only reads the stored viewport on mount, so writing a stale
-  // snapshot value back would not move the camera — it would only overwrite
-  // the persisted viewport and make the camera jump on the next launch.
+  // Note: undo/redo intentionally leave `viewport` / sessionViewport untouched.
+  // The React Flow camera only reads the stored viewport on mount, so writing a
+  // stale snapshot value back would not move the camera — it would only corrupt
+  // the session cache and cause a jump when re-entering the view.
   undo: () => {
     const { nodes, edges, viewport, _undoRedo } = get();
     const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });

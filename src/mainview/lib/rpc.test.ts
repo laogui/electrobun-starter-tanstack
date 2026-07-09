@@ -235,11 +235,7 @@ describe('rpc', () => {
     request.scanUnlinkedNotes.mockResolvedValue({ entries: [] });
 
     await rpc.loadCanvas('focus');
-    await rpc.rpcSaveManifest('focus', [{ id: 'n1' }], [{ id: 'e1' }], {
-      x: 1,
-      y: 2,
-      zoom: 3,
-    });
+    await rpc.rpcSaveManifest('focus', [{ id: 'n1' }], [{ id: 'e1' }]);
     await rpc.rpcSaveNote('note-1', { title: 'Title' }, 'Body');
     await rpc.rpcCreateNote('note-2', 'New', 'text');
     await rpc.rpcDeleteNote('note-2');
@@ -305,7 +301,6 @@ describe('rpc', () => {
       viewId: 'focus',
       nodes: [{ id: 'n1' }],
       edges: [{ id: 'e1' }],
-      viewport: { x: 1, y: 2, zoom: 3 },
     });
     expect(request.saveNote).toHaveBeenCalledWith({
       noteId: 'note-1',

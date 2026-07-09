@@ -4,10 +4,6 @@ import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
-import {
-  resetViewportPersistSuppression,
-  suppressViewportPersist,
-} from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const rpcMocks = vi.hoisted(() => ({
@@ -44,7 +40,6 @@ const resetStore = () => {
 describe('useCanvasPersistence', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    resetViewportPersistSuppression();
     resetStore();
     rpcMocks.isRpcAvailable.mockReset();
     rpcMocks.rpcSaveManifest.mockReset();
@@ -55,7 +50,6 @@ describe('useCanvasPersistence', () => {
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
-    resetViewportPersistSuppression();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -105,43 +99,18 @@ describe('useCanvasPersistence', () => {
           data: {},
         },
       ],
-      [],
-      undefined
+      []
     );
   });
 
-  it('debounces and persists viewport changes', async () => {
+  it('does not schedule disk persistence for viewport-only changes', async () => {
     render(<TestComponent />);
     await vi.runAllTicks();
 
-    // First change is consumed by the post-hydrate guard.
     useCanvasStore.getState().setViewport({ x: 50, y: 60, zoom: 1 });
     useCanvasStore.getState().setViewport({ x: 100, y: 200, zoom: 1.5 });
 
-    vi.advanceTimersByTime(499);
-    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1);
-    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
-    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith('default', [], [], {
-      x: 100,
-      y: 200,
-      zoom: 1.5,
-    });
-  });
-
-  it('does not schedule persistence when only the runtime viewport changes', async () => {
-    render(<TestComponent />);
-    await vi.runAllTicks();
-
-    useCanvasStore.setState({
-      persistedViewport: { x: 0, y: 0, zoom: 1 },
-    });
-    suppressViewportPersist(300);
-    useCanvasStore.getState().setViewport({ x: 900, y: 900, zoom: 0.25 });
-
-    vi.advanceTimersByTime(600);
-
+    vi.advanceTimersByTime(3000);
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 
@@ -175,12 +144,11 @@ describe('useCanvasPersistence', () => {
           data: {},
         },
       ],
-      [],
-      undefined
+      []
     );
   });
 
-  it('includes the latest persisted viewport when flushing on blur', async () => {
+  it('does not include viewport when flushing layout on blur', async () => {
     render(<TestComponent />);
     await vi.runAllTicks();
 
@@ -202,7 +170,18 @@ describe('useCanvasPersistence', () => {
 
     expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
     const lastCall = rpcMocks.rpcSaveManifest.mock.calls.at(-1);
-    expect(lastCall?.[3]).toEqual({ x: 50, y: 60, zoom: 0.75 });
+    expect(lastCall).toEqual([
+      'default',
+      [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 10, y: 10 },
+          data: {},
+        },
+      ],
+      [],
+    ]);
   });
 
   it('cancels pending timer and does not flush when activeViewId changes', async () => {
@@ -322,8 +301,7 @@ describe('useCanvasPersistence', () => {
           data: {},
         },
       ],
-      [],
-      undefined
+      []
     );
   });
 

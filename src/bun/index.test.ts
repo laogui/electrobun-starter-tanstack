@@ -851,7 +851,6 @@ describe('src/bun/index helpers', () => {
           },
         ],
         edges: [],
-        viewport: { x: 0, y: 0, zoom: 1 },
       })
     ).resolves.toEqual({ success: true });
 

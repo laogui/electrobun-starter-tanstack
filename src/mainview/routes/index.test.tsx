@@ -1548,7 +1548,7 @@ describe('routes/index', () => {
     });
   });
 
-  it('hydrates the saved viewport from loadCanvas into the store', async () => {
+  it('ignores disk viewport from loadCanvas and cold-starts without session cache', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({
       nodes: [
         {
@@ -1559,6 +1559,7 @@ describe('routes/index', () => {
         },
       ],
       edges: [],
+      // Legacy manifests may still contain viewport; renderer must ignore it.
       viewport: { x: 42, y: 84, zoom: 1.25 },
     });
     const module = await import('./index');
@@ -1569,20 +1570,13 @@ describe('routes/index', () => {
 
     await waitFor(() => {
       expect(rpcMocks.loadCanvas).toHaveBeenCalledWith('default');
-      expect(useCanvasStore.getState().viewport).toEqual({
-        x: 42,
-        y: 84,
-        zoom: 1.25,
-      });
-      expect(useCanvasStore.getState().persistedViewport).toEqual({
-        x: 42,
-        y: 84,
-        zoom: 1.25,
-      });
+      expect(useCanvasStore.getState()._hydrated).toBe(true);
+      expect(useCanvasStore.getState().viewport).toBeNull();
+      expect(useCanvasStore.getState().sessionViewport).toBeNull();
     });
   });
 
-  it('persists user-driven viewport moves during suppression windows', async () => {
+  it('writes user-driven viewport moves to the session cache during suppression windows', async () => {
     const module = await import('./index');
     const CanvasRoute = module.Route.options
       .component as () => React.ReactElement;
@@ -1596,7 +1590,7 @@ describe('routes/index', () => {
     const initialViewport = { x: 0, y: 0, zoom: 1 };
     useCanvasStore.setState({
       viewport: initialViewport,
-      persistedViewport: initialViewport,
+      sessionViewport: initialViewport,
     });
 
     suppressViewportPersist(300);
@@ -1613,7 +1607,7 @@ describe('routes/index', () => {
       y: 600,
       zoom: 0.5,
     });
-    expect(useCanvasStore.getState().persistedViewport).toEqual({
+    expect(useCanvasStore.getState().sessionViewport).toEqual({
       x: 500,
       y: 600,
       zoom: 0.5,

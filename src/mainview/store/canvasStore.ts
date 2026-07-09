@@ -189,33 +189,96 @@ function buildPastedClipboard(
   return { edges, nodes };
 }
 
+/**
+ * Detect whether any node in the graph references a widget - either as a
+ * top-level widget node or as a widget child nested inside a folder's
+ * `data.children`. Used to gate cloning so folder-only-widget paste/duplicate
+ * is not silently skipped.
+ */
+function graphContainsWidgetReference(nodes: Node[]): boolean {
+  for (const node of nodes) {
+    if (node.type === 'widget') {
+      return true;
+    }
+    if (node.type === 'folder') {
+      const children = (node.data as any)?.children as
+        | Array<{ type?: string }>
+        | undefined;
+      if (
+        Array.isArray(children) &&
+        children.some((c) => c?.type === 'widget')
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
   const { useWidgetStore } = await import('@/store/widgetStore');
   const cloneWidget = useWidgetStore.getState().cloneWidget;
 
+  async function cloneWidgetId(widgetId: unknown): Promise<string | null> {
+    if (typeof widgetId !== 'string' || !widgetId) {
+      return null;
+    }
+    const record = await cloneWidget(widgetId);
+    if (!record) {
+      // Cloning failed: surface the data coupling so the user is not silently
+      // sharing a backing file between original and copy.
+      toast.error('Failed to clone a widget; copy shares the original.');
+      return null;
+    }
+    return record.id;
+  }
+
   return await Promise.all(
     nodes.map(async (node) => {
-      if (node.type !== 'widget') {
-        return node;
+      if (node.type === 'widget') {
+        const data = node.data as Record<string, unknown>;
+        const clonedId = await cloneWidgetId(data.widgetId);
+        if (!clonedId) {
+          return node;
+        }
+        return {
+          ...node,
+          data: {
+            ...data,
+            widgetId: clonedId,
+          },
+        };
       }
 
-      const data = node.data as Record<string, unknown>;
-      const widgetId = data.widgetId;
-      if (typeof widgetId !== 'string' || !widgetId) {
-        return node;
+      if (node.type === 'folder') {
+        const data = node.data as Record<string, unknown>;
+        const children = data?.children;
+        if (!Array.isArray(children)) {
+          return node;
+        }
+        const nextChildren = await Promise.all(
+          children.map(async (child: any) => {
+            if (!child || child.type !== 'widget') {
+              return child;
+            }
+            const childData = child.data as Record<string, unknown> | undefined;
+            const clonedId = await cloneWidgetId(childData?.widgetId);
+            if (!clonedId) {
+              return child;
+            }
+            return {
+              ...child,
+              data: { ...(childData ?? {}), widgetId: clonedId },
+            };
+          })
+        );
+        return {
+          ...node,
+          data: { ...data, children: nextChildren },
+        };
       }
 
-      // Cloning keeps duplicated widgets independent; fallback preserves the
-      // visible node if the backing record cannot be cloned.
-      const record = await cloneWidget(widgetId);
-      return {
-        ...node,
-        data: {
-          ...data,
-          widgetId: record?.id ?? widgetId,
-          kind: record?.kind ?? data.kind,
-        },
-      };
+      return node;
     })
   );
 }
@@ -1509,7 +1572,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       currentNodes,
       offset
     );
-    const pastedNodes = pasted.nodes.some((node) => node.type === 'widget')
+    const pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
     set((s) => ({
@@ -1535,7 +1598,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       offset
     );
     get().saveSnapshot();
-    const pastedNodes = pasted.nodes.some((node) => node.type === 'widget')
+    const pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
     set((s) => ({

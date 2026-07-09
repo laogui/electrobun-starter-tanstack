@@ -607,7 +607,12 @@ async function migrateChecklistCardToWidgetReference(
       return { widgetId: existing.id, kind: 'checklist' };
     }
     if (existing.error === 'corrupted') {
-      throw new Error(`Existing widget ${widgetId} is corrupted.`);
+      // The deterministic widget file exists but is corrupted. Rebuild it from
+      // the legacy card so migration is not permanently blocked by a broken
+      // file (which would otherwise abort every subsequent loadCanvas).
+      console.warn(
+        `[persistence] Overwriting corrupted widget ${widgetId} during migration.`
+      );
     }
 
     const record = checklistRecordFromCard(noteId, cardData);
@@ -2324,10 +2329,16 @@ async function main() {
           const exportedNotes: ExportedNote[] = [];
           const failures: Array<{ noteId: string; reason: string }> = [];
           type ExportNoteResult =
-            | { exported: ExportedNote; failure?: never }
+            | { exported: ExportedNote; failure?: never; skipped?: never }
             | {
                 exported?: never;
                 failure: { noteId: string; reason: string };
+                skipped?: never;
+              }
+            | {
+                exported?: never;
+                failure?: never;
+                skipped: { noteId: string; reason: string };
               };
 
           const exportResults = await Promise.all(
@@ -2373,7 +2384,7 @@ async function main() {
           for (const result of exportResults) {
             if (result.failure) {
               failures.push(result.failure);
-            } else {
+            } else if (result.exported) {
               exportedNotes.push(result.exported);
             }
           }
@@ -2400,6 +2411,16 @@ async function main() {
                           record.error === 'corrupted'
                             ? 'corrupted widget'
                             : 'widget record not found',
+                      },
+                    };
+                  }
+                  // Non-checklist widgets (pomodoro/reminder) have no markdown
+                  // representation; skip them instead of counting as failures.
+                  if (record.kind !== 'checklist') {
+                    return {
+                      skipped: {
+                        noteId: widgetId,
+                        reason: `non-markdown widget kind: ${record.kind}`,
                       },
                     };
                   }
@@ -2430,9 +2451,11 @@ async function main() {
             for (const result of widgetExportResults) {
               if (result.failure) {
                 failures.push(result.failure);
-              } else {
+              } else if (result.exported) {
                 exportedNotes.push(result.exported);
               }
+              // result.skipped is intentionally ignored: non-markdown widgets
+              // are neither exported nor failed.
             }
           }
 

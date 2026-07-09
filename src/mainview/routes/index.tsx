@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type {
   Connection,
-  Edge,
   Node,
   NodeChange,
   ReactFlowInstance,
@@ -20,7 +19,6 @@ import {
 import { useTheme } from 'better-themes';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
-import { nanoid } from 'nanoid';
 
 import {
   useCallback,
@@ -74,6 +72,10 @@ import {
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';
+import {
+  buildImportedCanvasPayload,
+  collectWidgetIdsFromCanvasExport,
+} from '@/lib/canvasImport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { sortNodesByParent } from '@/lib/canvasUtils';
@@ -225,204 +227,6 @@ async function materializeInitialWidgetSeeds(
     });
   }
   return seededNodes;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function readCanvasPoint(value: unknown): { x: number; y: number } {
-  if (!isRecord(value)) {
-    return { x: 0, y: 0 };
-  }
-  const { x, y } = value;
-  return {
-    x: typeof x === 'number' && Number.isFinite(x) ? x : 0,
-    y: typeof y === 'number' && Number.isFinite(y) ? y : 0,
-  };
-}
-
-function uniqueImportedId(prefix: string, usedIds: Set<string>): string {
-  let id = `${prefix}-${nanoid(8)}`;
-  while (usedIds.has(id)) {
-    id = `${prefix}-${nanoid(8)}`;
-  }
-  usedIds.add(id);
-  return id;
-}
-
-function collectWidgetIdsFromImportedData(
-  type: unknown,
-  data: unknown,
-  ids: Set<string>
-): void {
-  if (!isRecord(data)) {
-    return;
-  }
-  if (type === 'widget') {
-    const widgetId = data.widgetId;
-    if (typeof widgetId === 'string' && widgetId) {
-      ids.add(widgetId);
-    }
-    return;
-  }
-  if (type !== 'folder') {
-    return;
-  }
-  const children = data.children;
-  if (!Array.isArray(children)) {
-    return;
-  }
-  for (const child of children) {
-    if (!isRecord(child)) {
-      continue;
-    }
-    collectWidgetIdsFromImportedData(child.type, child.data, ids);
-  }
-}
-
-function collectWidgetIdsFromCanvasExport(
-  document_: CanvasExportDocument
-): string[] {
-  const ids = new Set<string>();
-  for (const node of document_.nodes) {
-    if (!isRecord(node)) {
-      continue;
-    }
-    collectWidgetIdsFromImportedData(node.type, node.data, ids);
-  }
-  return [...ids];
-}
-
-function remapImportedWidgetData(
-  type: unknown,
-  data: unknown,
-  widgetIdMap: Map<string, string>
-): Record<string, unknown> {
-  if (!isRecord(data)) {
-    return {};
-  }
-
-  if (type === 'widget') {
-    const widgetId = data.widgetId;
-    return {
-      ...data,
-      ...(typeof widgetId === 'string' && widgetIdMap.has(widgetId)
-        ? { widgetId: widgetIdMap.get(widgetId) }
-        : {}),
-    };
-  }
-
-  if (type !== 'folder' || !Array.isArray(data.children)) {
-    return { ...data };
-  }
-
-  return {
-    ...data,
-    children: data.children.map((child) => {
-      if (!isRecord(child)) {
-        return child;
-      }
-      return {
-        ...child,
-        data: remapImportedWidgetData(child.type, child.data, widgetIdMap),
-      };
-    }),
-  };
-}
-
-function buildImportedCanvasPayload(
-  document_: CanvasExportDocument,
-  anchorCenter: { x: number; y: number },
-  currentNodes: Node[],
-  currentEdges: Edge[],
-  widgetIdMap: Map<string, string>
-): { edges: Edge[]; nodes: Node[] } {
-  const rawNodes = document_.nodes.filter(
-    (node): node is Record<string, unknown> =>
-      isRecord(node) && typeof node.id === 'string' && node.id.length > 0
-  );
-  const usedNodeIds = new Set(currentNodes.map((node) => node.id));
-  const usedEdgeIds = new Set(currentEdges.map((edge) => edge.id));
-  const nodeIdMap = new Map<string, string>();
-  for (const node of rawNodes) {
-    nodeIdMap.set(
-      node.id as string,
-      uniqueImportedId('import-node', usedNodeIds)
-    );
-  }
-
-  const topLevelPositions = rawNodes
-    .filter((node) => {
-      const parentId = node.parentId;
-      return !(typeof parentId === 'string' && nodeIdMap.has(parentId));
-    })
-    .map((node) => readCanvasPoint(node.position));
-  const minX =
-    topLevelPositions.length > 0
-      ? Math.min(...topLevelPositions.map((point) => point.x))
-      : 0;
-  const minY =
-    topLevelPositions.length > 0
-      ? Math.min(...topLevelPositions.map((point) => point.y))
-      : 0;
-  const offset = { x: anchorCenter.x - minX, y: anchorCenter.y - minY };
-
-  const nodes = rawNodes.map((node) => {
-    const {
-      data: rawData,
-      extent,
-      id,
-      parentId: rawParentId,
-      position: rawPosition,
-      ...rest
-    } = node;
-    const nextParentId =
-      typeof rawParentId === 'string' ? nodeIdMap.get(rawParentId) : undefined;
-    const position = readCanvasPoint(rawPosition);
-    const nextPosition = nextParentId
-      ? position
-      : { x: position.x + offset.x, y: position.y + offset.y };
-
-    return {
-      ...rest,
-      id: nodeIdMap.get(id as string) as string,
-      position: nextPosition,
-      data: remapImportedWidgetData(node.type, rawData, widgetIdMap),
-      selected: true,
-      ...(nextParentId
-        ? { parentId: nextParentId, extent: extent ?? 'parent' }
-        : {}),
-    } as Node;
-  });
-
-  const edges = document_.edges.flatMap((rawEdge) => {
-    if (
-      !(
-        isRecord(rawEdge) &&
-        typeof rawEdge.source === 'string' &&
-        typeof rawEdge.target === 'string'
-      )
-    ) {
-      return [];
-    }
-    const source = nodeIdMap.get(rawEdge.source);
-    const target = nodeIdMap.get(rawEdge.target);
-    if (!(source && target)) {
-      return [];
-    }
-    return [
-      {
-        ...rawEdge,
-        id: uniqueImportedId('import-edge', usedEdgeIds),
-        source,
-        target,
-        selected: false,
-      } as Edge,
-    ];
-  });
-
-  return { edges, nodes: sortNodesByParent(nodes) };
 }
 
 export const Route = createFileRoute('/')({
@@ -621,7 +425,8 @@ function CanvasComponent() {
       anchorCenter: { x: number; y: number }
     ) => {
       const widgetIdMap = new Map<string, string>();
-      for (const widgetId of collectWidgetIdsFromCanvasExport(document_)) {
+      const allWidgetIds = collectWidgetIdsFromCanvasExport(document_);
+      for (const widgetId of allWidgetIds) {
         const sourceWidget = document_.widgets?.[widgetId];
         if (!sourceWidget) {
           continue;
@@ -654,6 +459,8 @@ function CanvasComponent() {
         widgetIdMap.set(widgetId, createdWidget.id);
       }
 
+      const skippedWidgetCount = allWidgetIds.length - widgetIdMap.size;
+
       const state = useCanvasStore.getState();
       const imported = buildImportedCanvasPayload(
         document_,
@@ -675,7 +482,13 @@ function CanvasComponent() {
         ])
       );
       state.setEdges((prev) => [...prev, ...imported.edges]);
-      toast.success('Canvas JSON imported.');
+      if (skippedWidgetCount > 0) {
+        toast.warning(
+          `Skipped ${skippedWidgetCount} widget(s) that could not be imported.`
+        );
+      } else {
+        toast.success('Canvas JSON imported.');
+      }
     },
     [createWidgetRecord, saveWidgetNow, updateWidgetRecord]
   );

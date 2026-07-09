@@ -326,4 +326,57 @@ describe('widgetStore', () => {
       })
     );
   });
+
+  it('saveWidgetNow serializes concurrent saves for the same widget', async () => {
+    // Use real timers for this test so promise resolution order is observable.
+    vi.useRealTimers();
+    useWidgetStore.setState({ records: {}, history: {} });
+
+    const first = checklistRecord({ id: 'widget_race', title: 'First' });
+    useWidgetStore.setState({ records: { widget_race: first } });
+
+    // First save resolves slowly; second save is scheduled while the first is
+    // still in flight. The chain must run them in submission order so a slower
+    // earlier save can never overwrite the latest snapshot on disk.
+    let resolveFirst: (value: { success: boolean }) => void = () => {};
+    const firstPromise = new Promise<{ success: boolean }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    rpcSaveWidgetMock.mockReset();
+    const saveOrder: string[] = [];
+    rpcSaveWidgetMock.mockImplementationOnce(async (record: WidgetRecord) => {
+      saveOrder.push(record.title);
+      return firstPromise;
+    });
+    rpcSaveWidgetMock.mockImplementationOnce(async (record: WidgetRecord) => {
+      saveOrder.push(record.title);
+      return { success: true };
+    });
+
+    // Kick off the first save with the "First" snapshot.
+    const firstSaveP = useWidgetStore.getState().saveWidgetNow('widget_race');
+
+    // While the first save is still in flight, update the record to "Second"
+    // and kick off a second save. Without serialization the faster second RPC
+    // could finish before the first and then be overwritten by it on disk.
+    const second = { ...first, title: 'Second' };
+    useWidgetStore.setState({ records: { widget_race: second } });
+    const secondSaveP = useWidgetStore.getState().saveWidgetNow('widget_race');
+
+    // Let the first save's RPC start; the second must be queued behind it.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(saveOrder).toEqual(['First']);
+    expect(rpcSaveWidgetMock).toHaveBeenCalledTimes(1);
+
+    resolveFirst({ success: true });
+    await Promise.all([firstSaveP, secondSaveP]);
+
+    // Both saves ran, in submission order: First then Second.
+    expect(saveOrder).toEqual(['First', 'Second']);
+    expect(rpcSaveWidgetMock).toHaveBeenCalledTimes(2);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T12:00:00.000Z'));
+  });
 });

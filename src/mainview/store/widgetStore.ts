@@ -49,6 +49,12 @@ export interface WidgetStoreState {
 // UI state, just in-flight scheduling bookkeeping.
 const pendingSaves = new Map<string, PendingSave>();
 
+// Per-widget save promise chains. Serializing saves per widgetId guarantees
+// that overlapping saveWidgetNow calls (e.g. hydrate auto-complete racing a
+// user edit) apply to disk in submission order, so a slower earlier save can
+// never overwrite a faster later one (silent data loss on next reload).
+const saveChains = new Map<string, Promise<void>>();
+
 function scheduleSave(widgetId: string, save: () => Promise<void>): void {
   const existing = pendingSaves.get(widgetId);
   if (existing) {
@@ -259,13 +265,27 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       clearTimeout(pending.timer);
       pendingSaves.delete(widgetId);
     }
+    // Capture the record snapshot now so every queued save writes the version
+    // that was current when it was scheduled, and chain it behind any in-flight
+    // save for the same widgetId to preserve submission order on disk.
     const record = get().records[widgetId];
     if (!record || isWidgetLoadError(record)) {
       return;
     }
-    const result = await rpcSaveWidget(record);
-    if (!result.success) {
-      console.error(`[widgetStore] saveWidget failed for ${widgetId}`);
-    }
+    const doSave = async () => {
+      const result = await rpcSaveWidget(record);
+      if (!result.success) {
+        console.error(`[widgetStore] saveWidget failed for ${widgetId}`);
+      }
+    };
+    const previous = saveChains.get(widgetId) ?? Promise.resolve();
+    const chained = previous.then(doSave, doSave);
+    saveChains.set(widgetId, chained);
+    chained.finally(() => {
+      if (saveChains.get(widgetId) === chained) {
+        saveChains.delete(widgetId);
+      }
+    });
+    await chained;
   },
 }));

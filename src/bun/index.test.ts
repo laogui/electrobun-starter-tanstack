@@ -1585,6 +1585,116 @@ describe('src/bun/index helpers', () => {
     expect(String(indexCall?.[1])).toContain('Widget Checklist');
   });
 
+  it('exportNotesMarkdown (view) skips non-checklist widgets without counting as failure', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    openFileDialogMock.mockResolvedValueOnce(['/tmp/exports']);
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'widget-checklist',
+          type: 'widget',
+          position: { x: 10, y: 20 },
+          data: { widgetId: 'widget_chk', kind: 'checklist' },
+        },
+        {
+          id: 'widget-pomodoro',
+          type: 'widget',
+          position: { x: 100, y: 20 },
+          data: { widgetId: 'widget_pomo', kind: 'pomodoro' },
+        },
+        {
+          id: 'widget-reminder',
+          type: 'widget',
+          position: { x: 200, y: 20 },
+          data: { widgetId: 'widget_rem', kind: 'reminder' },
+        },
+      ],
+      edges: [],
+    });
+    bunFileMock.mockImplementation((path: string) => {
+      if (path.endsWith('/.ghostboard/widgets/widget_chk.json')) {
+        return {
+          exists: vi.fn().mockResolvedValue(true),
+          json: vi.fn().mockResolvedValue({
+            schema: 'ghostboard-widget/v1',
+            id: 'widget_chk',
+            kind: 'checklist',
+            title: 'Widget Checklist',
+            createdAt: '2026-07-08T00:00:00.000Z',
+            updatedAt: '2026-07-08T00:00:00.000Z',
+            data: { items: [] },
+          }),
+          size: 50,
+        };
+      }
+      if (path.endsWith('/.ghostboard/widgets/widget_pomo.json')) {
+        return {
+          exists: vi.fn().mockResolvedValue(true),
+          json: vi.fn().mockResolvedValue({
+            schema: 'ghostboard-widget/v1',
+            id: 'widget_pomo',
+            kind: 'pomodoro',
+            title: 'Timer',
+            createdAt: '2026-07-08T00:00:00.000Z',
+            updatedAt: '2026-07-08T00:00:00.000Z',
+            data: {
+              mode: 'focus',
+              focusMinutes: 25,
+              shortBreakMinutes: 5,
+              longBreakMinutes: 15,
+              sessionsBeforeLongBreak: 4,
+              completedSessions: 0,
+              timer: { state: 'idle' },
+            },
+          }),
+          size: 50,
+        };
+      }
+      if (path.endsWith('/.ghostboard/widgets/widget_rem.json')) {
+        return {
+          exists: vi.fn().mockResolvedValue(true),
+          json: vi.fn().mockResolvedValue({
+            schema: 'ghostboard-widget/v1',
+            id: 'widget_rem',
+            kind: 'reminder',
+            title: 'Reminder',
+            createdAt: '2026-07-08T00:00:00.000Z',
+            updatedAt: '2026-07-08T00:00:00.000Z',
+            data: {
+              dueAt: '2026-07-10T00:00:00.000Z',
+              status: 'scheduled',
+              timezone: 'UTC',
+            },
+          }),
+          size: 50,
+        };
+      }
+      return { exists: vi.fn().mockResolvedValue(false), size: 0 };
+    });
+
+    const result = (await canvasHandlers.exportNotesMarkdown({
+      scope: 'view',
+      viewId: 'default',
+      includeFrontmatter: false,
+    })) as { success: boolean; exported?: number; failed?: number };
+
+    expect(result.success).toBe(true);
+    // Only the checklist widget is exported; pomodoro/reminder are skipped, not failed.
+    expect(result.exported).toBe(1);
+    expect(result.failed).toBe(0);
+    const indexCall = bunWriteMock.mock.calls.find((call: unknown[]) =>
+      String(call[0]).endsWith('/index.md')
+    );
+    const indexBody = String(indexCall?.[1]);
+    expect(indexBody).toContain('Widget Checklist');
+    // The skipped widgets must not appear as failures in the export index.
+    expect(indexBody).not.toContain('unsupported widget kind');
+    expect(indexBody).not.toContain('non-markdown widget kind');
+  });
+
   it('exportNoteMarkdown refuses a corrupted sidecar instead of writing an empty file', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -2418,6 +2528,98 @@ describe('src/bun/index helpers', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Failed to migrate checklist noteId=note_fail'),
       expect.any(Error)
+    );
+  });
+
+  it('loadCanvas overwrites a corrupted deterministic widget file during migration', async () => {
+    await loadIndexModule();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'checklist-card-1',
+          type: 'card',
+          position: { x: 10, y: 20 },
+          data: {
+            noteId: 'note_corruptmig',
+            file: 'content/note_corruptmig.md',
+            type: 'checklist',
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_corruptmig',
+          {
+            noteId: 'note_corruptmig',
+            hasSidecar: false,
+            markdownFile: 'content/note_corruptmig.md',
+          },
+        ],
+      ])
+    );
+    noteStoreMocks.loadNoteRecord.mockResolvedValueOnce({
+      noteId: 'note_corruptmig',
+      source: 'markdown',
+      title: 'Recovered Checklist',
+      displayHint: 'checklist',
+      color: '',
+      revision: 0,
+      blocks: null,
+      preview: null,
+      corrupted: false,
+    });
+    noteStoreMocks.noteRecordToCardData.mockReturnValueOnce({
+      type: 'checklist',
+      title: 'Recovered Checklist',
+      items: [{ text: 'Recovered item', checked: false }],
+      file: 'content/note_corruptmig.md',
+    });
+    // The deterministic widget file already exists but holds corrupted data, so
+    // loadWidget reports it as corrupted. Migration must overwrite it instead of
+    // aborting.
+    bunFileMock.mockImplementation((path: string) => {
+      if (path.endsWith('/.ghostboard/widgets/widget_corruptmig.json')) {
+        return {
+          exists: vi.fn().mockResolvedValue(true),
+          json: vi.fn().mockResolvedValue({ broken: true }),
+          size: 10,
+        };
+      }
+      return { exists: vi.fn().mockResolvedValue(false), size: 0 };
+    });
+
+    const result = (await canvasHandlers.loadCanvas({
+      viewId: 'default',
+    })) as {
+      nodes: Record<string, any>[];
+      widgets?: Record<string, any>;
+    };
+
+    // Migration succeeded: the card became a widget node referencing the rebuilt file.
+    expect(result.nodes[0]).toMatchObject({
+      id: 'checklist-card-1',
+      type: 'widget',
+      data: { widgetId: 'widget_corruptmig', kind: 'checklist' },
+    });
+    expect(result.widgets?.widget_corruptmig).toMatchObject({
+      id: 'widget_corruptmig',
+      kind: 'checklist',
+      title: 'Recovered Checklist',
+    });
+    // The corrupted file was overwritten via atomicWrite.
+    const widgetWriteCall = atomicWriteMock.mock.calls.find((call) =>
+      String(call[0]).endsWith('/.ghostboard/widgets/widget_corruptmig.json')
+    );
+    expect(widgetWriteCall).toBeDefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Overwriting corrupted widget')
     );
   });
 

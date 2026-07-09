@@ -11,6 +11,92 @@ const WIDGET_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 export type WidgetKind = 'checklist' | 'pomodoro' | 'reminder';
 
+const WIDGET_KINDS: ReadonlySet<WidgetKind> = new Set<WidgetKind>([
+  'checklist',
+  'pomodoro',
+  'reminder',
+]);
+
+function isWidgetKind(value: unknown): value is WidgetKind {
+  return typeof value === 'string' && WIDGET_KINDS.has(value as WidgetKind);
+}
+
+function isStringRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Validate the shape of a widget record. Used by both load and save so a
+ * partially corrupt or adversarial payload can never round-trip as a
+ * "successful" record that later crashes the renderer (e.g. `data.items.map`
+ * on a non-array). Returns a {@link WidgetLoadError} when validation fails so
+ * the caller can surface the broken-widget fallback UI.
+ */
+export function parseWidgetRecord(
+  input: unknown
+): WidgetRecord | WidgetLoadError {
+  if (!isStringRecord(input)) {
+    return { id: 'unknown', error: 'corrupted' };
+  }
+  if (input.schema !== WIDGET_SCHEMA) {
+    return { id: 'unknown', error: 'corrupted' };
+  }
+  const id = input.id;
+  if (typeof id !== 'string' || !isValidWidgetId(id)) {
+    return { id: 'unknown', error: 'corrupted' };
+  }
+  if (!isWidgetKind(input.kind)) {
+    return { id, error: 'corrupted' };
+  }
+  if (typeof input.title !== 'string') {
+    return { id, error: 'corrupted' };
+  }
+  if (
+    typeof input.createdAt !== 'string' ||
+    typeof input.updatedAt !== 'string'
+  ) {
+    return { id, error: 'corrupted' };
+  }
+  const data = input.data;
+  if (!isStringRecord(data)) {
+    return { id, error: 'corrupted' };
+  }
+
+  const kind = input.kind;
+  if (kind === 'checklist') {
+    if (!Array.isArray(data.items)) {
+      return { id, error: 'corrupted' };
+    }
+  } else if (kind === 'pomodoro') {
+    if (
+      !(
+        isFiniteNumber(data.focusMinutes) &&
+        isFiniteNumber(data.shortBreakMinutes) &&
+        isFiniteNumber(data.longBreakMinutes) &&
+        isFiniteNumber(data.sessionsBeforeLongBreak) &&
+        isFiniteNumber(data.completedSessions) &&
+        isStringRecord(data.timer)
+      ) ||
+      typeof data.timer.state !== 'string'
+    ) {
+      return { id, error: 'corrupted' };
+    }
+  } else if (
+    kind === 'reminder' &&
+    (typeof data.dueAt !== 'string' ||
+      typeof data.timezone !== 'string' ||
+      typeof data.status !== 'string')
+  ) {
+    return { id, error: 'corrupted' };
+  }
+
+  return input as unknown as WidgetRecord;
+}
+
 export interface ChecklistWidgetItem {
   checked: boolean;
   completedAt?: string;
@@ -192,17 +278,12 @@ export async function loadWidget(
     return { id: widgetId, error: 'missing' };
   }
   try {
-    const parsed = (await file.json()) as Partial<WidgetRecord>;
-    if (
-      parsed.schema !== WIDGET_SCHEMA ||
-      typeof parsed.id !== 'string' ||
-      typeof parsed.kind !== 'string' ||
-      typeof parsed.data !== 'object' ||
-      parsed.data === null
-    ) {
+    const parsed = await file.json();
+    const result = parseWidgetRecord(parsed);
+    if ('error' in result) {
       return { id: widgetId, error: 'corrupted' };
     }
-    return parsed as WidgetRecord;
+    return result;
   } catch {
     return { id: widgetId, error: 'corrupted' };
   }
@@ -220,14 +301,20 @@ export async function loadWidgets(
   return Object.fromEntries(results);
 }
 
-/** Atomically write the widget JSON file. */
+/** Atomically write the widget JSON file. Throws when the record is invalid. */
 export async function saveWidget(
   wsPath: string,
   widget: WidgetRecord
 ): Promise<void> {
-  const relativePath = widgetRelativePath(widget.id);
+  const validated = parseWidgetRecord(widget);
+  if ('error' in validated) {
+    throw new Error(
+      `Refusing to save invalid widget record: ${validated.error}`
+    );
+  }
+  const relativePath = widgetRelativePath(validated.id);
   const fullPath = assertWorkspaceWidgetPath(wsPath, relativePath);
-  const serialized = JSON.stringify(widget, null, 2);
+  const serialized = JSON.stringify(validated, null, 2);
   await atomicWrite(fullPath, serialized);
 }
 

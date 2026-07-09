@@ -647,6 +647,109 @@ describe('canvasStore — clipboard', () => {
     });
   });
 
+  it('duplicateSelected clones widget backing records inside folder children', async () => {
+    cloneWidgetMock
+      .mockResolvedValueOnce(makeWidgetRecord('widget_child1_clone'))
+      .mockResolvedValueOnce(makeWidgetRecord('widget_child2_clone'));
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder-node', {
+          type: 'folder',
+          selected: true,
+          data: {
+            title: 'Folder',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-1',
+                type: 'widget',
+                data: { widgetId: 'widget_child1', kind: 'checklist' },
+              },
+              {
+                id: 'child-2',
+                type: 'widget',
+                data: { widgetId: 'widget_child2', kind: 'checklist' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    await useCanvasStore.getState().duplicateSelected();
+
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_child1');
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_child2');
+    const folders = useCanvasStore
+      .getState()
+      .nodes.filter((node) => node.type === 'folder');
+    expect(folders).toHaveLength(2);
+    const cloneFolder = folders.find((n) => n.id !== 'folder-node')!;
+    const cloneChildren = cloneFolder.data.children as Array<{
+      type: string;
+      data: { widgetId: string };
+    }>;
+    const cloneWidgetIds = cloneChildren
+      .filter((c) => c.type === 'widget')
+      .map((c) => c.data.widgetId)
+      .sort();
+    expect(cloneWidgetIds).toEqual([
+      'widget_child1_clone',
+      'widget_child2_clone',
+    ]);
+  });
+
+  it('pasteClipboard clones widget backing records inside folder children', async () => {
+    cloneWidgetMock
+      .mockResolvedValueOnce(makeWidgetRecord('widget_child1_clone'))
+      .mockResolvedValueOnce(makeWidgetRecord('widget_child2_clone'));
+    useCanvasStore.setState({
+      nodes: [],
+      clipboard: [
+        makeNode('folder-node', {
+          type: 'folder',
+          data: {
+            title: 'Folder',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-1',
+                type: 'widget',
+                data: { widgetId: 'widget_child1', kind: 'checklist' },
+              },
+              {
+                id: 'child-2',
+                type: 'widget',
+                data: { widgetId: 'widget_child2', kind: 'checklist' },
+              },
+            ],
+          },
+        }),
+      ],
+      clipboardEdges: [],
+    });
+
+    await useCanvasStore.getState().pasteClipboard();
+
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_child1');
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_child2');
+    const pastedFolder = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.type === 'folder');
+    const pastedChildren = pastedFolder?.data.children as Array<{
+      type: string;
+      data: { widgetId: string };
+    }>;
+    const pastedWidgetIds = pastedChildren
+      .filter((c) => c.type === 'widget')
+      .map((c) => c.data.widgetId)
+      .sort();
+    expect(pastedWidgetIds).toEqual([
+      'widget_child1_clone',
+      'widget_child2_clone',
+    ]);
+  });
+
   it('cutSelected copies selected nodes then deletes them from the canvas', () => {
     useCanvasStore.setState({
       nodes: [

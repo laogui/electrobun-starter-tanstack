@@ -629,6 +629,119 @@ async function migrateChecklistCardToWidgetReference(
   }
 }
 
+type FolderChildNode = {
+  data?: Record<string, unknown>;
+  id: string;
+  noteId?: string;
+  type?: string;
+  [key: string]: unknown;
+};
+
+function widgetReferenceFromData(
+  data: Record<string, unknown> | undefined
+): { kind: string; widgetId: string } | null {
+  if (!data) {
+    return null;
+  }
+  const widgetId = data.widgetId;
+  const kind = data.kind;
+  if (typeof widgetId !== 'string' || !widgetId) {
+    return null;
+  }
+  if (typeof kind !== 'string' || !kind) {
+    return null;
+  }
+  return { widgetId, kind };
+}
+
+/**
+ * Persist checklist→widget migration by patching only the nodes/children that
+ * actually became widgets. Start from the on-disk manifest shape so hydrated
+ * card bodies, attachment runtime fields, and preview URLs never get written
+ * back into `views/*.canvas.json`.
+ */
+function buildManifestNodesAfterWidgetMigration(
+  originalNodes: ManifestNode[],
+  hydratedNodes: ManifestNode[]
+): ManifestNode[] {
+  const hydratedById = new Map(
+    hydratedNodes.map((node) => [node.id, node] as const)
+  );
+
+  return originalNodes.map((node) => {
+    const hydrated = hydratedById.get(node.id);
+    if (!hydrated) {
+      return node;
+    }
+
+    // Top-level legacy card (or other non-widget) → widget reference.
+    if (node.type !== 'widget' && hydrated.type === 'widget') {
+      const ref = widgetReferenceFromData(
+        hydrated.data as Record<string, unknown>
+      );
+      if (!ref) {
+        return node;
+      }
+      return {
+        ...node,
+        type: 'widget',
+        data: ref,
+      };
+    }
+
+    // Folder: rewrite only children that migrated to widgets; keep every other
+    // child exactly as stored on disk (no hydrated card/attachment payload).
+    if (node.type === 'folder' && hydrated.type === 'folder') {
+      const originalChildren = (node.data.children ?? []) as FolderChildNode[];
+      if (!Array.isArray(originalChildren) || originalChildren.length === 0) {
+        return node;
+      }
+      const hydratedChildren = ((hydrated.data as Record<string, unknown>)
+        .children ?? []) as FolderChildNode[];
+      const hydratedChildById = new Map(
+        hydratedChildren
+          .filter((child) => typeof child?.id === 'string')
+          .map((child) => [child.id, child] as const)
+      );
+
+      let changed = false;
+      const nextChildren = originalChildren.map((child) => {
+        if (child.type === 'widget') {
+          return child;
+        }
+        const hydratedChild = hydratedChildById.get(child.id);
+        if (!hydratedChild || hydratedChild.type !== 'widget') {
+          return child;
+        }
+        const ref = widgetReferenceFromData(hydratedChild.data);
+        if (!ref) {
+          return child;
+        }
+        changed = true;
+        return {
+          id: child.id,
+          type: 'widget',
+          data: ref,
+        };
+      });
+
+      if (!changed) {
+        return node;
+      }
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          children: nextChildren,
+        },
+      };
+    }
+
+    // Cards, images, assets, stickies, already-widget nodes: leave disk shape.
+    return node;
+  });
+}
+
 interface CanvasRPC {
   bun: {
     requests: {
@@ -1577,6 +1690,30 @@ async function main() {
             Object.keys(migratedWidgets).length > 0
               ? { ...(widgets ?? {}), ...migratedWidgets }
               : widgets;
+
+          // Persist the migration so the on-disk manifest matches the hydrated
+          // widget references. Without this, search and other loadManifest
+          // consumers still see legacy checklist cards, and a mid-session crash
+          // re-runs the migration on every load. Only rewrite when a migration
+          // actually occurred — and only patch migrated refs so hydrated
+          // runtime content never pollutes the canvas JSON.
+          if (Object.keys(migratedWidgets).length > 0) {
+            try {
+              const persistedNodes = buildManifestNodesAfterWidgetMigration(
+                manifest.nodes,
+                hydratedNodes
+              );
+              await writeManifest(wsPath, viewEntry.file, {
+                ...manifest,
+                nodes: persistedNodes,
+              });
+            } catch (error) {
+              console.warn(
+                '[persistence] Failed to persist checklist migration:',
+                error
+              );
+            }
+          }
 
           return {
             nodes: hydratedNodes,

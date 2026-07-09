@@ -437,7 +437,7 @@ function isWidgetRecord(
   return !!record && !('error' in record);
 }
 
-function collectWidgetIdsFromNodes(nodes: Node[]): string[] {
+export function collectWidgetIdsFromNodes(nodes: Node[]): string[] {
   const ids = new Set<string>();
   for (const node of nodes) {
     const data = (node.data ?? {}) as CanvasNodeData;

@@ -2456,6 +2456,298 @@ describe('src/bun/index helpers', () => {
         '/tmp/workspace/.ghostboard/widgets/widget_child456.json',
       ])
     );
+    // Migration is persisted to the manifest so search / future loads see
+    // widget references instead of legacy checklist cards.
+    expect(manifestMocks.saveManifest).toHaveBeenCalled();
+    const persistedCall = manifestMocks.saveManifest.mock.calls.find(
+      (call: unknown[]) => call[1] === 'views/default.canvas.json'
+    );
+    const persistedManifest = persistedCall?.[2] as {
+      nodes: Array<{ id: string; type: string; data: Record<string, unknown> }>;
+    };
+    expect(persistedManifest).toBeDefined();
+    const persistedTop = persistedManifest.nodes.find(
+      (n) => n.id === 'checklist-card-1'
+    );
+    expect(persistedTop?.type).toBe('widget');
+    expect(persistedTop?.data).toMatchObject({
+      widgetId: 'widget_abc123',
+      kind: 'checklist',
+    });
+    const persistedFolder = persistedManifest.nodes.find(
+      (n) => n.id === 'folder-1'
+    );
+    const persistedChild = (
+      persistedFolder?.data.children as Array<{
+        type: string;
+        data: Record<string, unknown>;
+      }>
+    )?.find((c) => c.type === 'widget');
+    expect(persistedChild?.data).toMatchObject({
+      widgetId: 'widget_child456',
+      kind: 'checklist',
+    });
+  });
+
+  it('loadCanvas migration persist keeps non-widget nodes in on-disk shape', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    manifestMocks.loadManifest.mockResolvedValueOnce({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'checklist-card-1',
+          type: 'card',
+          position: { x: 10, y: 20 },
+          data: {
+            noteId: 'note_mixcheck',
+            file: 'content/note_mixcheck.md',
+            type: 'checklist',
+          },
+        },
+        {
+          id: 'text-card-1',
+          type: 'card',
+          position: { x: 40, y: 50 },
+          data: {
+            noteId: 'note_mixtext',
+            file: 'content/note_mixtext.md',
+            type: 'text',
+          },
+        },
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 80, y: 90 },
+          data: {
+            imageFile: 'attachments/photo.png',
+            thumbnailFile: 'attachments/photo.thumb.png',
+          },
+        },
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Folder',
+            children: [
+              {
+                id: 'child-checklist-1',
+                noteId: 'note_mixchild',
+                type: 'card',
+                data: {
+                  noteId: 'note_mixchild',
+                  file: 'content/note_mixchild.md',
+                  type: 'checklist',
+                },
+              },
+              {
+                id: 'child-text-1',
+                noteId: 'note_mixchildtext',
+                type: 'card',
+                data: {
+                  noteId: 'note_mixchildtext',
+                  file: 'content/note_mixchildtext.md',
+                  type: 'text',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(
+      new Map([
+        [
+          'note_mixcheck',
+          {
+            noteId: 'note_mixcheck',
+            hasSidecar: false,
+            markdownFile: 'content/note_mixcheck.md',
+          },
+        ],
+        [
+          'note_mixtext',
+          {
+            noteId: 'note_mixtext',
+            hasSidecar: false,
+            markdownFile: 'content/note_mixtext.md',
+          },
+        ],
+        [
+          'note_mixchild',
+          {
+            noteId: 'note_mixchild',
+            hasSidecar: false,
+            markdownFile: 'content/note_mixchild.md',
+          },
+        ],
+        [
+          'note_mixchildtext',
+          {
+            noteId: 'note_mixchildtext',
+            hasSidecar: false,
+            markdownFile: 'content/note_mixchildtext.md',
+          },
+        ],
+      ])
+    );
+    noteStoreMocks.loadNoteRecord
+      .mockResolvedValueOnce({
+        noteId: 'note_mixcheck',
+        source: 'markdown',
+        title: 'Checklist',
+        displayHint: 'checklist',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      })
+      .mockResolvedValueOnce({
+        noteId: 'note_mixtext',
+        source: 'markdown',
+        title: 'Text note',
+        displayHint: 'note',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      })
+      .mockResolvedValueOnce({
+        noteId: 'note_mixchild',
+        source: 'markdown',
+        title: 'Child checklist',
+        displayHint: 'checklist',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      })
+      .mockResolvedValueOnce({
+        noteId: 'note_mixchildtext',
+        source: 'markdown',
+        title: 'Child text',
+        displayHint: 'note',
+        color: '',
+        revision: 0,
+        blocks: null,
+        preview: null,
+        corrupted: false,
+      });
+    noteStoreMocks.noteRecordToCardData
+      .mockReturnValueOnce({
+        type: 'checklist',
+        title: 'Checklist',
+        items: [{ text: 'Item', checked: false }],
+        file: 'content/note_mixcheck.md',
+      })
+      .mockReturnValueOnce({
+        type: 'text',
+        title: 'Text note',
+        content: 'hydrated body must not hit disk',
+        file: 'content/note_mixtext.md',
+      })
+      .mockReturnValueOnce({
+        type: 'checklist',
+        title: 'Child checklist',
+        items: [{ text: 'Child item', checked: false }],
+        file: 'content/note_mixchild.md',
+      })
+      .mockReturnValueOnce({
+        type: 'text',
+        title: 'Child text',
+        content: 'hydrated child body must not hit disk',
+        file: 'content/note_mixchildtext.md',
+      });
+
+    await canvasHandlers.loadCanvas({ viewId: 'default' });
+
+    expect(manifestMocks.saveManifest).toHaveBeenCalled();
+    const persistedCall = manifestMocks.saveManifest.mock.calls.find(
+      (call: unknown[]) => call[1] === 'views/default.canvas.json'
+    );
+    const persistedManifest = persistedCall?.[2] as {
+      nodes: Array<{
+        data: Record<string, unknown>;
+        id: string;
+        type: string;
+      }>;
+    };
+    expect(persistedManifest).toBeDefined();
+
+    const persistedChecklist = persistedManifest.nodes.find(
+      (n) => n.id === 'checklist-card-1'
+    );
+    expect(persistedChecklist).toMatchObject({
+      type: 'widget',
+      data: { widgetId: 'widget_mixcheck', kind: 'checklist' },
+    });
+    expect(persistedChecklist?.data).not.toHaveProperty('items');
+    expect(persistedChecklist?.data).not.toHaveProperty('title');
+
+    const persistedText = persistedManifest.nodes.find(
+      (n) => n.id === 'text-card-1'
+    );
+    expect(persistedText).toEqual({
+      id: 'text-card-1',
+      type: 'card',
+      position: { x: 40, y: 50 },
+      data: {
+        noteId: 'note_mixtext',
+        file: 'content/note_mixtext.md',
+        type: 'text',
+      },
+    });
+    expect(persistedText?.data).not.toHaveProperty('content');
+    expect(persistedText?.data).not.toHaveProperty('title');
+
+    const persistedImage = persistedManifest.nodes.find(
+      (n) => n.id === 'image-1'
+    );
+    expect(persistedImage).toEqual({
+      id: 'image-1',
+      type: 'image',
+      position: { x: 80, y: 90 },
+      data: {
+        imageFile: 'attachments/photo.png',
+        thumbnailFile: 'attachments/photo.thumb.png',
+      },
+    });
+    expect(persistedImage?.data).not.toHaveProperty('imageUrl');
+    expect(persistedImage?.data).not.toHaveProperty('thumbnailUrl');
+
+    const persistedFolder = persistedManifest.nodes.find(
+      (n) => n.id === 'folder-1'
+    );
+    const children = persistedFolder?.data.children as Array<{
+      data: Record<string, unknown>;
+      id: string;
+      type: string;
+      noteId?: string;
+    }>;
+    expect(children).toEqual([
+      {
+        id: 'child-checklist-1',
+        type: 'widget',
+        data: { widgetId: 'widget_mixchild', kind: 'checklist' },
+      },
+      {
+        id: 'child-text-1',
+        noteId: 'note_mixchildtext',
+        type: 'card',
+        data: {
+          noteId: 'note_mixchildtext',
+          file: 'content/note_mixchildtext.md',
+          type: 'text',
+        },
+      },
+    ]);
+    expect(children[1]?.data).not.toHaveProperty('content');
   });
 
   it('loadCanvas keeps a hydrated checklist card when widget migration fails', async () => {

@@ -267,6 +267,7 @@ function PomodoroWidgetBody({
   onChange,
   readOnly = false,
   title,
+  widgetId,
 }: {
   data: PomodoroWidgetData;
   onChange?: (
@@ -274,11 +275,13 @@ function PomodoroWidgetBody({
   ) => void;
   readOnly?: boolean;
   title: string;
+  widgetId: string;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const remainingMs = remainingPomodoroMs(data, nowMs);
   const isRunning = data.timer.state === 'running';
   const isPaused = data.timer.state === 'paused';
+  const completePomodoroIfDue = useWidgetStore((s) => s.completePomodoroIfDue);
 
   useEffect(() => {
     if (!isRunning) {
@@ -292,16 +295,17 @@ function PomodoroWidgetBody({
     };
   }, [isRunning]);
 
+  // Auto-complete an expired running timer. The completion decision lives in
+  // the store action (guarded by `timer.state === 'running'`), so a repeated
+  // trigger from this effect (e.g. React Strict Mode double invocation) is a
+  // no-op rather than double-counting a session. Read-only previews must never
+  // mutate the live store or schedule a disk save.
   useEffect(() => {
-    if (!(isRunning && remainingMs === 0 && onChange)) {
+    if (readOnly || !(isRunning && remainingMs === 0)) {
       return;
     }
-    onChange((current) => ({
-      ...current,
-      completedSessions: current.completedSessions + 1,
-      timer: { state: 'idle' },
-    }));
-  }, [isRunning, onChange, remainingMs]);
+    completePomodoroIfDue(widgetId);
+  }, [readOnly, isRunning, remainingMs, widgetId, completePomodoroIfDue]);
 
   const modeLabel =
     data.mode === 'focus'
@@ -600,6 +604,7 @@ function WidgetNode({ id, data }: { data: WidgetNodeData; id: string }) {
               );
             }}
             title={record.title}
+            widgetId={data.widgetId}
           />
         ) : null}
         {record.kind === 'reminder' ? (
@@ -656,6 +661,7 @@ export function WidgetNodeReadOnly({ data }: { data: WidgetNodeData }) {
             data={record.data as PomodoroWidgetData}
             readOnly
             title={record.title}
+            widgetId={data.widgetId}
           />
         ) : null}
         {record.kind === 'reminder' ? (

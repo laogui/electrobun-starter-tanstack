@@ -68,6 +68,7 @@ import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
   type CanvasExportDocument,
+  collectWidgetIdsFromNodes,
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   sanitizeExportFileName,
@@ -1029,9 +1030,13 @@ function CanvasComponent() {
         }
         if (data) {
           hydrate(data.nodes, data.edges, data.viewport ?? null);
-          if (data.widgets) {
-            hydrateWidgets(data.widgets);
-          }
+          // Always hydrate (even when widgets is absent/empty) so switching to
+          // a canvas with zero widgets still prunes records from the previous
+          // view. Pass the referenced id set so unreferenced entries are dropped.
+          const referencedWidgetIds = new Set(
+            collectWidgetIdsFromNodes(data.nodes as unknown as Node[])
+          );
+          hydrateWidgets(data.widgets ?? {}, referencedWidgetIds);
         } else if (await isRpcAvailable()) {
           if (cancelled) {
             return;

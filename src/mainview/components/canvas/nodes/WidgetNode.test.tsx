@@ -209,4 +209,45 @@ describe('WidgetNode', () => {
       screen.queryByRole('button', { name: 'Mark reminder done' })
     ).not.toBeInTheDocument();
   });
+
+  it('does not auto-complete an expired pomodoro in read-only mode', async () => {
+    const { rpcSaveWidget } = await import('@/lib/rpc');
+    const rpcSaveWidgetMock = vi.mocked(rpcSaveWidget);
+    rpcSaveWidgetMock.mockClear();
+
+    // Bypass hydrate's auto-complete so we can mount an already-expired running
+    // timer in the store and assert the read-only surface leaves it alone.
+    useWidgetStore.setState({
+      history: {},
+      records: {
+        widget_pomodoro: pomodoroRecord({
+          completedSessions: 0,
+          timer: {
+            state: 'running',
+            startedAt: '2026-07-08T11:59:00.000Z',
+            durationMs: 60_000,
+          },
+        }),
+      },
+    });
+
+    render(
+      <WidgetNodeReadOnly
+        data={{ kind: 'pomodoro', widgetId: 'widget_pomodoro' }}
+      />
+    );
+
+    // remainingMs is 0 at system time 12:00 with startedAt 11:59 + 60s.
+    expect(screen.getByText('0:00')).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        completedSessions: 0,
+        timer: { state: 'running' },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(rpcSaveWidgetMock).not.toHaveBeenCalled();
+  });
 });

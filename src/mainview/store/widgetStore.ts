@@ -28,12 +28,16 @@ interface UpdateWidgetOptions {
 
 export interface WidgetStoreState {
   cloneWidget: (widgetId: string) => Promise<WidgetRecord | null>;
+  completePomodoroIfDue: (widgetId: string) => boolean;
   createWidget: (
     kind: WidgetKind,
     title?: string
   ) => Promise<WidgetRecord | null>;
   history: Record<string, WidgetHistoryEntry>;
-  hydrate: (records: Record<string, WidgetRecord | WidgetLoadError>) => void;
+  hydrate: (
+    records: Record<string, WidgetRecord | WidgetLoadError>,
+    referencedWidgetIds?: Set<string>
+  ) => void;
   records: Record<string, WidgetRecord | WidgetLoadError>;
   redoWidget: (widgetId: string) => void;
   saveWidgetNow: (widgetId: string) => Promise<void>;
@@ -132,7 +136,7 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
   records: {},
   history: {},
 
-  hydrate: (records) => {
+  hydrate: (records, referencedWidgetIds) => {
     const normalizedRecords = { ...records };
     const saveAfterHydrateIds: string[] = [];
     const dueReminderRecords: WidgetRecord[] = [];
@@ -157,8 +161,32 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       for (const id of Object.keys(normalizedRecords)) {
         delete nextHistory[id];
       }
+      // When the caller supplies the set of widget ids referenced by the
+      // current canvas, prune in-memory records that are neither referenced
+      // nor part of this hydration batch. This bounds memory growth as the
+      // user switches between views with disjoint widget sets.
+      let nextRecords = { ...s.records, ...normalizedRecords };
+      if (referencedWidgetIds) {
+        const incomingIds = new Set(Object.keys(normalizedRecords));
+        const kept: Record<string, WidgetRecord | WidgetLoadError> = {};
+        for (const [id, record] of Object.entries(nextRecords)) {
+          if (
+            referencedWidgetIds.has(id) ||
+            incomingIds.has(id) ||
+            // Keep records with in-flight or debounced writes so a view switch
+            // within the debounce window cannot drop unsaved edits (and cause
+            // saveWidgetNow to no-op on a missing record).
+            saveAfterHydrateIds.includes(id) ||
+            pendingSaves.has(id) ||
+            saveChains.has(id)
+          ) {
+            kept[id] = record;
+          }
+        }
+        nextRecords = kept;
+      }
       return {
-        records: { ...s.records, ...normalizedRecords },
+        records: nextRecords,
         // History is in-memory only; reloading starts fresh per hydrated id.
         history: nextHistory,
       };
@@ -194,6 +222,26 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       records: { ...s.records, [result.widget.id]: result.widget },
     }));
     return result.widget;
+  },
+
+  completePomodoroIfDue: (widgetId) => {
+    // Guarded completion: only transition a running, expired pomodoro to idle
+    // and increment the session count. Because the guard checks the live store
+    // state, a second invocation (e.g. React Strict Mode double effect) finds
+    // the timer already idle and is a no-op.
+    const current = get().records[widgetId];
+    if (
+      !current ||
+      isWidgetLoadError(current) ||
+      !isExpiredRunningPomodoro(current)
+    ) {
+      return false;
+    }
+    set((s) => ({
+      records: { ...s.records, [widgetId]: completeExpiredPomodoro(current) },
+    }));
+    scheduleSave(widgetId, () => get().saveWidgetNow(widgetId));
+    return true;
   },
 
   updateWidget: (widgetId, updater, options = {}) => {

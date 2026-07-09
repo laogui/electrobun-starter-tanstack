@@ -27,15 +27,18 @@ const PASTE_EDGE_ID_RE = /^paste-edge-/;
 const {
   loadCanvasMock,
   rpcDeleteNoteMock,
+  rpcDeleteWidgetMock,
   rpcSaveManifestMock,
   rpcSetActiveViewMock,
   isRpcAvailableMock,
   rpcCheckLicenseMock,
   getCachedLicenseMock,
   cloneWidgetMock,
+  createWidgetMock,
 } = vi.hoisted(() => ({
   loadCanvasMock: vi.fn(),
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
+  rpcDeleteWidgetMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcSetActiveViewMock: vi.fn(() => Promise.resolve({ success: true })),
   isRpcAvailableMock: vi.fn(() => Promise.resolve(true)),
@@ -46,11 +49,13 @@ const {
     () => { activated: boolean; email?: string } | null
   >(() => null),
   cloneWidgetMock: vi.fn(),
+  createWidgetMock: vi.fn(),
 }));
 
 vi.mock('@/lib/rpc', () => ({
   loadCanvas: loadCanvasMock,
   rpcDeleteNote: rpcDeleteNoteMock,
+  rpcDeleteWidget: rpcDeleteWidgetMock,
   rpcSaveManifest: rpcSaveManifestMock,
   rpcSetActiveView: rpcSetActiveViewMock,
   isRpcAvailable: isRpcAvailableMock,
@@ -66,6 +71,7 @@ vi.mock('@/store/widgetStore', () => ({
   useWidgetStore: {
     getState: () => ({
       cloneWidget: cloneWidgetMock,
+      createWidget: createWidgetMock,
     }),
   },
 }));
@@ -153,6 +159,7 @@ afterEach(() => {
   resetViewportPersistSuppression();
   vi.unstubAllGlobals();
   rpcDeleteNoteMock.mockClear();
+  rpcDeleteWidgetMock.mockClear();
   rpcCheckLicenseMock.mockReset();
   rpcCheckLicenseMock.mockResolvedValue({
     activated: true,
@@ -169,6 +176,8 @@ afterEach(() => {
   isRpcAvailableMock.mockResolvedValue(true);
   cloneWidgetMock.mockReset();
   cloneWidgetMock.mockResolvedValue(null);
+  createWidgetMock.mockReset();
+  createWidgetMock.mockResolvedValue(null);
 });
 
 describe('canvasStore — node operations', () => {
@@ -645,6 +654,54 @@ describe('canvasStore — clipboard', () => {
       widgetId: 'widget_source_clone',
       kind: 'checklist',
     });
+  });
+
+  it('duplicateSelected creates an independent widget when clone fails', async () => {
+    // cloneWidget fails; createWidget must produce an independent empty widget
+    // instead of the copy sharing the source widgetId.
+    cloneWidgetMock.mockResolvedValueOnce(null);
+    createWidgetMock.mockResolvedValueOnce(makeWidgetRecord('widget_fallback'));
+    useCanvasStore.setState({
+      nodes: [
+        {
+          ...makeWidgetNode('widget-node', 'widget_source'),
+          selected: true,
+        },
+      ],
+    });
+
+    await useCanvasStore.getState().duplicateSelected();
+
+    expect(cloneWidgetMock).toHaveBeenCalledWith('widget_source');
+    expect(createWidgetMock).toHaveBeenCalledWith('checklist');
+    const widgetIds = useCanvasStore
+      .getState()
+      .nodes.filter((node) => node.type === 'widget')
+      .map((node) => (node.data as Record<string, unknown>).widgetId);
+    // The copy must NOT reuse the source id.
+    expect(widgetIds).toEqual(['widget_source', 'widget_fallback']);
+  });
+
+  it('duplicateSelected drops the widget node when both clone and create fail', async () => {
+    cloneWidgetMock.mockResolvedValueOnce(null);
+    createWidgetMock.mockResolvedValueOnce(null);
+    useCanvasStore.setState({
+      nodes: [
+        {
+          ...makeWidgetNode('widget-node', 'widget_source'),
+          selected: true,
+        },
+      ],
+    });
+
+    await useCanvasStore.getState().duplicateSelected();
+
+    // The copy is dropped entirely rather than sharing the source id.
+    const widgetIds = useCanvasStore
+      .getState()
+      .nodes.filter((node) => node.type === 'widget')
+      .map((node) => (node.data as Record<string, unknown>).widgetId);
+    expect(widgetIds).toEqual(['widget_source']);
   });
 
   it('duplicateSelected clones widget backing records inside folder children', async () => {
@@ -1915,6 +1972,37 @@ describe('canvasStore — deleteFolderChild', () => {
 
     expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
   });
+
+  it('deletes the widget file for widget children', () => {
+    rpcDeleteWidgetMock.mockClear();
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-widget',
+                type: 'widget',
+                data: { widgetId: 'widget_folderchild', kind: 'checklist' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().deleteFolderChild('folder', 'child-widget');
+
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'folder')!;
+    expect(folder.data.children as unknown[]).toHaveLength(0);
+    expect(rpcDeleteWidgetMock).toHaveBeenCalledTimes(1);
+    expect(rpcDeleteWidgetMock).toHaveBeenCalledWith('widget_folderchild');
+  });
 });
 
 describe('canvasStore — deleteNodes (folder children notes)', () => {
@@ -2020,6 +2108,55 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
       },
     });
     expect(rpcDeleteNoteMock).not.toHaveBeenCalled();
+  });
+
+  it('deletes the widget file for removed top-level widget nodes', () => {
+    rpcDeleteWidgetMock.mockClear();
+    useCanvasStore.setState({
+      nodes: [
+        makeWidgetNode('widget-node', 'widget_toplevel'),
+        makeNode('card-keep'),
+      ],
+    });
+
+    useCanvasStore.getState().deleteNodes(['widget-node']);
+
+    const state = useCanvasStore.getState();
+    expect(state.nodes.find((n) => n.id === 'widget-node')).toBeUndefined();
+    expect(state.nodes.find((n) => n.id === 'card-keep')).toBeDefined();
+    expect(rpcDeleteWidgetMock).toHaveBeenCalledTimes(1);
+    expect(rpcDeleteWidgetMock).toHaveBeenCalledWith('widget_toplevel');
+  });
+
+  it('does not delete widget files when a folder with widget children is removed (children are detached)', () => {
+    rpcDeleteWidgetMock.mockClear();
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          data: {
+            title: '1 items',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-widget',
+                type: 'widget',
+                data: { widgetId: 'widget_detached', kind: 'checklist' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().deleteNodes(['folder']);
+
+    // The widget child is detached onto the canvas, so its file must survive.
+    const detached = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'child-widget');
+    expect(detached).toBeDefined();
+    expect(rpcDeleteWidgetMock).not.toHaveBeenCalled();
   });
 });
 

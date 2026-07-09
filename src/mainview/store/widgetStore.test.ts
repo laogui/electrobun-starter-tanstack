@@ -116,6 +116,82 @@ describe('widgetStore', () => {
     expect(rpcSaveWidgetMock).not.toHaveBeenCalled();
   });
 
+  it('hydrate prunes records not in the referenced set', () => {
+    // Pre-load two widgets from a previous view.
+    useWidgetStore.getState().hydrate({
+      widget_a: checklistRecord({ id: 'widget_a' }),
+      widget_b: checklistRecord({ id: 'widget_b' }),
+    });
+    expect(useWidgetStore.getState().records.widget_a).toBeDefined();
+    expect(useWidgetStore.getState().records.widget_b).toBeDefined();
+
+    // Switch to a view that only references widget_a; widget_b should be
+    // pruned from memory.
+    useWidgetStore
+      .getState()
+      .hydrate(
+        { widget_a: checklistRecord({ id: 'widget_a' }) },
+        new Set(['widget_a'])
+      );
+    expect(useWidgetStore.getState().records.widget_a).toBeDefined();
+    expect(useWidgetStore.getState().records.widget_b).toBeUndefined();
+  });
+
+  it('hydrate without a referenced set keeps existing records (backward compatible)', () => {
+    useWidgetStore.getState().hydrate({
+      widget_a: checklistRecord({ id: 'widget_a' }),
+    });
+    useWidgetStore.getState().hydrate({
+      widget_b: checklistRecord({ id: 'widget_b' }),
+    });
+    // No pruning when referencedWidgetIds is omitted.
+    expect(useWidgetStore.getState().records.widget_a).toBeDefined();
+    expect(useWidgetStore.getState().records.widget_b).toBeDefined();
+  });
+
+  it('hydrate with an empty widgets bag prunes unreferenced records', () => {
+    useWidgetStore.getState().hydrate({
+      widget_a: checklistRecord({ id: 'widget_a' }),
+      widget_b: checklistRecord({ id: 'widget_b' }),
+    });
+
+    // Switch to a canvas that references no widgets (widgets bag absent → {}).
+    useWidgetStore.getState().hydrate({}, new Set());
+
+    expect(useWidgetStore.getState().records.widget_a).toBeUndefined();
+    expect(useWidgetStore.getState().records.widget_b).toBeUndefined();
+  });
+
+  it('hydrate keeps records with a pending debounced save across view switch', async () => {
+    useWidgetStore.getState().hydrate({
+      widget_edit: checklistRecord({ id: 'widget_edit', title: 'Original' }),
+    });
+
+    useWidgetStore.getState().updateWidget('widget_edit', (current) => ({
+      ...current,
+      title: 'Unsaved edit',
+    }));
+    expect(useWidgetStore.getState().records.widget_edit).toMatchObject({
+      title: 'Unsaved edit',
+    });
+    expect(rpcSaveWidgetMock).not.toHaveBeenCalled();
+
+    // View switch before debounce fires must not drop the edited record, or the
+    // later save would no-op and silently lose the last edit.
+    useWidgetStore.getState().hydrate({}, new Set());
+    expect(useWidgetStore.getState().records.widget_edit).toMatchObject({
+      title: 'Unsaved edit',
+    });
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(rpcSaveWidgetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'widget_edit',
+        title: 'Unsaved edit',
+      })
+    );
+  });
+
   it('creates and clones widgets through RPC and stores successful records', async () => {
     const created = checklistRecord({ id: 'widget_created' });
     const cloned = checklistRecord({
@@ -325,6 +401,45 @@ describe('widgetStore', () => {
         data: expect.objectContaining({ status: 'missed' }),
       })
     );
+  });
+
+  it('completePomodoroIfDue increments once and is idempotent', async () => {
+    // Start with a running pomodoro that has already expired.
+    useWidgetStore.setState({
+      records: {
+        widget_pomodoro: pomodoroRecord(
+          {},
+          {
+            completedSessions: 1,
+            timer: {
+              state: 'running',
+              startedAt: '2026-07-08T11:20:00.000Z',
+              durationMs: 25 * 60 * 1000,
+            },
+          }
+        ),
+      },
+      history: {},
+    });
+
+    const first = useWidgetStore
+      .getState()
+      .completePomodoroIfDue('widget_pomodoro');
+    expect(first).toBe(true);
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: { completedSessions: 2, timer: { state: 'idle' } },
+    });
+
+    // A second invocation (e.g. Strict Mode double effect) must be a no-op.
+    const second = useWidgetStore
+      .getState()
+      .completePomodoroIfDue('widget_pomodoro');
+    expect(second).toBe(false);
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: { completedSessions: 2, timer: { state: 'idle' } },
+    });
+
+    await vi.advanceTimersByTimeAsync(400);
   });
 
   it('saveWidgetNow serializes concurrent saves for the same widget', async () => {

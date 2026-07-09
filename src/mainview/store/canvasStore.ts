@@ -34,6 +34,7 @@ import {
   isRpcAvailable,
   loadCanvas,
   rpcDeleteNote,
+  rpcDeleteWidget,
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
@@ -49,6 +50,7 @@ import {
   shouldPersistViewport,
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
+import type { WidgetKind } from '@/lib/widgetTypes';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -217,29 +219,42 @@ function graphContainsWidgetReference(nodes: Node[]): boolean {
 
 async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
   const { useWidgetStore } = await import('@/store/widgetStore');
-  const cloneWidget = useWidgetStore.getState().cloneWidget;
+  const { cloneWidget, createWidget } = useWidgetStore.getState();
 
-  async function cloneWidgetId(widgetId: unknown): Promise<string | null> {
+  async function cloneWidgetId(
+    widgetId: unknown,
+    fallbackKind: unknown
+  ): Promise<string | null> {
     if (typeof widgetId !== 'string' || !widgetId) {
       return null;
     }
     const record = await cloneWidget(widgetId);
-    if (!record) {
-      // Cloning failed: surface the data coupling so the user is not silently
-      // sharing a backing file between original and copy.
-      toast.error('Failed to clone a widget; copy shares the original.');
+    if (record) {
+      return record.id;
+    }
+    // Cloning the backing record failed. Rather than reuse the source id (which
+    // would silently couple the original and the copy to the same JSON file),
+    // create an independent empty widget of the same kind so the copy stands
+    // alone. If that also fails, signal the caller to drop the node.
+    const kind =
+      typeof fallbackKind === 'string'
+        ? (fallbackKind as WidgetKind)
+        : 'checklist';
+    const fallback = await createWidget(kind);
+    if (!fallback) {
+      toast.error('Failed to clone a widget; the copy was skipped.');
       return null;
     }
-    return record.id;
+    return fallback.id;
   }
 
-  return await Promise.all(
+  const results = await Promise.all(
     nodes.map(async (node) => {
       if (node.type === 'widget') {
         const data = node.data as Record<string, unknown>;
-        const clonedId = await cloneWidgetId(data.widgetId);
+        const clonedId = await cloneWidgetId(data.widgetId, data.kind);
         if (!clonedId) {
-          return node;
+          return null;
         }
         return {
           ...node,
@@ -262,9 +277,12 @@ async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
               return child;
             }
             const childData = child.data as Record<string, unknown> | undefined;
-            const clonedId = await cloneWidgetId(childData?.widgetId);
+            const clonedId = await cloneWidgetId(
+              childData?.widgetId,
+              childData?.kind
+            );
             if (!clonedId) {
-              return child;
+              return null;
             }
             return {
               ...child,
@@ -272,15 +290,18 @@ async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
             };
           })
         );
+        // Drop any folder children whose widget could not be materialized.
+        const filteredChildren = nextChildren.filter((c) => c !== null);
         return {
           ...node,
-          data: { ...data, children: nextChildren },
+          data: { ...data, children: filteredChildren },
         };
       }
 
       return node;
     })
   );
+  return results.filter((node): node is Node => node !== null);
 }
 
 function uniqueDetachedNodeId(
@@ -674,6 +695,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteFolderChild: (folderId, childId) => {
     const folder = get().nodes.find((n) => n.id === folderId);
     const existingChildren = ((folder?.data as any)?.children ?? []) as Array<{
+      data?: Record<string, unknown>;
       id: string;
       noteId?: string;
       type?: string;
@@ -708,6 +730,20 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         );
         toast.error('Failed to delete note file');
       });
+    }
+    // Widget children own a backing JSON file; delete it so disk does not
+    // accumulate orphan widget files until the next unlinked-file sweep.
+    if (removed?.type === 'widget') {
+      const removedWidgetId = removed.data?.widgetId as string | undefined;
+      if (removedWidgetId) {
+        rpcDeleteWidget(removedWidgetId).catch((error) => {
+          console.error(
+            '[canvasStore] Failed to delete folder child widget:',
+            error
+          );
+          toast.error('Failed to delete widget file');
+        });
+      }
     }
   },
 
@@ -1743,6 +1779,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   deleteNodes: (ids) => {
     const idSet = new Set(ids);
+    // Collect backing widget files for top-level widget nodes being removed.
+    // Folder children are detached (not deleted) when a folder is removed, so
+    // their widget files are intentionally left intact here.
+    const widgetIdsToDelete: string[] = [];
+    for (const node of get().nodes) {
+      if (idSet.has(node.id) && node.type === 'widget') {
+        const widgetId = (node.data as Record<string, unknown> | undefined)
+          ?.widgetId;
+        if (typeof widgetId === 'string' && widgetId) {
+          widgetIdsToDelete.push(widgetId);
+        }
+      }
+    }
     get().saveSnapshot();
     set((s) => {
       const usedNodeIds = new Set<string>();
@@ -1781,6 +1830,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ]),
       };
     });
+    // Fire-and-forget widget file cleanup for removed top-level widget nodes.
+    for (const widgetId of widgetIdsToDelete) {
+      rpcDeleteWidget(widgetId).catch((error) => {
+        console.error('[canvasStore] Failed to delete widget file:', error);
+        toast.error('Failed to delete widget file');
+      });
+    }
   },
 
   changeNodeColor: (nodeId) => {

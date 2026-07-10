@@ -1,13 +1,14 @@
 import {
   Bell,
   Check,
-  CheckCircle2,
-  Clock3,
+  Coffee,
+  Eye,
   ListChecks,
-  Pause,
-  Play,
+  Minus,
   Plus,
   RotateCcw,
+  Settings,
+  X,
 } from 'lucide-react';
 import { memo, type ReactNode, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -108,18 +109,21 @@ function reminderStatusLabel(status: ReminderWidgetData['status']): string {
 }
 
 function IconButton({
+  ariaLabel,
   children,
   className,
   onClick,
 }: {
+  ariaLabel: string;
   children: ReactNode;
   className?: string;
   onClick?: () => void;
 }) {
   return (
     <button
+      aria-label={ariaLabel}
       className={cn(
-        'nodrag nopan inline-flex size-9 items-center justify-center rounded-full border border-black/10 bg-white text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50',
+        'nodrag nopan inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white',
         className
       )}
       onClick={(event) => {
@@ -262,11 +266,274 @@ function ChecklistWidgetBody({
   );
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+type PomodoroDurationKey =
+  | 'focusMinutes'
+  | 'shortBreakMinutes'
+  | 'longBreakMinutes'
+  | 'sessionsBeforeLongBreak';
+
+interface PomodoroSettingRow {
+  key: PomodoroDurationKey;
+  label: string;
+  max: number;
+  min: number;
+  unit: string;
+}
+
+const POMODORO_SETTING_ROWS: PomodoroSettingRow[] = [
+  { key: 'focusMinutes', label: 'Focus session', unit: 'min', min: 1, max: 90 },
+  {
+    key: 'shortBreakMinutes',
+    label: 'Short break',
+    unit: 'min',
+    min: 1,
+    max: 60,
+  },
+  {
+    key: 'longBreakMinutes',
+    label: 'Long break',
+    unit: 'min',
+    min: 1,
+    max: 90,
+  },
+  {
+    key: 'sessionsBeforeLongBreak',
+    label: 'Long break after',
+    unit: 'sess.',
+    min: 1,
+    max: 12,
+  },
+];
+
+/** Maps the timer state to the label, a11y name, and store update for the
+ * single primary START / PAUSE / RESUME pill in the new design. */
+function pomodoroPrimaryAction(
+  state: PomodoroWidgetData['timer']['state'],
+  remainingMs: number
+): {
+  apply: (current: PomodoroWidgetData) => PomodoroWidgetData;
+  ariaLabel: string;
+  label: string;
+} {
+  switch (state) {
+    case 'idle':
+      return {
+        label: 'Start',
+        ariaLabel: 'Start timer',
+        apply: (current) => ({
+          ...current,
+          timer: {
+            state: 'running',
+            startedAt: new Date().toISOString(),
+            durationMs: durationForPomodoroMode(current),
+          },
+        }),
+      };
+    case 'running':
+      return {
+        label: 'Pause',
+        ariaLabel: 'Pause timer',
+        apply: (current) => ({
+          ...current,
+          timer: {
+            state: 'paused',
+            remainingMs: remainingPomodoroMs(current),
+          },
+        }),
+      };
+    case 'paused':
+      return {
+        label: 'Resume',
+        ariaLabel: 'Resume timer',
+        apply: (current) => {
+          const pausedRemaining =
+            current.timer.state === 'paused'
+              ? current.timer.remainingMs
+              : remainingMs;
+          return {
+            ...current,
+            timer: {
+              state: 'running',
+              startedAt: new Date().toISOString(),
+              durationMs: pausedRemaining,
+            },
+          };
+        },
+      };
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Circular countdown ring. `progress` is the elapsed fraction (0 → 1): the
+ * warm gradient arc grows clockwise from the top as time is spent. */
+function PomodoroRing({
+  gradientId,
+  progress,
+}: {
+  gradientId: string;
+  progress: number;
+}) {
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - clamp(progress, 0, 1));
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-full -rotate-90"
+      fill="none"
+      viewBox="0 0 120 120"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0%" x2="100%" y1="100%" y2="0%">
+          <stop offset="0%" stopColor="#f59e0b" />
+          <stop offset="55%" stopColor="#f97316" />
+          <stop offset="100%" stopColor="#ef4444" />
+        </linearGradient>
+      </defs>
+      <circle
+        className="stroke-black/[0.04] dark:stroke-white/[0.05]"
+        cx="60"
+        cy="60"
+        r="40"
+        strokeWidth="1"
+      />
+      <circle
+        className="stroke-black/[0.04] dark:stroke-white/[0.04]"
+        cx="60"
+        cy="60"
+        r="26"
+        strokeWidth="1"
+      />
+      <circle
+        className="stroke-neutral-200 dark:stroke-white/10"
+        cx="60"
+        cy="60"
+        r={radius}
+        strokeWidth="5"
+      />
+      <circle
+        className="drop-shadow-[0_0_6px_rgba(249,115,22,0.45)] transition-[stroke-dashoffset] duration-500 ease-linear"
+        cx="60"
+        cy="60"
+        r={radius}
+        stroke={`url(#${gradientId})`}
+        strokeDasharray={circumference}
+        strokeDashoffset={dashOffset}
+        strokeLinecap="round"
+        strokeWidth="5"
+      />
+    </svg>
+  );
+}
+
+function StepperButton({
+  ariaLabel,
+  children,
+  onClick,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="nodrag nopan inline-flex size-7 items-center justify-center rounded-full border border-black/10 bg-white text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function PomodoroSettingsPanel({
+  data,
+  onChange,
+  onClose,
+}: {
+  data: PomodoroWidgetData;
+  onChange: (updater: (data: PomodoroWidgetData) => PomodoroWidgetData) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="relative flex h-full flex-col">
+      <div className="relative mb-3 flex items-center justify-center">
+        <h3 className="font-semibold text-sm">Settings</h3>
+        <button
+          aria-label="Close settings"
+          className="nodrag nopan absolute right-0 inline-flex size-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-neutral-900 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          type="button"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col justify-center gap-0.5">
+        {POMODORO_SETTING_ROWS.map((row) => (
+          <div
+            className="flex items-center justify-between gap-2 rounded-2xl px-1 py-1.5"
+            key={row.key}
+          >
+            <span className="text-neutral-600 text-sm dark:text-white/70">
+              {row.label}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <StepperButton
+                ariaLabel={`Decrease ${row.label}`}
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    [row.key]: clamp(current[row.key] - 1, row.min, row.max),
+                  }))
+                }
+              >
+                <Minus className="size-3.5" />
+              </StepperButton>
+              <span className="w-14 text-center text-sm tabular-nums">
+                <span className="font-semibold">
+                  {data[row.key].toString().padStart(2, '0')}
+                </span>{' '}
+                <span className="text-2xs text-neutral-400 dark:text-white/40">
+                  {row.unit}
+                </span>
+              </span>
+              <StepperButton
+                ariaLabel={`Increase ${row.label}`}
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    [row.key]: clamp(current[row.key] + 1, row.min, row.max),
+                  }))
+                }
+              >
+                <Plus className="size-3.5" />
+              </StepperButton>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PomodoroWidgetBody({
   data,
   onChange,
   readOnly = false,
-  title,
   widgetId,
 }: {
   data: PomodoroWidgetData;
@@ -274,13 +541,14 @@ function PomodoroWidgetBody({
     updater: (data: PomodoroWidgetData) => PomodoroWidgetData
   ) => void;
   readOnly?: boolean;
-  title: string;
   widgetId: string;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showSettings, setShowSettings] = useState(false);
   const remainingMs = remainingPomodoroMs(data, nowMs);
+  const totalMs = durationForPomodoroMode(data);
+  const progress = totalMs > 0 ? 1 - remainingMs / totalMs : 0;
   const isRunning = data.timer.state === 'running';
-  const isPaused = data.timer.state === 'paused';
   const completePomodoroIfDue = useWidgetStore((s) => s.completePomodoroIfDue);
 
   useEffect(() => {
@@ -307,112 +575,93 @@ function PomodoroWidgetBody({
     completePomodoroIfDue(widgetId);
   }, [readOnly, isRunning, remainingMs, widgetId, completePomodoroIfDue]);
 
+  const isBreak = data.mode !== 'focus';
   const modeLabel =
     data.mode === 'focus'
       ? 'Focus'
       : data.mode === 'shortBreak'
         ? 'Short break'
         : 'Long break';
+  const ModeIcon = isBreak ? Coffee : Eye;
+
+  const sessionsPerCycle = Math.max(
+    1,
+    Math.round(data.sessionsBeforeLongBreak)
+  );
+  const completedInCycle = data.completedSessions % sessionsPerCycle;
+  const dotCount = Math.min(sessionsPerCycle, 8);
+
+  const primary = pomodoroPrimaryAction(data.timer.state, remainingMs);
+  const gradientId = `pomodoro-arc-${widgetId}`;
 
   return (
-    <div className="flex h-full flex-col p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate font-bold text-lg text-neutral-900">
-            {title}
-          </h2>
-          <div className="mt-1 text-neutral-500 text-xs">{modeLabel}</div>
-        </div>
-        <Clock3 className="size-5 shrink-0 text-neutral-400" />
-      </div>
-      <div className="flex flex-1 flex-col justify-center">
-        <div className="font-semibold text-5xl text-neutral-950 tabular-nums tracking-normal">
-          {formatDuration(remainingMs)}
-        </div>
-        <div className="mt-2 text-neutral-500 text-xs">
-          {data.completedSessions} completed
-        </div>
-      </div>
-      {readOnly ? null : (
-        <div className="mt-5 flex items-center gap-2">
-          {data.timer.state === 'idle' ? (
-            <IconButton
-              className="bg-neutral-950 text-white hover:bg-neutral-800"
-              onClick={() => {
-                onChange?.((current) => ({
-                  ...current,
-                  timer: {
-                    state: 'running',
-                    startedAt: new Date().toISOString(),
-                    durationMs: durationForPomodoroMode(current),
-                  },
-                }));
-              }}
-            >
-              <Play aria-label="Start timer" className="size-4" />
-            </IconButton>
-          ) : null}
-          {isRunning ? (
-            <IconButton
-              onClick={() => {
-                onChange?.((current) => ({
-                  ...current,
-                  timer: {
-                    state: 'paused',
-                    remainingMs: remainingPomodoroMs(current),
-                  },
-                }));
-              }}
-            >
-              <Pause aria-label="Pause timer" className="size-4" />
-            </IconButton>
-          ) : null}
-          {isPaused ? (
-            <IconButton
-              className="bg-neutral-950 text-white hover:bg-neutral-800"
-              onClick={() => {
-                onChange?.((current) => {
-                  const timer =
-                    current.timer.state === 'paused'
-                      ? current.timer
-                      : { state: 'paused' as const, remainingMs };
-                  return {
+    <div className="@container relative flex h-full flex-col overflow-hidden bg-white p-5 text-neutral-900 dark:bg-[#0b0b0d] dark:text-white dark:ring-1 dark:ring-white/[0.06] dark:ring-inset">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-3/4 bg-[radial-gradient(60%_55%_at_50%_32%,rgba(249,115,22,0.10),transparent_70%)] dark:bg-[radial-gradient(60%_55%_at_50%_32%,rgba(249,115,22,0.20),transparent_72%)]" />
+      {showSettings && !readOnly && onChange ? (
+        <PomodoroSettingsPanel
+          data={data}
+          onChange={onChange}
+          onClose={() => setShowSettings(false)}
+        />
+      ) : (
+        <div className="relative flex h-full flex-col">
+          <div className="relative grid min-h-0 flex-1 place-items-center">
+            <PomodoroRing gradientId={gradientId} progress={progress} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-center">
+              <ModeIcon className="size-4 text-neutral-400 dark:text-white/45" />
+              <div className="font-semibold text-[clamp(1.75rem,15cqw,3rem)] text-neutral-900 tabular-nums leading-none tracking-tight dark:text-white">
+                {formatDuration(remainingMs)}
+              </div>
+              <div aria-hidden="true" className="flex items-center gap-1">
+                {Array.from({ length: dotCount }, (_, index) => (
+                  <span
+                    className={cn(
+                      'h-2.5 w-1 rounded-full transition-colors',
+                      index < completedInCycle
+                        ? 'bg-gradient-to-b from-orange-400 to-red-500'
+                        : 'bg-neutral-200 dark:bg-white/15'
+                    )}
+                    key={index}
+                  />
+                ))}
+              </div>
+              <div className="text-2xs text-neutral-400 uppercase tracking-[0.22em] dark:text-white/40">
+                {modeLabel}
+              </div>
+            </div>
+          </div>
+          {readOnly ? null : (
+            <div className="mt-4 flex items-center gap-3">
+              <IconButton
+                ariaLabel="Reset timer"
+                onClick={() =>
+                  onChange?.((current) => ({
                     ...current,
-                    timer: {
-                      state: 'running',
-                      startedAt: new Date().toISOString(),
-                      durationMs: timer.remainingMs,
-                    },
-                  };
-                });
-              }}
-            >
-              <Play aria-label="Resume timer" className="size-4" />
-            </IconButton>
-          ) : null}
-          {data.timer.state !== 'idle' ? (
-            <IconButton
-              onClick={() => {
-                onChange?.((current) => ({
-                  ...current,
-                  timer: { state: 'idle' },
-                }));
-              }}
-            >
-              <RotateCcw aria-label="Reset timer" className="size-4" />
-            </IconButton>
-          ) : null}
-          <IconButton
-            onClick={() => {
-              onChange?.((current) => ({
-                ...current,
-                completedSessions: current.completedSessions + 1,
-                timer: { state: 'idle' },
-              }));
-            }}
-          >
-            <CheckCircle2 aria-label="Complete timer" className="size-4" />
-          </IconButton>
+                    timer: { state: 'idle' },
+                  }))
+                }
+              >
+                <RotateCcw className="size-4" />
+              </IconButton>
+              <button
+                aria-label={primary.ariaLabel}
+                className="nodrag nopan h-10 flex-1 rounded-full bg-neutral-900 font-medium text-sm text-white uppercase tracking-wide transition-colors hover:bg-neutral-800 dark:border dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onChange?.(primary.apply);
+                }}
+                type="button"
+              >
+                {primary.label}
+              </button>
+              <IconButton
+                ariaLabel="Timer settings"
+                onClick={() => setShowSettings(true)}
+              >
+                <Settings className="size-4" />
+              </IconButton>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -603,7 +852,6 @@ function WidgetNode({ id, data }: { data: WidgetNodeData; id: string }) {
                 { recordHistory: false }
               );
             }}
-            title={record.title}
             widgetId={data.widgetId}
           />
         ) : null}
@@ -660,7 +908,6 @@ export function WidgetNodeReadOnly({ data }: { data: WidgetNodeData }) {
           <PomodoroWidgetBody
             data={record.data as PomodoroWidgetData}
             readOnly
-            title={record.title}
             widgetId={data.widgetId}
           />
         ) : null}

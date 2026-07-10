@@ -368,6 +368,11 @@ function folderChildToDetachedNode(
 export interface CanvasState {
   // Hydration
   _hydrated: boolean;
+  /**
+   * Per-view session camera cache. Survives view switches within the process;
+   * cleared on full reset / app quit (never disk-backed).
+   */
+  _sessionViewports: Record<string, CanvasViewport>;
 
   // Undo / Redo
   _undoRedo: UndoRedoState;
@@ -477,6 +482,12 @@ export interface CanvasState {
   ) => Node | null;
   sendNodesBackward: (ids: string[]) => void;
   sendNodesToBack: (ids: string[]) => void;
+  /**
+   * User-confirmed camera for the active view. Session-only (in-memory):
+   * restored when re-entering a view in the same app session; cold start fits
+   * the canvas to the window instead. Never written to disk.
+   */
+  sessionViewport: CanvasViewport | null;
 
   /** Replace the entire active-tag-filters list. */
   setActiveTagFilters: (tags: string[]) => void;
@@ -511,12 +522,6 @@ export interface CanvasState {
 
   // In-window settings dialog
   settingsOpen: boolean;
-  /**
-   * User-confirmed camera for the active view. Session-only (in-memory):
-   * restored when re-entering a view in the same app session; cold start fits
-   * the canvas to the window instead. Never written to disk.
-   */
-  sessionViewport: CanvasViewport | null;
   setViewport: (
     viewport: CanvasViewport | null,
     options?: { persist?: boolean }
@@ -555,11 +560,6 @@ export interface CanvasState {
    */
   viewport: CanvasViewport | null;
   views: Array<{ id: string; name: string }>;
-  /**
-   * Per-view session camera cache. Survives view switches within the process;
-   * cleared on full reset / app quit (never disk-backed).
-   */
-  _sessionViewports: Record<string, CanvasViewport>;
 }
 
 // ---------------------------------------------------------------------------
@@ -796,8 +796,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // Viewport is session-only: restore from the in-memory cache for this view
     // (set by setActiveView / setViewport). Disk manifests are never consulted.
     const { activeViewId, _sessionViewports, sessionViewport } = get();
-    const restored =
-      sessionViewport ?? _sessionViewports[activeViewId] ?? null;
+    const restored = sessionViewport ?? _sessionViewports[activeViewId] ?? null;
     set({
       nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
       edges,

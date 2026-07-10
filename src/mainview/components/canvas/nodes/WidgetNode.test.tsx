@@ -131,14 +131,45 @@ describe('WidgetNode', () => {
       },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Complete timer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset timer' }));
     expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
       data: {
-        completedSessions: 1,
+        completedSessions: 0,
         timer: { state: 'idle' },
       },
     });
     expect(useWidgetStore.getState().history.widget_pomodoro).toBeUndefined();
+  });
+
+  it('adjusts pomodoro durations from the settings panel', () => {
+    useWidgetStore.getState().hydrate({
+      widget_pomodoro: pomodoroRecord(),
+    });
+
+    render(
+      <WidgetNode
+        data={{ kind: 'pomodoro', widgetId: 'widget_pomodoro' }}
+        id="node-pomodoro"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Timer settings' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Increase Focus session' })
+    );
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: { focusMinutes: 26 },
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Decrease Short break' })
+    );
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: { shortBreakMinutes: 4 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+    expect(screen.getByText('26:00')).toBeInTheDocument();
   });
 
   it('snoozes and completes reminders', () => {

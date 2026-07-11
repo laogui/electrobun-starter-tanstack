@@ -233,18 +233,6 @@
   }
 }
 
-.folder-scroll-container {
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  overscroll-behavior-x: contain;
-  touch-action: pan-x;
-}
-
-.folder-scroll-container::-webkit-scrollbar {
-  display: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -410,6 +398,31 @@ body.resizing-nwse * {
    not the inner visual, so the outline stays on the same layer as the card. */
 .react-flow__node {
   isolation: isolate;
+}
+
+/* Spatial-style folder peek: keep the opened folder in place while the rest
+   of the canvas recedes. App chrome stays at full strength; only canvas
+   content participates in the focus transition. */
+.folder-peek-active .react-flow__node,
+.folder-peek-active .react-flow__edge,
+.folder-peek-active .react-flow__minimap {
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.folder-peek-active .react-flow__node.folder-peek-muted {
+  opacity: 0.12;
+}
+
+.folder-peek-active .react-flow__node.folder-peek-anchor {
+  opacity: 1;
+}
+
+.folder-peek-active .react-flow__edge {
+  opacity: 0.08;
+}
+
+.folder-peek-active .react-flow__minimap {
+  opacity: 0.16;
 }
 
 /* While dragging a single content/folder node, repelled neighbors glide to

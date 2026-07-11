@@ -1292,6 +1292,7 @@ function CanvasComponent() {
     string,
     {
       dragZIndex: number | undefined;
+      folderPeekClass: string;
       isDropTarget: boolean;
       isHidden: boolean;
       result: Node;
@@ -1323,6 +1324,7 @@ function CanvasComponent() {
       string,
       {
         dragZIndex: number | undefined;
+        folderPeekClass: string;
         isDropTarget: boolean;
         isHidden: boolean;
         result: Node;
@@ -1334,8 +1336,12 @@ function CanvasComponent() {
       if ((node.data as Record<string, unknown>).detached) {
         continue;
       }
-      const isHidden =
-        focusedNode?.id === node.id || focusedFolder?.id === node.id;
+      const isHidden = focusedNode?.id === node.id;
+      const folderPeekClass = focusedFolder
+        ? focusedFolder.id === node.id
+          ? 'folder-peek-anchor'
+          : 'folder-peek-muted'
+        : '';
       const isDropTarget = dropTargetId === node.id;
       const dragZIndex = draggingOverContainerIds?.has(node.id)
         ? dragLayerZIndex
@@ -1345,6 +1351,7 @@ function CanvasComponent() {
         cached &&
         cached.source === node &&
         cached.isHidden === isHidden &&
+        cached.folderPeekClass === folderPeekClass &&
         cached.isDropTarget === isDropTarget &&
         cached.dragZIndex === dragZIndex
       ) {
@@ -1353,21 +1360,29 @@ function CanvasComponent() {
         continue;
       }
       const locked = Boolean((node.data as { locked?: unknown }).locked);
+      const className = [
+        node.className,
+        locked ? 'is-locked' : '',
+        folderPeekClass,
+      ]
+        .filter(Boolean)
+        .join(' ');
       const decorated: Node = {
         ...node,
         data: { ...node.data, isHidden, isDropTarget },
         ...(dragZIndex === undefined ? {} : { zIndex: dragZIndex }),
+        ...(className ? { className } : {}),
         ...(locked
           ? {
               draggable: false,
               connectable: false,
               deletable: false,
-              className: `${node.className ?? ''} is-locked`.trim(),
             }
           : {}),
       };
       nextCache.set(node.id, {
         dragZIndex,
+        folderPeekClass,
         isDropTarget,
         isHidden,
         result: decorated,
@@ -1586,8 +1601,10 @@ function CanvasComponent() {
     >
       <ZoomLevelProvider>
         <div
+          aria-hidden={focusedFolder ? true : undefined}
           aria-label={activeViewName}
-          className="h-full w-full"
+          className={cn('h-full w-full', focusedFolder && 'folder-peek-active')}
+          inert={focusedFolder ? true : undefined}
           ref={canvasContainerRef}
           role="application"
         >

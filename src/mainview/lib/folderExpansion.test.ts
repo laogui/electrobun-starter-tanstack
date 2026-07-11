@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFolderExpansionNodes,
   FOLDER_EXPANDED_CHILD_NODE_TYPE,
+  type FolderExpandedChildData,
   MAX_FOLDER_PREVIEWS,
 } from './folderExpansion';
 
@@ -73,6 +74,15 @@ describe('buildFolderExpansionNodes', () => {
       x: expanded[0]!.position.x - source.position.x,
       y: expanded[0]!.position.y - source.position.y,
     });
+    const firstData = expanded[0]!.data as FolderExpandedChildData;
+    expect(firstData.target.width * firstData.origin.scaleX).toBeCloseTo(
+      280 * 0.32,
+      5
+    );
+    expect(firstData.target.height * firstData.origin.scaleY).toBeCloseTo(
+      280 * 0.52,
+      5
+    );
   });
 
   it('switches the shared-element nodes into the reverse closing phase', () => {

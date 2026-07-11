@@ -2,7 +2,6 @@ import { NodeResizeControl } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import {
   colorToStyle,
   isColorDark,
@@ -13,10 +12,6 @@ import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
-import {
-  SkeletonLines,
-  ZoomedOutPlaceholder,
-} from './_shared/ZoomedOutPlaceholder';
 
 export interface StickyData {
   color?: string;
@@ -28,8 +23,6 @@ export interface StickyContentProps {
   data: StickyData;
   /** Enables textarea editing on the body text. */
   editing?: boolean;
-  /** When true, renders the simplified zoomed-out placeholder. */
-  isZoomedOut?: boolean;
   /** Blur handler for the body text (ignored unless `editing`). */
   onBlur?: () => void;
   /** Keydown handler for the body text (ignored unless `editing`). */
@@ -47,7 +40,6 @@ export interface StickyContentProps {
  */
 export const StickyContent = ({
   data,
-  isZoomedOut = false,
   editing = false,
   textRef,
   onBlur,
@@ -56,56 +48,34 @@ export const StickyContent = ({
 }: StickyContentProps) => {
   return (
     <>
-      {isZoomedOut ? (
-        <ZoomedOutPlaceholder
-          className="overflow-hidden rounded-sm"
-          color={data.color}
-          padding="sm"
-        >
-          {data.content ? (
-            <p className="wrap-break-word line-clamp-3 font-medium text-2xl/snug">
-              {data.content.length > 16
-                ? `${data.content.slice(0, 16)}…`
-                : data.content}
-            </p>
-          ) : (
-            <SkeletonLines
-              className="mt-1"
-              size="sm"
-              widths={['w-full', 'w-4/6']}
-            />
-          )}
-        </ZoomedOutPlaceholder>
-      ) : (
-        <div
-          className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"
-          style={colorToStyle(data.color)}
-        >
-          {editing ? (
-            <textarea
-              aria-label="Sticky note text"
-              className="sticky-editable nodrag nopan custom-scrollbar flex-1 resize-none overflow-y-auto border-none bg-transparent p-0 text-sm/relaxed outline-hidden"
-              defaultValue={data.content ?? ''}
-              onBlur={onBlur}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              placeholder={m.sticky_empty_placeholder()}
-              ref={textRef}
-            />
-          ) : (
-            <div
-              className={cn(
-                'sticky-editable wrap-break-word custom-scrollbar pointer-events-none flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-hidden',
-                !data.content && 'sticky-editable-empty'
-              )}
-              contentEditable={false}
-              data-placeholder={undefined}
-            >
-              {data.content}
-            </div>
-          )}
-        </div>
-      )}
+      <div
+        className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"
+        style={colorToStyle(data.color)}
+      >
+        {editing ? (
+          <textarea
+            aria-label="Sticky note text"
+            className="sticky-editable nodrag nopan custom-scrollbar flex-1 resize-none overflow-y-auto border-none bg-transparent p-0 text-sm/relaxed outline-hidden"
+            defaultValue={data.content ?? ''}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            placeholder={m.sticky_empty_placeholder()}
+            ref={textRef}
+          />
+        ) : (
+          <div
+            className={cn(
+              'sticky-editable wrap-break-word custom-scrollbar pointer-events-none flex-1 overflow-y-auto whitespace-pre-wrap text-sm/relaxed outline-hidden',
+              !data.content && 'sticky-editable-empty'
+            )}
+            contentEditable={false}
+            data-placeholder={undefined}
+          >
+            {data.content}
+          </div>
+        )}
+      </div>
       {/* Pushpin centered at the top, pressing the note flat against the wall.
           Half floats above the note so the head reads as sitting on top of the
           paper — the body div clips its own corners, so the pin (a sibling) is
@@ -144,7 +114,6 @@ const StickyNode = ({
   const isDark = isColorDark(data.color);
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
-  const isZoomedOut = useIsZoomedOut();
   const [editing, setEditing] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const focusAfterEditRequestRef = useRef(false);
@@ -317,13 +286,12 @@ const StickyNode = ({
         <StickyContent
           data={data}
           editing={editing}
-          isZoomedOut={isZoomedOut}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           textRef={textRef}
         />
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+        {tag || (tags && tags.length > 0) ? (
           <div className="pointer-events-none absolute right-2 bottom-2 left-2">
             <NodeTagChips
               isDark={isDark}

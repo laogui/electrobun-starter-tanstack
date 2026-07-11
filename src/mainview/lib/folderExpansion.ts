@@ -27,7 +27,7 @@ export interface FolderChildEntry {
 export interface FolderExpandedChildData extends Record<string, unknown> {
   child: FolderChildEntry;
   folderId: string;
-  origin: Point & { rotation: number; scale: number };
+  origin: Point & { rotation: number; scaleX: number; scaleY: number };
   phase: 'closing' | 'open';
   target: Point & Size;
 }
@@ -155,7 +155,7 @@ export function buildFolderExpansionNodes(options: {
       y: position.y + size.height / 2,
     };
     const previewWidth = (folderWidth * THUMBNAIL_WIDTH_PERCENT) / 100;
-    const originScale = Math.min(0.46, previewWidth / size.width);
+    const previewHeight = (folderHeight * THUMBNAIL_HEIGHT_PERCENT) / 100;
     const data: FolderExpandedChildData = {
       child,
       folderId,
@@ -163,7 +163,8 @@ export function buildFolderExpansionNodes(options: {
         x: thumbnailCenter.x - targetCenter.x,
         y: thumbnailCenter.y - targetCenter.y,
         rotation: slot.rotation,
-        scale: originScale,
+        scaleX: previewWidth / size.width,
+        scaleY: previewHeight / size.height,
       },
       phase: closing ? 'closing' : 'open',
       target: {

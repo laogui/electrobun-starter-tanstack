@@ -79,6 +79,8 @@ CreateMenu 没有暴露入口，但旧数据若带 `data.type === 'image'` 仍�
 
 ### A5. StickyNode：缩略态只有两条 placeholder 横线（P1）
 
+> **已失效（2026-07-11）**：固定阈值缩略态及其 placeholder 已整体移除，Sticky 在所有缩放等级保持真实内容。
+
 `isZoomedOut` 时显示两条灰 bar，**不显示任何文本预览**。其它节点（CardNode）至少在缩略态显示标题。Sticky 没有 title，但完全可以把 `content` 的前 12–16 字显示出来。
 
 文件：`src/mainview/components/canvas/nodes/StickyNode.tsx:70-76`
@@ -444,6 +446,8 @@ emoji 在不同系统字体下表现不一致；如果做 dark mode + 精致感�
 ## L. 性能 / 稳定性
 
 ### L1. `useViewport()` 触发所有节点重渲（P1）
+
+> **已失效（2026-07-11）**：各节点不再订阅 zoom，相关 `ZoomLevelContext` 与内容切换分支已删除。
 
 每种节点都调 `useViewport()` 比较 `zoom < 0.4`。缩放手势时所有节点同时重渲。建议把 `isZoomedOut` 提到上层 Context broadcast，节点订阅布尔值。
 

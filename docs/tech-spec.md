@@ -540,16 +540,11 @@ setActiveView(viewId)
 - 所有节点提供四向 Handle（top/right/bottom/left）。
 - `LabeledEdge` 支持 edge label、`pathType` 以及 floating endpoints；路径几何参数由 edge data 驱动并在保存前 sanitize。
 
-### 5.2 语义缩放（两档）
+### 5.2 连续缩放渲染
 
-| 缩放范围     | 状态        | 渲染内容               |
-| ------------ | ----------- | ---------------------- |
-| `zoom < 0.3` | `thumbnail` | 仅色块、标题、占位线条 |
-| `zoom ≥ 0.3` | `full`      | 完整内容和交互控件     |
+所有节点在 `minZoom = 0.1` 到 `maxZoom = 4` 范围内保持同一套内容树，不订阅 zoom，也不在固定阈值批量卸载完整内容并挂载 placeholder。这样可保持卡片视觉与空间辨认连续，并避免跨阈值时所有节点集中重渲染。
 
-`ZoomLevelContext` 只在 zoom 跨越 `ZOOMED_OUT_THRESHOLD = 0.3` 时触发订阅组件重渲染，避免每次平移缩放都让全部节点读取 `useViewport()`。
-
-> **后续规划**：可引入第三档 `summary`（0.3 ≤ zoom < 0.8），渲染标题 + 内容摘要、Checklist 仅前 2 条，不挂载交互控件。
+画布态本身保持轻量：文本卡只挂载只读摘要而非 BlockNote 编辑器；Image 优先显示持久化缩略图；Asset 使用 poster / waveform / 文本摘要；Link 通过 `IntersectionObserver` 仅在视口内触发 unfurl。后续若大画布基准确认存在瓶颈，应优先测量可见元素渲染和低缩放绘制样式简化，再决定是否引入新的 LOD。
 
 ### 5.3 FLIP 动画与独立动画层
 
@@ -576,13 +571,13 @@ setActiveView(viewId)
 
 | 规模          | 目标体验                     | 策略                                                         |
 | ------------- | ---------------------------- | ------------------------------------------------------------ |
-| ≤ 500 节点    | 画布编辑 60fps               | `onlyRenderVisibleElements` + 语义缩放 + 轻量节点 DOM        |
-| 500–1000 节点 | 平移缩放流畅，编辑延迟可接受 | 低缩放仅 `thumbnail`/`summary` 态；富编辑器仅选中/聚焦时挂载 |
+| ≤ 500 节点    | 画布编辑 60fps               | 轻量展示型 DOM、媒体缩略图、memo、视口内 Link unfurl         |
+| 500–1000 节点 | 平移缩放流畅，编辑延迟可接受 | 基于 Profiler 评估 `onlyRenderVisibleElements` 与绘制样式简化 |
 | > 1000 节点   | 不承诺 MVP 全量流畅          | 后续引入虚拟化、SQLite 索引或 Canvas/WebGL 降级              |
 
 **MVP 性能目标**：单画布 500 节点 + 1000 条边的日常编辑场景。
 
-**前提约束**：上述预算建立在"未聚焦节点保持展示型 DOM、富编辑器只在选中/聚焦时挂载、FLIP 只在模态进出时读取布局"的前提下。
+**前提约束**：上述预算建立在"未聚焦节点保持展示型 DOM、富编辑器只在选中/聚焦时挂载、FLIP 只在模态进出时读取布局"的前提下；500 节点目标仍需用混合节点数据集完成 Profiler 验证。
 
 ---
 

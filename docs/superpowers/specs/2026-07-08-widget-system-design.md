@@ -381,7 +381,6 @@ function WidgetNode({ id, data }) {
 - `src/mainview/components/canvas/ChecklistFocusedView.tsx`：改为 widget 数据源。
 - `src/mainview/components/canvas/nodes/readOnlyNodes.tsx`：只读渲染分发。
 - `src/mainview/components/library/LibraryCard.tsx` 及 library 视图：现按 `type === 'card' && data.type === 'checklist'` 选图标（约 37 行），摘要依赖 note `previewExcerpt`。widget 无 preview 基础设施——为 checklist widget 从 items 生成 excerpt，保证迁移后 checklist 不从 library 消失。
-- `src/mainview/components/canvas/nodes/_shared/ZoomedOutPlaceholder.tsx`：缩放占位的 checklist 假行样式对接 widget。
 - `src/mainview/data/initialNodes.ts`：种子改为 widget（见迁移节）。
 - `src/mainview/lib/creatableNodes.ts`：`checklist` 条目（约 64 行）指向 widget 创建流程，新增 `pomodoro` / `reminder` action。
 - `src/mainview/store/canvasStore.ts`：duplicate/粘贴克隆逻辑（见上节）。
@@ -537,7 +536,7 @@ src/bun/templates/<template-id>/
 - 标签 key 迁移（`note_xxx` → `widget_xxx`）。
 - 删除 `CardNode` checklist 分支，`ChecklistWidget` 接管；items 合成稳定 id。
 - `FocusedView` 路由 + commit 路径改造；`ChecklistFocusedView` 接 widgetStore。
-- `initialNodes.ts` 种子改 widget；`LibraryCard` / library 视图、`ZoomedOutPlaceholder`、`creatableNodes` 更新。
+- `initialNodes.ts` 种子改 widget；`LibraryCard` / library 视图、`creatableNodes` 更新。
 - Markdown 导出包含 checklist widget（GFM）。
 - 验证 checklist 全部编辑路径（inline + focused view）接入 per-widget undo。
 - 保留旧 note 文件。

@@ -1,7 +1,6 @@
 import { memo, useCallback } from 'react';
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 
 import {
   FOLDER_THUMBNAIL_SLOTS,
@@ -24,6 +23,7 @@ export interface FolderData {
   isDropTarget?: boolean;
   isExpanded?: boolean;
   isHidden?: boolean;
+  onCollapseComplete?: (folderId: string) => void;
   subtitle?: string;
   title?: string;
   updatedAt?: string;
@@ -31,8 +31,6 @@ export interface FolderData {
 
 export interface FolderContentProps {
   data: FolderData;
-  /** When true, hides subtitle/footer and bumps the title to a larger size. */
-  isZoomedOut?: boolean;
   onExpandedChildClick?: (
     event: React.MouseEvent<HTMLDivElement>,
     item: FolderExpandedChildData
@@ -46,7 +44,6 @@ export interface FolderContentProps {
  */
 export const FolderContent = ({
   data,
-  isZoomedOut = false,
   onExpandedChildClick,
   onMenuClick,
 }: FolderContentProps) => {
@@ -164,6 +161,12 @@ export const FolderContent = ({
               >
                 <FolderExpandedChildVisual
                   data={item}
+                  onAnimationComplete={
+                    data.isClosing &&
+                    index === (data.expansionChildren?.length ?? 0) - 1
+                      ? () => data.onCollapseComplete?.(item.folderId)
+                      : undefined
+                  }
                   onClick={(event) => onExpandedChildClick?.(event, item)}
                 />
               </div>
@@ -201,23 +204,18 @@ export const FolderContent = ({
           <div className="min-w-0">
             <h3
               aria-label="Folder name"
-              className={cn(
-                'truncate font-bold text-slate-800 leading-none',
-                isZoomedOut ? 'text-3xl' : 'text-xl'
-              )}
+              className="truncate font-bold text-slate-800 text-xl leading-none"
             >
               {data.title}
             </h3>
-            {isZoomedOut ? null : (
-              <p
-                className="mt-2 truncate font-medium text-slate-500 text-sm leading-none"
-                title={
-                  typeof data.subtitle === 'string' ? data.subtitle : undefined
-                }
-              >
-                {data.subtitle}
-              </p>
-            )}
+            <p
+              className="mt-2 truncate font-medium text-slate-500 text-sm leading-none"
+              title={
+                typeof data.subtitle === 'string' ? data.subtitle : undefined
+              }
+            >
+              {data.subtitle}
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {childCountLabel ? (
@@ -235,11 +233,11 @@ export const FolderContent = ({
             </button>
           </div>
         </div>
-        {isZoomedOut || !footerText ? null : (
+        {footerText ? (
           <p className="relative mt-auto truncate text-slate-400 text-sm leading-none">
             {footerText}
           </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -248,7 +246,6 @@ export const FolderContent = ({
 const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
-  const isZoomedOut = useIsZoomedOut();
 
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
     // Trigger the node context menu by dispatching a contextmenu event on
@@ -309,7 +306,6 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
 
       <FolderContent
         data={data}
-        isZoomedOut={isZoomedOut}
         onExpandedChildClick={handleExpandedChildClick}
         onMenuClick={handleMenuClick}
       />

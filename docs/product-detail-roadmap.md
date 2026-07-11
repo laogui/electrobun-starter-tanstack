@@ -68,7 +68,7 @@
 | ID | 改动 | 文件 |
 |---|---|---|
 | A3 | FolderNode 加子卡片缩略堆叠（最多 3 张）+ 自定义 `color` 支持 + dark 适配 | `src/mainview/components/canvas/nodes/FolderNode.tsx` |
-| A5 | StickyNode `isZoomedOut` 改成显示 `content.slice(0, 16)` + 末尾省略号 | `StickyNode.tsx:78-84` |
+| ↩ A5 | StickyNode 低缩放摘要曾显示 `content.slice(0, 16)`；固定阈值语义缩放已于 2026-07-11 移除 | `StickyNode.tsx` |
 | A6 | ImageNode 缩略图丢失时显示红色 "Missing image" 徽章（参考 AssetNode 实现） | `ImageNode.tsx:150-174` |
 | A7 | 抽 `ResizeHandle.tsx` 共享组件 → 5 处节点改用 | 新建 `src/mainview/components/canvas/nodes/_shared/ResizeHandle.tsx` |
 | J1 | StickyNode + FolderNode 改用 `shadow-card / shadow-card-hover` | StickyNode + FolderNode |
@@ -366,26 +366,25 @@
 
 ## Phase 9 · 性能 pass（1-2 天）✅ 已完成
 
-> **已完成（2026-06-09）**。核查发现 L4 / L2 在前序 PR 中已经落地，本 Phase 实际只需补 L1。
+> **已完成（2026-06-09）**。L4 / L2 保持有效；L1 随固定阈值语义缩放于 2026-07-11 移除。
 
 ### 任务
 
 | 状态 | ID | 改动 | 文件 |
 |---|---|---|---|
-| ✅ 已完成 | L1 | 新建 `ZoomLevelContext`（Provider 包在 `routes/index.tsx` 的 `<ReactFlow>` 外层，用 `useStore` 布尔选择器订阅 `transform[2] < 0.4`，布尔不变不重渲染），6 个节点改读 `useIsZoomedOut()` 不再调 `useViewport()` | 新建 `src/mainview/contexts/ZoomLevelContext.tsx` + LinkNode / FolderNode / AssetNode / ImageNode / CardNode / StickyNode |
+| ↩ 已移除 | L1 | 删除固定 zoom 阈值、`ZoomLevelContext` 和各节点 placeholder 分支；节点不再订阅 zoom，也不发生跨阈值批量内容树切换 | routes/index.tsx + 各 canvas node |
 | ✅ 已实现（前序 PR） | L4 | LinkNode unfurl 已用 `IntersectionObserver`，只在 ≥50% 可见时触发，命中即 `disconnect()`，卸载也 `disconnect()` | `LinkNode.tsx:320-346` |
 | ✅ 已实现（前序 PR） | L2 | FocusedView 已是纯 `opacity` 的 `motion.div`，不再用 top/left/width/height layout 动画 | `FocusedView.tsx:356-363` |
 
-### 实际落地（L1）
-- 用 React Flow 的 `useStore((s) => s.transform[2] < 0.4)` 替代手动 100ms throttle：`useStore` 自带等值比较，缩放过程中选择器每帧运行（极轻），但只有跨越 0.4 阈值时 Provider 才重渲染并触发节点重渲染。比 throttle 版更精确、更简单。
-- `useIsZoomedOut()` 仅 `useContext`，无 Provider 时返回默认 `false`（readonly 节点 / 单元测试零成本）。
-- 阈值常量 `ZOOMED_OUT_THRESHOLD = 0.4` 收敛到 context 单一来源。
-- 测试：6 个节点测试由 mock `useViewport` 改为 mock `@/contexts/ZoomLevelContext`；`routes/index.test.tsx` 的 `@xyflow/react` mock 补 `useStore`。
+### L1 后续决策（2026-07-11）
+- 当前没有完成 placeholder 与完整渲染的 Profiler A/B 数据，无法证明固定阈值降级的收益。
+- 统一 skeleton 在低缩放下削弱节点辨识度，并在跨阈值时集中卸载/挂载各节点内容树。
+- 删除 `ZoomLevelContext`、`ZoomedOutPlaceholder` 和节点 zoom 订阅；文本摘要、媒体缩略图与 Link 视口限流等既有轻量策略保持不变。
 
 ### 验收（已通过）
 - ✅ `bun run test` 全绿（96 文件 / 906 测试）。
 - ✅ `bun run type-check` 无新增 `src/` 错误（仅 `node_modules/electrobun` 预存在报错）。
-- 待人工 Profiler 复核：30 张卡片 + 缩放手势节点 commit 数应大幅下降；30 张 link 卡进视野不再瞬时并发（L4 已保证）。
+- 待人工 Profiler 复核：30 / 100 / 300 个混合节点在连续缩放和平移下的帧时间；根据数据决定是否启用可见元素渲染或低缩放样式简化。30 张 link 卡进视野不再瞬时并发（L4 已保证）。
 
 ---
 

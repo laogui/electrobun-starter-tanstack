@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import StickyNode from './StickyNode';
 
 const updateNodeDataMock = vi.fn();
-const isZoomedOutMock = vi.fn(() => false);
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -35,10 +34,6 @@ vi.mock('@xyflow/react', () => ({
     Bottom: 'bottom',
     Left: 'left',
   },
-}));
-
-vi.mock('@/contexts/ZoomLevelContext', () => ({
-  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 const saveSnapshotMock = vi.fn();
@@ -85,8 +80,6 @@ describe('StickyNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
     setEditingStickyIdMock.mockReset();
-    isZoomedOutMock.mockReset();
-    isZoomedOutMock.mockReturnValue(false);
     storeState.nodes = [];
     storeState.editingStickyId = null;
     document.body.className = '';
@@ -289,18 +282,17 @@ describe('StickyNode', () => {
     vi.useRealTimers();
   });
 
-  it('renders zoomed-out placeholder lines and hidden state support', () => {
-    isZoomedOutMock.mockReturnValue(true);
+  it('keeps sticky content visible while supporting the hidden state', () => {
     const { container } = render(
       <StickyNode
-        data={{ color: '#ffee88', content: '', isHidden: true }}
+        data={{ color: '#ffee88', content: 'Still rendered', isHidden: true }}
         id="sticky-2"
       />
     );
 
-    expect(screen.queryByText('Updated note')).toBeNull();
+    expect(screen.getByText('Still rendered')).toBeInTheDocument();
     expect(container.querySelector('.pointer-events-none')).not.toBeNull();
-    expect(container.querySelectorAll('.bg-current')).toHaveLength(2);
+    expect(container.querySelectorAll('.bg-current')).toHaveLength(0);
   });
 
   it('toggles resize body classes', () => {

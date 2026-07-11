@@ -46,7 +46,6 @@ import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { TagSidebar } from '@/components/tags/TagSidebar';
-import { ZoomLevelProvider } from '@/contexts/ZoomLevelContext';
 import {
   initialEdges,
   initialNodes,
@@ -440,6 +439,22 @@ function CanvasComponent() {
     []
   );
 
+  const finishFolderClose = useCallback(
+    (folderId: string) => {
+      if (useCanvasStore.getState().focusedFolder?.id !== folderId) {
+        return;
+      }
+      if (folderCloseTimerRef.current !== null) {
+        window.clearTimeout(folderCloseTimerRef.current);
+        folderCloseTimerRef.current = null;
+      }
+      setFocusedFolder(null);
+      setClosingFolderId(null);
+      setFolderTransitionLocked(false);
+    },
+    [setFocusedFolder]
+  );
+
   const closeFolderWithTransition = useCallback(() => {
     if (
       !focusedFolder ||
@@ -448,19 +463,19 @@ function CanvasComponent() {
     ) {
       return;
     }
+    const folderId = focusedFolder.id;
     setClosingFolderId(focusedFolder.id);
     setFolderTransitionLocked(true);
+    // Motion completion owns the normal close path. This longer timer is only
+    // a safety net for interrupted animations or an empty expansion.
     folderCloseTimerRef.current = window.setTimeout(() => {
-      setFocusedFolder(null);
-      setClosingFolderId(null);
-      setFolderTransitionLocked(false);
-      folderCloseTimerRef.current = null;
-    }, getFolderTransitionDuration(true));
+      finishFolderClose(folderId);
+    }, getFolderTransitionDuration(true) + 120);
   }, [
     closingFolderId,
+    finishFolderClose,
     focusedFolder,
     folderTransitionLocked,
-    setFocusedFolder,
   ]);
 
   const {
@@ -1517,7 +1532,12 @@ function CanvasComponent() {
           isHidden,
           isDropTarget,
           ...(node.type === 'folder'
-            ? { expansionChildren, isExpanded, isClosing }
+            ? {
+                expansionChildren,
+                isExpanded,
+                isClosing,
+                onCollapseComplete: finishFolderClose,
+              }
             : {}),
         },
         ...(renderZIndex === undefined ? {} : { zIndex: renderZIndex }),
@@ -1556,6 +1576,7 @@ function CanvasComponent() {
     dragLayerZIndex,
     folderAnchorZIndex,
     folderExpansionChildren,
+    finishFolderClose,
   ]);
 
   const dragDepthRef = useRef(0);
@@ -1755,102 +1776,100 @@ function CanvasComponent() {
       onMouseMove={onPointerMoveCanvas}
       onPointerDownCapture={onCanvasPointerDownCapture}
     >
-      <ZoomLevelProvider>
-        <div
-          aria-label={activeViewName}
-          className={cn(
-            'h-full w-full',
-            focusedFolder && 'folder-expansion-active',
-            focusedFolder?.id === closingFolderId && 'folder-expansion-closing'
-          )}
-          ref={canvasContainerRef}
-          role="application"
+      <div
+        aria-label={activeViewName}
+        className={cn(
+          'h-full w-full',
+          focusedFolder && 'folder-expansion-active',
+          focusedFolder?.id === closingFolderId && 'folder-expansion-closing'
+        )}
+        ref={canvasContainerRef}
+        role="application"
+      >
+        <ReactFlow
+          connectionLineComponent={ConnectionPreviewLine}
+          connectionMode={ConnectionMode.Loose}
+          connectionRadius={30}
+          defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
+          defaultViewport={sessionViewport ?? undefined}
+          disableKeyboardA11y
+          edges={edges}
+          edgeTypes={edgeTypes}
+          elevateEdgesOnSelect
+          fitView={!sessionViewport}
+          maxZoom={4}
+          minZoom={0.1}
+          nodes={nodesWithState}
+          nodesDraggable={
+            !(spacePanActive || editableInteractionLocked || focusedFolder)
+          }
+          nodesFocusable={false}
+          nodeTypes={nodeTypes}
+          onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
+          onConnectStart={onConnectStart}
+          onDragOver={onDragOverCanvas}
+          onDrop={onDropCanvas}
+          onEdgeContextMenu={onEdgeContextMenu}
+          onEdgesChange={onEdgesChange}
+          onInit={(instance) => {
+            rfInstance.current = instance;
+          }}
+          onMoveEnd={(event, viewport) => {
+            setViewport(viewport, { persist: event != null });
+          }}
+          onNodeClick={onNodeClick}
+          onNodeContextMenu={onNodeContextMenu}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
+          onNodesChange={handleNodesChange}
+          onPaneClick={() => {
+            if (focusedFolder) {
+              closeFolderWithTransition();
+            }
+          }}
+          onPaneContextMenu={onPaneContextMenu}
+          panOnDrag={spacePanActive}
+          panOnScroll={true}
+          proOptions={{ hideAttribution: true }}
+          selectionMode={SelectionMode.Partial}
+          selectionOnDrag={
+            !(spacePanActive || editableInteractionLocked || focusedFolder)
+          }
+          snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
+          snapToGrid={canvasSnapToGrid}
+          style={{ backgroundColor: canvasBackground }}
+          zoomOnDoubleClick={false}
+          zoomOnPinch={true}
         >
-          <ReactFlow
-            connectionLineComponent={ConnectionPreviewLine}
-            connectionMode={ConnectionMode.Loose}
-            connectionRadius={30}
-            defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
-            defaultViewport={sessionViewport ?? undefined}
-            disableKeyboardA11y
-            edges={edges}
-            edgeTypes={edgeTypes}
-            elevateEdgesOnSelect
-            fitView={!sessionViewport}
-            maxZoom={4}
-            minZoom={0.1}
-            nodes={nodesWithState}
-            nodesDraggable={
-              !(spacePanActive || editableInteractionLocked || focusedFolder)
-            }
-            nodesFocusable={false}
-            nodeTypes={nodeTypes}
-            onConnect={onConnect}
-            onConnectEnd={onConnectEnd}
-            onConnectStart={onConnectStart}
-            onDragOver={onDragOverCanvas}
-            onDrop={onDropCanvas}
-            onEdgeContextMenu={onEdgeContextMenu}
-            onEdgesChange={onEdgesChange}
-            onInit={(instance) => {
-              rfInstance.current = instance;
+          <Background
+            color={gridColor}
+            gap={CANVAS_GRID_SIZE}
+            size={1.5}
+            variant={BackgroundVariant.Dots}
+          />
+          <Controls
+            className="canvas-floating-surface"
+            position="bottom-left"
+          />
+          <HelperLines horizontal={helperLineH} vertical={helperLineV} />
+          <MiniMap
+            maskColor={miniMapMask}
+            nodeColor={miniMapNodeColor}
+            nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
+            pannable
+            position="bottom-right"
+            style={{
+              backgroundColor: miniMapBackground,
+              border: miniMapBorder,
+              borderRadius: 8,
             }}
-            onMoveEnd={(event, viewport) => {
-              setViewport(viewport, { persist: event != null });
-            }}
-            onNodeClick={onNodeClick}
-            onNodeContextMenu={onNodeContextMenu}
-            onNodeDoubleClick={onNodeDoubleClick}
-            onNodeDrag={onNodeDrag}
-            onNodeDragStart={onNodeDragStart}
-            onNodeDragStop={onNodeDragStop}
-            onNodesChange={handleNodesChange}
-            onPaneClick={() => {
-              if (focusedFolder) {
-                closeFolderWithTransition();
-              }
-            }}
-            onPaneContextMenu={onPaneContextMenu}
-            panOnDrag={spacePanActive}
-            panOnScroll={true}
-            proOptions={{ hideAttribution: true }}
-            selectionMode={SelectionMode.Partial}
-            selectionOnDrag={
-              !(spacePanActive || editableInteractionLocked || focusedFolder)
-            }
-            snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-            snapToGrid={canvasSnapToGrid}
-            style={{ backgroundColor: canvasBackground }}
-            zoomOnDoubleClick={false}
-            zoomOnPinch={true}
-          >
-            <Background
-              color={gridColor}
-              gap={CANVAS_GRID_SIZE}
-              size={1.5}
-              variant={BackgroundVariant.Dots}
-            />
-            <Controls
-              className="canvas-floating-surface"
-              position="bottom-left"
-            />
-            <HelperLines horizontal={helperLineH} vertical={helperLineV} />
-            <MiniMap
-              maskColor={miniMapMask}
-              nodeColor={miniMapNodeColor}
-              nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
-              pannable
-              position="bottom-right"
-              style={{
-                backgroundColor: miniMapBackground,
-                border: miniMapBorder,
-                borderRadius: 8,
-              }}
-              zoomable
-            />
-          </ReactFlow>
-        </div>
-      </ZoomLevelProvider>
+            zoomable
+          />
+        </ReactFlow>
+      </div>
 
       {nodesWithState.length === 0 ? (
         <EmptyCanvasOverlay

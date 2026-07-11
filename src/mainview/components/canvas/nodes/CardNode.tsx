@@ -2,10 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Check, PenLine } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
-import { getNodeTagItems } from '@/components/card/nodeTagItems';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
@@ -13,11 +11,6 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-import {
-  SkeletonChecklist,
-  SkeletonLines,
-  ZoomedOutPlaceholder,
-} from './_shared/ZoomedOutPlaceholder';
 
 export interface ChecklistItem {
   checked?: boolean;
@@ -268,7 +261,6 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   const { data: tagSummaries } = useTags();
   const tagSuggestions = (tagSummaries ?? []).map((t) => t.name);
   const queryClient = useQueryClient();
-  const isZoomedOut = useIsZoomedOut();
 
   // Cards key node metadata by the note's stable id; the React Flow node id
   // is a fallback for legacy nodes that pre-date the noteId roll-out.
@@ -287,14 +279,6 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
     }),
     [data, meta?.tag, meta?.tagColor, meta?.tagColors, meta?.tags]
   );
-  const tagItems = getNodeTagItems({
-    tag: viewData.tag,
-    tagColor: viewData.tagColor,
-    tagColors: viewData.tagColors,
-    tags: viewData.tags,
-  });
-  const firstTag = tagItems[0];
-
   // OR semantics: a card is "in scope" if it carries at least one of the
   // active filter tags. An empty filter list means no filtering at all.
   const dimmedByFilter = useMemo(() => {
@@ -381,34 +365,12 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
           'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
-        {isZoomedOut ? (
-          <ZoomedOutPlaceholder
-            color={data.color}
-            leading={
-              firstTag ? (
-                <div
-                  className="h-4 w-12 rounded-md"
-                  style={colorToStyle(firstTag.color)}
-                />
-              ) : null
-            }
-            padding="lg"
-            title={data.title || 'Untitled'}
-          >
-            {data.type === 'checklist' ? (
-              <SkeletonChecklist className="mt-6" />
-            ) : (
-              <SkeletonLines className="mt-6" />
-            )}
-          </ZoomedOutPlaceholder>
-        ) : (
-          <CardContent
-            data={viewData}
-            onChange={(newData) => {
-              commitNodeData(id, newData);
-            }}
-          />
-        )}
+        <CardContent
+          data={viewData}
+          onChange={(newData) => {
+            commitNodeData(id, newData);
+          }}
+        />
       </div>
     </div>
   );

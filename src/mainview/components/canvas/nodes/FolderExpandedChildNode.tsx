@@ -20,6 +20,7 @@ function getShapeClass(type: string): string {
 
 export interface FolderExpandedChildVisualProps {
   data: FolderExpandedChildData;
+  onAnimationComplete?: () => void;
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
@@ -30,19 +31,28 @@ export interface FolderExpandedChildVisualProps {
  */
 export function FolderExpandedChildVisual({
   data,
+  onAnimationComplete,
   onClick,
 }: FolderExpandedChildVisualProps) {
   const shouldReduceMotion = useReducedMotion();
   const returning = data.phase === 'closing';
   const origin = shouldReduceMotion
-    ? { x: 0, y: 0, scale: 1, rotate: 0 }
+    ? { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0 }
     : {
         x: data.origin.x,
         y: data.origin.y,
-        scale: data.origin.scale,
+        scaleX: data.origin.scaleX,
+        scaleY: data.origin.scaleY,
         rotate: data.origin.rotation,
       };
-  const expanded = { x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 };
+  const expanded = {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotate: 0,
+    opacity: 1,
+  };
   const returningTarget = {
     ...origin,
     opacity: shouldReduceMotion ? 0 : [1, 1, 0],
@@ -57,6 +67,11 @@ export function FolderExpandedChildVisual({
       )}
       data-folder-child-id={data.child.id}
       initial={{ ...origin, opacity: 1 }}
+      onAnimationComplete={() => {
+        if (returning) {
+          onAnimationComplete?.();
+        }
+      }}
       onClick={onClick}
       onDoubleClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}

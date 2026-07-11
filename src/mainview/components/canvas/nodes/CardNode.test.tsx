@@ -8,7 +8,6 @@ import { useCanvasStore } from '@/store/canvasStore';
 import CardNode, { CardContent } from './CardNode';
 
 const updateNodeDataMock = vi.fn();
-const isZoomedOutMock = vi.fn(() => false);
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -38,10 +37,6 @@ vi.mock('@xyflow/react', () => ({
     Left: 'left',
   },
   useReactFlow: () => ({ updateNodeData: updateNodeDataMock }),
-}));
-
-vi.mock('@/contexts/ZoomLevelContext', () => ({
-  useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
 vi.mock('@/components/preview/NotePreview', () => ({
@@ -90,8 +85,6 @@ vi.mock('@tanstack/react-query', () => ({
 describe('CardNode', () => {
   afterEach(() => {
     updateNodeDataMock.mockReset();
-    isZoomedOutMock.mockReset();
-    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -121,13 +114,12 @@ describe('CardNode', () => {
     ).not.toBeNull();
   });
 
-  it('renders zoomed-out summary and toggles resize body class hooks', () => {
-    isZoomedOutMock.mockReturnValue(true);
-
+  it('keeps full card content visible and toggles resize body class hooks', () => {
     render(
       <CardNode
         data={{
           color: '#111111',
+          content: 'Always-visible body',
           tag: 'Urgent',
           tagColor: '#ff0000',
           title: 'Condensed',
@@ -137,6 +129,9 @@ describe('CardNode', () => {
     );
 
     expect(screen.getByText('Condensed')).toBeInTheDocument();
+    expect(screen.getByTestId('note-preview')).toHaveTextContent(
+      'Always-visible body'
+    );
     fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
     expect(document.body.classList.contains('resizing-nwse')).toBe(true);
 

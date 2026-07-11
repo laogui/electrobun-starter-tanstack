@@ -16,7 +16,6 @@ import {
 } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { LinkNodeData } from '@/lib/contentTypes';
 import {
@@ -31,10 +30,6 @@ import { useCanvasStore } from '@/store/canvasStore';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 import { TypeBadge } from './_shared/TypeBadge';
-import {
-  SkeletonLines,
-  ZoomedOutPlaceholder,
-} from './_shared/ZoomedOutPlaceholder';
 
 const DEFAULT_LINK_COLOR = '#FFFFFF';
 
@@ -359,7 +354,6 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
-  const isZoomedOut = useIsZoomedOut();
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const isVisibleRef = useRef(false);
 
@@ -491,21 +485,8 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
       <NodeHandles />
 
       <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
-        {isZoomedOut ? (
-          <ZoomedOutPlaceholder
-            align="center"
-            color={data.color}
-            leading={
-              <div className="h-8 w-8 rounded-xl bg-current opacity-10" />
-            }
-            title={getLinkDisplayTitle(resolveLinkData(data))}
-          >
-            <SkeletonLines className="mt-5" widths={['w-3/4']} />
-          </ZoomedOutPlaceholder>
-        ) : (
-          <LinkContent data={data} onRetry={handleRetry} />
-        )}
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+        <LinkContent data={data} onRetry={handleRetry} />
+        {tag || (tags && tags.length > 0) ? (
           <div className="pointer-events-none absolute right-3 bottom-3 left-3">
             <NodeTagChips
               isDark={isDark}

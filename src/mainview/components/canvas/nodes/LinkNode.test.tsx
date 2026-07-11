@@ -55,10 +55,6 @@ vi.mock('@xyflow/react', () => ({
   },
 }));
 
-vi.mock('@/contexts/ZoomLevelContext', () => ({
-  useIsZoomedOut: () => false,
-}));
-
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
     selector: (state: {

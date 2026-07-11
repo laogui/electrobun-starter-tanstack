@@ -19,7 +19,7 @@
 - **功能描述**：一个没有边界的 2D 空间，用户可以在任意位置放置内容节点。
 - **交互逻辑**：
   - **平移 (Panning)**：支持触控板双指滑动或鼠标中键拖拽，实现画布的无级平移。
-  - **缩放 (Zooming)**：支持触控板捏合、`Ctrl/Cmd + 滚轮` 以及 `Cmd/Ctrl + +/-/0` 缩放。当前已落地第一阶段**语义化缩放 (Semantic Zoom)**：当 `zoom < 0.3` 时，Card / Sticky / Asset / Link / Recording 等节点切换到统一的轻量 placeholder / skeleton / 缩略图表达，降低画布密度和渲染成本；放大后恢复完整内容。后续仍需补独立**语义缩放层级设计 spec**，明确更多档位、各节点类型渲染规则、Edge label 表达和过渡曲线。
+  - **缩放 (Zooming)**：支持触控板捏合、`Ctrl/Cmd + 滚轮` 以及 `Cmd/Ctrl + +/-/0` 缩放。节点在所有缩放等级保持同一套真实内容与视觉结构，不在固定阈值批量切换 placeholder / skeleton；Image / Asset 继续使用既有缩略图和摘要数据控制媒体成本。低缩放专用 LOD 只有在实际 Profiler 数据证明必要后才重新引入。
   - **选择与聚焦 (Selection & Focus)**：
     - 当前采用"单击打开 + 显式选择"模型（✅ 已实现）——普通单击可聚焦节点直接进入 FocusedView，普通单击 Folder 进入 drill-down；Sticky 的普通单击直接进入原地编辑。选择主要通过框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键菜单同步选择来完成。
     - 多选集合支持批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、改色、编辑标签、移动到其他画布，以及拖入 Group/Folder。
@@ -278,7 +278,7 @@
 
 | 状态管理 | Zustand + TanStack React Query |
 
-> 渲染引擎、语义缩放、FLIP 动画、性能预算与降级策略等技术实现细节请参阅 [技术规范文档](./tech-spec.md)。
+> 渲染引擎、连续缩放渲染、FLIP 动画、性能预算与降级策略等技术实现细节请参阅 [技术规范文档](./tech-spec.md)。
 
 ---
 

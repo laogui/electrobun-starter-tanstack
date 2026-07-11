@@ -1,8 +1,7 @@
-import { AlertTriangle, Loader2, Mic, Pause, Play } from 'lucide-react';
+import { AlertTriangle, Loader2, Pause, Play } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import type { RecordingNodeData } from '@/lib/contentTypes';
 import { getRecordingDisplayTitle } from '@/lib/contentTypes';
@@ -14,7 +13,6 @@ import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-import { ZoomedOutPlaceholder } from './_shared/ZoomedOutPlaceholder';
 
 const WAVEFORM_BAR_COUNT = 48;
 const DEFAULT_WAVEFORM_BARS = Array.from(
@@ -265,7 +263,6 @@ const RecordingNode = ({
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(id, data as unknown as Record<string, unknown>);
-  const isZoomedOut = useIsZoomedOut();
   const recording = resolveRecordingData(data);
   const isDark = isColorDark(recording.color);
   const title = getRecordingDisplayTitle(recording, m.menu_new_recording());
@@ -392,28 +389,9 @@ const RecordingNode = ({
       <NodeHandles />
 
       <div className="node-visual relative size-full overflow-hidden rounded-2xl border border-black/5 bg-neutral-50 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:bg-neutral-900">
-        {isZoomedOut ? (
-          <ZoomedOutPlaceholder
-            align="center"
-            color={recording.color}
-            leading={
-              <Mic
-                className={isDark ? 'text-neutral-200' : 'text-neutral-500'}
-                size={26}
-              />
-            }
-            title={title}
-            titleClassName="text-xl/tight"
-          />
-        ) : (
-          <RecordingContent
-            data={data}
-            loading={loading}
-            streamSrc={streamSrc}
-          />
-        )}
+        <RecordingContent data={data} loading={loading} streamSrc={streamSrc} />
 
-        {isRenaming && !isZoomedOut ? (
+        {isRenaming ? (
           <div
             className="absolute inset-x-4 top-3 z-10"
             onClick={(e) => e.stopPropagation()}
@@ -440,7 +418,7 @@ const RecordingNode = ({
           </div>
         ) : null}
 
-        {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+        {tag || (tags && tags.length > 0) ? (
           <div className="pointer-events-none absolute right-3 bottom-2 left-3">
             <NodeTagChips
               isDark={isDark}

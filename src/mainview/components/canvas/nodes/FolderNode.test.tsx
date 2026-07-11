@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasStore } from '@/store/canvasStore';
 import FolderNode from './FolderNode';
 
-const isZoomedOutMock = vi.fn(() => false);
 const commitNodeDataMock = vi.fn();
 
 vi.mock('@xyflow/react', () => ({
@@ -38,10 +37,6 @@ vi.mock('@xyflow/react', () => ({
   },
 }));
 
-vi.mock('@/contexts/ZoomLevelContext', () => ({
-  useIsZoomedOut: () => isZoomedOutMock(),
-}));
-
 vi.mock('@/components/canvas/FolderChildPreview', () => ({
   FolderChildPreview: ({ child }: { child: { id: string } }) => (
     <div data-testid={`folder-preview-${child.id}`} />
@@ -59,8 +54,6 @@ describe('FolderNode', () => {
 
   afterEach(() => {
     commitNodeDataMock.mockReset();
-    isZoomedOutMock.mockReset();
-    isZoomedOutMock.mockReturnValue(false);
     document.body.className = '';
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -125,7 +118,13 @@ describe('FolderNode', () => {
                 data: { title: 'Inside' },
               },
               folderId: 'folder-layered',
-              origin: { x: 40, y: 80, rotation: -5, scale: 0.3 },
+              origin: {
+                x: 40,
+                y: 80,
+                rotation: -5,
+                scaleX: 0.3,
+                scaleY: 0.45,
+              },
               phase: 'open',
               target: { x: -120, y: -260, width: 180, height: 220 },
             },
@@ -158,9 +157,7 @@ describe('FolderNode', () => {
     });
   });
 
-  it('hides subtitle when zoomed out and toggles resize body class hooks', () => {
-    isZoomedOutMock.mockReturnValue(true);
-
+  it('keeps folder details visible and toggles resize body class hooks', () => {
     render(
       <FolderNode
         data={{
@@ -174,7 +171,7 @@ describe('FolderNode', () => {
     );
 
     expect(screen.getByText('Archive')).toBeInTheDocument();
-    expect(screen.queryByText('Hidden subtitle')).toBeNull();
+    expect(screen.getByText('Hidden subtitle')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
     expect(document.body.classList.contains('resizing-nwse')).toBe(true);

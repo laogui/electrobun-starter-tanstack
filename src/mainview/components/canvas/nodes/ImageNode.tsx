@@ -3,7 +3,6 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
-import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
@@ -204,16 +203,11 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
-  const isZoomedOut = useIsZoomedOut();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [renameDraft, setRenameDraft] = useState(data.title ?? '');
-  const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
-  const workspaceImagePath = toWorkspaceAttachmentPath(rawImageUrl);
-  const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
-  const previewImageUrl = data.thumbnailUrl || directImageUrl;
   const hasImage = Boolean(
-    rawImageUrl || data.imageFile || data.thumbnailFile || data.thumbnailUrl
+    data.imageUrl || data.imageFile || data.thumbnailFile || data.thumbnailUrl
   );
 
   useEffect(() => {
@@ -424,7 +418,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       />
 
       <AssetHoverCard
-        enabled={!isZoomedOut && hasImage && Boolean(data.title)}
+        enabled={hasImage && Boolean(data.title)}
         rows={
           data.title
             ? [
@@ -441,23 +435,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
           )}
         >
-          {isZoomedOut ? (
-            <div
-              className="flex size-full items-center justify-center"
-              style={colorToStyle(data.color)}
-            >
-              {previewImageUrl ? (
-                <img
-                  alt=""
-                  className="pointer-events-none size-full object-cover"
-                  draggable={false}
-                  src={previewImageUrl}
-                />
-              ) : (
-                <ImagePlus className="text-gray-300" size={32} />
-              )}
-            </div>
-          ) : hasImage ? (
+          {hasImage ? (
             <ImageContent data={data} />
           ) : (
             <div
@@ -479,10 +457,10 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               </span>
             </div>
           )}
-          {hasImage && !isZoomedOut ? (
+          {hasImage ? (
             <TypeBadge className="absolute top-5 right-5 z-10">Image</TypeBadge>
           ) : null}
-          {isRenaming && hasImage && !isZoomedOut ? (
+          {isRenaming && hasImage ? (
             <div
               className="absolute inset-x-5 bottom-16 z-10"
               onClick={(e) => e.stopPropagation()}
@@ -508,7 +486,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               />
             </div>
           ) : null}
-          {!isZoomedOut && (tag || (tags && tags.length > 0)) ? (
+          {tag || (tags && tags.length > 0) ? (
             <div className="pointer-events-none absolute right-3 bottom-3 left-3">
               <NodeTagChips
                 isDark={isDark}

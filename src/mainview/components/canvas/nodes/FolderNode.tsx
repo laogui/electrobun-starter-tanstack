@@ -1,6 +1,14 @@
 import { memo, useCallback } from 'react';
+import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
+import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
 import { useIsZoomedOut } from '@/contexts/ZoomLevelContext';
 
+import {
+  FOLDER_THUMBNAIL_SLOTS,
+  type FolderChildEntry,
+  type FolderExpandedChildData,
+  MAX_FOLDER_PREVIEWS,
+} from '@/lib/folderExpansion';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -10,8 +18,11 @@ import { ResizeHandle } from './_shared/ResizeHandle';
 export interface FolderData {
   children?: unknown[];
   color?: string;
+  expansionChildren?: FolderExpandedChildData[];
   footer?: string;
+  isClosing?: boolean;
   isDropTarget?: boolean;
+  isExpanded?: boolean;
   isHidden?: boolean;
   subtitle?: string;
   title?: string;
@@ -22,6 +33,10 @@ export interface FolderContentProps {
   data: FolderData;
   /** When true, hides subtitle/footer and bumps the title to a larger size. */
   isZoomedOut?: boolean;
+  onExpandedChildClick?: (
+    event: React.MouseEvent<HTMLDivElement>,
+    item: FolderExpandedChildData
+  ) => void;
   /** Click handler for the three-dot menu icon. */
   onMenuClick?: (e: React.MouseEvent) => void;
 }
@@ -32,10 +47,25 @@ export interface FolderContentProps {
 export const FolderContent = ({
   data,
   isZoomedOut = false,
+  onExpandedChildClick,
   onMenuClick,
 }: FolderContentProps) => {
   const footerText = data.footer ?? data.updatedAt;
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
+  const previewChildren = Array.isArray(data.children)
+    ? data.children
+        .filter((child): child is FolderChildEntry =>
+          Boolean(
+            child &&
+              typeof child === 'object' &&
+              typeof (child as FolderChildEntry).id === 'string' &&
+              typeof (child as FolderChildEntry).type === 'string' &&
+              (child as FolderChildEntry).data &&
+              typeof (child as FolderChildEntry).data === 'object'
+          )
+        )
+        .slice(0, MAX_FOLDER_PREVIEWS)
+    : [];
   const childCountLabel =
     childCount === 1 ? '1 item' : childCount > 1 ? `${childCount} items` : '';
 
@@ -45,12 +75,17 @@ export const FolderContent = ({
         'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-[transform,box-shadow] duration-200 ease-out will-change-transform',
         data.isDropTarget
           ? 'scale-105 ring-2 ring-accent ring-offset-2'
-          : 'group-hover/folder:-translate-y-1.5'
+          : data.isExpanded
+            ? ''
+            : 'group-hover/folder:-translate-y-1.5'
       )}
       style={{ transform: 'translateZ(0)' }}
     >
-      {/* Background SVG */}
-      <div className="pointer-events-none absolute inset-0">
+      {/* Layer 1: folder back shell. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        data-folder-layer="back"
+      >
         <svg
           height="100%"
           preserveAspectRatio="none"
@@ -72,36 +107,83 @@ export const FolderContent = ({
             strokeWidth="2"
             vectorEffect="non-scaling-stroke"
           />
-          <rect
-            fill="#93F004"
-            height="125"
-            rx="12"
-            transform="rotate(-4 190 160)"
-            vectorEffect="non-scaling-stroke"
-            width="230"
-            x="75"
-            y="95"
-          />
-          <rect
-            fill="#00F260"
-            height="125"
-            rx="12"
-            transform="rotate(3 205 175)"
-            vectorEffect="non-scaling-stroke"
-            width="240"
-            x="85"
-            y="103"
-          />
-          <rect
-            fill="#E0F6E3"
-            height="125"
-            rx="12"
-            transform="rotate(-1 197 190)"
-            vectorEffect="non-scaling-stroke"
-            width="235"
-            x="80"
-            y="111"
-          />
+        </svg>
+      </div>
+
+      {/* Layer 2: real child previews, sandwiched between the folder shells. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
+        data-folder-layer="middle"
+      >
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 overflow-hidden rounded-[20px]"
+        >
+          {previewChildren.map((child, index) => {
+            const slot = FOLDER_THUMBNAIL_SLOTS[index]!;
+            return (
+              <div
+                className={cn(
+                  'absolute h-[52%] w-[32%] overflow-hidden rounded-md border border-black/8 bg-white shadow-sm transition-opacity duration-100 ease-out [&_.conn-handle]:hidden',
+                  data.isExpanded
+                    ? data.isClosing
+                      ? 'opacity-100 delay-200'
+                      : 'opacity-0'
+                    : 'opacity-100'
+                )}
+                data-folder-thumbnail-id={child.id}
+                key={child.id}
+                style={{
+                  left: `${slot.leftPercent}%`,
+                  top: `${slot.topPercent}%`,
+                  transform: `rotate(${slot.rotation}deg)`,
+                  zIndex: index + 1,
+                }}
+              >
+                <div className="h-[333.333%] w-[333.333%] origin-top-left scale-[0.3]">
+                  <FolderChildPreview child={child} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {data.isExpanded
+          ? data.expansionChildren?.map((item, index) => (
+              <div
+                className="pointer-events-auto absolute"
+                data-folder-expanded-visual-id={item.child.id}
+                key={item.child.id}
+                style={{
+                  height: item.target.height,
+                  left: item.target.x,
+                  top: item.target.y,
+                  width: item.target.width,
+                  zIndex: MAX_FOLDER_PREVIEWS + index + 1,
+                }}
+              >
+                <FolderExpandedChildVisual
+                  data={item}
+                  onClick={(event) => onExpandedChildClick?.(event, item)}
+                />
+              </div>
+            ))
+          : null}
+      </div>
+
+      {/* Layer 3: front shell masks the lower part of the preview stack. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[2]"
+        data-folder-layer="front"
+      >
+        <svg
+          aria-hidden="true"
+          height="100%"
+          preserveAspectRatio="none"
+          viewBox="48 73 304 189"
+          width="100%"
+          xmlns="http://www.w3.org/2000/svg"
+        >
           <path
             d="M 50, 240 V 145 A 20,20 0 0 1 70,125 H 330 A 20,20 0 0 1 350,145 V 240 A 20,20 0 0 1 330,260 H 70 A 20,20 0 0 1 50,240 Z"
             fill="#F1F5F9"
@@ -165,6 +247,7 @@ export const FolderContent = ({
 
 const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const isZoomedOut = useIsZoomedOut();
 
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
@@ -184,6 +267,26 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
       nodeEl.dispatchEvent(contextEvent);
     }
   }, []);
+
+  const handleExpandedChildClick = useCallback(
+    (
+      event: React.MouseEvent<HTMLDivElement>,
+      item: FolderExpandedChildData
+    ) => {
+      event.stopPropagation();
+      if (data.isClosing) {
+        return;
+      }
+      setFocusedNode({
+        data: item.child.data,
+        folderId: id,
+        id: item.child.id,
+        rect: event.currentTarget.getBoundingClientRect(),
+        type: item.child.type,
+      });
+    },
+    [data.isClosing, id, setFocusedNode]
+  );
 
   return (
     <div
@@ -207,6 +310,7 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
       <FolderContent
         data={data}
         isZoomedOut={isZoomedOut}
+        onExpandedChildClick={handleExpandedChildClick}
         onMenuClick={handleMenuClick}
       />
     </div>

@@ -27,6 +27,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from 'react';
 import { toast } from 'sonner';
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar';
@@ -37,7 +38,6 @@ import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
 import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
-import { FolderView } from '@/components/canvas/FolderView';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
@@ -87,6 +87,12 @@ import {
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
 import {
+  buildFolderExpansionNodes,
+  FOLDER_EXPANSION_GAP,
+  type FolderExpandedChildData,
+  isFolderExpandedChildNode,
+} from '@/lib/folderExpansion';
+import {
   computeImageNodeSize,
   createImageDropPreview,
   isImageFile,
@@ -97,6 +103,7 @@ import {
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
 import { saveRecording } from '@/lib/recordingFiles';
+import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
 import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
 import {
   type ConnectionStartState,
@@ -133,6 +140,18 @@ const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
 // or group) that was brought to front - regardless of which container type
 // the card is about to drop onto.
 const DRAGGING_OVER_CONTAINER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
+const FOLDER_EXPANSION_DURATION_MS = 420;
+const FOLDER_COLLAPSE_DURATION_MS = 320;
+
+function getFolderTransitionDuration(closing = false): number {
+  if (
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) {
+    return 20;
+  }
+  return closing ? FOLDER_COLLAPSE_DURATION_MS : FOLDER_EXPANSION_DURATION_MS;
+}
 
 function nodeZIndex(node: Node): number {
   return typeof node.zIndex === 'number' ? node.zIndex : 0;
@@ -366,6 +385,7 @@ function CanvasComponent() {
   const edges = useCanvasStore((s) => s.edges);
   const focusedNode = useCanvasStore((s) => s.focusedNode);
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
+  const focusedFolderId = focusedFolder?.id;
   const createMenuOpen = useCanvasStore((s) => s.createMenuOpen);
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
@@ -376,9 +396,72 @@ function CanvasComponent() {
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const folderCloseTimerRef = useRef<number | null>(null);
+  const folderUnlockTimerRef = useRef<number | null>(null);
+  const [folderTransitionLocked, setFolderTransitionLocked] = useState(false);
+  const [closingFolderId, setClosingFolderId] = useState<string | null>(null);
   const { screenToFlowPosition } = useReactFlow();
   const spacePanActive = useSpacePanMode();
   const editableInteractionLocked = useEditableInteractionLock();
+
+  useEffect(() => {
+    if (folderUnlockTimerRef.current !== null) {
+      window.clearTimeout(folderUnlockTimerRef.current);
+      folderUnlockTimerRef.current = null;
+    }
+
+    if (!focusedFolderId) {
+      setFolderTransitionLocked(false);
+      setClosingFolderId(null);
+      return;
+    }
+
+    setFolderTransitionLocked(true);
+    setClosingFolderId(null);
+    folderUnlockTimerRef.current = window.setTimeout(() => {
+      setFolderTransitionLocked(false);
+      folderUnlockTimerRef.current = null;
+    }, getFolderTransitionDuration());
+
+    return () => {
+      if (folderUnlockTimerRef.current !== null) {
+        window.clearTimeout(folderUnlockTimerRef.current);
+        folderUnlockTimerRef.current = null;
+      }
+    };
+  }, [focusedFolderId]);
+
+  useEffect(
+    () => () => {
+      if (folderCloseTimerRef.current !== null) {
+        window.clearTimeout(folderCloseTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const closeFolderWithTransition = useCallback(() => {
+    if (
+      !focusedFolder ||
+      folderTransitionLocked ||
+      closingFolderId === focusedFolder.id
+    ) {
+      return;
+    }
+    setClosingFolderId(focusedFolder.id);
+    setFolderTransitionLocked(true);
+    folderCloseTimerRef.current = window.setTimeout(() => {
+      setFocusedFolder(null);
+      setClosingFolderId(null);
+      setFolderTransitionLocked(false);
+      folderCloseTimerRef.current = null;
+    }, getFolderTransitionDuration(true));
+  }, [
+    closingFolderId,
+    focusedFolder,
+    folderTransitionLocked,
+    setFocusedFolder,
+  ]);
 
   const {
     dropTargetId,
@@ -872,9 +955,6 @@ function CanvasComponent() {
   );
   const setNodes = useCanvasStore((s) => s.setNodes);
   const setEdges = useCanvasStore((s) => s.setEdges);
-  const moveFolderChildToCanvas = useCanvasStore(
-    (s) => s.moveFolderChildToCanvas
-  );
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
   const onOpenNoteLibrary = useCallback(() => {
@@ -1080,7 +1160,11 @@ function CanvasComponent() {
     saveWidgetNow,
   ]);
 
-  useCanvasKeyboard({ onDeleteNodes: requestDeleteNodes, rfInstance });
+  useCanvasKeyboard({
+    onCloseFolder: closeFolderWithTransition,
+    onDeleteNodes: requestDeleteNodes,
+    rfInstance,
+  });
 
   const handleCanvasPaste = useEffectEvent((event: ClipboardEvent) => {
     if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
@@ -1179,7 +1263,16 @@ function CanvasComponent() {
       if (!rect) {
         return;
       }
-      if (node.type === 'folder') {
+      if (isFolderExpandedChildNode(node)) {
+        const { child, folderId } = node.data;
+        setFocusedNode({
+          id: child.id,
+          folderId,
+          type: child.type,
+          data: child.data,
+          rect,
+        });
+      } else if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (isFocusableNode(node.type)) {
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
@@ -1210,7 +1303,14 @@ function CanvasComponent() {
       // click opens. Folders open their focused view too. Skip nodes that have
       // no focused view and the one that is already open.
       const state = useCanvasStore.getState();
-      const isOpenable = node.type === 'folder' || isFocusableNode(node.type);
+      if (state.focusedFolder?.id === node.id && node.type === 'folder') {
+        closeFolderWithTransition();
+        return;
+      }
+      const isOpenable =
+        node.type === 'folder' ||
+        isFolderExpandedChildNode(node) ||
+        isFocusableNode(node.type);
       const alreadyOpen =
         state.focusedNode?.id === node.id ||
         state.focusedFolder?.id === node.id;
@@ -1226,7 +1326,7 @@ function CanvasComponent() {
       }
       openNodeFocusedView(node);
     },
-    [openNodeFocusedView]
+    [closeFolderWithTransition, openNodeFocusedView]
   );
 
   // Double-click stays as a redundant open path in case a first click is
@@ -1235,6 +1335,10 @@ function CanvasComponent() {
   const onNodeDoubleClick = useCallback(
     (_: any, node: Node) => {
       const state = useCanvasStore.getState();
+      if (state.focusedFolder?.id === node.id && node.type === 'folder') {
+        closeFolderWithTransition();
+        return;
+      }
       if (
         state.focusedNode?.id === node.id ||
         state.focusedFolder?.id === node.id
@@ -1243,7 +1347,7 @@ function CanvasComponent() {
       }
       openNodeFocusedView(node);
     },
-    [openNodeFocusedView]
+    [closeFolderWithTransition, openNodeFocusedView]
   );
 
   // Drop the pure-selection changes a plain node click produces so clicking a
@@ -1267,22 +1371,31 @@ function CanvasComponent() {
     [onNodesChange]
   );
 
-  const onMoveFolderChildOut = useCallback(
-    (child: { id: string }, rect: DOMRect) => {
-      if (!focusedFolder) {
-        return;
-      }
-      const viewport = rfInstance.current?.getViewport();
-      const zoom = viewport?.zoom ?? 1;
-      moveFolderChildToCanvas(focusedFolder.id, child.id, {
-        anchorCenter: {
-          x: (rect.left + rect.width / 2 - (viewport?.x ?? 0)) / zoom,
-          y: (rect.top + rect.height / 2 - (viewport?.y ?? 0)) / zoom,
-        },
-      });
-    },
-    [focusedFolder, moveFolderChildToCanvas]
+  const folderExpansionNodes = useMemo(
+    () =>
+      focusedFolderId
+        ? buildFolderExpansionNodes({
+            allNodes: nodes,
+            closing: closingFolderId === focusedFolderId,
+            folderId: focusedFolderId,
+          })
+        : [],
+    [closingFolderId, focusedFolderId, nodes]
   );
+
+  const renderSourceNodes = useMemo(() => {
+    if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
+      return nodes;
+    }
+    const combined = [...nodes, ...folderExpansionNodes];
+    return applyDragRepulsion({
+      activeIds: new Set(folderExpansionNodes.map((node) => node.id)),
+      gap: FOLDER_EXPANSION_GAP,
+      nodes: combined,
+      origins: captureRepulsionOrigins(nodes),
+      paused: closingFolderId === focusedFolderId,
+    });
+  }, [closingFolderId, focusedFolderId, folderExpansionNodes, nodes]);
 
   // Decorate nodes with render-only flags while keeping object identity stable
   // for unchanged nodes. Without the cache, every store update (including each
@@ -1291,10 +1404,13 @@ function CanvasComponent() {
   const decoratedNodesCacheRef = useRef<Map<
     string,
     {
-      dragZIndex: number | undefined;
+      expansionChildren: FolderExpandedChildData[] | undefined;
       folderPeekClass: string;
+      isClosing: boolean;
       isDropTarget: boolean;
+      isExpanded: boolean;
       isHidden: boolean;
+      renderZIndex: number | undefined;
       result: Node;
       source: Node;
     }
@@ -1318,42 +1434,69 @@ function CanvasComponent() {
       Math.max(0, ...nodes.map(nodeZIndex)) + DRAGGING_OVER_CONTAINER_Z_OFFSET
     );
   }, [nodes, draggingOverContainerIds]);
+  const folderAnchorZIndex = useMemo(() => {
+    if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
+      return;
+    }
+    return Math.max(...folderExpansionNodes.map(nodeZIndex)) + 1;
+  }, [focusedFolderId, folderExpansionNodes]);
+  const folderExpansionChildren = useMemo(
+    () =>
+      folderExpansionNodes.map((node) => node.data as FolderExpandedChildData),
+    [folderExpansionNodes]
+  );
   const nodesWithState = useMemo(() => {
     const cache = decoratedNodesCache;
     const nextCache = new Map<
       string,
       {
-        dragZIndex: number | undefined;
+        expansionChildren: FolderExpandedChildData[] | undefined;
         folderPeekClass: string;
+        isClosing: boolean;
         isDropTarget: boolean;
+        isExpanded: boolean;
         isHidden: boolean;
+        renderZIndex: number | undefined;
         result: Node;
         source: Node;
       }
     >();
     const result: Node[] = [];
-    for (const node of nodes) {
+    for (const node of renderSourceNodes) {
       if ((node.data as Record<string, unknown>).detached) {
         continue;
       }
-      const isHidden = focusedNode?.id === node.id;
-      const folderPeekClass = focusedFolder
-        ? focusedFolder.id === node.id
+      const isExpansionChild = isFolderExpandedChildNode(node);
+      const isHidden = !isExpansionChild && focusedNode?.id === node.id;
+      const folderPeekClass = focusedFolderId
+        ? focusedFolderId === node.id
           ? 'folder-peek-anchor'
-          : 'folder-peek-muted'
+          : isExpansionChild
+            ? ''
+            : 'folder-peek-muted'
         : '';
-      const isDropTarget = dropTargetId === node.id;
-      const dragZIndex = draggingOverContainerIds?.has(node.id)
-        ? dragLayerZIndex
+      const isExpanded = focusedFolderId === node.id;
+      const isClosing = isExpanded && closingFolderId === node.id;
+      const expansionChildren = isExpanded
+        ? folderExpansionChildren
         : undefined;
+      const isDropTarget = dropTargetId === node.id;
+      const renderZIndex = isExpanded
+        ? folderAnchorZIndex
+        : draggingOverContainerIds?.has(node.id)
+          ? dragLayerZIndex
+          : undefined;
       const cached = cache.get(node.id);
       if (
         cached &&
         cached.source === node &&
         cached.isHidden === isHidden &&
         cached.folderPeekClass === folderPeekClass &&
+        cached.expansionChildren === expansionChildren &&
+        cached.isExpanded === isExpanded &&
+        cached.isClosing === isClosing &&
         cached.isDropTarget === isDropTarget &&
-        cached.dragZIndex === dragZIndex
+        cached.renderZIndex === renderZIndex
       ) {
         nextCache.set(node.id, cached);
         result.push(cached.result);
@@ -1369,8 +1512,15 @@ function CanvasComponent() {
         .join(' ');
       const decorated: Node = {
         ...node,
-        data: { ...node.data, isHidden, isDropTarget },
-        ...(dragZIndex === undefined ? {} : { zIndex: dragZIndex }),
+        data: {
+          ...node.data,
+          isHidden,
+          isDropTarget,
+          ...(node.type === 'folder'
+            ? { expansionChildren, isExpanded, isClosing }
+            : {}),
+        },
+        ...(renderZIndex === undefined ? {} : { zIndex: renderZIndex }),
         ...(className ? { className } : {}),
         ...(locked
           ? {
@@ -1381,10 +1531,13 @@ function CanvasComponent() {
           : {}),
       };
       nextCache.set(node.id, {
-        dragZIndex,
+        expansionChildren,
         folderPeekClass,
+        isClosing,
         isDropTarget,
+        isExpanded,
         isHidden,
+        renderZIndex,
         result: decorated,
         source: node,
       });
@@ -1393,13 +1546,16 @@ function CanvasComponent() {
     decoratedNodesCacheRef.current = nextCache;
     return result;
   }, [
-    nodes,
+    renderSourceNodes,
     focusedNode,
-    focusedFolder,
+    focusedFolderId,
+    closingFolderId,
     dropTargetId,
     decoratedNodesCache,
     draggingOverContainerIds,
     dragLayerZIndex,
+    folderAnchorZIndex,
+    folderExpansionChildren,
   ]);
 
   const dragDepthRef = useRef(0);
@@ -1601,10 +1757,12 @@ function CanvasComponent() {
     >
       <ZoomLevelProvider>
         <div
-          aria-hidden={focusedFolder ? true : undefined}
           aria-label={activeViewName}
-          className={cn('h-full w-full', focusedFolder && 'folder-peek-active')}
-          inert={focusedFolder ? true : undefined}
+          className={cn(
+            'h-full w-full',
+            focusedFolder && 'folder-expansion-active',
+            focusedFolder?.id === closingFolderId && 'folder-expansion-closing'
+          )}
           ref={canvasContainerRef}
           role="application"
         >
@@ -1622,7 +1780,9 @@ function CanvasComponent() {
             maxZoom={4}
             minZoom={0.1}
             nodes={nodesWithState}
-            nodesDraggable={!(spacePanActive || editableInteractionLocked)}
+            nodesDraggable={
+              !(spacePanActive || editableInteractionLocked || focusedFolder)
+            }
             nodesFocusable={false}
             nodeTypes={nodeTypes}
             onConnect={onConnect}
@@ -1645,15 +1805,23 @@ function CanvasComponent() {
             onNodeDragStart={onNodeDragStart}
             onNodeDragStop={onNodeDragStop}
             onNodesChange={handleNodesChange}
+            onPaneClick={() => {
+              if (focusedFolder) {
+                closeFolderWithTransition();
+              }
+            }}
             onPaneContextMenu={onPaneContextMenu}
             panOnDrag={spacePanActive}
             panOnScroll={true}
             proOptions={{ hideAttribution: true }}
             selectionMode={SelectionMode.Partial}
-            selectionOnDrag={!(spacePanActive || editableInteractionLocked)}
+            selectionOnDrag={
+              !(spacePanActive || editableInteractionLocked || focusedFolder)
+            }
             snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
             snapToGrid={canvasSnapToGrid}
             style={{ backgroundColor: canvasBackground }}
+            zoomOnDoubleClick={false}
             zoomOnPinch={true}
           >
             <Background
@@ -1702,24 +1870,6 @@ function CanvasComponent() {
       ) : null}
 
       <AnimatePresence>
-        {focusedFolder ? (
-          <FolderView
-            folder={focusedFolder}
-            onCardClick={(child: any, rect: any) => {
-              setFocusedNode({
-                id: child.id,
-                folderId: focusedFolder.id,
-                type: child.type,
-                data: child.data,
-                rect,
-              });
-            }}
-            onClose={() => {
-              setFocusedFolder(null);
-            }}
-            onMoveChildOut={onMoveFolderChildOut}
-          />
-        ) : null}
         {focusedNode ? (
           <FocusedView
             node={focusedNode}

@@ -1,6 +1,7 @@
 import LabeledEdge from '@/components/canvas/edges/LabeledEdge';
 import AssetNode from '@/components/canvas/nodes/AssetNode';
 import CardNode from '@/components/canvas/nodes/CardNode';
+import FolderExpandedChildNode from '@/components/canvas/nodes/FolderExpandedChildNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
@@ -47,6 +48,7 @@ export const nodeTypes = {
   asset: AssetNode,
   card: CardNode,
   folder: FolderNode,
+  folderExpandedChild: FolderExpandedChildNode,
   group: GroupNode,
   image: ImageNode,
   link: LinkNode,

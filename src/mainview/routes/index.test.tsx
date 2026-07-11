@@ -285,6 +285,7 @@ vi.mock('@xyflow/react', async () => {
       onMoveEnd,
       snapGrid,
       snapToGrid,
+      zoomOnDoubleClick,
       children,
     }: {
       children: React.ReactNode;
@@ -319,6 +320,7 @@ vi.mock('@xyflow/react', async () => {
       ) => void;
       snapGrid?: [number, number];
       snapToGrid?: boolean;
+      zoomOnDoubleClick?: boolean;
     }) => {
       reactFlowMocks.props({
         connectionLineComponent,
@@ -326,6 +328,7 @@ vi.mock('@xyflow/react', async () => {
         onMoveEnd,
         snapGrid,
         snapToGrid,
+        zoomOnDoubleClick,
       });
       onInit?.({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }) });
       return (
@@ -550,12 +553,6 @@ vi.mock('@/hooks/useNodeMetadata', () => ({
 vi.mock('@/components/canvas/FocusedView', () => ({
   FocusedView: ({ node }: { node: { id: string } }) => (
     <div>Focused {node.id}</div>
-  ),
-}));
-
-vi.mock('@/components/canvas/FolderView', () => ({
-  FolderView: ({ folder }: { folder: { id: string } }) => (
-    <div>Folder {folder.id}</div>
   ),
 }));
 
@@ -792,14 +789,24 @@ describe('routes/index', () => {
     });
   });
 
-  it('opens a folder view on a plain single click', async () => {
+  it('expands folder children into the canvas on a plain single click', async () => {
     rpcMocks.loadCanvas.mockResolvedValue({
       nodes: [
         {
           id: 'folder-1',
           type: 'folder',
           position: { x: 0, y: 0 },
-          data: { title: 'My Folder', subtitle: '', children: [] },
+          data: {
+            title: 'My Folder',
+            subtitle: '',
+            children: [
+              {
+                id: 'folder-child-1',
+                type: 'card',
+                data: { title: 'Inside', content: 'Folder child' },
+              },
+            ],
+          },
         },
       ],
       edges: [],
@@ -829,12 +836,31 @@ describe('routes/index', () => {
     const element = document.querySelector('[data-id="folder-1"]');
     vi.spyOn(element!, 'getBoundingClientRect').mockReturnValue(rect);
 
-    // Folders open their focused view on a single plain click too.
+    // Folders expand directly inside React Flow on a single plain click.
     fireEvent.click(screen.getByRole('button', { name: 'Click focused node' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Folder folder-1')).toBeInTheDocument();
+      expect(useCanvasStore.getState().focusedFolder?.id).toBe('folder-1');
+      expect(document.querySelector('.folder-expansion-active')).not.toBeNull();
+      expect(
+        document.querySelector(
+          '[data-id="folderExpandedChild:folder-1:folder-child-1"]'
+        )
+      ).not.toBeNull();
     });
+
+    const renderedNodes = reactFlowMocks.props.mock.calls.at(-1)?.[0]
+      ?.nodes as Array<{
+      data: { expansionChildren?: unknown[] };
+      id: string;
+      zIndex?: number;
+    }>;
+    const renderedFolder = renderedNodes.find((node) => node.id === 'folder-1');
+    const renderedChild = renderedNodes.find((node) =>
+      node.id.startsWith('folderExpandedChild:')
+    );
+    expect(renderedFolder?.zIndex).toBeGreaterThan(renderedChild?.zIndex ?? 0);
+    expect(renderedFolder?.data.expansionChildren).toHaveLength(1);
   });
 
   it('does not open the focused view on a modifier-click (selection only)', async () => {
@@ -913,6 +939,20 @@ describe('routes/index', () => {
           snapGrid: [24, 24],
           snapToGrid: true,
         })
+      );
+    });
+  });
+
+  it('keeps a pane click from zooming while closing an expanded folder', async () => {
+    const module = await import('./index');
+    const CanvasRoute = module.Route.options
+      .component as () => React.ReactElement;
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(reactFlowMocks.props).toHaveBeenCalledWith(
+        expect.objectContaining({ zoomOnDoubleClick: false })
       );
     });
   });

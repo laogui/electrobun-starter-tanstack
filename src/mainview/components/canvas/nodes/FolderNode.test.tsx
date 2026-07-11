@@ -42,11 +42,18 @@ vi.mock('@/contexts/ZoomLevelContext', () => ({
   useIsZoomedOut: () => isZoomedOutMock(),
 }));
 
+vi.mock('@/components/canvas/FolderChildPreview', () => ({
+  FolderChildPreview: ({ child }: { child: { id: string } }) => (
+    <div data-testid={`folder-preview-${child.id}`} />
+  ),
+}));
+
 describe('FolderNode', () => {
   beforeEach(() => {
     useCanvasStore.setState({
       commitNodeData: commitNodeDataMock,
       editingFolderId: null,
+      focusedNode: null,
     });
   });
 
@@ -75,6 +82,80 @@ describe('FolderNode', () => {
     expect(screen.getByText('2 items')).toBeInTheDocument();
     expect(screen.getByText('12 children')).toBeInTheDocument();
     expect(screen.getByTestId('handle-left')).toBeInTheDocument();
+  });
+
+  it('renders up to five real child preview layers inside the folder shell', () => {
+    const { container } = render(
+      <FolderNode
+        data={{
+          children: Array.from({ length: 7 }, (_, index) => ({
+            id: `child-${index}`,
+            type: 'card',
+            data: { content: `Card ${index}` },
+          })),
+          title: 'References',
+        }}
+        id="folder-previews"
+      />
+    );
+
+    expect(
+      container.querySelectorAll('[data-folder-thumbnail-id]')
+    ).toHaveLength(5);
+    expect(screen.getByTestId('folder-preview-child-0')).toBeInTheDocument();
+    expect(screen.queryByTestId('folder-preview-child-5')).toBeNull();
+  });
+
+  it('keeps the moving expansion visual inside the SVG middle layer', () => {
+    const { container } = render(
+      <FolderNode
+        data={{
+          children: [
+            {
+              id: 'child-a',
+              type: 'card',
+              data: { title: 'Inside' },
+            },
+          ],
+          expansionChildren: [
+            {
+              child: {
+                id: 'child-a',
+                type: 'card',
+                data: { title: 'Inside' },
+              },
+              folderId: 'folder-layered',
+              origin: { x: 40, y: 80, rotation: -5, scale: 0.3 },
+              phase: 'open',
+              target: { x: -120, y: -260, width: 180, height: 220 },
+            },
+          ],
+          isExpanded: true,
+          title: 'Layered folder',
+        }}
+        id="folder-layered"
+      />
+    );
+
+    const back = container.querySelector('[data-folder-layer="back"]');
+    const middle = container.querySelector('[data-folder-layer="middle"]');
+    const front = container.querySelector('[data-folder-layer="front"]');
+    const movingVisual = container.querySelector(
+      '[data-folder-expanded-visual-id="child-a"]'
+    );
+
+    expect(middle?.contains(movingVisual)).toBe(true);
+    expect(back?.nextElementSibling).toBe(middle);
+    expect(middle?.nextElementSibling).toBe(front);
+
+    fireEvent.click(
+      container.querySelector('[data-folder-child-id="child-a"]')!
+    );
+    expect(useCanvasStore.getState().focusedNode).toMatchObject({
+      folderId: 'folder-layered',
+      id: 'child-a',
+      type: 'card',
+    });
   });
 
   it('hides subtitle when zoomed out and toggles resize body class hooks', () => {

@@ -12,6 +12,7 @@ import * as m from '../../paraglide/messages.js';
 type CanvasDirection = 'down' | 'left' | 'right' | 'up';
 
 interface UseCanvasKeyboardOptions {
+  onCloseFolder?: () => void;
   onDeleteNodes?: (ids: string[]) => void;
   rfInstance?: MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
@@ -67,6 +68,7 @@ function centerNodeIfNeeded(
 }
 
 export function useCanvasKeyboard({
+  onCloseFolder,
   onDeleteNodes,
   rfInstance,
 }: UseCanvasKeyboardOptions = {}) {
@@ -123,7 +125,11 @@ export function useCanvasKeyboard({
           return;
         }
         if (focusedFolder) {
-          setFocusedFolder(null);
+          if (onCloseFolder) {
+            onCloseFolder();
+          } else {
+            setFocusedFolder(null);
+          }
           return;
         }
         return;
@@ -351,6 +357,7 @@ export function useCanvasKeyboard({
   }, [
     focusedNode,
     focusedFolder,
+    onCloseFolder,
     setFocusedNode,
     setFocusedFolder,
     setNodes,

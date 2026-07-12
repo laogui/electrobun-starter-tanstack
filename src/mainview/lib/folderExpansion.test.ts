@@ -18,7 +18,13 @@ import {
   THUMBNAIL_WIDTH_PERCENT,
 } from './folderExpansion';
 
-function folder(children: Array<{ id: string; type?: string }>): Node {
+function folder(
+  children: Array<{
+    id: string;
+    size?: { height: number; width: number };
+    type?: string;
+  }>
+): Node {
   return {
     id: 'folder-1',
     type: 'folder',
@@ -27,6 +33,7 @@ function folder(children: Array<{ id: string; type?: string }>): Node {
     data: {
       children: children.map((child) => ({
         id: child.id,
+        size: child.size,
         type: child.type ?? 'card',
         data: { title: child.id, content: child.id },
       })),
@@ -169,6 +176,33 @@ describe('buildFolderExpansionNodes', () => {
       expect(item.origin.scaleX).toBe(item.origin.scaleY);
       expect(item.motionOrder).toBeGreaterThanOrEqual(5);
     }
+    expect(expandedData.slice(0, 5).map((item) => item.motionDepth)).toEqual([
+      0, 0, 0, 0, 0,
+    ]);
+    expect(expandedData.slice(5).every((item) => item.motionDepth === 1)).toBe(
+      true
+    );
+  });
+
+  it('assigns one shared timing depth to each row in a three-row waterfall', () => {
+    const source = folder(
+      Array.from({ length: 8 }, (_, index) => ({
+        id: `three-row-${index}`,
+        size: { height: 520, width: 520 },
+      }))
+    );
+    const expanded = buildFolderExpansionNodes({
+      allNodes: [source],
+      closing: false,
+      folderId: source.id,
+    });
+    const depths = expanded.map(
+      (node) => (node.data as FolderExpandedChildData).motionDepth
+    );
+
+    expect(depths.slice(0, 3)).toEqual([0, 0, 0]);
+    expect(depths.slice(3, 6)).toEqual([0.5, 0.5, 0.5]);
+    expect(depths.slice(6)).toEqual([1, 1]);
   });
 
   it('preserves a stored child aspect ratio while bounding its expanded size', () => {

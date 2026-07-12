@@ -12,11 +12,43 @@ import {
 import { cn } from '@/lib/utils';
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
+const OPEN_BASE_DURATION = 0.34;
+const OPEN_DEPTH_DURATION = 0.1;
+const CLOSE_BASE_DURATION = 0.28;
+const CLOSE_DEPTH_DURATION = 0.06;
 
 export interface FolderExpandedChildVisualProps {
   data: FolderExpandedChildData;
   onAnimationComplete?: () => void;
   onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
+}
+
+export function getFolderExpandedChildTransition(
+  data: Pick<
+    FolderExpandedChildData,
+    'motionCount' | 'motionDepth' | 'motionOrder' | 'phase'
+  >,
+  shouldReduceMotion: boolean | null
+) {
+  const fallbackDepth =
+    data.motionCount > 1 ? data.motionOrder / (data.motionCount - 1) : 0;
+  const motionDepth = Math.min(
+    1,
+    Math.max(0, data.motionDepth ?? fallbackDepth)
+  );
+  const returning = data.phase === 'closing';
+
+  return {
+    // Every row leaves the folder on the same frame. Upper rows receive a
+    // slightly longer travel window instead of waiting behind lower cards.
+    delay: 0,
+    duration: shouldReduceMotion
+      ? 0.01
+      : returning
+        ? CLOSE_BASE_DURATION + motionDepth * CLOSE_DEPTH_DURATION
+        : OPEN_BASE_DURATION + motionDepth * OPEN_DEPTH_DURATION,
+    ease: EASE_OUT_QUINT,
+  };
 }
 
 /**
@@ -71,15 +103,7 @@ export function FolderExpandedChildVisual({
         width: `${thumbnailContent.widthPercent}%`,
       };
   const expandedContent = { scaleX: 1, width: '100%' };
-  const transition = {
-    delay: shouldReduceMotion
-      ? 0
-      : returning
-        ? (data.motionCount - 1 - data.motionOrder) * 0.015
-        : data.motionOrder * 0.018,
-    duration: shouldReduceMotion ? 0.01 : returning ? 0.3 : 0.38,
-    ease: EASE_OUT_QUINT,
-  };
+  const transition = getFolderExpandedChildTransition(data, shouldReduceMotion);
 
   const focusable = isFocusableNode(data.child.type);
 
@@ -92,6 +116,8 @@ export function FolderExpandedChildVisual({
         getFolderChildShapeClass(data.child.type)
       )}
       data-folder-child-id={data.child.id}
+      data-folder-motion-delay={transition.delay}
+      data-folder-motion-duration={transition.duration}
       initial={origin}
       onAnimationComplete={() => {
         if (!returning) {
@@ -116,7 +142,7 @@ export function FolderExpandedChildVisual({
         animate={returning ? originContent : expandedContent}
         className="h-full"
         initial={originContent}
-        style={{ transformOrigin: 'left center' }}
+        style={{ contain: 'layout paint', transformOrigin: 'left center' }}
         transition={transition}
       >
         <FolderChildPreview child={data.child} />

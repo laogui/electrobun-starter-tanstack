@@ -261,6 +261,7 @@ export const FolderContent = ({
               <div
                 className="pointer-events-auto absolute"
                 data-folder-expanded-visual-id={item.child.id}
+                data-folder-motion-depth={item.motionDepth ?? 0}
                 data-folder-motion-order={item.motionOrder}
                 data-folder-origin-kind={item.origin.kind}
                 data-folder-peek-index={item.origin.peekIndex ?? undefined}

@@ -42,6 +42,8 @@ export interface FolderExpandedChildData extends Record<string, unknown> {
   child: FolderChildEntry;
   folderId: string;
   motionCount: number;
+  /** 0 is the folder-adjacent row; 1 is the highest waterfall row. */
+  motionDepth?: number;
   motionOrder: number;
   origin: Point & {
     kind: 'hidden' | 'peek';
@@ -524,15 +526,29 @@ export function buildFolderExpansionNodes(options: {
     getFolderChildPreviewSize(child.type, child.size)
   );
   const waterfallSlots = calculateFolderWaterfallLayout({ folderRect, sizes });
+  const waterfallItems = waterfallSlots.map((slot, index) => ({
+    index,
+    bottom: slot.y + slot.height,
+    x: slot.x,
+  }));
+  const lowestBottom = Math.max(...waterfallItems.map((item) => item.bottom));
+  const highestBottom = Math.min(...waterfallItems.map((item) => item.bottom));
+  const waterfallDepth = lowestBottom - highestBottom;
   const motionOrderByIndex = new Map(
-    waterfallSlots
-      .map((slot, index) => ({
-        index,
-        bottom: slot.y + slot.height,
-        x: slot.x,
-      }))
+    waterfallItems
       .sort((a, b) => b.bottom - a.bottom || a.x - b.x)
       .map((item, motionOrder) => [item.index, motionOrder] as const)
+  );
+  const motionDepthByIndex = new Map(
+    waterfallItems.map(
+      (item) =>
+        [
+          item.index,
+          waterfallDepth > 0
+            ? (lowestBottom - item.bottom) / waterfallDepth
+            : 0,
+        ] as const
+    )
   );
   const folderWidth = folderRect.right - folderRect.left;
   const folderHeight = folderRect.bottom - folderRect.top;
@@ -589,6 +605,7 @@ export function buildFolderExpansionNodes(options: {
       child,
       folderId,
       motionCount: children.length,
+      motionDepth: motionDepthByIndex.get(index) ?? 0,
       motionOrder: motionOrderByIndex.get(index) ?? index,
       origin: {
         x: originCenter.x - targetCenter.x,

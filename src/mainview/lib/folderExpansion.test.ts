@@ -5,7 +5,13 @@ import {
   buildFolderExpansionNodes,
   FOLDER_EXPANDED_CHILD_NODE_TYPE,
   type FolderExpandedChildData,
+  getFolderThumbnailContentTransform,
+  getFolderThumbnailSlots,
+  getFolderThumbnailTransform,
+  getFolderThumbnailTransformFromOrigin,
   MAX_FOLDER_PREVIEWS,
+  THUMBNAIL_HEIGHT_PERCENT,
+  THUMBNAIL_WIDTH_PERCENT,
 } from './folderExpansion';
 
 function folder(children: Array<{ id: string; type?: string }>): Node {
@@ -25,6 +31,42 @@ function folder(children: Array<{ id: string; type?: string }>): Node {
 }
 
 describe('buildFolderExpansionNodes', () => {
+  it('uses a distinct tucked composition for every visible card count', () => {
+    for (let count = 1; count <= MAX_FOLDER_PREVIEWS; count += 1) {
+      const childIds = Array.from(
+        { length: count },
+        (_, index) => `child-${index}`
+      );
+      const slots = getFolderThumbnailSlots(childIds);
+
+      expect(slots).toHaveLength(count);
+      expect(new Set(slots.map((slot) => slot.rotation))).toHaveLength(count);
+      expect(
+        slots.every((slot) => slot.topPercent >= 16 && slot.topPercent <= 24)
+      ).toBe(true);
+      expect(getFolderThumbnailSlots(childIds)).toEqual(slots);
+    }
+  });
+
+  it('selects stable pseudo-random variants from each card-count family', () => {
+    for (let count = 1; count <= MAX_FOLDER_PREVIEWS; count += 1) {
+      const variants = new Set(
+        Array.from({ length: 24 }, (_, seed) =>
+          JSON.stringify(
+            getFolderThumbnailSlots(
+              Array.from(
+                { length: count },
+                (_, index) => `folder-${seed}-child-${index}`
+              )
+            )
+          )
+        )
+      );
+
+      expect(variants.size).toBeGreaterThan(1);
+    }
+  });
+
   it('materializes at most five render-only React Flow children above the folder', () => {
     const source = folder(
       Array.from({ length: 7 }, (_, index) => ({ id: `child-${index}` }))
@@ -76,11 +118,11 @@ describe('buildFolderExpansionNodes', () => {
     });
     const firstData = expanded[0]!.data as FolderExpandedChildData;
     expect(firstData.target.width * firstData.origin.scaleX).toBeCloseTo(
-      280 * 0.32,
+      280 * (THUMBNAIL_WIDTH_PERCENT / 100),
       5
     );
     expect(firstData.target.height * firstData.origin.scaleY).toBeCloseTo(
-      280 * 0.52,
+      280 * (THUMBNAIL_HEIGHT_PERCENT / 100),
       5
     );
   });
@@ -105,5 +147,61 @@ describe('buildFolderExpansionNodes', () => {
     });
 
     expect(expanded.every((node) => (node.zIndex ?? 0) > 4200)).toBe(true);
+  });
+
+  it('matches closed-stack thumbnail scale to the expansion origin frame', () => {
+    const childIds = ['a', 'b'];
+    const source = folder([
+      { id: childIds[0]! },
+      { id: childIds[1]!, type: 'image' },
+    ]);
+    const expanded = buildFolderExpansionNodes({
+      allNodes: [source],
+      closing: false,
+      folderId: source.id,
+    });
+    const slots = getFolderThumbnailSlots(childIds);
+
+    for (const [index, node] of expanded.entries()) {
+      const data = node.data as FolderExpandedChildData;
+      const slot = slots[index]!;
+      const thumbnail = getFolderThumbnailTransform({
+        folderHeight: 280,
+        folderWidth: 280,
+        rotation: slot.rotation,
+        type: data.child.type,
+      });
+      expect(data.origin.scaleX).toBeCloseTo(thumbnail.scaleX, 5);
+      expect(data.origin.scaleY).toBeCloseTo(thumbnail.scaleY, 5);
+      expect(data.origin.rotation).toBe(slot.rotation);
+      expect(data.target.width).toBe(thumbnail.width);
+      expect(data.target.height).toBe(thumbnail.height);
+      // Motion order: scale then rotate (not rotate then scale).
+      expect(thumbnail.transform).toBe(
+        `translate(-50%, -50%) scale(${thumbnail.scaleX}, ${thumbnail.scaleY}) rotate(${slot.rotation}deg)`
+      );
+      expect(
+        getFolderThumbnailTransformFromOrigin({
+          height: data.target.height,
+          rotation: data.origin.rotation,
+          scaleX: data.origin.scaleX,
+          scaleY: data.origin.scaleY,
+          width: data.target.width,
+        }).transform
+      ).toBe(thumbnail.transform);
+    }
+  });
+
+  it('counter-scales wide thumbnail contents without exposing the frame', () => {
+    const content = getFolderThumbnailContentTransform({
+      scaleX: 0.8,
+      scaleY: 0.4,
+    });
+
+    expect(content.scaleX).toBe(0.5);
+    expect(content.widthPercent).toBe(200);
+    expect(content.transform).toBe('scaleX(0.5)');
+    expect(content.scaleX * content.widthPercent).toBe(100);
+    expect(0.8 * content.scaleX).toBe(0.4);
   });
 });

@@ -3,20 +3,14 @@ import * as motion from 'motion/react-m';
 import { memo } from 'react';
 
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
-import type { FolderExpandedChildData } from '@/lib/folderExpansion';
+import {
+  type FolderExpandedChildData,
+  getFolderChildShapeClass,
+  getFolderThumbnailContentTransform,
+} from '@/lib/folderExpansion';
 import { cn } from '@/lib/utils';
 
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
-
-function getShapeClass(type: string): string {
-  if (type === 'sticky') {
-    return 'rounded-sm';
-  }
-  if (type === 'recording') {
-    return 'rounded-2xl';
-  }
-  return 'rounded-3xl';
-}
 
 export interface FolderExpandedChildVisualProps {
   data: FolderExpandedChildData;
@@ -28,6 +22,10 @@ export interface FolderExpandedChildVisualProps {
  * The visible shared element is rendered by FolderNode inside the folder's
  * middle layer. Keeping it there is the only way CSS can place the moving
  * card between the SVG back and front shells for the entire round trip.
+ *
+ * Origin frame matches the closed-stack thumbnail (same size, scale→rotate
+ * order, border, radius, shadow). During close the static stack is already
+ * visible underneath, so unmounting this layer is a visual no-op.
  */
 export function FolderExpandedChildVisual({
   data,
@@ -51,44 +49,60 @@ export function FolderExpandedChildVisual({
     scaleX: 1,
     scaleY: 1,
     rotate: 0,
-    opacity: 1,
   };
-  const returningTarget = {
-    ...origin,
-    opacity: shouldReduceMotion ? 0 : [1, 1, 0],
+  const thumbnailContent = getFolderThumbnailContentTransform({
+    scaleX: data.origin.scaleX,
+    scaleY: data.origin.scaleY,
+  });
+  const originContent = shouldReduceMotion
+    ? { scaleX: 1, width: '100%' }
+    : {
+        scaleX: thumbnailContent.scaleX,
+        width: `${thumbnailContent.widthPercent}%`,
+      };
+  const expandedContent = { scaleX: 1, width: '100%' };
+  const transition = {
+    duration: shouldReduceMotion ? 0.01 : returning ? 0.32 : 0.42,
+    ease: EASE_OUT_QUINT,
   };
 
   return (
     <motion.div
-      animate={returning ? returningTarget : expanded}
+      animate={returning ? origin : expanded}
       className={cn(
-        'folder-expanded-child-visual node-visual pointer-events-auto size-full cursor-pointer overflow-hidden border border-black/7 bg-white shadow-card will-change-[transform,opacity] dark:border-white/10 dark:bg-neutral-800',
-        getShapeClass(data.child.type)
+        'folder-expanded-child-visual node-visual pointer-events-auto size-full cursor-pointer overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800',
+        getFolderChildShapeClass(data.child.type)
       )}
       data-folder-child-id={data.child.id}
-      initial={{ ...origin, opacity: 1 }}
+      initial={origin}
       onAnimationComplete={() => {
-        if (returning) {
-          onAnimationComplete?.();
+        if (!returning) {
+          return;
         }
+        // Paint the final origin frame over the already-visible static stack
+        // before tearing the expansion layer down, so React unmount cannot
+        // land on a half-composited Motion frame.
+        requestAnimationFrame(() => {
+          onAnimationComplete?.();
+        });
       }}
       onClick={onClick}
       onDoubleClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       style={{ transformOrigin: 'center center' }}
-      transition={{
-        duration: shouldReduceMotion ? 0.01 : returning ? 0.32 : 0.42,
-        ease: EASE_OUT_QUINT,
-        opacity: returning
-          ? {
-              duration: shouldReduceMotion ? 0.01 : 0.32,
-              ease: 'linear',
-              times: [0, 0.75, 1],
-            }
-          : undefined,
-      }}
+      // Keep Motion's default prop order (translate → scale → rotate) so the
+      // landing frame matches getFolderThumbnailTransformFromOrigin.
+      transition={transition}
     >
-      <FolderChildPreview child={data.child} />
+      <motion.div
+        animate={returning ? originContent : expandedContent}
+        className="h-full"
+        initial={originContent}
+        style={{ transformOrigin: 'left center' }}
+        transition={transition}
+      >
+        <FolderChildPreview child={data.child} />
+      </motion.div>
     </motion.div>
   );
 }

@@ -3,6 +3,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getFolderThumbnailSlots } from '@/lib/folderExpansion';
 import { useCanvasStore } from '@/store/canvasStore';
 import FolderNode from './FolderNode';
 
@@ -10,25 +11,6 @@ const commitNodeDataMock = vi.fn();
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
-  NodeResizeControl: ({
-    children,
-    onResizeEnd,
-    onResizeStart,
-  }: {
-    children: React.ReactNode;
-    onResizeEnd?: () => void;
-    onResizeStart?: () => void;
-  }) => (
-    <div>
-      <button onClick={onResizeStart} type="button">
-        start resize
-      </button>
-      <button onClick={onResizeEnd} type="button">
-        end resize
-      </button>
-      {children}
-    </div>
-  ),
   Position: {
     Top: 'top',
     Right: 'right',
@@ -99,6 +81,39 @@ describe('FolderNode', () => {
     expect(screen.queryByTestId('folder-preview-child-5')).toBeNull();
   });
 
+  it('applies the stable count-specific composition for one through five cards', () => {
+    for (let count = 1; count <= 5; count += 1) {
+      const children = Array.from({ length: count }, (_, index) => ({
+        id: `count-${count}-child-${index}`,
+        type: 'card',
+        data: { content: `Card ${index}` },
+      }));
+      const slots = getFolderThumbnailSlots(children.map((child) => child.id));
+      const { container, unmount } = render(
+        <FolderNode
+          data={{ children, title: `${count} cards` }}
+          id={`folder-count-${count}`}
+        />
+      );
+      const thumbnails = Array.from(
+        container.querySelectorAll<HTMLElement>('[data-folder-thumbnail-id]')
+      );
+
+      expect(thumbnails).toHaveLength(count);
+      for (const [index, thumbnail] of thumbnails.entries()) {
+        const slot = slots[index]!;
+        expect(thumbnail).toHaveStyle({
+          left: `${slot.leftPercent}%`,
+          top: `${slot.topPercent}%`,
+        });
+        expect(thumbnail.firstElementChild?.getAttribute('style')).toContain(
+          `rotate(${slot.rotation}deg)`
+        );
+      }
+      unmount();
+    }
+  });
+
   it('keeps the moving expansion visual inside the SVG middle layer', () => {
     const { container } = render(
       <FolderNode
@@ -132,7 +147,9 @@ describe('FolderNode', () => {
           isExpanded: true,
           title: 'Layered folder',
         }}
+        height={280}
         id="folder-layered"
+        width={280}
       />
     );
 
@@ -157,8 +174,107 @@ describe('FolderNode', () => {
     });
   });
 
-  it('keeps folder details visible and toggles resize body class hooks', () => {
-    render(
+  it('keeps closed-stack thumbnails visible under returning cards while closing', () => {
+    const { container } = render(
+      <FolderNode
+        data={{
+          children: [
+            {
+              id: 'child-a',
+              type: 'card',
+              data: { title: 'Inside' },
+            },
+          ],
+          expansionChildren: [
+            {
+              child: {
+                id: 'child-a',
+                type: 'card',
+                data: { title: 'Inside' },
+              },
+              folderId: 'folder-closing',
+              origin: {
+                x: 40,
+                y: 80,
+                rotation: -5,
+                scaleX: 0.3,
+                scaleY: 0.45,
+              },
+              phase: 'closing',
+              target: { x: -120, y: -260, width: 180, height: 220 },
+            },
+          ],
+          isClosing: true,
+          isExpanded: true,
+          title: 'Closing folder',
+        }}
+        height={280}
+        id="folder-closing"
+        width={280}
+      />
+    );
+
+    const thumb = container.querySelector(
+      '[data-folder-thumbnail-id="child-a"] > div'
+    );
+    expect(thumb?.className).toContain('opacity-100');
+    expect(thumb).toHaveStyle({
+      width: '180px',
+      height: '220px',
+      transform: 'translate(-50%, -50%) scale(0.3, 0.45) rotate(-5deg)',
+    });
+    expect(
+      container.querySelector('[data-folder-expanded-visual-id="child-a"]')
+    ).toBeTruthy();
+  });
+
+  it('hides closed-stack thumbnails while the folder is open', () => {
+    const { container } = render(
+      <FolderNode
+        data={{
+          children: [
+            {
+              id: 'child-a',
+              type: 'card',
+              data: { title: 'Inside' },
+            },
+          ],
+          expansionChildren: [
+            {
+              child: {
+                id: 'child-a',
+                type: 'card',
+                data: { title: 'Inside' },
+              },
+              folderId: 'folder-open',
+              origin: {
+                x: 40,
+                y: 80,
+                rotation: -5,
+                scaleX: 0.3,
+                scaleY: 0.45,
+              },
+              phase: 'open',
+              target: { x: -120, y: -260, width: 180, height: 220 },
+            },
+          ],
+          isExpanded: true,
+          title: 'Open folder',
+        }}
+        height={280}
+        id="folder-open"
+        width={280}
+      />
+    );
+
+    const thumb = container.querySelector(
+      '[data-folder-thumbnail-id="child-a"] > div'
+    );
+    expect(thumb?.className).toContain('opacity-0');
+  });
+
+  it('keeps folder details visible when hidden or used as a drop target', () => {
+    const { container } = render(
       <FolderNode
         data={{
           isDropTarget: true,
@@ -172,12 +288,9 @@ describe('FolderNode', () => {
 
     expect(screen.getByText('Archive')).toBeInTheDocument();
     expect(screen.getByText('Hidden subtitle')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
-    expect(document.body.classList.contains('resizing-nwse')).toBe(true);
-
-    fireEvent.click(screen.getByRole('button', { name: 'end resize' }));
-    expect(document.body.classList.contains('resizing-nwse')).toBe(false);
+    // Folders are not resizable — no bottom-right resize control.
+    expect(container.querySelector('.react-flow__resize-control')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'start resize' })).toBeNull();
   });
 
   it('renders the title as static text (no inline contentEditable)', () => {

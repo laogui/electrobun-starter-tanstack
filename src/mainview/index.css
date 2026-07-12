@@ -406,12 +406,13 @@ body.resizing-nwse * {
 
 /* Folder expansion is a local collision transaction. React Flow owns the
    wrapper translate; transitioning that transform lets nearby nodes glide to
-   the positions solved by repulsion.ts while the opened folder stays pinned. */
+   the positions solved by repulsion.ts while the opened folder stays pinned.
+   Avoid will-change here: promoting every node then dropping the class on
+   close causes a one-frame compositor snap that reads as a global jitter. */
 .folder-expansion-active .react-flow__node {
   transition:
     transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, opacity;
 }
 
 .folder-expansion-active .react-flow__node.folder-peek-muted {
@@ -421,12 +422,14 @@ body.resizing-nwse * {
 .folder-expansion-active .react-flow__node.folder-peek-anchor,
 .folder-expansion-active .react-flow__node.folder-expanded-child {
   opacity: 1;
+  /* Anchor + temporary expansion nodes must not ease their wrapper transform
+     or they drift relative to the Motion shared-element animation. */
+  transition-property: opacity;
 }
 
 .folder-expansion-active .react-flow__edge {
   opacity: 0.08;
   transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity;
 }
 
 .folder-expansion-active.folder-expansion-closing .react-flow__node {

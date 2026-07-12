@@ -1,6 +1,8 @@
 import {
+  AlarmClock,
   Bell,
   Check,
+  CheckCircle2,
   Coffee,
   Eye,
   ListChecks,
@@ -71,15 +73,54 @@ function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function formatDueAt(value: string): string {
+function formatDueClock(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
   }).format(date);
+}
+
+function formatDueDay(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+/** Compact relative label for the hero time, e.g. "in 15m" / "2h ago" / "Due now". */
+function formatRelativeDue(value: string, nowMs = Date.now()): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const diffMs = date.getTime() - nowMs;
+  const absMs = Math.abs(diffMs);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (absMs < minute) {
+    return diffMs >= 0 ? 'Due now' : 'Just now';
+  }
+  if (absMs < hour) {
+    const minutes = Math.round(absMs / minute);
+    return diffMs >= 0 ? `in ${minutes}m` : `${minutes}m ago`;
+  }
+  if (absMs < day * 2) {
+    const hours = Math.round(absMs / hour);
+    return diffMs >= 0 ? `in ${hours}h` : `${hours}h ago`;
+  }
+  const days = Math.round(absMs / day);
+  return diffMs >= 0 ? `in ${days}d` : `${days}d ago`;
 }
 
 function toDateTimeLocalValue(value: string): string {
@@ -101,6 +142,48 @@ function reminderStatusLabel(status: ReminderWidgetData['status']): string {
       return 'Done';
     case 'missed':
       return 'Missed';
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Status-driven palette for the reminder card ambient glow + chip. */
+function reminderStatusTheme(status: ReminderWidgetData['status']): {
+  ambient: string;
+  chip: string;
+  hero: string;
+} {
+  switch (status) {
+    case 'scheduled':
+      return {
+        ambient:
+          'bg-[radial-gradient(70%_55%_at_50%_18%,rgba(99,102,241,0.14),transparent_72%)] dark:bg-[radial-gradient(70%_55%_at_50%_18%,rgba(129,140,248,0.22),transparent_74%)]',
+        chip: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70 dark:bg-indigo-400/10 dark:text-indigo-200 dark:ring-indigo-400/20',
+        hero: 'text-neutral-900 dark:text-white',
+      };
+    case 'snoozed':
+      return {
+        ambient:
+          'bg-[radial-gradient(70%_55%_at_50%_18%,rgba(245,158,11,0.16),transparent_72%)] dark:bg-[radial-gradient(70%_55%_at_50%_18%,rgba(251,191,36,0.20),transparent_74%)]',
+        chip: 'bg-amber-50 text-amber-800 ring-amber-200/80 dark:bg-amber-400/10 dark:text-amber-100 dark:ring-amber-400/20',
+        hero: 'text-amber-950 dark:text-amber-50',
+      };
+    case 'missed':
+      return {
+        ambient:
+          'bg-[radial-gradient(70%_55%_at_50%_18%,rgba(244,63,94,0.14),transparent_72%)] dark:bg-[radial-gradient(70%_55%_at_50%_18%,rgba(251,113,133,0.22),transparent_74%)]',
+        chip: 'bg-rose-50 text-rose-700 ring-rose-200/80 dark:bg-rose-400/10 dark:text-rose-100 dark:ring-rose-400/25',
+        hero: 'text-rose-950 dark:text-rose-50',
+      };
+    case 'done':
+      return {
+        ambient:
+          'bg-[radial-gradient(70%_55%_at_50%_18%,rgba(16,185,129,0.12),transparent_72%)] dark:bg-[radial-gradient(70%_55%_at_50%_18%,rgba(52,211,153,0.16),transparent_74%)]',
+        chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200/80 dark:bg-emerald-400/10 dark:text-emerald-100 dark:ring-emerald-400/20',
+        hero: 'text-neutral-500 dark:text-white/50',
+      };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -681,101 +764,185 @@ function ReminderWidgetBody({
   readOnly?: boolean;
   title: string;
 }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const effectiveDue = data.snoozedUntil ?? data.dueAt;
+  const theme = reminderStatusTheme(data.status);
+  const isDone = data.status === 'done';
+  const relativeLabel = isDone
+    ? 'Completed'
+    : formatRelativeDue(effectiveDue, nowMs);
+
+  // Refresh relative labels while the card is open (not while done).
+  useEffect(() => {
+    if (isDone) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30_000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isDone]);
+
   return (
-    <div className="flex h-full flex-col p-6">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate font-bold text-lg text-neutral-900">
-            {title}
-          </h2>
-          <div className="mt-1 text-neutral-500 text-xs">
-            {formatDueAt(data.snoozedUntil ?? data.dueAt)}
+    <div className="@container relative flex h-full flex-col overflow-hidden bg-white p-5 text-neutral-900 dark:bg-[#0b0b0d] dark:text-white dark:ring-1 dark:ring-white/[0.06] dark:ring-inset">
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-x-0 top-0 h-3/4',
+          theme.ambient
+        )}
+      />
+
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {title ? (
+              <h2 className="truncate font-semibold text-[15px] text-neutral-900 tracking-tight dark:text-white">
+                {title}
+              </h2>
+            ) : null}
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 font-medium text-2xs ring-1 ring-inset',
+                  theme.chip
+                )}
+              >
+                {reminderStatusLabel(data.status)}
+              </span>
+              {data.status === 'snoozed' && data.snoozedUntil ? (
+                <span className="truncate text-2xs text-neutral-400 dark:text-white/40">
+                  until {formatDueClock(data.snoozedUntil)}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <div
+            className={cn(
+              'inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-neutral-500 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 dark:text-white/55',
+              isDone && 'text-emerald-600 dark:text-emerald-300'
+            )}
+          >
+            {isDone ? (
+              <CheckCircle2 className="size-4" />
+            ) : (
+              <Bell className="size-4" />
+            )}
           </div>
         </div>
-        <Bell className="size-5 shrink-0 text-neutral-400" />
-      </div>
-      <div className="flex flex-1 flex-col justify-center gap-3">
-        <span className="w-fit rounded-full bg-neutral-100 px-2 py-1 font-medium text-neutral-600 text-xs">
-          {reminderStatusLabel(data.status)}
-        </span>
-        {data.note ? (
-          <p className="line-clamp-4 text-neutral-700 text-sm leading-relaxed">
-            {data.note}
-          </p>
-        ) : null}
-        {readOnly ? null : (
-          <div className="grid gap-2">
-            <label className="grid gap-1 text-neutral-500 text-xs">
-              <span>Reminder time</span>
-              <input
-                aria-label="Reminder time"
-                className="nodrag nopan rounded-md border border-black/10 bg-white px-2 py-1.5 text-neutral-800 text-xs outline-hidden focus:border-neutral-400"
-                onChange={(event) => {
-                  const nextDate = new Date(event.target.value);
-                  if (Number.isNaN(nextDate.getTime())) {
-                    return;
-                  }
-                  onChange?.((current) => ({
-                    ...current,
-                    dueAt: nextDate.toISOString(),
-                    snoozedUntil: undefined,
-                    status: 'scheduled',
-                  }));
-                }}
-                type="datetime-local"
-                value={toDateTimeLocalValue(data.dueAt)}
-              />
-            </label>
-            <label className="grid gap-1 text-neutral-500 text-xs">
-              <span>Reminder note</span>
-              <textarea
-                aria-label="Reminder note"
-                className="nodrag nopan min-h-12 resize-none rounded-md border border-black/10 bg-white px-2 py-1.5 text-neutral-800 text-xs outline-hidden focus:border-neutral-400"
-                onChange={(event) => {
-                  onChange?.((current) => ({
-                    ...current,
-                    note: event.target.value,
-                  }));
-                }}
-                value={data.note ?? ''}
-              />
-            </label>
+
+        <div className="mt-5 flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-col items-start gap-1">
+            <div
+              className={cn(
+                'font-semibold text-[clamp(1.65rem,14cqw,2.35rem)] tabular-nums leading-none tracking-tight',
+                theme.hero,
+                isDone &&
+                  'line-through decoration-neutral-300 dark:decoration-white/20'
+              )}
+            >
+              {formatDueClock(effectiveDue)}
+            </div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-neutral-500 text-sm dark:text-white/55">
+                {formatDueDay(effectiveDue)}
+              </span>
+              <span className="text-2xs text-neutral-400 uppercase tracking-[0.16em] dark:text-white/35">
+                {relativeLabel}
+              </span>
+            </div>
+          </div>
+
+          {readOnly ? (
+            data.note ? (
+              <p className="mt-4 line-clamp-4 text-neutral-600 text-sm leading-relaxed dark:text-white/65">
+                {data.note}
+              </p>
+            ) : null
+          ) : (
+            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-2.5">
+              <label className="group grid gap-1.5">
+                <span className="sr-only">Reminder time</span>
+                <div className="flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-neutral-50/80 px-3 py-2 transition-colors focus-within:border-indigo-300/70 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-200/50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:focus-within:border-indigo-400/40 dark:focus-within:bg-white/[0.06] dark:focus-within:ring-indigo-400/20">
+                  <AlarmClock className="size-3.5 shrink-0 text-neutral-400 dark:text-white/40" />
+                  <input
+                    aria-label="Reminder time"
+                    className="nodrag nopan w-full border-none bg-transparent text-neutral-800 text-xs outline-hidden dark:text-white/90 dark:[color-scheme:dark]"
+                    onChange={(event) => {
+                      const nextDate = new Date(event.target.value);
+                      if (Number.isNaN(nextDate.getTime())) {
+                        return;
+                      }
+                      onChange?.((current) => ({
+                        ...current,
+                        dueAt: nextDate.toISOString(),
+                        snoozedUntil: undefined,
+                        status: 'scheduled',
+                      }));
+                    }}
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(data.dueAt)}
+                  />
+                </div>
+              </label>
+              <label className="grid min-h-0 flex-1 gap-1.5">
+                <span className="sr-only">Reminder note</span>
+                <textarea
+                  aria-label="Reminder note"
+                  className="nodrag nopan min-h-14 w-full flex-1 resize-none rounded-2xl border border-black/[0.06] bg-neutral-50/80 px-3 py-2.5 text-neutral-700 text-sm leading-relaxed outline-hidden transition-colors placeholder:text-neutral-400 focus:border-indigo-300/70 focus:bg-white focus:ring-2 focus:ring-indigo-200/50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/80 dark:focus:border-indigo-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-indigo-400/20 dark:placeholder:text-white/30"
+                  onChange={(event) => {
+                    onChange?.((current) => ({
+                      ...current,
+                      note: event.target.value,
+                    }));
+                  }}
+                  placeholder="Add a note…"
+                  value={data.note ?? ''}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        {readOnly || isDone ? null : (
+          <div className="mt-4 flex items-center gap-2.5">
+            <button
+              aria-label="Snooze 10 minutes"
+              className="nodrag nopan inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-black/10 bg-white font-medium text-neutral-700 text-xs transition-colors hover:bg-neutral-50 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChange?.((current) => ({
+                  ...current,
+                  status: 'snoozed',
+                  snoozedUntil: new Date(
+                    Date.now() + 10 * 60 * 1000
+                  ).toISOString(),
+                }));
+              }}
+              type="button"
+            >
+              <AlarmClock className="size-3.5 opacity-70" />
+              Snooze 10m
+            </button>
+            <button
+              aria-label="Mark reminder done"
+              className="nodrag nopan inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-neutral-900 font-medium text-sm text-white transition-colors hover:bg-neutral-800 dark:border dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChange?.((current) => ({
+                  ...current,
+                  status: 'done',
+                }));
+              }}
+              type="button"
+            >
+              <Check className="size-3.5 opacity-90" />
+              Done
+            </button>
           </div>
         )}
       </div>
-      {readOnly || data.status === 'done' ? null : (
-        <div className="mt-5 flex items-center gap-2">
-          <button
-            className="nodrag nopan rounded-full border border-black/10 px-3 py-2 font-medium text-neutral-700 text-xs transition-colors hover:bg-neutral-50"
-            onClick={(event) => {
-              event.stopPropagation();
-              onChange?.((current) => ({
-                ...current,
-                status: 'snoozed',
-                snoozedUntil: new Date(
-                  Date.now() + 10 * 60 * 1000
-                ).toISOString(),
-              }));
-            }}
-            type="button"
-          >
-            Snooze 10 minutes
-          </button>
-          <button
-            className="nodrag nopan rounded-full bg-neutral-950 px-3 py-2 font-medium text-white text-xs transition-colors hover:bg-neutral-800"
-            onClick={(event) => {
-              event.stopPropagation();
-              onChange?.((current) => ({
-                ...current,
-                status: 'done',
-              }));
-            }}
-            type="button"
-          >
-            Mark reminder done
-          </button>
-        </div>
-      )}
     </div>
   );
 }

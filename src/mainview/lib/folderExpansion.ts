@@ -38,23 +38,135 @@ export interface FolderThumbnailSlot {
   topPercent: number;
 }
 
+type FolderThumbnailVariants = readonly (readonly FolderThumbnailSlot[])[];
+
 /**
- * Five stable slots shared by the closed Folder stack and the expansion
- * origin calculation. Keeping both sides on the same geometry makes the
- * child card appear to come from the thumbnail the user was already seeing.
+ * Count-specific compositions for the closed Folder stack. Every count has
+ * three intentionally asymmetric variants: enough variation to keep folders
+ * from looking stamped out, while keeping all cards close to the folder lip.
  */
-export const FOLDER_THUMBNAIL_SLOTS: readonly FolderThumbnailSlot[] = [
-  { leftPercent: 18, topPercent: 16, rotation: -9 },
-  { leftPercent: 27, topPercent: 10, rotation: -5 },
-  { leftPercent: 35, topPercent: 6, rotation: 0 },
-  { leftPercent: 43, topPercent: 10, rotation: 5 },
-  { leftPercent: 52, topPercent: 16, rotation: 9 },
-];
+const FOLDER_THUMBNAIL_LAYOUTS: Readonly<
+  Record<1 | 2 | 3 | 4 | 5, FolderThumbnailVariants>
+> = {
+  1: [
+    [{ leftPercent: 21, topPercent: 19, rotation: -1.6 }],
+    [{ leftPercent: 20, topPercent: 18, rotation: 1.4 }],
+    [{ leftPercent: 22, topPercent: 20, rotation: -0.6 }],
+  ],
+  2: [
+    [
+      { leftPercent: 9, topPercent: 22, rotation: -3.8 },
+      { leftPercent: 32, topPercent: 18, rotation: 2.8 },
+    ],
+    [
+      { leftPercent: 12, topPercent: 18, rotation: -2.4 },
+      { leftPercent: 30, topPercent: 22, rotation: 3.8 },
+    ],
+    [
+      { leftPercent: 7, topPercent: 21, rotation: -4.2 },
+      { leftPercent: 34, topPercent: 19, rotation: 2.2 },
+    ],
+  ],
+  3: [
+    [
+      { leftPercent: 5, topPercent: 24, rotation: -3.8 },
+      { leftPercent: 21, topPercent: 17, rotation: 0.8 },
+      { leftPercent: 37, topPercent: 22, rotation: 3.2 },
+    ],
+    [
+      { leftPercent: 6, topPercent: 21, rotation: -2.8 },
+      { leftPercent: 22, topPercent: 19, rotation: -0.4 },
+      { leftPercent: 36, topPercent: 24, rotation: 4 },
+    ],
+    [
+      { leftPercent: 3, topPercent: 24, rotation: -4.4 },
+      { leftPercent: 22, topPercent: 16, rotation: 0 },
+      { leftPercent: 39, topPercent: 21, rotation: 2.6 },
+    ],
+  ],
+  4: [
+    [
+      { leftPercent: 3, topPercent: 24, rotation: -4.2 },
+      { leftPercent: 15, topPercent: 20, rotation: -1.4 },
+      { leftPercent: 28, topPercent: 18, rotation: 1.2 },
+      { leftPercent: 40, topPercent: 23, rotation: 3.6 },
+    ],
+    [
+      { leftPercent: 2, topPercent: 22, rotation: -3.4 },
+      { leftPercent: 16, topPercent: 18, rotation: -0.6 },
+      { leftPercent: 29, topPercent: 21, rotation: 2.2 },
+      { leftPercent: 42, topPercent: 24, rotation: 4.4 },
+    ],
+    [
+      { leftPercent: 5, topPercent: 24, rotation: -4.8 },
+      { leftPercent: 14, topPercent: 19, rotation: -2 },
+      { leftPercent: 30, topPercent: 17, rotation: 0.8 },
+      { leftPercent: 39, topPercent: 22, rotation: 3 },
+    ],
+  ],
+  5: [
+    [
+      { leftPercent: 3, topPercent: 24, rotation: -4.2 },
+      { leftPercent: 13, topPercent: 21, rotation: -1.8 },
+      { leftPercent: 23, topPercent: 17, rotation: 0.6 },
+      { leftPercent: 33, topPercent: 19, rotation: 2.8 },
+      { leftPercent: 42, topPercent: 24, rotation: 4.6 },
+    ],
+    [
+      { leftPercent: 2, topPercent: 23, rotation: -3.6 },
+      { leftPercent: 12, topPercent: 18, rotation: -0.8 },
+      { leftPercent: 24, topPercent: 20, rotation: 1.4 },
+      { leftPercent: 34, topPercent: 17, rotation: 3.8 },
+      { leftPercent: 43, topPercent: 24, rotation: 5 },
+    ],
+    [
+      { leftPercent: 4, topPercent: 24, rotation: -4.8 },
+      { leftPercent: 14, topPercent: 20, rotation: -2.6 },
+      { leftPercent: 22, topPercent: 16, rotation: -0.4 },
+      { leftPercent: 32, topPercent: 20, rotation: 1.8 },
+      { leftPercent: 41, topPercent: 23, rotation: 3.4 },
+    ],
+  ],
+};
 
-const THUMBNAIL_WIDTH_PERCENT = 32;
-const THUMBNAIL_HEIGHT_PERCENT = 52;
+function hashFolderThumbnailSeed(childIds: readonly string[]): number {
+  let hash = 0;
+  for (const childId of childIds) {
+    for (let index = 0; index < childId.length; index += 1) {
+      hash = (hash * 31 + childId.charCodeAt(index)) % 2_147_483_647;
+    }
+    hash = (hash * 31 + 31) % 2_147_483_647;
+  }
+  return hash;
+}
 
-function expandedSize(type: string): Size {
+/**
+ * Pick a stable pseudo-random layout from the matching card-count family.
+ * The same children always produce the same slots, so regular renders never
+ * jitter and the expansion origin stays identical to the closed thumbnail.
+ */
+export function getFolderThumbnailSlots(
+  childIds: readonly string[]
+): readonly FolderThumbnailSlot[] {
+  const count = Math.min(MAX_FOLDER_PREVIEWS, childIds.length) as
+    | 0
+    | 1
+    | 2
+    | 3
+    | 4
+    | 5;
+  if (count === 0) {
+    return [];
+  }
+  const variants = FOLDER_THUMBNAIL_LAYOUTS[count];
+  return variants[hashFolderThumbnailSeed(childIds) % variants.length]!;
+}
+
+export const THUMBNAIL_WIDTH_PERCENT = 58;
+export const THUMBNAIL_HEIGHT_PERCENT = 38;
+
+/** Natural size used by both the closed stack and the expansion animation. */
+export function getFolderChildPreviewSize(type: string): Size {
   const source = findSpecByNodeType(type)?.size ?? {
     width: 350,
     height: 450,
@@ -67,6 +179,97 @@ function expandedSize(type: string): Size {
   return {
     width: Math.round(source.width * scale),
     height: Math.round(source.height * scale),
+  };
+}
+
+export function getFolderChildShapeClass(type: string): string {
+  if (type === 'sticky') {
+    return 'rounded-sm';
+  }
+  if (type === 'recording') {
+    return 'rounded-2xl';
+  }
+  return 'rounded-3xl';
+}
+
+/**
+ * Closed-stack thumbnail transform that matches the expansion origin frame:
+ * layout the card at its natural preview size, then scale it into the slot.
+ *
+ * Transform order must match Motion's default (`scale` then `rotate`) so the
+ * closing shared-element frame is pixel-identical to the static stack.
+ */
+export function getFolderThumbnailTransform(options: {
+  folderHeight: number;
+  folderWidth: number;
+  rotation: number;
+  type: string;
+}): {
+  height: number;
+  scaleX: number;
+  scaleY: number;
+  transform: string;
+  width: number;
+} {
+  const size = getFolderChildPreviewSize(options.type);
+  const previewWidth = (options.folderWidth * THUMBNAIL_WIDTH_PERCENT) / 100;
+  const previewHeight = (options.folderHeight * THUMBNAIL_HEIGHT_PERCENT) / 100;
+  const scaleX = previewWidth / size.width;
+  const scaleY = previewHeight / size.height;
+  return {
+    height: size.height,
+    scaleX,
+    scaleY,
+    // Motion emits: translate → scaleX/scaleY → rotate
+    transform: `translate(-50%, -50%) scale(${scaleX}, ${scaleY}) rotate(${options.rotation}deg)`,
+    width: size.width,
+  };
+}
+
+/**
+ * Counter-scale thumbnail contents so a wide, shallow card does not stretch
+ * its typography or imagery. The outer frame still fills its slot, while the
+ * nested preview lands at the smaller axis' uniform scale.
+ */
+export function getFolderThumbnailContentTransform(options: {
+  scaleX: number;
+  scaleY: number;
+}): {
+  scaleX: number;
+  transform: string;
+  widthPercent: number;
+} {
+  if (!(options.scaleX > 0 && options.scaleY > 0)) {
+    return { scaleX: 1, transform: 'scaleX(1)', widthPercent: 100 };
+  }
+  const scaleX = options.scaleY / options.scaleX;
+  return {
+    scaleX,
+    transform: `scaleX(${scaleX})`,
+    widthPercent: 100 / scaleX,
+  };
+}
+
+/** Build a static-stack transform from the live expansion origin (exact match). */
+export function getFolderThumbnailTransformFromOrigin(options: {
+  height: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  width: number;
+}): {
+  height: number;
+  scaleX: number;
+  scaleY: number;
+  transform: string;
+  width: number;
+} {
+  return {
+    height: options.height,
+    scaleX: options.scaleX,
+    scaleY: options.scaleY,
+    transform: `translate(-50%, -50%) scale(${options.scaleX}, ${options.scaleY}) rotate(${options.rotation}deg)`,
+    width: options.width,
   };
 }
 
@@ -114,7 +317,10 @@ export function buildFolderExpansionNodes(options: {
     return [];
   }
 
-  const sizes = children.map((child) => expandedSize(child.type));
+  const thumbnailSlots = getFolderThumbnailSlots(
+    children.map((child) => child.id)
+  );
+  const sizes = children.map((child) => getFolderChildPreviewSize(child.type));
   const totalWidth =
     sizes.reduce((sum, size) => sum + size.width, 0) +
     CARD_GAP * Math.max(0, sizes.length - 1);
@@ -132,7 +338,7 @@ export function buildFolderExpansionNodes(options: {
 
   return children.map((child, index): Node => {
     const size = sizes[index]!;
-    const slot = FOLDER_THUMBNAIL_SLOTS[index]!;
+    const slot = thumbnailSlots[index]!;
     const distanceFromCenter = Math.abs(index - (children.length - 1) / 2);
     const bottom =
       folderRect.top - FOLDER_TO_CARDS_GAP - distanceFromCenter * 5;
@@ -154,8 +360,12 @@ export function buildFolderExpansionNodes(options: {
       x: position.x + size.width / 2,
       y: position.y + size.height / 2,
     };
-    const previewWidth = (folderWidth * THUMBNAIL_WIDTH_PERCENT) / 100;
-    const previewHeight = (folderHeight * THUMBNAIL_HEIGHT_PERCENT) / 100;
+    const thumbnail = getFolderThumbnailTransform({
+      folderHeight,
+      folderWidth,
+      rotation: slot.rotation,
+      type: child.type,
+    });
     const data: FolderExpandedChildData = {
       child,
       folderId,
@@ -163,8 +373,8 @@ export function buildFolderExpansionNodes(options: {
         x: thumbnailCenter.x - targetCenter.x,
         y: thumbnailCenter.y - targetCenter.y,
         rotation: slot.rotation,
-        scaleX: previewWidth / size.width,
-        scaleY: previewHeight / size.height,
+        scaleX: thumbnail.scaleX,
+        scaleY: thumbnail.scaleY,
       },
       phase: closing ? 'closing' : 'open',
       target: {

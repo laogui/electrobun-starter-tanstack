@@ -3,16 +3,24 @@ import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
 
 import {
-  FOLDER_THUMBNAIL_SLOTS,
   type FolderChildEntry,
   type FolderExpandedChildData,
+  getFolderChildShapeClass,
+  getFolderThumbnailContentTransform,
+  getFolderThumbnailSlots,
+  getFolderThumbnailTransform,
+  getFolderThumbnailTransformFromOrigin,
   MAX_FOLDER_PREVIEWS,
+  THUMBNAIL_HEIGHT_PERCENT,
+  THUMBNAIL_WIDTH_PERCENT,
 } from '@/lib/folderExpansion';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import { NodeHandles } from './_shared/NodeHandles';
-import { ResizeHandle } from './_shared/ResizeHandle';
+
+/** Fallback when React Flow has not measured the node yet. */
+const DEFAULT_FOLDER_SIZE = 280;
 
 export interface FolderData {
   children?: unknown[];
@@ -31,12 +39,16 @@ export interface FolderData {
 
 export interface FolderContentProps {
   data: FolderData;
+  /** Measured folder height in flow coordinates (matches expansion origin math). */
+  height?: number | null;
   onExpandedChildClick?: (
     event: React.MouseEvent<HTMLDivElement>,
     item: FolderExpandedChildData
   ) => void;
   /** Click handler for the three-dot menu icon. */
   onMenuClick?: (e: React.MouseEvent) => void;
+  /** Measured folder width in flow coordinates (matches expansion origin math). */
+  width?: number | null;
 }
 
 /**
@@ -44,11 +56,15 @@ export interface FolderContentProps {
  */
 export const FolderContent = ({
   data,
+  height,
   onExpandedChildClick,
   onMenuClick,
+  width,
 }: FolderContentProps) => {
   const footerText = data.footer ?? data.updatedAt;
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
+  const folderWidth = width && width > 0 ? width : DEFAULT_FOLDER_SIZE;
+  const folderHeight = height && height > 0 ? height : DEFAULT_FOLDER_SIZE;
   const previewChildren = Array.isArray(data.children)
     ? data.children
         .filter((child): child is FolderChildEntry =>
@@ -63,6 +79,9 @@ export const FolderContent = ({
         )
         .slice(0, MAX_FOLDER_PREVIEWS)
     : [];
+  const thumbnailSlots = getFolderThumbnailSlots(
+    previewChildren.map((child) => child.id)
+  );
   const childCountLabel =
     childCount === 1 ? '1 item' : childCount > 1 ? `${childCount} items` : '';
 
@@ -70,11 +89,7 @@ export const FolderContent = ({
     <div
       className={cn(
         'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-[transform,box-shadow] duration-200 ease-out will-change-transform',
-        data.isDropTarget
-          ? 'scale-105 ring-2 ring-accent ring-offset-2'
-          : data.isExpanded
-            ? ''
-            : 'group-hover/folder:-translate-y-1.5'
+        data.isDropTarget && 'scale-105 ring-2 ring-accent ring-offset-2'
       )}
       style={{ transform: 'translateZ(0)' }}
     >
@@ -117,28 +132,69 @@ export const FolderContent = ({
           className="absolute inset-0 overflow-hidden rounded-[20px]"
         >
           {previewChildren.map((child, index) => {
-            const slot = FOLDER_THUMBNAIL_SLOTS[index]!;
+            const slot = thumbnailSlots[index]!;
+            // Prefer the live expansion origin so the static stack is
+            // bit-identical to the shared-element landing frame.
+            const expansion = data.expansionChildren?.find(
+              (item) => item.child.id === child.id
+            );
+            const thumbnail = expansion
+              ? getFolderThumbnailTransformFromOrigin({
+                  height: expansion.target.height,
+                  rotation: expansion.origin.rotation,
+                  scaleX: expansion.origin.scaleX,
+                  scaleY: expansion.origin.scaleY,
+                  width: expansion.target.width,
+                })
+              : getFolderThumbnailTransform({
+                  folderHeight,
+                  folderWidth,
+                  rotation: slot.rotation,
+                  type: child.type,
+                });
+            const thumbnailContent = getFolderThumbnailContentTransform({
+              scaleX: thumbnail.scaleX,
+              scaleY: thumbnail.scaleY,
+            });
+            // Hide only while open and flying out. During close the stack sits
+            // under the returning cards so unmounting them is a no-op visually.
+            const thumbsVisible = !data.isExpanded || Boolean(data.isClosing);
             return (
               <div
-                className={cn(
-                  'absolute h-[52%] w-[32%] overflow-hidden rounded-md border border-black/8 bg-white shadow-sm transition-opacity duration-100 ease-out [&_.conn-handle]:hidden',
-                  data.isExpanded
-                    ? data.isClosing
-                      ? 'opacity-100 delay-200'
-                      : 'opacity-0'
-                    : 'opacity-100'
-                )}
+                className="absolute"
                 data-folder-thumbnail-id={child.id}
                 key={child.id}
                 style={{
+                  height: `${THUMBNAIL_HEIGHT_PERCENT}%`,
                   left: `${slot.leftPercent}%`,
                   top: `${slot.topPercent}%`,
-                  transform: `rotate(${slot.rotation}deg)`,
+                  width: `${THUMBNAIL_WIDTH_PERCENT}%`,
                   zIndex: index + 1,
                 }}
               >
-                <div className="h-[333.333%] w-[333.333%] origin-top-left scale-[0.3]">
-                  <FolderChildPreview child={child} />
+                <div
+                  className={cn(
+                    'absolute top-1/2 left-1/2 overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800 [&_.conn-handle]:hidden',
+                    getFolderChildShapeClass(child.type),
+                    thumbsVisible ? 'opacity-100' : 'opacity-0'
+                  )}
+                  style={{
+                    height: thumbnail.height,
+                    transform: thumbnail.transform,
+                    transformOrigin: 'center center',
+                    width: thumbnail.width,
+                  }}
+                >
+                  <div
+                    className="h-full"
+                    style={{
+                      transform: thumbnailContent.transform,
+                      transformOrigin: 'left center',
+                      width: `${thumbnailContent.widthPercent}%`,
+                    }}
+                  >
+                    <FolderChildPreview child={child} />
+                  </div>
                 </div>
               </div>
             );
@@ -243,8 +299,17 @@ export const FolderContent = ({
   );
 };
 
-const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
-  const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
+const FolderNode = ({
+  id,
+  data,
+  height,
+  width,
+}: {
+  data: FolderData;
+  height?: number | null;
+  id: string;
+  width?: number | null;
+}) => {
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
 
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
@@ -288,26 +353,18 @@ const FolderNode = ({ id, data }: { id: string; data: FolderData }) => {
   return (
     <div
       className={cn(
-        'group/folder relative size-full',
+        'relative size-full',
         data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
     >
-      <ResizeHandle
-        hoverClassName="group-hover/folder:opacity-100"
-        maxHeight={600}
-        maxWidth={600}
-        minHeight={250}
-        minWidth={250}
-        nodeId={id}
-        onResizeStart={saveSnapshot}
-      />
-
       <NodeHandles topStyle={{ top: '12%' }} />
 
       <FolderContent
         data={data}
+        height={height}
         onExpandedChildClick={handleExpandedChildClick}
         onMenuClick={handleMenuClick}
+        width={width}
       />
     </div>
   );

@@ -7,11 +7,12 @@ import {
   type FolderChildEntry,
   type FolderExpandedChildData,
   getFolderChildShapeClass,
+  getFolderPeekChildren,
   getFolderThumbnailContentTransform,
   getFolderThumbnailSlots,
   getFolderThumbnailTransform,
   getFolderThumbnailTransformFromOrigin,
-  MAX_FOLDER_PREVIEWS,
+  MAX_FOLDER_EXPANDED_CHILDREN,
   THUMBNAIL_HEIGHT_PERCENT,
   THUMBNAIL_WIDTH_PERCENT,
 } from '@/lib/folderExpansion';
@@ -106,20 +107,32 @@ export const FolderContent = ({
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
   const folderWidth = width && width > 0 ? width : DEFAULT_FOLDER_SIZE;
   const folderHeight = height && height > 0 ? height : DEFAULT_FOLDER_SIZE;
-  const previewChildren = Array.isArray(data.children)
-    ? data.children
-        .filter((child): child is FolderChildEntry =>
-          Boolean(
-            child &&
-              typeof child === 'object' &&
-              typeof (child as FolderChildEntry).id === 'string' &&
-              typeof (child as FolderChildEntry).type === 'string' &&
-              (child as FolderChildEntry).data &&
-              typeof (child as FolderChildEntry).data === 'object'
-          )
+  const validChildren = Array.isArray(data.children)
+    ? data.children.filter((child): child is FolderChildEntry =>
+        Boolean(
+          child &&
+            typeof child === 'object' &&
+            typeof (child as FolderChildEntry).id === 'string' &&
+            typeof (child as FolderChildEntry).type === 'string' &&
+            (child as FolderChildEntry).data &&
+            typeof (child as FolderChildEntry).data === 'object'
         )
-        .slice(0, MAX_FOLDER_PREVIEWS)
+      )
     : [];
+  const capturedPeekChildren = data.isExpanded
+    ? (data.expansionChildren ?? [])
+        .filter((item) => item.origin.kind === 'peek')
+        .sort(
+          (a, b) =>
+            (a.origin.peekIndex ?? Number.MAX_SAFE_INTEGER) -
+            (b.origin.peekIndex ?? Number.MAX_SAFE_INTEGER)
+        )
+        .map((item) => item.child)
+    : [];
+  const previewChildren =
+    capturedPeekChildren.length > 0
+      ? capturedPeekChildren
+      : getFolderPeekChildren(validChildren);
   const thumbnailSlots = getFolderThumbnailSlots(
     previewChildren.map((child) => child.id)
   );
@@ -248,6 +261,9 @@ export const FolderContent = ({
               <div
                 className="pointer-events-auto absolute"
                 data-folder-expanded-visual-id={item.child.id}
+                data-folder-motion-order={item.motionOrder}
+                data-folder-origin-kind={item.origin.kind}
+                data-folder-peek-index={item.origin.peekIndex ?? undefined}
                 key={item.child.id}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -265,7 +281,12 @@ export const FolderContent = ({
                   left: item.target.x,
                   top: item.target.y,
                   width: item.target.width,
-                  zIndex: MAX_FOLDER_PREVIEWS + index + 1,
+                  zIndex:
+                    item.origin.kind === 'peek'
+                      ? MAX_FOLDER_EXPANDED_CHILDREN +
+                        (item.origin.peekIndex ?? 0) +
+                        1
+                      : index + 1,
                 }}
               >
                 <FolderExpandedChildVisual

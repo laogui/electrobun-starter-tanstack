@@ -139,8 +139,8 @@ const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
 // or group) that was brought to front - regardless of which container type
 // the card is about to drop onto.
 const DRAGGING_OVER_CONTAINER_Z_OFFSET = REACT_FLOW_SELECTED_NODE_Z_OFFSET + 1;
-const FOLDER_EXPANSION_DURATION_MS = 420;
-const FOLDER_COLLAPSE_DURATION_MS = 320;
+const FOLDER_EXPANSION_DURATION_MS = 520;
+const FOLDER_COLLAPSE_DURATION_MS = 420;
 
 function getFolderTransitionDuration(closing = false): number {
   if (

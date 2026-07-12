@@ -21,6 +21,10 @@ const MIN_SOURCE_EDGE = 120;
 const MAX_SOURCE_EDGE = 900;
 const EXPANDED_SCALE = 0.68;
 const FOLDER_SHELF_GAP = 22;
+const MAX_WATERFALL_COLUMNS = 5;
+const MIN_WATERFALL_WIDTH = 1120;
+const WATERFALL_WIDTH_FACTOR = 5;
+const HIDDEN_ORIGIN_SCALE = 0.16;
 // React Flow raises selected nodes by 1000. Keep the temporary expansion
 // layer above that range, then let the folder anchor sit one layer higher so
 // returning cards disappear behind its shell instead of painting over it.
@@ -37,7 +41,16 @@ export interface FolderChildEntry {
 export interface FolderExpandedChildData extends Record<string, unknown> {
   child: FolderChildEntry;
   folderId: string;
-  origin: Point & { rotation: number; scaleX: number; scaleY: number };
+  motionCount: number;
+  motionOrder: number;
+  origin: Point & {
+    kind: 'hidden' | 'peek';
+    opacity: number;
+    peekIndex: number | null;
+    rotation: number;
+    scaleX: number;
+    scaleY: number;
+  };
   phase: 'closing' | 'open';
   target: Point & Size;
 }
@@ -323,17 +336,81 @@ function getChildren(folder: Node): FolderChildEntry[] {
     .slice(0, MAX_FOLDER_EXPANDED_CHILDREN);
 }
 
+/**
+ * The closed folder always previews the same leading identities. Randomness is
+ * allowed in their slot composition, never in which cards are selected.
+ */
+export function getFolderPeekChildren(
+  children: readonly FolderChildEntry[]
+): FolderChildEntry[] {
+  return children.slice(0, MAX_FOLDER_PREVIEWS);
+}
+
 export interface FolderShelfSlot extends Point, Size {}
 
+interface WaterfallColumn {
+  height: number;
+  itemIndexes: number[];
+  width: number;
+}
+
+interface WaterfallPlan {
+  columns: WaterfallColumn[];
+  totalWidth: number;
+}
+
+function buildWaterfallPlan(
+  sizes: readonly Size[],
+  columnCount: number
+): WaterfallPlan {
+  const columns = Array.from(
+    { length: columnCount },
+    (): WaterfallColumn => ({
+      height: 0,
+      itemIndexes: [],
+      width: 0,
+    })
+  );
+  const centerIndex = (columnCount - 1) / 2;
+
+  for (const [itemIndex, size] of sizes.entries()) {
+    let columnIndex = itemIndex;
+    if (itemIndex >= columnCount) {
+      columnIndex = columns.reduce((bestIndex, column, index) => {
+        const best = columns[bestIndex]!;
+        if (column.height !== best.height) {
+          return column.height < best.height ? index : bestIndex;
+        }
+        const distance = Math.abs(index - centerIndex);
+        const bestDistance = Math.abs(bestIndex - centerIndex);
+        return distance < bestDistance ? index : bestIndex;
+      }, 0);
+    }
+
+    const column = columns[columnIndex]!;
+    column.height +=
+      size.height + (column.itemIndexes.length > 0 ? FOLDER_SHELF_GAP : 0);
+    column.width = Math.max(column.width, size.width);
+    column.itemIndexes.push(itemIndex);
+  }
+
+  return {
+    columns,
+    totalWidth:
+      columns.reduce((sum, column) => sum + column.width, 0) +
+      FOLDER_SHELF_GAP * Math.max(0, columns.length - 1),
+  };
+}
+
 /**
- * Bottom-up shelf packing modeled after the reference interaction:
+ * Bottom-up waterfall packing modeled after the reference interaction:
  *
- * - one shelf for up to five children;
- * - six to eight children split into two balanced shelves (7 → 4 + 3);
- * - every shelf is centered on the folder and bottom-aligns mixed heights;
- * - the same gap separates siblings, shelves, and the folder lip.
+ * - up to five bottom columns grow outward from the folder;
+ * - additional cards stack above the currently shortest, center-most column;
+ * - wide content automatically reduces the number of columns;
+ * - every column grows upward and preserves each card's natural dimensions.
  */
-export function calculateFolderShelfLayout(options: {
+export function calculateFolderWaterfallLayout(options: {
   folderRect: Rect;
   sizes: readonly Size[];
 }): FolderShelfSlot[] {
@@ -342,65 +419,72 @@ export function calculateFolderShelfLayout(options: {
     return [];
   }
 
-  const firstRowCount =
-    sizes.length <= MAX_FOLDER_PREVIEWS
-      ? sizes.length
-      : Math.ceil(sizes.length / 2);
-  const rows = [
-    Array.from({ length: firstRowCount }, (_, index) => index),
-    Array.from(
-      { length: sizes.length - firstRowCount },
-      (_, index) => firstRowCount + index
-    ),
-  ].filter((row) => row.length > 0);
+  const folderWidth = folderRect.right - folderRect.left;
+  const maximumWidth = Math.max(
+    MIN_WATERFALL_WIDTH,
+    folderWidth * WATERFALL_WIDTH_FACTOR
+  );
+  let plan = buildWaterfallPlan(
+    sizes,
+    Math.min(MAX_WATERFALL_COLUMNS, sizes.length)
+  );
+  while (plan.totalWidth > maximumWidth && plan.columns.length > 1) {
+    plan = buildWaterfallPlan(sizes, plan.columns.length - 1);
+  }
+
   const folderCenterX = (folderRect.left + folderRect.right) / 2;
   const slots = Array.from<FolderShelfSlot | undefined>({
     length: sizes.length,
   });
-  let baseline = folderRect.top - FOLDER_SHELF_GAP;
+  let cursorX = folderCenterX - plan.totalWidth / 2;
 
-  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
-    const row = rows[rowIndex]!;
-    const rowWidth =
-      row.reduce((sum, itemIndex) => sum + sizes[itemIndex]!.width, 0) +
-      FOLDER_SHELF_GAP * Math.max(0, row.length - 1);
-    const rowHeight = Math.max(
-      ...row.map((itemIndex) => sizes[itemIndex]!.height)
-    );
-    let cursorX = folderCenterX - rowWidth / 2;
-
-    for (const itemIndex of row) {
+  for (const column of plan.columns) {
+    const columnCenterX = cursorX + column.width / 2;
+    let baseline = folderRect.top - FOLDER_SHELF_GAP;
+    for (const itemIndex of column.itemIndexes) {
       const size = sizes[itemIndex]!;
       slots[itemIndex] = {
-        x: cursorX,
+        x: columnCenterX - size.width / 2,
         y: baseline - size.height,
         width: size.width,
         height: size.height,
       };
-      cursorX += size.width + FOLDER_SHELF_GAP;
+      baseline -= size.height + FOLDER_SHELF_GAP;
     }
-
-    baseline -= rowHeight + FOLDER_SHELF_GAP;
+    cursorX += column.width + FOLDER_SHELF_GAP;
   }
 
   return slots.map((slot) => slot!);
 }
 
-function getExpansionOriginSlot(
-  index: number,
-  thumbnailSlots: readonly FolderThumbnailSlot[]
-): FolderThumbnailSlot {
-  const direct = thumbnailSlots[index];
-  if (direct) {
-    return direct;
-  }
-  const center = thumbnailSlots[Math.floor((thumbnailSlots.length - 1) / 2)]!;
-  const hiddenIndex = index - thumbnailSlots.length;
+function getHiddenOrigin(options: {
+  folderRect: Rect;
+  hiddenIndex: number;
+  size: Size;
+}): Point & {
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+} {
+  const { folderRect, hiddenIndex, size } = options;
+  const folderWidth = folderRect.right - folderRect.left;
+  const folderHeight = folderRect.bottom - folderRect.top;
   const direction = hiddenIndex % 2 === 0 ? -1 : 1;
+  const centerX =
+    (folderRect.left + folderRect.right) / 2 +
+    direction * folderWidth * (0.025 + hiddenIndex * 0.012);
+  const centerY = folderRect.top + folderHeight * 0.56;
+  const scale = Math.min(
+    HIDDEN_ORIGIN_SCALE,
+    (folderWidth * 0.28) / size.width,
+    (folderHeight * 0.2) / size.height
+  );
   return {
-    leftPercent: center.leftPercent + direction * (hiddenIndex + 1) * 2,
-    topPercent: Math.min(25, center.topPercent + hiddenIndex + 1),
-    rotation: center.rotation + direction * (0.8 + hiddenIndex * 0.4),
+    x: centerX,
+    y: centerY,
+    rotation: direction * (1.2 + hiddenIndex * 0.45),
+    scaleX: scale,
+    scaleY: scale,
   };
 }
 
@@ -429,13 +513,27 @@ export function buildFolderExpansionNodes(options: {
     return [];
   }
 
+  const peekChildren = getFolderPeekChildren(children);
+  const peekIndexById = new Map(
+    peekChildren.map((child, index) => [child.id, index] as const)
+  );
   const thumbnailSlots = getFolderThumbnailSlots(
-    children.slice(0, MAX_FOLDER_PREVIEWS).map((child) => child.id)
+    peekChildren.map((child) => child.id)
   );
   const sizes = children.map((child) =>
     getFolderChildPreviewSize(child.type, child.size)
   );
-  const shelfSlots = calculateFolderShelfLayout({ folderRect, sizes });
+  const waterfallSlots = calculateFolderWaterfallLayout({ folderRect, sizes });
+  const motionOrderByIndex = new Map(
+    waterfallSlots
+      .map((slot, index) => ({
+        index,
+        bottom: slot.y + slot.height,
+        x: slot.x,
+      }))
+      .sort((a, b) => b.bottom - a.bottom || a.x - b.x)
+      .map((item, motionOrder) => [item.index, motionOrder] as const)
+  );
   const folderWidth = folderRect.right - folderRect.left;
   const folderHeight = folderRect.bottom - folderRect.top;
   const expansionLayerBase =
@@ -447,35 +545,58 @@ export function buildFolderExpansionNodes(options: {
     ) + EXPANSION_LAYER_OFFSET;
   return children.map((child, index): Node => {
     const size = sizes[index]!;
-    const slot = getExpansionOriginSlot(index, thumbnailSlots);
-    const position = shelfSlots[index]!;
-
-    const thumbnailCenter = {
-      x:
-        folderRect.left +
-        folderWidth * ((slot.leftPercent + THUMBNAIL_WIDTH_PERCENT / 2) / 100),
-      y:
-        folderRect.top +
-        folderHeight * ((slot.topPercent + THUMBNAIL_HEIGHT_PERCENT / 2) / 100),
-    };
+    const peekIndex = peekIndexById.get(child.id) ?? null;
+    const position = waterfallSlots[index]!;
     const targetCenter = {
       x: position.x + size.width / 2,
       y: position.y + size.height / 2,
     };
-    const thumbnail = getFolderThumbnailTransform({
-      folderHeight,
-      folderWidth,
-      rotation: slot.rotation,
-      size: child.size,
-      type: child.type,
-    });
+    const peekSlot = peekIndex === null ? null : thumbnailSlots[peekIndex]!;
+    const hiddenOrigin =
+      peekIndex === null
+        ? getHiddenOrigin({
+            folderRect,
+            hiddenIndex: index - peekChildren.length,
+            size,
+          })
+        : null;
+    const originCenter = peekSlot
+      ? {
+          x:
+            folderRect.left +
+            folderWidth *
+              ((peekSlot.leftPercent + THUMBNAIL_WIDTH_PERCENT / 2) / 100),
+          y:
+            folderRect.top +
+            folderHeight *
+              ((peekSlot.topPercent + THUMBNAIL_HEIGHT_PERCENT / 2) / 100),
+        }
+      : { x: hiddenOrigin!.x, y: hiddenOrigin!.y };
+    const thumbnail = peekSlot
+      ? getFolderThumbnailTransform({
+          folderHeight,
+          folderWidth,
+          rotation: peekSlot.rotation,
+          size: child.size,
+          type: child.type,
+        })
+      : {
+          rotation: hiddenOrigin!.rotation,
+          scaleX: hiddenOrigin!.scaleX,
+          scaleY: hiddenOrigin!.scaleY,
+        };
     const data: FolderExpandedChildData = {
       child,
       folderId,
+      motionCount: children.length,
+      motionOrder: motionOrderByIndex.get(index) ?? index,
       origin: {
-        x: thumbnailCenter.x - targetCenter.x,
-        y: thumbnailCenter.y - targetCenter.y,
-        rotation: slot.rotation,
+        x: originCenter.x - targetCenter.x,
+        y: originCenter.y - targetCenter.y,
+        kind: peekIndex === null ? 'hidden' : 'peek',
+        opacity: peekIndex === null ? 0 : 1,
+        peekIndex,
+        rotation: peekSlot?.rotation ?? hiddenOrigin!.rotation,
         scaleX: thumbnail.scaleX,
         scaleY: thumbnail.scaleY,
       },

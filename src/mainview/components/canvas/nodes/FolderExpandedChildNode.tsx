@@ -36,10 +36,18 @@ export function FolderExpandedChildVisual({
   const shouldReduceMotion = useReducedMotion();
   const returning = data.phase === 'closing';
   const origin = shouldReduceMotion
-    ? { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0 }
+    ? {
+        x: 0,
+        y: 0,
+        opacity: data.origin.kind === 'hidden' ? 0 : 1,
+        scaleX: 1,
+        scaleY: 1,
+        rotate: 0,
+      }
     : {
         x: data.origin.x,
         y: data.origin.y,
+        opacity: data.origin.opacity,
         scaleX: data.origin.scaleX,
         scaleY: data.origin.scaleY,
         rotate: data.origin.rotation,
@@ -47,6 +55,7 @@ export function FolderExpandedChildVisual({
   const expanded = {
     x: 0,
     y: 0,
+    opacity: 1,
     scaleX: 1,
     scaleY: 1,
     rotate: 0,
@@ -63,7 +72,12 @@ export function FolderExpandedChildVisual({
       };
   const expandedContent = { scaleX: 1, width: '100%' };
   const transition = {
-    duration: shouldReduceMotion ? 0.01 : returning ? 0.32 : 0.42,
+    delay: shouldReduceMotion
+      ? 0
+      : returning
+        ? (data.motionCount - 1 - data.motionOrder) * 0.015
+        : data.motionOrder * 0.018,
+    duration: shouldReduceMotion ? 0.01 : returning ? 0.3 : 0.38,
     ease: EASE_OUT_QUINT,
   };
 

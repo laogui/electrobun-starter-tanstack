@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildFolderExpansionNodes,
-  calculateFolderShelfLayout,
+  calculateFolderWaterfallLayout,
   FOLDER_EXPANDED_CHILD_NODE_TYPE,
   type FolderExpandedChildData,
   getFolderChildPreviewSize,
+  getFolderPeekChildren,
   getFolderThumbnailContentTransform,
   getFolderThumbnailSlots,
   getFolderThumbnailTransform,
@@ -90,7 +91,7 @@ describe('buildFolderExpansionNodes', () => {
     expect(expanded.every((node) => node.draggable === false)).toBe(true);
   });
 
-  it('packs seven mixed-size cards into bottom-aligned four-plus-three shelves', () => {
+  it('packs seven mixed-size cards into centered bottom-up waterfall columns', () => {
     const folderRect = { left: 500, right: 780, top: 600, bottom: 880 };
     const sizes = [
       { width: 230, height: 356 },
@@ -101,27 +102,73 @@ describe('buildFolderExpansionNodes', () => {
       { width: 480, height: 350 },
       { width: 255, height: 352 },
     ];
-    const slots = calculateFolderShelfLayout({ folderRect, sizes });
-    const topRow = slots.slice(0, 4);
-    const bottomRow = slots.slice(4);
+    const slots = calculateFolderWaterfallLayout({ folderRect, sizes });
+    const columnCenters = new Set(slots.map((slot) => slot.x + slot.width / 2));
 
-    expect(new Set(topRow.map((slot) => slot.y + slot.height))).toHaveLength(1);
-    expect(new Set(bottomRow.map((slot) => slot.y + slot.height))).toHaveLength(
-      1
-    );
-    expect(bottomRow[0]!.y + bottomRow[0]!.height).toBe(578);
-    expect(topRow[0]!.y + topRow[0]!.height).toBe(204);
-    expect(bottomRow[1]!.x - (bottomRow[0]!.x + bottomRow[0]!.width)).toBe(22);
+    expect(columnCenters.size).toBe(4);
+    expect(slots.slice(0, 4).map((slot) => slot.y + slot.height)).toEqual([
+      578, 578, 578, 578,
+    ]);
+    expect(slots[4]!.y + slots[4]!.height).toBe(slots[3]!.y - 22);
+    expect(slots[5]!.y + slots[5]!.height).toBe(slots[2]!.y - 22);
+    expect(slots[6]!.y + slots[6]!.height).toBe(slots[0]!.y - 22);
 
     const centerX = (folderRect.left + folderRect.right) / 2;
-    const topLeft = Math.min(...topRow.map((slot) => slot.x));
-    const topRight = Math.max(...topRow.map((slot) => slot.x + slot.width));
-    const bottomLeft = Math.min(...bottomRow.map((slot) => slot.x));
-    const bottomRight = Math.max(
-      ...bottomRow.map((slot) => slot.x + slot.width)
+    const left = Math.min(...slots.map((slot) => slot.x));
+    const right = Math.max(...slots.map((slot) => slot.x + slot.width));
+    expect((left + right) / 2).toBe(centerX);
+  });
+
+  it('captures five stable peek identities and hides all overflow origins', () => {
+    const source = folder(
+      Array.from({ length: 7 }, (_, index) => ({ id: `child-${index}` }))
     );
-    expect((topLeft + topRight) / 2).toBe(centerX);
-    expect((bottomLeft + bottomRight) / 2).toBe(centerX);
+    const sourceChildren = source.data.children as Array<{
+      data: Record<string, unknown>;
+      id: string;
+      type: string;
+    }>;
+    const peekChildren = getFolderPeekChildren(sourceChildren);
+    const expanded = buildFolderExpansionNodes({
+      allNodes: [source],
+      closing: false,
+      folderId: source.id,
+    });
+    const expandedData = expanded.map(
+      (node) => node.data as FolderExpandedChildData
+    );
+
+    expect(peekChildren.map((child) => child.id)).toEqual([
+      'child-0',
+      'child-1',
+      'child-2',
+      'child-3',
+      'child-4',
+    ]);
+    expect(
+      expandedData.slice(0, 5).map((item) => ({
+        id: item.child.id,
+        kind: item.origin.kind,
+        opacity: item.origin.opacity,
+        peekIndex: item.origin.peekIndex,
+      }))
+    ).toEqual(
+      peekChildren.map((child, peekIndex) => ({
+        id: child.id,
+        kind: 'peek',
+        opacity: 1,
+        peekIndex,
+      }))
+    );
+    for (const item of expandedData.slice(5)) {
+      expect(item.origin).toMatchObject({
+        kind: 'hidden',
+        opacity: 0,
+        peekIndex: null,
+      });
+      expect(item.origin.scaleX).toBe(item.origin.scaleY);
+      expect(item.motionOrder).toBeGreaterThanOrEqual(5);
+    }
   });
 
   it('preserves a stored child aspect ratio while bounding its expanded size', () => {

@@ -52,15 +52,16 @@ const CANVAS_CONTENT_NODE_TYPES = new Set<string>([
   'widget',
 ]);
 
-/** React Flow node types that open a focused/zoom view on double-click.
- *  `asset` is reserved for Phase 1B; keeping it true here lets persisted
- *  experimental data route through focused view once the UI exists. */
+/** React Flow node types that open a focused/zoom view on click.
+ *  Widgets are interactive on the canvas itself and never open a note
+ *  focused view. `asset` is reserved for Phase 1B; keeping it true here
+ *  lets persisted experimental data route through focused view once the
+ *  UI exists. */
 const FOCUSABLE_NODE_TYPES = new Set<string>([
   'card',
   'image',
   'asset',
   'link',
-  'widget',
 ]);
 
 export function isCanvasContentNode(type: string | undefined): boolean {

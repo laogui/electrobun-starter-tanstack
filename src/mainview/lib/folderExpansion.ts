@@ -1,17 +1,26 @@
 import type { Node } from '@xyflow/react';
 
 import { findSpecByNodeType } from './canvasNodeRegistry';
-import { buildAbsoluteRects, type Point, type Size } from './collision';
+import {
+  buildAbsoluteRects,
+  type Point,
+  type Rect,
+  type Size,
+} from './collision';
 
 export const FOLDER_EXPANDED_CHILD_NODE_TYPE = 'folderExpandedChild';
+/** Closed folder artwork stays intentionally concise. */
 export const MAX_FOLDER_PREVIEWS = 5;
+/** Expanded shelves can reveal a richer set before a dedicated pager is needed. */
+export const MAX_FOLDER_EXPANDED_CHILDREN = 8;
 export const FOLDER_EXPANSION_GAP = 18;
 
-const MAX_EXPANDED_WIDTH = 190;
-const MAX_EXPANDED_HEIGHT = 234;
-const EXPANDED_SCALE = 0.52;
-const CARD_GAP = 18;
-const FOLDER_TO_CARDS_GAP = 22;
+const MAX_EXPANDED_WIDTH = 480;
+const MAX_EXPANDED_HEIGHT = 480;
+const MIN_SOURCE_EDGE = 120;
+const MAX_SOURCE_EDGE = 900;
+const EXPANDED_SCALE = 0.68;
+const FOLDER_SHELF_GAP = 22;
 // React Flow raises selected nodes by 1000. Keep the temporary expansion
 // layer above that range, then let the folder anchor sit one layer higher so
 // returning cards disappear behind its shell instead of painting over it.
@@ -21,6 +30,7 @@ export interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
   noteId?: string;
+  size?: Size;
   type: string;
 }
 
@@ -165,12 +175,32 @@ export function getFolderThumbnailSlots(
 export const THUMBNAIL_WIDTH_PERCENT = 58;
 export const THUMBNAIL_HEIGHT_PERCENT = 38;
 
-/** Natural size used by both the closed stack and the expansion animation. */
-export function getFolderChildPreviewSize(type: string): Size {
-  const source = findSpecByNodeType(type)?.size ?? {
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+function getFolderChildSourceSize(type: string, storedSize?: Size): Size {
+  const fallback = findSpecByNodeType(type)?.size ?? {
     width: 350,
     height: 450,
   };
+  const hasStoredSize =
+    Number.isFinite(storedSize?.width) &&
+    Number.isFinite(storedSize?.height) &&
+    (storedSize?.width ?? 0) > 0 &&
+    (storedSize?.height ?? 0) > 0;
+  const source = hasStoredSize ? storedSize! : fallback;
+  return {
+    width: clamp(source.width, MIN_SOURCE_EDGE, MAX_SOURCE_EDGE),
+    height: clamp(source.height, MIN_SOURCE_EDGE, MAX_SOURCE_EDGE),
+  };
+}
+
+/** Natural size used by both the closed stack and the expansion animation. */
+export function getFolderChildPreviewSize(
+  type: string,
+  storedSize?: Size
+): Size {
+  const source = getFolderChildSourceSize(type, storedSize);
   const scale = Math.min(
     EXPANDED_SCALE,
     MAX_EXPANDED_WIDTH / source.width,
@@ -203,6 +233,7 @@ export function getFolderThumbnailTransform(options: {
   folderHeight: number;
   folderWidth: number;
   rotation: number;
+  size?: Size;
   type: string;
 }): {
   height: number;
@@ -211,7 +242,7 @@ export function getFolderThumbnailTransform(options: {
   transform: string;
   width: number;
 } {
-  const size = getFolderChildPreviewSize(options.type);
+  const size = getFolderChildPreviewSize(options.type, options.size);
   const previewWidth = (options.folderWidth * THUMBNAIL_WIDTH_PERCENT) / 100;
   const previewHeight = (options.folderHeight * THUMBNAIL_HEIGHT_PERCENT) / 100;
   const scaleX = previewWidth / size.width;
@@ -289,7 +320,88 @@ function getChildren(folder: Node): FolderChildEntry[] {
           typeof (child as FolderChildEntry).data === 'object'
       )
     )
-    .slice(0, MAX_FOLDER_PREVIEWS);
+    .slice(0, MAX_FOLDER_EXPANDED_CHILDREN);
+}
+
+export interface FolderShelfSlot extends Point, Size {}
+
+/**
+ * Bottom-up shelf packing modeled after the reference interaction:
+ *
+ * - one shelf for up to five children;
+ * - six to eight children split into two balanced shelves (7 → 4 + 3);
+ * - every shelf is centered on the folder and bottom-aligns mixed heights;
+ * - the same gap separates siblings, shelves, and the folder lip.
+ */
+export function calculateFolderShelfLayout(options: {
+  folderRect: Rect;
+  sizes: readonly Size[];
+}): FolderShelfSlot[] {
+  const { folderRect, sizes } = options;
+  if (sizes.length === 0) {
+    return [];
+  }
+
+  const firstRowCount =
+    sizes.length <= MAX_FOLDER_PREVIEWS
+      ? sizes.length
+      : Math.ceil(sizes.length / 2);
+  const rows = [
+    Array.from({ length: firstRowCount }, (_, index) => index),
+    Array.from(
+      { length: sizes.length - firstRowCount },
+      (_, index) => firstRowCount + index
+    ),
+  ].filter((row) => row.length > 0);
+  const folderCenterX = (folderRect.left + folderRect.right) / 2;
+  const slots = Array.from<FolderShelfSlot | undefined>({
+    length: sizes.length,
+  });
+  let baseline = folderRect.top - FOLDER_SHELF_GAP;
+
+  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+    const row = rows[rowIndex]!;
+    const rowWidth =
+      row.reduce((sum, itemIndex) => sum + sizes[itemIndex]!.width, 0) +
+      FOLDER_SHELF_GAP * Math.max(0, row.length - 1);
+    const rowHeight = Math.max(
+      ...row.map((itemIndex) => sizes[itemIndex]!.height)
+    );
+    let cursorX = folderCenterX - rowWidth / 2;
+
+    for (const itemIndex of row) {
+      const size = sizes[itemIndex]!;
+      slots[itemIndex] = {
+        x: cursorX,
+        y: baseline - size.height,
+        width: size.width,
+        height: size.height,
+      };
+      cursorX += size.width + FOLDER_SHELF_GAP;
+    }
+
+    baseline -= rowHeight + FOLDER_SHELF_GAP;
+  }
+
+  return slots.map((slot) => slot!);
+}
+
+function getExpansionOriginSlot(
+  index: number,
+  thumbnailSlots: readonly FolderThumbnailSlot[]
+): FolderThumbnailSlot {
+  const direct = thumbnailSlots[index];
+  if (direct) {
+    return direct;
+  }
+  const center = thumbnailSlots[Math.floor((thumbnailSlots.length - 1) / 2)]!;
+  const hiddenIndex = index - thumbnailSlots.length;
+  const direction = hiddenIndex % 2 === 0 ? -1 : 1;
+  return {
+    leftPercent: center.leftPercent + direction * (hiddenIndex + 1) * 2,
+    topPercent: Math.min(25, center.topPercent + hiddenIndex + 1),
+    rotation: center.rotation + direction * (0.8 + hiddenIndex * 0.4),
+  };
 }
 
 /**
@@ -318,13 +430,12 @@ export function buildFolderExpansionNodes(options: {
   }
 
   const thumbnailSlots = getFolderThumbnailSlots(
-    children.map((child) => child.id)
+    children.slice(0, MAX_FOLDER_PREVIEWS).map((child) => child.id)
   );
-  const sizes = children.map((child) => getFolderChildPreviewSize(child.type));
-  const totalWidth =
-    sizes.reduce((sum, size) => sum + size.width, 0) +
-    CARD_GAP * Math.max(0, sizes.length - 1);
-  const folderCenterX = (folderRect.left + folderRect.right) / 2;
+  const sizes = children.map((child) =>
+    getFolderChildPreviewSize(child.type, child.size)
+  );
+  const shelfSlots = calculateFolderShelfLayout({ folderRect, sizes });
   const folderWidth = folderRect.right - folderRect.left;
   const folderHeight = folderRect.bottom - folderRect.top;
   const expansionLayerBase =
@@ -334,19 +445,10 @@ export function buildFolderExpansionNodes(options: {
         typeof node.zIndex === 'number' ? node.zIndex : 0
       )
     ) + EXPANSION_LAYER_OFFSET;
-  let cursorX = folderCenterX - totalWidth / 2;
-
   return children.map((child, index): Node => {
     const size = sizes[index]!;
-    const slot = thumbnailSlots[index]!;
-    const distanceFromCenter = Math.abs(index - (children.length - 1) / 2);
-    const bottom =
-      folderRect.top - FOLDER_TO_CARDS_GAP - distanceFromCenter * 5;
-    const position = {
-      x: cursorX,
-      y: bottom - size.height,
-    };
-    cursorX += size.width + CARD_GAP;
+    const slot = getExpansionOriginSlot(index, thumbnailSlots);
+    const position = shelfSlots[index]!;
 
     const thumbnailCenter = {
       x:
@@ -364,6 +466,7 @@ export function buildFolderExpansionNodes(options: {
       folderHeight,
       folderWidth,
       rotation: slot.rotation,
+      size: child.size,
       type: child.type,
     });
     const data: FolderExpandedChildData = {

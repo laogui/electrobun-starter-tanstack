@@ -148,10 +148,13 @@ const storeActions = {
   }),
   setEditingFolderId: vi.fn(),
   changeNodeColor: vi.fn(),
+  commitFolderChildData: vi.fn(),
+  deleteFolderChild: vi.fn(),
   duplicateSelected: vi.fn(),
   groupSelected: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
+  moveFolderChildToCanvas: vi.fn(),
   nextNodeId: vi.fn(() => `node-${Math.random().toString(36).slice(2, 10)}`),
   saveSnapshot: vi.fn(),
   createNode: vi.fn(
@@ -254,6 +257,7 @@ const Harness = () => {
     contextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onFolderChildContextMenu,
     onEdgeContextMenu,
     handleContextMenuAction,
   } = useContextMenu({ rfInstance: rfInstance as never });
@@ -431,6 +435,31 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          onFolderChildContextMenu(
+            {
+              preventDefault: vi.fn(),
+              stopPropagation: vi.fn(),
+              clientX: 97,
+              clientY: 77,
+            } as never,
+            'folder-1',
+            {
+              id: 'folder-child-1',
+              type: 'card',
+              data: {
+                title: 'Folder child',
+                content: 'Nested body',
+                color: '#FFFFFF',
+              },
+            }
+          );
+        }}
+        type="button"
+      >
+        folder-child-card
+      </button>
+      <button
+        onClick={() => {
           onEdgeContextMenu(
             {
               preventDefault: vi.fn(),
@@ -558,6 +587,14 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          handleContextMenuAction('delete', 'folder-child-1');
+        }}
+        type="button"
+      >
+        delete-folder-child
+      </button>
+      <button
+        onClick={() => {
           handleContextMenuAction('change-color', 'card-1');
         }}
         type="button"
@@ -647,9 +684,16 @@ describe('useContextMenu', () => {
   beforeEach(() => {
     screenToFlowPosition.mockClear();
     rpcMocks.rpcImportMarkdownFiles.mockReset();
+    storeActions.commitFolderChildData.mockClear();
+    storeActions.deleteFolderChild.mockClear();
+    storeActions.moveFolderChildToCanvas.mockClear();
     // Selection now changes on right-click, so start each test from a clean
     // selection to avoid leaking state between tests.
     storeState.nodes = storeState.nodes.map((n) => ({ ...n, selected: false }));
+    const folder = storeState.nodes.find((node) => node.id === 'folder-1');
+    if (folder) {
+      folder.data = { ...folder.data, children: [] };
+    }
   });
 
   it('tracks pane/node/edge context menu state', () => {
@@ -695,6 +739,11 @@ describe('useContextMenu', () => {
       '{"x":96,"y":76,"target":"recording","nodeId":"recording-1"}'
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'folder-child-card' }));
+    expect(output).toHaveTextContent(
+      '{"x":97,"y":77,"target":"card","nodeId":"folder-child-1","folderId":"folder-1"}'
+    );
+
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));
     expect(output).toHaveTextContent(
       '{"x":120,"y":160,"target":"edge","edgeId":"edge-1"}'
@@ -732,6 +781,38 @@ describe('useContextMenu', () => {
       .map((n) => n.id)
       .sort();
     expect(selectedIds).toEqual(['card-1', 'folder-1']);
+  });
+
+  it('routes expanded-card menu actions to the child stored in its folder', () => {
+    const folder = storeState.nodes.find((node) => node.id === 'folder-1')!;
+    folder.data = {
+      ...folder.data,
+      children: [
+        {
+          id: 'folder-child-1',
+          type: 'card',
+          data: {
+            title: 'Folder child',
+            content: 'Nested body',
+            color: '#FFFFFF',
+          },
+        },
+      ],
+    };
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'folder-child-card' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'delete-folder-child' })
+    );
+
+    expect(storeActions.deleteFolderChild).toHaveBeenCalledWith(
+      'folder-1',
+      'folder-child-1'
+    );
+    expect(storeActions.deleteNodes).not.toHaveBeenCalledWith([
+      'folder-child-1',
+    ]);
   });
 
   it('imports markdown at the saved context-menu anchor', async () => {

@@ -107,7 +107,7 @@ describe('buildLibrary', () => {
     expect(titles).toContain('https://example.com');
   });
 
-  it('hydrates widget titles and checklist excerpts from widget records', () => {
+  it('excludes widgets from the library (they are not focusable notes)', () => {
     const widget = {
       schema: 'ghostboard-widget/v1',
       id: 'widget_check',
@@ -127,21 +127,15 @@ describe('buildLibrary', () => {
         widgetId: 'widget_check',
         kind: 'checklist',
       }),
+      makeNode('card-1', 'card', { title: 'A note' }),
     ];
 
-    const { groups } = buildLibrary(nodes, 'release', 'recent', {
+    const { groups } = buildLibrary(nodes, '', 'recent', {
       widget_check: widget,
     });
 
-    expect(groups[0]?.items[0]).toMatchObject({
-      type: 'widget',
-      title: 'Launch list',
-      data: {
-        kind: 'checklist',
-        previewExcerpt: 'Draft release notes\nShip build',
-        title: 'Launch list',
-        updatedAt: new Date('2026-07-08T01:30:00.000Z').getTime(),
-      },
-    });
+    const items = groups.flatMap((g) => g.items);
+    expect(items.some((item) => item.type === 'widget')).toBe(false);
+    expect(items.some((item) => item.type === 'card')).toBe(true);
   });
 });

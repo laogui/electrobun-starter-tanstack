@@ -3,6 +3,7 @@ import * as motion from 'motion/react-m';
 import { memo } from 'react';
 
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import {
   type FolderExpandedChildData,
   getFolderChildShapeClass,
@@ -66,11 +67,14 @@ export function FolderExpandedChildVisual({
     ease: EASE_OUT_QUINT,
   };
 
+  const focusable = isFocusableNode(data.child.type);
+
   return (
     <motion.div
       animate={returning ? origin : expanded}
       className={cn(
-        'folder-expanded-child-visual node-visual pointer-events-auto size-full cursor-pointer overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800',
+        'folder-expanded-child-visual node-visual pointer-events-auto size-full overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800',
+        focusable ? 'cursor-pointer' : 'cursor-default',
         getFolderChildShapeClass(data.child.type)
       )}
       data-folder-child-id={data.child.id}
@@ -86,7 +90,7 @@ export function FolderExpandedChildVisual({
           onAnimationComplete?.();
         });
       }}
-      onClick={onClick}
+      onClick={focusable ? onClick : undefined}
       onDoubleClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       style={{ transformOrigin: 'center center' }}

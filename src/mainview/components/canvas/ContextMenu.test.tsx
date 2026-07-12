@@ -124,6 +124,38 @@ describe('canvasContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('shows supported card actions for an expanded folder child', () => {
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'card',
+          nodeId: 'child-1',
+          folderId: 'folder-1',
+        }}
+        onAction={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: OPEN_FOCUSED_RE })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: COPY_RE })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Change color' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Move Out' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Delete ⌫' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Tag' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lock' })).toBeNull();
+  });
+
   it('closes when pressing Escape', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
@@ -358,6 +390,28 @@ describe('canvasContextMenu', () => {
 
     expect(onAction).toHaveBeenCalledWith('rename-asset', 'recording-1');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders widget node actions without open focused', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'widget' as never,
+          nodeId: 'widget-1',
+        }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /Copy/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
   });
 
   it('renders move-to-view submenu for multi-selection', () => {

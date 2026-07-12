@@ -77,6 +77,8 @@ type ContextMenuState = {
     | 'edge';
   nodeId?: string;
   edgeId?: string;
+  /** Present when the target is an expanded child stored inside a folder. */
+  folderId?: string;
 } | null;
 
 const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
@@ -142,6 +144,37 @@ const getCardItems = (locked: boolean): MenuItem[] => [
 const getFolderChildItems = (): MenuItem[] => [
   { id: 'move-out', label: m.menu_move_out(), icon: LogOut },
 ];
+
+const EXPANDED_FOLDER_CHILD_ACTIONS = new Set([
+  'focus',
+  'copy',
+  'copy-as-markdown',
+  'change-color',
+  'export-markdown',
+  'open-link',
+  'copy-url',
+  'refetch-link',
+  'edit-url',
+  'copy-image-address',
+  'reveal-in-finder',
+  'delete',
+]);
+
+function getExpandedFolderChildItems(baseItems: MenuItem[]): MenuItem[] {
+  const supported = baseItems.filter((item) =>
+    EXPANDED_FOLDER_CHILD_ACTIONS.has(item.id)
+  );
+  const deleteIndex = supported.findIndex((item) => item.id === 'delete');
+  const moveOut = getFolderChildItems()[0]!;
+  if (deleteIndex === -1) {
+    return [...supported, moveOut];
+  }
+  return [
+    ...supported.slice(0, deleteIndex),
+    moveOut,
+    ...supported.slice(deleteIndex),
+  ];
+}
 
 const getFolderItems = (locked: boolean): MenuItem[] => [
   {
@@ -328,6 +361,19 @@ const getAssetItems = (locked: boolean): MenuItem[] => [
   },
 ];
 
+/** Widgets edit in place on the canvas — no focused/note view. */
+const getWidgetItems = (locked: boolean): MenuItem[] => [
+  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
+  lockItem(locked),
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
+];
+
 const getRecordingItems = (locked: boolean): MenuItem[] => [
   {
     id: 'reveal-in-finder',
@@ -396,6 +442,7 @@ export function CanvasContextMenu({
         menu.target,
         menu.nodeId ?? '',
         menu.edgeId ?? '',
+        menu.folderId ?? '',
         Math.round(menu.x),
         Math.round(menu.y),
       ].join(':')
@@ -470,14 +517,18 @@ export function CanvasContextMenu({
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
     recording: () => getRecordingItems(nodeLocked),
+    widget: () => getWidgetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
     multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
     canvas: () => getCanvasItems(hasClipboard),
   };
 
-  const items = menu
+  const baseItems = menu
     ? (itemGetters[menu.target] ?? (() => getCanvasItems(hasClipboard)))()
     : [];
+  const items = menu?.folderId
+    ? getExpandedFolderChildItems(baseItems)
+    : baseItems;
   const submenuItems = openSubmenu
     ? items.find((item) => item.id === openSubmenu)?.submenu
     : undefined;

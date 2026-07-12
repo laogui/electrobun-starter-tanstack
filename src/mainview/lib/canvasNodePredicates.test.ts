@@ -65,13 +65,14 @@ describe('isFocusableNode', () => {
   it('reserves a true branch for asset / link', () => {
     expect(isFocusableNode('asset')).toBe(true);
     expect(isFocusableNode('link')).toBe(true);
-    expect(isFocusableNode('widget')).toBe(true);
   });
 
-  it('rejects structural and undefined types', () => {
+  it('rejects structural, widget, and undefined types', () => {
     expect(isFocusableNode('folder')).toBe(false);
     expect(isFocusableNode('group')).toBe(false);
     expect(isFocusableNode('sticky')).toBe(false);
+    // Widgets edit in place on the canvas; they must not open FocusedView.
+    expect(isFocusableNode('widget')).toBe(false);
     expect(isFocusableNode(undefined)).toBe(false);
   });
 });

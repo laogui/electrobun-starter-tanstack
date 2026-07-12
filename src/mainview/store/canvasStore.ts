@@ -25,7 +25,7 @@ import {
 } from '@/lib/canvasNodeRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
-import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
@@ -103,6 +103,7 @@ interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
   noteId?: string;
+  size?: Size;
   type?: string;
 }
 
@@ -336,11 +337,31 @@ function resolveFolderChildSpec(childType: string | undefined) {
   return buildNewNodeSpec(spec.kind);
 }
 
+function resolveFolderChildSize(child: FolderChildEntry, fallback: Size): Size {
+  const width = child.size?.width;
+  const height = child.size?.height;
+  if (
+    typeof width !== 'number' ||
+    typeof height !== 'number' ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return fallback;
+  }
+  return {
+    width: Math.min(1200, Math.max(80, width)),
+    height: Math.min(1200, Math.max(80, height)),
+  };
+}
+
 function folderChildToDetachedNode(
   child: FolderChildEntry,
   usedNodeIds: Set<string>
 ): Node {
   const spec = resolveFolderChildSpec(child.type);
+  const size = resolveFolderChildSize(child, spec.size);
   const {
     isDropTarget: _isDropTarget,
     isHidden: _isHidden,
@@ -350,7 +371,7 @@ function folderChildToDetachedNode(
     id: uniqueDetachedNodeId(child.id, usedNodeIds),
     type: spec.base.type,
     position: { x: 0, y: 0 },
-    style: spec.base.style,
+    style: { ...spec.base.style, width: size.width, height: size.height },
     data: {
       ...data,
       ...(child.noteId && spec.base.type === 'card'
@@ -685,6 +706,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             ...(childNoteId ? { noteId: childNoteId } : {}),
             type: card.type,
             data: childData,
+            size: getNodeSize(card),
           },
         ];
         return [
@@ -1972,15 +1994,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     const spec = resolveFolderChildSpec(child.type);
+    const childSize = resolveFolderChildSize(child, spec.size);
     const anchor =
       options?.anchor ??
       (options?.anchorCenter
         ? {
-            x: options.anchorCenter.x - spec.size.width / 2,
-            y: options.anchorCenter.y - spec.size.height / 2,
+            x: options.anchorCenter.x - childSize.width / 2,
+            y: options.anchorCenter.y - childSize.height / 2,
           }
         : {
-            x: folder.position.x + (FOLDER_W - spec.size.width) / 2,
+            x: folder.position.x + (FOLDER_W - childSize.width) / 2,
             y: folder.position.y + FOLDER_H + 32,
           });
 
@@ -2003,6 +2026,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         type: spec.base.type,
         data: child.data,
         position: anchor,
+        style: {
+          ...spec.base.style,
+          width: childSize.width,
+          height: childSize.height,
+        },
         selected: true,
       };
 

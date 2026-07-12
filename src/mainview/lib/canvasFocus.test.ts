@@ -109,4 +109,25 @@ describe('openFocusedById', () => {
     expect(useCanvasStore.getState().focusedNode).toBeNull();
     expect(useCanvasStore.getState().focusedFolder).toBeNull();
   });
+
+  it('does not open FocusedView for widget nodes', async () => {
+    const nodes: Node[] = [
+      {
+        id: 'widget-1',
+        type: 'widget',
+        position: { x: 0, y: 0 },
+        data: { widgetId: 'w1', kind: 'checklist' },
+      } as unknown as Node,
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
+
+    await openFocusedById({
+      nodeId: 'widget-1',
+      rfInstance: makeRfInstance(),
+      centerDurationMs: 0,
+    });
+
+    expect(useCanvasStore.getState().focusedNode).toBeNull();
+    expect(useCanvasStore.getState().focusedFolder).toBeNull();
+  });
 });

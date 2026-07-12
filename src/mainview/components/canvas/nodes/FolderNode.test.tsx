@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFolderThumbnailSlots } from '@/lib/folderExpansion';
@@ -23,6 +24,27 @@ vi.mock('@/components/canvas/FolderChildPreview', () => ({
   FolderChildPreview: ({ child }: { child: { id: string } }) => (
     <div data-testid={`folder-preview-${child.id}`} />
   ),
+}));
+
+vi.mock('motion/react-m', () => ({
+  div: (props: Record<string, unknown>) => {
+    const {
+      animate: _animate,
+      children,
+      initial: _initial,
+      onAnimationComplete,
+      transition: _transition,
+      ...domProps
+    } = props;
+    return createElement(
+      'div',
+      {
+        ...domProps,
+        onTransitionEnd: onAnimationComplete as (() => void) | undefined,
+      },
+      children as ReactNode
+    );
+  },
 }));
 
 describe('FolderNode', () => {
@@ -115,6 +137,7 @@ describe('FolderNode', () => {
   });
 
   it('keeps the moving expansion visual inside the SVG middle layer', () => {
+    const onExpandedChildContextMenu = vi.fn();
     const { container } = render(
       <FolderNode
         data={{
@@ -145,6 +168,7 @@ describe('FolderNode', () => {
             },
           ],
           isExpanded: true,
+          onExpandedChildContextMenu,
           title: 'Layered folder',
         }}
         height={280}
@@ -172,6 +196,13 @@ describe('FolderNode', () => {
       id: 'child-a',
       type: 'card',
     });
+
+    fireEvent.contextMenu(movingVisual!);
+    expect(onExpandedChildContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      'folder-layered',
+      expect.objectContaining({ id: 'child-a', type: 'card' })
+    );
   });
 
   it('keeps closed-stack thumbnails visible under returning cards while closing', () => {
@@ -226,6 +257,73 @@ describe('FolderNode', () => {
     expect(
       container.querySelector('[data-folder-expanded-visual-id="child-a"]')
     ).toBeTruthy();
+  });
+
+  it('waits for every card in a two-row layout before removing the return layer', () => {
+    const onCollapseComplete = vi.fn();
+    const children = Array.from({ length: 7 }, (_, index) => ({
+      id: `child-${index}`,
+      type: 'card',
+      data: { title: `Inside ${index}` },
+    }));
+    const expansionChildren = children.map((child, index) => ({
+      child,
+      folderId: 'folder-two-rows',
+      origin: {
+        x: 40 + index,
+        y: 80 + index,
+        rotation: index - 3,
+        scaleX: 0.3,
+        scaleY: 0.45,
+      },
+      phase: 'closing' as const,
+      target: {
+        x: -400 + index * 130,
+        y: index < 4 ? -520 : -280,
+        width: 180,
+        height: 220,
+      },
+    }));
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+
+    const { container } = render(
+      <FolderNode
+        data={{
+          children,
+          expansionChildren,
+          isClosing: true,
+          isExpanded: true,
+          onCollapseComplete,
+          title: 'Two-row folder',
+        }}
+        height={280}
+        id="folder-two-rows"
+        width={280}
+      />
+    );
+
+    const returningCards = container.querySelectorAll('[data-folder-child-id]');
+    expect(returningCards).toHaveLength(7);
+
+    // The previous implementation treated the last array item as a barrier.
+    // Finishing it first must no longer tear down the other six cards.
+    fireEvent.transitionEnd(returningCards[6]!);
+    expect(onCollapseComplete).not.toHaveBeenCalled();
+
+    for (let index = 0; index < 6; index += 1) {
+      fireEvent.transitionEnd(returningCards[index]!);
+    }
+    expect(onCollapseComplete).toHaveBeenCalledTimes(1);
+    expect(onCollapseComplete).toHaveBeenCalledWith('folder-two-rows');
+
+    fireEvent.transitionEnd(returningCards[0]!);
+    expect(onCollapseComplete).toHaveBeenCalledTimes(1);
+    requestAnimationFrameSpy.mockRestore();
   });
 
   it('hides closed-stack thumbnails while the folder is open', () => {

@@ -1779,6 +1779,34 @@ describe('canvasStore — updateFolderChildData', () => {
 });
 
 describe('canvasStore — absorbCardIntoFolder', () => {
+  it('preserves the canvas card dimensions for natural-size folder shelves', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('image-wide', {
+          type: 'image',
+          style: { width: 640, height: 360 },
+          data: { title: 'Wide image', imageUrl: '', color: '#FFFFFF' },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          data: { title: '0 items', subtitle: '', children: [] },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().absorbCardIntoFolder('image-wide', 'folder');
+    const folder = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.id === 'folder')!;
+
+    expect(folder.data.children).toEqual([
+      expect.objectContaining({
+        id: 'image-wide',
+        size: { width: 640, height: 360 },
+      }),
+    ]);
+  });
+
   it('preserves an existing card noteId on the folder child entry', () => {
     useCanvasStore.setState({
       nodes: [
@@ -2206,6 +2234,41 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
 });
 
 describe('canvasStore — moveFolderChildToCanvas', () => {
+  it('restores a folder child with its preserved canvas dimensions', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: 'Images',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-wide',
+                type: 'image',
+                size: { width: 640, height: 360 },
+                data: { title: 'Wide image', imageUrl: '', color: '#FFFFFF' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().moveFolderChildToCanvas('folder', 'child-wide', {
+      anchorCenter: { x: 600, y: 400 },
+    });
+    const restored = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.id === 'child-wide');
+
+    expect(restored).toMatchObject({
+      position: { x: 280, y: 220 },
+      style: { width: 640, height: 360 },
+    });
+  });
+
   it('removes a folder child and restores it as a selected canvas node, preserving noteId', () => {
     useCanvasStore.setState({
       focusedFolder: {

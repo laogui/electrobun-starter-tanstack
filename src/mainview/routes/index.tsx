@@ -1011,6 +1011,7 @@ function CanvasComponent() {
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onFolderChildContextMenu,
     onEdgeContextMenu,
     handleContextMenuAction,
   } = useContextMenu({
@@ -1280,6 +1281,11 @@ function CanvasComponent() {
       }
       if (isFolderExpandedChildNode(node)) {
         const { child, folderId } = node.data;
+        // Expanded children only open when the underlying kind is focusable
+        // (e.g. cards/images). Widgets edit in place and must not open a note.
+        if (!isFocusableNode(child.type)) {
+          return;
+        }
         setFocusedNode({
           id: child.id,
           folderId,
@@ -1324,8 +1330,9 @@ function CanvasComponent() {
       }
       const isOpenable =
         node.type === 'folder' ||
-        isFolderExpandedChildNode(node) ||
-        isFocusableNode(node.type);
+        (isFolderExpandedChildNode(node)
+          ? isFocusableNode(node.data.child.type)
+          : isFocusableNode(node.type));
       const alreadyOpen =
         state.focusedNode?.id === node.id ||
         state.focusedFolder?.id === node.id;
@@ -1537,6 +1544,7 @@ function CanvasComponent() {
                 isExpanded,
                 isClosing,
                 onCollapseComplete: finishFolderClose,
+                onExpandedChildContextMenu: onFolderChildContextMenu,
               }
             : {}),
         },
@@ -1577,6 +1585,7 @@ function CanvasComponent() {
     folderAnchorZIndex,
     folderExpansionChildren,
     finishFolderClose,
+    onFolderChildContextMenu,
   ]);
 
   const dragDepthRef = useRef(0);

@@ -2,6 +2,7 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { type MutableRefObject, useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -305,6 +306,10 @@ export function useCanvasKeyboard({
         if (node.type === 'sticky') {
           e.preventDefault();
           setEditingStickyId(node.id);
+          return;
+        }
+        // Widgets (and other non-focusable content) stay on-canvas only.
+        if (node.type !== 'folder' && !isFocusableNode(node.type)) {
           return;
         }
         const el = document.querySelector(`[data-id="${node.id}"]`);

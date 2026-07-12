@@ -3,6 +3,8 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import {
   type CreatableCanvasNodeKind,
   normalizeLinkUrl,
@@ -11,6 +13,7 @@ import {
   type CanvasCreateRequest,
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
+import type { FolderChildEntry } from '@/lib/folderExpansion';
 import {
   buildImportedCardCreateOptions,
   handleMarkdownImportResult,
@@ -54,7 +57,8 @@ type NodeContextTarget =
   | 'sticky'
   | 'image'
   | 'link'
-  | 'recording';
+  | 'recording'
+  | 'widget';
 
 /**
  * Map a React Flow `node.type` to the context-menu `target` discriminator.
@@ -69,6 +73,7 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   image: 'image',
   link: 'link',
   recording: 'recording',
+  widget: 'widget',
 };
 
 function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {
@@ -97,6 +102,11 @@ export function useContextMenu({
   const duplicateSelected = useCanvasStore((s) => s.duplicateSelected);
   const groupSelected = useCanvasStore((s) => s.groupSelected);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
+  const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
+  const deleteFolderChild = useCanvasStore((s) => s.deleteFolderChild);
+  const moveFolderChildToCanvas = useCanvasStore(
+    (s) => s.moveFolderChildToCanvas
+  );
   const pasteClipboard = useCanvasStore((s) => s.pasteClipboard);
   const createNode = useCanvasStore((s) => s.createNode);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
@@ -141,6 +151,21 @@ export function useContextMenu({
     });
   }, []);
 
+  const onFolderChildContextMenu = useCallback(
+    (e: React.MouseEvent, folderId: string, child: FolderChildEntry) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        target: nodeContextMenuTarget(child.type),
+        nodeId: child.id,
+        folderId,
+      });
+    },
+    []
+  );
+
   const onEdgeContextMenu = useCallback((e: React.MouseEvent, edge: Edge) => {
     e.preventDefault();
     setContextMenu({
@@ -165,6 +190,194 @@ export function useContextMenu({
           y: (sy - (viewport?.y ?? 0)) / zoom,
         };
       };
+
+      const folderId = contextMenu?.folderId;
+      const folderChild = folderId
+        ? ((
+            (
+              useCanvasStore
+                .getState()
+                .nodes.find((node) => node.id === folderId)?.data as
+                | {
+                    children?: FolderChildEntry[];
+                  }
+                | undefined
+            )?.children ?? []
+          ).find((child) => child.id === nodeId) ?? null)
+        : null;
+
+      if (folderId && folderChild) {
+        const childData = folderChild.data;
+        const expandedChildElement = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '[data-folder-expanded-visual-id]'
+          )
+        ).find(
+          (element) => element.dataset.folderExpandedVisualId === folderChild.id
+        );
+        const childRect = expandedChildElement?.getBoundingClientRect();
+
+        switch (action) {
+          case 'focus':
+          case 'edit-url': {
+            // Widgets (and other non-focusable kinds) never open FocusedView.
+            if (!(childRect && isFocusableNode(folderChild.type))) {
+              return;
+            }
+            setFocusedNode({
+              id: folderChild.id,
+              type: folderChild.type,
+              data: childData,
+              folderId,
+              rect: childRect,
+            });
+            return;
+          }
+          case 'copy': {
+            const copiedData =
+              folderChild.noteId && !childData.noteId
+                ? { ...childData, noteId: folderChild.noteId }
+                : childData;
+            useCanvasStore.setState({
+              clipboard: [
+                {
+                  id: folderChild.id,
+                  type: folderChild.type,
+                  data: copiedData,
+                  position: { x: 0, y: 0 },
+                  ...(folderChild.size
+                    ? {
+                        style: {
+                          width: folderChild.size.width,
+                          height: folderChild.size.height,
+                        },
+                      }
+                    : {}),
+                },
+              ],
+              clipboardEdges: [],
+            });
+            return;
+          }
+          case 'copy-as-markdown': {
+            const title =
+              typeof childData.title === 'string' ? childData.title : '';
+            const body =
+              typeof childData.content === 'string' ? childData.content : '';
+            const markdown = title ? `# ${title}\n\n${body}` : body;
+            if (markdown) {
+              navigator.clipboard
+                .writeText(markdown)
+                .then(() => toast(m.toast_markdown_copied()))
+                .catch(() => toast(m.toast_export_failed()));
+            }
+            return;
+          }
+          case 'change-color': {
+            const palette =
+              folderChild.type === 'sticky' ? STICKY_COLORS : CARD_COLORS;
+            const current =
+              typeof childData.color === 'string'
+                ? childData.color
+                : palette[0];
+            const index = palette.indexOf(current);
+            commitFolderChildData(folderId, folderChild.id, {
+              color: palette[(index + 1) % palette.length],
+            });
+            return;
+          }
+          case 'move-out': {
+            const screenCenter = childRect
+              ? {
+                  x: childRect.left + childRect.width / 2,
+                  y: childRect.top + childRect.height / 2,
+                }
+              : { x: contextMenu.x, y: contextMenu.y };
+            moveFolderChildToCanvas(folderId, folderChild.id, {
+              anchorCenter: screenToFlow(screenCenter.x, screenCenter.y),
+            });
+            return;
+          }
+          case 'delete': {
+            deleteFolderChild(folderId, folderChild.id);
+            toast(m.toast_node_deleted(), {
+              action: { label: m.toast_undo(), onClick: () => undo() },
+            });
+            return;
+          }
+          case 'export-markdown': {
+            const noteId =
+              folderChild.noteId ??
+              (typeof childData.noteId === 'string'
+                ? childData.noteId
+                : undefined);
+            if (noteId) {
+              rpcExportNoteMarkdown(noteId)
+                .then((res) => {
+                  if (res?.success) {
+                    toast(m.toast_markdown_exported());
+                  } else if (!res?.canceled) {
+                    toast(m.toast_export_failed());
+                  }
+                })
+                .catch(() => toast(m.toast_export_failed()));
+            }
+            return;
+          }
+          case 'open-link': {
+            const rawUrl = childData.url;
+            if (typeof rawUrl === 'string' && rawUrl) {
+              const safeUrl = normalizeLinkUrl(rawUrl) ?? rawUrl;
+              const result = await rpcOpenExternalUrl(safeUrl);
+              if (!result?.success) {
+                toast(m.toast_open_link_failed());
+              }
+            }
+            return;
+          }
+          case 'copy-url': {
+            if (typeof childData.url === 'string' && childData.url) {
+              navigator.clipboard.writeText(childData.url).catch(() => {
+                // Clipboard access can be denied by the host; keep the menu quiet.
+              });
+            }
+            return;
+          }
+          case 'refetch-link': {
+            commitFolderChildData(folderId, folderChild.id, {
+              unfurlStatus: 'idle',
+              unfurlError: undefined,
+            });
+            return;
+          }
+          case 'copy-image-address': {
+            if (typeof childData.imageUrl === 'string' && childData.imageUrl) {
+              navigator.clipboard.writeText(childData.imageUrl).catch(() => {
+                // Clipboard access can be denied by the host; keep the menu quiet.
+              });
+            }
+            return;
+          }
+          case 'reveal-in-finder': {
+            const relativePath =
+              (typeof childData.attachmentFile === 'string' &&
+                childData.attachmentFile) ||
+              (typeof childData.imageFile === 'string' &&
+                childData.imageFile) ||
+              '';
+            if (relativePath) {
+              const result = await rpcRevealAttachment(relativePath);
+              if (!result?.success) {
+                toast(m.toast_reveal_failed());
+              }
+            }
+            return;
+          }
+          default: {
+            return;
+          }
+        }
+      }
 
       const newType = resolveCreatableKind(action);
       if (newType) {
@@ -266,7 +479,7 @@ export function useContextMenu({
             }
             const { nodes } = useCanvasStore.getState();
             const node = nodes.find((n) => n.id === nodeId);
-            if (node) {
+            if (node && isFocusableNode(node.type)) {
               setFocusedNode({
                 id: nodeId,
                 type: node.type,
@@ -640,6 +853,9 @@ export function useContextMenu({
       duplicateSelected,
       groupSelected,
       addFolderChild,
+      commitFolderChildData,
+      deleteFolderChild,
+      moveFolderChildToCanvas,
       pasteClipboard,
       saveSnapshot,
       createNode,
@@ -655,6 +871,7 @@ export function useContextMenu({
     setContextMenu,
     onPaneContextMenu,
     onNodeContextMenu,
+    onFolderChildContextMenu,
     onEdgeContextMenu,
     handleContextMenuAction,
   };

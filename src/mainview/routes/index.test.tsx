@@ -56,6 +56,7 @@ const exportMocks = vi.hoisted(() => ({
 }));
 
 const reactFlowMocks = vi.hoisted(() => ({
+  fitBounds: vi.fn(),
   props: vi.fn(),
 }));
 
@@ -298,6 +299,7 @@ vi.mock('@xyflow/react', async () => {
         zIndex?: number;
       }>;
       onInit?: (instance: {
+        fitBounds: typeof reactFlowMocks.fitBounds;
         getViewport: () => { x: number; y: number; zoom: number };
       }) => void;
       onPaneContextMenu?: (event: MouseEvent) => void;
@@ -330,7 +332,10 @@ vi.mock('@xyflow/react', async () => {
         snapToGrid,
         zoomOnDoubleClick,
       });
-      onInit?.({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }) });
+      onInit?.({
+        fitBounds: reactFlowMocks.fitBounds,
+        getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+      });
       return (
         <div>
           <button
@@ -669,6 +674,7 @@ describe('routes/index', () => {
       (name: string) => `safe-${name}`
     );
     reactFlowMocks.props.mockReset();
+    reactFlowMocks.fitBounds.mockReset();
     nodeDragMocks.draggingNodeIds = [];
     nodeDragMocks.dropTargetId = null;
     helperLineMocks.onNodesChange.mockReset();
@@ -858,6 +864,7 @@ describe('routes/index', () => {
     );
     expect(renderedFolder?.zIndex).toBeGreaterThan(renderedChild?.zIndex ?? 0);
     expect(renderedFolder?.data.expansionChildren).toHaveLength(1);
+    expect(reactFlowMocks.fitBounds).not.toHaveBeenCalled();
   });
 
   it('does not open the focused view on a modifier-click (selection only)', async () => {

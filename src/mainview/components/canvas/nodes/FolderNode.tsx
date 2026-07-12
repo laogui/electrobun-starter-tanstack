@@ -1,7 +1,8 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
 
+import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import {
   type FolderChildEntry,
   type FolderExpandedChildData,
@@ -32,6 +33,11 @@ export interface FolderData {
   isExpanded?: boolean;
   isHidden?: boolean;
   onCollapseComplete?: (folderId: string) => void;
+  onExpandedChildContextMenu?: (
+    event: React.MouseEvent,
+    folderId: string,
+    child: FolderChildEntry
+  ) => void;
   subtitle?: string;
   title?: string;
   updatedAt?: string;
@@ -61,6 +67,41 @@ export const FolderContent = ({
   onMenuClick,
   width,
 }: FolderContentProps) => {
+  const completedClosingChildIdsRef = useRef(new Set<string>());
+  const collapseReportedRef = useRef(false);
+  const completionCycleKeyRef = useRef<string | null>(null);
+  const closingChildrenKey = data.isClosing
+    ? (data.expansionChildren ?? []).map((item) => item.child.id).join('\u0000')
+    : '';
+
+  useEffect(() => {
+    if (completionCycleKeyRef.current === closingChildrenKey) {
+      return;
+    }
+    completionCycleKeyRef.current = closingChildrenKey;
+    completedClosingChildIdsRef.current.clear();
+    collapseReportedRef.current = false;
+  }, [closingChildrenKey]);
+
+  const handleReturningChildComplete = useCallback(
+    (item: FolderExpandedChildData) => {
+      if (collapseReportedRef.current || !data.isClosing) {
+        return;
+      }
+      const expansionChildren = data.expansionChildren ?? [];
+      completedClosingChildIdsRef.current.add(item.child.id);
+      const allChildrenReturned = expansionChildren.every((child) =>
+        completedClosingChildIdsRef.current.has(child.child.id)
+      );
+      if (!allChildrenReturned) {
+        return;
+      }
+      collapseReportedRef.current = true;
+      data.onCollapseComplete?.(item.folderId);
+    },
+    [data.expansionChildren, data.isClosing, data.onCollapseComplete]
+  );
+
   const footerText = data.footer ?? data.updatedAt;
   const childCount = Array.isArray(data.children) ? data.children.length : 0;
   const folderWidth = width && width > 0 ? width : DEFAULT_FOLDER_SIZE;
@@ -150,6 +191,7 @@ export const FolderContent = ({
                   folderHeight,
                   folderWidth,
                   rotation: slot.rotation,
+                  size: child.size,
                   type: child.type,
                 });
             const thumbnailContent = getFolderThumbnailContentTransform({
@@ -207,6 +249,17 @@ export const FolderContent = ({
                 className="pointer-events-auto absolute"
                 data-folder-expanded-visual-id={item.child.id}
                 key={item.child.id}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!data.isClosing) {
+                    data.onExpandedChildContextMenu?.(
+                      event,
+                      item.folderId,
+                      item.child
+                    );
+                  }
+                }}
                 style={{
                   height: item.target.height,
                   left: item.target.x,
@@ -218,9 +271,8 @@ export const FolderContent = ({
                 <FolderExpandedChildVisual
                   data={item}
                   onAnimationComplete={
-                    data.isClosing &&
-                    index === (data.expansionChildren?.length ?? 0) - 1
-                      ? () => data.onCollapseComplete?.(item.folderId)
+                    data.isClosing
+                      ? () => handleReturningChildComplete(item)
                       : undefined
                   }
                   onClick={(event) => onExpandedChildClick?.(event, item)}
@@ -337,6 +389,10 @@ const FolderNode = ({
     ) => {
       event.stopPropagation();
       if (data.isClosing) {
+        return;
+      }
+      // Widgets edit in place; only note-like kinds open FocusedView.
+      if (!isFocusableNode(item.child.type)) {
         return;
       }
       setFocusedNode({

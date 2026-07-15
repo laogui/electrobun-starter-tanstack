@@ -36,6 +36,14 @@ vi.mock('@xyflow/react', () => ({
   }),
 }));
 
+vi.mock('motion/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('motion/react')>();
+  return {
+    ...actual,
+    useReducedMotion: () => true,
+  };
+});
+
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
     selector: (state: {

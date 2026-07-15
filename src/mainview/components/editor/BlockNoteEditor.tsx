@@ -38,6 +38,7 @@ import {
   resolveBlockNoteFileUrl,
   uploadBlockNoteFile,
 } from './blocknoteAttachments';
+import { NoteEditorLoading } from './NoteEditorLoading';
 import {
   type BlockNoteSaveStatus,
   useBlockNoteSaver,
@@ -244,17 +245,7 @@ export default function BlockNoteEditor({
     : 'no-ai';
 
   if (!initial || localHttpEndpoint === undefined) {
-    return (
-      <div
-        className={cn(
-          'flex h-full w-full items-center justify-center',
-          isDark ? 'text-white/60' : 'text-gray-500'
-        )}
-        style={colorToStyle(colorValue)}
-      >
-        <span className="text-sm">Loading editor…</span>
-      </div>
-    );
+    return <NoteEditorLoading color={colorValue} title={titleValue} />;
   }
 
   return (

@@ -206,6 +206,7 @@
   "focused_close": "关闭",
   "focused_created_at": "创建于 {time}",
   "focused_updated_at": "更新于 {time}",
+  "focused_loading": "正在加载笔记…",
   "save_status_saving": "保存中…",
   "save_status_saved_at": "已于 {time} 保存",
   "save_status_error": "保存失败",

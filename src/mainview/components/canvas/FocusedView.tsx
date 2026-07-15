@@ -1,5 +1,6 @@
 import { useReactFlow } from '@xyflow/react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
 import * as motion from 'motion/react-m';
 import {
   lazy,
@@ -12,12 +13,12 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
+import { NoteEditorLoading } from '@/components/editor/NoteEditorLoading';
 import { SaveIndicator } from '@/components/editor/SaveIndicator';
 import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
-import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
 import { cn } from '@/lib/utils';
@@ -45,26 +46,37 @@ const BlockNoteEditor = lazy(
   () => import('@/components/editor/BlockNoteEditor')
 );
 
-const FocusedSkeleton = ({ color }: { color?: unknown }) => {
-  const colorValue = typeof color === 'string' ? color : '#FFFFFF';
-  return (
-    <div
-      className="flex h-full flex-col gap-6 p-8"
-      style={colorToStyle(colorValue)}
-    >
-      <div
-        className={`h-11 w-2/3 animate-pulse rounded-md ${
-          isColorDark(colorValue) ? 'bg-white/20' : 'bg-black/10'
-        }`}
-      />
-      <div
-        className={`h-full animate-pulse rounded-lg ${
-          isColorDark(colorValue) ? 'bg-white/10' : 'bg-black/5'
-        }`}
-      />
-    </div>
+/** Matches folder-fan easing so open/close feels like one system. */
+const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
+const OPEN_DURATION_S = 0.34;
+const CLOSE_DURATION_S = 0.26;
+
+function getViewportSize() {
+  return {
+    height: typeof window === 'undefined' ? 768 : window.innerHeight,
+    width: typeof window === 'undefined' ? 1024 : window.innerWidth,
+  };
+}
+
+/**
+ * FLIP-style expand metrics: the full-bleed shell scales up from the card's
+ * center so the open path reads as "this card grew into focus mode".
+ */
+function getExpandFromRect(
+  rect: DOMRect,
+  viewport: { height: number; width: number }
+) {
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const transformOrigin = `${(centerX / viewport.width) * 100}% ${
+    (centerY / viewport.height) * 100
+  }%`;
+  const scale = Math.max(
+    0.08,
+    Math.min(rect.width / viewport.width, rect.height / viewport.height, 0.92)
   );
-};
+  return { scale, transformOrigin };
+}
 
 interface FocusedViewProps {
   node: FocusedItem;
@@ -374,6 +386,14 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const didToastOnErrorRef = useRef(false);
+  const shouldReduceMotion = useReducedMotion();
+
+  // Origin for the expand/collapse morph. Recomputed when navigating to a
+  // sibling so close shrinks back toward the currently focused card.
+  const expandMetrics = useMemo(() => {
+    const viewport = getViewportSize();
+    return getExpandFromRect(node.rect, viewport);
+  }, [node.rect]);
 
   const handleSaveStatusChange = useCallback(
     (status: BlockNoteSaveStatus, savedAt: Date | null) => {
@@ -465,68 +485,101 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, [handleClose]);
 
+  const openTransition = {
+    duration: shouldReduceMotion ? 0.1 : OPEN_DURATION_S,
+    ease: EASE_OUT_QUINT,
+  };
+  const closeTransition = {
+    duration: shouldReduceMotion ? 0.08 : CLOSE_DURATION_S,
+    ease: EASE_OUT_QUINT,
+  };
+  const chromeTransition = {
+    delay: shouldReduceMotion ? 0 : 0.12,
+    duration: shouldReduceMotion ? 0.08 : 0.2,
+    ease: EASE_OUT_QUINT,
+  };
+
+  // Root must be a motion node so AnimatePresence can run the exit morph.
   return (
     <motion.div
-      animate={{ opacity: 1 }}
+      animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        'fixed inset-0 z-60 flex',
+        'fixed inset-0 z-60 flex overflow-hidden',
         isImage ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950'
       )}
-      exit={{ opacity: 0 }}
-      initial={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
+      exit={{
+        opacity: 0,
+        scale: shouldReduceMotion ? 1 : expandMetrics.scale,
+        transition: closeTransition,
+      }}
+      initial={
+        shouldReduceMotion
+          ? { opacity: 0, scale: 1 }
+          : { opacity: 0.92, scale: expandMetrics.scale }
+      }
+      style={{ transformOrigin: expandMetrics.transformOrigin }}
+      transition={openTransition}
     >
       {/* Floating Back Button (positioned below macOS traffic lights) */}
-      <button
+      <motion.button
+        animate={{ opacity: 1 }}
         aria-label={m.focused_close()}
         className={cn(
           'absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full transition-colors',
           chromeButtonClass
         )}
+        initial={{ opacity: 0 }}
         onClick={(e) => {
           e.stopPropagation();
           handleClose();
         }}
+        transition={chromeTransition}
         type="button"
       >
         <ArrowLeft size={16} />
-      </button>
+      </motion.button>
 
       {/* Floating Previous/Next Navigation (positioned center left/right) */}
-      {previousItem && (
-        <button
+      {previousItem ? (
+        <motion.button
+          animate={{ opacity: 1 }}
           aria-label="Previous item"
           className={cn(
             'absolute top-1/2 left-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
             chromeButtonClass
           )}
+          initial={{ opacity: 0 }}
           onClick={(e) => {
             e.stopPropagation();
             handleNavigate(previousItem);
           }}
           title="Previous"
+          transition={chromeTransition}
           type="button"
         >
           <ChevronLeft size={16} />
-        </button>
-      )}
-      {nextItem && (
-        <button
+        </motion.button>
+      ) : null}
+      {nextItem ? (
+        <motion.button
+          animate={{ opacity: 1 }}
           aria-label="Next item"
           className={cn(
             'absolute top-1/2 right-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
             chromeButtonClass
           )}
+          initial={{ opacity: 0 }}
           onClick={(e) => {
             e.stopPropagation();
             handleNavigate(nextItem);
           }}
           title="Next"
+          transition={chromeTransition}
           type="button"
         >
           <ChevronRight size={16} />
-        </button>
-      )}
+        </motion.button>
+      ) : null}
 
       {/* Floating image caption (lightbox mode) */}
       {isImage && title ? (
@@ -538,11 +591,11 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       ) : null}
 
       {/* Floating Save Status (bottom right) */}
-      {isText && saveStatus !== 'idle' && (
+      {isText && saveStatus !== 'idle' ? (
         <div className="absolute right-6 bottom-6 z-70 text-xs text-zinc-400">
           <SaveIndicator lastSavedAt={lastSavedAt} status={saveStatus} />
         </div>
-      )}
+      ) : null}
 
       {/* Content Area */}
       <div
@@ -588,7 +641,9 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 onCommit={commitChecklistWidgetData}
               />
             ) : isText ? (
-              <Suspense fallback={<FocusedSkeleton color={color} />}>
+              <Suspense
+                fallback={<NoteEditorLoading color={color} title={title} />}
+              >
                 <BlockNoteEditor
                   color={color}
                   data={node.data}

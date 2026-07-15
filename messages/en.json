@@ -206,6 +206,7 @@
   "focused_close": "Close",
   "focused_created_at": "Created {time}",
   "focused_updated_at": "Updated {time}",
+  "focused_loading": "Loading note…",
   "save_status_saving": "Saving…",
   "save_status_saved_at": "Saved at {time}",
   "save_status_error": "Save failed",

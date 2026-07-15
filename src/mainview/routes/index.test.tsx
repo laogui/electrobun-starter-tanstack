@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   resetViewportPersistSuppression,
@@ -508,6 +509,9 @@ vi.mock('@xyflow/react', async () => {
     Background: () => <div>Background</div>,
     Controls: () => <div>Controls</div>,
     MiniMap: () => <div>MiniMap</div>,
+    Panel: ({ children }: { children?: ReactNode }) => (
+      <div data-testid="rf-panel">{children}</div>
+    ),
     useReactFlow: () => ({
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
     }),

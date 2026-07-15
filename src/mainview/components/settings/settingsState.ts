@@ -46,6 +46,10 @@ export function normalizeSettings(
     )
       ? settings.canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
+    canvasShowMinimap:
+      typeof settings?.canvasShowMinimap === 'boolean'
+        ? settings.canvasShowMinimap
+        : DEFAULT_SETTINGS.canvasShowMinimap,
     canvasSnapToGrid:
       typeof settings?.canvasSnapToGrid === 'boolean'
         ? settings.canvasSnapToGrid

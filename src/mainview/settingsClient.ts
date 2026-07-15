@@ -41,6 +41,7 @@ export interface AppSettings {
   aiProvider: AIProviderSetting;
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
+  canvasShowMinimap: boolean;
   canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
   locale: LocaleSetting;
@@ -130,6 +131,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'en',
   fontFamily: 'system',
   canvasBackground: 'default',
+  canvasShowMinimap: true,
   canvasSnapToGrid: true,
   autoSaveInterval: 800,
   aiEnabled: false,

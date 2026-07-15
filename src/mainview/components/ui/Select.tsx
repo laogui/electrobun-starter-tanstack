@@ -118,7 +118,9 @@ function SelectContent({
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
         alignItemWithTrigger={false}
-        className="z-50 outline-hidden"
+        // Above SettingsDialog (z-55) and nested confirm dialogs (z-60) so
+        // the popup stays clickable when Select is used inside a modal.
+        className="z-[70] outline-hidden"
         sideOffset={sideOffset}
       >
         <SelectPrimitive.Popup

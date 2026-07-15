@@ -73,6 +73,101 @@
   border-color: rgb(255 255 255 / 0.1);
 }
 
+/* Unified minimap + zoom dock (single frosted card). Nested Controls/MiniMap
+   are themselves React Flow panels — flatten them into normal flow. */
+.canvas-viewport-chrome.react-flow__panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  pointer-events: none;
+}
+
+.canvas-viewport-chrome .react-flow__panel {
+  position: relative;
+  inset: auto;
+  margin: 0;
+  pointer-events: all;
+}
+
+.canvas-viewport-chrome .react-flow__minimap {
+  overflow: hidden;
+  background: transparent;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.canvas-viewport-chrome .react-flow__minimap svg {
+  display: block;
+}
+
+/* Horizontal toolbar under the minimap — not a second floating surface. */
+.canvas-viewport-chrome .canvas-viewport-controls.react-flow__controls {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  min-width: 7.5rem;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgb(0 0 0 / 0.06);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Controls-only mode: no divider line above the toolbar. */
+.canvas-viewport-chrome--controls-only
+.canvas-viewport-controls.react-flow__controls {
+  min-width: 6.5rem;
+  border-top: none;
+}
+
+.canvas-viewport-chrome .canvas-viewport-controls .react-flow__controls-button {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 32px;
+  color: rgb(82 82 82);
+  background: transparent;
+  border: none;
+  border-right: 1px solid rgb(0 0 0 / 0.06);
+  border-radius: 0;
+  fill: currentColor;
+}
+
+.canvas-viewport-chrome
+  .canvas-viewport-controls
+  .react-flow__controls-button:last-child {
+  border-right: none;
+}
+
+.canvas-viewport-chrome
+  .canvas-viewport-controls
+  .react-flow__controls-button:hover {
+  background: rgb(0 0 0 / 0.05);
+}
+
+.dark .canvas-viewport-chrome .canvas-viewport-controls.react-flow__controls {
+  border-top-color: rgb(255 255 255 / 0.1);
+}
+
+.dark
+  .canvas-viewport-chrome
+  .canvas-viewport-controls
+  .react-flow__controls-button {
+  color: rgb(212 212 212);
+  border-right-color: rgb(255 255 255 / 0.1);
+}
+
+.dark
+  .canvas-viewport-chrome
+  .canvas-viewport-controls
+  .react-flow__controls-button:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* Legacy vertical Controls styling (e.g. template preview). */
 .canvas-floating-surface.react-flow__controls {
   overflow: hidden;
 }

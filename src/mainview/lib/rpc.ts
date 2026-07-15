@@ -61,7 +61,7 @@ async function initElectrobun() {
         messages: {
           // Phase 8 broadcast: the settings window now ships the full
           // AppSettings (theme + locale + fontFamily + canvasBackground +
-          // canvasSnapToGrid + autoSaveInterval). Forward everything so
+          // canvasShowMinimap + canvasSnapToGrid + autoSaveInterval). Forward everything so
           // listeners can react without a second round-trip through
           // `rpcGetSettings`.
           settingsUpdated: (settings: Record<string, unknown>) => {

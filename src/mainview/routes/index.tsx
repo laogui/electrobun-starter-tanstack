@@ -9,8 +9,6 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
-  Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   SelectionMode,
@@ -31,6 +29,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar';
+import { CanvasViewportChrome } from '@/components/canvas/CanvasViewportChrome';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
@@ -64,6 +63,7 @@ import {
   useSpacePanMode,
 } from '@/hooks/useSpacePanMode';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import { resolveCanvasBackground } from '@/lib/canvasBackground';
 import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
 import {
   type CanvasExportDocument,
@@ -111,7 +111,6 @@ import {
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
-import type { CanvasBackgroundSetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
@@ -120,14 +119,6 @@ import * as m from '../../paraglide/messages.js';
 
 // ─── 画布颜色 ────────────────────────────────────────────────────────────────
 // 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
-
-/** 画布主背景色 (light theme presets — selected via Settings → General). */
-const CANVAS_BG_LIGHT_PRESETS = {
-  default: '#EFF3F4',
-  paper: '#F6F0E4', // warm beige
-  mono: '#F4F4F4', // neutral gray
-} as const satisfies Record<CanvasBackgroundSetting, string>;
-const CANVAS_BG_DARK = '#141414';
 
 /** 背景网格点颜色 */
 const GRID_COLOR_LIGHT = '#D8DCDF';
@@ -163,10 +154,6 @@ const ASSET_DROP_GRID_GAP = 180;
 /** 小地图背景色 */
 const MINIMAP_BG_LIGHT = 'rgba(255, 255, 255, 0.92)';
 const MINIMAP_BG_DARK = 'rgba(28, 28, 28, 0.92)';
-
-/** 小地图边框 */
-const MINIMAP_BORDER_LIGHT = '1px solid rgba(0, 0, 0, 0.08)';
-const MINIMAP_BORDER_DARK = '1px solid rgba(255, 255, 255, 0.08)';
 
 /** 小地图遮罩（视口外区域的蒙层） */
 const MINIMAP_MASK_LIGHT = 'rgba(240, 239, 237, 0.7)';
@@ -1698,15 +1685,13 @@ function CanvasComponent() {
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
   const canvasBackgroundPreset = useAppSettingsStore((s) => s.canvasBackground);
   const canvasSnapToGrid = useAppSettingsStore((s) => s.canvasSnapToGrid);
-  const canvasBackground = isDarkTheme
-    ? CANVAS_BG_DARK
-    : (CANVAS_BG_LIGHT_PRESETS[canvasBackgroundPreset] ??
-      CANVAS_BG_LIGHT_PRESETS.default);
+  const canvasShowMinimap = useAppSettingsStore((s) => s.canvasShowMinimap);
+  const canvasBackground = resolveCanvasBackground(
+    canvasBackgroundPreset,
+    isDarkTheme
+  );
   const gridColor = isDarkTheme ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
   const miniMapBackground = isDarkTheme ? MINIMAP_BG_DARK : MINIMAP_BG_LIGHT;
-  const miniMapBorder = isDarkTheme
-    ? MINIMAP_BORDER_DARK
-    : MINIMAP_BORDER_LIGHT;
   const miniMapMask = isDarkTheme ? MINIMAP_MASK_DARK : MINIMAP_MASK_LIGHT;
   const miniMapNodeColor = useCallback(
     (node: Node) =>
@@ -1859,23 +1844,13 @@ function CanvasComponent() {
             size={1.5}
             variant={BackgroundVariant.Dots}
           />
-          <Controls
-            className="canvas-floating-surface"
-            position="bottom-left"
-          />
           <HelperLines horizontal={helperLineH} vertical={helperLineV} />
-          <MiniMap
+          <CanvasViewportChrome
+            backgroundColor={miniMapBackground}
             maskColor={miniMapMask}
             nodeColor={miniMapNodeColor}
             nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
-            pannable
-            position="bottom-right"
-            style={{
-              backgroundColor: miniMapBackground,
-              border: miniMapBorder,
-              borderRadius: 8,
-            }}
-            zoomable
+            showMinimap={canvasShowMinimap}
           />
         </ReactFlow>
       </div>

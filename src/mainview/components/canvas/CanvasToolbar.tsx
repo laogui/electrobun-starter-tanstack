@@ -6,9 +6,9 @@ import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
 
 /**
- * Floating top-left toolbar that groups the canvas-level entry points
- * (note library, tag filter, settings) into a single frosted pill instead
- * of three loose buttons. Sits just below the transparent titlebar.
+ * Floating bottom-left toolbar that groups the canvas-level entry points
+ * (note library, tag filter, settings) into a single frosted pill.
+ * Viewport chrome (zoom + minimap) lives bottom-right; create/view bar is center.
  */
 export function CanvasToolbar() {
   const toggleLibrary = useCanvasStore((s) => s.toggleLibrary);
@@ -19,13 +19,7 @@ export function CanvasToolbar() {
   const hasTagFilters = activeTagCount > 0;
 
   return (
-    <div
-      className="canvas-floating-surface absolute z-30 flex flex-col gap-1 p-1"
-      style={{
-        top: 'calc(var(--app-titlebar-height, 2.5rem) + 8px)',
-        left: 12,
-      }}
-    >
+    <div className="canvas-floating-surface absolute bottom-3 left-3 z-30 flex flex-col gap-1 p-1">
       <ToolbarButton
         label={m.library_button_aria()}
         onClick={() => {

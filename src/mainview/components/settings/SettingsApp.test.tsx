@@ -307,6 +307,61 @@ describe('SettingsApp', () => {
       });
     });
   });
+
+  it('saves when the minimap setting changes', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      canvasShowMinimap: true,
+      locale: 'en',
+    });
+
+    renderSettingsApp(client);
+
+    const user = userEvent.setup();
+    const minimapSelect = await screen.findByRole('combobox', {
+      name: 'Show minimap',
+    });
+    await user.click(minimapSelect);
+    await user.click(await screen.findByRole('option', { name: 'Off' }));
+
+    await waitFor(() => {
+      expect(client.saveSettings).toHaveBeenCalledWith({
+        ...DEFAULT_SETTINGS,
+        canvasShowMinimap: false,
+        locale: 'en',
+      });
+    });
+  });
+
+  it('saves when the canvas background setting changes', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      canvasBackground: 'default',
+      locale: 'en',
+    });
+    const onSettingsChange = vi.fn();
+
+    renderSettingsApp(client, { onSettingsChange });
+
+    const user = userEvent.setup();
+    const paperOption = await screen.findByRole('radio', {
+      name: 'Paper (warm)',
+    });
+    await user.click(paperOption);
+
+    await waitFor(() => {
+      expect(client.saveSettings).toHaveBeenCalledWith({
+        ...DEFAULT_SETTINGS,
+        canvasBackground: 'paper',
+        locale: 'en',
+      });
+    });
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      canvasBackground: 'paper',
+      locale: 'en',
+    });
+  });
 });
 
 describe('SettingsApp trash section', () => {

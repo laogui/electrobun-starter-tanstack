@@ -629,13 +629,13 @@ async function migrateChecklistCardToWidgetReference(
   }
 }
 
-type FolderChildNode = {
+interface FolderChildNode {
   data?: Record<string, unknown>;
   id: string;
   noteId?: string;
   type?: string;
   [key: string]: unknown;
-};
+}
 
 function widgetReferenceFromData(
   data: Record<string, unknown> | undefined
@@ -1131,6 +1131,7 @@ interface AppSettings {
   aiProvider: (typeof AI_PROVIDER_VALUES)[number];
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
+  canvasShowMinimap: boolean;
   canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
   locale: string;
@@ -1142,6 +1143,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'en',
   fontFamily: 'system',
   canvasBackground: 'default',
+  canvasShowMinimap: true,
   canvasSnapToGrid: true,
   autoSaveInterval: 800,
   aiEnabled: false,
@@ -1168,6 +1170,10 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
     canvasBackground: includes(CANVAS_BACKGROUND_VALUES, raw.canvasBackground)
       ? raw.canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
+    canvasShowMinimap:
+      typeof raw.canvasShowMinimap === 'boolean'
+        ? raw.canvasShowMinimap
+        : DEFAULT_SETTINGS.canvasShowMinimap,
     canvasSnapToGrid:
       typeof raw.canvasSnapToGrid === 'boolean'
         ? raw.canvasSnapToGrid

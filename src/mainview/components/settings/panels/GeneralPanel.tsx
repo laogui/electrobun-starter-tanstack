@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { LicenseActivationDialog } from '@/components/LicenseActivationDialog';
 import { LicenseStatusCard } from '@/components/LicenseStatusCard';
@@ -9,6 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
+import {
+  CANVAS_BG_DARK_PRESETS,
+  CANVAS_BG_LIGHT_PRESETS,
+  CANVAS_BG_PRESET_ORDER,
+} from '@/lib/canvasBackground';
+import { cn } from '@/lib/utils';
 import {
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
@@ -130,14 +137,18 @@ export function GeneralPanel({
     { label: strings.fontSerif, value: 'serif' },
     { label: strings.fontMono, value: 'mono' },
   ];
-  const canvasBgOptions: SelectOption<CanvasBackgroundSetting>[] = [
-    { label: strings.canvasBgDefault, value: 'default' },
-    { label: strings.canvasBgPaper, value: 'paper' },
-    { label: strings.canvasBgMono, value: 'mono' },
-  ];
+  const canvasBgLabels: Record<CanvasBackgroundSetting, string> = {
+    default: strings.canvasBgDefault,
+    paper: strings.canvasBgPaper,
+    mono: strings.canvasBgMono,
+  };
   const canvasSnapOptions: SelectOption<CanvasSnapOptionValue>[] = [
     { label: strings.canvasSnapOn, value: 'on' },
     { label: strings.canvasSnapOff, value: 'off' },
+  ];
+  const canvasMinimapOptions: SelectOption<CanvasSnapOptionValue>[] = [
+    { label: strings.canvasMinimapOn, value: 'on' },
+    { label: strings.canvasMinimapOff, value: 'off' },
   ];
   const autoSaveLabels: Record<AutoSaveIntervalSetting, string> = {
     500: strings.autoSave500,
@@ -191,13 +202,14 @@ export function GeneralPanel({
           options={fontOptions}
           value={settings.fontFamily}
         />
-        <SettingsSelect
+        <CanvasBackgroundPicker
           id="settings-canvas-bg"
           label={strings.canvasBgLabel}
+          labels={canvasBgLabels}
           onValueChange={(canvasBackground) => {
             onUpdate({ canvasBackground });
           }}
-          options={canvasBgOptions}
+          theme={settings.theme}
           value={settings.canvasBackground}
         />
         <SettingsSelect
@@ -208,6 +220,15 @@ export function GeneralPanel({
           }}
           options={canvasSnapOptions}
           value={settings.canvasSnapToGrid ? 'on' : 'off'}
+        />
+        <SettingsSelect
+          id="settings-canvas-minimap"
+          label={strings.canvasMinimapLabel}
+          onValueChange={(value) => {
+            onUpdate({ canvasShowMinimap: value === 'on' });
+          }}
+          options={canvasMinimapOptions}
+          value={settings.canvasShowMinimap ? 'on' : 'off'}
         />
         <SettingsSelect
           id="settings-auto-save"
@@ -250,5 +271,107 @@ function PanelHeading({ children }: { children: React.ReactNode }) {
     <h2 className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-50">
       {children}
     </h2>
+  );
+}
+
+function isDarkThemeSetting(theme: ThemeSetting): boolean {
+  if (theme === 'dark') {
+    return true;
+  }
+  if (theme === 'light') {
+    return false;
+  }
+  return globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+interface CanvasBackgroundPickerProps {
+  id: string;
+  label: string;
+  labels: Record<CanvasBackgroundSetting, string>;
+  onValueChange: (value: CanvasBackgroundSetting) => void;
+  theme: ThemeSetting;
+  value: CanvasBackgroundSetting;
+}
+
+function CanvasBackgroundPicker({
+  id,
+  label,
+  labels,
+  onValueChange,
+  theme,
+  value,
+}: CanvasBackgroundPickerProps) {
+  const isDark = isDarkThemeSetting(theme);
+  const lightPresets = CANVAS_BG_LIGHT_PRESETS;
+  const darkPresets = CANVAS_BG_DARK_PRESETS;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        <span
+          className="block font-medium text-[13px] text-neutral-800 dark:text-neutral-100"
+          id={id}
+        >
+          {label}
+        </span>
+      </div>
+      <div
+        aria-labelledby={id}
+        className="grid max-w-[360px] grid-cols-3 gap-2"
+        role="radiogroup"
+      >
+        {CANVAS_BG_PRESET_ORDER.map((preset) => {
+          const selected = value === preset;
+          const lightColor = lightPresets[preset];
+          const darkColor = darkPresets[preset];
+          const previewColor = isDark ? darkColor : lightColor;
+          const inputId = `${id}-${preset}`;
+
+          return (
+            <label
+              className={cn(
+                'group flex cursor-pointer flex-col gap-1.5 rounded-lg border p-1.5 text-left transition-colors',
+                'has-focus-visible:outline-2 has-focus-visible:outline-accent/60 has-focus-visible:outline-offset-2',
+                selected
+                  ? 'border-accent bg-accent/5 shadow-sm dark:bg-accent/10'
+                  : 'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-neutral-600 dark:hover:bg-neutral-800'
+              )}
+              htmlFor={inputId}
+              key={preset}
+            >
+              <input
+                checked={selected}
+                className="sr-only"
+                id={inputId}
+                name={id}
+                onChange={() => {
+                  onValueChange(preset);
+                }}
+                type="radio"
+                value={preset}
+              />
+              <span
+                className={cn(
+                  'relative flex h-12 w-full items-end justify-end overflow-hidden rounded-md border',
+                  isDark
+                    ? 'border-white/10'
+                    : 'border-black/8 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)]'
+                )}
+                style={{ backgroundColor: previewColor }}
+              >
+                {selected ? (
+                  <span className="m-1 flex size-4 items-center justify-center rounded-full bg-accent text-white shadow-sm">
+                    <Check aria-hidden className="size-2.5" strokeWidth={3} />
+                  </span>
+                ) : null}
+              </span>
+              <span className="px-0.5 font-medium text-[11px] text-neutral-700 leading-tight dark:text-neutral-200">
+                {labels[preset]}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }

@@ -17,6 +17,7 @@ const FONT_VALUES: readonly FontFamilySetting[] = ['system', 'serif', 'mono'];
 const CANVAS_BG_VALUES: readonly CanvasBackgroundSetting[] = [
   'default',
   'paper',
+  'cream',
   'mono',
 ];
 

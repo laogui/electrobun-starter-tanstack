@@ -283,6 +283,7 @@
   "settings_canvas_bg_label": "Canvas background",
   "settings_canvas_bg_default": "Default (cool gray)",
   "settings_canvas_bg_paper": "Paper (warm)",
+  "settings_canvas_bg_cream": "Cream (soft)",
   "settings_canvas_bg_mono": "Mono (neutral)",
   "settings_canvas_snap_label": "Snap to grid",
   "settings_canvas_snap_on": "On",

@@ -362,7 +362,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
       {/* Visual wrapper — keeps Handle positions stable */}
       <div
         className={cn(
-          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
+          'node-visual size-full cursor-pointer overflow-hidden rounded-3xl shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
         <CardContent

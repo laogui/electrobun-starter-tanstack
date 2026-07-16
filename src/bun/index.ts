@@ -1116,7 +1116,7 @@ interface SwitchWorkspaceResponse {
 const FONT_FAMILY_VALUES = ['system', 'serif', 'mono'] as const;
 type FontFamilySetting = (typeof FONT_FAMILY_VALUES)[number];
 
-const CANVAS_BACKGROUND_VALUES = ['default', 'paper', 'mono'] as const;
+const CANVAS_BACKGROUND_VALUES = ['default', 'paper', 'cream', 'mono'] as const;
 type CanvasBackgroundSetting = (typeof CANVAS_BACKGROUND_VALUES)[number];
 
 const AUTO_SAVE_INTERVAL_VALUES = [500, 800, 2000, 5000] as const;

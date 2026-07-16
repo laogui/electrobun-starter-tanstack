@@ -140,6 +140,7 @@ export function GeneralPanel({
   const canvasBgLabels: Record<CanvasBackgroundSetting, string> = {
     default: strings.canvasBgDefault,
     paper: strings.canvasBgPaper,
+    cream: strings.canvasBgCream,
     mono: strings.canvasBgMono,
   };
   const canvasSnapOptions: SelectOption<CanvasSnapOptionValue>[] = [
@@ -317,7 +318,7 @@ function CanvasBackgroundPicker({
       </div>
       <div
         aria-labelledby={id}
-        className="grid max-w-[360px] grid-cols-3 gap-2"
+        className="grid max-w-[400px] grid-cols-4 gap-2"
         role="radiogroup"
       >
         {CANVAS_BG_PRESET_ORDER.map((preset) => {

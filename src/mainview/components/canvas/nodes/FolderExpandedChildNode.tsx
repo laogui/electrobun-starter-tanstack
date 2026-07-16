@@ -111,7 +111,7 @@ export function FolderExpandedChildVisual({
     <motion.div
       animate={returning ? origin : expanded}
       className={cn(
-        'folder-expanded-child-visual node-visual pointer-events-auto size-full overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800',
+        'folder-expanded-child-visual node-visual pointer-events-auto size-full overflow-hidden bg-white shadow-card will-change-transform dark:bg-neutral-800',
         focusable ? 'cursor-pointer' : 'cursor-default',
         getFolderChildShapeClass(data.child.type)
       )}

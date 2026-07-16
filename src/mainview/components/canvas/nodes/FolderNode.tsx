@@ -229,7 +229,7 @@ export const FolderContent = ({
               >
                 <div
                   className={cn(
-                    'absolute top-1/2 left-1/2 overflow-hidden border border-black/7 bg-white shadow-card will-change-transform dark:border-white/10 dark:bg-neutral-800 [&_.conn-handle]:hidden',
+                    'absolute top-1/2 left-1/2 overflow-hidden bg-white shadow-card will-change-transform dark:bg-neutral-800 [&_.conn-handle]:hidden',
                     getFolderChildShapeClass(child.type),
                     thumbsVisible ? 'opacity-100' : 'opacity-0'
                   )}

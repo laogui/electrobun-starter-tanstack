@@ -57,6 +57,46 @@
   --color-accent-strong: oklch(0.83 0.08 255);
 }
 
+/* ── Canvas card elevation ("paper on desk") ──
+   Craft-style minimal shadows are too faint on light canvas fills
+   (#EFF3F4 / paper / cream). Board cards need:
+     1) a readable 1px edge ring (separates white card from gray canvas)
+     2) a tight contact shadow (sits the card on the surface)
+     3) a soft ambient shadow (gives lift / depth)
+   Hover adds one more mid layer so elevation animates cleanly.
+   Dark mode keeps a light ring and deeper black ambient. */
+:root {
+  --shadow-ring-rgb: 15, 23, 42; /* slate-900 ink */
+  --shadow-card:
+    /* edge ring — primary separator on pale canvas */
+    rgba(var(--shadow-ring-rgb), 0.1) 0px 0px 0px 1px,
+    /* contact */
+    rgba(var(--shadow-ring-rgb), 0.05) 0px 1px 2px 0px,
+    /* mid lift */
+    rgba(var(--shadow-ring-rgb), 0.07) 0px 4px 10px -2px,
+    /* ambient */
+    rgba(var(--shadow-ring-rgb), 0.08) 0px 12px 28px -6px;
+  --shadow-card-hover:
+    rgba(var(--shadow-ring-rgb), 0.12) 0px 0px 0px 1px,
+    rgba(var(--shadow-ring-rgb), 0.06) 0px 2px 4px 0px,
+    rgba(var(--shadow-ring-rgb), 0.09) 0px 8px 16px -3px,
+    rgba(var(--shadow-ring-rgb), 0.12) 0px 20px 40px -8px;
+}
+
+.dark {
+  --shadow-ring-rgb: 255, 255, 255;
+  --shadow-card:
+    rgba(var(--shadow-ring-rgb), 0.1) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.35) 0px 1px 2px 0px,
+    rgba(0, 0, 0, 0.28) 0px 4px 10px -2px,
+    rgba(0, 0, 0, 0.32) 0px 14px 32px -6px;
+  --shadow-card-hover:
+    rgba(var(--shadow-ring-rgb), 0.14) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.4) 0px 2px 4px 0px,
+    rgba(0, 0, 0, 0.34) 0px 8px 18px -3px,
+    rgba(0, 0, 0, 0.4) 0px 22px 44px -8px;
+}
+
 /* Shared frosted panel for canvas chrome: search, toolbar, bottom bar, zoom.
    Unlayered so it wins over @xyflow/react's default control styles. */
 .canvas-floating-surface {
@@ -199,34 +239,24 @@
 }
 
 @layer utilities {
-  /* Layered, soft card shadow — gives a sense of depth on the canvas */
+  /* Board-card elevation. Prefer over Tailwind shadow-sm/md for floating nodes. */
   .shadow-card {
-    box-shadow:
-      0 1px 1px rgba(15, 23, 42, 0.04),
-      0 2px 4px -1px rgba(15, 23, 42, 0.06),
-      0 8px 16px -6px rgba(15, 23, 42, 0.1),
-      0 20px 32px -12px rgba(15, 23, 42, 0.12);
+    box-shadow: var(--shadow-card);
   }
   .shadow-card-hover {
-    box-shadow:
-      0 2px 4px rgba(15, 23, 42, 0.08),
-      0 8px 16px -4px rgba(15, 23, 42, 0.12),
-      0 24px 40px -12px rgba(15, 23, 42, 0.2),
-      0 48px 80px -24px rgba(15, 23, 42, 0.28);
+    box-shadow: var(--shadow-card-hover);
   }
 
-  /* drop-shadow variant of the card shadow for nodes whose shape is cut with
-     clip-path (e.g. the sticky's folded corner) — box-shadow would trace the
-     rectangular border box and leak into the cut-out area. */
+  /* drop-shadow variant for clip-path shapes (box-shadow would leak into cutouts). */
   .shadow-card-cutout {
-    filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.05))
-      drop-shadow(0 3px 6px rgba(15, 23, 42, 0.08))
-      drop-shadow(0 12px 20px rgba(15, 23, 42, 0.1));
+    filter: drop-shadow(0 0 0.5px rgba(var(--shadow-ring-rgb), 0.18))
+      drop-shadow(0 1px 2px rgba(var(--shadow-ring-rgb), 0.08))
+      drop-shadow(0 6px 14px rgba(var(--shadow-ring-rgb), 0.1));
   }
   .shadow-card-cutout:hover {
-    filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.08))
-      drop-shadow(0 8px 14px rgba(15, 23, 42, 0.12))
-      drop-shadow(0 24px 36px rgba(15, 23, 42, 0.18));
+    filter: drop-shadow(0 0 0.5px rgba(var(--shadow-ring-rgb), 0.2))
+      drop-shadow(0 2px 4px rgba(var(--shadow-ring-rgb), 0.1))
+      drop-shadow(0 12px 28px rgba(var(--shadow-ring-rgb), 0.14));
   }
 
   .custom-scrollbar {

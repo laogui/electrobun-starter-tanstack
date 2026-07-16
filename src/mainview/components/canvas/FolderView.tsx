@@ -412,7 +412,7 @@ export const FolderView = ({
                 aria-label={ariaLabel}
                 aria-selected={activeIndex === index}
                 className={cn(
-                  'pointer-events-auto fixed cursor-pointer overflow-hidden rounded-lg border border-black/5 bg-white text-left shadow-card focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-3 dark:border-white/10 dark:bg-neutral-800',
+                  'pointer-events-auto fixed cursor-pointer overflow-hidden rounded-lg bg-white text-left shadow-card focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-3 dark:bg-neutral-800',
                   isChild && 'cursor-grab active:cursor-grabbing'
                 )}
                 data-folder-fan-card="true"

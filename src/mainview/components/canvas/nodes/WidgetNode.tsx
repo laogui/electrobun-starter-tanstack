@@ -990,7 +990,7 @@ function WidgetNode({ id, data }: { data: WidgetNodeData; id: string }) {
         nodeId={id}
       />
       <NodeHandles />
-      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 bg-white shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+      <div className="node-visual size-full overflow-hidden rounded-3xl bg-white shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         {record.kind === 'checklist' ? (
           <ChecklistWidgetBody
             data={record.data as ChecklistWidgetData}
@@ -1049,7 +1049,7 @@ export function WidgetNodeReadOnly({ data }: { data: WidgetNodeData }) {
     return (
       <div className="size-full">
         <NodeHandles />
-        <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+        <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
           <WidgetFallback
             message="Widget preview is not available."
             title={data.kind === 'checklist' ? 'Checklist' : data.kind}
@@ -1062,7 +1062,7 @@ export function WidgetNodeReadOnly({ data }: { data: WidgetNodeData }) {
   return (
     <div className="size-full">
       <NodeHandles />
-      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+      <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
         {record.kind === 'checklist' ? (
           <ChecklistWidgetBody
             data={record.data as ChecklistWidgetData}

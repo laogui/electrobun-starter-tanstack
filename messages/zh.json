@@ -283,6 +283,7 @@
   "settings_canvas_bg_label": "画布背景",
   "settings_canvas_bg_default": "默认（冷灰）",
   "settings_canvas_bg_paper": "纸感（暖色）",
+  "settings_canvas_bg_cream": "奶油白",
   "settings_canvas_bg_mono": "中性灰",
   "settings_canvas_snap_label": "吸附网格",
   "settings_canvas_snap_on": "开启",

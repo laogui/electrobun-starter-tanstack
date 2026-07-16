@@ -270,7 +270,7 @@ const StickyNode = ({
 
       <div
         className={cn(
-          'node-visual relative z-0 size-full rounded-sm',
+          'node-visual relative z-0 size-full rounded-sm shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover',
           dragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         onClick={handleClick}

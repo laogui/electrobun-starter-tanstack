@@ -484,7 +484,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
 
       <NodeHandles />
 
-      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+      <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
         <LinkContent data={data} onRetry={handleRetry} />
         {tag || (tags && tags.length > 0) ? (
           <div className="pointer-events-none absolute right-3 bottom-3 left-3">

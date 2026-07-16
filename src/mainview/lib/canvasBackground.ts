@@ -4,6 +4,7 @@ import type { CanvasBackgroundSetting } from '@/settingsClient';
 export const CANVAS_BG_LIGHT_PRESETS = {
   default: '#EFF3F4',
   paper: '#F6F0E4', // warm beige
+  cream: '#F8F5F2', // soft cream
   mono: '#F4F4F4', // neutral gray
 } as const satisfies Record<CanvasBackgroundSetting, string>;
 
@@ -11,12 +12,14 @@ export const CANVAS_BG_LIGHT_PRESETS = {
 export const CANVAS_BG_DARK_PRESETS = {
   default: '#141414',
   paper: '#1E1A14', // warm charcoal
+  cream: '#1B1917', // soft warm dark
   mono: '#1C1C1C', // neutral near-black
 } as const satisfies Record<CanvasBackgroundSetting, string>;
 
 export const CANVAS_BG_PRESET_ORDER = [
   'default',
   'paper',
+  'cream',
   'mono',
 ] as const satisfies readonly CanvasBackgroundSetting[];
 

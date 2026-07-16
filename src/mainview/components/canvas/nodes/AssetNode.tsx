@@ -1143,7 +1143,7 @@ const AssetNode = ({
         enabled={!asset.missing}
         rows={buildAssetHoverRows(asset)}
       >
-        <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
+        <div className="node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover">
           <AssetContent data={data} />
           {isRenaming ? (
             <div

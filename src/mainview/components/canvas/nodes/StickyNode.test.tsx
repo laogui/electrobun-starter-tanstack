@@ -310,7 +310,7 @@ describe('StickyNode', () => {
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
 
-  it('renders without drop-shadow filters', () => {
+  it('uses craft-style card shadow without cutout drop-shadow filters', () => {
     const { container, rerender } = render(
       <StickyNode
         data={{ color: '#ffee88', content: 'No shadow' }}
@@ -318,9 +318,9 @@ describe('StickyNode', () => {
       />
     );
 
-    expect(container.querySelector('.node-visual')).not.toHaveClass(
-      'shadow-card-cutout'
-    );
+    const visual = container.querySelector('.node-visual');
+    expect(visual).toHaveClass('shadow-card');
+    expect(visual).not.toHaveClass('shadow-card-cutout');
     expect(container.querySelector('[aria-hidden="true"]')).not.toHaveStyle({
       filter: expect.stringContaining('drop-shadow'),
     });
@@ -333,6 +333,7 @@ describe('StickyNode', () => {
       />
     );
 
+    expect(container.querySelector('.node-visual')).toHaveClass('shadow-card');
     expect(container.querySelector('.node-visual')).not.toHaveClass(
       'shadow-card-cutout'
     );

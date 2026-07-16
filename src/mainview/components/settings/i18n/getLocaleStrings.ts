@@ -52,6 +52,7 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     canvasBgLabel: t('settings_canvas_bg_label'),
     canvasBgDefault: t('settings_canvas_bg_default'),
     canvasBgPaper: t('settings_canvas_bg_paper'),
+    canvasBgCream: t('settings_canvas_bg_cream'),
     canvasBgMono: t('settings_canvas_bg_mono'),
     canvasSnapLabel: t('settings_canvas_snap_label'),
     canvasSnapOn: t('settings_canvas_snap_on'),

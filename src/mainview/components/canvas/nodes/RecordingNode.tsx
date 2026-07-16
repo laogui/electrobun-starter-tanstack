@@ -388,7 +388,7 @@ const RecordingNode = ({
 
       <NodeHandles />
 
-      <div className="node-visual relative size-full overflow-hidden rounded-2xl border border-black/5 bg-neutral-50 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:bg-neutral-900">
+      <div className="node-visual relative size-full overflow-hidden rounded-2xl bg-neutral-50 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:bg-neutral-900">
         <RecordingContent data={data} loading={loading} streamSrc={streamSrc} />
 
         {isRenaming ? (

@@ -432,7 +432,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       >
         <div
           className={cn(
-            'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl border border-black/5 shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
+            'node-visual relative size-full cursor-pointer overflow-hidden rounded-3xl shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
           )}
         >
           {hasImage ? (

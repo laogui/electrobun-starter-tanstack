@@ -74,7 +74,7 @@ function ReadOnlyHandles() {
 export const CardNodeReadOnly = memo(({ data }: { data: CardContentData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
-    <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+    <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
       <CardContent data={data} readOnly />
     </div>
   </div>
@@ -84,7 +84,7 @@ CardNodeReadOnly.displayName = 'CardNodeReadOnly';
 export const ImageNodeReadOnly = memo(({ data }: { data: ImageData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
-    <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-sm">
+    <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
       <ImageContent data={data} />
     </div>
   </div>
@@ -95,7 +95,7 @@ export const LinkNodeReadOnly = memo(
   ({ data }: { data: LinkNodeRuntimeData }) => (
     <div className="size-full">
       <ReadOnlyHandles />
-      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+      <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
         <LinkContent data={data} />
       </div>
     </div>
@@ -107,7 +107,7 @@ export const AssetNodeReadOnly = memo(
   ({ data }: { data: AssetNodeRuntimeData }) => (
     <div className="size-full">
       <ReadOnlyHandles />
-      <div className="node-visual size-full overflow-hidden rounded-3xl border border-black/5 shadow-card">
+      <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
         <AssetContent data={data} />
       </div>
     </div>
@@ -119,7 +119,7 @@ export const RecordingNodeReadOnly = memo(
   ({ data }: { data: RecordingRuntimeData }) => (
     <div className="size-full">
       <ReadOnlyHandles />
-      <div className="node-visual size-full overflow-hidden rounded-2xl border border-black/5 shadow-card">
+      <div className="node-visual size-full overflow-hidden rounded-2xl shadow-card">
         <RecordingContent data={data} />
       </div>
     </div>
@@ -130,7 +130,7 @@ RecordingNodeReadOnly.displayName = 'RecordingNodeReadOnly';
 export const StickyNodeReadOnly = memo(({ data }: { data: StickyData }) => (
   <div className="size-full">
     <ReadOnlyHandles />
-    <div className="node-visual relative size-full rounded-sm border border-black/5 shadow-card">
+    <div className="node-visual relative size-full rounded-sm shadow-card">
       <StickyContent data={data} />
     </div>
   </div>

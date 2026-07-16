@@ -32,7 +32,12 @@ export const ResizeHandle = ({
   onResizeStart,
 }: ResizeHandleProps) => (
   <NodeResizeControl
-    className="border-none! bg-transparent!"
+    // z-10 lifts the control above `node-visual` wrappers that are
+    // `position: relative` (image/asset/link/recording nodes). Without it,
+    // the visual layer - which sits later in the DOM - paints over the
+    // handle and hides the resize glyph. Mirrors the inline `z-10` already
+    // used by StickyNode's own resize control.
+    className="z-10 border-none! bg-transparent!"
     maxHeight={maxHeight}
     maxWidth={maxWidth}
     minHeight={minHeight}

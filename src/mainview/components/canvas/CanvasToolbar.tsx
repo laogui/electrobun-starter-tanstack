@@ -75,7 +75,10 @@ function ToolbarButton({
     <button
       aria-label={label}
       className={cn(
-        'relative flex size-8 items-center justify-center rounded-xl text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white',
+        // Sized and shaped to match the other floating bottom bars (center
+        // view-switcher pill, right zoom controls) so all three read as one
+        // family of rounded icon buttons with the same focus treatment.
+        'relative flex size-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white',
         active && 'text-primary dark:text-primary'
       )}
       onClick={onClick}

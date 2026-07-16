@@ -4,7 +4,7 @@
 >
 > - [技术规范文档](./tech-spec.md) — 架构、技术栈、目录结构、状态管理、渲染动画、性能预算、数据持久化、RPC 协议、编码约定
 >
-> **最近同步**：已按 2026-06-15 至 2026-07-07 的提交记录更新本 PRD，重点覆盖画布交互、文件/录音节点、导入导出、设置入口、搜索、持久化与路线图状态。
+> **最近同步**：已按 2026-06-15 至 2026-07-16 的提交记录更新本 PRD。除画布交互、文件/录音节点、导入导出、设置入口、搜索与持久化外，补齐 **widget 小组件**（checklist / pomodoro / reminder）、Folder **waterfall** 展开、FocusedView **从卡片 morph**、画布 **minimap 开关** 与 **cream** 背景，并与 [tech-spec](./tech-spec.md) 对齐。
 
 ## 1. 产品概述
 
@@ -31,26 +31,32 @@
 - **功能描述**：画板上的基本元素，支持不同类型的数据载体。
 - **卡片类型**：
   - **图文卡片**：包含图片和文本（如演示中的 Target audience 饼图卡片）。
-  - **待办列表 (Checklist)**：支持在画布上**直接无缝编辑**。用户可以双击直接在列表末尾敲击键盘添加新条目（如演示中添加 "Add great search"），无需进入特殊的编辑模式。画布上的勾选和添加条目操作不改变交互状态（保持 `idle` 或 `selected`），不触发 `inline-editing`；仅当需要完整编辑时通过聚焦模式处理。
-  - **长文本/文档**：承载长篇幅的文章。在聚焦模式下使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用块。BlockNote 文档以无损 JSON sidecar (`content/.ghostboard/blocknote/<noteId>.json`) 作为 canonical source；Markdown 只作为 legacy/import fallback 与按需导出格式，保存时不再维护同步 `.md` 副本。
+  - **长文本/文档 (Note Card)**：承载长篇幅的文章。在聚焦模式下使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑，支持标题、列表、任务列表、引用、代码块、行内代码、粗斜体、删除线、链接、图片、分割线等常用块。BlockNote 文档以无损 JSON sidecar (`content/.ghostboard/blocknote/<noteId>.json`) 作为 canonical source；Markdown 只作为 legacy/import fallback 与按需导出格式，保存时不再维护同步 `.md` 副本。
+  - **小组件 (Widget)**：独立于 Card 的节点类别，React Flow `type: "widget"`，用 `kind` 区分具体种类。**内容不写入 canvas manifest**，而是存放在 `.ghostboard/widgets/<widgetId>.json`；manifest 只保留 `{ widgetId, kind }` 引用。当前支持三种：
+    - **待办列表 (Checklist)**：画布上可直接勾选与在列表末尾添加条目，不改变全局交互状态（保持 `idle` / `selected`），不触发 `inline-editing`；完整编辑可进入 FocusedView。内容字段为带稳定 `id` 的 items 数组；编辑走 `widgetStore`，不经 `commitNodeData` 写回 manifest。
+    - **番茄钟 (Pomodoro)**：专注 / 短休 / 长休计时器，画布上直接操作。运行中 tick **不**每秒写盘，仅在 start / pause / complete 等状态转换时保存；加载时若 `running` 已超时则按完成结算。
+    - **提醒 (Reminder)**：截止时间与状态（scheduled / snoozed / done / missed）。第一版仅在 app 打开时做应用内提示，`repeat` 只实现 `'none'`；系统通知与重复提醒后置。
+    - **生命周期**：删除画布上的 widget 节点只删引用，不删 widget 文件；duplicate / 粘贴会 **克隆** widget 文件并重映射 `widgetId`。内容编辑的撤销由 **per-widget undo 栈**承担，与画布布局 undo 分离（焦点在 widget 内时 `Cmd+Z` 路由到 widget）。
+    - **Checklist 迁移**：旧版 `type: "card"` + `data.type: "checklist"` 在 `loadCanvas` 时懒迁移为 widget；标签 key 从 `note_*` 同步为 `widget_*`。
   - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。导入时按图片自然宽高自动计算卡片尺寸，并生成轻量缩略图；画布态优先显示缩略图，聚焦模式下懒加载原图。支持图片替换二次确认、缺失图片重试、标题重命名和标签管理。
   - **本地文件卡片 (Asset)**：支持从文件选择器、拖拽和粘贴导入本地文件，文件内容保存到 `attachments/`。导入流程优先使用原生路径拷贝或本地 HTTP 流式上传，避免大文件走 data URL；保留 25 MB data URL 限制仅作为 legacy 路径。画布态以预览为主：视频 poster、音频 waveform、图片缩略图、PDF/普通文件纸张图标、文本/JSON 摘要、压缩包条目摘要；文件名、大小、时长、路径等细节进入 hover 信息面板。FocusedView 中视频/音频可播放，图片、文本和 PDF 可预览，普通文件提供 `Open file`。支持替换文件、在 Finder 中显示、标题重命名和标签管理。PDF 已有基础内嵌预览，但页面级缩略图、页码导航和批注仍属后续增强。
   - **录音卡片 (Recording)**：支持通过创建菜单或画布右键启动麦克风录音。录音弹窗自动请求权限并展示实时 waveform 与计时，停止后以用户可读的 `recording-N.<ext>` 作为显示文件名，实际音频通过统一附件链路保存到 `attachments/audio_<id>.<ext>`，并生成 duration / waveform / stream URL。Recording 在画布上以语音备忘录样式展示，可直接播放、暂停、重命名、标记标签、改变颜色、锁定和删除；它可以进入 Group/Folder，但当前不进入 FocusedView。
   - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示富媒体卡片样式，支持打开链接、复制 URL、重新抓取预览和编辑 URL。URL 创建路径只接受安全的 http(s) 链接，打开外部链接时限制为 http/https/mailto。
   - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；普通单击进入原地编辑，`Enter` 可对已选中便签启动编辑，失焦后自动保存。便签以纯文本写入 manifest，粘贴时剥离富文本格式；装饰采用 CSS pushpin，pushpin 渐变会根据便签颜色自动派生。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
 - **卡片通用能力**：
-  - **画布预览渲染**：普通文本卡片在画布态（非聚焦态）优先渲染 sidecar 中缓存的 `previewHtml` / `previewExcerpt`；legacy Markdown 卡片通过 **markdown-it** 将正文渲染为安全的 HTML 预览，并经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist 卡片在画布上保持独立的结构化 `data.items` 交互。
+  - **画布预览渲染**：普通文本卡片在画布态（非聚焦态）优先渲染 sidecar 中缓存的 `previewHtml` / `previewExcerpt`；legacy Markdown 卡片通过 **markdown-it** 将正文渲染为安全的 HTML 预览，并经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist widget 在画布上保持独立的结构化 items 交互（数据在 `widgetStore`）。
   - **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。
-  - **复制/粘贴 / 剪切 / 重复**：支持 `Cmd/Ctrl+C`、`Cmd/Ctrl+V`、`Cmd/Ctrl+X`、`Cmd/Ctrl+D`；复制时保留选中集合内部的连线，粘贴和重复会分配新的 `nodeId` 并保持 parent / extent 约束。
-  - **聚焦入口约定**：普通单击 Card / Image / Asset / Link 进入聚焦模式（FocusedView），已选中节点按 `Enter` 也可进入；Checklist 卡片仍可在画布上直接勾选和添加条目，无需进入聚焦模式。Recording 与 Sticky 不进入 FocusedView。
-  - **创建流程**：底部 `ViewSwitcher` 右侧 `+` 是主创建入口，常用区提供 Note / Sticky / Link / Image，More 区提供 Checklist / Folder / Group / File / Recording，并提供 Markdown 导入和文库笔记入口；画布右键菜单提供同一套创建能力，并以右键位置作为新节点锚点。Image / File 会先打开系统文件选择器；Link 会打开 URL 表单；Recording 会打开麦克风录音弹窗。
+  - **复制/粘贴 / 剪切 / 重复**：支持 `Cmd/Ctrl+C`、`Cmd/Ctrl+V`、`Cmd/Ctrl+X`、`Cmd/Ctrl+D`；复制时保留选中集合内部的连线，粘贴和重复会分配新的 `nodeId` 并保持 parent / extent 约束。**Widget 额外克隆内容文件**并重映射 `widgetId`，避免多个节点共享同一 widget 文件。
+  - **聚焦入口约定**：普通单击 Card / Image / Asset / Link / Checklist widget 进入聚焦模式（FocusedView），已选中节点按 `Enter` 也可进入；Checklist 仍可在画布上直接勾选和添加条目。Pomodoro / Reminder 以画布内交互为主；Recording 与 Sticky 不进入 FocusedView。
+  - **创建流程**：底部 `ViewSwitcher` 右侧 `+` 是主创建入口，常用区提供 Note / Sticky / Link / Image，More 区提供 **Checklist / Pomodoro / Reminder** / Folder / Group / File / Recording，并提供 Markdown 导入和文库笔记入口；画布右键菜单提供同一套创建能力，并以右键位置作为新节点锚点。Image / File 会先打开系统文件选择器；Link 会打开 URL 表单；Recording 会打开麦克风录音弹窗；创建 widget 时先 RPC 写入 widget 文件再放置节点。
 
 ### 2.3 沉浸式聚焦模式 (Focused View / Modal Expansion)
 
-- **功能描述**：当用户需要深度阅读、编辑或预览某一张卡片时，提供无干扰的阅读/编辑环境。聚焦模式下，长文本/文档类卡片使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑；图片卡片进入大图浏览模式；Checklist 卡片进入结构化列表编辑模式；Asset 根据文件类型进入媒体播放器、图片/PDF/文本预览或文件详情视图；Link 进入链接详情/URL 编辑视图。
+- **功能描述**：当用户需要深度阅读、编辑或预览某一张卡片时，提供无干扰的阅读/编辑环境。聚焦模式下，长文本/文档类卡片使用 **BlockNote 块编辑器**进行 Notion 风格的所见即所得编辑；图片卡片进入大图浏览模式；Checklist widget 进入结构化列表编辑模式（数据写 `widgetStore`）；Asset 根据文件类型进入媒体播放器、图片/PDF/文本预览或文件详情视图；Link 进入链接详情/URL 编辑视图。
 - **交互逻辑**：
-  - 普通单击可聚焦节点、已选中节点按 `Enter`，或右键菜单 `Open Focused` 进入聚焦模式。卡片通过 FLIP 动画从画布位置平滑放大至屏幕中央，成为主视图；背景画布被一层半透明遮罩（Overlay/Dimmer）覆盖，屏蔽其他元素的干扰。点击遮罩、返回按钮或按 `Escape` 退回画布，卡片收缩回原位。
-  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，普通单击进入原地编辑；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理。
+  - 普通单击可聚焦节点、已选中节点按 `Enter`，或右键菜单 `Open Focused` 进入聚焦模式。全屏 shell 以源卡片屏幕矩形为起点 **morph 放大**到主视图（FLIP 风格：`transformOrigin` 取卡片中心，scale 从卡片相对视口比例过渡到 1）；退出时反向收缩。背景画布被半透明遮罩覆盖。点击遮罩、返回按钮或按 `Escape` 退回画布。
+  - BlockNote 与 note 加载态共用 `NoteEditorLoading` 占位，避免聚焦闪白。
+  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，普通单击进入原地编辑；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理；Pomodoro / Reminder 以画布内控件为主。
 
 ### 2.4 节点连线 (Edges / Connections)
 
@@ -88,10 +94,10 @@
   - **封面渲染原则**：Folder 封面只表达摘要，不渲染完整的内部小画布。封面信息优先级为：标题 / item 数量 / 主要类型分布 / 最近的 2–4 个代表性缩略图或类型图标。没有图片时使用类型图标组合和数量文案兜底，避免每新增一种节点类型都重写封面布局。
   - **进入图层 (Drill-down)**：普通单击 Folder、已选中 Folder 按 `Enter`，或通过右键菜单 `Open` 触发**隔离层模式**。
     - 背景画布整体变暗或模糊（失去焦点）。
-    - 文件夹内的卡片从堆叠状态平滑展开（散开）到当前的临时图层上，供用户浏览或编辑。MVP 采用确定性的自动排布（横向 strip 或 grid），排列顺序按 `children` 数组索引（即拖入先后顺序），不提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
+    - 文件夹内的条目从堆叠状态平滑展开到临时图层。当前实现为 **bottom-up waterfall** 自动排布（非横向 strip / 固定 grid）：最多约五列从 Folder 上方中心向上生长，宽内容自动减列，保留各子项自然尺寸；封面使用动态缩略图槽位摘要。排列顺序按 `children` 数组索引（拖入先后），**不**提供自由拖拽排序，因此不额外持久化 Folder 内部坐标。
       - 在此模式下，画布上的其他非同组元素不可见或不可交互。
   - **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
-  - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Checklist` / `Image` / `Asset` / `Link` / `Recording`。这些类型都被视为"内容条目"，可在 Folder drill-down 中被浏览、聚焦、播放或编辑。
+  - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Widget`（checklist / pomodoro / reminder）/ `Image` / `Asset` / `Link` / `Recording`。这些类型都被视为"内容条目"，可在 Folder 展开层中被浏览、聚焦、播放或编辑。
   - **不允许收纳的节点类型**：Folder 不收纳 `Folder` / `Group` / `Sticky`。`Folder` 嵌套会把资料夹变成递归信息架构；`Group` 带空间布局语义；`Sticky` 是画布上的临时注释，默认保留在画布层。若未来需要便签归档，应作为独立功能评估，不改变 Folder 的基本定位。
   - **成员来源**：Folder 的成员通过以下方式产生：
     1. **在 Folder 内直接新建**：在 Folder drill-down 视图中通过顶部工具栏或右键菜单的 `New Card` 新建卡片，直接追加到该 Folder 的 `children` 数组。
@@ -105,12 +111,12 @@
 
 - **功能描述**：右键菜单是画布上的高频操作入口，避免用户频繁依赖顶部工具栏或记忆快捷键。
 - **交互逻辑**：
-  - **画布空白处右键**：提供新建（`note` / `checklist` / `sticky` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown 等操作。
+  - **画布空白处右键**：提供新建（`note` / `checklist` / `pomodoro` / `reminder` / `sticky` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown 等操作。
   - **卡片上右键**：提供聚焦打开、复制、Copy as Markdown（标题 + 正文写入剪贴板）、改颜色、编辑标签、锁定/解锁、移到笔记库、导出为 Markdown、删除等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
-  - **Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。
-  - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。
+  - **Widget / Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。Widget 删除只移除画布引用。
+  - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；含 widget 时会 clone 内容文件。Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。
   - **媒体节点右键**：Image 支持 Replace image、Copy image address、Reveal in Finder、Rename；Asset 支持 Reveal in Finder、Replace file、Rename；Link 支持 Open link、Copy URL、Refetch preview、Edit URL；Recording 支持 Reveal in Finder、Rename。
-  - **Folder 上右键**：提供打开 Folder、重命名显示标签、在该 Folder 内新建卡片、锁定/解锁、删除等操作。**注**：M5 之后 Folder 子卡片是独立 note record，不再对应系统目录，因此不提供「在系统文件管理器中显示目录」入口；如需查看原始数据，可在 `content/.ghostboard/blocknote/`（sidecar）或 `content/*.md`（legacy/import）按 `noteId` 查找，也可导出 Markdown。Folder drill-down 视图中的子卡片菜单需额外提供 `Extract to Canvas`。
+  - **Folder 上右键**：提供打开 Folder、重命名显示标签、在该 Folder 内新建内容、锁定/解锁、删除等操作。**注**：M5 之后 Folder 子卡片是独立 note / widget record，不再对应系统目录，因此不提供「在系统文件管理器中显示目录」入口；如需查看原始数据，可在 `content/.ghostboard/blocknote/`、`content/*.md` 或 `.ghostboard/widgets/` 按 id 查找。Folder 展开层中的子项菜单需额外提供 `Extract to Canvas`。
   - **连线上右键**：提供编辑标签、切换动画、切换曲线/折线、`Cycle Color` 循环切换连线颜色、删除连线等操作。
 
 ### 2.7 多画布视图 (Multi-Canvas Views) ✅
@@ -118,17 +124,18 @@
 - **功能描述**：同一个 workspace 中可以创建多个独立的画布视图。同一个 note record 可以通过 `noteId` 在不同画布上多次出现（实例 `nodeId` 不同），实现同一知识库的多视角组织。
 - **交互逻辑**：
   - **底部切换器**：画布底部居中显示一个浮动的 `ViewSwitcher` 面板，包含当前画布名称、节点计数、导出按钮和创建按钮。
+  - **视口 chrome**：画布右下角 `CanvasViewportChrome` 将 minimap 与缩放控件合成一块 frosted 面板；设置中可关闭 minimap（仅保留缩放条）。
   - **切换画布**：点击切换器展开画布列表，点击任一画布立即切换。切换前会先保存当前画布；若保存失败则中止切换并提示，避免未保存变更被清空。切换成功后清空节点/边、聚焦模式、Folder drill-down、undo/redo 历史栈并加载目标画布；剪贴板保留，支持跨画布复制粘贴。
   - **Viewport 持久化**：每个画布视图的 ReactFlow viewport（`x` / `y` / `zoom`）随 manifest 一起持久化到 `.canvas.json` 的 `viewport` 字段。切换画布时恢复目标画布的上次 viewport；刷新页面或重启应用后 viewport 也会恢复。搜索定位、聚焦定位等程序化相机移动会短暂抑制 viewport 持久化，避免把临时跳转写成用户的长期浏览位置。
   - **活跃画布持久化**：用户当前选中的画布 `activeViewId` 持久化到 `workspace.json`，重启应用后自动恢复到上次使用的画布。
-  - **新建画布**：通过切换器右侧的 `+` 按钮触发子菜单，提供两种创建方式：① **空白画布**（沿用原有 `handleCreate` 流程，自动命名为 `Canvas N` 并切换过去）；② **选择模板…**（跳转 `/templates` 路由页浏览模板库，选中模板后在只读 ReactFlow 预览页确认后基于模板创建新画布，自动为模板中的每张 Card 生成新 `noteId` 和初始 note record，首次聚焦编辑后迁移为 BlockNote sidecar）。
+  - **新建画布**：通过切换器右侧的 `+` 按钮触发子菜单，提供两种创建方式：① **空白画布**（沿用原有 `handleCreate` 流程，自动命名为 `Canvas N` 并切换过去）；② **选择模板…**（跳转 `/templates` 路由页浏览模板库，选中模板后在只读 ReactFlow 预览页确认后基于模板创建新画布，自动为模板中的每张 Card 生成新 `noteId` 和初始 note record，首次聚焦编辑后迁移为 BlockNote sidecar；legacy checklist 在加载时懒迁移为 widget）。
   - **重命名**：在弹出菜单中点击铅笔图标进入行内编辑模式，`Enter` 确认、`Escape` 取消。名称为空、超过 80 字符或与其他画布重名时阻止提交并显示行内错误。
   - **删除画布**：在弹出菜单中点击删除图标。至少保留一个画布，删除最后一个时操作被拒绝。删除当前画布时自动切换到列表中的第一个画布。
   - **恢复画布**：删除画布后进入 workspace trash，并通过 toast 提供 Undo 恢复；设置页的 Workspace 面板也可恢复 trash 中的画布。
-  - **数据隔离**：每个画布对应独立的 `.ghostboard/views/{viewId}.canvas.json` manifest 文件。Card 内容以 `noteId` 引用共享的 note record（sidecar 或 legacy `.md`），不跟随单个画布复制。
+  - **数据隔离**：每个画布对应独立的 `.ghostboard/views/{viewId}.canvas.json` manifest 文件。Card 以 `noteId` 引用 note record；Widget 以 `widgetId` 引用 `.ghostboard/widgets/` 文件，均不随单个画布整份复制内容文件。
 - **限制（当前版本）**：
   - 不支持跨画布拖拽节点。
-  - 不支持画布间的 noteId 引用关系可视化。
+  - 不支持画布间的 noteId / widgetId 引用关系可视化。
 
 ### 2.8 搜索 (Search) ✅ MVP / ⚠️ 覆盖范围待补
 
@@ -142,26 +149,26 @@
   - **搜索历史**：查询输入为空时显示「Recent searches」分组，列出 `localStorage` 中保存的最近 8 条查询（`ghostboard:v1:search-history` 键，兼容旧键 `ghostboard:search-history`），点击回填到输入框；提供 `Clear` 一键清空与单条删除入口。历史只在用户实际选中结果时落盘，避免误触污染。
   - **Detached notes 的可见性**：用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索。画布侧提供游离笔记管理入口，可将 detached notes 拖回画布并赋予真实坐标。
 - **当前限制 / 待办**：
-  - 后端搜索目前主要索引 manifest 顶层节点；Folder `children` 中的 Card/Asset/Link/Image/Recording 仍可能漏搜，需作为 P0 补齐。
-  - 纯粹存在于 `content/*.md` 或 `content/.ghostboard/blocknote/*.json`、但没有任何 manifest 引用的 note record 不会作为一等搜索结果返回；它们目前通过设置页的 Unlinked Files 清理工具暴露，而不是通过搜索面板暴露。
+  - 后端搜索目前主要索引 manifest 顶层节点；Folder `children` 中的 Card/Widget/Asset/Link/Image/Recording 仍可能漏搜，需作为 P0 补齐。
+  - 纯粹存在于 `content/*.md`、`content/.ghostboard/blocknote/*.json` 或 `.ghostboard/widgets/*.json`、但没有任何 manifest 引用的内容不会作为一等搜索结果返回；它们目前通过设置页 Unlinked Files / cleanup 暴露，而不是通过搜索面板暴露。
   - 早期规划中的“输入时实时高亮画布匹配/未匹配节点变淡”尚未实现。
   - 对未放置内容提供“一键放回当前画布”的搜索结果操作尚未实现；当前放回路径主要是 `DetachedNotesSidebar`。
 
 ### 2.9 撤销/重做 (Undo / Redo)
 
-- **功能描述**：对画布上的结构性与离散操作（移动、创建、删除、Resize、拖入文件夹、节点级提交等）提供撤销和重做能力。正文长文编辑不进入画布撤销栈，而是由 BlockNote（底层 ProseMirror）自身历史栈处理；标题输入框使用浏览器原生 input undo。
+- **功能描述**：对画布上的结构性与离散操作（移动、创建、删除、Resize、拖入文件夹、节点级提交等）提供撤销和重做能力。正文长文编辑不进入画布撤销栈，而是由 BlockNote（底层 ProseMirror）自身历史栈处理；**Widget 内容编辑**（checklist items、番茄钟状态等）由 `widgetStore` 的 **per-widget undo 栈**处理，不写入画布快照；标题输入框使用浏览器原生 input undo。
 - **交互逻辑**：
-  - 非编辑态下，`Cmd+Z` 撤销，`Cmd+Shift+Z` 重做；若焦点位于 `input` / `textarea` / `contenteditable` 中，则快捷键交给当前编辑控件，不由画布 store 接管。
-  - 维护一个画布快照历史栈（Snapshot History Stack），每次离散画布操作前保存当前 `{nodes, edges}` 快照；当前实现不记录 diff / command。
-  - **栈深度上限**：最多保留 **50** 步操作历史，超出后丢弃最早记录，避免大画布场景下内存不可控增长。
-  - **撤销与持久化的一致性策略**：撤销/重做仅回滚内存状态，不直接触发磁盘反向写入。下一次 debounce 到期时，以当前内存状态为准覆盖磁盘文件。这意味着：用户编辑 → debounce 写盘 → `Cmd+Z` 撤销 → 内存回滚 → 下次 debounce 再次以内存状态覆盖磁盘，保证内存与磁盘最终一致。
+  - 非编辑态下，`Cmd+Z` 撤销，`Cmd+Shift+Z` 重做。若编辑焦点在某个 widget 内，快捷键优先路由到该 widget 的 undo/redo；若焦点位于 `input` / `textarea` / `contenteditable` 中，则交给当前编辑控件；否则由画布 store 接管。
+  - 维护一个画布快照历史栈（Snapshot History Stack），每次离散画布操作前保存当前 `{nodes, edges}` 快照；当前实现不记录 diff / command。Widget 内容栈与画布栈互不感知。
+  - **栈深度上限**：画布与每个 widget 各自最多保留 **50** 步，超出后丢弃最早记录。
+  - **撤销与持久化的一致性策略**：撤销/重做仅回滚内存状态，不直接触发磁盘反向写入。下一次 debounce 到期时，以当前内存状态为准覆盖磁盘文件（manifest 或 widget JSON）。
   - **生命周期**：撤销栈仅存在于内存中，关闭应用或切换 workspace 后清空，不做持久化。
 
 ### 2.10 键盘快捷键体系 (Keyboard Shortcuts)
 
 | macOS                   | Windows / Linux           | 行为                                                                            |
 | ----------------------- | ------------------------- | ------------------------------------------------------------------------------- |
-| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 非编辑态下走画布快照栈；若焦点在 `input` / `textarea` / `contenteditable`，则交给当前编辑控件（BlockNote / ProseMirror history / 浏览器原生 input undo） |
+| `Cmd+Z` / `Cmd+Shift+Z` | `Ctrl+Z` / `Ctrl+Shift+Z` | 焦点在 widget 内 → widget undo；焦点在 input/contenteditable → 编辑控件（BlockNote / 浏览器）；否则画布快照栈 |
 | `Cmd+C` / `Cmd+X` / `Cmd+V` | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | 复制 / 剪切 / 粘贴选中节点与其内部连线                                                                 |
 | `Cmd+D`                 | `Ctrl+D`                  | 重复选中节点                                                                     |
 | `Cmd+G` / `Cmd+Shift+G` | `Ctrl+G` / `Ctrl+Shift+G` | 将选中节点创建为 Group / 取消 Group                                             |
@@ -180,7 +187,7 @@
 | 状态                | 进入条件                                                                               | 退出条件                                 | 约束                                                                                                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `idle`              | 默认状态；点击空白处；完成操作后回落                                                   | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选；普通单击可聚焦节点会直接进入 `focused` / `folder-drill-down`，普通单击 Sticky 进入 `inline-editing`                                                                            |
-| `selected`          | 框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键单选或多选集合右键                         | 点击空白、`Escape`、进入其他状态         | 允许批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、移动到其他画布。**Checklist 例外**：Checklist 卡片在 `selected` 状态下允许直接勾选 checkbox 和在列表末尾添加条目（局部交互） |
+| `selected`          | 框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键单选或多选集合右键                         | 点击空白、`Escape`、进入其他状态         | 允许批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、移动到其他画布。**Checklist widget 例外**：在 `selected` 状态下允许直接勾选 checkbox 和在列表末尾添加条目（局部交互，写 widgetStore） |
 | `marquee-selecting` | 在空白处左键拖拽                                                                       | 鼠标释放                                 | 桌面端启用；与空格平移模式、输入编辑态互斥                                                                                                                                                           |
 | `dragging`          | 拖拽一个或多个已选节点                                                                 | 鼠标释放或取消                           | 暂停双击判定，避免误触发编辑                                                                                                                                                                         |
 | `inline-editing`    | 普通单击 Sticky、选中 Sticky 后按 `Enter`、Group label 编辑、资源/录音标题重命名          | `Escape`、提交、失焦或点击其他区域       | 编辑期间禁用画布级快捷键；Sticky 使用纯文本 textarea，媒体标题使用行内 input。Card/Image/Asset/Link 的深度编辑进入 `focused`                                                                         |
@@ -278,7 +285,7 @@
 
 | 状态管理 | Zustand + TanStack React Query |
 
-> 渲染引擎、连续缩放渲染、FLIP 动画、性能预算与降级策略等技术实现细节请参阅 [技术规范文档](./tech-spec.md)。
+> 渲染引擎、连续缩放渲染、FocusedView morph、Folder waterfall、性能预算与降级策略等技术实现细节请参阅 [技术规范文档](./tech-spec.md)。
 
 ---
 
@@ -286,12 +293,12 @@
 
 ### 5.1 核心原则
 
-1. **本地文件即数据源（Local Files as Source of Truth）**—— 每张 **Card 类型**卡片对应一个以 `noteId` 标识的 note record。当前优先使用 BlockNote JSON sidecar（`content/.ghostboard/blocknote/<noteId>.json`）作为内容级 canonical source；legacy/imported `.md` 文件仍会被发现、读取、导出和迁移，但新编辑保存不再维护同步 Markdown 副本。画布布局用独立的 manifest 文件管理。**Folder 的 Card 子节点今天的运行模型与顶层 Card 完全对等**：各有独立 `noteId` 和 note record，可被其他画布通过 `noteId` 引用（详见 §5.6 manifest 示例与 §5.10 决策表：M5 已完成）。Sticky（便签）的内容依然内嵌在 manifest `data.content` 中，不生成独立 note record；Image / Asset / Recording 走 `attachments/` 附件模式，Link 走 URL + unfurl 元数据，不分配 `.md`。
+1. **本地文件即数据源（Local Files as Source of Truth）**—— 每张 **Card 类型**卡片对应一个以 `noteId` 标识的 note record。当前优先使用 BlockNote JSON sidecar（`content/.ghostboard/blocknote/<noteId>.json`）作为内容级 canonical source；legacy/imported `.md` 文件仍会被发现、读取、导出和迁移，但新编辑保存不再维护同步 Markdown 副本。**Widget** 内容以 `widgetId` 标识，canonical source 为 `.ghostboard/widgets/<widgetId>.json`。画布布局用独立的 manifest 文件管理。**Folder 的 Card 子节点与顶层 Card 对等**（独立 `noteId`）；**Widget 子节点与顶层 Widget 对等**（独立 `widgetId`）。Sticky 内容内嵌在 manifest `data.content`；Image / Asset / Recording 走 `attachments/`；Link 走 URL + unfurl 元数据。
 
-   > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式，仅在 GhostBoard 内可见。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会迁到独立 note record 并把 manifest 吐到引用形式。
-2. **内容与布局解耦** —— 内容级属性（标题、颜色、创建时间、BlockNote blocks / preview）存 sidecar 或 legacy frontmatter；视图级属性（位置、大小、层级）存 manifest。
-3. **`noteId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离，同一篇笔记可在多个画布或同一画布中多次出现。
-4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` 不再被任何画布引用时，note record（sidecar 或 legacy `.md`）保留，直到用户显式执行永久删除或在设置页 Unlinked Files 清理工具中删除。删除 Folder 时，其 Card/Asset/Link/Recording 等 children 会被转换为 detached 节点，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 note record 会被清理，Image/Asset/Recording 仍遵循附件 + manifest 引用模式，Link 只清理 URL 元数据。
+   > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会迁到独立 note record。Checklist 曾以 Card + `data.type: "checklist"` 存在，现已懒迁移为 Widget。
+2. **内容与布局解耦** —— 内容级属性（标题、颜色、创建时间、BlockNote blocks / preview、widget items/timer）存 sidecar / widget JSON 或 legacy frontmatter；视图级属性（位置、大小、层级）存 manifest。
+3. **`noteId` / `widgetId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离；同一内容可在多画布出现。Widget 的 duplicate/粘贴会克隆文件（不共享 widgetId）。
+4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` / `widgetId` 不再被任何画布引用时，内容文件保留，直到用户显式永久删除或 Unlinked Files 清理。删除 Folder 时，其 children 会被转换为 detached 节点，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 note record 清理策略与顶层一致，Widget 默认只删引用，Image/Asset/Recording 仍遵循附件 + manifest 引用模式，Link 只清理 URL 元数据。
 
 ### 5.2 配置文件与偏好
 
@@ -313,6 +320,7 @@ workspace/
   "locale": "zh",
   "fontFamily": "system",
   "canvasBackground": "default",
+  "canvasShowMinimap": true,
   "canvasSnapToGrid": true,
   "autoSaveInterval": 800,
   "aiEnabled": false,
@@ -322,8 +330,8 @@ workspace/
 }
 ```
 
-- `theme` / `locale` / 字体 / 画布背景 / 自动保存间隔 / AI 模型配置通过 `CanvasToolbar` 的 Settings 图标打开 in-window `SettingsDialog` 保存，并向主画布即时推送更新。
-- 设置弹窗包含 General / Workspace / AI / Shortcuts / About 五个 section。Workspace 面板承载当前路径、打开 workspace 文件夹、选择下次启动 workspace、导出 workspace archive、Trash 恢复/清空、Unlinked Files 扫描/删除。
+- `theme` / `locale` / 字体 / **画布背景**（`default` | `paper` | `cream` | `mono`，设置面板 swatch 选择）/ **minimap 开关**（`canvasShowMinimap`）/ 网格吸附 / 自动保存间隔 / AI 模型配置通过 `CanvasToolbar` 的 Settings 图标打开 in-window `SettingsDialog` 保存，并向主画布即时推送更新。
+- 设置弹窗包含 General / Workspace / AI / Shortcuts / About 五个 section。General 含外观与画布 chrome；Workspace 面板承载当前路径、打开 workspace 文件夹、选择下次启动 workspace、导出 workspace archive、Trash 恢复/清空、Unlinked Files 扫描/删除。
 - AI API key 不写入 `.ghostboard/settings.json`，而是保存在 app-level `ai-credentials.json`。
 - 当前 workspace 路径不可能放进 workspace 内设置，因此单独保存在 app-level `userprefs.json`：
 
@@ -382,13 +390,15 @@ workspace/
 workspace/
 ├── .ghostboard/                        # 应用元数据（不是用户内容）
 │   ├── workspace.json                  # workspace 内视图列表、activeViewId、trash 记录
-│   ├── settings.json                   # 主题、语言、字体、画布背景、自动保存、AI 模型配置
-│   ├── node-metadata.json              # 节点标签元数据（tag / tagColor / tags，以 noteId 或 nodeId 为键）
+│   ├── settings.json                   # 主题、语言、字体、画布背景/minimap、自动保存、AI 模型配置
+│   ├── node-metadata.json              # 标签元数据（key = noteId / widgetId / nodeId）
+│   ├── widgets/                        # 小组件内容 JSON（checklist / pomodoro / reminder）
+│   │   └── widget_ab12cd34.json
 │   ├── trash/                          # 被软删除的 canvas manifest
-│   └── views/                          # 每个画布一个 manifest
+│   └── views/                          # 每个画布一个 manifest（widget 仅存引用）
 │       ├── default.canvas.json
 │       └── roadmap.canvas.json
-├── content/                            # 统一内容树
+├── content/                            # 统一 note 内容树
 │   ├── who-ghostboard-is-for.md        # legacy / imported Markdown，或按需导出的格式
 │   ├── prio-before-launch.md
 │   ├── alpha-feedback.md
@@ -406,7 +416,8 @@ workspace/
     └── file_d4e5f6a7.pdf
 ```
 
-- **单一内容树**：所有 note record 统一由 `noteId` 索引。当前主存储是 `content/.ghostboard/blocknote/<noteId>.json`；legacy/imported Markdown 继续位于 `content/*.md`，并可在下次聚焦编辑时迁移为 sidecar。**M5 之后 Folder Card 子节点与顶层 Card 对等**，manifest 通过 `children[].noteId` 加可选 legacy `file` 引用。示意图中的 `great-ideas/` 子目录仅为远期「文件夹即目录」模型的占位示意，当前不启用。
+- **单一 note 内容树**：所有 note record 统一由 `noteId` 索引。当前主存储是 `content/.ghostboard/blocknote/<noteId>.json`；legacy/imported Markdown 继续位于 `content/*.md`，并可在下次聚焦编辑时迁移为 sidecar。**M5 之后 Folder Card 子节点与顶层 Card 对等**，manifest 通过 `children[].noteId` 加可选 legacy `file` 引用。示意图中的 `great-ideas/` 子目录仅为远期「文件夹即目录」模型的占位示意，当前不启用。
+- **Widget 内容树**：独立于 note，按 `widgetId` 存放在 `.ghostboard/widgets/`；manifest 与 Folder children 只保存引用。
 - **Per-view manifest**：每个画布视图独立一个 `.canvas.json`，避免单文件成为写入热点。
 - **附件命名**：附件文件名使用 `{kind}_{uuid8}.{ext}` 格式（`img_` / `video_` / `audio_` / `file_`），避免同名冲突。路径统一为 workspace-relative POSIX 路径。Image / Asset / Recording 节点保存原始附件引用；视频/图片可额外保存 `thumbnailFile`，音频/录音可额外保存 `waveform` / `duration`，文本与压缩包可保存 `previewExcerpt` / `archiveSummary`。
 
@@ -418,7 +429,7 @@ Markdown 不再是 BlockNote 卡片的主存储格式。它仍用于 legacy note
 ---
 id: 'note_a1b2c3d4'
 title: 'Prio before launch'
-displayHint: 'checklist'
+displayHint: 'note'
 color: '#EAF2B8'
 tags: ['Inbox']
 createdAt: 2026-03-28T10:00:00Z
@@ -427,23 +438,21 @@ updatedAt: 2026-03-31T14:30:00Z
 
 ## Lingering bugs
 
-- [x] Dragging should not let stickies become too small
-- [x] When pasting images/webclips
-- [ ] Drop area on desktop reported by some
-- [ ] Highlight border around webclips isn't removed after undoing resize
+Body text stored in BlockNote sidecar (or legacy Markdown body).
 ```
 
-**`displayHint` 说明**（legacy Markdown / 导出 frontmatter 中的 UI 渲染提示，互斥枚举——每张卡片有且仅有一个值）：
+**`displayHint` 说明**（legacy Markdown / 导出 frontmatter 中的 UI 渲染提示，仅用于 **Card / note**）：
 
 | displayHint | 代码中对应 `data.type` | 含义                   | 画布上的默认渲染                            | 聚焦行为      |
 | ----------- | ---------------------- | ---------------------- | ------------------------------------------- | ------------- |
 | `note`      | `text`                 | 普通文本笔记（默认值） | 显示标题 + 正文摘要                         | ✅ 可进入聚焦 |
-| `checklist` | `checklist`            | 以待办列表为主         | 显示标题 + checkbox 列表（可直接勾选/添加） | ✅ 可进入聚焦 |
-| `image`     | `image`                | 以图片为主             | 显示图表/图片内容                           | ✅ 可进入聚焦 |
+| `image`     | `image`                | 以图片为主（legacy）   | 显示图表/图片内容                           | ✅ 可进入聚焦 |
 
-> **Sticky / Asset / Link / Recording 不属于 `displayHint` 枚举**：Sticky（便签）是独立的节点类型（manifest 中 `type: "sticky"`），其内容直接内嵌在 manifest `data.content` 中；Asset / Link / Recording 也是独立 node kind，分别引用附件或 URL 元数据。它们都不对应独立的 `.md` 文件，因此不使用 frontmatter 的 `displayHint` 字段。
+> **Checklist 不再使用 Card `displayHint`**：待办列表是 **Widget**（`type: "widget"`, `kind: "checklist"`），内容在 `.ghostboard/widgets/`。导出 Markdown 时 checklist widget 会序列化为 GFM 任务列表。磁盘上若仍存在 legacy `displayHint: 'checklist'` 的 Card，加载时会懒迁移为 widget。
 
-> **当前实现说明**：代码中仍使用 `data.type`（值为 `'text'` / `'checklist'` / `'image'`）作为 Card 的类型标识，与 PRD 定义的 `displayHint` 字段名和枚举值（`'note'`）存在差异。长期目标是把 Card 的 UI hint 与 frontmatter 的 `displayHint` 统一，但这不影响独立 node kind（Sticky / Asset / Link / Recording）。
+> **Sticky / Widget / Asset / Link / Recording 不属于 Card 的 `displayHint` 枚举**：Sticky 内嵌 `data.content`；Widget 用 `widgetId` + `kind`；Asset / Link / Recording 引用附件或 URL 元数据。
+
+> **当前实现说明**：Card 仍使用 `data.type`（`'text'` / `'image'`）作为运行时标识，与 PRD 的 `displayHint: 'note'` 存在命名差异；长期目标是统一字段名。
 
 **frontmatter / sidecar 字段归属原则**：
 
@@ -495,6 +504,15 @@ updatedAt: 2026-03-31T14:30:00Z
       "data": {
         "noteId": "note_a1b2c3d4",
         "type": "text"
+      }
+    },
+    {
+      "id": "node_w1",
+      "type": "widget",
+      "position": { "x": 300, "y": 120 },
+      "data": {
+        "widgetId": "widget_ab12cd34",
+        "kind": "checklist"
       }
     },
     {
@@ -584,14 +602,15 @@ updatedAt: 2026-03-31T14:30:00Z
 **设计说明**：
 
 - 所有字段（`position`、`data`、`style`、`parentId`、`extent`、`source`/`target`、`sourceHandle`/`targetHandle`）均为 React Flow 原生字段，加载时可直接传入 `<ReactFlow nodes={} edges={} />` 无需转换。
-- 业务自定义字段（`noteId`、`file`、`label`、`color`、`children` 等）统一放在 `data` 对象内。
-- 节点 `type` 使用 `'card'` / `'image'` / `'asset'` / `'link'` / `'recording'` / `'sticky'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
+- 业务自定义字段（`noteId`、`widgetId`、`file`、`label`、`color`、`children` 等）统一放在 `data` 对象内。
+- 节点 `type` 使用 `'card'` / `'widget'` / `'image'` / `'asset'` / `'link'` / `'recording'` / `'sticky'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
 - Edge 使用自定义 `labeledEdge`，曲线类型放在 `edge.data.pathType`（默认 `bezier`，可切换 `smoothstep`），label / color / animated 等显示属性也随 `data` 持久化。
-- Folder 的 `data.children` 存放被收纳的内容条目；当前允许的 child 类型为 `card` / `image` / `asset` / `link` / `recording`（Checklist 以 `type: "card"` + `data.type: "checklist"` 表达）。`folder` / `group` / `sticky` 不进入 Folder。
-- Folder 封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生；封面只渲染摘要信息，不渲染内部完整小画布。
-- Folder `children` 在 drill-down 中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
+- Folder 的 `data.children` 存放被收纳的内容条目；允许的 child 类型为 `card` / `widget` / `image` / `asset` / `link` / `recording`。`folder` / `group` / `sticky` 不进入 Folder。
+- Folder 封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生；封面只渲染摘要缩略图，不渲染内部完整小画布；展开层用 waterfall 自动排布且不持久化坐标。
+- Folder `children` 在展开层中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
 - **Folder Card 子节点的水化与落盘**（M5 ✅）：加载时 `loadCanvas` 按 `noteId` 优先读取 BlockNote sidecar，缺失时回退到可选 legacy `file` 指向的 `.md`；水化回 `title` / `preview` / `content` / `color` 等字段填充到 `data` 中。保存时 `saveManifest` 对 sidecar-backed note 只合并 title/color 等元数据，不重写 blocks 或 Markdown；legacy Markdown note 继续 round-trip `.md`，直到下次聚焦编辑迁移为 sidecar。manifest 保留 `{ id, noteId, type, data: { noteId, type, file? } }` 的薄引用形式（不写正文、不写 preview 元数据）。Legacy 内嵌 children 在加载时自动 stamp 一个 `noteId`，下次 save 时迁到 note record。
+- **Folder Widget 子节点**：`{ id, type: "widget", widgetId, data: { widgetId, kind } }`；内容由 `loadWidgets` 批量加载进 `widgetStore`。
 - **非 Card 子节点例外**：Folder 中的 Image / Asset / Recording / Link 子节点不分配 `noteId`，不生成 `.md`；Image/Asset/Recording 使用附件指针，Link 使用 URL + unfurl 元数据。
 - **Asset / Link / Recording 节点**：Asset 使用 `attachmentFile`、`thumbnailFile`、`waveform`、`mimeType`、`kind`、`previewExcerpt`、`archiveSummary` 等字段描述本地附件；Link 使用 `url`、`title`、`description`、`siteName`、`faviconUrl`、`imageUrl` 等字段描述网页链接；Recording 使用 `attachmentFile`、`fileName`、`mimeType`、`recordingNumber`、`duration`、`waveform` 描述录音。三者可以作为顶层节点，也可以作为 Folder children，长期产品语义为"资料夹中的内容条目"。
 - **Viewport 持久化**：`viewport` 字段（`x` / `y` / `zoom`）随 manifest 一起持久化。切换画布时保存当前 viewport 到源 manifest、从目标 manifest 恢复 viewport；应用重启后通过 `hydrate` 回写 ReactFlow，确保用户回到上次浏览位置。搜索定位、聚焦定位、导出临时 fitView 等程序化相机移动会抑制或恢复 viewport，避免污染用户最后浏览位置。
@@ -609,10 +628,10 @@ updatedAt: 2026-03-31T14:30:00Z
 
 - **导出**：
   - **Markdown**：单篇笔记导出（卡片右键 →「导出为 Markdown…」）、当前画布批量导出（画布右键 →「导出画布为 Markdown…」）。
-    - 导出内容包含 frontmatter + 正文 + 附件收集 + `index.md`。
+    - 导出内容包含 frontmatter + 正文 + 附件收集 + `index.md`；**checklist widget** 会生成 GFM 任务列表，避免静默丢清单。
     - RPC `exportNoteMarkdown` / `exportNotesMarkdown` 已实现，`scope` 支持 `'view'`（当前画布）/ `'all'`（全部画布）/ `'selected'`（自选）。
     - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-23）。
-  - **JSON**：导出当前画布的 self-contained JSON（`ghostboard-canvas-export/v1`），直接从内存中的可见 nodes / edges / viewport 生成，并清理运行时 URL、hidden / detached 节点和不可持久化字段。当前实现是导出能力，尚未提供 JSON 导入恢复。
+  - **JSON**：导出当前画布的 self-contained JSON（`ghostboard-canvas-export/v1`），直接从内存中的可见 nodes / edges / viewport 生成，并清理运行时 URL、hidden / detached 节点和不可持久化字段。当前实现是导出能力，尚未提供 JSON 导入恢复；widget 完整 records 是否纳入 JSON 导出仍属后续增强（workspace ZIP 已含 `.ghostboard/widgets/`）。
   - **PNG**：导出当前画布的 2x screenshot-style PNG。导出时先临时 `fitView` 全部可见节点、等待浏览器 repaint、隐藏 minimap/controls/panel/attribution，再截图 `.react-flow` 容器，最后恢复导出前 viewport。当前没有 SVG 导出。
 - **导入**：
   - 支持通过底部创建菜单或画布右键显式选择多个 Markdown 文件，解析 frontmatter / 标题 / 正文后创建新的 Note 卡片。
@@ -628,17 +647,19 @@ updatedAt: 2026-03-31T14:30:00Z
 | 布局存储           | Per-view manifest，不放 frontmatter                                             | 布局和内容解耦，避免单文件热点                                             |
 | 内容树结构         | 统一 `content/` 目录                                                            | 避免 `notes/` + `folders/` 双根混乱                                        |
 | 内容生命周期       | 删 `node` 只删实例；零引用 `note` 保留为 **detached note**，可在笔记库中找回                             | 避免误删共享内容，也避免内容文件无入口可找回                               |
-| Folder 范围        | Folder 是内容集合，不是万能容器；可收纳 Card/Checklist/Image/Asset/Link/Recording，不收纳 Folder/Group/Sticky | 保持 Folder 的资料夹语义，避免递归层级、空间布局和临时便签混进同一个模型 |
-| Folder Card 子节点  | 与顶层 Card 对等：独立 `noteId` + note record（sidecar 或 legacy `.md`）；manifest 仅保留 `{ id, noteId, type, data: { noteId, type, file? } }` 引用（M5 ✅） | 可跨画布复用 noteId；消除早期「仅画布内可见」降级定位 |
+| Folder 范围        | Folder 是内容集合，不是万能容器；可收纳 Card/Widget/Image/Asset/Link/Recording，不收纳 Folder/Group/Sticky | 保持 Folder 的资料夹语义，避免递归层级、空间布局和临时便签混进同一个模型 |
+| Folder Card 子节点  | 与顶层 Card 对等：独立 `noteId` + note record（sidecar 或 legacy `.md`）；manifest 仅保留薄引用（M5 ✅） | 可跨画布复用 noteId；消除早期「仅画布内可见」降级定位 |
+| Folder Widget 子节点 | 与顶层 Widget 对等：独立 `widgetId` + `.ghostboard/widgets/` JSON；manifest 仅 `{ widgetId, kind }` | items/timer 不进 canvas json，避免布局文件膨胀 |
 | Folder Image 子节点 | 继续使用 `attachments/` + `imageFile` 指针，不分配 `noteId`                                       | Image 没有文本正文概念，附件模式已足够；保持与顶层 Image 节点一致                                 |
 | Asset / Link / Recording 节点 | 作为独立 node kind，不并入 `image` 或 `card`；Asset/Recording 走 `attachments/`，Link 走 URL + unfurl 元数据 | 避免把本地文件、网页链接、录音和 Markdown 文档混成一个数据模型 |
+| Widget 节点        | 单一 `type: "widget"` + `kind`；内容独立 JSON；duplicate 克隆文件；per-widget undo 栈 | 可交互小工具与笔记解耦，checklist 从 card 迁出 |
 | Folder / Edge 边界 | Folder 封面可连线；`children` 不跨层暴露 Handle                                 | 避免 drill-down 时连线语义失真                                             |
-| Folder 内布局      | MVP 使用自动排布，不存子坐标                                                    | 避免过早引入子画布复杂度                                                   |
-| ID 生成            | `nanoid`，写入 note record（sidecar 或 legacy frontmatter）                     | 文件重命名不影响引用关系                                                   |
-| 文件监听           | 暂不承诺持续 watcher；当前通过 load/search/export 按需读取 sidecar / legacy `.md`，未来如做外部编辑器实时同步再引入 `fs.watch` / `chokidar` | 避免 watcher 循环、跨 workspace 切换 teardown 和 JSON sidecar 冲突过早复杂化 |
-| 持久化策略         | manifest/layout 约 2500ms debounce，viewport 约 500ms debounce，视图切换/失焦/隐藏时立即 flush，并保留 pending flush backup | 平衡输入流畅度与磁盘写入频率，降低切换画布和异常退出时的数据丢失风险 |
+| Folder 内布局      | 打开时 bottom-up waterfall 自动排布，不存子坐标                                 | 避免过早引入子画布复杂度                                                   |
+| ID 生成            | note / widget 使用 nanoid 风格 id，写入各自内容文件                             | 文件重命名不影响引用关系                                                   |
+| 文件监听           | 暂不承诺持续 watcher；当前通过 load/search/export 按需读取 sidecar / widget / legacy `.md`，未来如做外部编辑器实时同步再引入 `fs.watch` / `chokidar` | 避免 watcher 循环、跨 workspace 切换 teardown 和 JSON 冲突过早复杂化 |
+| 持久化策略         | manifest/layout 约 2500ms debounce，viewport 约 500ms debounce，widget 内容独立 debounce，视图切换/失焦/隐藏时立即 flush | 平衡输入流畅度与磁盘写入频率 |
 | 写入协调           | 分 debounce + 单串行写入队列 + 原子写                                           | 降低内容/布局竞态与文件损坏风险                                            |
-| Checklist 格式     | GFM `- [x]` 语法                                                                | 与 Obsidian/Typora 等生态兼容                                              |
+| Checklist 导出     | Markdown 导出生成 GFM `- [x]` 任务列表                                          | 与 Obsidian/Typora 等生态兼容                                              |
 | 图片/附件          | `attachments/` + `{kind}_{uuid8}.{ext}` 文件名，媒体流通过本地 token-auth HTTP 服务读取，视频/音频支持 byte range | 避免同名冲突，支持大文件导入和播放器 seek                                 |
 | manifest 格式      | 与 @xyflow/react 原生 Node/Edge JSON 一致                                       | 加载时零转换，直接传入组件                                                 |
 | z-order            | 数组顺序（后覆盖前）                                                            | 简单直观，React Flow 原生行为                                              |
@@ -646,6 +667,7 @@ updatedAt: 2026-03-31T14:30:00Z
 | 颜色来源           | manifest `color` 覆盖 sidecar / legacy frontmatter `color`                      | 保留内容语义色与视图强调色的分层                                           |
 | Viewport 持久化    | Per-view `viewport` 字段写入 `.canvas.json`，切换画布/重启后恢复                  | 用户回到上次浏览位置，避免每次打开从原点开始                             |
 | 活跃画布持久化     | `activeViewId` 实时写入 `workspace.json`                                          | 重启后恢复到上次使用的画布                                               |
+| 画布 chrome        | `canvasShowMinimap` + `CanvasViewportChrome`；背景 `default/paper/cream/mono`   | 视口导航可配置，主题色板含 cream                                         |
 | 设置归属           | Workspace settings 存 `.ghostboard/settings.json`；当前 workspace 指针存 app-level `userprefs.json`；AI key 存 app-level credentials | workspace 可移植，同时避免把绝对路径和密钥写进可共享目录 |
 
 ### 5.11 Edge Cases & Guardrails
@@ -720,6 +742,11 @@ updatedAt: 2026-03-31T14:30:00Z
 | 14.9 | **标签管理** — TagEditor、TagSidebar、node-metadata.json、标签筛选与重命名/删除 | 中 | ✅ 已完成 |
 | 14.10 | **Recording 录音节点** — 麦克风录制、实时 waveform、附件保存、画布播放、Folder/Group 收纳 | 中 | ✅ 已完成 |
 | 14.11 | **Markdown 文件导入** — 多文件选择导入为新 Note，创建卡片并保留 frontmatter / 正文 | 低 | ✅ 已完成 |
+| 14.12 | **Widget 系统** — `type: widget` + checklist/pomodoro/reminder；独立 JSON；懒迁移 checklist；per-widget undo；Folder 收纳 | 高 | ✅ MVP 已完成 |
+| 14.13 | **Folder waterfall 展开** — bottom-up 多列排布、动态封面缩略图、展开层子项右键 | 中 | ✅ 已完成 |
+| 14.14 | **FocusedView morph + 共享 loading** — 从源卡片 scale 展开；`NoteEditorLoading` | 中 | ✅ 已完成 |
+| 14.15 | **画布 viewport chrome** — minimap + zoom 合一面板；`canvasShowMinimap` 设置 | 低 | ✅ 已完成 |
+| 14.16 | **Cream 画布背景** — settings swatch；`default/paper/cream/mono` | 低 | ✅ 已完成 |
 
 ### ⚪ P3 — 后续迭代
 
@@ -770,7 +797,7 @@ updatedAt: 2026-03-31T14:30:00Z
 
 | ID | 事项 | 目标 | 优先级 |
 | --- | --- | --- | --- |
-| TODO-1 | **补 Folder children 搜索** | 后端和前端 fallback 都应索引 Folder children 中的 Card/Asset/Link/Image/Recording，使其能被全局搜索命中并定位回画布。 | P0 |
+| TODO-1 | **补 Folder children 搜索** | 后端和前端 fallback 都应索引 Folder children 中的 Card/Widget/Asset/Link/Image/Recording，使其能被全局搜索命中并定位回画布。 | P0 |
 | TODO-2 | **明确 unlinked note record 策略** | 决定无 manifest 引用的 legacy `.md` 和 BlockNote sidecar 是进入搜索结果，还是只留在设置页 Unlinked Files 清理工具。 | P0 |
 | TODO-3 | **Asset 大文件导入** | ✅ 已实现 — 文件选择优先 native path copy，拖拽/粘贴走本地 HTTP 流式上传；25 MB data URL 限制仅保留为 legacy fallback。 | ~~P1~~ ✅ |
 | TODO-4 | **Link 富预览与安全硬化** | ✅ 已实现 — UI 展示 favicon/image preview；unfurl 已增加 DNS 解析后的私网 IP 防护，降低 DNS rebinding 风险。 | ~~P1~~ ✅ |
@@ -797,7 +824,11 @@ updatedAt: 2026-03-31T14:30:00Z
 | 决策摘要 | 落地位置 |
 | --- | --- |
 | Folder Card 子节点强制 `noteId + note record`（M5） | §5.1、§5.6、§5.10 |
-| Folder 是内容集合，不是万能容器；允许 Card/Checklist/Image/Asset/Link/Recording，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
+| Widget 独立于 Card；checklist 懒迁移；内容不进 manifest | §2.2、§5.1、§5.3、§5.10；[tech-spec](./tech-spec.md) §3.3 / §4.2.1 / §7 |
+| Folder 展开用 waterfall，不持久化子坐标 | §2.5.2、§5.10 |
+| FocusedView 从源卡片 morph | §2.3 |
+| canvasShowMinimap + cream 背景 | §5.2 |
+| Folder 是内容集合，不是万能容器；允许 Card/Widget/Image/Asset/Link/Recording，不允许 Folder/Group/Sticky | §2.5.2、§5.6、§5.10 |
 | Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |
 | BlockNote 与画布 undo/redo 栈隔离 | §2.10 |
 | TagEditor + TagSidebar + node-metadata.json | §2.13、§5.3 |

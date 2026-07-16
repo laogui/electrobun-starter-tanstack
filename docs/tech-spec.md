@@ -3,7 +3,7 @@
 > 本文档描述 GhostBoard 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
 > 产品需求与交互设计请参阅 [PRD](./PRD.md)。
 >
-> 最近同步：已按 `2026-06-15` 至 `2026-07-07` 的实现提交更新，覆盖 sidecar-first note store、Asset/Link/Recording、附件 streaming upload、内嵌设置弹窗、PNG/JSON 导出与 `labeledEdge` 等变化。
+> 最近同步：已按 `2026-06-15` 至 `2026-07-16` 的实现提交更新。在 Jun–Jul 的 sidecar-first note store、Asset/Link/Recording、附件 streaming、设置弹窗、PNG/JSON 导出与 `labeledEdge` 基础上，补齐 **widget 系统**（checklist / pomodoro / reminder）、Folder **waterfall** 展开、FocusedView **从卡片 morph**、`CanvasViewportChrome` / minimap 设置，以及画布背景 **cream** 色板。
 
 ---
 
@@ -18,16 +18,17 @@
 │  canvasStore (Zustand)                  │     │  RPC / HTTP handlers                 │
 │    ├─ nodes / edges / viewport          │     │    ├─ loadCanvas / saveManifest      │
 │    ├─ focusedNode / focusedFolder       │     │    ├─ loadBlockNote / saveBlockNote  │
-│    ├─ undo/redo / clipboard             │     │    ├─ attachment upload / stream     │
-│    └─ library / search / tag UI state   │     │    └─ views / settings / exports     │
-│                               │         │     │         │                            │
+│    ├─ undo/redo / clipboard             │     │    ├─ create/clone/save Widget       │
+│    └─ library / search / tag UI state   │     │    ├─ attachment upload / stream     │
+│  widgetStore (Zustand)                  │     │    └─ views / settings / exports     │
+│    └─ widget records + per-id undo      │     │         │                            │
 │  useCanvasPersistence         │         │     │    文件系统 (原子写入)                  │
 │    └─ debounce 2500ms ─────── ▼         │     │    workspace/                         │
 │                        electrobun/view  │────▶│    ├── .ghostboard/views/*.canvas.json│
-│                           RPC client    │◀────│    ├── content/.ghostboard/blocknote/ │
-│                                         │     │    ├── content/*.md (legacy/import)   │
-│  uploadAttachmentBlob ───── HTTP POST ───────▶│    └── attachments/                   │
-│  hydrate ◀──────────── 启动时加载         │     │                                      │
+│                           RPC client    │◀────│    ├── .ghostboard/widgets/*.json    │
+│                                         │     │    ├── content/.ghostboard/blocknote/ │
+│  uploadAttachmentBlob ───── HTTP POST ───────▶│    ├── content/*.md (legacy/import)   │
+│  hydrate ◀──────────── 启动时加载         │     │    └── attachments/                   │
 │  sanitize ──────────── 写盘前过滤         │     │                                      │
 └─────────────────────────────────────────┘     └──────────────────────────────────────┘
 ```
@@ -81,6 +82,7 @@ src/
     search.ts                              # workspace 搜索索引与匹配评分
     templates.ts                           # 内置模板 registry + manifest/meta 加载
     nodeMetadata.ts                        # 节点标签元数据（tag / tagColor / tags）持久化、批量重命名/删除标签
+    widgets.ts                             # widget JSON CRUD：create/load/save/clone/delete + schema 校验
     templates/                             # 内置 demo / kanban 模板数据
   mainview/                                # React 渲染端
     main.tsx                               # 挂载 ThemeProvider + RouterProvider
@@ -89,18 +91,19 @@ src/
     index.css                              # Tailwind 入口
     routes/
       __root.tsx                           # 全局 Shell：SettingsDialog、Sonner toaster、DevTools
-      index.tsx                            # 主画布页面：ReactFlow + CanvasToolbar + LibraryPopup + FocusedView + FolderView + ViewSwitcher + ContextMenu + RecordingRecorder
+      index.tsx                            # 主画布：ReactFlow + CanvasToolbar + CanvasViewportChrome + FocusedView + ViewSwitcher + ContextMenu + RecordingRecorder
       templates/
         index.tsx                          # 模板库列表
         $templateId.tsx                    # 模板只读预览 + 从模板创建画布
     store/
-      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布/布局模式/文档选择
+      canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布/布局模式
+      widgetStore.ts                       # 独立 widget 内容 store：records + per-widget undo 栈 + debounce 落盘
     hooks/
-      useCanvasKeyboard.ts                # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape
+      useCanvasKeyboard.ts                # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape（widget 焦点时路由到 widget undo）
       useCanvasPersistence.ts             # 自动保存：subscribe store → debounce → RPC saveManifest（动态 viewId）
-      useContextMenu.ts                   # 右键菜单状态管理 + action 分发
+      useContextMenu.ts                   # 右键菜单状态管理 + action 分发（含 Folder child / widget）
       useHelperLines.ts                   # 辅助对齐线（拖拽时的 snap-to 提示）
-      useNodeCreation.ts                  # 节点创建入口（ViewSwitcher + ContextMenu 共用）
+      useNodeCreation.ts                  # 节点创建入口（ViewSwitcher + ContextMenu 共用；widget 走 createWidget RPC）
       useNodeDrag.ts                      # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
       useNodeMetadata.ts                  # 节点标签元数据查询 + 乐观更新 mutation
       useNoteSaver.ts                     # legacy Markdown note debounce 保存
@@ -110,21 +113,25 @@ src/
     components/
       canvas/
         CanvasToolbar.tsx                 # 左上角浮动工具栏：Library / Tag Sidebar / Settings
-        ContextMenu.tsx                   # 右键菜单 UI（canvas/card/folder/group/sticky/image/asset/link/recording）
-        FocusedView.tsx                   # 聚焦模式：FLIP 动画 + overlay
-        FolderView.tsx                    # Folder drill-down：展开子卡片 + 返回动画
+        CanvasViewportChrome.tsx          # 右下角 minimap + zoom controls 合一 frosted 面板
+        ContextMenu.tsx                   # 右键菜单 UI（canvas/card/widget/folder/group/sticky/image/asset/link/recording）
+        FocusedView.tsx                   # 聚焦模式：从源卡片 morph 展开 + overlay
+        FolderView.tsx                    # Folder drill-down 辅助层（返回动画等）
         HelperLines.tsx                   # 对齐辅助线渲染
         RecordingRecorder.tsx             # 麦克风录音 overlay
         ViewSwitcher.tsx                  # 底部画布切换器 + 新建/导入/导出/重命名/删除画布
         nodes/
-          CardNode.tsx                    # 图文/Checklist 卡片节点
-          FolderNode.tsx                  # 堆叠式文件夹节点
+          CardNode.tsx                    # 图文 Card 节点（普通 note；checklist 已迁出）
+          WidgetNode.tsx                  # 统一 widget 外壳：按 kind 分发 checklist / pomodoro / reminder
+          FolderNode.tsx                  # 堆叠式文件夹 + waterfall 展开子节点
+          FolderExpandedChildNode.tsx     # Folder 展开层子项渲染
           GroupNode.tsx                   # 开放式分组容器节点
           ImageNode.tsx                   # 图片卡片节点
           AssetNode.tsx                   # 本地文件/视频/音频节点
           LinkNode.tsx                    # URL 链接节点
           RecordingNode.tsx               # 录音节点（音频附件 + waveform + 播放控件）
           StickyNode.tsx                  # 便签节点
+          readOnlyNodes.tsx               # 模板预览等只读节点变体
         edges/
           LabeledEdge.tsx                 # 支持 label / pathType / floating endpoints 的自定义边
       card/
@@ -133,6 +140,7 @@ src/
         useNodeTagEditing.tsx             # 标签编辑 Hook（状态管理 + RPC 调用）
       editor/
         BlockNoteEditor.tsx               # BlockNote 块编辑器（聚焦模式使用）
+        NoteEditorLoading.tsx             # note / BlockNote 加载占位（FocusedView 与编辑器共享）
         blocknoteAttachments.ts           # BlockNote 附件上传/URL 解析
         useBlockNoteSaver.ts              # BlockNote sidecar 保存逻辑（debounce + revision 管理）
       tags/
@@ -144,14 +152,17 @@ src/
         SearchDialog.tsx                  # 全局搜索弹窗
       settings/
         SettingsApp.tsx                   # 设置内容面板（被 SettingsDialog 嵌入）
-        SettingsDialog.tsx                # 内嵌设置弹窗：appearance/canvas/AI/trash/unlinked/about
+        SettingsDialog.tsx                # 内嵌设置弹窗：General / Workspace / AI / Shortcuts / About
       ui/                                 # shadcn/ui 基础组件
       layout/                             # ErrorBoundary, Loader
     lib/
       canvasConstants.ts                   # 节点尺寸常量 + nodeTypes 注册表
-      canvasNodeRegistry.ts                # 节点规格单一 registry（默认尺寸、data、Folder/Group 能力）
+      canvasNodeRegistry.ts                # 节点规格单一 registry（默认尺寸、data、Folder/Group 能力；widget kinds）
       canvasNodePredicates.ts              # 节点能力谓词（可聚焦、可进 Folder/Group 等）
       contentTypes.ts                      # CanvasNodeKind、Asset/Link/Recording 数据结构、文件分类、URL helper
+      widgetTypes.ts                       # WidgetKind / WidgetRecord 前端类型与 load-error 判别
+      folderExpansion.ts                   # Folder 封面缩略图布局 + bottom-up waterfall 展开坐标
+      canvasBackground.ts                  # 画布背景 token（default/paper/cream/mono）→ CSS 变量
       canvasUtils.ts                       # sortNodesByParent, isDescendant 等工具函数
       colorUtils.ts                        # 颜色常量（hex）+ colorToStyle 转换
       assetFiles.ts                        # 前端文件导入：streaming upload、生成缩略图/waveform
@@ -160,11 +171,11 @@ src/
       recordingFiles.ts                    # 录音 Blob → 附件保存 + RecordingNodeData
       queryClient.ts                       # React Query 共享客户端（错误→Sonner toast）
       rpc.ts                               # Electrobun RPC 客户端封装（非 Electrobun 环境自动降级）
-      canvasNodeSerialization.ts           # 写盘前过滤运行时字段
-      undoRedo.ts                          # undo/redo 纯函数（快照历史栈，上限 50）
+      canvasNodeSerialization.ts           # 写盘前过滤运行时字段（含 widget 仅保留 widgetId/kind）
+      undoRedo.ts                          # 画布 undo/redo 纯函数（快照历史栈，上限 50）
       utils.ts                             # cn() 工具
     data/
-      initialNodes.ts                      # 种子数据（纯前端 fallback / 测试）
+      initialNodes.ts                      # 种子数据（纯前端 fallback / 测试；checklist 走 widget）
 ```
 
 ---
@@ -178,7 +189,9 @@ src/
 | kind / type | 组件            | 持久化方式                                                    | 可聚焦        | 可 Resize                    |
 | ----------- | --------------- | ------------------------------------------------------------- | ------------- | ---------------------------- |
 | `card`      | `CardNode`      | manifest 轻引用 `noteId`；内容源优先 sidecar JSON，legacy `.md` 只作迁移/导入 fallback | ✅            | ✅ (150~800 × 150~900)       |
-| `checklist` | `CardNode`      | 创建 kind；React Flow `node.type` 仍为 `card`，`data.type = checklist` | ✅            | ✅ (150~800 × 150~900)       |
+| `checklist` | `WidgetNode`    | 创建 kind；`node.type = widget`，`data = { widgetId, kind }`；内容在 `.ghostboard/widgets/` | ✅            | ✅                            |
+| `pomodoro`  | `WidgetNode`    | 同上，`kind: 'pomodoro'`                                      | ❌ 画布内操作 | ✅                            |
+| `reminder`  | `WidgetNode`    | 同上，`kind: 'reminder'`                                      | ❌ 画布内操作 | ✅                            |
 | `image`     | `ImageNode`     | `attachments/img_<id>.<ext>` 原图 + 可选 thumbnail，manifest 存相对路径 | ✅            | ✅ (150~800 × 150~900)       |
 | `asset`     | `AssetNode`     | `attachments/{video|audio|file}_<id>.<ext>` + 可选 thumbnail/waveform/metadata | ✅            | ✅                           |
 | `link`      | `LinkNode`      | manifest `data.url` + unfurl 元数据                           | ✅            | ✅                           |
@@ -187,6 +200,8 @@ src/
 | `group`     | `GroupNode`     | manifest `data.label` + `data.color`                          | ❌            | ✅ NodeResizer (min 300×200) |
 | `sticky`    | `StickyNode`    | manifest `data.content` + `data.color` 内嵌                   | ❌ 原地编辑   | ✅ (120~500 × 120~500)       |
 
+> React Flow 的 `node.type` 对三种小组件统一为 `widget`；`canvasNodeRegistry` 的 **kind** 仍是 `checklist` / `pomodoro` / `reminder`，创建菜单与快捷创建走 kind。
+
 ### 3.2 TypeScript 类型定义
 
 > 以下为设计目标类型。实际代码中部分字段使用宽松 `any`/`Record<string, unknown>`，后续逐步收敛。
@@ -194,13 +209,16 @@ src/
 ```typescript
 // ─── ID 类型 ───
 type NoteID = string; // 内容实体 ID，如 "note_a1b2c3d4"
+type WidgetID = string; // 小组件内容 ID，如 "widget_ab12cd34"
 type NodeID = string; // 画布实例 ID，如 "node_7f3a"
 type ViewID = string;
 
-// ─── Canvas node vocabulary (`contentTypes.ts`) ───
+// ─── Canvas node vocabulary (`contentTypes.ts` / registry kinds) ───
 type CanvasNodeKind =
   | 'card'
-  | 'checklist'
+  | 'checklist' // widget kind → node.type 'widget'
+  | 'pomodoro'
+  | 'reminder'
   | 'sticky'
   | 'folder'
   | 'group'
@@ -220,7 +238,7 @@ interface ArchiveSummary {
 interface NoteFrontmatter {
   id: NoteID;
   title?: string;
-  displayHint?: 'note' | 'checklist' | 'image'; // legacy .md / import fallback
+  displayHint?: 'note' | 'image' | 'checklist'; // checklist 仅 legacy；新 checklist 是 widget
   color?: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
@@ -277,18 +295,75 @@ interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
   noteId?: NoteID;
-  type?: 'card' | 'image' | 'asset' | 'link' | 'recording';
+  widgetId?: string; // widget children
+  type?: 'card' | 'widget' | 'image' | 'asset' | 'link' | 'recording';
+}
+
+// ─── Widget 内容层：.ghostboard/widgets/<widgetId>.json ───
+type WidgetKind = 'checklist' | 'pomodoro' | 'reminder';
+
+interface WidgetRecord {
+  schema: 'ghostboard-widget/v1';
+  id: string; // widget_<nanoid>
+  kind: WidgetKind;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  data: ChecklistWidgetData | PomodoroWidgetData | ReminderWidgetData;
+}
+
+interface ChecklistWidgetData {
+  items: Array<{
+    id: string;
+    text: string;
+    checked: boolean;
+    isHeader?: boolean;
+    createdAt?: string;
+    completedAt?: string;
+  }>;
+}
+
+interface PomodoroWidgetData {
+  mode: 'focus' | 'shortBreak' | 'longBreak';
+  focusMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  sessionsBeforeLongBreak: number;
+  completedSessions: number;
+  timer:
+    | { state: 'idle' }
+    | { state: 'running'; startedAt: string; durationMs: number }
+    | { state: 'paused'; remainingMs: number };
+}
+
+interface ReminderWidgetData {
+  dueAt: string;
+  timezone: string;
+  status: 'scheduled' | 'snoozed' | 'done' | 'missed';
+  snoozedUntil?: string;
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly'; // 第一版只实现 'none'
+  note?: string;
+}
+
+interface WidgetLoadError {
+  error: 'missing' | 'corrupted';
+  id: string;
 }
 
 interface CanvasNodeDataShapes {
   card: ManifestNodeData & {
     noteId: NoteID;
     file?: string; // legacy .md hint only; sidecar-backed records may omit it
-    type?: 'text' | 'checklist' | 'image';
+    type?: 'text' | 'image'; // 'checklist' 已迁出为 widget；加载时懒迁移
     previewHtml?: string;
     previewExcerpt?: string;
     previewBlocks?: number;
     previewVersion?: number;
+  };
+  widget: {
+    widgetId: string;
+    kind: WidgetKind;
+    // items / timer / dueAt 等完整内容在 widgetStore / 磁盘 JSON，不进 manifest
   };
   image: {
     imageFile?: string;
@@ -362,6 +437,7 @@ interface RecordingNodeData {
 
 type CanvasNode =
   | Node<CanvasNodeDataShapes['card'], 'card'>
+  | Node<CanvasNodeDataShapes['widget'], 'widget'>
   | Node<CanvasNodeDataShapes['image'], 'image'>
   | Node<CanvasNodeDataShapes['asset'], 'asset'>
   | Node<CanvasNodeDataShapes['link'], 'link'>
@@ -398,7 +474,8 @@ interface AppSettings {
   theme: string;
   locale: string;
   fontFamily: 'system' | 'serif' | 'mono';
-  canvasBackground: 'default' | 'paper' | 'mono';
+  canvasBackground: 'default' | 'paper' | 'cream' | 'mono';
+  canvasShowMinimap: boolean; // 默认 true；false 时仅显示 zoom controls
   canvasSnapToGrid: boolean;
   autoSaveInterval: 500 | 800 | 2000 | 5000;
   aiEnabled: boolean;
@@ -414,7 +491,7 @@ interface NodeMetadata {
   tags?: string[];    // 次要标签
 }
 
-type NodeMetadataMap = Record<string, NodeMetadata>; // key = noteId (Card) 或 nodeId (非 Card)
+type NodeMetadataMap = Record<string, NodeMetadata>; // key = noteId (Card) / widgetId (Widget) / nodeId (其他)
 
 interface NodeMetadataDocument {
   entries: NodeMetadataMap;
@@ -432,17 +509,26 @@ interface TagMutationResult {
 
 ```
 
-### 3.3 displayHint 与 data.type 映射
+### 3.3 Card `displayHint` / `data.type` 与 Widget 节点
 
-Card / Checklist 的 React Flow `node.type` 都是 `card`；创建 kind 与内容展示由 `displayHint` / `data.type` 区分：
+**普通 Card（笔记）**：React Flow `node.type === 'card'`；创建 kind 与内容展示由 `displayHint` / `data.type` 区分：
 
 | note record `displayHint` | 运行时 `data.type` | 说明 |
 | ------------------------- | ------------------ | ---- |
 | `note`（默认）            | `text`             | 普通 BlockNote 文档 |
-| `checklist`               | `checklist`        | Checklist 卡片外观 |
 | `image`                   | `image`            | legacy 显示 hint；新图片使用独立 `image` node kind |
 
 当前 sidecar-backed note 的 `displayHint` 存在 `content/.ghostboard/blocknote/<noteId>.json`；legacy Markdown fallback 才从 frontmatter 读取。映射仍复用 `src/bun/notes.ts` 的 `displayHintToType` / `typeToDisplayHint` / `noteToCardData`，但新的读取入口是 `src/bun/noteStore.ts`。
+
+**Widget（小组件）**：React Flow `node.type === 'widget'`，创建 kind 为 `checklist` / `pomodoro` / `reminder`。manifest 只保存 `{ widgetId, kind }`；完整内容在 `.ghostboard/widgets/<widgetId>.json`，运行时由 `widgetStore` 持有。产品语义见 [PRD](./PRD.md) §2.2 / §5。
+
+| WidgetKind | 内容实体 | 说明 |
+| ---------- | -------- | ---- |
+| `checklist` | `WidgetRecord.data.items` | 待办列表；画布可直接勾选/添加；可进入 FocusedView |
+| `pomodoro` | timer + session 配置 | 番茄钟；运行中 tick 不写盘，状态转换时保存 |
+| `reminder` | `dueAt` + status | 提醒；第一版仅 app 内提示、`repeat: 'none'` |
+
+**Checklist 懒迁移**：磁盘上若仍存在 legacy `type: 'card'` + `data.type: 'checklist'`（或 Folder child 等价形态），`loadCanvas` 会迁移为 `type: 'widget'`、`kind: 'checklist'`，写入确定性 `widgetId = widget_${noteId 去 note_ 前缀}` 的 widget 文件，并同步把标签 key 从 `note_*` 重写为 `widget_*`。旧 note 文件第一版不删除。
 
 `asset`、`link` 与 `recording` 是独立 node kind，不使用 Card 的 `displayHint`。Asset / Recording 的内容实体是 `attachments/` 文件引用；Link 的内容实体是 URL 与 unfurl 元数据，均直接存放在 manifest `data` 中。
 
@@ -452,11 +538,12 @@ Card / Checklist 的 React Flow `node.type` 都是 `card`；创建 kind 与内�
 
 ### 4.1 分层策略
 
-| 层                | 工具                           | 职责                                                                                     |
-| ----------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| 画布交互状态      | **Zustand** (`canvasStore.ts`) | `nodes`/`edges`、`focusedNode`/`focusedFolder`、`clipboard`、undo/redo 历史栈、节点 CRUD |
-| 异步/文件系统数据 | **TanStack React Query**       | 加载、缓存、重试、错误 toast                                                             |
-| 局部 UI 状态      | `useState` / Hook 内部         | 右键菜单位置、拖拽 dropTarget、helper lines 等                                           |
+| 层                | 工具                            | 职责                                                                                     |
+| ----------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
+| 画布交互状态      | **Zustand** (`canvasStore.ts`)  | `nodes`/`edges`、`focusedNode`/`focusedFolder`、`clipboard`、undo/redo 历史栈、节点 CRUD |
+| Widget 内容状态   | **Zustand** (`widgetStore.ts`)  | `records`、per-widget undo 栈、create/clone/update/save；**不**把 items/timer 写进 canvas 快照 |
+| 异步/文件系统数据 | **TanStack React Query**        | 加载、缓存、重试、错误 toast                                                             |
+| 局部 UI 状态      | `useState` / Hook 内部          | 右键菜单位置、拖拽 dropTarget、helper lines 等                                           |
 
 ### 4.2 canvasStore 结构
 
@@ -470,18 +557,37 @@ CanvasState
 ├── 核心 actions: setNodes, setEdges, applyNodesChange, applyEdgesChange, addConnection, updateNodeData, commitNodeData, commitEdgeData
 ├── UI actions: setFocusedNode, setFocusedFolder, setCreateMenuOpen, setSearchOpen, setLibraryOpen, toggleLibrary
 ├── 多画布 actions: setActiveView, setViews, setActiveViewId, setPendingSearchTarget
-├── 剪贴板: copySelected, pasteClipboard
+├── 剪贴板: copySelected, pasteClipboard（widget 节点会 cloneWidget 并重映射 widgetId）
 ├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild, deleteFolderChild, updateFolderChildData
 ├── 笔记池: detachNoteFromCanvas, pinNoteToCanvas
 ├── Hydration: hydrate(nodes, edges), reset(), _hydrated
 └── Undo/Redo: saveSnapshot, undo, redo, canUndo, canRedo (_undoRedo: UndoRedoState)
 ```
 
+### 4.2.1 widgetStore
+
+```
+WidgetStore
+├── records: Record<widgetId, WidgetRecord | WidgetLoadError>
+├── history: Record<widgetId, { past, future }>  // 每 widget 上限 50
+├── hydrate(records)           // loadCanvas 返回的 widgets map
+├── createWidget(kind, title?) // RPC createWidget → 写入 records
+├── cloneWidget(widgetId)      // duplicate / 粘贴
+├── updateWidget(id, updater)  // 压栈 + debounce saveWidget
+├── undoWidget / redoWidget
+└── saveWidgetNow(id)          // flush
+```
+
+- **删除画布上的 widget 节点只删引用**，不删 `.ghostboard/widgets/` 文件；未引用 widget 由 Unlinked / cleanup 管理。
+- **hydrate 副作用**：超时仍在 `running` 的 pomodoro 按完成结算；due 的 reminder 可标为 `missed` 并 toast。
+- 创建路径：`createNode('checklist'|'pomodoro'|'reminder')` → RPC `createWidget` → 节点 `data` 仅 `{ widgetId, kind }`。
+
 ### 4.3 Undo/Redo 机制
 
-- **纯函数实现**：`undoRedo.ts` 导出 `pushSnapshot` / `undo` / `redo` 纯函数，不依赖 Zustand middleware。
+- **画布**：`undoRedo.ts` 导出 `pushSnapshot` / `undo` / `redo` 纯函数，不依赖 Zustand middleware。
 - **快照策略**：在破坏性操作前调用 `saveSnapshot()`（`createNode`、`deleteNodes`、`addConnection`、`pasteClipboard`、`changeNodeColor`、`addFolderChild`、`onNodeDragStart`）。
-- **历史栈上限**：最多保留 **50** 步（`MAX_HISTORY = 50`）。
+- **历史栈上限**：画布与每个 widget 各自最多 **50** 步。
+- **双栈路由**：编辑焦点在某个 widget 内（inline 或 FocusedView 编辑 checklist 等）时，`Cmd+Z` / `Shift+Cmd+Z` 走 `undoWidget` / `redoWidget`；否则走画布 undo。两栈互不感知。
 - **生命周期**：仅存在于内存中，关闭应用后清空。
 - **与持久化的一致性**：撤销/重做仅回滚内存状态；下次 debounce 到期时以内存状态覆盖磁盘。
 
@@ -517,7 +623,7 @@ setActiveView(viewId)
 
 - **触发器**：显示当前画布名称 + 节点计数 + 画布数量
 - **弹出菜单**：列出所有画布，点击切换；支持行内重命名（铅笔图标）、软删除（至少保留 1 个）
-- **快捷创建**：`+` 按钮打开子菜单，支持 Note / Sticky / Link / Image 快捷入口，More 子菜单支持 Checklist / Folder / Group / File / Recording / Markdown import / Note Library
+- **快捷创建**：`+` 按钮打开子菜单，常用区 Note / Sticky / Link / Image；More 区 **Checklist / Pomodoro / Reminder** / Folder / Group / File / Recording / Markdown import / Note Library
 - **导出**：同一面板提供 PNG screenshot export 与当前画布 JSON export
 - **Trash**：删除 view 时 manifest 移入 `.ghostboard/trash/`，内嵌 `SettingsDialog` 可恢复或永久清理
 
@@ -546,24 +652,38 @@ setActiveView(viewId)
 
 画布态本身保持轻量：文本卡只挂载只读摘要而非 BlockNote 编辑器；Image 优先显示持久化缩略图；Asset 使用 poster / waveform / 文本摘要；Link 通过 `IntersectionObserver` 仅在视口内触发 unfurl。后续若大画布基准确认存在瓶颈，应优先测量可见元素渲染和低缩放绘制样式简化，再决定是否引入新的 LOD。
 
-### 5.3 FLIP 动画与独立动画层
+### 5.3 FocusedView morph 与动画层
 
-- 聚焦（FocusedView）和 Folder drill-down 使用 **FLIP (First, Last, Invert, Play)** 技术。
-- 借助 `motion/react`（Framer Motion）处理弹簧物理动画和共享元素过渡。
-- React Flow 持有节点 transform 状态，不能直接承担过渡动画。进入聚焦/drill-down 时：
-  1. 记录源节点屏幕坐标（`BoundingClientRect` + viewport transform）
-  2. 把视觉副本挂到独立 overlay animation layer（`AnimatePresence` 容器）
-  3. 同时隐藏源节点（`data.isHidden = true`）
-  4. 动画完成后挂载目标视图
-- `BoundingClientRect` 读取仅在进入/退出过渡时执行一次，不进入持续平移、缩放、拖拽的热路径。
+- FocusedView 使用 **从源卡片 morph 展开** 的 FLIP 风格过渡：读取源节点 `BoundingClientRect`，以卡片中心为 `transformOrigin`，全屏 shell 从源矩形 scale 到 1，退出时反向收缩。
+- 借助 `motion/react`（Framer Motion）+ `AnimatePresence` 处理 open/close；easing 与 Folder 展开共用同一套曲线（`ease-out-quint` 系），使「打开卡片」与「打开 Folder」手感一致。
+- React Flow 持有节点 transform，不直接承担模态过渡：
+  1. 记录源节点屏幕矩形
+  2. 全屏 overlay 以源矩形为起点 morph 到目标布局
+  3. 源节点可隐藏（`data.isHidden`）避免双影
+  4. 内容区：BlockNote 经 `lazy` + `Suspense`，fallback 为共享 `NoteEditorLoading`（与编辑器内 loading 同一组件）
+- `BoundingClientRect` 仅在进入/退出或跨项导航时读取，不进入平移/缩放/拖拽热路径。
+- Widget checklist 的 FocusedView 编辑写 `widgetStore`，**不**经 `commitNodeData` 把 items 写回 manifest。
 
-### 5.4 层级隔离（文件夹视图）
+### 5.4 层级隔离与 Folder waterfall 展开
 
-进入 Folder drill-down 时：
+进入 Folder drill-down / 展开时：
 
-- 挂载全屏 `Backdrop`（半透明遮罩）与独立 drill-down 容器。
-- 背景 React Flow 保持冻结但不销毁，维持空间连续性和返回动画所需的原始坐标。
-- 子卡片从堆叠状态展开至自动排布位置（横向 strip / grid，按 `children` 数组顺序）。
+- 背景画布冻结或降权，Folder 本体仍提供封面锚点。
+- 子项通过 `folderExpansion.ts` 的 **bottom-up waterfall** 排布（取代早期横向 strip / shelf）：
+  - 最多约 5 列从 Folder 上方中心向外生长；宽内容会自动减列
+  - 新卡片落到当前最短、偏中的列，整列向上叠放，保留各子项自然尺寸
+  - 展开层使用 `folderExpandedChild` 虚拟节点类型 + `FolderExpandedChildNode`
+  - 封面最多展示约 5 个动态缩略图槽位（`getFolderThumbnailSlots`），超出部分不画完整内容
+  - 展开子项上限约 8 个进入 waterfall 层；其余仍在 `children` 中但可被 overflow 隐藏策略处理
+- 布局坐标**不持久化**，每次打开按 `children` 顺序与当前尺寸重算。
+- Folder 子项右键 / 快捷键与顶层对齐（聚焦、Extract、锁、标签等），经 `useContextMenu` 的 folder-child 分支处理。
+
+### 5.5 画布视口 chrome 与背景
+
+- `CanvasViewportChrome`：右下角 frosted 面板，组合 React Flow `MiniMap` + 横向 `Controls`（缩放）。
+- 设置项 `canvasShowMinimap`（默认 `true`）：为 `false` 时仅保留 zoom controls。
+- 画布背景 `canvasBackground`：`default` | `paper` | `cream` | `mono`；`canvasBackground.ts` 映射为 CSS 变量，设置面板提供 swatch 选择器。
+- PNG 导出前仍会临时隐藏 minimap / controls / panel / attribution，再截图 `.react-flow`。
 
 ---
 
@@ -592,10 +712,12 @@ workspace/
 ├── .ghostboard/
 │   ├── workspace.json              # activeViewId + views 列表
 │   ├── settings.json               # workspace 级 UI/AI 非密钥设置
-│   ├── node-metadata.json          # 节点标签元数据（tag / tagColor / tags，以 noteId 或 nodeId 为键）
+│   ├── node-metadata.json          # 标签元数据（key = noteId / widgetId / nodeId）
+│   ├── widgets/                    # 小组件内容 JSON（按 widgetId）
+│   │   └── widget_ab12cd34.json
 │   ├── trash/                      # soft-deleted canvas manifests
 │   └── views/
-│       └── default.canvas.json     # 画布 manifest（节点/边/viewport）
+│       └── default.canvas.json     # 画布 manifest（节点/边/viewport；widget 仅引用）
 ├── content/
 │   ├── imported-legacy-note.md     # legacy/import Markdown fallback，不再是新笔记主存储
 │   └── .ghostboard/                # 内容辅助文件
@@ -608,11 +730,12 @@ workspace/
     └── file_d4e5f6a7.pdf           # 其他文件附件
 ```
 
-- `workspace.ts` 负责初始化目录结构、读写 `workspace.json`，并提供 `atomicWrite()` 工具函数。
+- `workspace.ts` 负责初始化目录结构（含 `widgets/`）、读写 `workspace.json`，并提供 `atomicWrite()` 工具函数。
 - `manifest.ts` 负责 canvas manifest 的序列化/反序列化。
 - `noteStore.ts` 是 note record 的读取入口：优先 sidecar JSON，缺失时 fallback 到 legacy `.md`。
 - `notes.ts` 负责 legacy Markdown CRUD、frontmatter 解析/序列化、`displayHint` ↔ `data.type` 映射。
 - `blocknote.ts` 负责 sidecar JSON 路径校验、schema 校验、atomic write、revision 与 preview 字段。
+- `widgets.ts` 负责 widget JSON 路径校验、schema 校验、atomic write、create/clone/load/save/delete。
 - `attachments.ts` 负责附件写入、streaming upload、读取、打开/reveal 和 workspace-relative 路径校验。
 - `.ghostboard/settings.json` 是 workspace-level 设置；`<userData>/userprefs.json` 保存 active workspace；`<userData>/ai-credentials.json` 保存 AI API key，不写入 workspace。
 
@@ -628,7 +751,7 @@ workspace/
   "createdAt": "2026-04-01T10:00:00.000Z",
   "updatedAt": "2026-07-07T09:30:00.000Z",
   "title": "Prio before launch",
-  "displayHint": "checklist",
+  "displayHint": "note",
   "color": "#EAF2B8",
   "preview": {
     "html": "<p>Lingering bugs</p>",
@@ -641,6 +764,24 @@ workspace/
 ```
 
 Legacy Markdown (`content/*.md`) 仍会被 `noteStore.ts` 发现并可在 `loadBlockNote` 时作为一次性导入来源；`saveBlockNote` 不再写 Markdown 副本。模板创建仍可能产生 legacy `.md` note stub，这些 note 在首次聚焦编辑保存后迁移为 sidecar JSON。
+
+#### Widget record（`.ghostboard/widgets/<widgetId>.json`）
+
+```json
+{
+  "schema": "ghostboard-widget/v1",
+  "id": "widget_ab12cd34",
+  "kind": "checklist",
+  "title": "Launch checklist",
+  "createdAt": "2026-07-08T10:00:00.000Z",
+  "updatedAt": "2026-07-16T09:30:00.000Z",
+  "data": {
+    "items": [
+      { "id": "item_1", "text": "Update landing copy", "checked": false }
+    ]
+  }
+}
+```
 
 #### Canvas Manifest（PRD §5.6，React Flow 原生结构）
 
@@ -657,7 +798,17 @@ Legacy Markdown (`content/*.md`) 仍会被 `noteStore.ts` 发现并可在 `loadB
       "style": { "width": 350, "height": 450 },
       "data": {
         "noteId": "note_a1b2c3d4",
-        "type": "checklist"
+        "type": "text"
+      }
+    },
+    {
+      "id": "node_w1",
+      "type": "widget",
+      "position": { "x": 300, "y": 120 },
+      "style": { "width": 280, "height": 320 },
+      "data": {
+        "widgetId": "widget_ab12cd34",
+        "kind": "checklist"
       }
     },
     {
@@ -691,6 +842,15 @@ Legacy Markdown (`content/*.md`) 仍会被 `noteStore.ts` 发现并可在 `loadB
               "noteId": "note_floating",
               "type": "text",
               "color": "#A3E635"
+            }
+          },
+          {
+            "id": "child_widget",
+            "type": "widget",
+            "widgetId": "widget_ab12cd34",
+            "data": {
+              "widgetId": "widget_ab12cd34",
+              "kind": "checklist"
             }
           },
           {
@@ -757,8 +917,10 @@ Legacy Markdown (`content/*.md`) 仍会被 `noteStore.ts` 发现并可在 `loadB
 - 保留的字段（白名单）：`id`, `type`, `position`, `style`, `parentId`, `extent`, `data`
 - 必须丢弃的运行时字段：`selected`, `dragging`, `resizing`, `measured`, `draggable`, `selectable`, `deletable`, `focusable`, `width`, `height`, `internals`
 - data 内丢弃：`isHidden`, `isDropTarget`, `missing`, `previewUrl`, `thumbnailUrl`, `unfurlError`，以及 loading/idle 状态的 `unfurlStatus`
+- **Widget 节点**：`data` 只保留 `{ widgetId, kind }`；items / timer / dueAt 等绝不进 manifest（顶层与 Folder child 均如此）
 - Bun 侧 `saveManifest` 对 Image 额外调用 `serializeImageDataForManifest()`，将 data URL 写入 `attachments/img_<id>.<ext>` 后只保留 `imageFile` / `thumbnailFile`；Asset/Recording 额外调用 `stripAttachmentRuntimeData()`。
 - Edge 丢弃：`selected`
+- Markdown 导出收集 checklist widget，生成 GFM 任务列表，避免静默丢清单
 
 ### 7.3 RPC 协议
 
@@ -775,6 +937,7 @@ type CanvasRPC = {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
+          widgets?: Record<string, WidgetRecord | WidgetLoadError>;
         } | null;
       };
       saveManifest: {
@@ -784,6 +947,24 @@ type CanvasRPC = {
           edges: ManifestEdge[];
           viewport?: { x: number; y: number; zoom: number };
         };
+        response: { success: boolean };
+      };
+
+      // Widgets（内容独立于 manifest）
+      createWidget: {
+        params: { kind: WidgetKind; title?: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      cloneWidget: {
+        params: { widgetId: string };
+        response: { success: true; widget: WidgetRecord } | { success: false };
+      };
+      saveWidget: {
+        params: { widget: WidgetRecord };
+        response: { success: boolean };
+      };
+      deleteWidget: {
+        params: { widgetId: string };
         response: { success: boolean };
       };
 
@@ -1109,38 +1290,44 @@ Edge 剥离 `selected`。
 ### 7.5 启动加载流程
 
 ```
-1. Bun 主进程启动 → initWorkspace() 确保目录结构存在
+1. Bun 主进程启动 → initWorkspace() 确保目录结构存在（含 .ghostboard/widgets/）
 2. 读取 workspace/.ghostboard/workspace.json → activeViewId
 3. 读取 .ghostboard/views/{activeViewId}.canvas.json → manifest
 4. 遍历 manifest.nodes：
    - 先 buildNoteIndex(wsPath)：sidecar JSON + legacy .md 按 noteId 建索引
    - type=card 且有 noteId → loadNoteRecord(wsPath, noteId, data.file?)
      → noteRecordToCardData() 将 sidecar preview 或 legacy Markdown 合并到 node.data
+   - type=card + data.type=checklist（legacy）→ 懒迁移为 type=widget + kind=checklist，收集 widgetId
+   - type=widget → 收集 widgetId；不把 items 等塞进 node.data
    - type=image → 通过 imageFile / thumbnailFile hydrate runtime data URL，缺失时保留占位状态
    - type=asset → 通过 attachmentFile / thumbnailFile hydrate previewUrl / thumbnailUrl，缺失时标记 missing
    - type=recording → 通过 attachmentFile hydrate previewUrl，保留 waveform/duration/recordingNumber，缺失时标记 missing
    - type=link → 直接使用 manifest 中的 URL 与 unfurl metadata
    - type=sticky/group → 直接使用 manifest 中的 data
-   - type=folder → 遍历 children；Card child 按 noteId/file hydrate，Image/Asset/Recording child hydrate 附件，Link child 直接使用 metadata；legacy inline Card child 会在加载时补 noteId 并在下次保存迁移为引用
-5. RPC 返回完整 { nodes, edges, viewport }
-6. 渲染端 canvasStore.hydrate(nodes, edges, viewport)
+   - type=folder → 遍历 children；Card / widget / Image / Asset / Recording / Link 同上；legacy checklist child 同样懒迁移
+5. loadWidgets(wsPath, widgetIds) → widgets map（单个缺失/损坏不影响整画布）
+6. 若发生迁移，把引用写回磁盘 manifest（仅 patch 迁移节点）
+7. RPC 返回 { nodes, edges, viewport, widgets }
+8. 渲染端 canvasStore.hydrate(nodes, edges, viewport)；widgetStore.hydrate(widgets)
 ```
 
 **首次启动 / 无 workspace**：
 
-Bun 侧 `seedFirstRunIfNeeded()` 在 `.ghostboard/workspace.json` 不存在时写入默认 config，并用内置 `demo` 模板填充默认画布。显式创建的空白画布不会自动 seed。
+Bun 侧 `seedFirstRunIfNeeded()` 在 `.ghostboard/workspace.json` 不存在时写入默认 config，并用内置 `demo` 模板填充默认画布。显式创建的空白画布不会自动 seed。模板中若仍含 legacy checklist card，靠下次 loadCanvas 懒迁移。
 
 ### 7.6 Folder children 模型
 
-Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card child 已升级为与顶层 Card 对等的 `noteId` 轻引用：
+Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card child 已升级为与顶层 Card 对等的 `noteId` 轻引用；Widget child 为 `widgetId` 轻引用：
 
 - Card child：`{ id, noteId, type: "card", data: { noteId, file?, type } }`，加载时通过 `noteStore.ts` hydrate；sidecar-backed child 保存时只 merge metadata，legacy child 才写回 `.md`。
+- Widget child：`{ id, type: "widget", widgetId, data: { widgetId, kind } }`，内容在 `widgetStore` / `.ghostboard/widgets/`。
 - Image child：继续走 `imageFile` / `thumbnailFile` 附件模式，不分配 `noteId`。
 - Asset child：走 `attachmentFile` / `thumbnailFile` / `waveform` 附件模式。
 - Link child：保存 URL 与 unfurl metadata。
 - Recording child：走 `attachmentFile` / `waveform` / `duration` / `recordingNumber` 附件模式。
+- **不允许** Folder / Group / Sticky 作为 Folder child。
 
-当前 Folder children 仍不是独立子画布：不持久化内部自由坐标，不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
+当前 Folder children 仍不是独立子画布：不持久化内部自由坐标（打开时用 waterfall 重算），不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
 
 ### 7.7 BlockNote JSON Sidecar
 

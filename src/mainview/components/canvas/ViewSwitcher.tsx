@@ -688,10 +688,17 @@ export function ViewSwitcher({
         {/* Deliberately its own pill (not `.canvas-floating-surface`) — this
             is the primary action bar, so it earns a fully-rounded shape and
             a standalone accent-filled create button instead of the flatter
-            rounded-2xl chrome used by the toolbar/search/zoom panels. */}
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-black/5 bg-white/70 p-1.5 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/70">
+            rounded-2xl chrome used by the toolbar/search/zoom panels. Border,
+            tint, and blur values otherwise match `.canvas-floating-surface`
+            so the three floating bars still read as one family. */}
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-black/5 bg-white/80 p-1.5 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/80">
           <Menu.Trigger
-            className={`flex items-center gap-2 rounded-full bg-white/90 px-4 py-2.5 text-sm shadow-xs transition-colors hover:bg-white data-popup-open:bg-white dark:bg-neutral-900/60 dark:data-popup-open:bg-neutral-700/80 dark:hover:bg-neutral-700/80 ${TRIGGER_FOCUS_RING}`}
+            // Transparent at rest (not its own filled pill) — a solid
+            // rounded-full surface nested directly inside the outer
+            // rounded-full bar reads as a pill-inside-a-pill. Only the
+            // accent create button keeps a persistent fill, as the bar's
+            // one deliberate primary action.
+            className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm transition-colors hover:bg-black/5 data-popup-open:bg-black/5 dark:data-popup-open:bg-white/10 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
             render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
             <Layers className="text-accent" size={16} />

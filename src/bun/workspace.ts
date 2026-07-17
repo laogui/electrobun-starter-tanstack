@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
 
+import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
 import type { CanvasManifest } from './manifest';
 import { saveManifest } from './manifest';
@@ -13,9 +14,9 @@ import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
 import { saveWidget } from './widgets';
 
-// Default workspace is inside the app's userData directory
+// Default workspace lives under ~/.ghostboard/{channel}/workspace
 export function getDefaultWorkspacePath(): string {
-  return join(Utils.paths.userData, 'workspace');
+  return join(getAppDataRoot(), 'workspace');
 }
 
 export interface ViewEntry {

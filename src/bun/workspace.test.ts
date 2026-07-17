@@ -68,7 +68,9 @@ describe('workspace', () => {
     });
   });
 
-  it('getDefaultWorkspacePath uses Electrobun userData', async () => {
+  it('getDefaultWorkspacePath uses ~/.ghostboard/{channel}', async () => {
+    vi.stubEnv('GHOSTBOARD_DATA_DIR', '/mock-user-data');
+    vi.resetModules();
     const { getDefaultWorkspacePath } = await import('./workspace');
 
     expect(getDefaultWorkspacePath()).toBe('/mock-user-data/workspace');

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { Utils } from 'electrobun/bun';
+import { getAppDataRoot } from './appPaths';
 
 /**
  * App-level user preferences that must live OUTSIDE the workspace
@@ -10,12 +10,12 @@ import { Utils } from 'electrobun/bun';
  * `<workspace>/.ghostboard/settings.json` because we wouldn't know
  * which workspace to read it from).
  *
- * Stored at `<userData>/userprefs.json`.
+ * Stored at `~/.ghostboard/{channel}/userprefs.json`.
  */
 export interface UserPrefs {
   /**
    * Absolute path to the active workspace. When undefined the app falls back
-   * to `<userData>/workspace` (see `getDefaultWorkspacePath`).
+   * to `~/.ghostboard/{channel}/workspace` (see `getDefaultWorkspacePath`).
    */
   workspacePath?: string;
 }
@@ -23,7 +23,7 @@ export interface UserPrefs {
 const USERPREFS_FILENAME = 'userprefs.json';
 
 function getUserPrefsPath(): string {
-  return join(Utils.paths.userData, USERPREFS_FILENAME);
+  return join(getAppDataRoot(), USERPREFS_FILENAME);
 }
 
 /** Read userprefs.json. Returns an empty object when the file is missing or unreadable. */

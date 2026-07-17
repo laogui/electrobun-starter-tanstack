@@ -2,12 +2,12 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { chmod, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { Utils } from 'electrobun/bun';
+import { getAppDataRoot } from './appPaths';
 
 /**
  * The LLM API key lives OUTSIDE the workspace so it never lands in
  * `<workspace>/.ghostboard/settings.json` (which users may commit to git).
- * Stored at `<userData>/ai-credentials.json` alongside `userprefs.json`.
+ * Stored at `~/.ghostboard/{channel}/ai-credentials.json` alongside `userprefs.json`.
  */
 export interface AICredentials {
   apiKey?: string;
@@ -16,7 +16,7 @@ export interface AICredentials {
 const AI_CREDENTIALS_FILENAME = 'ai-credentials.json';
 
 function getAICredentialsPath(): string {
-  return join(Utils.paths.userData, AI_CREDENTIALS_FILENAME);
+  return join(getAppDataRoot(), AI_CREDENTIALS_FILENAME);
 }
 
 /** Read ai-credentials.json. Returns an empty object when missing/unreadable. */

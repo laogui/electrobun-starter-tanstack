@@ -1225,7 +1225,7 @@ let mainWindow: BrowserWindow | null = null;
 // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
 // Streaming responses cannot travel over RPC, so it runs on 127.0.0.1.
 let localHttpServer: LocalHttpServerHandle | null = null;
-// LLM API key loaded from <userData>/ai-credentials.json (never in settings.json)
+// LLM API key loaded from ~/.ghostboard/{channel}/ai-credentials.json (never in settings.json)
 let cachedAIApiKey: string | null = null;
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
@@ -1256,7 +1256,7 @@ export async function persistSettings(settings: AppSettings) {
 
 /**
  * Assemble the live AI server config from cached settings + the API key stored
- * in `<userData>/ai-credentials.json`. Returns null when AI is disabled or a
+ * in `~/.ghostboard/{channel}/ai-credentials.json`. Returns null when AI is disabled or a
  * cloud provider is missing its key, which makes /ai/chat reply 503.
  */
 function buildAIConfig(): AIServerConfig | null {
@@ -1397,7 +1397,7 @@ async function exportWorkspaceArchiveImpl(
 
 /**
  * Prompt the user to pick a new workspace directory. The new path is
- * persisted to `<userData>/userprefs.json`; the renderer is expected to show
+ * persisted to `~/.ghostboard/{channel}/userprefs.json`; the renderer is expected to show
  * a "restart required" toast — switching wsPath in-process would require
  * tearing down every open RPC handler, manifest cache, and file watcher, so
  * we keep the pivot to a restart boundary.

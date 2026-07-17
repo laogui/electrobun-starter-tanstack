@@ -10,9 +10,7 @@ let userDataPath = '';
 vi.mock('electrobun/bun', () => ({
   Utils: {
     paths: {
-      get userData() {
-        return userDataPath;
-      },
+      userData: '/mock/Application Support/com.ghostboard.app/dev',
     },
   },
 }));
@@ -36,6 +34,7 @@ describe('aicredentials', () => {
   beforeEach(async () => {
     vi.resetModules();
     userDataPath = await mkdtemp(join(tmpdir(), 'ai-credentials-test-'));
+    vi.stubEnv('GHOSTBOARD_DATA_DIR', userDataPath);
     renameMock.mockReset();
     renameMock.mockImplementation(async (from: string, to: string) => {
       mkdirSync(dirname(to), { recursive: true });

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { cpus, hostname, totalmem } from 'node:os';
 import { join } from 'node:path';
 
-import { Utils } from 'electrobun/bun';
+import { getAppDataRoot } from './appPaths';
 
 // API Configuration
 const _API_BASE_URL =
@@ -99,7 +99,7 @@ async function saveLicense(info: LicenseInfo): Promise<void> {
   const data = JSON.stringify({ ...info, fingerprint: fp });
   const encoded = encode(data, fp);
 
-  const dir = Utils.paths.userData;
+  const dir = getAppDataRoot();
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -112,7 +112,7 @@ async function saveLicense(info: LicenseInfo): Promise<void> {
  */
 async function loadLicense(): Promise<LicenseInfo | null> {
   try {
-    const path = join(Utils.paths.userData, LICENSE_FILE);
+    const path = join(getAppDataRoot(), LICENSE_FILE);
     const file = Bun.file(path);
     if (!(await file.exists())) {
       return null;

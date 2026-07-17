@@ -1,34 +1,69 @@
-import type { CanvasBackgroundSetting } from '@/settingsClient';
+import { isHexColor } from '@/lib/hexColor';
 
-/** Light-theme canvas background colors (Settings → General). */
+/** Named canvas background presets (Settings + quick picker). */
 export const CANVAS_BG_LIGHT_PRESETS = {
   default: '#EFF3F4',
-  paper: '#F6F0E4', // warm beige
-  cream: '#F8F5F2', // soft cream
-  mono: '#F4F4F4', // neutral gray
-} as const satisfies Record<CanvasBackgroundSetting, string>;
+  paper: '#F6F0E4',
+  cream: '#F8F5F2',
+  mono: '#F4F4F4',
+  lavender: '#E8DDE8',
+  sage: '#E4EDD4',
+  mist: '#D9EBE8',
+  sand: '#F0E4DA',
+} as const;
 
-/** Dark-theme canvas background colors (Settings → General). */
 export const CANVAS_BG_DARK_PRESETS = {
   default: '#141414',
-  paper: '#1E1A14', // warm charcoal
-  cream: '#1B1917', // soft warm dark
-  mono: '#1C1C1C', // neutral near-black
-} as const satisfies Record<CanvasBackgroundSetting, string>;
+  paper: '#1E1A14',
+  cream: '#1B1917',
+  mono: '#1C1C1C',
+  lavender: '#1F1A1F',
+  sage: '#1A1E16',
+  mist: '#161C1B',
+  sand: '#1E1A17',
+} as const;
+
+export type CanvasBackgroundPreset = keyof typeof CANVAS_BG_LIGHT_PRESETS;
 
 export const CANVAS_BG_PRESET_ORDER = [
   'default',
   'paper',
   'cream',
   'mono',
-] as const satisfies readonly CanvasBackgroundSetting[];
+  'lavender',
+  'sage',
+  'mist',
+  'sand',
+] as const satisfies readonly CanvasBackgroundPreset[];
+
+export function isCanvasBackgroundPreset(
+  value: string
+): value is CanvasBackgroundPreset {
+  return Object.hasOwn(CANVAS_BG_LIGHT_PRESETS, value);
+}
+
+export function isCanvasBackgroundSetting(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (isCanvasBackgroundPreset(value) || isHexColor(value))
+  );
+}
 
 export function resolveCanvasBackground(
-  preset: CanvasBackgroundSetting,
+  setting: string,
   isDarkTheme: boolean
 ): string {
+  if (isHexColor(setting)) {
+    return setting;
+  }
+
   const presets = isDarkTheme
     ? CANVAS_BG_DARK_PRESETS
     : CANVAS_BG_LIGHT_PRESETS;
-  return presets[preset] ?? presets.default;
+
+  if (isCanvasBackgroundPreset(setting)) {
+    return presets[setting];
+  }
+
+  return presets.default;
 }

@@ -14,13 +14,14 @@ import {
   CANVAS_BG_DARK_PRESETS,
   CANVAS_BG_LIGHT_PRESETS,
   CANVAS_BG_PRESET_ORDER,
+  type CanvasBackgroundPreset,
+  isCanvasBackgroundPreset,
 } from '@/lib/canvasBackground';
 import { cn } from '@/lib/utils';
 import {
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
   type AutoSaveIntervalSetting,
-  type CanvasBackgroundSetting,
   type FontFamilySetting,
   type LocaleSetting,
   type ThemeSetting,
@@ -137,11 +138,15 @@ export function GeneralPanel({
     { label: strings.fontSerif, value: 'serif' },
     { label: strings.fontMono, value: 'mono' },
   ];
-  const canvasBgLabels: Record<CanvasBackgroundSetting, string> = {
+  const canvasBgLabels: Record<CanvasBackgroundPreset, string> = {
     default: strings.canvasBgDefault,
     paper: strings.canvasBgPaper,
     cream: strings.canvasBgCream,
     mono: strings.canvasBgMono,
+    lavender: strings.canvasBgLavender,
+    sage: strings.canvasBgSage,
+    mist: strings.canvasBgMist,
+    sand: strings.canvasBgSand,
   };
   const canvasSnapOptions: SelectOption<CanvasSnapOptionValue>[] = [
     { label: strings.canvasSnapOn, value: 'on' },
@@ -288,10 +293,10 @@ function isDarkThemeSetting(theme: ThemeSetting): boolean {
 interface CanvasBackgroundPickerProps {
   id: string;
   label: string;
-  labels: Record<CanvasBackgroundSetting, string>;
-  onValueChange: (value: CanvasBackgroundSetting) => void;
+  labels: Record<CanvasBackgroundPreset, string>;
+  onValueChange: (value: CanvasBackgroundPreset) => void;
   theme: ThemeSetting;
-  value: CanvasBackgroundSetting;
+  value: string;
 }
 
 function CanvasBackgroundPicker({
@@ -372,6 +377,29 @@ function CanvasBackgroundPicker({
             </label>
           );
         })}
+        {isCanvasBackgroundPreset(value) ? null : (
+          <div
+            aria-current="true"
+            className="flex flex-col gap-1.5 rounded-lg border border-accent bg-accent/5 p-1.5 shadow-sm dark:bg-accent/10"
+          >
+            <span
+              className={cn(
+                'relative flex h-12 w-full items-end justify-end overflow-hidden rounded-md border',
+                isDark
+                  ? 'border-white/10'
+                  : 'border-black/8 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)]'
+              )}
+              style={{ backgroundColor: value }}
+            >
+              <span className="m-1 flex size-4 items-center justify-center rounded-full bg-accent text-white shadow-sm">
+                <Check aria-hidden className="size-2.5" strokeWidth={3} />
+              </span>
+            </span>
+            <span className="px-0.5 font-medium font-mono text-[11px] text-neutral-700 uppercase leading-tight dark:text-neutral-200">
+              {value}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

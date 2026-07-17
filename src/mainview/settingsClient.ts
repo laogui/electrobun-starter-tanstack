@@ -20,7 +20,8 @@ import {
 export type ThemeSetting = 'dark' | 'light' | 'system';
 export type LocaleSetting = 'en' | 'zh';
 export type FontFamilySetting = 'mono' | 'serif' | 'system';
-export type CanvasBackgroundSetting = 'cream' | 'default' | 'mono' | 'paper';
+/** Named preset id, or a custom `#RRGGBB` / `#RRGGBBAA` hex color. */
+export type CanvasBackgroundSetting = string;
 
 export const AUTO_SAVE_INTERVAL_OPTIONS = [500, 800, 2000, 5000] as const;
 export type AutoSaveIntervalSetting =

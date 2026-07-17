@@ -1,5 +1,6 @@
 import { Library, Settings, Tag as TagIcon } from 'lucide-react';
 
+import { CanvasBackgroundToolbarButton } from '@/components/canvas/CanvasBackgroundToolbarButton';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -7,7 +8,7 @@ import * as m from '../../../paraglide/messages.js';
 
 /**
  * Floating bottom-left toolbar that groups the canvas-level entry points
- * (note library, tag filter, settings) into a single frosted pill.
+ * (note library, tag filter, background, settings) into a single frosted pill.
  * Viewport chrome (zoom + minimap) lives bottom-right; create/view bar is center.
  */
 export function CanvasToolbar() {
@@ -44,6 +45,8 @@ export function CanvasToolbar() {
           />
         ) : null}
       </ToolbarButton>
+
+      <CanvasBackgroundToolbarButton />
 
       <div className="mx-1.5 my-0.5 h-px bg-black/5 dark:bg-white/10" />
 

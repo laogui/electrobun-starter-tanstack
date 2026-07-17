@@ -1116,8 +1116,24 @@ interface SwitchWorkspaceResponse {
 const FONT_FAMILY_VALUES = ['system', 'serif', 'mono'] as const;
 type FontFamilySetting = (typeof FONT_FAMILY_VALUES)[number];
 
-const CANVAS_BACKGROUND_VALUES = ['default', 'paper', 'cream', 'mono'] as const;
-type CanvasBackgroundSetting = (typeof CANVAS_BACKGROUND_VALUES)[number];
+const CANVAS_BACKGROUND_PRESETS = [
+  'default',
+  'paper',
+  'cream',
+  'mono',
+  'lavender',
+  'sage',
+  'mist',
+  'sand',
+] as const;
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+function isCanvasBackgroundSetting(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (includes(CANVAS_BACKGROUND_PRESETS, value) || HEX_COLOR_RE.test(value))
+  );
+}
 
 const AUTO_SAVE_INTERVAL_VALUES = [500, 800, 2000, 5000] as const;
 type AutoSaveIntervalSetting = (typeof AUTO_SAVE_INTERVAL_VALUES)[number];
@@ -1130,7 +1146,7 @@ interface AppSettings {
   aiModel: string;
   aiProvider: (typeof AI_PROVIDER_VALUES)[number];
   autoSaveInterval: AutoSaveIntervalSetting;
-  canvasBackground: CanvasBackgroundSetting;
+  canvasBackground: string;
   canvasShowMinimap: boolean;
   canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
@@ -1167,7 +1183,7 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
     fontFamily: includes(FONT_FAMILY_VALUES, raw.fontFamily)
       ? raw.fontFamily
       : DEFAULT_SETTINGS.fontFamily,
-    canvasBackground: includes(CANVAS_BACKGROUND_VALUES, raw.canvasBackground)
+    canvasBackground: isCanvasBackgroundSetting(raw.canvasBackground)
       ? raw.canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
     canvasShowMinimap:

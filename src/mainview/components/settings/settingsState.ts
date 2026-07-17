@@ -1,10 +1,10 @@
+import { isCanvasBackgroundSetting } from '@/lib/canvasBackground';
 import {
   AI_PROVIDER_OPTIONS,
   type AIProviderSetting,
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
   type AutoSaveIntervalSetting,
-  type CanvasBackgroundSetting,
   DEFAULT_SETTINGS,
   type FontFamilySetting,
   type LocaleSetting,
@@ -14,12 +14,6 @@ import {
 const THEME_VALUES: readonly ThemeSetting[] = ['system', 'light', 'dark'];
 const LOCALE_VALUES: readonly LocaleSetting[] = ['en', 'zh'];
 const FONT_VALUES: readonly FontFamilySetting[] = ['system', 'serif', 'mono'];
-const CANVAS_BG_VALUES: readonly CanvasBackgroundSetting[] = [
-  'default',
-  'paper',
-  'cream',
-  'mono',
-];
 
 function includesValue<TValue extends number | string>(
   values: readonly TValue[],
@@ -31,6 +25,8 @@ function includesValue<TValue extends number | string>(
 export function normalizeSettings(
   settings: Partial<AppSettings> | null | undefined
 ): AppSettings {
+  const canvasBackground = settings?.canvasBackground;
+
   return {
     theme: includesValue(THEME_VALUES, settings?.theme)
       ? settings.theme
@@ -41,11 +37,8 @@ export function normalizeSettings(
     fontFamily: includesValue(FONT_VALUES, settings?.fontFamily)
       ? settings.fontFamily
       : DEFAULT_SETTINGS.fontFamily,
-    canvasBackground: includesValue(
-      CANVAS_BG_VALUES,
-      settings?.canvasBackground
-    )
-      ? settings.canvasBackground
+    canvasBackground: isCanvasBackgroundSetting(canvasBackground)
+      ? canvasBackground
       : DEFAULT_SETTINGS.canvasBackground,
     canvasShowMinimap:
       typeof settings?.canvasShowMinimap === 'boolean'

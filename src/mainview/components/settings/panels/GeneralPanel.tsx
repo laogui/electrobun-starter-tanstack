@@ -1,4 +1,3 @@
-import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { LicenseActivationDialog } from '@/components/LicenseActivationDialog';
 import { LicenseStatusCard } from '@/components/LicenseStatusCard';
@@ -10,14 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import {
-  CANVAS_BG_DARK_PRESETS,
-  CANVAS_BG_LIGHT_PRESETS,
-  CANVAS_BG_PRESET_ORDER,
-  type CanvasBackgroundPreset,
-  isCanvasBackgroundPreset,
-} from '@/lib/canvasBackground';
-import { cn } from '@/lib/utils';
 import {
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
@@ -138,16 +129,6 @@ export function GeneralPanel({
     { label: strings.fontSerif, value: 'serif' },
     { label: strings.fontMono, value: 'mono' },
   ];
-  const canvasBgLabels: Record<CanvasBackgroundPreset, string> = {
-    default: strings.canvasBgDefault,
-    paper: strings.canvasBgPaper,
-    cream: strings.canvasBgCream,
-    mono: strings.canvasBgMono,
-    lavender: strings.canvasBgLavender,
-    sage: strings.canvasBgSage,
-    mist: strings.canvasBgMist,
-    sand: strings.canvasBgSand,
-  };
   const canvasSnapOptions: SelectOption<CanvasSnapOptionValue>[] = [
     { label: strings.canvasSnapOn, value: 'on' },
     { label: strings.canvasSnapOff, value: 'off' },
@@ -208,16 +189,6 @@ export function GeneralPanel({
           options={fontOptions}
           value={settings.fontFamily}
         />
-        <CanvasBackgroundPicker
-          id="settings-canvas-bg"
-          label={strings.canvasBgLabel}
-          labels={canvasBgLabels}
-          onValueChange={(canvasBackground) => {
-            onUpdate({ canvasBackground });
-          }}
-          theme={settings.theme}
-          value={settings.canvasBackground}
-        />
         <SettingsSelect
           id="settings-canvas-snap"
           label={strings.canvasSnapLabel}
@@ -277,130 +248,5 @@ function PanelHeading({ children }: { children: React.ReactNode }) {
     <h2 className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-50">
       {children}
     </h2>
-  );
-}
-
-function isDarkThemeSetting(theme: ThemeSetting): boolean {
-  if (theme === 'dark') {
-    return true;
-  }
-  if (theme === 'light') {
-    return false;
-  }
-  return globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
-}
-
-interface CanvasBackgroundPickerProps {
-  id: string;
-  label: string;
-  labels: Record<CanvasBackgroundPreset, string>;
-  onValueChange: (value: CanvasBackgroundPreset) => void;
-  theme: ThemeSetting;
-  value: string;
-}
-
-function CanvasBackgroundPicker({
-  id,
-  label,
-  labels,
-  onValueChange,
-  theme,
-  value,
-}: CanvasBackgroundPickerProps) {
-  const isDark = isDarkThemeSetting(theme);
-  const lightPresets = CANVAS_BG_LIGHT_PRESETS;
-  const darkPresets = CANVAS_BG_DARK_PRESETS;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div>
-        <span
-          className="block font-medium text-[13px] text-neutral-800 dark:text-neutral-100"
-          id={id}
-        >
-          {label}
-        </span>
-      </div>
-      <div
-        aria-labelledby={id}
-        className="grid max-w-[400px] grid-cols-4 gap-2"
-        role="radiogroup"
-      >
-        {CANVAS_BG_PRESET_ORDER.map((preset) => {
-          const selected = value === preset;
-          const lightColor = lightPresets[preset];
-          const darkColor = darkPresets[preset];
-          const previewColor = isDark ? darkColor : lightColor;
-          const inputId = `${id}-${preset}`;
-
-          return (
-            <label
-              className={cn(
-                'group flex cursor-pointer flex-col gap-1.5 rounded-lg border p-1.5 text-left transition-colors',
-                'has-focus-visible:outline-2 has-focus-visible:outline-accent/60 has-focus-visible:outline-offset-2',
-                selected
-                  ? 'border-accent bg-accent/5 shadow-sm dark:bg-accent/10'
-                  : 'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-neutral-600 dark:hover:bg-neutral-800'
-              )}
-              htmlFor={inputId}
-              key={preset}
-            >
-              <input
-                checked={selected}
-                className="sr-only"
-                id={inputId}
-                name={id}
-                onChange={() => {
-                  onValueChange(preset);
-                }}
-                type="radio"
-                value={preset}
-              />
-              <span
-                className={cn(
-                  'relative flex h-12 w-full items-end justify-end overflow-hidden rounded-md border',
-                  isDark
-                    ? 'border-white/10'
-                    : 'border-black/8 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)]'
-                )}
-                style={{ backgroundColor: previewColor }}
-              >
-                {selected ? (
-                  <span className="m-1 flex size-4 items-center justify-center rounded-full bg-accent text-white shadow-sm">
-                    <Check aria-hidden className="size-2.5" strokeWidth={3} />
-                  </span>
-                ) : null}
-              </span>
-              <span className="px-0.5 font-medium text-[11px] text-neutral-700 leading-tight dark:text-neutral-200">
-                {labels[preset]}
-              </span>
-            </label>
-          );
-        })}
-        {isCanvasBackgroundPreset(value) ? null : (
-          <div
-            aria-current="true"
-            className="flex flex-col gap-1.5 rounded-lg border border-accent bg-accent/5 p-1.5 shadow-sm dark:bg-accent/10"
-          >
-            <span
-              className={cn(
-                'relative flex h-12 w-full items-end justify-end overflow-hidden rounded-md border',
-                isDark
-                  ? 'border-white/10'
-                  : 'border-black/8 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)]'
-              )}
-              style={{ backgroundColor: value }}
-            >
-              <span className="m-1 flex size-4 items-center justify-center rounded-full bg-accent text-white shadow-sm">
-                <Check aria-hidden className="size-2.5" strokeWidth={3} />
-              </span>
-            </span>
-            <span className="px-0.5 font-medium font-mono text-[11px] text-neutral-700 uppercase leading-tight dark:text-neutral-200">
-              {value}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }

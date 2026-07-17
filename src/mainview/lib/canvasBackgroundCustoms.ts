@@ -43,3 +43,12 @@ export function addCanvasBackgroundCustom(
   );
   return [color, ...without].slice(0, MAX_CUSTOM_COLORS);
 }
+
+export function removeCanvasBackgroundCustom(
+  colors: string[],
+  color: string
+): string[] {
+  return colors.filter(
+    (existing) => existing.toLowerCase() !== color.toLowerCase()
+  );
+}

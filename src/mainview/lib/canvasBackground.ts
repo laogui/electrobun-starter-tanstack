@@ -10,6 +10,9 @@ export const CANVAS_BG_LIGHT_PRESETS = {
   sage: '#E4EDD4',
   mist: '#D9EBE8',
   sand: '#F0E4DA',
+  ivory: '#FEF7EC',
+  mint: '#F2FFE4',
+  lichen: '#F2F7E7',
 } as const;
 
 export const CANVAS_BG_DARK_PRESETS = {
@@ -21,6 +24,9 @@ export const CANVAS_BG_DARK_PRESETS = {
   sage: '#1A1E16',
   mist: '#161C1B',
   sand: '#1E1A17',
+  ivory: '#1F1B16',
+  mint: '#161C14',
+  lichen: '#181B16',
 } as const;
 
 export type CanvasBackgroundPreset = keyof typeof CANVAS_BG_LIGHT_PRESETS;
@@ -34,6 +40,9 @@ export const CANVAS_BG_PRESET_ORDER = [
   'sage',
   'mist',
   'sand',
+  'ivory',
+  'mint',
+  'lichen',
 ] as const satisfies readonly CanvasBackgroundPreset[];
 
 export function isCanvasBackgroundPreset(

@@ -1125,6 +1125,9 @@ const CANVAS_BACKGROUND_PRESETS = [
   'sage',
   'mist',
   'sand',
+  'ivory',
+  'mint',
+  'lichen',
 ] as const;
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 

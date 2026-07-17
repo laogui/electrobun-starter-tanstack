@@ -1,6 +1,6 @@
 import { Popover } from '@base-ui/react/popover';
 import { useTheme } from 'better-themes';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -12,6 +12,7 @@ import {
 import {
   addCanvasBackgroundCustom,
   loadCanvasBackgroundCustoms,
+  removeCanvasBackgroundCustom,
   saveCanvasBackgroundCustoms,
 } from '@/lib/canvasBackgroundCustoms';
 import { persistAppSettingsPatch } from '@/lib/persistAppSettings';
@@ -77,6 +78,17 @@ export function CanvasBackgroundToolbarButton() {
     selectBackground(value);
   };
 
+  const handleRemoveCustom = (color: string) => {
+    setCustoms((prev) => {
+      const next = removeCanvasBackgroundCustom(prev, color);
+      saveCanvasBackgroundCustoms(next);
+      return next;
+    });
+    if (canvasBackground.toLowerCase() === color.toLowerCase()) {
+      selectBackground('default');
+    }
+  };
+
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>
       <Popover.Trigger
@@ -128,9 +140,13 @@ export function CanvasBackgroundToolbarButton() {
                   color={color}
                   key={color}
                   label={color}
+                  onRemove={() => {
+                    handleRemoveCustom(color);
+                  }}
                   onSelect={() => {
                     selectBackground(color);
                   }}
+                  removeLabel={m.canvas_bg_remove_color()}
                   selected={isSwatchSelected(color, canvasBackground, isDark)}
                 />
               ))}
@@ -160,6 +176,12 @@ function presetLabel(preset: CanvasBackgroundPreset): string {
       return m.settings_canvas_bg_mist();
     case 'sand':
       return m.settings_canvas_bg_sand();
+    case 'ivory':
+      return m.settings_canvas_bg_ivory();
+    case 'mint':
+      return m.settings_canvas_bg_mint();
+    case 'lichen':
+      return m.settings_canvas_bg_lichen();
     default: {
       const _exhaustive: never = preset;
       return _exhaustive;
@@ -170,36 +192,57 @@ function presetLabel(preset: CanvasBackgroundPreset): string {
 function BackgroundSwatch({
   color,
   label,
+  onRemove,
   onSelect,
+  removeLabel,
   selected,
 }: {
   color: string;
   label: string;
+  onRemove?: () => void;
   onSelect: () => void;
+  removeLabel?: string;
   selected: boolean;
 }) {
   return (
-    <button
-      aria-label={label}
-      className="flex aspect-square size-fit items-center justify-center rounded-full bg-white/10 p-0.5 outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60"
-      onClick={onSelect}
-      title={label}
-      type="button"
-    >
-      <span
-        className={cn(
-          'relative flex size-8 items-center justify-center rounded-full border border-black/10 dark:border-white/15'
-        )}
-        style={{ backgroundColor: color }}
+    <div className="group relative flex aspect-square size-fit items-center justify-center">
+      <button
+        aria-label={label}
+        className="flex aspect-square size-fit items-center justify-center rounded-full bg-white/10 p-0.5 outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60"
+        onClick={onSelect}
+        title={label}
+        type="button"
       >
-        {selected ? (
-          <Check
-            aria-hidden
-            className="size-4 text-neutral-800 drop-shadow-sm dark:text-white"
-            strokeWidth={2.5}
-          />
-        ) : null}
-      </span>
-    </button>
+        <span
+          className={cn(
+            'relative flex size-8 items-center justify-center rounded-full border border-black/10 dark:border-white/15'
+          )}
+          style={{ backgroundColor: color }}
+        >
+          {selected ? (
+            <Check
+              aria-hidden
+              className="size-4 text-neutral-800 drop-shadow-sm dark:text-white"
+              strokeWidth={2.5}
+            />
+          ) : null}
+        </span>
+      </button>
+      {onRemove && removeLabel ? (
+        <button
+          aria-label={removeLabel}
+          className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-neutral-800 text-white opacity-0 shadow-sm transition-opacity hover:bg-neutral-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accent/60 group-hover:opacity-100 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRemove();
+          }}
+          title={removeLabel}
+          type="button"
+        >
+          <X aria-hidden className="size-2.5" strokeWidth={3} />
+        </button>
+      ) : null}
+    </div>
   );
 }

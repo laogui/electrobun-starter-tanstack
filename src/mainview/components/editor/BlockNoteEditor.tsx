@@ -462,7 +462,7 @@ function BlockNoteSurface({
   return (
     <div
       className={cn(
-        'flex h-full w-full flex-col',
+        'note-editor-surface flex h-full w-full flex-col',
         isDark ? 'text-white' : 'text-gray-900'
       )}
       ref={setEditorRoot}
@@ -487,11 +487,11 @@ function BlockNoteSurface({
           overflow: { x: 'hidden' },
         }}
       >
-        <div className="mx-auto w-full max-w-[min(72ch,80%)] px-4 py-12 sm:px-8 lg:px-12">
+        <div className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12">
           <TextareaAutosize
             aria-label="Note title"
             className={cn(
-              'mb-6 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
+              'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
             )}
             maxLength={TITLE_MAX_LENGTH}

@@ -33,7 +33,7 @@ export function NoteEditorLoading({ color, title }: NoteEditorLoadingProps) {
       )}
       style={colorToStyle(colorValue)}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-8 pt-16 pb-10 md:px-12 md:pt-20">
+      <div className="mx-auto flex w-full max-w-[min(88ch,90%)] flex-1 flex-col gap-6 px-8 pt-16 pb-10 md:px-12 md:pt-20">
         {titleText ? (
           <h1
             className={cn(

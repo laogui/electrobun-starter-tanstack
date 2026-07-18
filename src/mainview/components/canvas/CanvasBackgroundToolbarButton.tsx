@@ -103,7 +103,11 @@ export function CanvasBackgroundToolbarButton() {
         />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Positioner align="start" side="top" sideOffset={10}>
+        {/* Open to the right of the toolbar instead of upward: the trigger sits
+            in the middle of a vertical pill, so an upward popover would cover
+            the buttons stacked above it. Right/bottom-aligned end stays clear
+            of every sibling and within the lower-left canvas region. */}
+        <Popover.Positioner align="end" side="right" sideOffset={10}>
           <Popover.Popup className="z-50 w-[23rem] origin-(--transform-origin) rounded-3xl border border-black/5 bg-white/90 p-4 shadow-xl outline-hidden backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
             <div className="mb-3 text-center">
               <Popover.Title className="font-medium text-lg">

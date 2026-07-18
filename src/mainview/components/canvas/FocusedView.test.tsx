@@ -538,7 +538,7 @@ describe('focusedView', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+    fireEvent.keyDown(document, { key: 'ArrowRight', metaKey: true });
 
     expect(setFocusedNodeMock).toHaveBeenCalledWith({
       id: 'link-1',
@@ -588,7 +588,7 @@ describe('focusedView', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+    fireEvent.keyDown(document, { key: 'ArrowRight', metaKey: true });
 
     const focusedItem = setFocusedNodeMock.mock.calls.at(-1)?.[0];
     expect(focusedItem).toMatchObject({ id: 'card-1' });

@@ -746,3 +746,13 @@ body.resizing-nwse * {
   background: hsl(var(--connection-active) / 0.1) !important;
   border: 1.5px solid hsl(var(--connection-active) / 0.5) !important;
 }
+
+/* ═══ Focused note editor (BlockNote) ═══ */
+
+/* The focused editor paints the note color on its root wrapper, so the
+   BlockNote surface must stay transparent — otherwise the body renders as a
+   detached white card that visually splits from the title above it. */
+.note-editor-surface .bn-container,
+.note-editor-surface .bn-editor {
+  background-color: transparent;
+}

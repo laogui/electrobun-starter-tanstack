@@ -1,5 +1,5 @@
 import { useReactFlow } from '@xyflow/react';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import * as motion from 'motion/react-m';
 import {
@@ -538,48 +538,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       >
         <ArrowLeft size={16} />
       </motion.button>
-
-      {/* Floating Previous/Next Navigation (positioned center left/right) */}
-      {previousItem ? (
-        <motion.button
-          animate={{ opacity: 1 }}
-          aria-label="Previous item"
-          className={cn(
-            'absolute top-1/2 left-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
-            chromeButtonClass
-          )}
-          initial={{ opacity: 0 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleNavigate(previousItem);
-          }}
-          title="Previous"
-          transition={chromeTransition}
-          type="button"
-        >
-          <ChevronLeft size={16} />
-        </motion.button>
-      ) : null}
-      {nextItem ? (
-        <motion.button
-          animate={{ opacity: 1 }}
-          aria-label="Next item"
-          className={cn(
-            'absolute top-1/2 right-4 z-70 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
-            chromeButtonClass
-          )}
-          initial={{ opacity: 0 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleNavigate(nextItem);
-          }}
-          title="Next"
-          transition={chromeTransition}
-          type="button"
-        >
-          <ChevronRight size={16} />
-        </motion.button>
-      ) : null}
 
       {/* Floating image caption (lightbox mode) */}
       {isImage && title ? (

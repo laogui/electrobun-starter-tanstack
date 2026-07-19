@@ -48,8 +48,13 @@ const BlockNoteEditor = lazy(
 
 /** Matches folder-fan easing so open/close feels like one system. */
 const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
-const OPEN_DURATION_S = 0.34;
 const CLOSE_DURATION_S = 0.26;
+/**
+ * Floor for the expand morph's starting scale. A tiny floor makes the panel
+ * grow from a blurry, reflowed thumbnail; a gentle floor keeps the content
+ * crisp so the open reads as a smooth settle rather than a zoom pop.
+ */
+const OPEN_MIN_SCALE = 0.86;
 
 function getViewportSize() {
   return {
@@ -72,7 +77,7 @@ function getExpandFromRect(
     (centerY / viewport.height) * 100
   }%`;
   const scale = Math.max(
-    0.08,
+    OPEN_MIN_SCALE,
     Math.min(rect.width / viewport.width, rect.height / viewport.height, 0.92)
   );
   return { scale, transformOrigin };
@@ -485,17 +490,19 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, [handleClose]);
 
-  const openTransition = {
-    duration: shouldReduceMotion ? 0.1 : OPEN_DURATION_S,
-    ease: EASE_OUT_QUINT,
-  };
+  const openTransition = shouldReduceMotion
+    ? { duration: 0.1 }
+    : {
+        default: { type: 'spring' as const, stiffness: 240, damping: 30, mass: 0.9 },
+        opacity: { duration: 0.18, ease: EASE_OUT_QUINT },
+      };
   const closeTransition = {
     duration: shouldReduceMotion ? 0.08 : CLOSE_DURATION_S,
     ease: EASE_OUT_QUINT,
   };
   const chromeTransition = {
-    delay: shouldReduceMotion ? 0 : 0.12,
-    duration: shouldReduceMotion ? 0.08 : 0.2,
+    delay: shouldReduceMotion ? 0 : 0.16,
+    duration: shouldReduceMotion ? 0.08 : 0.22,
     ease: EASE_OUT_QUINT,
   };
 
@@ -515,7 +522,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       initial={
         shouldReduceMotion
           ? { opacity: 0, scale: 1 }
-          : { opacity: 0.92, scale: expandMetrics.scale }
+          : { opacity: 0, scale: expandMetrics.scale }
       }
       style={{ transformOrigin: expandMetrics.transformOrigin }}
       transition={openTransition}

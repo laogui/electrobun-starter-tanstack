@@ -1,18 +1,36 @@
-import { FileText, MapPin, X } from 'lucide-react';
+import {
+  FileText,
+  ImageIcon,
+  Link2,
+  ListChecks,
+  MapPin,
+  Paperclip,
+  X,
+} from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { useCallback, useMemo, useState } from 'react';
 
+import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { NotePreview } from '@/components/preview/NotePreview';
+import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface DetachedEntry {
+  color?: string;
+  data?: Record<string, unknown>;
+  fileName?: string;
   id: string;
+  imageUrl?: string;
+  mimeType?: string;
   nodeId: string;
   preview: string;
+  thumbnailUrl?: string;
   title: string;
   type?: string;
+  updatedAt?: number;
+  url?: string;
 }
 
 const SIDEBAR_WIDTH = 300;
@@ -20,6 +38,11 @@ const SIDEBAR_WIDTH = 300;
 function getString(data: Record<string, unknown>, key: string): string {
   const v = data[key];
   return typeof v === 'string' ? v : '';
+}
+
+function readNumber(data: Record<string, unknown>, key: string): number {
+  const v = data[key];
+  return typeof v === 'number' ? v : 0;
 }
 
 function makePreview(
@@ -48,6 +71,28 @@ function makePreview(
     .trim();
 }
 
+function typeIconFor(type: string | undefined, data: Record<string, unknown>) {
+  if (type === 'image') {
+    return ImageIcon;
+  }
+  if (type === 'asset') {
+    return Paperclip;
+  }
+  if (type === 'link') {
+    return Link2;
+  }
+  if (type === 'card' && data.type === 'checklist') {
+    return ListChecks;
+  }
+  return FileText;
+}
+
+const THUMBNAIL_WIDTH = 56;
+const THUMBNAIL_HEIGHT = 42;
+const NATURAL_WIDTH = 208;
+const NATURAL_HEIGHT = 156;
+const SCALE = THUMBNAIL_WIDTH / NATURAL_WIDTH;
+
 // Component split is a broad UI refactor; keep current interaction grouping intact.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
@@ -68,11 +113,19 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
       ) {
         const data = n.data as Record<string, unknown>;
         out.push({
+          color: getString(data, 'color'),
+          data,
+          fileName: getString(data, 'fileName'),
           id: `node:${n.id}`,
+          imageUrl: getString(data, 'imageUrl'),
+          mimeType: getString(data, 'mimeType'),
           nodeId: n.id,
-          title: getString(data, 'title') || 'Untitled',
           preview: makePreview(data, n.type),
+          thumbnailUrl: getString(data, 'thumbnailUrl'),
+          title: getString(data, 'title') || 'Untitled',
           type: n.type,
+          updatedAt: readNumber(data, 'updatedAt'),
+          url: getString(data, 'url'),
         });
       }
     }
@@ -288,11 +341,15 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
             <ul className="flex flex-col">
               {entries.map((entry, idx) => {
                 const isSelected = entry.nodeId === selectedNodeId;
+                const Icon = typeIconFor(entry.type, entry.data ?? {});
+                const relative = entry.updatedAt
+                  ? formatRelativeTime(entry.updatedAt)
+                  : '';
                 return (
                   <li
                     aria-current={isSelected ? 'true' : undefined}
                     className={cn(
-                      'group px-4 py-3 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
+                      'group px-3 py-2.5 text-sm transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
                       idx > 0 && 'border-black/5 border-t dark:border-white/5',
                       isSelected && 'bg-accent-softer hover:bg-accent-soft'
                     )}
@@ -302,7 +359,46 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                       handleDragStart(e, entry);
                     }}
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      {/* Thumbnail preview */}
+                      <div className="relative shrink-0 overflow-hidden rounded-md border border-black/5 dark:border-white/10">
+                        <div
+                          className="flex items-center justify-center bg-gray-50 dark:bg-neutral-800"
+                          style={{
+                            height: THUMBNAIL_HEIGHT,
+                            width: THUMBNAIL_WIDTH,
+                          }}
+                        >
+                          {entry.type === 'image' &&
+                          (entry.thumbnailUrl || entry.imageUrl) ? (
+                            <img
+                              alt=""
+                              className="size-full object-cover"
+                              src={entry.thumbnailUrl || entry.imageUrl}
+                            />
+                          ) : (
+                            <div
+                              className="flex size-full origin-top-left items-center justify-center overflow-hidden"
+                              style={{
+                                height: NATURAL_HEIGHT,
+                                transform: `scale(${SCALE})`,
+                                transformOrigin: 'top left',
+                                width: NATURAL_WIDTH,
+                              }}
+                            >
+                              <FolderChildPreview
+                                child={{
+                                  data: entry.data ?? {},
+                                  id: entry.nodeId,
+                                  type: entry.type ?? 'card',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Content area */}
                       <button
                         className="min-w-0 flex-1 cursor-pointer text-left outline-hidden"
                         onClick={() => {
@@ -310,21 +406,29 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                         }}
                         type="button"
                       >
-                        <h3 className="truncate font-medium text-gray-800 dark:text-gray-100">
+                        <h3 className="truncate font-medium text-[13px] text-gray-800 leading-snug dark:text-gray-100">
                           {entry.title}
                         </h3>
                         {entry.preview ? (
-                          <p className="mt-1 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-500 leading-[1.3] dark:text-gray-400">
                             {entry.preview}
                           </p>
                         ) : (
-                          <p className="mt-1 text-[12px] text-gray-400 italic dark:text-gray-600">
+                          <p className="mt-0.5 text-[11px] text-gray-400 italic leading-[1.3] dark:text-gray-600">
                             {entry.type === 'asset'
                               ? 'No file metadata'
                               : 'Empty note'}
                           </p>
                         )}
+                        <div className="mt-1 flex items-center gap-1.5 text-2xs text-gray-400 dark:text-neutral-500">
+                          <Icon aria-hidden size={10} strokeWidth={1.75} />
+                          {relative ? (
+                            <span className="truncate">{relative}</span>
+                          ) : null}
+                        </div>
                       </button>
+
+                      {/* Pin button */}
                       <button
                         aria-label="Pin to canvas"
                         className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-2xs text-accent-strong opacity-0 transition-opacity hover:bg-accent-softer group-hover:opacity-100"

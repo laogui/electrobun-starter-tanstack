@@ -1,14 +1,6 @@
-import {
-  Bell,
-  Clock3,
-  FileText,
-  ImageIcon,
-  Link2,
-  ListChecks,
-  Paperclip,
-} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
+import { TypeBadge } from '@/components/canvas/nodes/_shared/TypeBadge';
 import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
 
@@ -27,37 +19,74 @@ interface LibraryCardProps {
   onFocus?: (item: LibraryItem) => void;
 }
 
-function iconFor(type: string, data: Record<string, unknown>) {
+/** Capsule label painted by library chrome (fixed size, never scaled). */
+function typeLabelFor(type: string, data: Record<string, unknown>): string {
   if (type === 'image') {
-    return ImageIcon;
-  }
-  if (type === 'asset') {
-    return Paperclip;
+    return 'Image';
   }
   if (type === 'link') {
-    return Link2;
+    return 'Link';
+  }
+  if (type === 'asset') {
+    return assetTypeLabel(data);
   }
   if (type === 'card' && data.type === 'checklist') {
-    return ListChecks;
+    return 'Checklist';
   }
   if (type === 'widget') {
     if (data.kind === 'checklist') {
-      return ListChecks;
+      return 'Checklist';
     }
     if (data.kind === 'pomodoro') {
-      return Clock3;
+      return 'Timer';
     }
     if (data.kind === 'reminder') {
-      return Bell;
+      return 'Reminder';
     }
+    return 'Widget';
   }
-  return FileText;
+  if (type === 'recording') {
+    return 'Recording';
+  }
+  if (type === 'sticky') {
+    return 'Sticky';
+  }
+  return 'Note';
+}
+
+/** Mirrors AssetNode's getAssetLabel so library pills match canvas ones. */
+function assetTypeLabel(data: Record<string, unknown>): string {
+  if (data.missing === true) {
+    return 'Missing';
+  }
+  const mimeType = typeof data.mimeType === 'string' ? data.mimeType : '';
+  if (mimeType === 'application/pdf') {
+    return 'PDF';
+  }
+  if (
+    mimeType === 'application/zip' ||
+    mimeType === 'application/x-zip-compressed'
+  ) {
+    return 'Archive';
+  }
+  if (mimeType.startsWith('text/')) {
+    return 'Text';
+  }
+  if (data.kind === 'video') {
+    return 'Video';
+  }
+  if (data.kind === 'audio') {
+    return 'Audio';
+  }
+  return 'File';
 }
 
 /**
  * Fixed-size library card: a scaled-down live preview of the real canvas card
  * (same rendering path as folder thumbnails) above a compact footer with the
- * title, type icon, and relative timestamp.
+ * title and relative timestamp. Type is always a fixed-size top-right capsule
+ * painted by this chrome layer — never the scaled-down badge inside the
+ * miniature — so every card's pill is the same size.
  */
 export function LibraryCard({
   item,
@@ -66,7 +95,8 @@ export function LibraryCard({
   onFocus,
 }: LibraryCardProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const Icon = iconFor(item.type, item.data);
+  const typeLabel = typeLabelFor(item.type, item.data);
+  const missing = item.type === 'asset' && item.data.missing === true;
   const relative = formatRelativeTime(item.updatedAt);
   const title =
     item.title.trim().length > 0 ? item.title : m.library_untitled();
@@ -94,15 +124,24 @@ export function LibraryCard({
       ref={buttonRef}
       type="button"
     >
-      <LibraryItemPreview item={item} />
+      <span className="relative block">
+        <LibraryItemPreview item={item} />
+        <TypeBadge
+          className="absolute top-2 right-2 z-10 border-black/5 bg-white/85 text-neutral-600 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200"
+          missing={missing}
+        >
+          {typeLabel}
+        </TypeBadge>
+      </span>
       <span className="flex flex-col gap-1 border-gray-100 border-t px-3 py-2.5 dark:border-neutral-800">
         <span className="truncate font-medium text-[13px] text-gray-900 leading-snug dark:text-gray-100">
           {title}
         </span>
-        <span className="flex items-center gap-1.5 text-2xs text-gray-400 dark:text-neutral-500">
-          <Icon aria-hidden size={11} strokeWidth={1.75} />
-          {relative ? <span className="truncate">{relative}</span> : null}
-        </span>
+        {relative ? (
+          <span className="truncate text-2xs text-gray-400 dark:text-neutral-500">
+            {relative}
+          </span>
+        ) : null}
       </span>
     </button>
   );

@@ -26,6 +26,7 @@ export function TypeBadge({
           : 'border-black/10 bg-white/60 text-neutral-500 dark:border-white/10 dark:bg-white/10 dark:text-neutral-300',
         className
       )}
+      data-type-badge=""
     >
       {children}
     </span>

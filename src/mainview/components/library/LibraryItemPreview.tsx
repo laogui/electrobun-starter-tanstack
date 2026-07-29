@@ -44,7 +44,10 @@ export function LibraryItemPreview({ item }: { item: LibraryItem }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none relative select-none overflow-hidden bg-white dark:bg-neutral-900"
+      // Hide TypeBadges baked into the live node content — LibraryCard paints
+      // a single fixed-size capsule on top so every card matches. Without this,
+      // asset/image/link badges shrink with the preview scale.
+      className="pointer-events-none relative select-none overflow-hidden bg-white dark:bg-neutral-900 [&_[data-type-badge]]:hidden"
       inert
       style={{
         height: LIBRARY_PREVIEW_HEIGHT,

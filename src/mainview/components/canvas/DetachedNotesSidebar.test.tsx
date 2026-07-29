@@ -88,12 +88,12 @@ describe('DetachedNotesSidebar', () => {
 
     render(<DetachedNotesSidebar onClose={vi.fn()} />);
 
-    expect(screen.getByText('Docs')).toBeInTheDocument();
+    expect(screen.getAllByText('Docs').length).toBeGreaterThan(0);
     expect(screen.getByText('https://example.com/docs')).toBeInTheDocument();
-    expect(screen.getByText('Report')).toBeInTheDocument();
+    expect(screen.getAllByText('Report').length).toBeGreaterThan(0);
     expect(screen.getByText('application/pdf')).toBeInTheDocument();
 
-    const docsItem = screen.getByText('Docs').closest('li');
+    const docsItem = screen.getAllByText('Docs')[0].closest('li');
     expect(docsItem).not.toBeNull();
     fireEvent.click(
       within(docsItem!).getByRole('button', { name: 'Pin to canvas' })

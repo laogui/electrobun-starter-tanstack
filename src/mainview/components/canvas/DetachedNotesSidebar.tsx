@@ -171,22 +171,19 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
           <motion.section
             animate={{ opacity: 1 }}
             aria-label="Note preview"
-            className="absolute bottom-0 left-0 z-30 flex flex-col bg-white/95 backdrop-blur-sm dark:bg-neutral-900/95"
+            className="absolute inset-y-0 left-0 z-50 flex flex-col bg-white/95 backdrop-blur-sm dark:bg-neutral-900/95"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
-            style={{
-              top: 'var(--app-titlebar-height, 2.5rem)',
-              right: SIDEBAR_WIDTH,
-            }}
+            style={{ right: SIDEBAR_WIDTH }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            <header className="flex items-center justify-between gap-3 border-black/5 border-b px-6 py-3 dark:border-white/5">
+            <header className="electrobun-webkit-app-region-drag flex h-10 shrink-0 items-center justify-between gap-3 border-black/5 border-b px-6 dark:border-white/5">
               <h2 className="truncate font-semibold text-gray-800 text-sm dark:text-gray-100">
                 {selectedTitle}
               </h2>
               <button
                 aria-label="Close preview"
-                className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+                className="electrobun-webkit-app-region-no-drag flex size-6 shrink-0 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
                 onClick={() => {
                   setSelectedNodeId(null);
                 }}
@@ -261,19 +258,19 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
 
       <motion.aside
         animate={{ x: 0, opacity: 1 }}
-        className="absolute right-0 bottom-0 z-40 flex w-[300px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
+        className="absolute inset-y-0 right-0 z-50 flex w-[300px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
         exit={{ x: 300, opacity: 0 }}
         initial={{ x: 300, opacity: 0 }}
-        style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
         transition={{ type: 'spring', damping: 28, stiffness: 350 }}
       >
-        <header className="flex items-center justify-between border-black/5 border-b px-4 py-3 dark:border-white/5">
+        {/* h-10 matches the app titlebar so the title sits in the window chrome row */}
+        <header className="electrobun-webkit-app-region-drag flex h-10 shrink-0 items-center justify-between border-black/5 border-b px-4 dark:border-white/5">
           <h2 className="font-semibold text-[13px] text-gray-800 dark:text-gray-100">
             Note Library
           </h2>
           <button
             aria-label="Close sidebar"
-            className="flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+            className="electrobun-webkit-app-region-no-drag flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
             onClick={onClose}
             type="button"
           >

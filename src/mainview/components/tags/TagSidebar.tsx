@@ -155,13 +155,13 @@ function TagSidebarBody() {
       <motion.aside
         animate={{ x: 0, opacity: 1 }}
         aria-label={m.tags_sidebar_title()}
-        className="fixed right-0 bottom-0 z-30 flex w-[280px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
+        className="fixed inset-y-0 right-0 z-50 flex w-[280px] flex-col border-black/5 border-l bg-white/95 shadow-xl backdrop-blur-sm dark:border-white/5 dark:bg-neutral-900/95"
         exit={{ x: 300, opacity: 0 }}
         initial={{ x: 300, opacity: 0 }}
-        style={{ top: 'var(--app-titlebar-height, 2.5rem)' }}
         transition={{ type: 'spring', damping: 28, stiffness: 350 }}
       >
-        <header className="flex items-center gap-2 border-black/5 border-b px-4 py-3 dark:border-white/5">
+        {/* h-10 matches the app titlebar so the title sits in the window chrome row */}
+        <header className="electrobun-webkit-app-region-drag flex h-10 shrink-0 items-center gap-2 border-black/5 border-b px-4 dark:border-white/5">
           <TagIcon
             aria-hidden
             className="text-muted-foreground"
@@ -173,7 +173,7 @@ function TagSidebarBody() {
           </h2>
           <button
             aria-label={m.tags_sidebar_close()}
-            className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+            className="electrobun-webkit-app-region-no-drag flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
             onClick={close}
             type="button"
           >

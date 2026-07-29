@@ -2,6 +2,7 @@ import type { Node } from '@xyflow/react';
 import { useMemo } from 'react';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import type { Size } from '@/lib/collision';
 import type {
   ChecklistWidgetData,
   ReminderWidgetData,
@@ -23,6 +24,8 @@ export interface LibraryItem {
   /** "node:<id>" for top-level nodes, "child:<folderId>:<childId>" for folder children. */
   id: string;
   nodeId: string;
+  /** Measured canvas size when known; previews fall back to the spec size. */
+  size?: Size;
   title: string;
   type: string;
   /** Epoch ms; 0 when missing. Used for sort only. */
@@ -134,6 +137,24 @@ function widgetRecordToLibraryData(
   return next;
 }
 
+function toValidSize(value: unknown): Size | undefined {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  const { width, height } = value as Partial<Size>;
+  if (
+    typeof width === 'number' &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === 'number' &&
+    Number.isFinite(height) &&
+    height > 0
+  ) {
+    return { width, height };
+  }
+  return;
+}
+
 function toItem(params: {
   nodeId: string;
   type: string;
@@ -141,8 +162,9 @@ function toItem(params: {
   widgets: Record<string, WidgetRecord | WidgetLoadError>;
   folderId?: string;
   childId?: string;
+  size?: Size;
 }): LibraryItem {
-  const { nodeId, type, folderId, childId, widgets } = params;
+  const { nodeId, type, folderId, childId, widgets, size } = params;
   const data =
     type === 'widget'
       ? widgetRecordToLibraryData(params.data, widgets)
@@ -160,6 +182,7 @@ function toItem(params: {
     folderId,
     childId,
     color: typeof colorRaw === 'string' ? colorRaw : undefined,
+    size,
     updatedAt: readNumber(data, 'updatedAt'),
     createdAt: readNumber(data, 'createdAt'),
   };
@@ -224,6 +247,7 @@ export function buildLibrary(
       id: string;
       type?: string;
       data: Record<string, unknown>;
+      size?: Size;
     }>;
     const items: LibraryItem[] = [];
     for (const child of children) {
@@ -239,6 +263,7 @@ export function buildLibrary(
           widgets,
           folderId: node.id,
           childId: child.id,
+          size: toValidSize(child.size),
         })
       );
     }
@@ -264,6 +289,7 @@ export function buildLibrary(
       type: node.type as string,
       data,
       widgets,
+      size: toValidSize(node.measured),
     });
     if (data.detached) {
       if (matchesQuery(item, normalizedQuery)) {

@@ -59,7 +59,15 @@ interface SelectTriggerProps {
   children: ReactNode;
   className?: string;
   id?: string;
+  /** `soft` matches filled toolbar fields (search inputs); default is elevated button. */
+  variant?: 'default' | 'soft';
 }
+
+const selectTriggerVariants = {
+  default:
+    'rounded-md border-neutral-300 bg-white text-neutral-950 text-sm shadow-sm hover:bg-neutral-50 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 data-[popup-open]:border-accent dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50 dark:hover:bg-neutral-800',
+  soft: 'rounded-lg border-gray-200 bg-gray-50 text-[13px] text-gray-700 shadow-none hover:bg-gray-50 focus-visible:border-gray-300 focus-visible:bg-white focus-visible:ring-0 data-[popup-open]:border-gray-300 data-[popup-open]:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:border-neutral-600 dark:data-[popup-open]:border-neutral-600 dark:data-[popup-open]:bg-neutral-800',
+} as const;
 
 function SelectTrigger({
   'aria-label': ariaLabel,
@@ -67,6 +75,7 @@ function SelectTrigger({
   className,
   children,
   id,
+  variant = 'default',
 }: SelectTriggerProps) {
   const contextLabelId = use(SelectContext);
   const labelId =
@@ -77,15 +86,26 @@ function SelectTrigger({
       aria-label={ariaLabel}
       aria-labelledby={labelId}
       className={cn(
-        'flex h-9 w-full items-center justify-between rounded-md border border-neutral-300 bg-white px-3 text-left text-neutral-950 text-sm shadow-sm outline-hidden transition-colors hover:bg-neutral-50 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 data-[popup-open]:border-accent dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50 dark:hover:bg-neutral-800',
+        'flex h-9 w-full items-center justify-between gap-2 border px-3 text-left outline-hidden transition-colors',
+        selectTriggerVariants[variant],
         className
       )}
       data-slot="select-trigger"
       id={id}
     >
       {children}
-      <SelectPrimitive.Icon className="ml-3 flex text-neutral-500 transition-transform data-[popup-open]:rotate-180 dark:text-neutral-400">
-        <ChevronDownIcon aria-hidden className="size-4" />
+      <SelectPrimitive.Icon
+        className={cn(
+          'flex shrink-0 transition-transform data-[popup-open]:rotate-180',
+          variant === 'soft'
+            ? 'text-gray-400 dark:text-neutral-500'
+            : 'text-neutral-500 dark:text-neutral-400'
+        )}
+      >
+        <ChevronDownIcon
+          aria-hidden
+          className={variant === 'soft' ? 'size-3.5' : 'size-4'}
+        />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );

@@ -1,5 +1,5 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
-import { type MutableRefObject, useEffect } from 'react';
+import { type MutableRefObject, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
@@ -94,8 +94,25 @@ export function useCanvasKeyboard({
   const searchOpen = useCanvasStore((s) => s.searchOpen);
   const setPendingSearchQuery = useCanvasStore((s) => s.setPendingSearchQuery);
 
+  // These values change identity on focus navigation / search toggle, but the
+  // keydown handler only needs their *current* value at event time. Mirror them
+  // into refs so the listener is wired up once instead of being torn down and
+  // rebuilt on every navigation (which also raced the Escape handler).
+  const focusedNodeRef = useRef(focusedNode);
+  focusedNodeRef.current = focusedNode;
+  const focusedFolderRef = useRef(focusedFolder);
+  focusedFolderRef.current = focusedFolder;
+  const searchOpenRef = useRef(searchOpen);
+  searchOpenRef.current = searchOpen;
+  const onCloseFolderRef = useRef(onCloseFolder);
+  onCloseFolderRef.current = onCloseFolder;
+  const onDeleteNodesRef = useRef(onDeleteNodes);
+  onDeleteNodesRef.current = onDeleteNodes;
+  const rfInstanceRef = useRef(rfInstance);
+  rfInstanceRef.current = rfInstance;
+
   useEffect(() => {
-    const isModal = () => focusedNode || focusedFolder;
+    const isModal = () => focusedNodeRef.current || focusedFolderRef.current;
     const isEditing = () => {
       const el = document.activeElement;
       return (
@@ -117,17 +134,18 @@ export function useCanvasKeyboard({
       }
 
       if (e.key === 'Escape') {
-        if (searchOpen) {
+        if (searchOpenRef.current) {
           // Let Dialog handle escape itself; do nothing here.
           return;
         }
-        if (focusedNode) {
+        if (focusedNodeRef.current) {
           setFocusedNode(null);
           return;
         }
-        if (focusedFolder) {
-          if (onCloseFolder) {
-            onCloseFolder();
+        if (focusedFolderRef.current) {
+          const close = onCloseFolderRef.current;
+          if (close) {
+            close();
           } else {
             setFocusedFolder(null);
           }
@@ -169,19 +187,19 @@ export function useCanvasKeyboard({
 
       if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
-        rfInstance?.current?.zoomIn?.({ duration: 180 });
+        rfInstanceRef.current?.current?.zoomIn?.({ duration: 180 });
         return;
       }
 
       if (mod && e.key === '-') {
         e.preventDefault();
-        rfInstance?.current?.zoomOut?.({ duration: 180 });
+        rfInstanceRef.current?.current?.zoomOut?.({ duration: 180 });
         return;
       }
 
       if (mod && e.key === '0') {
         e.preventDefault();
-        rfInstance?.current?.zoomTo?.(1, { duration: 180 });
+        rfInstanceRef.current?.current?.zoomTo?.(1, { duration: 180 });
         return;
       }
 
@@ -194,8 +212,9 @@ export function useCanvasKeyboard({
           }
         }
         if (selectedIds.length > 0) {
-          if (onDeleteNodes) {
-            onDeleteNodes(selectedIds);
+          const deleteHandler = onDeleteNodesRef.current;
+          if (deleteHandler) {
+            deleteHandler(selectedIds);
           } else {
             deleteNodes(selectedIds);
             toast(
@@ -227,7 +246,8 @@ export function useCanvasKeyboard({
 
       if (mod && key === 'x') {
         e.preventDefault();
-        if (onDeleteNodes) {
+        const cutHandler = onDeleteNodesRef.current;
+        if (cutHandler) {
           const selectedIds: string[] = [];
           for (const node of useCanvasStore.getState().nodes) {
             if (node.selected) {
@@ -236,7 +256,7 @@ export function useCanvasKeyboard({
           }
           if (selectedIds.length > 0) {
             copySelected();
-            onDeleteNodes(selectedIds);
+            cutHandler(selectedIds);
           }
         } else {
           cutSelected();
@@ -291,7 +311,7 @@ export function useCanvasKeyboard({
         const selected = selectNodeInDirection(direction, {
           extend: e.shiftKey,
         });
-        centerNodeIfNeeded(selected, rfInstance?.current);
+        centerNodeIfNeeded(selected, rfInstanceRef.current?.current);
         return;
       }
 
@@ -360,9 +380,10 @@ export function useCanvasKeyboard({
       globalThis.removeEventListener('open-search', handleOpenSearch);
     };
   }, [
-    focusedNode,
-    focusedFolder,
-    onCloseFolder,
+    // All Zustand actions here are stable references, so the listener is wired
+    // up once for the lifetime of the component. The focus/search/instance
+    // values are read through refs above, so they intentionally do NOT appear
+    // here (they would tear down & rebuild the keydown listener on every nav).
     setFocusedNode,
     setFocusedFolder,
     setNodes,
@@ -377,11 +398,8 @@ export function useCanvasKeyboard({
     setCreateMenuOpen,
     ungroupSelected,
     setSearchOpen,
-    searchOpen,
     setPendingSearchQuery,
-    onDeleteNodes,
     undo,
     redo,
-    rfInstance,
   ]);
 }

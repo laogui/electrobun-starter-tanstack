@@ -278,6 +278,10 @@ function sortLabel(value: LibrarySortKey): string {
   return SORT_OPTIONS.find((opt) => opt.value === value)?.label() ?? value;
 }
 
+/** Shared chrome for search + sort so they read as one control family. */
+const HEADER_FIELD =
+  'h-9 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-900 shadow-none outline-hidden transition-colors focus-within:border-gray-300 focus-within:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus-within:border-neutral-600 dark:focus-within:bg-neutral-800';
+
 function LibraryHeader({
   onClose,
   onQueryChange,
@@ -305,15 +309,17 @@ function LibraryHeader({
           </span>
         </div>
       </div>
-      <div className="ml-2 flex h-9 flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 transition-colors focus-within:border-gray-300 focus-within:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:focus-within:border-neutral-600 dark:focus-within:bg-neutral-800">
+      <div
+        className={`ml-2 flex flex-1 items-center gap-2 px-3 ${HEADER_FIELD}`}
+      >
         <Search
           aria-hidden
-          className="text-gray-400 dark:text-neutral-500"
+          className="shrink-0 text-gray-400 dark:text-neutral-500"
           size={15}
         />
         <input
           aria-label={m.library_search_placeholder()}
-          className="h-full flex-1 bg-transparent text-[13px] text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-neutral-500"
+          className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-neutral-500"
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={m.library_search_placeholder()}
           ref={searchInputRef}
@@ -335,7 +341,8 @@ function LibraryHeader({
       >
         <SelectTrigger
           aria-label={m.library_sort_label()}
-          className="h-9 w-auto min-w-[136px] shrink-0 px-3 text-[12px]"
+          className="w-auto min-w-[136px] shrink-0"
+          variant="soft"
         >
           <SelectValue>{sortLabel(sort)}</SelectValue>
         </SelectTrigger>
@@ -408,7 +415,7 @@ function LibraryBody({
             <h3 className="mb-3 px-0.5 font-semibold text-[12px] text-gray-700 uppercase tracking-wide dark:text-neutral-300">
               {m.library_recent_heading()}
             </h3>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,208px)] justify-center gap-4">
               {recentItems.map((item) => (
                 <LibraryCard item={item} key={item.id} onClick={onItemClick} />
               ))}
@@ -465,7 +472,7 @@ function LibraryGroupSection({
           {group.items.length}
         </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,208px)] justify-center gap-4">
         {group.items.map((item) => (
           <LibraryCard
             isFocused={item.id === focusedId}

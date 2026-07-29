@@ -1562,7 +1562,10 @@ function CanvasComponent() {
     return result;
   }, [
     renderSourceNodes,
-    focusedNode,
+    // The memo body only reads `focusedNode?.id` (to hide the focused node on
+    // canvas), so depending on the whole object would re-run this O(n) loop on
+    // every rect/data change to the focused item even though the id is stable.
+    focusedNode?.id,
     focusedFolderId,
     closingFolderId,
     dropTargetId,

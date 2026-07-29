@@ -17,19 +17,19 @@ describe('DetachedNotesSidebar', () => {
     vi.clearAllMocks();
   });
 
-  it('opens from the right below the measured titlebar area', () => {
+  it('opens full-height on the right with a titlebar-height header', () => {
     render(<DetachedNotesSidebar onClose={vi.fn()} />);
 
     const sidebar = screen.getByRole('complementary');
+    const header = sidebar.querySelector('header');
 
     expect(sidebar).toHaveClass('right-0');
-    expect(sidebar).toHaveClass('bottom-0');
+    expect(sidebar).toHaveClass('inset-y-0');
     expect(sidebar).toHaveClass('border-l');
     expect(sidebar).not.toHaveClass('left-0');
     expect(sidebar).not.toHaveClass('border-r');
-    expect(sidebar.getAttribute('style')).toContain(
-      'top: var(--app-titlebar-height, 2.5rem)'
-    );
+    expect(header).toHaveClass('h-10');
+    expect(header).toHaveClass('electrobun-webkit-app-region-drag');
   });
 
   it('keeps only the close action when the library is empty', () => {

@@ -350,6 +350,13 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
 
   const handleNavigate = useCallback(
     (item: FocusedItem) => {
+      // Navigating to the *same* node (e.g. a stray re-click) used to recompute
+      // a fresh DOMRect via getBoundingClientRect, which gave focusedNode a new
+      // object identity and rippled into unnecessary re-renders + keyboard
+      // listener rebuilds. Keep the existing rect when the target is unchanged.
+      if (item.id === node.id && item.folderId === folderId) {
+        return;
+      }
       const latestNode = item.folderId
         ? null
         : nodes.find((candidate) => candidate.id === item.id);
@@ -366,7 +373,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         rect: domRectForItem(latestItem),
       });
     },
-    [nodes, setFocusedNode]
+    [nodes, setFocusedNode, node.id, folderId]
   );
 
   const isText =
@@ -493,7 +500,12 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const openTransition = shouldReduceMotion
     ? { duration: 0.1 }
     : {
-        default: { type: 'spring' as const, stiffness: 240, damping: 30, mass: 0.9 },
+        default: {
+          type: 'spring' as const,
+          stiffness: 240,
+          damping: 30,
+          mass: 0.9,
+        },
         opacity: { duration: 0.18, ease: EASE_OUT_QUINT },
       };
   const closeTransition = {

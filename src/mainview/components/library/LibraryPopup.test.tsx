@@ -71,14 +71,16 @@ describe('LibraryPopup', () => {
     ]);
     render(<Harness />);
 
-    expect(screen.getByText('Roadmap')).toBeInTheDocument();
-    expect(screen.getByText('Inbox triage')).toBeInTheDocument();
+    // Titles appear twice per card: once in the scaled live preview and once
+    // in the footer caption.
+    expect(screen.getAllByText('Roadmap').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Inbox triage').length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText('Search notes…'), {
       target: { value: 'road' },
     });
 
-    expect(screen.getByText('Roadmap')).toBeInTheDocument();
+    expect(screen.getAllByText('Roadmap').length).toBeGreaterThan(0);
     expect(screen.queryByText('Inbox triage')).not.toBeInTheDocument();
   });
 
@@ -104,7 +106,7 @@ describe('LibraryPopup', () => {
     ]);
     render(<Harness />);
 
-    fireEvent.click(screen.getByText('Roadmap'));
+    fireEvent.click(screen.getAllByText('Roadmap')[0]!);
 
     expect(useCanvasStore.getState().libraryOpen).toBe(false);
     expect(canvasFocusMock.openFocusedById).toHaveBeenCalledWith(
@@ -128,7 +130,7 @@ describe('LibraryPopup', () => {
     ]);
     render(<Harness />);
 
-    fireEvent.click(screen.getByText('Inside child'));
+    fireEvent.click(screen.getAllByText('Inside child')[0]!);
 
     expect(canvasFocusMock.openFocusedById).toHaveBeenCalledWith(
       expect.objectContaining({ nodeId: 'folder-1' })
@@ -246,7 +248,7 @@ describe('LibraryPopup', () => {
     expect(screen.getByText('Clear search')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
     // The recent recommendation surfaces the existing card despite the query.
-    expect(screen.getByText('Roadmap')).toBeInTheDocument();
+    expect(screen.getAllByText('Roadmap').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByText('Clear search'));
     expect(screen.queryByText('Clear search')).not.toBeInTheDocument();

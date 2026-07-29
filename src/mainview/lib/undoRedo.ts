@@ -7,6 +7,11 @@ export interface CanvasSnapshot {
   viewport?: CanvasViewport | null;
 }
 
+// Each snapshot holds *references* to the nodes/edges arrays at commit time.
+// Because store updates are immutable, the arrays differ between snapshots but
+// unchanged node objects are shared (structural sharing), so the true memory
+// cost is roughly (MAX_HISTORY array shells) + (changed node objects), not
+// MAX_HISTORY full deep copies.
 const MAX_HISTORY = 50;
 
 export interface UndoRedoState {

@@ -93,7 +93,7 @@ describe('DetachedNotesSidebar', () => {
     expect(screen.getAllByText('Report').length).toBeGreaterThan(0);
     expect(screen.getByText('application/pdf')).toBeInTheDocument();
 
-    const docsItem = screen.getAllByText('Docs')[0].closest('li');
+    const docsItem = screen.getAllByText('Docs')[0]?.closest('li');
     expect(docsItem).not.toBeNull();
     fireEvent.click(
       within(docsItem!).getByRole('button', { name: 'Pin to canvas' })

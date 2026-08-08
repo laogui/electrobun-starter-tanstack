@@ -428,5 +428,18 @@
   "settings_about_update_no_update": "You are on the latest version.",
   "settings_about_update_error": "Could not check for updates.",
   "settings_about_dev_channel_note": "Updates are disabled on the dev channel. Use a release build to receive automatic updates.",
-  "settings_about_changelog": "View release notes"
+  "settings_about_changelog": "View release notes",
+  "menu_ai_summarize": "Summarize with AI",
+  "ai_panel_title": "AI Summary",
+  "ai_panel_loading": "AI is reading your selection…",
+  "ai_panel_insert": "Insert card",
+  "ai_panel_discard": "Discard",
+  "ai_panel_actions": "{count} canvas change(s)",
+  "ai_error_disabled": "AI is not enabled. Add a provider and API key in Settings.",
+  "ai_error_empty_selection": "Select at least one card or sticky with content first.",
+  "ai_error_model": "The AI request failed. Check your provider settings or try again.",
+  "ai_error_rpc": "Could not reach the app backend. Restart the app and try again.",
+  "ai_error_unsupported": "This AI task is not available yet.",
+  "ai_error_open_settings": "Open Settings",
+  "toast_ai_card_added": "AI summary added — press ⌘Z to undo"
 }

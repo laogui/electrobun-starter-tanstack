@@ -28,6 +28,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
+import { AISummaryPanel } from '@/components/canvas/AISummaryPanel';
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar';
 import { CanvasViewportChrome } from '@/components/canvas/CanvasViewportChrome';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
@@ -1913,6 +1914,8 @@ function CanvasComponent() {
 
       <CanvasToolbar />
       <LibraryPopup rfInstance={rfInstance} />
+
+      <AISummaryPanel rfInstance={rfInstance} />
 
       <TagSidebar />
 

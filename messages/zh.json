@@ -428,5 +428,18 @@
   "settings_about_update_no_update": "已经是最新版本。",
   "settings_about_update_error": "无法检查更新。",
   "settings_about_dev_channel_note": "开发通道不支持自动更新，请使用正式版本以接收更新。",
-  "settings_about_changelog": "查看更新日志"
+  "settings_about_changelog": "查看更新日志",
+  "menu_ai_summarize": "AI 总结",
+  "ai_panel_title": "AI 总结",
+  "ai_panel_loading": "AI 正在阅读所选内容…",
+  "ai_panel_insert": "插入卡片",
+  "ai_panel_discard": "丢弃",
+  "ai_panel_actions": "{count} 处画布修改",
+  "ai_error_disabled": "AI 未启用，请在设置中配置模型和 API Key。",
+  "ai_error_empty_selection": "请先选择至少一个有内容的卡片或便利贴。",
+  "ai_error_model": "AI 请求失败，请检查模型设置或重试。",
+  "ai_error_rpc": "无法连接应用后端，请重启应用后重试。",
+  "ai_error_unsupported": "该 AI 任务暂不可用。",
+  "ai_error_open_settings": "打开设置",
+  "toast_ai_card_added": "AI 总结已添加到画布，按 ⌘Z 可撤销"
 }

@@ -8,8 +8,10 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
+import type { AIRunTaskParams, AIRunTaskResponse } from '../shared/ai/types';
 import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
+import { runAITask } from './aiTasks';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
@@ -921,6 +923,10 @@ interface CanvasRPC {
       setAIApiKey: {
         params: { apiKey: string | null };
         response: { success: boolean };
+      };
+      aiRunTask: {
+        params: AIRunTaskParams;
+        response: AIRunTaskResponse;
       };
       listTrash: {
         params: Record<string, unknown>;
@@ -2651,6 +2657,14 @@ async function main() {
           await saveAIApiKey(apiKey);
           cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
           return { success: true };
+        },
+
+        aiRunTask: async (params) => {
+          const config = buildAIConfig();
+          if (!config) {
+            return { success: false, error: 'ai-disabled' };
+          }
+          return runAITask(params, config, wsPath);
         },
 
         listTrash: async () => await listTrash(wsPath),

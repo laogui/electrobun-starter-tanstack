@@ -17,6 +17,7 @@ import type {
   UpdateCheckResult,
   WorkspaceInfo,
 } from '@/settingsClient';
+import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
 
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
@@ -695,6 +696,16 @@ export async function rpcSetAIApiKey(apiKey: string | null) {
     return { success: false };
   }
   return eb.rpc.request.setAIApiKey({ apiKey });
+}
+
+export async function rpcRunAITask(
+  params: AIRunTaskParams
+): Promise<AIRunTaskResponse | null> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.aiRunTask(params);
 }
 
 export async function rpcCheckLicense(): Promise<LicenseInfo | null> {

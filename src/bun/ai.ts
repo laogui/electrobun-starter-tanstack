@@ -19,7 +19,7 @@ export interface AIServerConfig {
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 
-function resolveModel(config: AIServerConfig): LanguageModel {
+export function resolveModel(config: AIServerConfig): LanguageModel {
   switch (config.provider) {
     case 'anthropic': {
       const anthropic = createAnthropic({ apiKey: config.apiKey });

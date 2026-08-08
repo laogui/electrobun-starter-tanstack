@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
+import { runAISummarize } from '@/lib/ai/runAISummarize';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import {
@@ -416,6 +417,12 @@ export function useContextMenu({
         }
         case 'group-selection': {
           groupSelected();
+          break;
+        }
+        case 'ai-summarize': {
+          runAISummarize().catch((error) => {
+            console.error('[AI] summarize task failed:', error);
+          });
           break;
         }
         case 'paste': {

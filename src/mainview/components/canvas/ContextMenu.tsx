@@ -74,7 +74,8 @@ type ContextMenuState = {
     | 'sticky'
     | 'recording'
     | 'multi'
-    | 'edge';
+    | 'edge'
+    | 'widget';
   nodeId?: string;
   edgeId?: string;
   /** Present when the target is an expanded child stored inside a folder. */
@@ -129,6 +130,11 @@ const getCardItems = (locked: boolean): MenuItem[] => [
   { id: 'copy-as-markdown', label: m.menu_copy_as_markdown(), icon: Copy },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  {
+    id: 'ai-summarize',
+    label: m.menu_ai_summarize(),
+    icon: Sparkles,
+  },
   lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
   { id: 'export-markdown', label: m.menu_export_markdown(), icon: FileDown },
@@ -199,6 +205,11 @@ const getStickyItems = (locked: boolean): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
+  {
+    id: 'ai-summarize',
+    label: m.menu_ai_summarize(),
+    icon: Sparkles,
+  },
   lockItem(locked),
   {
     id: 'delete',
@@ -300,6 +311,11 @@ const getMultiItems = (
       label: m.menu_group(),
       icon: Group,
       shortcut: '⌘G',
+    },
+    {
+      id: 'ai-summarize',
+      label: m.menu_ai_summarize(),
+      icon: Sparkles,
     },
     { id: 'change-color', label: m.menu_change_color(), icon: Palette },
     { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },

@@ -70,6 +70,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_move_to_view: () => 'Move to canvas…',
   menu_change_color: () => 'Change color',
   menu_edit_tag: () => 'Edit Tag',
+  menu_ai_summarize: () => 'Summarize with AI',
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',

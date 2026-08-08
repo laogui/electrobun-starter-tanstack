@@ -4,7 +4,7 @@
 
 ## 架构
 
-- **后端 API** (`backend-api/`): Node.js/Express，负责签发与校验许可证。
+- **后端 API**（独立服务，非本仓库目录）: Node.js/Express，负责签发与校验许可证。客户端只通过环境变量 `LICENSE_API_URL` 与 `USE_ONLINE_LICENSE` 连接，不假设后端在本仓库内。
 - **主进程** (`src/bun/license.ts`): 设备指纹、本地加密存储、调用后端 API。
 - **渲染进程** (`src/mainview/lib/rpc-license.ts`): 通过 Electrobun RPC 调用主进程。
 - **UI**: `LicenseStatusCard` + `LicenseActivationDialog`，集成在设置页 General 面板。
@@ -21,15 +21,20 @@
 
 ## 后端 API
 
-启动：
+后端为独立部署的服务（仓库外），需自行实现并托管。客户端通过以下两个环境变量连接：
+
+- `LICENSE_API_URL` — 后端基地址（如 `https://api.ghostboard.app/api/v1`）。默认回退到 `http://localhost:3001/api/v1`。
+- `USE_ONLINE_LICENSE` — 设为 `true` 才启用在线校验；默认关闭（关闭时仅做本地 XOR 混淆，可被离线绕过）。
+
+启动（以独立的后端仓库为例）：
 
 ```bash
-cd backend-api
+cd <你的后端仓库>
 bun install
 bun run server.js   # 默认端口 3001
 ```
 
-主要端点（详见 `backend-api/README.md`）：
+主要端点（需在后端实现）：
 
 - `POST /api/v1/licenses` — 管理端签发新密钥（需 `ADMIN_API_KEY`）。
 - `POST /api/v1/licenses/activate` — 激活：绑定密钥到指纹。
@@ -38,7 +43,7 @@ bun run server.js   # 默认端口 3001
 
 ## 客户端配置
 
-主进程 `src/bun/license.ts` 中的 `API_BASE_URL` 指向后端地址。许可证文件存于工作区 `.ghostboard/license.dat`。
+主进程 `src/bun/license.ts` 中的 `API_BASE_URL` 由 `LICENSE_API_URL` 决定，指向后端地址。许可证文件存于工作区 `.ghostboard/license.dat`。
 
 ## 卡片限制实现
 

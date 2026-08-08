@@ -814,7 +814,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | TODO-24 | **显式「从 Markdown 重新导入」** | 当前已支持选择多个外部 `.md` 文件导入为新 Note；仍缺"覆盖当前笔记内容"路径。新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。 | P1 |
 | TODO-25 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
 | TODO-26 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
-| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（当前约 2242 行），每加一个功能都要改这个文件。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`、`handlers/assets.ts`。来源：原架构审计。 | P2 |
+| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（当前约 2841 行），每加一个功能都要改这个文件。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`、`handlers/assets.ts`。来源：原架构审计。 | P2 |
 | TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（当前约 1584 行）。建议继续提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit`、`useCanvasSearchNavigation` 等自定义 hooks。来源：原架构审计。 | P2 |
 | TODO-20 | **深色主题覆盖不完整** | 近期 design tokens / accent 色已有改善，但 Group label、部分 placeholder、媒体卡片 hover 信息等仍需逐组件审查深色主题适配。来源：原架构审计。 | P2 |
 | TODO-22 | **Onboarding 引导流程** | 首次打开应用 seed 了 `quick-start` 模板，但没有任何浮层引导。建议在首次启动时显示 3-4 步引导浮层：1.「拖拽平移画布」2.「点击卡片打开，框选/修饰键选择」3.「右键或 + 创建新内容」4.「Cmd+K 搜索」。来源：原架构审计。 | P2 |

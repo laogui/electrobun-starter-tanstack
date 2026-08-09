@@ -4,68 +4,69 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { saveRecording } from '@/lib/recordingFiles';
 
+const rpcSaveAttachmentMock = vi.hoisted(() => vi.fn());
 const uploadAttachmentBlobMock = vi.hoisted(() => vi.fn());
 const resolveAttachmentStreamUrlMock = vi.hoisted(() => vi.fn());
-const createAudioWaveformMock = vi.hoisted(() => vi.fn());
+
+const DATA_URL_WAV_RE = /^data:audio\/wav;base64,/;
 
 vi.mock('@/lib/rpc', () => ({
   resolveAttachmentStreamUrl: resolveAttachmentStreamUrlMock,
+  rpcSaveAttachment: rpcSaveAttachmentMock,
   uploadAttachmentBlob: uploadAttachmentBlobMock,
-}));
-
-vi.mock('@/lib/thumbnail', () => ({
-  createAudioWaveform: createAudioWaveformMock,
 }));
 
 describe('saveRecording', () => {
   afterEach(() => {
+    rpcSaveAttachmentMock.mockReset();
     uploadAttachmentBlobMock.mockReset();
     resolveAttachmentStreamUrlMock.mockReset();
-    createAudioWaveformMock.mockReset();
   });
 
-  it('saves an m4a attachment with waveform metadata and a stream URL', async () => {
-    createAudioWaveformMock.mockResolvedValueOnce({
-      duration: 12.5,
-      waveform: [0.1, 0.8],
-    });
-    uploadAttachmentBlobMock.mockResolvedValueOnce({
-      filePath: 'attachments/recording_abc.m4a',
+  it('saves via RPC data URL with caller-supplied waveform and a stream URL', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce({
+      filePath: 'attachments/recording_abc.wav',
     });
     resolveAttachmentStreamUrlMock.mockResolvedValueOnce(
-      'http://127.0.0.1:4242/attachment?path=recording_abc.m4a'
+      'http://127.0.0.1:4242/attachment?path=recording_abc.wav'
     );
-    const blob = new Blob(['audio'], { type: 'audio/mp4' });
+    const blob = new Blob(['audio-bytes'], { type: 'audio/wav' });
 
     await expect(
       saveRecording({
         blob,
         durationMs: 9000,
-        mimeType: 'audio/mp4',
+        mimeType: 'audio/wav',
         recordingNumber: 6,
+        waveform: [0.1, 0.8],
       })
     ).resolves.toEqual({
-      attachmentFile: 'attachments/recording_abc.m4a',
+      attachmentFile: 'attachments/recording_abc.wav',
       color: '#FFFFFF',
-      duration: 12.5,
-      fileName: 'recording-6.m4a',
-      mimeType: 'audio/mp4',
-      previewUrl: 'http://127.0.0.1:4242/attachment?path=recording_abc.m4a',
+      duration: 9,
+      fileName: 'recording-6.wav',
+      mimeType: 'audio/wav',
+      previewUrl: 'http://127.0.0.1:4242/attachment?path=recording_abc.wav',
       recordingNumber: 6,
-      size: 5,
+      size: 11,
       title: '',
       waveform: [0.1, 0.8],
     });
 
-    expect(uploadAttachmentBlobMock).toHaveBeenCalledWith(blob, {
-      fileName: 'recording-6.m4a',
+    expect(rpcSaveAttachmentMock).toHaveBeenCalledTimes(1);
+    const [dataUrl, existing, options] = rpcSaveAttachmentMock.mock.calls[0]!;
+    expect(String(dataUrl)).toMatch(DATA_URL_WAV_RE);
+    expect(existing).toBeUndefined();
+    expect(options).toEqual({
       kind: 'audio',
-      mimeType: 'audio/mp4',
+      mimeType: 'audio/wav',
+      suggestedName: 'recording-6.wav',
     });
+    expect(uploadAttachmentBlobMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to recorder duration when waveform extraction fails', async () => {
-    createAudioWaveformMock.mockRejectedValueOnce(new Error('decode failed'));
+  it('falls back to HTTP upload when RPC save returns no path', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce(null);
     uploadAttachmentBlobMock.mockResolvedValueOnce({
       filePath: 'attachments/recording_abc.webm',
     });
@@ -86,10 +87,15 @@ describe('saveRecording', () => {
     });
     expect(result).not.toHaveProperty('previewUrl');
     expect(result).not.toHaveProperty('waveform');
+    expect(uploadAttachmentBlobMock).toHaveBeenCalledWith(expect.any(Blob), {
+      fileName: 'recording-2.webm',
+      kind: 'audio',
+      mimeType: 'audio/webm',
+    });
   });
 
-  it('throws when the attachment upload does not return a workspace file path', async () => {
-    createAudioWaveformMock.mockResolvedValueOnce({});
+  it('throws when neither RPC nor HTTP upload returns a workspace file path', async () => {
+    rpcSaveAttachmentMock.mockResolvedValueOnce({});
     uploadAttachmentBlobMock.mockResolvedValueOnce({});
 
     await expect(

@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createImageThumbnail } from '@/lib/thumbnail';
+import { createAudioWaveform, createImageThumbnail } from '@/lib/thumbnail';
 
 interface FakeImageOptions {
   height: number;
@@ -95,5 +95,37 @@ describe('createImageThumbnail', () => {
     vi.stubGlobal('Image', undefined);
     const result = await createImageThumbnail('data:image/png;base64,fakedata');
     expect(result).toBeNull();
+  });
+});
+
+describe('createAudioWaveform', () => {
+  it('returns empty metadata when decodeAudioData never settles', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        decodeAudioData() {
+          return new Promise(() => {
+            // Intentionally never resolves — mirrors hung WebKit decodes.
+          });
+        }
+        close() {
+          return Promise.resolve();
+        }
+      }
+    );
+
+    const file = new File([new Uint8Array([1, 2, 3])], 'stuck.m4a', {
+      type: 'audio/mp4',
+    });
+
+    // createObjectURL / HTMLAudioElement metadata path is best-effort in jsdom;
+    // hang only the decode half so the overall timeout still wins.
+    const waveformPromise = createAudioWaveform(file);
+
+    // MEDIA_METADATA_TIMEOUT (4500) + AUDIO_DECODE_TIMEOUT (4000) + 500 buffer
+    await vi.advanceTimersByTimeAsync(9500);
+    await expect(waveformPromise).resolves.toEqual({});
+    vi.useRealTimers();
   });
 });

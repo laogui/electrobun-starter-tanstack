@@ -1280,7 +1280,7 @@ describe('routes/index', () => {
     expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(5);
   });
 
-  it('reserves recording numbers while the previous save is still pending', async () => {
+  it('keeps the recorder open while the previous save is still pending', async () => {
     let resolveSave!: (value: {
       attachmentFile: string;
       color: string;
@@ -1311,16 +1311,15 @@ describe('routes/index', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish recording' }));
 
+    // Overlay stays up while save is in flight so a hang never looks like a
+    // silent no-op. Number is already reserved, so the next open gets #2.
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Finish recording' })).toBe(
-        null
-      );
+      expect(recordingMocks.saveRecording).toHaveBeenCalled();
     });
-
-    fireEvent.click(screen.getAllByRole('button').at(-1)!);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
-
-    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(2);
+    expect(
+      screen.getByRole('button', { name: 'Finish recording' })
+    ).toBeInTheDocument();
+    expect(recordingMocks.lastRecorderProps?.recordingNumber).toBe(1);
 
     resolveSave({
       attachmentFile: 'attachments/recording-1.m4a',
@@ -1329,6 +1328,15 @@ describe('routes/index', () => {
       mimeType: 'audio/mp4',
       recordingNumber: 1,
       title: '',
+    });
+
+    await waitFor(() => {
+      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith(
+        'recording',
+        expect.objectContaining({
+          data: expect.objectContaining({ recordingNumber: 1 }),
+        })
+      );
     });
   });
 

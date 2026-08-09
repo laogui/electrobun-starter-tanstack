@@ -9,6 +9,7 @@ vi.mock('../../../../paraglide/messages.js', () => ({
   menu_new_recording: () => 'Localized Recording',
   recording_node_pause_aria: () => 'Localized pause recording',
   recording_node_play_aria: () => 'Localized play recording',
+  recording_node_seek_aria: () => 'Localized seek recording',
 }));
 
 describe('RecordingContent', () => {
@@ -46,5 +47,27 @@ describe('RecordingContent', () => {
     expect(
       screen.getByRole('button', { name: 'Localized play recording' })
     ).toBeDisabled();
+  });
+
+  it('exposes a seekable waveform when a stream is available', () => {
+    render(
+      <RecordingContent
+        data={{
+          color: '#ffffff',
+          duration: 12,
+          fileName: 'recording-1.wav',
+          mimeType: 'audio/wav',
+          recordingNumber: 1,
+          title: 'Memo',
+          waveform: [0.2, 0.8, 0.4],
+        }}
+        streamSrc="http://127.0.0.1:4242/recording-1"
+      />
+    );
+
+    expect(
+      screen.getByRole('slider', { name: 'Localized seek recording' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Memo')).toBeInTheDocument();
   });
 });

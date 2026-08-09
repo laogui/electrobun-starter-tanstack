@@ -17,6 +17,8 @@ const VIDEO_THUMBNAIL_QUALITY = 0.82;
 const VIDEO_THUMBNAIL_SEEK_FRACTIONS = [0.1, 0.25, 0.5, 0] as const;
 const AUDIO_WAVEFORM_SAMPLE_COUNT = 48;
 const AUDIO_WAVEFORM_MAX_DURATION_S = 10 * 60;
+/** Cap WebKit/decodeAudioData so a corrupt MediaRecorder blob cannot hang save. */
+const AUDIO_DECODE_TIMEOUT_MS = 4000;
 
 export interface CreateImageThumbnailOptions {
   /** Largest edge (in pixels) of the resulting thumbnail. */
@@ -355,6 +357,41 @@ async function extractAudioDuration(file: File): Promise<number | undefined> {
   }
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T
+): Promise<T> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(fallback);
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
+
 async function decodeAudioWaveform(
   file: File,
   duration: number | undefined
@@ -373,7 +410,16 @@ async function decodeAudioWaveform(
   try {
     const buffer = await readFileAsArrayBuffer(file);
     context = new Ctor();
-    const decoded = await context.decodeAudioData(buffer.slice(0));
+    // WebKit can leave decodeAudioData pending forever on incomplete
+    // MediaRecorder mp4 fragments. Race a timeout so callers never hang.
+    const decoded = await withTimeout(
+      context.decodeAudioData(buffer.slice(0)),
+      AUDIO_DECODE_TIMEOUT_MS,
+      null
+    );
+    if (!decoded) {
+      return;
+    }
     const channel = decoded.getChannelData(0);
     return summarizeWaveform(channel);
   } catch {
@@ -395,10 +441,18 @@ async function decodeAudioWaveform(
 export async function createAudioWaveform(
   file: File
 ): Promise<AudioWaveformResult> {
-  const duration = await extractAudioDuration(file);
-  const waveform = await decodeAudioWaveform(file, duration);
-  return {
-    ...(duration ? { duration } : {}),
-    ...(waveform && waveform.length > 0 ? { waveform } : {}),
-  };
+  // Bound the whole pipeline: metadata load + decode can each hang on bad
+  // blobs produced by some WebKit MediaRecorder builds.
+  return withTimeout(
+    (async () => {
+      const duration = await extractAudioDuration(file);
+      const waveform = await decodeAudioWaveform(file, duration);
+      return {
+        ...(duration ? { duration } : {}),
+        ...(waveform && waveform.length > 0 ? { waveform } : {}),
+      };
+    })(),
+    MEDIA_METADATA_TIMEOUT_MS + AUDIO_DECODE_TIMEOUT_MS + 500,
+    {}
+  );
 }

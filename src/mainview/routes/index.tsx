@@ -799,25 +799,31 @@ function CanvasComponent() {
   const handleRecordingComplete = useCallback(
     async (result: RecordingResult) => {
       const number = recorderNumber ?? 1;
-      setRecorderNumber(null);
       const targetKind = lastRecordingKindRef.current ?? 'recording';
       const anchorCenter = lastRecordingAnchorRef.current;
-      lastRecordingAnchorRef.current = undefined;
-      lastRecordingKindRef.current = undefined;
       try {
         const data = await saveRecording({
           blob: result.blob,
           durationMs: result.durationMs,
           mimeType: result.mimeType,
           recordingNumber: number,
+          ...(result.waveform ? { waveform: result.waveform } : {}),
         });
         await onCreateNode(targetKind, {
           ...(anchorCenter ? { anchorCenter } : {}),
           data: { ...data },
         });
+        // Close only after both save and node creation succeed so a failure
+        // can still surface on the overlay (and never leaves a hung spinner).
+        lastRecordingAnchorRef.current = undefined;
+        lastRecordingKindRef.current = undefined;
+        setRecorderNumber(null);
       } catch (error) {
         console.error('[index] Failed to save recording:', error);
         toast.error(m.toast_recording_save_failed());
+        // Re-throw so RecordingRecorder can keep the overlay open and offer
+        // retry instead of leaving the user with a silent no-op.
+        throw error;
       }
     },
     [onCreateNode, recorderNumber, setRecorderNumber]

@@ -317,18 +317,37 @@ export async function uploadAttachmentBlob(
   url.searchParams.set('fileName', options.fileName);
   url.searchParams.set('mimeType', options.mimeType);
   url.searchParams.set('kind', options.kind);
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${endpoint.token}`,
-      'Content-Type': options.mimeType || 'application/octet-stream',
-    },
-    body: blob,
-  });
-  if (!response.ok) {
-    throw new Error('Attachment upload failed.');
+  // WKWebView has been observed to leave Blob POSTs to localhost pending
+  // forever. Abort after a generous timeout so callers can fall back / error.
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, 15_000);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${endpoint.token}`,
+        'Content-Type': options.mimeType || 'application/octet-stream',
+      },
+      body: blob,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      // Drop a potentially stale endpoint cache (token rotated after HMR).
+      cachedLocalEndpoint = null;
+      throw new Error('Attachment upload failed.');
+    }
+    return (await response.json()) as SaveAttachmentResult;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      cachedLocalEndpoint = null;
+      throw new Error('Attachment upload timed out.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  return (await response.json()) as SaveAttachmentResult;
 }
 
 export async function rpcLoadAttachment(filePath: string) {

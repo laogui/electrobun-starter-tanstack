@@ -1,5 +1,5 @@
 import { Loader2, Mic, Square, X } from 'lucide-react';
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   type RecorderError,
   type RecordingResult,
@@ -63,14 +63,17 @@ function LiveWaveform({ levels }: { levels: number[] }) {
 
 interface RecordingRecorderProps {
   onCancel: () => void;
-  onComplete: (result: RecordingResult) => void;
+  /** Persist the capture. Resolves on success; rejects (or throws) on failure. */
+  onComplete: (result: RecordingResult) => void | Promise<void>;
   recordingNumber: number;
 }
+
+type OverlayPhase = 'capture' | 'saving' | 'empty' | 'save-failed';
 
 /**
  * Centered overlay that captures a microphone recording. Auto-starts on mount
  * (the user already chose "Record" from the menu), shows a live waveform and
- * timer, and resolves the captured audio when the user presses stop.
+ * timer, and only dismisses after the parent has successfully saved the node.
  */
 export function RecordingRecorder({
   onCancel,
@@ -80,6 +83,7 @@ export function RecordingRecorder({
   const { status, error, levels, elapsedMs, start, stop, cancel } =
     useAudioRecorder();
   const startedRef = useRef(false);
+  const [phase, setPhase] = useState<OverlayPhase>('capture');
   const defaultTitle = m.menu_new_recording();
   const title = `${defaultTitle} #${recordingNumber}`;
   const errorMessage = error ? formatRecorderError(error) : null;
@@ -93,12 +97,28 @@ export function RecordingRecorder({
   }, [start]);
 
   const handleStop = async () => {
-    const result = await stop();
-    if (result) {
-      onComplete(result);
-    } else {
-      onCancel();
+    if (phase !== 'capture') {
+      return;
     }
+    const result = await stop();
+    if (!result) {
+      // Keep the overlay open and surface a clear error instead of silently
+      // dismissing — that previously looked like a lost save.
+      setPhase('empty');
+      return;
+    }
+    setPhase('saving');
+    try {
+      await onComplete(result);
+      // Parent closes the overlay on success (setRecorderNumber(null)).
+    } catch {
+      setPhase('save-failed');
+    }
+  };
+
+  const handleRetry = () => {
+    setPhase('capture');
+    start();
   };
 
   const handleCancel = () => {
@@ -107,7 +127,7 @@ export function RecordingRecorder({
   };
 
   const handleEscapeKey = useEffectEvent((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && phase !== 'saving') {
       cancel();
       onCancel();
     }
@@ -121,20 +141,34 @@ export function RecordingRecorder({
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  const isBusy = status === 'requesting' || status === 'stopping';
+  const isBusy =
+    status === 'requesting' || status === 'stopping' || phase === 'saving';
+  const showError =
+    Boolean(errorMessage) || phase === 'empty' || phase === 'save-failed';
+  const bannerText =
+    phase === 'empty'
+      ? m.recording_recorder_error_empty_capture()
+      : phase === 'save-failed'
+        ? m.recording_recorder_error_save_failed()
+        : phase === 'saving'
+          ? m.recording_recorder_saving()
+          : errorMessage;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <button
         aria-label={m.recording_recorder_cancel_aria()}
         className="absolute inset-0 cursor-default bg-black/30 backdrop-blur-sm"
+        disabled={phase === 'saving'}
         onClick={handleCancel}
         type="button"
       />
-      <dialog
+      {/* Use a plain div instead of <dialog> — native dialog + sibling
+          backdrop can swallow clicks in WKWebView. */}
+      <div
         aria-label={title}
         className="relative w-[440px] max-w-[90vw] rounded-3xl bg-white p-6 shadow-2xl dark:bg-neutral-800"
-        open
+        role="dialog"
       >
         <div className="flex items-center justify-between gap-3">
           <span className="truncate font-medium text-2xs text-neutral-400 uppercase tracking-wide dark:text-neutral-500">
@@ -146,10 +180,21 @@ export function RecordingRecorder({
         </div>
 
         <div className="mt-3 min-h-16">
-          {errorMessage ? (
-            <div className="flex h-16 items-center gap-2 text-red-600 text-sm dark:text-red-400">
-              <Mic size={16} />
-              {errorMessage}
+          {showError || phase === 'saving' ? (
+            <div
+              className={cn(
+                'flex h-16 items-center gap-2 text-sm',
+                phase === 'saving'
+                  ? 'text-neutral-600 dark:text-neutral-300'
+                  : 'text-red-600 dark:text-red-400'
+              )}
+            >
+              {phase === 'saving' ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                <Mic size={16} />
+              )}
+              {bannerText}
             </div>
           ) : (
             <LiveWaveform levels={levels} />
@@ -157,13 +202,10 @@ export function RecordingRecorder({
         </div>
 
         <div className="mt-5 flex items-center justify-center gap-4">
-          {errorMessage ? (
+          {showError ? (
             <button
               className="rounded-xl bg-neutral-900 px-5 py-2.5 font-semibold text-neutral-50 text-sm hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
-              onClick={() => {
-                startedRef.current = true;
-                start();
-              }}
+              onClick={handleRetry}
               type="button"
             >
               {m.recording_recorder_retry()}
@@ -174,6 +216,7 @@ export function RecordingRecorder({
               className={cn(
                 'grid size-14 place-items-center rounded-full bg-red-500 text-white shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60',
                 status === 'recording' &&
+                  phase === 'capture' &&
                   'animate-[pulse_1.6s_ease-in-out_infinite]'
               )}
               disabled={isBusy}
@@ -189,14 +232,15 @@ export function RecordingRecorder({
           )}
           <button
             aria-label={m.recording_recorder_cancel_aria()}
-            className="grid size-10 place-items-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+            className="grid size-10 place-items-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+            disabled={phase === 'saving'}
             onClick={handleCancel}
             type="button"
           >
             <X size={18} />
           </button>
         </div>
-      </dialog>
+      </div>
     </div>
   );
 }

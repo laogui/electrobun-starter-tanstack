@@ -17,56 +17,169 @@ export interface RecordingResult {
   blob: Blob;
   durationMs: number;
   mimeType: string;
+  /** Peak amplitudes [0,1] sampled during capture for the node waveform. */
+  waveform?: number[];
 }
+
+/** Number of peak bars persisted onto the recording node. */
+const WAVEFORM_PEAK_COUNT = 48;
 
 /** Number of live amplitude samples kept for the scrolling waveform. */
 const LIVE_SAMPLE_COUNT = 56;
 /** How often (ms) a new live amplitude sample is captured. */
 const LIVE_SAMPLE_INTERVAL_MS = 90;
-
-/**
- * Candidate MediaRecorder MIME types in preference order. WebKit (Electrobun's
- * macOS WKWebView) records `audio/mp4` (AAC); Chromium/WebKit-GTK prefer
- * `audio/webm`. The empty string lets the browser pick its default.
- */
-const PREFERRED_MIME_TYPES = [
-  'audio/mp4',
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/ogg;codecs=opus',
-  '',
-];
-
-function pickSupportedMimeType(): string {
-  if (typeof MediaRecorder === 'undefined') {
-    return '';
-  }
-  for (const type of PREFERRED_MIME_TYPES) {
-    if (type === '' || MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
-  }
-  return '';
-}
+/** ScriptProcessor buffer size — power of 2, balance latency vs. overhead. */
+const PROCESSOR_BUFFER_SIZE = 4096;
 
 export function isAudioRecordingSupported(): boolean {
   return (
     typeof navigator !== 'undefined' &&
     !!navigator.mediaDevices?.getUserMedia &&
-    typeof MediaRecorder !== 'undefined'
+    !!(
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    )
   );
 }
 
-interface AudioContextRefs {
+function getAudioContextConstructor(): (new () => AudioContext) | null {
+  const w = window as unknown as {
+    AudioContext?: new () => AudioContext;
+    webkitAudioContext?: new () => AudioContext;
+  };
+  return w.AudioContext ?? w.webkitAudioContext ?? null;
+}
+
+/**
+ * Encode mono Float32 PCM samples as a 16-bit little-endian WAV blob.
+ * Avoids MediaRecorder entirely — WKWebView's MediaRecorder is unreliable
+ * (empty blobs / missing dataavailable / hang on decode).
+ */
+export function encodeWavFromFloat32(
+  chunks: Float32Array[],
+  sampleRate: number
+): Blob {
+  let totalSamples = 0;
+  for (const chunk of chunks) {
+    totalSamples += chunk.length;
+  }
+  const dataLength = totalSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+
+  const writeString = (startOffset: number, value: string) => {
+    let index = 0;
+    for (const char of value) {
+      view.setUint8(startOffset + index, char.charCodeAt(0));
+      index += 1;
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // PCM chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (const raw of chunk) {
+      const sample = Math.max(-1, Math.min(1, raw));
+      view.setInt16(
+        offset,
+        sample < 0 ? sample * 0x80_00 : sample * 0x7f_ff,
+        true
+      );
+      offset += 2;
+    }
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+/**
+ * Downsample captured PCM into a small peak trail for the recording card.
+ * Avoids re-decoding the WAV later (which has hung on WKWebView).
+ */
+export function peaksFromPcmChunks(
+  chunks: Float32Array[],
+  sampleCount = WAVEFORM_PEAK_COUNT
+): number[] {
+  if (sampleCount <= 0 || chunks.length === 0) {
+    return [];
+  }
+  let totalSamples = 0;
+  for (const chunk of chunks) {
+    totalSamples += chunk.length;
+  }
+  if (totalSamples === 0) {
+    return [];
+  }
+  const bucketSize = Math.max(1, Math.floor(totalSamples / sampleCount));
+  const peaks = new Array<number>(sampleCount).fill(0);
+  let maxPeak = 0;
+  let sampleIndex = 0;
+  let bucket = 0;
+  let peak = 0;
+  for (const chunk of chunks) {
+    for (const raw of chunk) {
+      const value = Math.abs(raw);
+      if (value > peak) {
+        peak = value;
+      }
+      sampleIndex += 1;
+      if (sampleIndex % bucketSize === 0 && bucket < sampleCount) {
+        peaks[bucket] = peak;
+        if (peak > maxPeak) {
+          maxPeak = peak;
+        }
+        peak = 0;
+        bucket += 1;
+      }
+    }
+  }
+  // Remainder samples that never filled a full bucketSize: keep as the last bar
+  // so the waveform still reflects the tail of the clip. When totalSamples is an
+  // exact multiple of bucketSize, bucket === sampleCount and this is a no-op.
+  if (bucket < sampleCount) {
+    peaks[bucket] = peak;
+    if (peak > maxPeak) {
+      maxPeak = peak;
+    }
+  }
+  if (maxPeak <= 0) {
+    return peaks;
+  }
+  return peaks.map((value) => Math.min(1, value / maxPeak));
+}
+
+interface CaptureGraph {
   analyser: AnalyserNode;
   context: AudioContext;
+  mute: GainNode;
+  processor: ScriptProcessorNode;
   source: MediaStreamAudioSourceNode;
 }
 
 /**
- * Microphone capture state machine built on MediaRecorder. Exposes a live
- * amplitude trail (`levels`) and elapsed time for the recording UI, and
- * resolves the captured audio Blob on `stop()`.
+ * Microphone capture via Web Audio ScriptProcessor → WAV.
+ *
+ * MediaRecorder on Electrobun's WKWebView frequently yields empty blobs or
+ * incomplete mp4 fragments. Capturing PCM and encoding WAV is deterministic
+ * across WebKit builds and always produces a playable file.
+ *
+ * ScriptProcessor is deprecated, but remains the only reliable PCM tap that
+ * works without an AudioWorklet module URL in a packaged WKWebView. Future:
+ * migrate to AudioWorklet when Electrobun supports worklet module loading.
  */
 export function useAudioRecorder() {
   const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -74,16 +187,12 @@ export function useAudioRecorder() {
   const [levels, setLevels] = useState<number[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioCtxRef = useRef<AudioContextRefs | null>(null);
+  const graphRef = useRef<CaptureGraph | null>(null);
+  const pcmChunksRef = useRef<Float32Array[]>([]);
   const startTimeRef = useRef(0);
   const sampleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clockTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopResolveRef = useRef<
-    ((result: RecordingResult | null) => void) | null
-  >(null);
   const startTokenRef = useRef(0);
 
   const cleanup = useCallback(() => {
@@ -95,14 +204,19 @@ export function useAudioRecorder() {
       clearInterval(clockTimerRef.current);
       clockTimerRef.current = null;
     }
-    if (audioCtxRef.current) {
+    const graph = graphRef.current;
+    if (graph) {
       try {
-        audioCtxRef.current.source.disconnect();
-        audioCtxRef.current.context.close().catch(() => undefined);
+        graph.processor.onaudioprocess = null;
+        graph.processor.disconnect();
+        graph.source.disconnect();
+        graph.analyser.disconnect();
+        graph.mute.disconnect();
       } catch {
-        // Some runtimes do not implement close(); ignore.
+        // ignore disconnect errors on half-torn graphs
       }
-      audioCtxRef.current = null;
+      graph.context.close().catch(() => undefined);
+      graphRef.current = null;
     }
     for (const track of streamRef.current?.getTracks() ?? []) {
       track.stop();
@@ -122,11 +236,18 @@ export function useAudioRecorder() {
     setError(null);
     setLevels([]);
     setElapsedMs(0);
-    chunksRef.current = [];
+    pcmChunksRef.current = [];
+    cleanup();
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1,
+        },
+      });
     } catch (err) {
       if (startTokenRef.current !== token) {
         return false;
@@ -147,69 +268,69 @@ export function useAudioRecorder() {
     }
     streamRef.current = stream;
 
-    const mimeType = pickSupportedMimeType();
-    let recorder: MediaRecorder;
+    const AudioCtor = getAudioContextConstructor();
+    if (!AudioCtor) {
+      cleanup();
+      setStatus('error');
+      setError('unsupported');
+      return false;
+    }
+
     try {
-      recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      const context = new AudioCtor();
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      // See module doc: ScriptProcessor until AudioWorklet is packagable.
+      const processor = context.createScriptProcessor(
+        PROCESSOR_BUFFER_SIZE,
+        1,
+        1
+      );
+      const mute = context.createGain();
+      mute.gain.value = 0;
+
+      processor.onaudioprocess = (event) => {
+        const input = event.inputBuffer.getChannelData(0);
+        // Copy — the underlying buffer is reused by the audio engine.
+        pcmChunksRef.current.push(new Float32Array(input));
+      };
+
+      source.connect(analyser);
+      source.connect(processor);
+      // Must connect processor to the graph or onaudioprocess never fires.
+      processor.connect(mute);
+      mute.connect(context.destination);
+
+      graphRef.current = { analyser, context, mute, processor, source };
+
+      // WKWebView often starts AudioContext suspended until resume(). Wire the
+      // graph first, then resume so onaudioprocess starts immediately.
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+      if (startTokenRef.current !== token) {
+        cleanup();
+        return false;
+      }
     } catch {
       cleanup();
       setStatus('error');
       setError('start-failed');
       return false;
     }
-    recorderRef.current = recorder;
-
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
-    };
-    recorder.onstop = () => {
-      const resolvedMime = recorder.mimeType || mimeType || 'audio/mp4';
-      const blob = new Blob(chunksRef.current, { type: resolvedMime });
-      const result: RecordingResult = {
-        blob,
-        durationMs: Date.now() - startTimeRef.current,
-        mimeType: resolvedMime,
-      };
-      cleanup();
-      setStatus('idle');
-      stopResolveRef.current?.(blob.size > 0 ? result : null);
-      stopResolveRef.current = null;
-    };
-
-    // Live amplitude metering via an AnalyserNode.
-    try {
-      const AudioCtor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-      if (AudioCtor) {
-        const context = new AudioCtor();
-        const source = context.createMediaStreamSource(stream);
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 1024;
-        source.connect(analyser);
-        audioCtxRef.current = { analyser, context, source };
-      }
-    } catch {
-      audioCtxRef.current = null;
-    }
 
     startTimeRef.current = Date.now();
-    recorder.start();
     setStatus('recording');
 
-    const buffer = audioCtxRef.current
-      ? new Uint8Array(audioCtxRef.current.analyser.fftSize)
+    const buffer = graphRef.current
+      ? new Uint8Array(graphRef.current.analyser.fftSize)
       : null;
     sampleTimerRef.current = setInterval(() => {
       let level = 0.05;
-      const ctx = audioCtxRef.current;
-      if (ctx && buffer) {
-        ctx.analyser.getByteTimeDomainData(buffer);
+      const graph = graphRef.current;
+      if (graph && buffer) {
+        graph.analyser.getByteTimeDomainData(buffer);
         let sum = 0;
         for (const sample of buffer) {
           const centered = (sample - 128) / 128;
@@ -234,37 +355,53 @@ export function useAudioRecorder() {
   }, [cleanup]);
 
   const stop = useCallback((): Promise<RecordingResult | null> => {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state === 'inactive') {
+    const graph = graphRef.current;
+    if (!graph) {
       cleanup();
       setStatus('idle');
       return Promise.resolve(null);
     }
+
     setStatus('stopping');
-    return new Promise((resolve) => {
-      stopResolveRef.current = resolve;
-      try {
-        recorder.stop();
-      } catch {
-        cleanup();
+
+    // Synchronously encode whatever PCM we have, then tear down.
+    // No MediaRecorder onstop race — the blob is ready immediately.
+    const sampleRate = graph.context.sampleRate || 44_100;
+    const chunks = pcmChunksRef.current;
+    const durationMs = Date.now() - startTimeRef.current;
+    pcmChunksRef.current = [];
+
+    cleanup();
+
+    if (chunks.length === 0) {
+      setStatus('idle');
+      return Promise.resolve(null);
+    }
+
+    try {
+      const blob = encodeWavFromFloat32(chunks, sampleRate);
+      if (blob.size <= 44) {
+        // Header-only WAV = no samples.
         setStatus('idle');
-        resolve(null);
+        return Promise.resolve(null);
       }
-    });
+      const waveform = peaksFromPcmChunks(chunks);
+      setStatus('idle');
+      return Promise.resolve({
+        blob,
+        durationMs,
+        mimeType: 'audio/wav',
+        ...(waveform.length > 0 ? { waveform } : {}),
+      });
+    } catch {
+      setStatus('idle');
+      return Promise.resolve(null);
+    }
   }, [cleanup]);
 
   const cancel = useCallback(() => {
     startTokenRef.current += 1;
-    const recorder = recorderRef.current;
-    stopResolveRef.current = null;
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.onstop = null;
-      try {
-        recorder.stop();
-      } catch {
-        // ignore
-      }
-    }
+    pcmChunksRef.current = [];
     cleanup();
     setStatus('idle');
     setLevels([]);

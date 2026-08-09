@@ -77,8 +77,11 @@ export async function enrichContext(
   context: AIContext
 ): Promise<AIContext> {
   const enriched = await Promise.all(
-    context.nodes.map(async (node) => {
-      if (!(node.noteId && node.nodeType === 'card')) {
+    context.nodes.map(async (node, index) => {
+      if (
+        index >= MAX_NODES_PER_TASK ||
+        !(node.noteId && node.nodeType === 'card')
+      ) {
         return node;
       }
       const record = await loadNoteRecord(wsPath, node.noteId).catch(

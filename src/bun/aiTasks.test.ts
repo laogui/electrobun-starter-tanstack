@@ -212,6 +212,36 @@ describe('enrichContext', () => {
     const enriched = await enrichContext('/ws', context);
     expect(enriched.nodes).toEqual(context.nodes);
   });
+
+  it('does not load note bodies beyond the per-task node cap', async () => {
+    loadNoteRecordMock.mockResolvedValue({
+      noteId: 'note-1',
+      title: 'Full note title',
+      source: 'markdown',
+      markdownDoc: { body: 'Full note body from disk.' },
+      blocks: null,
+      color: '#FFFFFF',
+      corrupted: false,
+      displayHint: 'note',
+      preview: null,
+      revision: 1,
+    } as any);
+    const context: AIContext = {
+      nodes: Array.from({ length: 41 }, (_, index) => ({
+        id: `node-${index}`,
+        nodeType: 'card',
+        noteId: `note-${index}`,
+        title: `Note ${index}`,
+        position: { x: index, y: 0 },
+      })),
+    };
+
+    const enriched = await enrichContext('/ws', context);
+
+    expect(loadNoteRecordMock).toHaveBeenCalledTimes(40);
+    expect(enriched.nodes[39]?.content).toContain('Full note body');
+    expect(enriched.nodes[40]).toEqual(context.nodes[40]);
+  });
 });
 
 describe('runAITask', () => {

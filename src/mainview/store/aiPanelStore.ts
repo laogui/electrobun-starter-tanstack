@@ -18,14 +18,21 @@ interface AIPanelState {
   close: () => void;
   errorCode: AITaskErrorCode | null;
   errorMessage: string | null;
-  openLoading: (task: AITaskType) => void;
+  openLoading: (
+    task: AITaskType,
+    requestId: number,
+    sourceViewId: string
+  ) => void;
+  requestId: number | null;
   result: AITaskResult | null;
   setError: (
     task: AITaskType,
+    requestId: number,
     errorCode: AITaskErrorCode,
     errorMessage?: string
   ) => void;
-  setReady: (task: AITaskType, result: AITaskResult) => void;
+  setReady: (task: AITaskType, requestId: number, result: AITaskResult) => void;
+  sourceViewId: string | null;
   status: AIPanelStatus;
   task: AITaskType | null;
 }
@@ -36,33 +43,45 @@ export const useAIPanelStore = create<AIPanelState>((set) => ({
   result: null,
   errorCode: null,
   errorMessage: null,
+  requestId: null,
+  sourceViewId: null,
 
-  openLoading: (task) =>
+  openLoading: (task, requestId, sourceViewId) =>
     set({
       status: 'loading',
       task,
       result: null,
       errorCode: null,
       errorMessage: null,
+      requestId,
+      sourceViewId,
     }),
 
-  setReady: (task, result) =>
-    set({
-      status: 'ready',
-      task,
-      result,
-      errorCode: null,
-      errorMessage: null,
-    }),
+  setReady: (task, requestId, result) =>
+    set((state) =>
+      state.task === task && state.requestId === requestId
+        ? {
+            status: 'ready',
+            task,
+            result,
+            errorCode: null,
+            errorMessage: null,
+          }
+        : state
+    ),
 
-  setError: (task, errorCode, errorMessage) =>
-    set({
-      status: 'error',
-      task,
-      result: null,
-      errorCode,
-      errorMessage: errorMessage ?? null,
-    }),
+  setError: (task, requestId, errorCode, errorMessage) =>
+    set((state) =>
+      state.task === task && state.requestId === requestId
+        ? {
+            status: 'error',
+            task,
+            result: null,
+            errorCode,
+            errorMessage: errorMessage ?? null,
+          }
+        : state
+    ),
 
   close: () =>
     set({
@@ -71,5 +90,7 @@ export const useAIPanelStore = create<AIPanelState>((set) => ({
       result: null,
       errorCode: null,
       errorMessage: null,
+      requestId: null,
+      sourceViewId: null,
     }),
 }));

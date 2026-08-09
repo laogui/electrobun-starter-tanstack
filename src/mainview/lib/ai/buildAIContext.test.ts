@@ -106,6 +106,34 @@ describe('buildSelectionContext', () => {
     const context = buildSelectionContext(nodes);
     expect(context.map((entry) => entry.id)).toEqual(['a', 'd']);
   });
+
+  it('serializes selected group children with absolute canvas positions', () => {
+    const context = buildSelectionContext([
+      makeNode({
+        id: 'group-1',
+        type: 'group',
+        position: { x: 1000, y: 800 },
+        style: { width: 500, height: 300 },
+        data: { label: 'Launch' },
+      }),
+      makeNode({
+        id: 'child-1',
+        parentId: 'group-1',
+        position: { x: 20, y: 30 },
+        selected: true,
+        style: { width: 300, height: 400 },
+        data: { title: 'Kickoff' },
+      }),
+    ]);
+
+    expect(context).toEqual([
+      expect.objectContaining({
+        id: 'child-1',
+        position: { x: 1020, y: 830 },
+        size: { width: 300, height: 400 },
+      }),
+    ]);
+  });
 });
 
 describe('hasSummarizableSelection', () => {

@@ -1,6 +1,7 @@
 import type { Node } from '@xyflow/react';
 
 import type { AINodeContext } from '../../../shared/ai/types';
+import { buildAbsoluteRects, type Rect } from '../collision';
 
 /**
  * Serialize the renderer's live selection into the `AINodeContext[]` the Bun
@@ -24,11 +25,22 @@ const asStringArray = (value: unknown): string[] | undefined => {
 };
 
 const nodeSize = (
-  node: Node
+  node: Node,
+  absoluteRect?: Rect
 ): { width?: number; height?: number } | undefined => {
   const style = node.style as Record<string, unknown> | undefined;
-  const width = typeof style?.width === 'number' ? style.width : undefined;
-  const height = typeof style?.height === 'number' ? style.height : undefined;
+  const width =
+    typeof style?.width === 'number'
+      ? style.width
+      : absoluteRect
+        ? absoluteRect.right - absoluteRect.left
+        : undefined;
+  const height =
+    typeof style?.height === 'number'
+      ? style.height
+      : absoluteRect
+        ? absoluteRect.bottom - absoluteRect.top
+        : undefined;
   if (width === undefined && height === undefined) {
     return;
   }
@@ -98,7 +110,10 @@ function extractFromData(
 }
 
 /** Convert a single React Flow node to AI context, or null to skip it. */
-export function nodeToAIContext(node: Node): AINodeContext | null {
+export function nodeToAIContext(
+  node: Node,
+  absoluteRect?: Rect
+): AINodeContext | null {
   const nodeType = node.type ?? '';
   const data = (node.data ?? {}) as Record<string, unknown>;
   if (data.isHidden === true) {
@@ -115,18 +130,21 @@ export function nodeToAIContext(node: Node): AINodeContext | null {
     content: extracted.content,
     tags: extracted.tags,
     noteId: extracted.noteId,
-    position: { x: node.position.x, y: node.position.y },
+    position: absoluteRect
+      ? { x: absoluteRect.left, y: absoluteRect.top }
+      : { x: node.position.x, y: node.position.y },
     ...(node.parentId ? { parentId: node.parentId } : {}),
-    size: nodeSize(node),
+    size: nodeSize(node, absoluteRect),
   };
 }
 
 /** Build the task context from the current selection. */
 export function buildSelectionContext(nodes: Node[]): AINodeContext[] {
   const selected = nodes.filter((node) => node.selected);
+  const absoluteRects = buildAbsoluteRects(nodes);
   const contexts: AINodeContext[] = [];
   for (const node of selected) {
-    const context = nodeToAIContext(node);
+    const context = nodeToAIContext(node, absoluteRects.get(node.id));
     if (context) {
       contexts.push(context);
     }

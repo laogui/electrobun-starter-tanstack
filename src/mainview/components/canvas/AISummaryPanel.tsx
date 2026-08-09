@@ -1,7 +1,7 @@
 import { Loader2, Sparkles, X } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { NotePreview } from '@/components/preview/NotePreview';
@@ -47,13 +47,25 @@ export function AISummaryPanel({ rfInstance }: AISummaryPanelProps) {
   const result = useAIPanelStore((s) => s.result);
   const errorCode = useAIPanelStore((s) => s.errorCode);
   const errorMessage = useAIPanelStore((s) => s.errorMessage);
+  const sourceViewId = useAIPanelStore((s) => s.sourceViewId);
   const close = useAIPanelStore((s) => s.close);
+  const activeViewId = useCanvasStore((s) => s.activeViewId);
   const setSettingsOpen = useCanvasStore((s) => s.setSettingsOpen);
   const undo = useCanvasStore((s) => s.undo);
   const [applying, setApplying] = useState(false);
 
+  useEffect(() => {
+    if (sourceViewId && sourceViewId !== activeViewId) {
+      close();
+    }
+  }, [activeViewId, close, sourceViewId]);
+
   const handleApply = async () => {
     if (!result || applying) {
+      return;
+    }
+    if (sourceViewId !== useCanvasStore.getState().activeViewId) {
+      close();
       return;
     }
     setApplying(true);

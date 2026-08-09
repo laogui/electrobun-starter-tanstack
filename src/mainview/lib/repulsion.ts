@@ -85,10 +85,8 @@ export function pushNodeAwayFromObstacle(
   obstacle: Rect,
   gap = REPULSION_GAP
 ): { x: number; y: number } {
-  const dx =
-    node.x + node.width / 2 - (obstacle.x + obstacle.width / 2);
-  const dy =
-    node.y + node.height / 2 - (obstacle.y + obstacle.height / 2);
+  const dx = node.x + node.width / 2 - (obstacle.x + obstacle.width / 2);
+  const dy = node.y + node.height / 2 - (obstacle.y + obstacle.height / 2);
   const px = (node.width + obstacle.width) / 2 + gap - Math.abs(dx);
   const py = (node.height + obstacle.height) / 2 + gap - Math.abs(dy);
   if (px <= OVERLAP_EPSILON || py <= OVERLAP_EPSILON) {

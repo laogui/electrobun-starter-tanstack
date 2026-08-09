@@ -41,6 +41,7 @@ import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
+import { SelectionAIToolbar } from '@/components/canvas/SelectionAIToolbar';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { LibraryPopup } from '@/components/library/LibraryPopup';
@@ -1857,6 +1858,7 @@ function CanvasComponent() {
             variant={BackgroundVariant.Dots}
           />
           <HelperLines horizontal={helperLineH} vertical={helperLineV} />
+          <SelectionAIToolbar />
           <CanvasViewportChrome
             backgroundColor={miniMapBackground}
             maskColor={miniMapMask}

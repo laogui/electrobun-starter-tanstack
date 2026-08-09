@@ -241,10 +241,9 @@ export function useNodeDrag() {
         );
         targetFolderId = folder?.id || null;
         if (!targetFolderId && isRejectedFolderChildNode(node.type)) {
-          rejectedFolderId = findAnyOverlappingFolder(
-            node,
-            useCanvasStore.getState().nodes
-          )?.id ?? null;
+          rejectedFolderId =
+            findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)
+              ?.id ?? null;
         }
         // Folder takes precedence (matches onNodeDragStop ordering); when no
         // folder is under the cursor, the group acts as the drop target so the
@@ -260,18 +259,16 @@ export function useNodeDrag() {
         // Elevate the dragged folder above the group it is about to enter.
         setDropTargetId(targetGroupId);
         // A folder dragged over another folder is rejected, not absorbed.
-        rejectedFolderId = findAnyOverlappingFolder(
-          node,
-          useCanvasStore.getState().nodes
-        )?.id ?? null;
+        rejectedFolderId =
+          findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)?.id ??
+          null;
       }
       // Groups cannot go into anything
       else if (node.type === 'group') {
         setDropTargetId(null);
-        rejectedFolderId = findAnyOverlappingFolder(
-          node,
-          useCanvasStore.getState().nodes
-        )?.id ?? null;
+        rejectedFolderId =
+          findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)?.id ??
+          null;
       } else {
         // Unknown node types: no drop target, no rejection.
         setDropTargetId(null);
@@ -362,10 +359,8 @@ export function useNodeDrag() {
       // rejected folder and push the dragged node out so it doesn't settle
       // inside the folder.
       const rejectedFolderId = isRejectedFolderChildNode(node.type)
-        ? (findAnyOverlappingFolder(
-            node,
-            useCanvasStore.getState().nodes
-          )?.id ?? null)
+        ? (findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)
+            ?.id ?? null)
         : null;
       const applyRejectPush = (nds: Node[]) =>
         rejectedFolderId
@@ -512,7 +507,13 @@ export function useNodeDrag() {
       }
       originsRef.current = null;
     },
-    [rf, setNodes, findOverlappingFolder, findAnyOverlappingFolder, restorePushedNodes]
+    [
+      rf,
+      setNodes,
+      findOverlappingFolder,
+      findAnyOverlappingFolder,
+      restorePushedNodes,
+    ]
   );
 
   return {

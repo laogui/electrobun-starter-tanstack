@@ -1,6 +1,6 @@
 import { Popover } from '@base-ui/react/popover';
 import { useTheme } from 'better-themes';
-import { Check, Palette, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -100,13 +100,7 @@ export function CanvasBackgroundToolbarButton() {
           aria-hidden
           className="relative inline-flex size-4 items-center justify-center rounded-full border border-black/15 shadow-inner dark:border-white/20"
           style={{ backgroundColor: resolved }}
-        >
-          <Palette
-            className="pointer-events-none text-neutral-500/80 dark:text-neutral-300/80"
-            size={11}
-            strokeWidth={2}
-          />
-        </span>
+        />
       </Popover.Trigger>
       <Popover.Portal>
         {/* Open to the right of the toolbar instead of upward: the trigger sits

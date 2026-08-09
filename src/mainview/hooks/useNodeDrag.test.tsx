@@ -102,13 +102,19 @@ vi.mock('@/lib/repulsion', () => ({
     }
     return origins;
   },
-  pushNodeAwayFromObstacle: (node: { x: number; y: number; width: number; height: number }, obs: { x: number; y: number; width: number; height: number }, gap = 20) => {
+  pushNodeAwayFromObstacle: (
+    node: { x: number; y: number; width: number; height: number },
+    obs: { x: number; y: number; width: number; height: number },
+    gap = 20
+  ) => {
     // Real algorithm: push out along axis of minimum penetration.
     const dx = node.x + node.width / 2 - (obs.x + obs.width / 2);
     const dy = node.y + node.height / 2 - (obs.y + obs.height / 2);
     const px = (node.width + obs.width) / 2 + gap - Math.abs(dx);
     const py = (node.height + obs.height) / 2 + gap - Math.abs(dy);
-    if (px <= 0.5 || py <= 0.5) return { x: node.x, y: node.y };
+    if (px <= 0.5 || py <= 0.5) {
+      return { x: node.x, y: node.y };
+    }
     if (px < py) {
       const sign = dx > 0 ? 1 : -1;
       return { x: node.x + px * sign, y: node.y };

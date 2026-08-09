@@ -593,6 +593,10 @@ vi.mock('@/components/canvas/HelperLines', () => ({
   HelperLines: () => <div>HelperLines</div>,
 }));
 
+vi.mock('@/components/canvas/SelectionAIToolbar', () => ({
+  SelectionAIToolbar: () => null,
+}));
+
 const routeFactoryMock = vi.fn((options) => ({ options }));
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual =

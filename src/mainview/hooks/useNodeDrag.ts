@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   isCanvasContentNode,
   isGroupChildNode,
+  isRejectedFolderChildNode,
 } from '@/lib/canvasNodePredicates';
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasNodeRegistry';
 import { canAbsorbIntoFolder, sortNodesByParent } from '@/lib/canvasUtils';
@@ -11,6 +12,7 @@ import type { Point } from '@/lib/collision';
 import {
   applyDragRepulsion,
   captureRepulsionOrigins,
+  pushNodeAwayFromObstacle,
   REPULSION_GAP,
 } from '@/lib/repulsion';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -22,6 +24,58 @@ import { useCanvasStore } from '@/store/canvasStore';
  * automatically.
  */
 const isContentNode = (node: Node) => isCanvasContentNode(node.type);
+
+/** Resolve a node's live width/height for overlap math. */
+function nodeSize(node: Node): { width: number; height: number } {
+  const width =
+    (node.measured?.width ?? (node.style?.width as number)) || CARD_W;
+  const height =
+    (node.measured?.height ?? (node.style?.height as number)) || CARD_H;
+  return { width, height };
+}
+
+/**
+ * Push every dragged node out of the rejected folder so the cursor cannot pull
+ * an un-placeable node (widget, sticky, folder, group) through it. Returns a
+ * new node array with the pushed positions applied; other nodes are untouched.
+ * The folder is an immovable obstacle, so only the dragged nodes move.
+ */
+export function pushDraggedNodesOutOfFolder(
+  nodes: Node[],
+  draggedIds: Set<string>,
+  folderId: string
+): Node[] {
+  const folder = nodes.find((n) => n.id === folderId);
+  if (!folder) {
+    return nodes;
+  }
+  const folderSize = nodeSize(folder);
+  const obstacle = {
+    x: folder.position.x,
+    y: folder.position.y,
+    width: folderSize.width,
+    height: folderSize.height,
+  };
+  return nodes.map((n) => {
+    if (!draggedIds.has(n.id)) {
+      return n;
+    }
+    const size = nodeSize(n);
+    const pos = pushNodeAwayFromObstacle(
+      {
+        x: n.position.x,
+        y: n.position.y,
+        width: size.width,
+        height: size.height,
+      },
+      obstacle
+    );
+    if (pos.x === n.position.x && pos.y === n.position.y) {
+      return n;
+    }
+    return { ...n, position: pos };
+  });
+}
 
 function getDraggingNodeIds(node: Node, draggedNodes: Node[]): string[] {
   const ids = new Set<string>();
@@ -37,6 +91,9 @@ export function useNodeDrag() {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  /** Folder the dragged node overlaps but is not allowed to enter (widgets,
+   *  sticky, groups, other folders). Drives the red "reject" highlight. */
+  const [rejectedFolderId, setRejectedFolderId] = useState<string | null>(null);
   const [draggingNodeIds, setDraggingNodeIds] = useState<string[]>([]);
   /** True while dragging a single content/folder node — drives the CSS class
    *  that animates repelled neighbors. Group drags are excluded because their
@@ -60,6 +117,16 @@ export function useNodeDrag() {
       if (!canAbsorbIntoFolder(draggedNode)) {
         return null;
       }
+      return findAnyOverlappingFolder(draggedNode, allNodes);
+    },
+    []
+  );
+
+  /** Like {@link findOverlappingFolder} but ignores absorbability, so callers
+   *  can detect a folder the dragged node overlaps even when it must be
+   *  visually rejected (widgets, sticky, folders, groups). */
+  const findAnyOverlappingFolder = useCallback(
+    (draggedNode: Node, allNodes: Node[]) => {
       const nodeW =
         (draggedNode.measured?.width ?? (draggedNode.style?.width as number)) ||
         CARD_W;
@@ -118,6 +185,7 @@ export function useNodeDrag() {
     (_, node, draggedNodes = []) => {
       saveSnapshot();
       originsRef.current = null;
+      setRejectedFolderId(null);
       setDraggingNodeIds(getDraggingNodeIds(node, draggedNodes));
       const draggingGroup =
         node.type === 'group' || draggedNodes.some((n) => n.type === 'group');
@@ -157,8 +225,11 @@ export function useNodeDrag() {
       // --- Determine drop target ---
       let targetGroupId: string | null = null;
       let targetFolderId: string | null = null;
+      let rejectedFolderId = null;
 
-      // Content nodes (card/image/sticky) can go into groups or folders
+      // Content nodes (card/image/sticky/widgets) can go into groups or
+      // folders. Widgets and sticky cannot enter a folder, so when one of them
+      // overlaps a folder it is rejected (red highlight) rather than absorbed.
       if (isContentNode(node)) {
         const group = rf
           .getIntersectingNodes(node)
@@ -169,6 +240,12 @@ export function useNodeDrag() {
           useCanvasStore.getState().nodes
         );
         targetFolderId = folder?.id || null;
+        if (!targetFolderId && isRejectedFolderChildNode(node.type)) {
+          rejectedFolderId = findAnyOverlappingFolder(
+            node,
+            useCanvasStore.getState().nodes
+          )?.id ?? null;
+        }
         // Folder takes precedence (matches onNodeDragStop ordering); when no
         // folder is under the cursor, the group acts as the drop target so the
         // dragged card is elevated above the group like it is above a folder.
@@ -182,11 +259,24 @@ export function useNodeDrag() {
         targetGroupId = group?.id ?? null;
         // Elevate the dragged folder above the group it is about to enter.
         setDropTargetId(targetGroupId);
+        // A folder dragged over another folder is rejected, not absorbed.
+        rejectedFolderId = findAnyOverlappingFolder(
+          node,
+          useCanvasStore.getState().nodes
+        )?.id ?? null;
       }
       // Groups cannot go into anything
       else if (node.type === 'group') {
         setDropTargetId(null);
+        rejectedFolderId = findAnyOverlappingFolder(
+          node,
+          useCanvasStore.getState().nodes
+        )?.id ?? null;
+      } else {
+        // Unknown node types: no drop target, no rejection.
+        setDropTargetId(null);
       }
+      setRejectedFolderId(rejectedFolderId);
 
       setActiveGroupId(targetGroupId);
 
@@ -232,26 +322,55 @@ export function useNodeDrag() {
         // Positions in the store are already live: React Flow dispatches the
         // position changes (including helper-line snapping) synchronously
         // before this callback runs.
-        return applyDragRepulsion({
+        const repelled = applyDragRepulsion({
           nodes: highlighted,
           activeIds: draggingIds,
           origins: originsRef.current,
           paused,
           gap: REPULSION_GAP,
         });
+        // When the dragged node cannot enter the folder it overlaps (widget,
+        // sticky, folder, group), push it out so the folder reads as a hard
+        // wall the cursor cannot pull it through — on top of the red reject
+        // highlight. Repulsion would otherwise re-overlap the folder, so this
+        // runs last and wins.
+        if (rejectedFolderId) {
+          return pushDraggedNodesOutOfFolder(
+            repelled,
+            draggingIds,
+            rejectedFolderId
+          );
+        }
+        return repelled;
       });
     },
-    [rf, setNodes, findOverlappingFolder]
+    [rf, setNodes, findOverlappingFolder, findAnyOverlappingFolder]
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_, node, draggedNodes = []) => {
       setDropTargetId(null);
+      setRejectedFolderId(null);
       setRepelAnimationActive(false);
       setDraggingNodeIds([]);
 
       const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
       draggingIds.add(node.id);
+
+      // At drag stop React Flow snaps the store back to the pointer position,
+      // which may sit on top of a folder the node cannot enter. Re-derive the
+      // rejected folder and push the dragged node out so it doesn't settle
+      // inside the folder.
+      const rejectedFolderId = isRejectedFolderChildNode(node.type)
+        ? (findAnyOverlappingFolder(
+            node,
+            useCanvasStore.getState().nodes
+          )?.id ?? null)
+        : null;
+      const applyRejectPush = (nds: Node[]) =>
+        rejectedFolderId
+          ? pushDraggedNodesOutOfFolder(nds, draggingIds, rejectedFolderId)
+          : nds;
 
       if (isContentNode(node)) {
         setNodes((nds) => {
@@ -328,7 +447,7 @@ export function useNodeDrag() {
               position: abs,
             };
           });
-          return sortNodesByParent(updated);
+          return applyRejectPush(sortNodesByParent(updated));
         });
         setActiveGroupId(null);
         originsRef.current = null;
@@ -371,7 +490,7 @@ export function useNodeDrag() {
               position: abs,
             };
           });
-          return sortNodesByParent(updated);
+          return applyRejectPush(sortNodesByParent(updated));
         });
         setActiveGroupId(null);
         originsRef.current = null;
@@ -381,22 +500,25 @@ export function useNodeDrag() {
       // Groups stay top-level — no nesting into other groups or folders
       if (node.type === 'group') {
         setNodes((nds) =>
-          nds.map((n) =>
-            n.type === 'group'
-              ? { ...n, data: { ...n.data, active: false } }
-              : n
+          applyRejectPush(
+            nds.map((n) =>
+              n.type === 'group'
+                ? { ...n, data: { ...n.data, active: false } }
+                : n
+            )
           )
         );
         setActiveGroupId(null);
       }
       originsRef.current = null;
     },
-    [rf, setNodes, findOverlappingFolder, restorePushedNodes]
+    [rf, setNodes, findOverlappingFolder, findAnyOverlappingFolder, restorePushedNodes]
   );
 
   return {
     dropTargetId,
     activeGroupId,
+    rejectedFolderId,
     draggingNodeIds,
     repelAnimationActive,
     onNodeDragStart,

@@ -33,6 +33,7 @@ export interface FolderData {
   isDropTarget?: boolean;
   isExpanded?: boolean;
   isHidden?: boolean;
+  isRejectingDrop?: boolean;
   onCollapseComplete?: (folderId: string) => void;
   onExpandedChildContextMenu?: (
     event: React.MouseEvent,
@@ -143,7 +144,8 @@ export const FolderContent = ({
     <div
       className={cn(
         'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-[transform,box-shadow] duration-200 ease-out will-change-transform',
-        data.isDropTarget && 'scale-105 ring-2 ring-accent ring-offset-2'
+        data.isDropTarget && 'scale-105 ring-2 ring-accent ring-offset-2',
+        data.isRejectingDrop && 'folder-rejecting'
       )}
       style={{ transform: 'translateZ(0)' }}
     >
@@ -369,6 +371,15 @@ export const FolderContent = ({
           </p>
         ) : null}
       </div>
+
+      {/* Reject overlay: shown while an un-placeable node (widget, sticky,
+          folder, group) is dragged over this folder. */}
+      {data.isRejectingDrop ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20 rounded-[20px] ring-2 ring-red-500 ring-offset-2"
+        />
+      ) : null}
     </div>
   );
 };

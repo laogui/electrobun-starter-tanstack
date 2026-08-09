@@ -112,6 +112,7 @@ export function LibraryCard({
 
   return (
     <button
+      aria-label={title}
       className={cn(
         'group relative flex w-[208px] flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white text-left transition-[transform,border-color,box-shadow,background-color]',
         'hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]',
@@ -133,16 +134,13 @@ export function LibraryCard({
           {typeLabel}
         </TypeBadge>
       </span>
-      <span className="flex flex-col gap-1 border-gray-100 border-t px-3 py-2.5 dark:border-neutral-800">
-        <span className="truncate font-medium text-[13px] text-gray-900 leading-snug dark:text-gray-100">
-          {title}
+      {/* The miniature above already renders the live title, so the footer
+          carries only the timestamp to avoid printing the same heading twice. */}
+      {relative ? (
+        <span className="flex items-center border-gray-100 border-t px-3 py-2 text-2xs text-gray-400 dark:border-neutral-800 dark:text-neutral-500">
+          <span className="truncate">{relative}</span>
         </span>
-        {relative ? (
-          <span className="truncate text-2xs text-gray-400 dark:text-neutral-500">
-            {relative}
-          </span>
-        ) : null}
-      </span>
+      ) : null}
     </button>
   );
 }

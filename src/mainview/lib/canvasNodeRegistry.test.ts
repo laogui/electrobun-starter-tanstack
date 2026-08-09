@@ -61,11 +61,11 @@ describe('CANVAS_NODE_SPECS', () => {
     expect(CANVAS_NODE_SPECS.card.canEnterFolder).toBe(true);
 
     expect(CANVAS_NODE_SPECS.checklist.canEnterGroup).toBe(true);
-    expect(CANVAS_NODE_SPECS.checklist.canEnterFolder).toBe(true);
+    expect(CANVAS_NODE_SPECS.checklist.canEnterFolder).toBe(false);
     expect(CANVAS_NODE_SPECS.pomodoro.canEnterGroup).toBe(true);
-    expect(CANVAS_NODE_SPECS.pomodoro.canEnterFolder).toBe(true);
+    expect(CANVAS_NODE_SPECS.pomodoro.canEnterFolder).toBe(false);
     expect(CANVAS_NODE_SPECS.reminder.canEnterGroup).toBe(true);
-    expect(CANVAS_NODE_SPECS.reminder.canEnterFolder).toBe(true);
+    expect(CANVAS_NODE_SPECS.reminder.canEnterFolder).toBe(false);
 
     expect(CANVAS_NODE_SPECS.image.canEnterGroup).toBe(true);
     expect(CANVAS_NODE_SPECS.image.canEnterFolder).toBe(true);

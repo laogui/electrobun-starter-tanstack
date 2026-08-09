@@ -230,7 +230,7 @@ export const CardContent = ({
       <h2
         className={cn(
           'mb-4 flex items-center gap-2 font-bold text-xl',
-          !data.title && 'opacity-40'
+          !data.title && 'opacity-55'
         )}
       >
         {data.title || 'Untitled'}

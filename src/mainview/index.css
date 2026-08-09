@@ -389,13 +389,13 @@ body.resizing-nwse * {
 .note-preview {
   -webkit-mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.5rem),
-    transparent 100%
+    black calc(100% - 2.5rem),
+    transparent calc(100% - 0.25rem)
   );
   mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.5rem),
-    transparent 100%
+    black calc(100% - 2.5rem),
+    transparent calc(100% - 0.25rem)
   );
 }
 
@@ -521,11 +521,18 @@ body.resizing-nwse * {
 
 /* ── React Flow node overrides ── */
 
-/* Selected card/folder node styling — outline on the visual card itself
-   so border + card share the same element, radius, and stacking context */
+/* Selected card/folder node styling — a white gap + accent ring on the
+   visual card itself so border + card share the same element, radius, and
+   stacking context. A bare white outline vanished on pale cards, so the
+   selection reads as: normal card elevation, a 2px white gap, then a crisp
+   accent ring (the outline sits at `outline-offset: 2px`, exactly outside the
+   white box-shadow gap). Works on white, tinted, and colored cards alike. */
 .react-flow__node.selected:not(.react-flow__node-group) .node-visual {
-  outline: 2px solid #ffffff;
-  outline-offset: 0px;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 2px rgb(255 255 255 / 0.92);
 }
 
 /* Promote each node to its own compositing layer to avoid repaints
@@ -533,6 +540,24 @@ body.resizing-nwse * {
    not the inner visual, so the outline stays on the same layer as the card. */
 .react-flow__node {
   isolation: isolate;
+}
+
+/* A folder rejecting an un-placeable drop (widget, sticky, folder, group)
+   shakes once to signal the contents cannot be absorbed. */
+@keyframes folder-reject-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+.folder-rejecting {
+  animation: folder-reject-shake 200ms ease-in-out;
 }
 
 /* Folder expansion is a local collision transaction. React Flow owns the

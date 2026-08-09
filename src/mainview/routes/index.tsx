@@ -471,6 +471,7 @@ function CanvasComponent() {
     activeGroupId,
     draggingNodeIds,
     repelAnimationActive,
+    rejectedFolderId,
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,
@@ -1420,6 +1421,7 @@ function CanvasComponent() {
       isDropTarget: boolean;
       isExpanded: boolean;
       isHidden: boolean;
+      isRejectingDrop: boolean;
       renderZIndex: number | undefined;
       result: Node;
       source: Node;
@@ -1466,6 +1468,7 @@ function CanvasComponent() {
         isDropTarget: boolean;
         isExpanded: boolean;
         isHidden: boolean;
+        isRejectingDrop: boolean;
         renderZIndex: number | undefined;
         result: Node;
         source: Node;
@@ -1491,6 +1494,7 @@ function CanvasComponent() {
         ? folderExpansionChildren
         : undefined;
       const isDropTarget = dropTargetId === node.id;
+      const isRejectingDrop = rejectedFolderId === node.id;
       const renderZIndex = isExpanded
         ? folderAnchorZIndex
         : draggingOverContainerIds?.has(node.id)
@@ -1506,6 +1510,7 @@ function CanvasComponent() {
         cached.isExpanded === isExpanded &&
         cached.isClosing === isClosing &&
         cached.isDropTarget === isDropTarget &&
+        cached.isRejectingDrop === isRejectingDrop &&
         cached.renderZIndex === renderZIndex
       ) {
         nextCache.set(node.id, cached);
@@ -1526,6 +1531,7 @@ function CanvasComponent() {
           ...node.data,
           isHidden,
           isDropTarget,
+          isRejectingDrop,
           ...(node.type === 'folder'
             ? {
                 expansionChildren,
@@ -1553,6 +1559,7 @@ function CanvasComponent() {
         isDropTarget,
         isExpanded,
         isHidden,
+        isRejectingDrop,
         renderZIndex,
         result: decorated,
         source: node,
@@ -1570,6 +1577,7 @@ function CanvasComponent() {
     focusedFolderId,
     closingFolderId,
     dropTargetId,
+    rejectedFolderId,
     decoratedNodesCache,
     draggingOverContainerIds,
     dragLayerZIndex,

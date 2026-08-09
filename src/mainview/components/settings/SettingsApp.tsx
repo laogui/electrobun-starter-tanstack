@@ -8,6 +8,7 @@ import {
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
@@ -76,6 +77,39 @@ export function SettingsApp({
     useState<SettingsSection>('general');
   const { loadFailed, saveFailed, settings } = settingsState;
   const settingsRef = useRef(settings);
+
+  // Bottom fade hint for the dialog scroll container: revealed only while the
+  // content can still scroll further down, so a half-cut last row doesn't read
+  // as a broken layout. Targets the OverlayScrollbars `.os-viewport` element.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  useEffect(() => {
+    if (variant !== 'dialog') {
+      return;
+    }
+    const host = scrollContainerRef.current;
+    const viewport = host?.querySelector<HTMLElement>('.os-viewport');
+    const el = viewport ?? host;
+    if (!el) {
+      return;
+    }
+    const update = () => {
+      setHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    // Watch the scroll container's content box: swapping settings panels swaps
+    // the content and changes its height, which flips the fade state without
+    // needing to re-run the effect on section change.
+    const content = host?.querySelector<HTMLElement>('.os-content');
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(content ?? el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      resizeObserver.disconnect();
+    };
+  }, [variant]);
 
   const strings = getLocaleStrings(settings.locale);
 
@@ -170,25 +204,37 @@ export function SettingsApp({
       />
 
       {variant === 'dialog' ? (
-        <OverlayScrollbarsComponent
-          aria-labelledby="settings-active-section-heading"
-          className="settings-scrollbar min-h-0 min-w-0 flex-1"
-          defer
-          element="section"
-          options={SETTINGS_SCROLLBAR_OPTIONS}
+        <div
+          className="relative flex min-w-0 flex-1 flex-col"
+          ref={scrollContainerRef}
         >
-          <div className="px-7 pt-12 pb-8">
-            <SettingsContent
-              activeSection={activeSection}
-              client={client}
-              errorMessage={errorMessage}
-              locale={settings.locale}
-              onUpdate={updateSettings}
-              settings={settings}
-              strings={strings}
-            />
-          </div>
-        </OverlayScrollbarsComponent>
+          <OverlayScrollbarsComponent
+            aria-labelledby="settings-active-section-heading"
+            className="settings-scrollbar min-h-0 min-w-0 flex-1"
+            defer
+            element="section"
+            options={SETTINGS_SCROLLBAR_OPTIONS}
+          >
+            <div className="px-7 pt-12 pb-8">
+              <SettingsContent
+                activeSection={activeSection}
+                client={client}
+                errorMessage={errorMessage}
+                locale={settings.locale}
+                onUpdate={updateSettings}
+                settings={settings}
+                strings={strings}
+              />
+            </div>
+          </OverlayScrollbarsComponent>
+          <div
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-xl bg-gradient-to-t from-neutral-50 to-transparent transition-opacity duration-200 dark:from-neutral-950',
+              hasMoreBelow ? 'opacity-100' : 'opacity-0'
+            )}
+          />
+        </div>
       ) : (
         <section
           aria-labelledby="settings-active-section-heading"

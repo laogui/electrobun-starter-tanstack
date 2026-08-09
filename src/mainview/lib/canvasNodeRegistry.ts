@@ -78,7 +78,7 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       kind: 'checklist',
     }),
     canEnterGroup: true,
-    canEnterFolder: true,
+    canEnterFolder: false,
   },
   pomodoro: {
     kind: 'pomodoro',
@@ -89,7 +89,7 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       kind: 'pomodoro',
     }),
     canEnterGroup: true,
-    canEnterFolder: true,
+    canEnterFolder: false,
   },
   reminder: {
     kind: 'reminder',
@@ -100,7 +100,7 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       kind: 'reminder',
     }),
     canEnterGroup: true,
-    canEnterFolder: true,
+    canEnterFolder: false,
   },
   sticky: {
     kind: 'sticky',

@@ -76,6 +76,24 @@ export function isFolderChildNode(type: string | undefined): boolean {
   return type ? getFolderChildNodeTypes().has(type) : false;
 }
 
+/** React Flow node types that can never be absorbed into a folder from a drag
+ *  (sticky, folder, group, and the checklist/pomodoro/reminder widgets). */
+const REJECTED_FOLDER_CHILD_NODE_TYPES = new Set<string>([
+  'sticky',
+  'folder',
+  'group',
+  'widget',
+]);
+
+/** True when `nodeType` is a draggable node that a folder must visually reject
+ *  (repel) instead of absorbing. Structural containers and widgets can never
+ *  live inside a folder. */
+export function isRejectedFolderChildNode(
+  nodeType: string | undefined
+): boolean {
+  return nodeType ? REJECTED_FOLDER_CHILD_NODE_TYPES.has(nodeType) : false;
+}
+
 export function isFocusableNode(type: string | undefined): boolean {
   return type ? FOCUSABLE_NODE_TYPES.has(type) : false;
 }

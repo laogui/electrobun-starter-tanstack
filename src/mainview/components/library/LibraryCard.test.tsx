@@ -24,8 +24,9 @@ describe('LibraryCard', () => {
     render(<LibraryCard item={makeItem()} onClick={vi.fn()} />);
 
     expect(screen.getByText('Note')).toBeInTheDocument();
-    // Footer still shows the title; no lucide svg type glyph beside the time.
-    expect(screen.getAllByText('Roadmap').length).toBeGreaterThan(0);
+    // The miniature preview still renders the live title; the footer now shows
+    // only the timestamp, so the heading is printed exactly once.
+    expect(screen.getAllByText('Roadmap').length).toBe(1);
     expect(document.querySelector('svg')).toBeNull();
   });
 

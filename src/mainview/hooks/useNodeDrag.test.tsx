@@ -102,6 +102,20 @@ vi.mock('@/lib/repulsion', () => ({
     }
     return origins;
   },
+  pushNodeAwayFromObstacle: (node: { x: number; y: number; width: number; height: number }, obs: { x: number; y: number; width: number; height: number }, gap = 20) => {
+    // Real algorithm: push out along axis of minimum penetration.
+    const dx = node.x + node.width / 2 - (obs.x + obs.width / 2);
+    const dy = node.y + node.height / 2 - (obs.y + obs.height / 2);
+    const px = (node.width + obs.width) / 2 + gap - Math.abs(dx);
+    const py = (node.height + obs.height) / 2 + gap - Math.abs(dy);
+    if (px <= 0.5 || py <= 0.5) return { x: node.x, y: node.y };
+    if (px < py) {
+      const sign = dx > 0 ? 1 : -1;
+      return { x: node.x + px * sign, y: node.y };
+    }
+    const sign = dy > 0 ? 1 : -1;
+    return { x: node.x, y: node.y + py * sign };
+  },
 }));
 
 vi.mock('@/store/canvasStore', () => {
@@ -127,6 +141,7 @@ const Harness = () => {
     dropTargetId,
     activeGroupId,
     repelAnimationActive,
+    rejectedFolderId,
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,
@@ -303,6 +318,44 @@ const Harness = () => {
           onNodeDrag(
             {} as never,
             {
+              id: 'widget-1',
+              type: 'widget',
+              position: { x: 0, y: 0 },
+              data: { widgetId: 'w1', kind: 'checklist' },
+              measured: { width: 320, height: 340 },
+              style: { width: 320, height: 340 },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        dragging-widget
+      </button>
+      <button
+        onClick={() => {
+          onNodeDragStop(
+            {} as never,
+            {
+              id: 'widget-1',
+              type: 'widget',
+              position: { x: 0, y: 0 },
+              data: { widgetId: 'w1', kind: 'checklist' },
+              measured: { width: 320, height: 340 },
+              style: { width: 320, height: 340 },
+            } as never,
+            [] as never
+          );
+        }}
+        type="button"
+      >
+        drag-stop-widget
+      </button>
+      <button
+        onClick={() => {
+          onNodeDrag(
+            {} as never,
+            {
               id: 'folder-1',
               type: 'folder',
               position: { x: 40, y: 60 },
@@ -354,6 +407,7 @@ const Harness = () => {
       </button>
       <output aria-label="drop-target">{dropTargetId ?? 'none'}</output>
       <output aria-label="active-group">{activeGroupId ?? 'none'}</output>
+      <output aria-label="rejected-folder">{rejectedFolderId ?? 'none'}</output>
       <output aria-label="repel-anim">
         {repelAnimationActive ? 'on' : 'off'}
       </output>
@@ -572,6 +626,55 @@ describe('useNodeDrag – group and folder interactions', () => {
       paused: boolean;
     };
     expect(params.paused).toBe(true);
+  });
+
+  it('rejects a widget dragged over a folder without absorbing it', () => {
+    // widget-1 at (0,0) has its center inside folder-1 (20,20, 300x300).
+    rfMock.getIntersectingNodes.mockReturnValue([] as never[]);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'dragging-widget' }));
+
+    // The folder is a reject target, not an absorb drop target.
+    expect(screen.getByLabelText('rejected-folder')).toHaveTextContent(
+      'folder-1'
+    );
+    expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
+    // Repulsion is not paused (nothing is being absorbed).
+    const params = applyDragRepulsionMock.mock.calls.at(-1)?.[0] as unknown as {
+      paused: boolean;
+    };
+    expect(params.paused).toBe(false);
+  });
+
+  it('does not absorb a widget into a folder and pushes it out on drop stop', () => {
+    rfMock.getIntersectingNodes.mockReturnValue([] as never[]);
+    state.nodes = state.nodes.map((n) =>
+      n.id === 'card-1'
+        ? {
+            id: 'widget-1',
+            type: 'widget',
+            position: { x: 0, y: 0 },
+            data: { widgetId: 'w1', kind: 'checklist' },
+            measured: { width: 320, height: 340 },
+            style: { width: 320, height: 340 },
+          }
+        : n
+    ) as typeof state.nodes;
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-stop-widget' }));
+
+    // widget stays top-level, folder keeps empty children.
+    const widget = state.nodes.find((n) => n.id === 'widget-1');
+    expect(widget).toBeDefined();
+    expect(state.nodes.find((n) => n.id === 'folder-1')).toMatchObject({
+      data: { title: 'Folder', children: [] },
+    });
+    expect(screen.getByLabelText('rejected-folder')).toHaveTextContent('none');
+    // The widget (0,0, 320x340) overlapped folder-1 (20,20, 280x280) at drag
+    // stop; it must be pushed out rather than settle inside.
+    expect(widget?.position).toEqual({ x: 0, y: 320 });
   });
 
   it('restores pushed nodes to their origins when dropping into a folder', () => {

@@ -64,6 +64,44 @@ export function captureRepulsionOrigins(nodes: Node[]): Map<string, Point> {
   return origins;
 }
 
+/** Axis-aligned rect in absolute canvas coordinates. */
+export interface Rect {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Push a movable rect out of an immovable obstacle rect along the axis of
+ * minimum penetration, keeping a `gap` clearance. Used to give a dragged node
+ * that cannot enter a folder (widget, sticky, group, folder) a live "top it
+ * off" effect: the folder acts as a hard wall the cursor cannot pull the node
+ * through. Returns the new top-left position; unchanged when there is no
+ * overlap.
+ */
+export function pushNodeAwayFromObstacle(
+  node: Rect,
+  obstacle: Rect,
+  gap = REPULSION_GAP
+): { x: number; y: number } {
+  const dx =
+    node.x + node.width / 2 - (obstacle.x + obstacle.width / 2);
+  const dy =
+    node.y + node.height / 2 - (obstacle.y + obstacle.height / 2);
+  const px = (node.width + obstacle.width) / 2 + gap - Math.abs(dx);
+  const py = (node.height + obstacle.height) / 2 + gap - Math.abs(dy);
+  if (px <= OVERLAP_EPSILON || py <= OVERLAP_EPSILON) {
+    return { x: node.x, y: node.y };
+  }
+  if (px < py) {
+    const sign = dx > 0 ? 1 : -1;
+    return { x: node.x + px * sign, y: node.y };
+  }
+  const sign = dy > 0 ? 1 : -1;
+  return { x: node.x, y: node.y + py * sign };
+}
+
 function isLockedNode(node: Node): boolean {
   return Boolean((node.data as { locked?: unknown } | undefined)?.locked);
 }

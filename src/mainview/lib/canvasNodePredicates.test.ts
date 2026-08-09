@@ -5,6 +5,7 @@ import {
   isFocusableNode,
   isFolderChildNode,
   isGroupChildNode,
+  isRejectedFolderChildNode,
 } from '@/lib/canvasNodePredicates';
 
 describe('isCanvasContentNode', () => {
@@ -49,10 +50,28 @@ describe('isFolderChildNode', () => {
     ['sticky', false],
     ['folder', false],
     ['group', false],
+    ['widget', false],
     ['unknown', false],
     [undefined, false],
   ] as const)('returns %s for %s', (type, expected) => {
     expect(isFolderChildNode(type)).toBe(expected);
+  });
+});
+
+describe('isRejectedFolderChildNode', () => {
+  it.each([
+    ['widget', true],
+    ['sticky', true],
+    ['folder', true],
+    ['group', true],
+    ['card', false],
+    ['image', false],
+    ['asset', false],
+    ['link', false],
+    ['unknown', false],
+    [undefined, false],
+  ] as const)('returns %s for %s', (type, expected) => {
+    expect(isRejectedFolderChildNode(type)).toBe(expected);
   });
 });
 

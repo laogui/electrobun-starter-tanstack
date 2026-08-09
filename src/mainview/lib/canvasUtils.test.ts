@@ -148,8 +148,8 @@ describe('canAbsorbIntoFolder', () => {
     }
   });
 
-  it('returns false for sticky, folder, group', () => {
-    for (const type of ['sticky', 'folder', 'group']) {
+  it('returns false for sticky, folder, group, widget', () => {
+    for (const type of ['sticky', 'folder', 'group', 'widget']) {
       const node = createNode('n1') as Node;
       node.type = type;
       expect(canAbsorbIntoFolder(node)).toBe(false);

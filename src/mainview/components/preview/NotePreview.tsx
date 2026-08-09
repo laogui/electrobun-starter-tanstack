@@ -136,7 +136,7 @@ function NotePreviewComponent({
       <div
         className={cn(
           'flex-1 overflow-hidden whitespace-pre-wrap text-sm/relaxed',
-          fallbackText === 'Empty note' && 'opacity-40',
+          fallbackText === 'Empty note' && 'opacity-55',
           className
         )}
       >

@@ -6,6 +6,7 @@ import type { Point } from './collision';
 import {
   applyDragRepulsion,
   captureRepulsionOrigins,
+  pushNodeAwayFromObstacle,
   REPULSION_GAP,
   REPULSION_MARGIN,
 } from './repulsion';
@@ -55,16 +56,54 @@ const positionOf = (nodes: Node[], id: string): Point => {
 };
 
 describe('captureRepulsionOrigins', () => {
-  it('captures top-level positions and skips parented children', () => {
+  it('captures positions of top-level nodes only', () => {
     const nodes = [
-      card('a', 5, 6),
-      group('g', 100, 100, 500, 300),
-      card('child', 10, 10, { parentId: 'g' }),
+      card('a', 0, 0),
+      { ...card('b', 100, 100), parentId: 'g' },
+      card('c', 200, 200),
     ];
     const origins = captureRepulsionOrigins(nodes);
-    expect(origins.get('a')).toEqual({ x: 5, y: 6 });
-    expect(origins.get('g')).toEqual({ x: 100, y: 100 });
-    expect(origins.has('child')).toBe(false);
+    expect(origins.get('a')).toEqual({ x: 0, y: 0 });
+    expect(origins.get('c')).toEqual({ x: 200, y: 200 });
+    expect(origins.has('b')).toBe(false);
+  });
+});
+
+describe('pushNodeAwayFromObstacle', () => {
+  const obstacle = { x: 20, y: 20, width: 280, height: 280 };
+  const gap = REPULSION_GAP;
+
+  it('returns the same position when there is no overlap', () => {
+    const node = { x: 600, y: 600, width: 320, height: 340 };
+    expect(pushNodeAwayFromObstacle(node, obstacle, gap)).toEqual({
+      x: 600,
+      y: 600,
+    });
+  });
+
+  it('pushes out along the axis of minimum penetration', () => {
+    // node center (260,170) overlaps the folder; vertical penetration is
+    // deeper, so it is pushed horizontally (out of the folder's right side).
+    const node = { x: 100, y: 0, width: 320, height: 340 };
+    const result = pushNodeAwayFromObstacle(node, obstacle, gap);
+    expect(result.x).toBeGreaterThan(obstacle.x + obstacle.width);
+    expect(result.y).toBe(0);
+  });
+
+  it('pushes vertically when horizontal penetration is deeper', () => {
+    // node center (160,170) is nearly center-aligned horizontally with the
+    // folder, so it is pushed down out of the folder's bottom edge.
+    const node = { x: 0, y: 0, width: 320, height: 340 };
+    const result = pushNodeAwayFromObstacle(node, obstacle, gap);
+    expect(result.y).toBeGreaterThan(obstacle.y + obstacle.height);
+    expect(result.x).toBe(0);
+  });
+
+  it('keeps the REPULSION_GAP clearance from the obstacle edge', () => {
+    const node = { x: 100, y: 0, width: 320, height: 340 };
+    const result = pushNodeAwayFromObstacle(node, obstacle, gap);
+    // Folder right edge = 300; node left edge must sit at or beyond 300 + gap.
+    expect(result.x).toBeGreaterThanOrEqual(300 + gap);
   });
 });
 

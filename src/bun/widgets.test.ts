@@ -87,6 +87,19 @@ describe('widgets I/O', () => {
     expect(isValidWidgetId('with space')).toBe(false);
   });
 
+  it('createWidget writes a reminder due one hour from now', async () => {
+    const before = Date.now();
+    const record = await createWidget(wsPath, 'reminder');
+    expect(record.kind).toBe('reminder');
+    expect(record.title).toBe('Reminder');
+    expect(record.data).toMatchObject({
+      status: 'scheduled',
+    });
+    const dueAt = Date.parse((record.data as { dueAt?: string }).dueAt ?? '');
+    expect(dueAt).toBeGreaterThan(before);
+    expect(dueAt).toBeLessThanOrEqual(before + 60 * 60 * 1000 + 1000);
+  });
+
   it('createWidget writes a checklist widget with default data', async () => {
     const record = await createWidget(wsPath, 'checklist', 'Launch');
     expect(record.schema).toBe(WIDGET_SCHEMA);
@@ -222,6 +235,29 @@ describe('parseWidgetRecord', () => {
 
   it('accepts a valid pomodoro record', () => {
     const result = parseWidgetRecord(validPomodoro());
+    expect('error' in result).toBe(false);
+  });
+
+  it('accepts a pomodoro record with optional clockKind and stopwatch', () => {
+    const result = parseWidgetRecord(
+      validPomodoro({
+        data: {
+          clockKind: 'stopwatch',
+          mode: 'focus',
+          focusMinutes: 25,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          sessionsBeforeLongBreak: 4,
+          completedSessions: 0,
+          timer: { state: 'idle' },
+          stopwatch: {
+            state: 'running',
+            startedAt: '2026-07-08T12:00:00.000Z',
+            elapsedMs: 1000,
+          },
+        },
+      })
+    );
     expect('error' in result).toBe(false);
   });
 

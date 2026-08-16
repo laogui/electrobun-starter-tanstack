@@ -110,17 +110,28 @@ export interface ChecklistWidgetData {
   items: ChecklistWidgetItem[];
 }
 
+export type PomodoroClockKind = 'pomodoro' | 'stopwatch';
+
+export type PomodoroTimerState =
+  | { state: 'idle' }
+  | { durationMs: number; startedAt: string; state: 'running' }
+  | { remainingMs: number; state: 'paused' };
+
+export type StopwatchTimerState =
+  | { state: 'idle' }
+  | { elapsedMs: number; startedAt: string; state: 'running' }
+  | { elapsedMs: number; state: 'paused' };
+
 export interface PomodoroWidgetData {
+  clockKind?: PomodoroClockKind;
   completedSessions: number;
   focusMinutes: number;
   longBreakMinutes: number;
   mode: 'focus' | 'shortBreak' | 'longBreak';
   sessionsBeforeLongBreak: number;
   shortBreakMinutes: number;
-  timer:
-    | { state: 'idle' }
-    | { durationMs: number; startedAt: string; state: 'running' }
-    | { remainingMs: number; state: 'paused' };
+  stopwatch?: StopwatchTimerState;
+  timer: PomodoroTimerState;
 }
 
 export interface ReminderWidgetData {
@@ -198,6 +209,7 @@ function defaultDataForKind(kind: WidgetKind): WidgetData {
       return { items: [] } satisfies ChecklistWidgetData;
     case 'pomodoro':
       return {
+        clockKind: 'pomodoro',
         mode: 'focus',
         focusMinutes: 25,
         shortBreakMinutes: 5,
@@ -205,10 +217,11 @@ function defaultDataForKind(kind: WidgetKind): WidgetData {
         sessionsBeforeLongBreak: 4,
         completedSessions: 0,
         timer: { state: 'idle' },
+        stopwatch: { state: 'idle' },
       } satisfies PomodoroWidgetData;
     case 'reminder':
       return {
-        dueAt: new Date().toISOString(),
+        dueAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         status: 'scheduled',
       } satisfies ReminderWidgetData;

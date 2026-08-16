@@ -47,7 +47,7 @@ const DEFAULT_LINK_H = 360;
 const DEFAULT_RECORDING_W = 380;
 const DEFAULT_RECORDING_H = 150;
 const DEFAULT_WIDGET_W = 320;
-const DEFAULT_WIDGET_H = 340;
+const DEFAULT_WIDGET_H = 380;
 
 function pickRandom<T>(values: readonly T[]): T {
   // Falls back to first entry when array is empty (which the canvas color

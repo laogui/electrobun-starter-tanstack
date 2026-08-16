@@ -403,6 +403,35 @@ describe('widgetStore', () => {
     );
   });
 
+  it('does not complete a running stopwatch on hydrate', async () => {
+    useWidgetStore.getState().hydrate({
+      widget_pomodoro: pomodoroRecord(
+        {},
+        {
+          clockKind: 'stopwatch',
+          completedSessions: 1,
+          timer: { state: 'idle' },
+          stopwatch: {
+            state: 'running',
+            startedAt: '2026-07-08T10:00:00.000Z',
+            elapsedMs: 0,
+          },
+        }
+      ),
+    });
+
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        clockKind: 'stopwatch',
+        completedSessions: 1,
+        timer: { state: 'idle' },
+        stopwatch: { state: 'running' },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(rpcSaveWidgetMock).not.toHaveBeenCalled();
+  });
+
   it('completePomodoroIfDue increments once and is idempotent', async () => {
     // Start with a running pomodoro that has already expired.
     useWidgetStore.setState({

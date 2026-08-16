@@ -141,6 +141,70 @@ describe('WidgetNode', () => {
     expect(useWidgetStore.getState().history.widget_pomodoro).toBeUndefined();
   });
 
+  it('runs a stopwatch independently of the pomodoro clock', () => {
+    useWidgetStore.getState().hydrate({
+      widget_pomodoro: pomodoroRecord(),
+    });
+
+    render(
+      <WidgetNode
+        data={{ kind: 'pomodoro', widgetId: 'widget_pomodoro' }}
+        id="node-pomodoro"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start timer' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Switch to stopwatch' }));
+
+    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Timer settings' })
+    ).not.toBeInTheDocument();
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        clockKind: 'stopwatch',
+        timer: { state: 'running' },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start timer' }));
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        timer: { state: 'running' },
+        stopwatch: {
+          state: 'running',
+          startedAt: '2026-07-08T12:00:00.000Z',
+          elapsedMs: 0,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause timer' }));
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        timer: { state: 'running' },
+        stopwatch: { state: 'paused', elapsedMs: 0 },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop timer' }));
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        timer: { state: 'running' },
+        stopwatch: { state: 'idle' },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Switch to pomodoro' }));
+    expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({
+      data: {
+        clockKind: 'pomodoro',
+        timer: { state: 'running' },
+      },
+    });
+    expect(useWidgetStore.getState().history.widget_pomodoro).toBeUndefined();
+  });
+
   it('adjusts pomodoro durations from the settings panel', () => {
     useWidgetStore.getState().hydrate({
       widget_pomodoro: pomodoroRecord(),
@@ -153,6 +217,9 @@ describe('WidgetNode', () => {
       />
     );
 
+    expect(
+      screen.queryByRole('button', { name: 'Stop timer' })
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Timer settings' }));
     fireEvent.click(
       screen.getByRole('button', { name: 'Increase Focus session' })
@@ -184,15 +251,26 @@ describe('WidgetNode', () => {
       />
     );
 
+    expect(screen.getByLabelText('Reminder title')).toHaveValue('Follow up');
+    fireEvent.change(screen.getByLabelText('Reminder title'), {
+      target: { value: 'Call back' },
+    });
+    expect(useWidgetStore.getState().records.widget_reminder).toMatchObject({
+      title: 'Call back',
+    });
     expect(screen.getByLabelText('Reminder note')).toHaveValue(
       'Send the invoice'
     );
-    fireEvent.change(screen.getByLabelText('Reminder time'), {
-      target: { value: '2026-07-08T13:45' },
+    fireEvent.click(screen.getByRole('button', { name: 'Reminder time' }));
+    fireEvent.click(
+      document.querySelector('button[data-day="2026-07-09"]') as Element
+    );
+    fireEvent.change(screen.getByLabelText('Time'), {
+      target: { value: '13:45' },
     });
     expect(useWidgetStore.getState().records.widget_reminder).toMatchObject({
       data: {
-        dueAt: new Date('2026-07-08T13:45').toISOString(),
+        dueAt: new Date(2026, 6, 9, 13, 45).toISOString(),
         status: 'scheduled',
       },
     });
@@ -269,7 +347,7 @@ describe('WidgetNode', () => {
     );
 
     // remainingMs is 0 at system time 12:00 with startedAt 11:59 + 60s.
-    expect(screen.getByText('0:00')).toBeInTheDocument();
+    expect(screen.getByText('00:00')).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(useWidgetStore.getState().records.widget_pomodoro).toMatchObject({

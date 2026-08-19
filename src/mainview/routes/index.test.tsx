@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -10,6 +16,8 @@ import {
 import { DEFAULT_SETTINGS } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 const FOCUSED_RE = /Focused/;
 const NEW_RE = /^new$/i;
@@ -611,11 +619,13 @@ vi.mock('@/components/canvas/RecordingRecorder', () => ({
     return (
       <button
         onClick={() => {
-          props.onComplete({
-            blob: new Blob(['audio'], { type: 'audio/mp4' }),
-            durationMs: 1000,
-            mimeType: 'audio/mp4',
-          });
+          Promise.resolve(
+            props.onComplete({
+              blob: new Blob(['audio'], { type: 'audio/mp4' }),
+              durationMs: 1000,
+              mimeType: 'audio/mp4',
+            })
+          ).catch(() => undefined);
         }}
         type="button"
       >
@@ -657,10 +667,20 @@ const resetStore = () => {
   useAppSettingsStore.setState({
     ...DEFAULT_SETTINGS,
   });
+  useExtensionEnablementStore.setState({ disabledCanvasTypes: [] });
+  useExtensionInstanceStore.setState({ records: {}, history: {} });
 };
 
 describe('routes/index', () => {
+  let CanvasRoute: () => React.ReactElement;
+
+  beforeAll(async () => {
+    const module = await import('./index');
+    CanvasRoute = module.Route.options.component as () => React.ReactElement;
+  }, 20_000);
+
   beforeEach(() => {
+    cleanup();
     resetViewportPersistSuppression();
     resetStore();
     rpcMocks.loadCanvas.mockReset();
@@ -794,10 +814,6 @@ describe('routes/index', () => {
   });
 
   it('hydrates loaded canvas data and opens a focused node', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -827,10 +843,6 @@ describe('routes/index', () => {
   });
 
   it('opens the focused view on a plain single click', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -882,10 +894,6 @@ describe('routes/index', () => {
       edges: [],
     });
 
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -935,10 +943,6 @@ describe('routes/index', () => {
   });
 
   it('does not open the focused view on a modifier-click (selection only)', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -954,10 +958,6 @@ describe('routes/index', () => {
   });
 
   it('drops the selection change from a plain click on a node', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -975,10 +975,6 @@ describe('routes/index', () => {
   });
 
   it('keeps selection changes from marquee/modifier interactions', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -998,10 +994,6 @@ describe('routes/index', () => {
   });
 
   it('enables 24px snap-to-grid dragging', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1015,10 +1007,6 @@ describe('routes/index', () => {
   });
 
   it('keeps a pane click from zooming while closing an expanded folder', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1032,10 +1020,6 @@ describe('routes/index', () => {
     useAppSettingsStore.setState({
       canvasSnapToGrid: false,
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1071,10 +1055,6 @@ describe('routes/index', () => {
       ],
       edges: [],
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1127,10 +1107,6 @@ describe('routes/index', () => {
       ],
       edges: [],
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1162,10 +1138,6 @@ describe('routes/index', () => {
 
   it('shows an empty canvas guide for empty manifests', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce({ nodes: [], edges: [] });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1182,10 +1154,6 @@ describe('routes/index', () => {
   });
 
   it('supports create menu and canvas context menu flows', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1232,10 +1200,6 @@ describe('routes/index', () => {
         },
       },
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1255,10 +1219,6 @@ describe('routes/index', () => {
   });
 
   it('creates completed recordings at the canvas context-menu anchor', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1321,10 +1281,6 @@ describe('routes/index', () => {
       ],
       edges: [],
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1351,10 +1307,6 @@ describe('routes/index', () => {
         resolveSave = resolve;
       })
     );
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1388,21 +1340,24 @@ describe('routes/index', () => {
     });
 
     await waitFor(() => {
-      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith(
-        'recording',
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ recordingNumber: 1 }),
+          canvasTypeId: 'ghostboard.media/recording',
+          state: expect.objectContaining({
+            recordingNumber: 1,
+          }),
         })
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Finish recording' })).toBe(
+        null
       );
     });
   });
 
   it('uses the localized recording save failure toast', async () => {
     recordingMocks.saveRecording.mockRejectedValueOnce(new Error('disk full'));
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1421,10 +1376,6 @@ describe('routes/index', () => {
   });
 
   it('creates link nodes from the create menu URL form', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1452,10 +1403,6 @@ describe('routes/index', () => {
   });
 
   it('creates link nodes from pasted URLs when the canvas is idle', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1488,10 +1435,6 @@ describe('routes/index', () => {
   });
 
   it('creates asset nodes from dropped files', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1530,10 +1473,6 @@ describe('routes/index', () => {
         data: { items: [] },
       },
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1585,10 +1524,6 @@ describe('routes/index', () => {
       importError
     );
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1612,10 +1547,6 @@ describe('routes/index', () => {
   });
 
   it('exports the current canvas as PNG from the toolbar', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1640,10 +1571,6 @@ describe('routes/index', () => {
   });
 
   it('exports the current canvas as JSON from the toolbar', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1681,10 +1608,6 @@ describe('routes/index', () => {
       // Legacy manifests may still contain viewport; renderer must ignore it.
       viewport: { x: 42, y: 84, zoom: 1.25 },
     });
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1696,10 +1619,6 @@ describe('routes/index', () => {
   });
 
   it('writes user-driven viewport moves to the session cache during suppression windows', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1736,10 +1655,6 @@ describe('routes/index', () => {
   it('seeds initial nodes when no manifest exists and rpc is available', async () => {
     rpcMocks.loadCanvas.mockResolvedValueOnce(null);
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(true);
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1780,10 +1695,6 @@ describe('routes/index', () => {
   it('keeps loading state when load fails and does not focus without rect', async () => {
     rpcMocks.loadCanvas.mockRejectedValueOnce(new Error('failed load'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1800,10 +1711,6 @@ describe('routes/index', () => {
     // demo nodes so the canvas remains usable for browser-only debugging.
     rpcMocks.loadCanvas.mockResolvedValueOnce(null);
     rpcMocks.isRpcAvailable.mockResolvedValueOnce(false);
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1816,10 +1723,6 @@ describe('routes/index', () => {
   });
 
   it('does not open focused node when the selected element has no rect', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {
@@ -1834,10 +1737,6 @@ describe('routes/index', () => {
   });
 
   it('registers the custom connection preview line', async () => {
-    const module = await import('./index');
-    const CanvasRoute = module.Route.options
-      .component as () => React.ReactElement;
-
     render(<CanvasRoute />);
 
     await waitFor(() => {

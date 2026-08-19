@@ -85,6 +85,57 @@ describe('LibraryCard', () => {
     expect(chromeBadge).toHaveAttribute('data-type-badge');
   });
 
+  it('labels extension media and productivity cards like the original types', () => {
+    const { rerender } = render(
+      <LibraryCard
+        item={makeItem({
+          data: {
+            canvasTypeId: 'ghostboard.media/file',
+            kind: 'file',
+            mimeType: 'application/pdf',
+            title: 'deck',
+          },
+          id: 'node:ext-file',
+          nodeId: 'ext-file',
+          title: 'deck',
+          type: 'extension',
+        })}
+        onClick={vi.fn()}
+      />
+    );
+    expect(
+      screen.getAllByText('PDF').some((el) => el.className.includes('absolute'))
+    ).toBe(true);
+
+    rerender(
+      <LibraryCard
+        item={makeItem({
+          data: { canvasTypeId: 'ghostboard.media/image', title: 'Logo' },
+          id: 'node:ext-image',
+          nodeId: 'ext-image',
+          title: 'Logo',
+          type: 'extension',
+        })}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Image')).toBeInTheDocument();
+
+    rerender(
+      <LibraryCard
+        item={makeItem({
+          data: { canvasTypeId: 'ghostboard.productivity/pomodoro' },
+          id: 'node:ext-pomodoro',
+          nodeId: 'ext-pomodoro',
+          title: 'Focus',
+          type: 'extension',
+        })}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Timer')).toBeInTheDocument();
+  });
+
   it('invokes onClick when activated', () => {
     const onClick = vi.fn();
     const item = makeItem();

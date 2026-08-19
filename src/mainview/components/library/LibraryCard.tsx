@@ -3,8 +3,16 @@ import { useEffect, useRef } from 'react';
 import { TypeBadge } from '@/components/canvas/nodes/_shared/TypeBadge';
 import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
-
 import * as m from '../../../paraglide/messages.js';
+import {
+  CHECKLIST_CANVAS_TYPE_ID,
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+  POMODORO_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+  REMINDER_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
 import { LibraryItemPreview } from './LibraryItemPreview';
 import type { LibraryItem } from './useLibraryData';
 
@@ -51,6 +59,31 @@ function typeLabelFor(type: string, data: Record<string, unknown>): string {
   if (type === 'sticky') {
     return 'Sticky';
   }
+  if (type === 'extension') {
+    const canvasTypeId =
+      typeof data.canvasTypeId === 'string' ? data.canvasTypeId : '';
+    if (canvasTypeId === IMAGE_CANVAS_TYPE_ID) {
+      return 'Image';
+    }
+    if (canvasTypeId === LINK_CANVAS_TYPE_ID) {
+      return 'Link';
+    }
+    if (canvasTypeId === RECORDING_CANVAS_TYPE_ID) {
+      return 'Recording';
+    }
+    if (canvasTypeId === FILE_CANVAS_TYPE_ID) {
+      return assetTypeLabel(data);
+    }
+    if (canvasTypeId === CHECKLIST_CANVAS_TYPE_ID) {
+      return 'Checklist';
+    }
+    if (canvasTypeId === POMODORO_CANVAS_TYPE_ID) {
+      return 'Timer';
+    }
+    if (canvasTypeId === REMINDER_CANVAS_TYPE_ID) {
+      return 'Reminder';
+    }
+  }
   return 'Note';
 }
 
@@ -96,7 +129,11 @@ export function LibraryCard({
 }: LibraryCardProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const typeLabel = typeLabelFor(item.type, item.data);
-  const missing = item.type === 'asset' && item.data.missing === true;
+  const missing =
+    (item.type === 'asset' && item.data.missing === true) ||
+    (item.type === 'extension' &&
+      item.data.canvasTypeId === FILE_CANVAS_TYPE_ID &&
+      item.data.missing === true);
   const relative = formatRelativeTime(item.updatedAt);
   const title =
     item.title.trim().length > 0 ? item.title : m.library_untitled();

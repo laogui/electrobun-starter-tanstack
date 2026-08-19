@@ -490,6 +490,30 @@ describe('AssetContent', () => {
     expect(screen.queryByText('Loading media')).not.toBeInTheDocument();
   });
 
+  it('resolves an image-as-file thumbnail from thumbnailFile', async () => {
+    resolveAttachmentStreamUrlMock.mockResolvedValueOnce(
+      'blob:thumb-from-file'
+    );
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/file_abc.png',
+          color: '#ffffff',
+          fileName: 'screenshot.png',
+          kind: 'file',
+          mimeType: 'image/png',
+          thumbnailFile: 'attachments/file_abc.thumb.jpg',
+          title: 'screenshot.png',
+        }}
+      />
+    );
+
+    expect(
+      await screen.findByAltText('screenshot.png thumbnail')
+    ).toHaveAttribute('src', 'blob:thumb-from-file');
+  });
+
   it('renders an image-as-file thumbnail when the MIME is image/*', () => {
     render(
       <AssetContent

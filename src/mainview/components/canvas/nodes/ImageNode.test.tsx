@@ -231,6 +231,33 @@ describe('ImageNode', () => {
     ).toHaveAttribute('src', 'data:image/jpeg;base64,thumb');
   });
 
+  it('loads the thumbnail attachment on the canvas when only thumbnailFile is present', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/jpeg;base64,from-file',
+    });
+
+    render(
+      <ImageContent
+        data={{
+          color: '#fff',
+          imageFile: 'attachments/full.jpg',
+          thumbnailFile: 'attachments/thumb.jpg',
+          title: 'Thumb only',
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(rpcLoadAttachmentMock).toHaveBeenCalledWith(
+        'attachments/thumb.jpg'
+      );
+      expect(screen.getByRole('img', { name: 'Thumb only' })).toHaveAttribute(
+        'src',
+        'data:image/jpeg;base64,from-file'
+      );
+    });
+  });
+
   it('falls back to the thumbnail when focused original image loading fails', async () => {
     rpcLoadAttachmentMock.mockResolvedValueOnce(null);
 

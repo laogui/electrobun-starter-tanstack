@@ -4,19 +4,19 @@ import * as motion from 'motion/react-m';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { colorToStyle } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 import type { FocusedItem } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
+import {
+  type ExtensionInstanceLoadError,
+  type ExtensionInstanceRecord,
+  isExtensionInstanceLoadError,
+} from '../../../shared/extensions/instance';
 import { CanvasContextMenu, type ContextMenuState } from './ContextMenu';
+import { FolderChildPreview } from './FolderChildPreview';
 import { calculateFolderFanLayout } from './folderFanLayout';
-import { AssetContent } from './nodes/AssetNode';
-import type { CardContentData } from './nodes/CardNode';
-import { CardContent } from './nodes/CardNode';
-import type { ImageData } from './nodes/ImageNode';
-import { ImageContent } from './nodes/ImageNode';
-import { LinkContent } from './nodes/LinkNode';
 
 export interface FolderChild {
   data: Record<string, unknown>;
@@ -63,38 +63,32 @@ function useViewportSize() {
   return viewport;
 }
 
-const FolderChildContent = ({ child }: { child: FolderChild }) => {
-  if (child.type === 'image') {
-    return <ImageContent data={child.data as unknown as ImageData} />;
-  }
-  if (child.type === 'link') {
-    return <LinkContent data={child.data} />;
-  }
-  if (child.type === 'asset') {
-    return <AssetContent data={child.data} />;
-  }
-  if (child.type === 'sticky') {
-    const stickyColor =
-      typeof child.data.color === 'string' ? child.data.color : undefined;
-    const stickyContent =
-      typeof child.data.content === 'string' ? child.data.content : '';
-    return (
-      <div
-        className="flex size-full flex-col p-4"
-        style={colorToStyle(stickyColor)}
-      >
-        <div className="wrap-break-word flex-1 whitespace-pre-wrap text-sm/relaxed">
-          {stickyContent}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <CardContent data={child.data as unknown as CardContentData} readOnly />
-  );
-};
+const FolderChildContent = ({ child }: { child: FolderChild }) => (
+  <FolderChildPreview child={child} />
+);
 
-function getChildLabel(child: FolderChild): string {
+function getChildLabel(
+  child: FolderChild,
+  instances: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  >
+): string {
+  if (child.type === 'extension') {
+    const instanceId =
+      typeof child.data.instanceId === 'string' ? child.data.instanceId : '';
+    const record = instanceId ? instances[instanceId] : undefined;
+    if (record && !isExtensionInstanceLoadError(record)) {
+      const presentationTitle = record.presentation.title.trim();
+      if (presentationTitle) {
+        return presentationTitle;
+      }
+      const subtitle = record.presentation.subtitle?.trim();
+      if (subtitle) {
+        return subtitle;
+      }
+    }
+  }
   const title = child.data.title;
   if (typeof title === 'string' && title.trim()) {
     return title.trim();
@@ -119,6 +113,7 @@ export const FolderView = ({
   onCardClick,
   onMoveChildOut,
 }: FolderViewProps) => {
+  const extensionRecords = useExtensionInstanceStore((s) => s.records);
   const childrenRaw = folder.data.children;
   const children: FolderChild[] = useMemo(
     () => (Array.isArray(childrenRaw) ? (childrenRaw as FolderChild[]) : []),
@@ -400,7 +395,9 @@ export const FolderView = ({
             const originX = folderCenterX - (slot.left + layout.cardWidth / 2);
             const originY = folderCenterY - (slot.top + layout.cardHeight / 2);
             const isChild = entry.kind === 'child';
-            const childLabel = isChild ? getChildLabel(entry.child) : '';
+            const childLabel = isChild
+              ? getChildLabel(entry.child, extensionRecords)
+              : '';
             const ariaLabel = isChild
               ? m.folder_view_open_item({ title: childLabel })
               : m.folder_view_more_items({ count: entry.remaining });

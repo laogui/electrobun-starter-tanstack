@@ -60,20 +60,13 @@ function PomodoroCanvasSurface({
   );
 }
 
-function PomodoroPreviewSurface({
-  presentation,
-  state,
-}: PreviewProps<PomodoroState>) {
-  const normalized = normalizePomodoroState(state);
+function PomodoroPreviewSurface({ state }: PreviewProps<PomodoroState>) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-1 p-3">
-      <div className="font-medium text-sm">
-        {presentation.title || normalized.title || 'Pomodoro'}
-      </div>
-      <div className="text-neutral-500 text-xs">
-        {normalized.completedSessions} sessions
-      </div>
-    </div>
+    <PomodoroWidgetBody
+      data={normalizePomodoroState(state)}
+      readOnly
+      widgetId="pomodoro-preview"
+    />
   );
 }
 
@@ -87,7 +80,7 @@ export const pomodoroCanvasType: BuiltinCanvasType<PomodoroState> = {
   createFlow: 'immediate',
   capabilities: ['scheduler', 'notifications'],
   surface: {
-    defaultSize: { width: 320, height: 340 },
+    defaultSize: { width: 320, height: 380 },
     minSize: { width: 220, height: 220 },
     maxSize: { width: 800, height: 900 },
     resizable: true,

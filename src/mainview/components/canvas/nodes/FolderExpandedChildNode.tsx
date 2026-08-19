@@ -116,7 +116,7 @@ export function FolderExpandedChildVisual({
       className={cn(
         'folder-expanded-child-visual node-visual pointer-events-auto size-full overflow-hidden bg-white shadow-card will-change-transform dark:bg-neutral-800',
         focusable ? 'cursor-pointer' : 'cursor-default',
-        getFolderChildShapeClass(data.child.type)
+        getFolderChildShapeClass(data.child.type, data.child.data)
       )}
       data-folder-child-id={data.child.id}
       data-folder-motion-delay={transition.delay}

@@ -46,9 +46,13 @@ export const ImageContent = ({
   const directImageUrl = workspaceImagePath ? '' : rawImageUrl;
   const attachmentToLoad =
     workspaceImagePath ||
-    (directImageUrl || (data.thumbnailUrl && !isFocused)
+    (directImageUrl
       ? undefined
-      : data.imageFile);
+      : isFocused
+        ? data.imageFile
+        : data.thumbnailUrl
+          ? undefined
+          : data.thumbnailFile || data.imageFile);
   const [lazyLoadState, setLazyLoadState] = useState<{
     attachmentToLoad: string | undefined;
     failed: boolean;

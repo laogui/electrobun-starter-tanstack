@@ -7,6 +7,7 @@ import {
   FOLDER_EXPANDED_CHILD_NODE_TYPE,
   type FolderExpandedChildData,
   getFolderChildPreviewSize,
+  getFolderChildShapeClass,
   getFolderPeekChildren,
   getFolderThumbnailContentTransform,
   getFolderThumbnailSlots,
@@ -337,5 +338,22 @@ describe('buildFolderExpansionNodes', () => {
     expect(content.transform).toBe('scaleX(0.5)');
     expect(content.scaleX * content.widthPercent).toBe(100);
     expect(0.8 * content.scaleX).toBe(0.4);
+  });
+});
+
+describe('getFolderChildShapeClass', () => {
+  it('keeps recording cards — leftover and extension — on the 2xl radius', () => {
+    expect(getFolderChildShapeClass('recording')).toBe('rounded-2xl');
+    expect(
+      getFolderChildShapeClass('extension', {
+        canvasTypeId: 'ghostboard.media/recording',
+      })
+    ).toBe('rounded-2xl');
+    expect(
+      getFolderChildShapeClass('extension', {
+        canvasTypeId: 'ghostboard.media/image',
+      })
+    ).toBe('rounded-3xl');
+    expect(getFolderChildShapeClass('sticky')).toBe('rounded-sm');
   });
 });

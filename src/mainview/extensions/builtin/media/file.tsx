@@ -1,6 +1,12 @@
 import { File } from 'lucide-react';
-import { useCallback } from 'react';
 
+import { AssetHoverCard } from '@/components/canvas/nodes/_shared/AssetHoverCard';
+import {
+  AssetContent,
+  type AssetNodeRuntimeData,
+  buildAssetHoverRows,
+  resolveAssetData,
+} from '@/components/canvas/nodes/AssetNode';
 import { FILE_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildFilePresentation,
@@ -16,48 +22,40 @@ import type {
   SurfaceProps,
 } from '../../types';
 
-function FileCanvasSurface({ context, host, state }: SurfaceProps<FileState>) {
-  const normalized = normalizeFileState(state);
-  const title = normalized.title.trim() || normalized.fileName || 'File';
-  const open = useCallback(() => {
-    if (!normalized.attachmentFile) {
-      return;
-    }
-    host.external.openUrl(normalized.attachmentFile).catch(() => undefined);
-  }, [host, normalized.attachmentFile]);
+function toAssetData(state: FileState): AssetNodeRuntimeData {
+  return {
+    ...(state.archiveSummary ? { archiveSummary: state.archiveSummary } : {}),
+    ...(state.attachmentFile ? { attachmentFile: state.attachmentFile } : {}),
+    color: state.color,
+    ...(typeof state.duration === 'number' ? { duration: state.duration } : {}),
+    fileName: state.fileName,
+    kind: state.kind,
+    mimeType: state.mimeType,
+    ...(state.previewExcerpt ? { previewExcerpt: state.previewExcerpt } : {}),
+    ...(typeof state.size === 'number' ? { size: state.size } : {}),
+    ...(state.thumbnailFile ? { thumbnailFile: state.thumbnailFile } : {}),
+    title: state.title,
+    ...(state.waveform ? { waveform: state.waveform } : {}),
+  };
+}
 
+function FileCanvasSurface({ state }: SurfaceProps<FileState>) {
+  const data = toAssetData(normalizeFileState(state));
+  const asset = resolveAssetData(data);
   return (
-    <div className="flex h-full flex-col justify-between p-5">
-      <div>
-        <div className="font-medium text-sm">{title}</div>
-        <div className="mt-1 text-neutral-500 text-xs">
-          {normalized.fileName || normalized.mimeType}
-        </div>
-      </div>
-      {context.readOnly ? null : (
-        <button
-          className="nodrag nopan rounded-full bg-neutral-900 px-3 py-2 text-white text-xs dark:bg-white/10"
-          onClick={open}
-          type="button"
-        >
-          Open
-        </button>
-      )}
-    </div>
+    <AssetHoverCard enabled={!asset.missing} rows={buildAssetHoverRows(asset)}>
+      <AssetContent data={data} />
+    </AssetHoverCard>
   );
 }
 
-function FilePreviewSurface({ presentation, state }: PreviewProps<FileState>) {
-  const normalized = normalizeFileState(state);
+function FilePreviewSurface({ state }: PreviewProps<FileState>) {
+  return <AssetContent data={toAssetData(normalizeFileState(state))} />;
+}
+
+function FileDetailSurface({ state }: SurfaceProps<FileState>) {
   return (
-    <div className="flex h-full flex-col justify-center gap-1 p-3">
-      <div className="truncate font-medium text-sm">
-        {presentation.title || normalized.title || 'File'}
-      </div>
-      <div className="truncate text-neutral-500 text-xs">
-        {normalized.fileName}
-      </div>
-    </div>
+    <AssetContent data={toAssetData(normalizeFileState(state))} isFocused />
   );
 }
 
@@ -85,5 +83,5 @@ export const fileCanvasType: BuiltinCanvasType<FileState> = {
   buildPresentation: buildFilePresentation,
   CanvasSurface: FileCanvasSurface,
   PreviewSurface: FilePreviewSurface,
-  DetailSurface: FileCanvasSurface,
+  DetailSurface: FileDetailSurface,
 };

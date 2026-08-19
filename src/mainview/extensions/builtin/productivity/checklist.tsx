@@ -41,21 +41,15 @@ function ChecklistCanvasSurface({
   );
 }
 
-function ChecklistPreviewSurface({
-  presentation,
-  state,
-}: PreviewProps<ChecklistState>) {
+function ChecklistPreviewSurface({ state }: PreviewProps<ChecklistState>) {
   const normalized = normalizeChecklistState(state);
-  const open = normalized.items.filter(
-    (item) => !(item.checked || item.isHeader)
-  ).length;
   return (
-    <div className="flex h-full flex-col justify-center gap-1 p-3">
-      <div className="truncate font-medium text-sm">
-        {presentation.title || normalized.title || 'Checklist'}
-      </div>
-      <div className="text-neutral-500 text-xs">{open} open</div>
-    </div>
+    <ChecklistWidgetBody
+      data={{ items: normalized.items }}
+      nodeId="checklist-preview"
+      readOnly
+      title={normalized.title}
+    />
   );
 }
 
@@ -68,7 +62,7 @@ export const checklistCanvasType: BuiltinCanvasType<ChecklistState> = {
   dataVersion: 1,
   createFlow: 'immediate',
   surface: {
-    defaultSize: { width: 320, height: 340 },
+    defaultSize: { width: 320, height: 380 },
     minSize: { width: 220, height: 220 },
     maxSize: { width: 800, height: 900 },
     resizable: true,

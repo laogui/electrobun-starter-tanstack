@@ -1,5 +1,6 @@
 import type { Node } from '@xyflow/react';
 
+import { RECORDING_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
 import { findSpecByNodeType } from './canvasNodeRegistry';
 import {
   buildAbsoluteRects,
@@ -227,11 +228,17 @@ export function getFolderChildPreviewSize(
   };
 }
 
-export function getFolderChildShapeClass(type: string): string {
+export function getFolderChildShapeClass(
+  type: string,
+  data?: Record<string, unknown>
+): string {
   if (type === 'sticky') {
     return 'rounded-sm';
   }
   if (type === 'recording') {
+    return 'rounded-2xl';
+  }
+  if (type === 'extension' && data?.canvasTypeId === RECORDING_CANVAS_TYPE_ID) {
     return 'rounded-2xl';
   }
   return 'rounded-3xl';

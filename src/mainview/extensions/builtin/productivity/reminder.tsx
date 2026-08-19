@@ -87,18 +87,10 @@ function ReminderCanvasSurface({
   );
 }
 
-function ReminderPreviewSurface({
-  presentation,
-  state,
-}: PreviewProps<ReminderState>) {
+function ReminderPreviewSurface({ state }: PreviewProps<ReminderState>) {
   const normalized = normalizeReminderState(state);
   return (
-    <div className="flex h-full flex-col justify-center gap-1 p-3">
-      <div className="truncate font-medium text-sm">
-        {presentation.title || normalized.title || 'Reminder'}
-      </div>
-      <div className="text-neutral-500 text-xs">{normalized.status}</div>
-    </div>
+    <ReminderWidgetBody data={normalized} readOnly title={normalized.title} />
   );
 }
 
@@ -112,7 +104,7 @@ export const reminderCanvasType: BuiltinCanvasType<ReminderState> = {
   createFlow: 'immediate',
   capabilities: ['scheduler', 'notifications'],
   surface: {
-    defaultSize: { width: 320, height: 340 },
+    defaultSize: { width: 320, height: 380 },
     minSize: { width: 220, height: 220 },
     maxSize: { width: 800, height: 900 },
     resizable: true,

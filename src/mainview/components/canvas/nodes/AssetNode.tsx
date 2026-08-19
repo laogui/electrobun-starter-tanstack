@@ -97,7 +97,7 @@ function resolveArchiveSummary(value: unknown): ArchiveSummary | undefined {
   return { entryCount: candidate.entryCount, topFiles };
 }
 
-function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
+export function resolveAssetData(data: AssetNodeRuntimeData): AssetNodeData {
   const kind: AssetKind =
     data.kind === 'video' || data.kind === 'audio' || data.kind === 'file'
       ? data.kind
@@ -156,7 +156,7 @@ function getAssetLabel(asset: AssetNodeData): string {
 
 // Builds the metadata rows shown in the canvas hover panel. Surfacing this
 // info on hover lets the card face stay minimal (badge + thumbnail + title).
-function buildAssetHoverRows(asset: AssetNodeData): {
+export function buildAssetHoverRows(asset: AssetNodeData): {
   label: string;
   value: string;
 }[] {
@@ -433,13 +433,17 @@ function ImageAsFileThumbnail({
   asset: AssetNodeData;
   title: string;
 }) {
+  const thumbSrc = useResolvedAttachmentPreview(
+    asset.thumbnailUrl,
+    asset.thumbnailFile
+  );
   return (
     <div className="relative size-full overflow-hidden bg-neutral-100 dark:bg-black/30">
-      {asset.thumbnailUrl ? (
+      {thumbSrc ? (
         <img
           alt={`${title} thumbnail`}
           className="size-full object-cover"
-          src={asset.thumbnailUrl}
+          src={thumbSrc}
         />
       ) : (
         <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,oklch(0.85_0.04_220/.4),transparent_55%),oklch(0.96_0.01_220)] text-neutral-500 dark:bg-[radial-gradient(circle_at_50%_35%,oklch(0.55_0.07_220/.45),transparent_55%),oklch(0.22_0.02_240)] dark:text-neutral-300">

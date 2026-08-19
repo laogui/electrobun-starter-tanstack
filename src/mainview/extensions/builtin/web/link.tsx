@@ -114,16 +114,8 @@ function LinkCanvasSurface({ context, host, state }: SurfaceProps<LinkState>) {
   );
 }
 
-function LinkPreviewSurface({ presentation, state }: PreviewProps<LinkState>) {
-  const normalized = normalizeLinkState(state);
-  return (
-    <div className="flex h-full flex-col justify-center gap-1 p-3">
-      <div className="truncate font-medium text-sm">
-        {presentation.title || normalized.title || 'Link'}
-      </div>
-      <div className="truncate text-neutral-500 text-xs">{normalized.url}</div>
-    </div>
-  );
+function LinkPreviewSurface({ state }: PreviewProps<LinkState>) {
+  return <LinkContent data={normalizeLinkState(state)} />;
 }
 
 export const linkCanvasType: BuiltinCanvasType<LinkState> = {

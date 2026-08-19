@@ -3,6 +3,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { NodeHandles } from '@/components/canvas/nodes/_shared/NodeHandles';
 import { ResizeHandle } from '@/components/canvas/nodes/_shared/ResizeHandle';
 import { cn } from '@/lib/utils';
+import { RECORDING_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
 
@@ -86,7 +87,14 @@ export function ExtensionHostShell({
       data-extension-instance={instanceId}
     >
       <NodeHandles />
-      <div className="node-visual size-full overflow-hidden rounded-3xl bg-white shadow-card dark:bg-neutral-900">
+      <div
+        className={cn(
+          'node-visual size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
+          canvasTypeId === RECORDING_CANVAS_TYPE_ID
+            ? 'rounded-2xl'
+            : 'rounded-3xl'
+        )}
+      >
         {showFallback ? (
           <ExtensionFallback
             availability={availability}

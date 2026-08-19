@@ -16,8 +16,20 @@ import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
 import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
+import {
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
+import {
+  type ExtensionInstanceLoadError,
+  type ExtensionInstanceRecord,
+  isExtensionInstanceLoadError,
+} from '../../../shared/extensions/instance';
 import { iconFor } from './resultIcon';
 import {
   type CanvasEntry,
@@ -150,7 +162,27 @@ function writeHistory(entries: string[]) {
   }
 }
 
-function contentNodeKind(type: string | undefined): SearchResultKind {
+function contentNodeKind(
+  type: string | undefined,
+  data?: Record<string, unknown>
+): SearchResultKind {
+  if (type === 'extension') {
+    const canvasTypeId =
+      typeof data?.canvasTypeId === 'string' ? data.canvasTypeId : '';
+    if (canvasTypeId === IMAGE_CANVAS_TYPE_ID) {
+      return 'image';
+    }
+    if (canvasTypeId === FILE_CANVAS_TYPE_ID) {
+      return 'asset';
+    }
+    if (canvasTypeId === LINK_CANVAS_TYPE_ID) {
+      return 'link';
+    }
+    if (canvasTypeId === RECORDING_CANVAS_TYPE_ID) {
+      return 'recording';
+    }
+    return 'extension';
+  }
   switch (type) {
     case 'sticky':
       return 'sticky';
@@ -167,8 +199,28 @@ function contentNodeKind(type: string | undefined): SearchResultKind {
   }
 }
 
-function contentNodeTitle(node: Node): string {
+function contentNodeTitle(
+  node: Node,
+  instances: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  > = {}
+): string {
   const data = (node.data ?? {}) as Record<string, unknown>;
+  if (node.type === 'extension') {
+    const instanceId =
+      typeof data.instanceId === 'string' ? data.instanceId : '';
+    const record = instanceId ? instances[instanceId] : undefined;
+    if (record && !isExtensionInstanceLoadError(record)) {
+      const presentationTitle = record.presentation.title.trim();
+      if (presentationTitle) {
+        return presentationTitle;
+      }
+      if (record.presentation.subtitle?.trim()) {
+        return record.presentation.subtitle.trim();
+      }
+    }
+  }
   const title = typeof data.title === 'string' ? data.title.trim() : '';
   if (title) {
     return title;
@@ -210,6 +262,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
   const nodes = useCanvasStore((s) => s.nodes);
   const views = useCanvasStore((s) => s.views);
+  const extensionRecords = useExtensionInstanceStore((s) => s.records);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -283,10 +336,10 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       .slice(0, RECENT_CARDS_MAX)
       .map(({ node }) => ({
         id: node.id,
-        kind: contentNodeKind(node.type),
-        title: contentNodeTitle(node),
+        kind: contentNodeKind(node.type, node.data as Record<string, unknown>),
+        title: contentNodeTitle(node, extensionRecords),
       }));
-  }, [nodes]);
+  }, [extensionRecords, nodes]);
 
   // Canvases offered as quick jump targets in the empty state (everything but
   // the one already in view). Mirrors the filter inside SearchEmptyState.

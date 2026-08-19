@@ -47,18 +47,8 @@ function RecordingCanvasSurface({ host, state }: SurfaceProps<RecordingState>) {
   return <RecordingContent data={normalized} streamSrc={src} />;
 }
 
-function RecordingPreviewSurface({
-  presentation,
-  state,
-}: PreviewProps<RecordingState>) {
-  const normalized = normalizeRecordingState(state);
-  return (
-    <div className="flex h-full items-center justify-center p-3 text-sm">
-      {presentation.title ||
-        normalized.title ||
-        `New Recording #${normalized.recordingNumber}`}
-    </div>
-  );
+function RecordingPreviewSurface({ state }: PreviewProps<RecordingState>) {
+  return <RecordingContent data={normalizeRecordingState(state)} />;
 }
 
 export const recordingCanvasType: BuiltinCanvasType<RecordingState> = {

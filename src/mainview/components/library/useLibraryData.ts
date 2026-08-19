@@ -11,7 +11,13 @@ import type {
 } from '@/lib/widgetTypes';
 import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
+import {
+  type ExtensionInstanceLoadError,
+  type ExtensionInstanceRecord,
+  isExtensionInstanceLoadError,
+} from '../../../shared/extensions/instance';
 
 export type LibrarySortKey = 'recent' | 'name' | 'created';
 
@@ -137,6 +143,38 @@ function widgetRecordToLibraryData(
   return next;
 }
 
+function isStateRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extensionRecordToLibraryData(
+  data: Record<string, unknown>,
+  instances: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  >
+): Record<string, unknown> {
+  const instanceId = readString(data, 'instanceId');
+  const record = instanceId ? instances[instanceId] : undefined;
+  if (!record || isExtensionInstanceLoadError(record)) {
+    return data;
+  }
+  const state = isStateRecord(record.state) ? record.state : {};
+  const title =
+    record.presentation.title.trim() ||
+    readString(state, 'title') ||
+    readString(state, 'fileName') ||
+    readString(state, 'url');
+  return {
+    ...data,
+    ...state,
+    title,
+    previewExcerpt: record.presentation.plainText,
+    createdAt: dateMs(record.createdAt),
+    updatedAt: dateMs(record.updatedAt),
+  };
+}
+
 function toValidSize(value: unknown): Size | undefined {
   if (!value || typeof value !== 'object') {
     return;
@@ -159,16 +197,30 @@ function toItem(params: {
   nodeId: string;
   type: string;
   data: Record<string, unknown>;
+  extensions?: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  >;
   widgets: Record<string, WidgetRecord | WidgetLoadError>;
   folderId?: string;
   childId?: string;
   size?: Size;
 }): LibraryItem {
-  const { nodeId, type, folderId, childId, widgets, size } = params;
+  const {
+    nodeId,
+    type,
+    folderId,
+    childId,
+    widgets,
+    extensions = {},
+    size,
+  } = params;
   const data =
     type === 'widget'
       ? widgetRecordToLibraryData(params.data, widgets)
-      : params.data;
+      : type === 'extension'
+        ? extensionRecordToLibraryData(params.data, extensions)
+        : params.data;
   const id =
     folderId && childId ? `child:${folderId}:${childId}` : `node:${nodeId}`;
   const title = fallbackTitle(data, type);
@@ -219,10 +271,11 @@ export function useLibraryData(
 ): UseLibraryDataResult {
   const nodes = useCanvasStore((s) => s.nodes);
   const widgets = useWidgetStore((s) => s.records);
+  const extensions = useExtensionInstanceStore((s) => s.records);
   const { query = '', sort = 'recent' } = options;
   return useMemo(
-    () => buildLibrary(nodes, query, sort, widgets),
-    [nodes, query, sort, widgets]
+    () => buildLibrary(nodes, query, sort, widgets, extensions),
+    [nodes, query, sort, widgets, extensions]
   );
 }
 
@@ -230,7 +283,11 @@ export function buildLibrary(
   nodes: Node[],
   query: string,
   sort: LibrarySortKey,
-  widgets: Record<string, WidgetRecord | WidgetLoadError> = {}
+  widgets: Record<string, WidgetRecord | WidgetLoadError> = {},
+  extensions: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  > = {}
 ): UseLibraryDataResult {
   const normalizedQuery = query.trim().toLowerCase();
   const sortFn = comparator(sort);
@@ -261,6 +318,7 @@ export function buildLibrary(
           type: child.type as string,
           data: child.data,
           widgets,
+          extensions,
           folderId: node.id,
           childId: child.id,
           size: toValidSize(child.size),
@@ -289,6 +347,7 @@ export function buildLibrary(
       type: node.type as string,
       data,
       widgets,
+      extensions,
       size: toValidSize(node.measured),
     });
     if (data.detached) {

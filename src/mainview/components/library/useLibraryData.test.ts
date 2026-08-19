@@ -1,6 +1,15 @@
 import type { Node } from '@xyflow/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WidgetRecord } from '@/lib/widgetTypes';
+
+vi.mock('@/extensions/registry', () => ({
+  canvasTypeRegistry: {
+    get: (id: string) =>
+      id === 'ghostboard.media/file' || id === 'ghostboard.web/link'
+        ? { surface: { openBehavior: 'detail' } }
+        : undefined,
+  },
+}));
 
 import { buildLibrary } from './useLibraryData';
 
@@ -137,5 +146,65 @@ describe('buildLibrary', () => {
     const items = groups.flatMap((g) => g.items);
     expect(items.some((item) => item.type === 'widget')).toBe(false);
     expect(items.some((item) => item.type === 'card')).toBe(true);
+  });
+
+  it('uses extension instance presentation for titles, search text, and file labels', () => {
+    const nodes: Node[] = [
+      makeNode('ext-file', 'extension', {
+        canvasTypeId: 'ghostboard.media/file',
+        instanceId: 'extinst_file1',
+      }),
+      makeNode('ext-link', 'extension', {
+        canvasTypeId: 'ghostboard.web/link',
+        instanceId: 'extinst_link1',
+      }),
+    ];
+
+    const { groups } = buildLibrary(
+      nodes,
+      'spec',
+      'name',
+      {},
+      {
+        extinst_file1: {
+          schema: 'ghostboard-extension-instance/v1',
+          id: 'extinst_file1',
+          canvasTypeId: 'ghostboard.media/file',
+          appVersion: '0.0.0',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-02T00:00:00.000Z',
+          state: {
+            fileName: 'spec.pdf',
+            mimeType: 'application/pdf',
+            kind: 'file',
+            title: '',
+          },
+          presentation: {
+            title: 'Spec PDF',
+            plainText: 'Spec PDF\nspec.pdf',
+          },
+        },
+        extinst_link1: {
+          schema: 'ghostboard-extension-instance/v1',
+          id: 'extinst_link1',
+          canvasTypeId: 'ghostboard.web/link',
+          appVersion: '0.0.0',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+          state: { url: 'https://example.com', title: '' },
+          presentation: { title: 'Example', subtitle: 'https://example.com' },
+        },
+      }
+    );
+
+    const items = groups.flatMap((g) => g.items);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.title).toBe('Spec PDF');
+    expect(items[0]?.data.mimeType).toBe('application/pdf');
+    expect(items[0]?.data.kind).toBe('file');
   });
 });

@@ -35,7 +35,10 @@ import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../../paraglide/messages.js';
-import { IMAGE_CANVAS_TYPE_ID } from '../../../shared/extensions/builtinIds';
+import {
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
 import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { ImageZoomPan } from './ImageZoomPan';
@@ -210,7 +213,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const colorRaw = node.data.color;
   const color = typeof colorRaw === 'string' ? colorRaw : undefined;
   const titleRaw = node.data.title;
-  const title = typeof titleRaw === 'string' ? titleRaw : undefined;
+  const envelopeTitle = typeof titleRaw === 'string' ? titleRaw : undefined;
   const contentRaw = node.data.content;
   const content = typeof contentRaw === 'string' ? contentRaw : undefined;
   const dataTypeRaw = node.data.type;
@@ -404,13 +407,17 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     extensionInstanceId ? s.records[extensionInstanceId] : undefined
   );
   const locale = useAppSettingsStore((s) => s.locale);
+  const presentationTitle =
+    extensionRecord && !isExtensionInstanceLoadError(extensionRecord)
+      ? extensionRecord.presentation.title.trim()
+      : '';
+  const title = envelopeTitle || presentationTitle || undefined;
   const isImage =
     node.type === 'image' || extensionCanvasTypeId === IMAGE_CANVAS_TYPE_ID;
+  const isFile =
+    node.type === 'asset' || extensionCanvasTypeId === FILE_CANVAS_TYPE_ID;
   const isChecklist =
-    !isImage &&
-    node.type !== 'asset' &&
-    node.type !== 'link' &&
-    dataTypeRaw === 'checklist';
+    !(isImage || isFile) && node.type !== 'link' && dataTypeRaw === 'checklist';
   // Full-bleed surfaces own their entire layout; the others render inside the
   // centered detail shell.
   const isChecklistWidget = Boolean(checklistWidgetFocusedData && widgetId);
@@ -608,7 +615,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
           className={cn(
             isFullBleed && 'h-full w-full',
             !isFullBleed &&
-              (node.type === 'asset'
+              (isFile
                 ? 'h-full w-full max-w-6xl p-4 pt-16 md:p-10 md:pt-16'
                 : 'h-full w-full max-w-4xl p-4 pt-16 md:p-12 md:pt-16')
           )}

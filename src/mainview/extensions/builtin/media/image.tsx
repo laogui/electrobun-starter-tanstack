@@ -1,6 +1,12 @@
 import { ImageIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
+import { ImageZoomPan } from '@/components/canvas/ImageZoomPan';
+import { AssetHoverCard } from '@/components/canvas/nodes/_shared/AssetHoverCard';
+import { TypeBadge } from '@/components/canvas/nodes/_shared/TypeBadge';
+import {
+  ImageContent,
+  type ImageData,
+} from '@/components/canvas/nodes/ImageNode';
 import { IMAGE_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildImagePresentation,
@@ -16,70 +22,51 @@ import type {
   SurfaceProps,
 } from '../../types';
 
-function ImageCanvasSurface({
-  context,
-  host,
-  state,
-}: SurfaceProps<ImageState>) {
-  const normalized = normalizeImageState(state);
-  const path = normalized.thumbnailFile || normalized.imageFile;
-  const [src, setSrc] = useState<string | null>(null);
+function toImageData(state: ImageState): ImageData {
+  return {
+    color: state.color,
+    title: state.title,
+    ...(state.imageFile ? { imageFile: state.imageFile } : {}),
+    ...(state.thumbnailFile ? { thumbnailFile: state.thumbnailFile } : {}),
+  };
+}
 
-  useEffect(() => {
-    if (!path) {
-      setSrc(null);
-      return;
-    }
-    let cancelled = false;
-    host.assets
-      .getUrl(path)
-      .then((url) => {
-        if (!cancelled) {
-          setSrc(url);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSrc(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [host, path]);
-
+function ImageCanvasSurface({ state }: SurfaceProps<ImageState>) {
+  const data = toImageData(normalizeImageState(state));
+  const hasImage = Boolean(data.imageFile || data.thumbnailFile);
   return (
-    <div className="flex size-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
-      {src ? (
-        <img
-          alt={normalized.title || 'Image'}
-          className="size-full object-cover"
-          draggable={false}
-          src={src}
-        />
-      ) : (
-        <div className="text-neutral-400 text-sm">
-          {normalized.title || 'Image'}
-        </div>
-      )}
-      {context.surface === 'detail' && normalized.title ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-sm text-white/90">
-          {normalized.title}
-        </div>
-      ) : null}
-    </div>
+    <AssetHoverCard
+      enabled={hasImage && Boolean(data.title)}
+      rows={
+        data.title
+          ? [
+              { label: 'Name', value: data.title },
+              ...(data.imageFile
+                ? [{ label: 'Path', value: data.imageFile }]
+                : []),
+            ]
+          : []
+      }
+    >
+      <div className="relative size-full">
+        <ImageContent data={data} />
+        {hasImage ? (
+          <TypeBadge className="absolute top-5 right-5 z-10">Image</TypeBadge>
+        ) : null}
+      </div>
+    </AssetHoverCard>
   );
 }
 
-function ImagePreviewSurface({
-  presentation,
-  state,
-}: PreviewProps<ImageState>) {
-  const normalized = normalizeImageState(state);
+function ImagePreviewSurface({ state }: PreviewProps<ImageState>) {
+  return <ImageContent data={toImageData(normalizeImageState(state))} />;
+}
+
+function ImageDetailSurface({ state }: SurfaceProps<ImageState>) {
   return (
-    <div className="flex h-full items-center justify-center bg-neutral-100 p-3 text-sm dark:bg-neutral-900">
-      {presentation.title || normalized.title || 'Image'}
-    </div>
+    <ImageZoomPan>
+      <ImageContent data={toImageData(normalizeImageState(state))} isFocused />
+    </ImageZoomPan>
   );
 }
 
@@ -108,5 +95,5 @@ export const imageCanvasType: BuiltinCanvasType<ImageState> = {
   buildPresentation: buildImagePresentation,
   CanvasSurface: ImageCanvasSurface,
   PreviewSurface: ImagePreviewSurface,
-  DetailSurface: ImageCanvasSurface,
+  DetailSurface: ImageDetailSurface,
 };

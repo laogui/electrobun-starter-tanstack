@@ -332,6 +332,24 @@ describe('SettingsApp', () => {
       });
     });
   });
+
+  it('opens the canvas types panel empty state', async () => {
+    const client = createClient({
+      ...DEFAULT_SETTINGS,
+      locale: 'en',
+    });
+
+    renderSettingsApp(client);
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', { name: 'Canvas Types' })
+    );
+
+    expect(
+      await screen.findByText('No canvas types are registered in this build.')
+    ).toBeVisible();
+  });
 });
 
 describe('SettingsApp trash section', () => {

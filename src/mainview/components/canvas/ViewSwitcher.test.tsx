@@ -16,14 +16,19 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+import {
+  CHECKLIST_CANVAS_TYPE_ID,
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  POMODORO_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+  REMINDER_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
 
-const saveAssetFileWithProgressToastMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/lib/assetImportProgress', () => ({
-  saveAssetFileWithProgressToast: saveAssetFileWithProgressToastMock,
-}));
+registerBuiltinCanvasTypes();
 
 const rpcMocks = vi.hoisted(() => ({
   isRpcAvailable: vi.fn(),
@@ -157,26 +162,23 @@ const resetStore = () => {
 
 const renderViewSwitcher = ({
   createMenuOpen = false,
+  onCreateCanvasType = vi.fn(),
   onCreateNode = vi.fn(),
-  onOpenImagePicker = vi.fn(),
-  onOpenRecorder = vi.fn(),
   setCreateMenuOpen = vi.fn(),
 }: {
   createMenuOpen?: boolean;
+  onCreateCanvasType?: (canvasTypeId: string) => void | Promise<void>;
   onCreateNode?: (
     type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
-  onOpenImagePicker?: () => void;
-  onOpenRecorder?: () => void;
   setCreateMenuOpen?: (v: boolean) => void;
 } = {}) =>
   render(
     <ViewSwitcher
       createMenuOpen={createMenuOpen}
+      onCreateCanvasType={onCreateCanvasType}
       onCreateNode={onCreateNode}
-      onOpenImagePicker={onOpenImagePicker}
-      onOpenRecorder={onOpenRecorder}
       setCreateMenuOpen={setCreateMenuOpen}
     />
   );
@@ -193,7 +195,6 @@ describe('viewSwitcher', () => {
     rpcMocks.rpcDeleteView.mockReset();
     rpcMocks.rpcImportMarkdownFiles.mockReset();
     rpcMocks.rpcRenameView.mockReset();
-    saveAssetFileWithProgressToastMock.mockReset();
 
     rpcMocks.rpcListViews.mockResolvedValue({
       views: [
@@ -630,14 +631,12 @@ describe('viewSwitcher', () => {
   });
 
   it('creates supported nodes from the create menu', async () => {
+    const onCreateCanvasType = vi.fn();
     const onCreateNode = vi.fn();
-    const onOpenImagePicker = vi.fn();
-    const onOpenRecorder = vi.fn();
     renderViewSwitcher({
       createMenuOpen: true,
+      onCreateCanvasType,
       onCreateNode,
-      onOpenImagePicker,
-      onOpenRecorder,
     });
 
     await waitFor(() => {
@@ -645,109 +644,31 @@ describe('viewSwitcher', () => {
     });
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Image' }));
-    expect(onOpenImagePicker).toHaveBeenCalledTimes(1);
-    expect(onCreateNode).not.toHaveBeenCalledWith('image');
-
     fireEvent.click(screen.getByRole('menuitem', { name: 'Checklist' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pomodoro' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reminder' }));
-    expect(onCreateNode).toHaveBeenCalledWith('checklist');
-    expect(onCreateNode).toHaveBeenCalledWith('pomodoro');
-    expect(onCreateNode).toHaveBeenCalledWith('reminder');
-
-    const fileItem = screen.getByRole('menuitem', { name: 'File' });
-    expect(fileItem).not.toHaveAttribute('aria-disabled', 'true');
-
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Recording' }));
-    expect(onOpenRecorder).toHaveBeenCalledTimes(1);
-    expect(onCreateNode).not.toHaveBeenCalledWith('recording');
+
+    expect(onCreateCanvasType).toHaveBeenCalledWith(IMAGE_CANVAS_TYPE_ID);
+    expect(onCreateCanvasType).toHaveBeenCalledWith(CHECKLIST_CANVAS_TYPE_ID);
+    expect(onCreateCanvasType).toHaveBeenCalledWith(POMODORO_CANVAS_TYPE_ID);
+    expect(onCreateCanvasType).toHaveBeenCalledWith(REMINDER_CANVAS_TYPE_ID);
+    expect(onCreateCanvasType).toHaveBeenCalledWith(FILE_CANVAS_TYPE_ID);
+    expect(onCreateCanvasType).toHaveBeenCalledWith(RECORDING_CANVAS_TYPE_ID);
+    expect(onCreateNode).not.toHaveBeenCalled();
   });
 
-  it('opens the renderer picker and creates one asset per selected file', async () => {
-    const onCreateNode = vi.fn();
-    const firstAssetData = {
-      attachmentFile: 'attachments/file_abc.txt',
-      color: '#FFFFFF',
-      fileName: 'notes.txt',
-      kind: 'file',
-      mimeType: 'text/plain',
-      size: 5,
-      title: 'notes.txt',
-    };
-    const secondAssetData = {
-      ...firstAssetData,
-      attachmentFile: 'attachments/file_def.txt',
-      fileName: 'tasks.txt',
-      title: 'tasks.txt',
-    };
-    saveAssetFileWithProgressToastMock
-      .mockResolvedValueOnce(firstAssetData)
-      .mockResolvedValueOnce(secondAssetData);
-
-    const { container } = renderViewSwitcher({
+  it('routes File creation through the canvas type host', async () => {
+    const onCreateCanvasType = vi.fn();
+    renderViewSwitcher({
       createMenuOpen: true,
-      onCreateNode,
+      onCreateCanvasType,
     });
-    const input =
-      container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    const inputClick = vi.spyOn(input, 'click');
-    const firstFile = new File(['hello'], 'notes.txt', { type: 'text/plain' });
-    const secondFile = new File(['tasks'], 'tasks.txt', { type: 'text/plain' });
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
 
-    expect(inputClick).toHaveBeenCalledOnce();
-    expect(input).toHaveAttribute('multiple');
-
-    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
-
-    await waitFor(() => {
-      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
-        1,
-        firstFile
-      );
-      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
-        2,
-        secondFile
-      );
-      expect(onCreateNode).toHaveBeenNthCalledWith(1, 'asset', {
-        data: firstAssetData,
-      });
-      expect(onCreateNode).toHaveBeenNthCalledWith(2, 'asset', {
-        data: secondAssetData,
-      });
-    });
-  });
-
-  it('continues importing selected files after one file fails', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const onCreateNode = vi.fn();
-    const savedAsset = {
-      attachmentFile: 'attachments/file_def.txt',
-      color: '#FFFFFF',
-      fileName: 'tasks.txt',
-      kind: 'file',
-      mimeType: 'text/plain',
-      size: 5,
-      title: 'tasks.txt',
-    };
-    saveAssetFileWithProgressToastMock
-      .mockRejectedValueOnce(new Error('first failed'))
-      .mockResolvedValueOnce(savedAsset);
-    const { container } = renderViewSwitcher({ onCreateNode });
-    const input = container.querySelector('input[type="file"]')!;
-    const firstFile = new File(['hello'], 'notes.txt', { type: 'text/plain' });
-    const secondFile = new File(['tasks'], 'tasks.txt', { type: 'text/plain' });
-
-    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
-
-    await waitFor(() => {
-      expect(saveAssetFileWithProgressToastMock).toHaveBeenNthCalledWith(
-        2,
-        secondFile
-      );
-      expect(onCreateNode).toHaveBeenCalledWith('asset', { data: savedAsset });
-    });
+    expect(onCreateCanvasType).toHaveBeenCalledWith(FILE_CANVAS_TYPE_ID);
   });
 
   it('imports markdown files from the create menu', async () => {

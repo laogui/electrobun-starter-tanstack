@@ -529,4 +529,55 @@ describe('sanitizeForPersistence', () => {
     expect(readyData.unfurlStatus).toBe('ready');
     expect(failedData.unfurlStatus).toBe('failed');
   });
+
+  it('round-trips unknown node types and extra data fields', () => {
+    const result = sanitizeForPersistence(
+      [
+        createNode({
+          type: 'from-the-future',
+          data: {
+            keep: true,
+            mystery: 1,
+            previewUrl: 'blob:drop-me',
+          },
+        }),
+      ],
+      []
+    );
+
+    expect(result.nodes[0]).toEqual({
+      id: 'node-1',
+      type: 'from-the-future',
+      position: { x: 10, y: 20 },
+      data: { keep: true, mystery: 1 },
+    });
+  });
+
+  it('round-trips extension nodes including extra data', () => {
+    const result = sanitizeForPersistence(
+      [
+        createNode({
+          type: 'extension',
+          data: {
+            instanceId: 'extinst_abc123def456',
+            canvasTypeId: 'ghostboard.demo/counter',
+            extra: { nested: true },
+            previewUrl: 'blob:drop-me',
+          },
+        }),
+      ],
+      []
+    );
+
+    expect(result.nodes[0]).toEqual({
+      id: 'node-1',
+      type: 'extension',
+      position: { x: 10, y: 20 },
+      data: {
+        instanceId: 'extinst_abc123def456',
+        canvasTypeId: 'ghostboard.demo/counter',
+        extra: { nested: true },
+      },
+    });
+  });
 });

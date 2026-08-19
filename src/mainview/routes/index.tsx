@@ -52,6 +52,9 @@ import {
   initialNodes,
   initialWidgetSeeds,
 } from '@/data/initialNodes';
+import { resolveExtensionMessage } from '@/extensions/messages';
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -76,6 +79,7 @@ import {
 } from '@/lib/canvasExport';
 import {
   buildImportedCanvasPayload,
+  collectExtensionInstanceIdsFromCanvasExport,
   collectWidgetIdsFromCanvasExport,
 } from '@/lib/canvasImport';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
@@ -98,14 +102,19 @@ import {
   createImageDropPreview,
   isImageFile,
   isOsFileDrag,
-  persistImportedImage,
+  persistImportedImageFiles,
   readCanvasExportJsonFile,
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
-import { isRpcAvailable, loadCanvas, rpcSaveManifest } from '@/lib/rpc';
+import {
+  isRpcAvailable,
+  loadCanvas,
+  rpcListExtensionEnablement,
+  rpcSaveManifest,
+} from '@/lib/rpc';
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
@@ -115,9 +124,26 @@ import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
-
 import * as m from '../../paraglide/messages.js';
+import {
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+} from '../../shared/extensions/builtinIds';
+import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
+import {
+  normalizeFileState,
+  normalizeImageState,
+  normalizeRecordingState,
+} from '../../shared/extensions/media/state';
+import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
+import { normalizeLinkState } from '../../shared/extensions/web/link';
+
+registerBuiltinCanvasTypes();
 
 // ─── 画布颜色 ────────────────────────────────────────────────────────────────
 // 亮色 / 暗色两套色板，所有颜色值集中定义，避免散落在 JSX 中。
@@ -310,6 +336,22 @@ function readRecordingNumber(data: unknown): number {
 function maxRecordingNumberFromEntry(entry: RecordingNumberEntry): number {
   let max = entry.type === 'recording' ? readRecordingNumber(entry.data) : 0;
 
+  if (entry.type === 'extension') {
+    const data = entry.data as
+      | { canvasTypeId?: unknown; instanceId?: unknown }
+      | undefined;
+    if (
+      data?.canvasTypeId === RECORDING_CANVAS_TYPE_ID &&
+      typeof data.instanceId === 'string'
+    ) {
+      const record =
+        useExtensionInstanceStore.getState().records[data.instanceId];
+      if (record && !isExtensionInstanceLoadError(record)) {
+        max = Math.max(max, readRecordingNumber(record.state));
+      }
+    }
+  }
+
   if (entry.type === 'folder') {
     const children = (entry.data as { children?: unknown } | undefined)
       ?.children;
@@ -482,9 +524,17 @@ function CanvasComponent() {
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const createExtensionNode = useCanvasStore((s) => s.createExtensionNode);
   const createWidgetRecord = useWidgetStore((s) => s.createWidget);
   const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
   const saveWidgetNow = useWidgetStore((s) => s.saveWidgetNow);
+  const createExtensionInstance = useExtensionInstanceStore(
+    (s) => s.createInstance
+  );
+  const hydrateExtensionInstances = useExtensionInstanceStore((s) => s.hydrate);
+  const hydrateExtensionEnablement = useExtensionEnablementStore(
+    (s) => s.hydrate
+  );
 
   const createLinkFromText = useCallback(
     async (
@@ -499,13 +549,34 @@ function CanvasComponent() {
       if (!data) {
         return false;
       }
-      await onCreateNode('link', {
-        ...options,
-        data: { ...data },
+      const state = normalizeLinkState(data);
+      const def = canvasTypeRegistry.get(LINK_CANVAS_TYPE_ID);
+      if (!def) {
+        return false;
+      }
+      const record = await createExtensionInstance({
+        canvasTypeId: LINK_CANVAS_TYPE_ID,
+        dataVersion: def.dataVersion,
+        presentation: def.buildPresentation(state),
+        state,
       });
+      if (!record) {
+        return false;
+      }
+      await createExtensionNode(
+        LINK_CANVAS_TYPE_ID,
+        record.id,
+        rfInstance.current,
+        {
+          size: def.surface.defaultSize,
+          ...(options?.anchorCenter
+            ? { anchorCenter: options.anchorCenter }
+            : {}),
+        }
+      );
       return true;
     },
-    [onCreateNode]
+    [createExtensionInstance, createExtensionNode]
   );
 
   const importCanvasExportDocument = useCallback(
@@ -550,13 +621,35 @@ function CanvasComponent() {
 
       const skippedWidgetCount = allWidgetIds.length - widgetIdMap.size;
 
+      const instanceIdMap = new Map<string, string>();
+      const exportedInstances = document_.extensionInstances ?? {};
+      for (const sourceId of collectExtensionInstanceIdsFromCanvasExport(
+        document_
+      )) {
+        const source = exportedInstances[sourceId];
+        if (!source) {
+          continue;
+        }
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop
+        const created = await createExtensionInstance({
+          canvasTypeId: source.canvasTypeId,
+          dataVersion: source.dataVersion,
+          presentation: source.presentation,
+          state: source.state,
+        });
+        if (created) {
+          instanceIdMap.set(sourceId, created.id);
+        }
+      }
+
       const state = useCanvasStore.getState();
       const imported = buildImportedCanvasPayload(
         document_,
         anchorCenter,
         state.nodes,
         state.edges,
-        widgetIdMap
+        widgetIdMap,
+        instanceIdMap
       );
       if (imported.nodes.length === 0) {
         toast.error('Canvas JSON did not contain importable nodes.');
@@ -579,7 +672,12 @@ function CanvasComponent() {
         toast.success('Canvas JSON imported.');
       }
     },
-    [createWidgetRecord, saveWidgetNow, updateWidgetRecord]
+    [
+      createExtensionInstance,
+      createWidgetRecord,
+      saveWidgetNow,
+      updateWidgetRecord,
+    ]
   );
 
   const createAssetsFromFiles = useCallback(
@@ -619,31 +717,34 @@ function CanvasComponent() {
           try {
             // Keep dropped files inserted in visual grid order.
             // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            const nodeId = await onCreateNode('image', {
-              anchorCenter: position,
-              ...(size ? { size } : {}),
-              data: {
-                imageUrl: preview.imageUrl,
-                thumbnailUrl: preview.imageUrl,
-                title: preview.title,
-              },
-              focusViewport: false,
+            const persisted = await persistImportedImageFiles(file);
+            const def = canvasTypeRegistry.get(IMAGE_CANVAS_TYPE_ID);
+            const state = normalizeImageState({
+              title: persisted.title || preview.title,
+              color: '#FFFFFF',
+              imageFile: persisted.imageFile,
+              thumbnailFile: persisted.thumbnailFile,
             });
-            if (!nodeId) {
-              revokeImageDropPreview(preview.imageUrl);
-              continue;
-            }
-            persistImportedImage(nodeId, file, updateNodeData)
-              .catch((error) => {
-                console.error(
-                  '[canvas] Failed to persist dropped image:',
-                  error
-                );
-                toast.error('Image could not be saved.');
-              })
-              .finally(() => {
-                revokeImageDropPreview(preview.imageUrl);
+            if (def) {
+              const record = await createExtensionInstance({
+                canvasTypeId: IMAGE_CANVAS_TYPE_ID,
+                dataVersion: def.dataVersion,
+                presentation: def.buildPresentation(state),
+                state,
               });
+              if (record) {
+                await createExtensionNode(
+                  IMAGE_CANVAS_TYPE_ID,
+                  record.id,
+                  rfInstance.current,
+                  {
+                    ...(size ? { size } : { size: def.surface.defaultSize }),
+                    anchorCenter: position,
+                  }
+                );
+              }
+            }
+            revokeImageDropPreview(preview.imageUrl);
           } catch (error) {
             revokeImageDropPreview(preview.imageUrl);
             console.error('[canvas] Failed to import dropped image:', error);
@@ -655,18 +756,33 @@ function CanvasComponent() {
           // Keep dropped files inserted in visual grid order.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
           const data = await saveAssetFileWithProgressToast(file);
-          // Keep dropped files inserted in visual grid order.
-          // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await onCreateNode('asset', {
-            anchorCenter: position,
-            data: { ...data },
-          });
+          const def = canvasTypeRegistry.get(FILE_CANVAS_TYPE_ID);
+          const state = normalizeFileState(data);
+          if (def) {
+            const record = await createExtensionInstance({
+              canvasTypeId: FILE_CANVAS_TYPE_ID,
+              dataVersion: def.dataVersion,
+              presentation: def.buildPresentation(state),
+              state,
+            });
+            if (record) {
+              await createExtensionNode(
+                FILE_CANVAS_TYPE_ID,
+                record.id,
+                rfInstance.current,
+                {
+                  size: def.surface.defaultSize,
+                  anchorCenter: position,
+                }
+              );
+            }
+          }
         } catch (error) {
           console.error('[canvas] Failed to import dropped file:', error);
         }
       }
     },
-    [importCanvasExportDocument, onCreateNode, updateNodeData]
+    [createExtensionInstance, createExtensionNode, importCanvasExportDocument]
   );
 
   // Flow-space anchor for pasted content: prefer the last cursor position so
@@ -799,7 +915,6 @@ function CanvasComponent() {
   const handleRecordingComplete = useCallback(
     async (result: RecordingResult) => {
       const number = recorderNumber ?? 1;
-      const targetKind = lastRecordingKindRef.current ?? 'recording';
       const anchorCenter = lastRecordingAnchorRef.current;
       try {
         const data = await saveRecording({
@@ -809,10 +924,29 @@ function CanvasComponent() {
           recordingNumber: number,
           ...(result.waveform ? { waveform: result.waveform } : {}),
         });
-        await onCreateNode(targetKind, {
-          ...(anchorCenter ? { anchorCenter } : {}),
-          data: { ...data },
+        const def = canvasTypeRegistry.get(RECORDING_CANVAS_TYPE_ID);
+        const state = normalizeRecordingState(data);
+        if (!def) {
+          return;
+        }
+        const record = await createExtensionInstance({
+          canvasTypeId: RECORDING_CANVAS_TYPE_ID,
+          dataVersion: def.dataVersion,
+          presentation: def.buildPresentation(state),
+          state,
         });
+        if (!record) {
+          return;
+        }
+        await createExtensionNode(
+          RECORDING_CANVAS_TYPE_ID,
+          record.id,
+          rfInstance.current,
+          {
+            size: def.surface.defaultSize,
+            ...(anchorCenter ? { anchorCenter } : {}),
+          }
+        );
         // Close only after both save and node creation succeed so a failure
         // can still surface on the overlay (and never leaves a hung spinner).
         lastRecordingAnchorRef.current = undefined;
@@ -826,7 +960,12 @@ function CanvasComponent() {
         throw error;
       }
     },
-    [onCreateNode, recorderNumber, setRecorderNumber]
+    [
+      createExtensionInstance,
+      createExtensionNode,
+      recorderNumber,
+      setRecorderNumber,
+    ]
   );
 
   // Opens the shared hidden file input used by asset/image creation. The
@@ -845,12 +984,6 @@ function CanvasComponent() {
     },
     []
   );
-
-  // Bottom create menu's "Image" entry: pick a file first, then create the
-  // card at the viewport center (the picker-change handler's default anchor).
-  const openImagePicker = useCallback(() => {
-    openAssetFilePicker('image/*');
-  }, [openAssetFilePicker]);
 
   // Unified create entry point shared with the canvas right-click menu. Plain
   // kinds are created immediately; `link` opens the URL popover, `asset` and
@@ -934,6 +1067,87 @@ function CanvasComponent() {
     [createWidgetRecord, onCreateNode]
   );
 
+  const createCanvasTypeWithState = useCallback(
+    async (
+      canvasTypeId: string,
+      state: unknown,
+      request?: CanvasCreateRequest & {
+        size?: { height: number; width: number };
+      }
+    ) => {
+      const def = canvasTypeRegistry.get(canvasTypeId);
+      if (!def) {
+        toast.error(resolveExtensionMessage('toast_extension_unknown_type'));
+        return;
+      }
+      if (!useExtensionEnablementStore.getState().isEnabled(canvasTypeId)) {
+        toast.error(resolveExtensionMessage('toast_extension_type_disabled'));
+        return;
+      }
+      const presentation = def.buildPresentation(
+        def.validateState(state) ? state : def.createInitialState()
+      );
+      const record = await createExtensionInstance({
+        canvasTypeId,
+        dataVersion: def.dataVersion,
+        presentation,
+        state,
+      });
+      if (!record) {
+        toast.error(resolveExtensionMessage('toast_extension_create_failed'));
+        return;
+      }
+      await createExtensionNode(canvasTypeId, record.id, rfInstance.current, {
+        size: request?.size ?? def.surface.defaultSize,
+        ...(request?.anchorCenter
+          ? { anchorCenter: request.anchorCenter }
+          : {}),
+      });
+    },
+    [createExtensionInstance, createExtensionNode]
+  );
+
+  const requestCreateCanvasType = useCallback(
+    async (canvasTypeId: string, request?: CanvasCreateRequest) => {
+      const def = canvasTypeRegistry.get(canvasTypeId);
+      if (!def) {
+        toast.error(resolveExtensionMessage('toast_extension_unknown_type'));
+        return;
+      }
+      const flow = def.createFlow ?? 'immediate';
+      if (flow === 'url') {
+        setLinkPrompt({
+          anchorCenter: request?.anchorCenter,
+          screen: request?.screen,
+        });
+        return;
+      }
+      if (flow === 'image') {
+        openAssetFilePicker('image/*', request?.anchorCenter);
+        return;
+      }
+      if (flow === 'file') {
+        openAssetFilePicker('', request?.anchorCenter);
+        return;
+      }
+      if (flow === 'recording') {
+        openRecorder(request?.anchorCenter);
+        return;
+      }
+      await createCanvasTypeWithState(
+        canvasTypeId,
+        def.createInitialState(),
+        request
+      );
+    },
+    [
+      createCanvasTypeWithState,
+      openAssetFilePicker,
+      openRecorder,
+      setLinkPrompt,
+    ]
+  );
+
   const onAssetFileInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -1014,6 +1228,7 @@ function CanvasComponent() {
     onDeleteNodes: requestDeleteNodes,
     onReplaceNodeFile,
     onRequestCreate: requestCreate,
+    onRequestCreateCanvasType: requestCreateCanvasType,
     rfInstance,
   });
 
@@ -1120,6 +1335,11 @@ function CanvasComponent() {
         if (cancelled) {
           return;
         }
+        const enablement = await rpcListExtensionEnablement();
+        if (cancelled) {
+          return;
+        }
+        hydrateExtensionEnablement(enablement.disabledCanvasTypes);
         if (data) {
           // Viewport is session-only; loadCanvas no longer carries camera state.
           hydrate(data.nodes, data.edges);
@@ -1130,6 +1350,13 @@ function CanvasComponent() {
             collectWidgetIdsFromNodes(data.nodes as unknown as Node[])
           );
           hydrateWidgets(data.widgets ?? {}, referencedWidgetIds);
+          const referencedExtensionIds = new Set(
+            collectExtensionInstanceIds(data.nodes)
+          );
+          hydrateExtensionInstances(
+            data.extensionInstances ?? {},
+            referencedExtensionIds
+          );
         } else if (await isRpcAvailable()) {
           if (cancelled) {
             return;
@@ -1147,11 +1374,13 @@ function CanvasComponent() {
           await rpcSaveManifest(activeViewId, sanitized.nodes, sanitized.edges);
           if (!cancelled) {
             hydrate(seededNodes, initialEdges);
+            hydrateExtensionInstances({}, new Set());
           }
         } else {
           // Browser/dev fallback (no Electrobun RPC): hydrate in-memory with
           // the initial data so the canvas is usable for debugging without persistence.
           hydrate(initialNodes, initialEdges);
+          hydrateExtensionInstances({}, new Set());
         }
       })
       .catch((error) => {
@@ -1165,6 +1394,8 @@ function CanvasComponent() {
   }, [
     hydrate,
     hydrateWidgets,
+    hydrateExtensionEnablement,
+    hydrateExtensionInstances,
     hydrated,
     activeViewId,
     createWidgetRecord,
@@ -1279,7 +1510,7 @@ function CanvasComponent() {
         const { child, folderId } = node.data;
         // Expanded children only open when the underlying kind is focusable
         // (e.g. cards/images). Widgets edit in place and must not open a note.
-        if (!isFocusableNode(child.type)) {
+        if (!isFocusableNode(child.type, child.data)) {
           return;
         }
         setFocusedNode({
@@ -1291,7 +1522,9 @@ function CanvasComponent() {
         });
       } else if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
-      } else if (isFocusableNode(node.type)) {
+      } else if (
+        isFocusableNode(node.type, node.data as Record<string, unknown>)
+      ) {
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
       }
     },
@@ -1327,8 +1560,8 @@ function CanvasComponent() {
       const isOpenable =
         node.type === 'folder' ||
         (isFolderExpandedChildNode(node)
-          ? isFocusableNode(node.data.child.type)
-          : isFocusableNode(node.type));
+          ? isFocusableNode(node.data.child.type, node.data.child.data)
+          : isFocusableNode(node.type, node.data as Record<string, unknown>));
       const alreadyOpen =
         state.focusedNode?.id === node.id ||
         state.focusedFolder?.id === node.id;
@@ -1759,6 +1992,7 @@ function CanvasComponent() {
         viewName: activeViewName,
         viewport: instance.getViewport?.(),
         widgets: useWidgetStore.getState().records,
+        extensionInstances: useExtensionInstanceStore.getState().records,
       });
       if (exported) {
         toast.success(m.toast_json_exported());
@@ -1937,12 +2171,11 @@ function CanvasComponent() {
 
       <ViewSwitcher
         createMenuOpen={createMenuOpen}
+        onCreateCanvasType={requestCreateCanvasType}
         onCreateNode={createFromBottomMenu}
         onExportCanvas={onExportCanvas}
         onExportCanvasJson={onExportCanvasJson}
-        onOpenImagePicker={openImagePicker}
         onOpenNoteLibrary={onOpenNoteLibrary}
-        onOpenRecorder={openRecorder}
         setCreateMenuOpen={setCreateMenuOpen}
       />
       <CanvasContextMenu
@@ -1975,12 +2208,13 @@ function CanvasComponent() {
             setLinkPrompt(null);
           }}
           onCreate={async (data) => {
-            await onCreateNode('link', {
-              ...(linkPrompt.anchorCenter
+            await createCanvasTypeWithState(
+              LINK_CANVAS_TYPE_ID,
+              normalizeLinkState(data),
+              linkPrompt.anchorCenter
                 ? { anchorCenter: linkPrompt.anchorCenter }
-                : {}),
-              data: { ...data },
-            });
+                : undefined
+            );
             setLinkPrompt(null);
           }}
           screen={linkPrompt.screen}

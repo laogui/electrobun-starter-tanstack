@@ -1,5 +1,7 @@
+import { ExtensionNodeReadOnly } from '@/extensions/ExtensionNode';
 import { colorToStyle } from '@/lib/colorUtils';
 import type { FolderChildEntry } from '@/lib/folderExpansion';
+import type { ExtensionNodeData } from '../../../shared/extensions/protocol';
 
 import type { AssetNodeRuntimeData } from './nodes/AssetNode';
 import { AssetContent } from './nodes/AssetNode';
@@ -30,6 +32,13 @@ export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
   if (child.type === 'widget') {
     return (
       <WidgetNodeReadOnly data={child.data as unknown as WidgetNodeData} />
+    );
+  }
+  if (child.type === 'extension') {
+    return (
+      <ExtensionNodeReadOnly
+        data={child.data as unknown as ExtensionNodeData}
+      />
     );
   }
   if (child.type === 'sticky') {

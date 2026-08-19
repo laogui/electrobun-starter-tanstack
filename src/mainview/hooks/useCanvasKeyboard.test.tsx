@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 
 const PASTE_ID_RE = /^paste-/;
@@ -213,6 +214,45 @@ describe('useCanvasKeyboard', () => {
 
     expect(undoWidget).toHaveBeenCalledWith('widget_1');
     expect(redoWidget).toHaveBeenCalledWith('widget_1');
+    expect(canvasUndo).not.toHaveBeenCalled();
+    expect(canvasRedo).not.toHaveBeenCalled();
+  });
+
+  it('routes undo and redo to the focused extension surface', () => {
+    const canvasUndo = vi.spyOn(useCanvasStore.getState(), 'undo');
+    const canvasRedo = vi.spyOn(useCanvasStore.getState(), 'redo');
+    const undoInstance = vi
+      .spyOn(useExtensionInstanceStore.getState(), 'undoInstance')
+      .mockImplementation(() => undefined);
+    const redoInstance = vi
+      .spyOn(useExtensionInstanceStore.getState(), 'redoInstance')
+      .mockImplementation(() => undefined);
+
+    render(<TestComponent />);
+
+    const host = document.createElement('div');
+    host.setAttribute('data-extension-instance', 'extinst_abc');
+    document.body.append(host);
+    host.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'z',
+        metaKey: true,
+      })
+    );
+    host.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Z',
+        metaKey: true,
+        shiftKey: true,
+      })
+    );
+
+    expect(undoInstance).toHaveBeenCalledWith('extinst_abc');
+    expect(redoInstance).toHaveBeenCalledWith('extinst_abc');
     expect(canvasUndo).not.toHaveBeenCalled();
     expect(canvasRedo).not.toHaveBeenCalled();
   });

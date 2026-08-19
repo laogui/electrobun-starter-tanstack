@@ -3,11 +3,14 @@ import { ThemeProvider } from 'better-themes';
 import { domAnimation, LazyMotion } from 'motion/react';
 import ReactDOM from 'react-dom/client';
 
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { router } from '@/router';
 
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
+
+registerBuiltinCanvasTypes();
 
 const rootElement = document.querySelector('#root');
 

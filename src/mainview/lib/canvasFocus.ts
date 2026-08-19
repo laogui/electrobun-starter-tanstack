@@ -104,7 +104,7 @@ export async function openFocusedById({
     return;
   }
 
-  if (!isFocusableNode(node.type)) {
+  if (!isFocusableNode(node.type, node.data as Record<string, unknown>)) {
     return;
   }
 

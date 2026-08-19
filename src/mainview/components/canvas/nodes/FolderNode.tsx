@@ -425,7 +425,12 @@ const FolderNode = ({
         return;
       }
       // Widgets edit in place; only note-like kinds open FocusedView.
-      if (!isFocusableNode(item.child.type)) {
+      if (
+        !isFocusableNode(
+          item.child.type,
+          item.child.data as Record<string, unknown>
+        )
+      ) {
         return;
       }
       setFocusedNode({

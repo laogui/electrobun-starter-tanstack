@@ -6,6 +6,7 @@ import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 
 import * as m from '../../paraglide/messages.js';
@@ -155,6 +156,23 @@ export function useCanvasKeyboard({
       }
 
       if (mod && key === 'z') {
+        const extensionHost =
+          e.target instanceof Element
+            ? e.target.closest('[data-extension-instance]')
+            : null;
+        const instanceId = extensionHost?.getAttribute(
+          'data-extension-instance'
+        );
+        if (instanceId) {
+          e.preventDefault();
+          const extensionStore = useExtensionInstanceStore.getState();
+          if (e.shiftKey) {
+            extensionStore.redoInstance(instanceId);
+          } else {
+            extensionStore.undoInstance(instanceId);
+          }
+          return;
+        }
         const focused = useCanvasStore.getState().focusedNode;
         if (focused?.type === 'widget') {
           const widgetId = focused.data.widgetId;
@@ -329,7 +347,10 @@ export function useCanvasKeyboard({
           return;
         }
         // Widgets (and other non-focusable content) stay on-canvas only.
-        if (node.type !== 'folder' && !isFocusableNode(node.type)) {
+        if (
+          node.type !== 'folder' &&
+          !isFocusableNode(node.type, node.data as Record<string, unknown>)
+        ) {
           return;
         }
         const el = document.querySelector(`[data-id="${node.id}"]`);
@@ -358,7 +379,7 @@ export function useCanvasKeyboard({
       // swallow them with preventDefault. Space is reserved for React Flow's
       // pan activation (drag the canvas).
       if (
-        !(searchOpen || mod || e.altKey) &&
+        !(searchOpenRef.current || mod || e.altKey) &&
         e.key.length === 1 &&
         e.key !== ' '
       ) {

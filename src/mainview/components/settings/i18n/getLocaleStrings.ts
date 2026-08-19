@@ -35,6 +35,7 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
 
     navGeneral: t('settings_nav_general'),
     navWorkspace: t('settings_nav_workspace'),
+    navCanvasTypes: t('settings_nav_canvas_types'),
     navAi: t('settings_nav_ai'),
     navShortcuts: t('settings_nav_shortcuts'),
     navAbout: t('settings_nav_about'),
@@ -103,6 +104,18 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     workspaceExportSuccess: (path: string) =>
       f('settings_workspace_export_success', { path }),
     workspaceExportFailed: t('settings_workspace_export_failed'),
+
+    canvasTypesTitle: t('settings_canvas_types_title'),
+    canvasTypesDescription: t('settings_canvas_types_description'),
+    canvasTypesEmpty: t('settings_canvas_types_empty'),
+    canvasTypesEnabled: t('settings_canvas_types_enabled'),
+    canvasTypesDisabled: t('settings_canvas_types_disabled'),
+    canvasTypesInstanceCount: (value: number) =>
+      f('settings_canvas_types_instance_count', { count: value }),
+    canvasTypesClear: t('settings_canvas_types_clear'),
+    canvasTypesClearConfirm: (count: number, name: string) =>
+      f('settings_canvas_types_clear_confirm', { count, name }),
+    canvasTypesClearFailed: t('settings_canvas_types_clear_failed'),
 
     cleanupTitle: t('settings_cleanup_title'),
     cleanupDescription: t('settings_cleanup_description'),

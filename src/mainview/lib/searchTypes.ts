@@ -12,8 +12,10 @@ export type SearchResultKind =
   | 'card'
   | 'asset'
   | 'link'
+  | 'recording'
   | 'edge'
   | 'widget'
+  | 'extension'
   | 'view';
 
 export type SearchMatchField =

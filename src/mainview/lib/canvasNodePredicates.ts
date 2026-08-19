@@ -1,3 +1,4 @@
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { CANVAS_NODE_SPECS } from './canvasNodeRegistry';
 
 /**
@@ -22,6 +23,7 @@ function getGroupChildNodeTypes(): Set<string> {
         set.add(spec.nodeType);
       }
     }
+    set.add('extension');
     groupChildNodeTypes = set;
   }
   return groupChildNodeTypes;
@@ -50,6 +52,7 @@ const CANVAS_CONTENT_NODE_TYPES = new Set<string>([
   'link',
   'recording',
   'widget',
+  'extension',
 ]);
 
 /** React Flow node types that open a focused/zoom view on click.
@@ -64,20 +67,40 @@ const FOCUSABLE_NODE_TYPES = new Set<string>([
   'link',
 ]);
 
+function canvasTypeFromData(
+  data?: Record<string, unknown> | null
+): ReturnType<typeof canvasTypeRegistry.get> {
+  const canvasTypeId =
+    typeof data?.canvasTypeId === 'string' ? data.canvasTypeId : '';
+  return canvasTypeId ? canvasTypeRegistry.get(canvasTypeId) : undefined;
+}
+
 export function isCanvasContentNode(type: string | undefined): boolean {
   return type ? CANVAS_CONTENT_NODE_TYPES.has(type) : false;
 }
 
-export function isGroupChildNode(type: string | undefined): boolean {
+export function isGroupChildNode(
+  type: string | undefined,
+  data?: Record<string, unknown> | null
+): boolean {
+  if (type === 'extension') {
+    return canvasTypeFromData(data)?.surface.canEnterGroup ?? true;
+  }
   return type ? getGroupChildNodeTypes().has(type) : false;
 }
 
-export function isFolderChildNode(type: string | undefined): boolean {
+export function isFolderChildNode(
+  type: string | undefined,
+  data?: Record<string, unknown> | null
+): boolean {
+  if (type === 'extension') {
+    return canvasTypeFromData(data)?.surface.canEnterFolder ?? false;
+  }
   return type ? getFolderChildNodeTypes().has(type) : false;
 }
 
 /** React Flow node types that can never be absorbed into a folder from a drag
- *  (sticky, folder, group, and the checklist/pomodoro/reminder widgets). */
+ *  (sticky, folder, group, and leftover checklist/pomodoro/reminder widgets). */
 const REJECTED_FOLDER_CHILD_NODE_TYPES = new Set<string>([
   'sticky',
   'folder',
@@ -87,13 +110,23 @@ const REJECTED_FOLDER_CHILD_NODE_TYPES = new Set<string>([
 
 /** True when `nodeType` is a draggable node that a folder must visually reject
  *  (repel) instead of absorbing. Structural containers and widgets can never
- *  live inside a folder. */
+ *  live inside a folder. Extension nodes follow their canvas-type capability. */
 export function isRejectedFolderChildNode(
-  nodeType: string | undefined
+  nodeType: string | undefined,
+  data?: Record<string, unknown> | null
 ): boolean {
+  if (nodeType === 'extension') {
+    return !(canvasTypeFromData(data)?.surface.canEnterFolder ?? false);
+  }
   return nodeType ? REJECTED_FOLDER_CHILD_NODE_TYPES.has(nodeType) : false;
 }
 
-export function isFocusableNode(type: string | undefined): boolean {
+export function isFocusableNode(
+  type: string | undefined,
+  data?: Record<string, unknown> | null
+): boolean {
+  if (type === 'extension') {
+    return canvasTypeFromData(data)?.surface.openBehavior === 'detail';
+  }
   return type ? FOCUSABLE_NODE_TYPES.has(type) : false;
 }

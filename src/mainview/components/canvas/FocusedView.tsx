@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import { NoteEditorLoading } from '@/components/editor/NoteEditorLoading';
 import { SaveIndicator } from '@/components/editor/SaveIndicator';
 import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
+import { createExtensionHostApi } from '@/extensions/hostApi';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
@@ -28,10 +30,13 @@ import type {
   ChecklistWidgetItem,
 } from '@/lib/widgetTypes';
 import { isWidgetLoadError } from '@/lib/widgetTypes';
+import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
-
 import * as m from '../../../paraglide/messages.js';
+import { IMAGE_CANVAS_TYPE_ID } from '../../../shared/extensions/builtinIds';
+import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
@@ -306,7 +311,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         ?.children ?? []) as FolderChildEntry[];
       const items: FocusedItem[] = [];
       for (const child of children) {
-        if (!isFocusableNode(child.type)) {
+        if (!isFocusableNode(child.type, child.data)) {
           continue;
         }
         items.push({
@@ -323,7 +328,10 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     const items: FocusedItem[] = [];
     for (const candidate of nodes) {
       if (
-        !isFocusableNode(candidate.type) ||
+        !isFocusableNode(
+          candidate.type,
+          candidate.data as Record<string, unknown>
+        ) ||
         (candidate.data as Record<string, unknown> | undefined)?.detached
       ) {
         continue;
@@ -381,7 +389,23 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     node.type !== 'image' &&
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
-  const isImage = node.type === 'image';
+  const extensionCanvasTypeId =
+    node.type === 'extension' && typeof node.data.canvasTypeId === 'string'
+      ? node.data.canvasTypeId
+      : undefined;
+  const extensionInstanceId =
+    node.type === 'extension' && typeof node.data.instanceId === 'string'
+      ? node.data.instanceId
+      : undefined;
+  const extensionType = extensionCanvasTypeId
+    ? canvasTypeRegistry.get(extensionCanvasTypeId)
+    : undefined;
+  const extensionRecord = useExtensionInstanceStore((s) =>
+    extensionInstanceId ? s.records[extensionInstanceId] : undefined
+  );
+  const locale = useAppSettingsStore((s) => s.locale);
+  const isImage =
+    node.type === 'image' || extensionCanvasTypeId === IMAGE_CANVAS_TYPE_ID;
   const isChecklist =
     !isImage &&
     node.type !== 'asset' &&
@@ -597,7 +621,37 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 : 'h-full w-full overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-2xl dark:border-white/5 dark:bg-zinc-900'
             }
           >
-            {node.type === 'image' ? (
+            {node.type === 'extension' &&
+            extensionType?.DetailSurface &&
+            extensionRecord &&
+            !isExtensionInstanceLoadError(extensionRecord) &&
+            extensionCanvasTypeId &&
+            extensionInstanceId ? (
+              <extensionType.DetailSurface
+                context={{
+                  width: 0,
+                  height: 0,
+                  theme: document.documentElement.classList.contains('dark')
+                    ? 'dark'
+                    : 'light',
+                  locale,
+                  readOnly: false,
+                  selected: true,
+                  surface: 'detail',
+                }}
+                host={createExtensionHostApi({
+                  canvasTypeId: extensionCanvasTypeId,
+                  instanceId: extensionInstanceId,
+                  nodeId: node.id,
+                })}
+                presentation={extensionRecord.presentation}
+                state={
+                  extensionType.validateState(extensionRecord.state)
+                    ? extensionRecord.state
+                    : extensionType.createInitialState()
+                }
+              />
+            ) : node.type === 'image' ? (
               <ImageZoomPan>
                 <ImageContent
                   data={node.data as unknown as ImageData}

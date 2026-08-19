@@ -1,6 +1,7 @@
 import {
   Info,
   Keyboard,
+  Puzzle,
   Settings as SettingsIcon,
   Sparkles,
   Wrench,
@@ -21,25 +22,38 @@ import {
 } from './i18n/getLocaleStrings';
 import { AboutPanel } from './panels/AboutPanel';
 import { AIPanel } from './panels/AIPanel';
+import { CanvasTypesPanel } from './panels/CanvasTypesPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
 import { WorkspacePanel } from './panels/WorkspacePanel';
 import { applyTheme, normalizeSettings } from './settingsState';
 
-type SettingsSection = 'about' | 'ai' | 'general' | 'shortcuts' | 'workspace';
+type SettingsSection =
+  | 'about'
+  | 'ai'
+  | 'canvasTypes'
+  | 'general'
+  | 'shortcuts'
+  | 'workspace';
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string; size?: number }>;
   id: SettingsSection;
   labelKey: keyof Pick<
     SettingsLocaleStrings,
-    'navAbout' | 'navAi' | 'navGeneral' | 'navShortcuts' | 'navWorkspace'
+    | 'navAbout'
+    | 'navAi'
+    | 'navCanvasTypes'
+    | 'navGeneral'
+    | 'navShortcuts'
+    | 'navWorkspace'
   >;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'general', icon: SettingsIcon, labelKey: 'navGeneral' },
   { id: 'workspace', icon: Wrench, labelKey: 'navWorkspace' },
+  { id: 'canvasTypes', icon: Puzzle, labelKey: 'navCanvasTypes' },
   { id: 'ai', icon: Sparkles, labelKey: 'navAi' },
   { id: 'shortcuts', icon: Keyboard, labelKey: 'navShortcuts' },
   { id: 'about', icon: Info, labelKey: 'navAbout' },
@@ -294,6 +308,9 @@ function SettingsContent({
       ) : null}
       {activeSection === 'workspace' ? (
         <WorkspacePanel client={client} locale={locale} strings={strings} />
+      ) : null}
+      {activeSection === 'canvasTypes' ? (
+        <CanvasTypesPanel locale={locale} strings={strings} />
       ) : null}
       {activeSection === 'ai' ? (
         <AIPanel

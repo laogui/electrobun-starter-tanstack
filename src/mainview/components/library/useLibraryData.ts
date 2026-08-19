@@ -252,7 +252,7 @@ export function buildLibrary(
     const items: LibraryItem[] = [];
     for (const child of children) {
       folderChildIds.add(`${node.id}:${child.id}`);
-      if (!isFocusableNode(child.type)) {
+      if (!isFocusableNode(child.type, child.data)) {
         continue;
       }
       items.push(
@@ -280,7 +280,7 @@ export function buildLibrary(
   const ungroupedItems: LibraryItem[] = [];
   const detachedItems: LibraryItem[] = [];
   for (const node of nodes) {
-    if (!isFocusableNode(node.type)) {
+    if (!isFocusableNode(node.type, node.data as Record<string, unknown>)) {
       continue;
     }
     const data = node.data as Record<string, unknown>;

@@ -105,7 +105,10 @@ export function FolderExpandedChildVisual({
   const expandedContent = { scaleX: 1, width: '100%' };
   const transition = getFolderExpandedChildTransition(data, shouldReduceMotion);
 
-  const focusable = isFocusableNode(data.child.type);
+  const focusable = isFocusableNode(
+    data.child.type,
+    data.child.data as Record<string, unknown>
+  );
 
   return (
     <motion.div

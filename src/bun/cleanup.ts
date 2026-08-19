@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
-
+import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import { blocknoteSidecarDir } from './blocknote';
 import { loadManifest, type ManifestNode } from './manifest';
 import { listFilesRecursiveAsync, parseFrontmatter } from './notes';
@@ -27,6 +27,8 @@ const CONTENT_PATH_RE = /^content\/[^/][^\\]*\.md$/;
 const SIDECAR_PATH_RE =
   /^content\/\.ghostboard\/blocknote\/[A-Za-z0-9_-]+\.json$/;
 const WIDGET_PATH_RE = /^\.ghostboard\/widgets\/[A-Za-z0-9_-]+\.json$/;
+const INSTANCE_PATH_RE =
+  /^\.ghostboard\/extension-instances\/[A-Za-z0-9_-]+\.json$/;
 const JSON_EXT_RE = /\.json$/;
 
 function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
@@ -94,6 +96,9 @@ async function collectReferencedIds(wsPath: string): Promise<Set<string>> {
     }
     for (const node of manifest.nodes) {
       collectNoteIdsFromNode(node, ids);
+      for (const instanceId of collectExtensionInstanceIds([node])) {
+        ids.add(instanceId);
+      }
     }
   }
   return ids;
@@ -223,6 +228,44 @@ export async function scanUnlinkedNotes(
     }
   }
 
+  const instancesDir = join(wsPath, '.ghostboard', 'extension-instances');
+  const instanceEntries = await Promise.all(
+    (await listFilesRecursiveAsync(instancesDir)).map(async (rel) => {
+      if (!rel.endsWith('.json') || rel.includes('/')) {
+        return null;
+      }
+      const instanceId = rel.replace(JSON_EXT_RE, '');
+      if (referenced.has(instanceId)) {
+        return null;
+      }
+      const fullPath = join(instancesDir, rel);
+      const [parsed, stats] = await Promise.all([
+        Bun.file(fullPath)
+          .json()
+          .catch(() => null) as Promise<{
+          presentation?: { title?: unknown };
+        } | null>,
+        stat(fullPath).catch(() => null),
+      ]);
+      return {
+        file: `.ghostboard/extension-instances/${rel}`,
+        hasFrontmatterId: true,
+        modifiedAt: stats?.mtimeMs ?? 0,
+        noteId: instanceId,
+        size: stats?.size ?? 0,
+        title:
+          typeof parsed?.presentation?.title === 'string'
+            ? parsed.presentation.title
+            : '',
+      };
+    })
+  );
+  for (const entry of instanceEntries) {
+    if (entry) {
+      entries.push(entry);
+    }
+  }
+
   entries.sort((a, b) => a.file.localeCompare(b.file));
   return entries;
 }
@@ -239,7 +282,7 @@ async function noteIdForCleanupPath(
   if (SIDECAR_PATH_RE.test(rel)) {
     return rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? null;
   }
-  if (WIDGET_PATH_RE.test(rel)) {
+  if (WIDGET_PATH_RE.test(rel) || INSTANCE_PATH_RE.test(rel)) {
     return rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? null;
   }
   try {
@@ -274,7 +317,8 @@ export async function deleteUnlinkedNotes(
       const isAllowed =
         CONTENT_PATH_RE.test(rel) ||
         SIDECAR_PATH_RE.test(rel) ||
-        WIDGET_PATH_RE.test(rel);
+        WIDGET_PATH_RE.test(rel) ||
+        INSTANCE_PATH_RE.test(rel);
       if (!isAllowed || rel.includes('..')) {
         return { rel, status: 'skipped' as const };
       }

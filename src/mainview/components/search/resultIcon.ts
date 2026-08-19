@@ -43,6 +43,10 @@ export function iconFor(kind: SearchResultKind, widgetKind?: WidgetKind) {
         return Bell;
       }
       return FileText;
+    case 'recording':
+      return FileText;
+    case 'extension':
+      return FileText;
     default:
       return FileText;
   }

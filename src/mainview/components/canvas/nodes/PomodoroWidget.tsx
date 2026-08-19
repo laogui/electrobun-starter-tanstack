@@ -360,6 +360,7 @@ function ActionChip({
 export function PomodoroWidgetBody({
   data,
   onChange,
+  onCompleteIfDue,
   readOnly = false,
   widgetId,
 }: {
@@ -367,6 +368,7 @@ export function PomodoroWidgetBody({
   onChange?: (
     updater: (data: PomodoroWidgetData) => PomodoroWidgetData
   ) => void;
+  onCompleteIfDue?: () => void;
   readOnly?: boolean;
   widgetId: string;
 }) {
@@ -401,8 +403,19 @@ export function PomodoroWidgetBody({
     if (readOnly || !(pomodoroRunning && remainingMs === 0)) {
       return;
     }
+    if (onCompleteIfDue) {
+      onCompleteIfDue();
+      return;
+    }
     completePomodoroIfDue(widgetId);
-  }, [readOnly, pomodoroRunning, remainingMs, widgetId, completePomodoroIfDue]);
+  }, [
+    readOnly,
+    pomodoroRunning,
+    remainingMs,
+    widgetId,
+    onCompleteIfDue,
+    completePomodoroIfDue,
+  ]);
 
   const sessionsPerCycle = Math.max(
     1,

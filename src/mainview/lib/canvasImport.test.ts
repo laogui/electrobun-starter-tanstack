@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { CanvasExportDocument } from '@/lib/canvasExport';
 import {
   buildImportedCanvasPayload,
+  collectExtensionInstanceIdsFromCanvasExport,
   collectWidgetIdsFromCanvasExport,
 } from '@/lib/canvasImport';
 
@@ -176,5 +177,40 @@ describe('buildImportedCanvasPayload', () => {
     );
     expect(nodes).toHaveLength(1);
     expect(edges).toHaveLength(0);
+  });
+
+  it('remaps extension instance ids and never drops unknown types', () => {
+    const doc = {
+      schema: 'ghostboard-canvas-export/v2' as const,
+      exportedAt: '2026-07-08T00:00:00.000Z',
+      nodes: [
+        {
+          id: 'n1',
+          type: 'extension',
+          position: { x: 0, y: 0 },
+          data: {
+            canvasTypeId: 'ghostboard.future/unknown',
+            instanceId: 'extinst_old',
+          },
+        },
+      ],
+      edges: [],
+    };
+    expect(collectExtensionInstanceIdsFromCanvasExport(doc)).toEqual([
+      'extinst_old',
+    ]);
+    const { nodes } = buildImportedCanvasPayload(
+      doc,
+      anchorCenter,
+      [] as Node[],
+      [] as Edge[],
+      new Map(),
+      new Map([['extinst_old', 'extinst_new']])
+    );
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]?.data).toMatchObject({
+      canvasTypeId: 'ghostboard.future/unknown',
+      instanceId: 'extinst_new',
+    });
   });
 });

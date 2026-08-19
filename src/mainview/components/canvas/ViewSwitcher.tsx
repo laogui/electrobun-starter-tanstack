@@ -24,11 +24,12 @@ import {
 import * as motion from 'motion/react-m';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { toast } from 'sonner';
-import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import { getCanvasTypeMenuItems } from '@/extensions/createMenu';
+import { resolveExtensionMessage } from '@/extensions/messages';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   type CreatableMenuItem,
-  type CreateActionId,
   getCreatableMenuItems,
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
@@ -46,10 +47,14 @@ import {
   rpcRestoreView,
 } from '@/lib/rpc';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
-
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import * as m from '../../../paraglide/messages.js';
+import {
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
+import { canvasTypeMenuActionId } from '../../../shared/extensions/ids';
 import { DeleteViewConfirmDialog } from './DeleteViewConfirmDialog';
-import { LinkCreateForm } from './LinkCreateForm';
 
 /**
  * Max length for canvas (view) names. Aligned with the audit's F2 spec —
@@ -62,14 +67,11 @@ const VIEW_NAME_MAX_LENGTH = 80;
  * Create-menu items shown in the top "common" group. Widgets are first-class
  * creation actions, so keep them visible instead of hiding them behind "More".
  */
-const COMMON_CREATE_IDS = new Set<CreateActionId>([
+const COMMON_CREATE_IDS = new Set<string>([
   'note',
-  'checklist',
-  'pomodoro',
-  'reminder',
   'sticky',
-  'link',
-  'image',
+  canvasTypeMenuActionId(LINK_CANVAS_TYPE_ID),
+  canvasTypeMenuActionId(IMAGE_CANVAS_TYPE_ID),
 ]);
 
 /**
@@ -82,7 +84,6 @@ const TRIGGER_FOCUS_RING =
 interface ViewSwitcherUiState {
   editingId: string | null;
   editingName: string;
-  linkFormOpen: boolean;
   open: boolean;
   pendingDeleteId: string | null;
 }
@@ -91,14 +92,12 @@ type ViewSwitcherUiAction =
   | { type: 'beginRename'; id: string; name: string; open?: boolean }
   | { type: 'cancelRename' }
   | { type: 'setEditingName'; name: string }
-  | { type: 'setLinkFormOpen'; open: boolean }
   | { type: 'setOpen'; open: boolean }
   | { type: 'setPendingDeleteId'; id: string | null };
 
 const initialViewSwitcherUiState: ViewSwitcherUiState = {
   editingId: null,
   editingName: '',
-  linkFormOpen: false,
   open: false,
   pendingDeleteId: null,
 };
@@ -119,8 +118,6 @@ function viewSwitcherUiReducer(
       return { ...state, editingId: null };
     case 'setEditingName':
       return { ...state, editingName: action.name };
-    case 'setLinkFormOpen':
-      return { ...state, linkFormOpen: action.open };
     case 'setOpen':
       return { ...state, open: action.open };
     case 'setPendingDeleteId':
@@ -129,14 +126,11 @@ function viewSwitcherUiReducer(
 }
 
 interface RenderCreateMenuItemDeps {
+  onCreateCanvasType?: (canvasTypeId: string) => void | Promise<void>;
   onCreateNode: (
     type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
-  openAssetPicker: () => void;
-  openImagePicker: () => void;
-  openRecorder: () => void;
-  setLinkFormOpen: (open: boolean) => void;
 }
 
 /**
@@ -146,13 +140,7 @@ interface RenderCreateMenuItemDeps {
  */
 function renderCreateMenuItem(
   item: CreatableMenuItem,
-  {
-    onCreateNode,
-    openAssetPicker,
-    openImagePicker,
-    openRecorder,
-    setLinkFormOpen,
-  }: RenderCreateMenuItemDeps
+  { onCreateCanvasType, onCreateNode }: RenderCreateMenuItemDeps
 ) {
   return (
     <Menu.Item
@@ -162,30 +150,27 @@ function renderCreateMenuItem(
           ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
           : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
       } border-gray-100 border-b dark:border-neutral-700`}
-      closeOnClick={
-        item.id !== 'link' && item.id !== 'file' && item.id !== 'recording'
-      }
+      closeOnClick={(() => {
+        const canvasTypeId = item.id.startsWith('ext:')
+          ? item.id.slice('ext:'.length)
+          : undefined;
+        const flow = canvasTypeId
+          ? canvasTypeRegistry.get(canvasTypeId)?.createFlow
+          : undefined;
+        return flow !== 'url' && flow !== 'file' && flow !== 'recording';
+      })()}
       disabled={!item.enabled}
       key={item.id}
       onClick={async () => {
+        const canvasTypeId = item.id.startsWith('ext:')
+          ? item.id.slice('ext:'.length)
+          : undefined;
+        if (canvasTypeId) {
+          onCreateCanvasType?.(canvasTypeId);
+          return;
+        }
         const type = resolveCreatableKind(item.id);
         if (type) {
-          if (type === 'link') {
-            setLinkFormOpen(true);
-            return;
-          }
-          if (type === 'asset') {
-            openAssetPicker();
-            return;
-          }
-          if (type === 'image') {
-            openImagePicker();
-            return;
-          }
-          if (type === 'recording') {
-            openRecorder();
-            return;
-          }
           await onCreateNode(type);
         }
       }}
@@ -242,35 +227,31 @@ const getQuickTemplateItems = () => [
 // View switching keeps the menu, restore flow, and import actions in one control.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export function ViewSwitcher({
+  onCreateCanvasType,
   onCreateNode,
   onExportCanvas,
   onExportCanvasJson,
-  onOpenImagePicker,
   onOpenNoteLibrary,
-  onOpenRecorder,
   createMenuOpen,
   setCreateMenuOpen,
 }: {
   createMenuOpen: boolean;
+  onCreateCanvasType?: (canvasTypeId: string) => void | Promise<void>;
   onCreateNode: (
     type: CreatableCanvasNodeKind,
     options?: CreateNodeOptions
   ) => void;
   onExportCanvas?: () => void;
   onExportCanvasJson?: () => void;
-  onOpenImagePicker: () => void;
   onOpenNoteLibrary?: () => void;
-  onOpenRecorder: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
   const [uiState, dispatchUi] = useReducer(
     viewSwitcherUiReducer,
     initialViewSwitcherUiState
   );
-  const { editingId, editingName, linkFormOpen, open, pendingDeleteId } =
-    uiState;
+  const { editingId, editingName, open, pendingDeleteId } = uiState;
   const inputRef = useRef<HTMLInputElement>(null);
-  const assetFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
@@ -337,10 +318,6 @@ export function ViewSwitcher({
 
   const setEditingName = useCallback((name: string) => {
     dispatchUi({ type: 'setEditingName', name });
-  }, []);
-
-  const setLinkFormOpen = useCallback((nextOpen: boolean) => {
-    dispatchUi({ type: 'setLinkFormOpen', open: nextOpen });
   }, []);
 
   const setPendingDeleteId = useCallback((id: string | null) => {
@@ -585,31 +562,6 @@ export function ViewSwitcher({
       ? m.view_node_count_one()
       : m.view_node_count_other({ count: activeViewNodeCount });
 
-  const handleAssetFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0) {
-        return;
-      }
-      setCreateMenuOpen(false);
-      for (const file of files) {
-        try {
-          // Preserve creation order and individual failure handling for each file.
-          // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          const data = await saveAssetFileWithProgressToast(file);
-          // Preserve node insertion order in the active canvas.
-          // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await onCreateNode('asset', { data: { ...data } });
-        } catch (error) {
-          console.error(
-            '[ViewSwitcher] Failed to import selected file:',
-            error
-          );
-        }
-      }
-    },
-    [onCreateNode, setCreateMenuOpen]
-  );
-
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
     const imported = handleMarkdownImportResult(result, async (notes) => {
@@ -631,7 +583,16 @@ export function ViewSwitcher({
   // "more" (folder / group / file / checklist). Common are the everyday
   // entry points; everything else is one section header away to keep the
   // popup scannable. F4 in the product detail roadmap.
-  const createMenuItems = getCreatableMenuItems('short');
+  const disabledCanvasTypes = useExtensionEnablementStore(
+    (s) => s.disabledCanvasTypes
+  );
+  const createMenuItems = getCreatableMenuItems(
+    'short',
+    getCanvasTypeMenuItems(
+      canvasTypeRegistry.listEnabled(disabledCanvasTypes),
+      resolveExtensionMessage
+    )
+  );
   const commonCreateItems = createMenuItems.filter((item) =>
     COMMON_CREATE_IDS.has(item.id)
   );
@@ -641,20 +602,6 @@ export function ViewSwitcher({
 
   return (
     <>
-      <input
-        aria-label="Import asset files"
-        className="hidden"
-        multiple
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          event.target.value = '';
-          handleAssetFiles(files).catch((error) => {
-            console.error('[ViewSwitcher] Failed to import files:', error);
-          });
-        }}
-        ref={assetFileInputRef}
-        type="file"
-      />
       <DeleteViewConfirmDialog
         onCancel={() => {
           setPendingDeleteId(null);
@@ -770,15 +717,7 @@ export function ViewSwitcher({
             </Menu.Root>
           ) : null}
 
-          <Menu.Root
-            onOpenChange={(nextOpen) => {
-              if (!nextOpen) {
-                setLinkFormOpen(false);
-              }
-              setCreateMenuOpen(nextOpen);
-            }}
-            open={createMenuOpen}
-          >
+          <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
             <Menu.Trigger
               aria-label={m.menu_create_button_aria()}
               className={`flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong ${TRIGGER_FOCUS_RING}`}
@@ -803,11 +742,8 @@ export function ViewSwitcher({
                 <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
                   {commonCreateItems.map((item) =>
                     renderCreateMenuItem(item, {
+                      onCreateCanvasType,
                       onCreateNode,
-                      setLinkFormOpen,
-                      openAssetPicker: () => assetFileInputRef.current?.click(),
-                      openImagePicker: onOpenImagePicker,
-                      openRecorder: onOpenRecorder,
                     })
                   )}
                   <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:border-neutral-700 dark:text-gray-400">
@@ -815,11 +751,8 @@ export function ViewSwitcher({
                   </div>
                   {moreCreateItems.map((item) =>
                     renderCreateMenuItem(item, {
+                      onCreateCanvasType,
                       onCreateNode,
-                      setLinkFormOpen,
-                      openAssetPicker: () => assetFileInputRef.current?.click(),
-                      openImagePicker: onOpenImagePicker,
-                      openRecorder: onOpenRecorder,
                     })
                   )}
                   <Menu.Item
@@ -835,15 +768,6 @@ export function ViewSwitcher({
                     <FilePlus size={18} />
                     {m.menu_import_markdown()}
                   </Menu.Item>
-                  {linkFormOpen ? (
-                    <LinkCreateForm
-                      onCreate={async (data) => {
-                        await onCreateNode('link', { data: { ...data } });
-                        setLinkFormOpen(false);
-                        setCreateMenuOpen(false);
-                      }}
-                    />
-                  ) : null}
                   {onOpenNoteLibrary ? (
                     <Menu.Item
                       aria-label={m.menu_note_library()}

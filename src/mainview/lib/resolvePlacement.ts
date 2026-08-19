@@ -30,6 +30,8 @@ export interface PlacementResult {
 export interface ResolvePlacementOptions {
   /** Top-left anchor the caller *prefers* for the new node (canvas coords). */
   anchor: Point;
+  /** Override group adoption when the caller knows a canvas-type capability. */
+  canEnterGroup?: boolean;
   /** Type of the node being created (decides group-adoption eligibility). */
   newType: string;
   /** Existing nodes on the canvas. */
@@ -83,7 +85,7 @@ export function resolveNodePlacement(
   };
 
   // Step 1: anchor's center sits inside a group → try to adopt it as a child.
-  const canAdopt = isGroupChildNode(newType);
+  const canAdopt = options.canEnterGroup ?? isGroupChildNode(newType);
   const targetGroup = canAdopt
     ? (groups.find((g) => {
         const r = groupRectsById.get(g.id);

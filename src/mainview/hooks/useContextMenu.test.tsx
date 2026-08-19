@@ -910,9 +910,8 @@ describe('useContextMenu', () => {
       id: expect.stringMatching(NODE_ID_RE),
       type: 'card',
       data: {
-        type: 'checklist',
+        type: 'text',
         title: '',
-        items: [],
         color: '#FFFFFF',
       },
     });
@@ -1029,12 +1028,12 @@ describe('useContextMenu', () => {
     expect(storeActions.saveSnapshot).not.toHaveBeenCalled();
   });
 
-  it('routes link/asset/image creation through onRequestCreate when provided', () => {
-    const onRequestCreate = vi.fn();
+  it('routes extension creation through onRequestCreateCanvasType when provided', () => {
+    const onRequestCreateCanvasType = vi.fn();
 
     const RoutingHarness = () => {
       const { onPaneContextMenu, handleContextMenuAction } = useContextMenu({
-        onRequestCreate,
+        onRequestCreateCanvasType,
         rfInstance: rfInstance as never,
       });
       return (
@@ -1053,7 +1052,7 @@ describe('useContextMenu', () => {
           </button>
           <button
             onClick={() => {
-              handleContextMenuAction('new-link');
+              handleContextMenuAction('new-ext:ghostboard.web/link');
             }}
             type="button"
           >
@@ -1061,7 +1060,7 @@ describe('useContextMenu', () => {
           </button>
           <button
             onClick={() => {
-              handleContextMenuAction('new-file');
+              handleContextMenuAction('new-ext:ghostboard.media/file');
             }}
             type="button"
           >
@@ -1069,7 +1068,7 @@ describe('useContextMenu', () => {
           </button>
           <button
             onClick={() => {
-              handleContextMenuAction('new-image');
+              handleContextMenuAction('new-ext:ghostboard.media/image');
             }}
             type="button"
           >
@@ -1087,21 +1086,30 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'routing-pane' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'routing-new-link' }));
-    expect(onRequestCreate).toHaveBeenCalledWith('link', {
-      anchorCenter: expectedAnchor,
-      screen: expectedScreen,
-    });
+    expect(onRequestCreateCanvasType).toHaveBeenCalledWith(
+      'ghostboard.web/link',
+      {
+        anchorCenter: expectedAnchor,
+        screen: expectedScreen,
+      }
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'routing-new-file' }));
-    expect(onRequestCreate).toHaveBeenCalledWith('asset', {
-      anchorCenter: expectedAnchor,
-      screen: expectedScreen,
-    });
+    expect(onRequestCreateCanvasType).toHaveBeenCalledWith(
+      'ghostboard.media/file',
+      {
+        anchorCenter: expectedAnchor,
+        screen: expectedScreen,
+      }
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'routing-new-image' }));
-    expect(onRequestCreate).toHaveBeenCalledWith('image', {
-      anchorCenter: expectedAnchor,
-      screen: expectedScreen,
-    });
+    expect(onRequestCreateCanvasType).toHaveBeenCalledWith(
+      'ghostboard.media/image',
+      {
+        anchorCenter: expectedAnchor,
+        screen: expectedScreen,
+      }
+    );
   });
 });

@@ -1,25 +1,18 @@
 import LabeledEdge from '@/components/canvas/edges/LabeledEdge';
-import AssetNode from '@/components/canvas/nodes/AssetNode';
 import CardNode from '@/components/canvas/nodes/CardNode';
 import FolderExpandedChildNode from '@/components/canvas/nodes/FolderExpandedChildNode';
 import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
-import ImageNode from '@/components/canvas/nodes/ImageNode';
-import LinkNode from '@/components/canvas/nodes/LinkNode';
-import RecordingNode from '@/components/canvas/nodes/RecordingNode';
 import {
-  AssetNodeReadOnly,
   CardNodeReadOnly,
   FolderNodeReadOnly,
   GroupNodeReadOnly,
-  ImageNodeReadOnly,
-  LinkNodeReadOnly,
-  RecordingNodeReadOnly,
   StickyNodeReadOnly,
-  WidgetNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
-import WidgetNode from '@/components/canvas/nodes/WidgetNode';
+import ExtensionNode, {
+  ExtensionNodeReadOnly,
+} from '@/extensions/ExtensionNode';
 
 /**
  * Default node dimensions. These now live in `canvasNodeRegistry` (the spec
@@ -44,17 +37,14 @@ export {
   STICKY_COLORS,
 } from './colorUtils';
 
+/** Core React Flow types plus the generic extension host. */
 export const nodeTypes = {
-  asset: AssetNode,
   card: CardNode,
   folder: FolderNode,
   folderExpandedChild: FolderExpandedChildNode,
   group: GroupNode,
-  image: ImageNode,
-  link: LinkNode,
-  recording: RecordingNode,
   sticky: StickyNode,
-  widget: WidgetNode,
+  extension: ExtensionNode,
 };
 
 /**
@@ -64,15 +54,11 @@ export const nodeTypes = {
  * export, minimap thumbnails).
  */
 export const readOnlyNodeTypes = {
-  asset: AssetNodeReadOnly,
   card: CardNodeReadOnly,
   folder: FolderNodeReadOnly,
   group: GroupNodeReadOnly,
-  image: ImageNodeReadOnly,
-  link: LinkNodeReadOnly,
-  recording: RecordingNodeReadOnly,
   sticky: StickyNodeReadOnly,
-  widget: WidgetNodeReadOnly,
+  extension: ExtensionNodeReadOnly,
 };
 
 export const edgeTypes = {

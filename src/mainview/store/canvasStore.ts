@@ -51,8 +51,8 @@ import {
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
 import type { WidgetKind } from '@/lib/widgetTypes';
-
 import * as m from '../../paraglide/messages.js';
+import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,6 +198,102 @@ function buildPastedClipboard(
  * `data.children`. Used to gate cloning so folder-only-widget paste/duplicate
  * is not silently skipped.
  */
+function graphContainsExtensionReference(nodes: Node[]): boolean {
+  for (const node of nodes) {
+    if (node.type === EXTENSION_NODE_TYPE) {
+      return true;
+    }
+    if (node.type === 'folder') {
+      const children = (node.data as { children?: Array<{ type?: string }> })
+        ?.children;
+      if (
+        Array.isArray(children) &&
+        children.some((child) => child?.type === EXTENSION_NODE_TYPE)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function cloneExtensionReferences(nodes: Node[]): Promise<Node[]> {
+  const { useExtensionInstanceStore } = await import(
+    '@/store/extensionInstanceStore'
+  );
+  const { cloneInstance } = useExtensionInstanceStore.getState();
+
+  async function cloneInstanceId(instanceId: unknown): Promise<string | null> {
+    if (typeof instanceId !== 'string' || !instanceId) {
+      return null;
+    }
+    const record = await cloneInstance(instanceId);
+    if (!record) {
+      toast.error('Failed to clone a canvas type; the copy was skipped.');
+      return null;
+    }
+    return record.id;
+  }
+
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      if (node.type === EXTENSION_NODE_TYPE) {
+        const data = node.data as Record<string, unknown>;
+        const clonedId = await cloneInstanceId(data.instanceId);
+        if (!clonedId) {
+          return null;
+        }
+        return {
+          ...node,
+          data: {
+            ...data,
+            instanceId: clonedId,
+          },
+        };
+      }
+
+      if (node.type === 'folder') {
+        const data = node.data as Record<string, unknown>;
+        const children = data?.children;
+        if (!Array.isArray(children)) {
+          return node;
+        }
+        const nextChildren = await Promise.all(
+          children.map(async (rawChild) => {
+            const child = rawChild as {
+              data?: Record<string, unknown>;
+              type?: string;
+            } | null;
+            if (!child || child.type !== EXTENSION_NODE_TYPE) {
+              return child;
+            }
+            const childData = child.data;
+            const clonedId = await cloneInstanceId(childData?.instanceId);
+            if (!clonedId) {
+              return null;
+            }
+            return {
+              ...child,
+              data: { ...(childData ?? {}), instanceId: clonedId },
+            };
+          })
+        );
+        return {
+          ...node,
+          data: {
+            ...data,
+            children: nextChildren.filter((child) => child !== null),
+          },
+        };
+      }
+
+      return node;
+    })
+  );
+
+  return results.filter((node): node is Node => node !== null);
+}
+
 function graphContainsWidgetReference(nodes: Node[]): boolean {
   for (const node of nodes) {
     if (node.type === 'widget') {
@@ -440,9 +536,15 @@ export interface CanvasState {
   // Actions – clipboard
   copySelected: () => void;
 
-  createMenuOpen: boolean;
-
   // Actions – node CRUD
+  createExtensionNode: (
+    canvasTypeId: string,
+    instanceId: string,
+    rfInstance: ReactFlowInstance<any, any> | null,
+    options?: CreateNodeOptions
+  ) => Promise<string | undefined>;
+
+  createMenuOpen: boolean;
   createNode: (
     type: CreatableCanvasNodeKind,
     rfInstance: ReactFlowInstance<any, any> | null,
@@ -670,7 +772,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (!(card && folder) || folder.type !== 'folder') {
       return;
     }
-    if (!isFolderChildNode(card.type)) {
+    if (!isFolderChildNode(card.type, card.data as Record<string, unknown>)) {
       return;
     }
     // Preserve / synthesize noteId for card children so they map 1:1 to .md files
@@ -1666,9 +1768,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       currentNodes,
       offset
     );
-    const pastedNodes = graphContainsWidgetReference(pasted.nodes)
+    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
+    if (graphContainsExtensionReference(pastedNodes)) {
+      pastedNodes = await cloneExtensionReferences(pastedNodes);
+    }
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
@@ -1692,9 +1797,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       offset
     );
     get().saveSnapshot();
-    const pastedNodes = graphContainsWidgetReference(pasted.nodes)
+    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
+    if (graphContainsExtensionReference(pastedNodes)) {
+      pastedNodes = await cloneExtensionReferences(pastedNodes);
+    }
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
@@ -1832,6 +1940,80 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       );
     }
 
+    return id;
+  },
+
+  createExtensionNode: async (
+    canvasTypeId,
+    instanceId,
+    rfInstance,
+    options
+  ) => {
+    const size = options?.size ?? { width: 240, height: 200 };
+    const viewport = rfInstance?.getViewport();
+    const zoom = viewport?.zoom ?? 1;
+    const viewportCenter = rfInstance?.screenToFlowPosition
+      ? rfInstance.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        })
+      : {
+          x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
+          y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
+        };
+    const center = options?.anchorCenter ?? viewportCenter;
+    const anchor = options?.anchor ?? {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2,
+    };
+    const { nodes } = get();
+    const { placement, parentId, canPlace } = resolveNodePlacement({
+      anchor,
+      nodes,
+      newType: EXTENSION_NODE_TYPE,
+      size,
+      canEnterGroup: true,
+    });
+    if (!canPlace) {
+      toast.error(m.toast_no_placement_slot());
+      return;
+    }
+    let position = placement;
+    if (parentId) {
+      const parentRect = buildAbsoluteRects(nodes).get(parentId);
+      if (parentRect) {
+        position = {
+          x: placement.x - parentRect.left,
+          y: placement.y - parentRect.top,
+        };
+      }
+    }
+    get().saveSnapshot();
+    const id = get().nextNodeId();
+    const newNode: Node = {
+      id,
+      type: EXTENSION_NODE_TYPE,
+      position,
+      style: { width: size.width, height: size.height },
+      data: {
+        canvasTypeId,
+        instanceId,
+        ...(options?.data ?? {}),
+      },
+      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
+    };
+    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
+    if (
+      options?.focusViewport !== false &&
+      typeof rfInstance?.setCenter === 'function'
+    ) {
+      suppressViewportPersist(300);
+      rfInstance.setCenter(
+        placement.x + size.width / 2,
+        placement.y + size.height / 2,
+        { duration: 240, zoom }
+      );
+    }
     return id;
   },
 

@@ -37,10 +37,13 @@ import {
   useRef,
   useState,
 } from 'react';
-
+import { getCanvasTypeMenuItems } from '@/extensions/createMenu';
+import { resolveExtensionMessage } from '@/extensions/messages';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 
 import * as m from '../../../paraglide/messages.js';
 
@@ -73,6 +76,8 @@ type ContextMenuState = {
     | 'group'
     | 'sticky'
     | 'recording'
+    | 'widget'
+    | 'extension'
     | 'multi'
     | 'edge'
     | 'widget';
@@ -87,7 +92,15 @@ const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
     id: 'new',
     label: m.menu_new(),
     icon: Plus,
-    submenu: getCreatableMenuItems('short').map((item) => ({
+    submenu: getCreatableMenuItems(
+      'short',
+      getCanvasTypeMenuItems(
+        canvasTypeRegistry.listEnabled(
+          useExtensionEnablementStore.getState().disabledCanvasTypes
+        ),
+        resolveExtensionMessage
+      )
+    ).map((item) => ({
       id: `new-${item.id}`,
       label: item.label,
       icon: item.icon,
@@ -534,6 +547,7 @@ export function CanvasContextMenu({
     asset: () => getAssetItems(nodeLocked),
     recording: () => getRecordingItems(nodeLocked),
     widget: () => getWidgetItems(nodeLocked),
+    extension: () => getWidgetItems(nodeLocked),
     card: () => getCardItems(nodeLocked),
     multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
     canvas: () => getCanvasItems(hasClipboard),

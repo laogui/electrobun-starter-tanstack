@@ -9,6 +9,13 @@ import {
   Utils,
 } from 'electrobun/bun';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../shared/ai/types';
+import type { ExtensionEnablementFile } from '../shared/extensions/enablement';
+import type {
+  ExtensionInstanceLoadError,
+  ExtensionInstanceRecord,
+} from '../shared/extensions/instance';
+import type { ExtensionPresentation } from '../shared/extensions/presentation';
+import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import { runAITask } from './aiTasks';
@@ -31,6 +38,28 @@ import {
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
 } from './cleanup';
+import {
+  loadExtensionEnablement,
+  setCanvasTypeEnabled,
+} from './extensions/enablement';
+import {
+  cloneExtensionInstance,
+  countInstancesByCanvasType,
+  createExtensionInstance,
+  deleteInstancesByCanvasType,
+  loadExtensionInstances,
+  updateExtensionInstance,
+} from './extensions/instanceStore';
+import {
+  buildManifestNodesAfterExtensionMigration,
+  migrateLegacyCanvasNodes,
+} from './extensions/migration';
+import {
+  cancelExtensionTask,
+  listExtensionTasks,
+  scheduleExtensionTask,
+  tickExtensionTasks,
+} from './extensions/scheduler';
 import {
   activateLicense as activateLicenseKey,
   checkLicenseStatus,
@@ -753,6 +782,10 @@ interface CanvasRPC {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
           widgets?: Record<string, WidgetRecord | WidgetLoadError>;
+          extensionInstances?: Record<
+            string,
+            ExtensionInstanceRecord | ExtensionInstanceLoadError
+          >;
         } | null;
       };
       saveManifest: {
@@ -778,6 +811,90 @@ interface CanvasRPC {
       deleteWidget: {
         params: { widgetId: string };
         response: { success: boolean };
+      };
+      extensionEnablementList: {
+        params: Record<string, unknown>;
+        response: {
+          disabledCanvasTypes: string[];
+          instanceCounts: Record<string, number>;
+        };
+      };
+      extensionEnablementSetEnabled: {
+        params: { canvasTypeId: string; enabled: boolean };
+        response: {
+          enablement?: ExtensionEnablementFile;
+          success: boolean;
+        };
+      };
+      extensionInstanceCreate: {
+        params: {
+          canvasTypeId: string;
+          dataVersion: number;
+          id?: string;
+          presentation: ExtensionPresentation;
+          state: unknown;
+        };
+        response:
+          | { record: ExtensionInstanceRecord; success: true }
+          | { success: false };
+      };
+      extensionInstanceLoadMany: {
+        params: { instanceIds: string[] };
+        response: {
+          records: Record<
+            string,
+            ExtensionInstanceRecord | ExtensionInstanceLoadError
+          >;
+        };
+      };
+      extensionInstanceUpdate: {
+        params: {
+          expectedRevision?: number;
+          instanceId: string;
+          presentation: ExtensionPresentation;
+          state: unknown;
+        };
+        response:
+          | { record: ExtensionInstanceRecord; success: true }
+          | { success: false };
+      };
+      extensionInstanceClone: {
+        params: { instanceId: string };
+        response:
+          | { record: ExtensionInstanceRecord; success: true }
+          | { success: false };
+      };
+      extensionInstanceClearType: {
+        params: { canvasTypeId: string };
+        response: { deleted: number; success: boolean };
+      };
+      extensionSchedulerSchedule: {
+        params: {
+          canvasTypeId: string;
+          fireAt: string;
+          id: string;
+          instanceId: string;
+          payload?: unknown;
+          repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+        };
+        response: { success: boolean };
+      };
+      extensionSchedulerCancel: {
+        params: { taskId: string };
+        response: { success: boolean };
+      };
+      extensionSchedulerList: {
+        params: { instanceId?: string };
+        response: {
+          tasks: Array<{
+            canvasTypeId: string;
+            fireAt: string;
+            id: string;
+            instanceId: string;
+            payload?: unknown;
+            repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+          }>;
+        };
       };
       saveNote: {
         params: {
@@ -1540,7 +1657,7 @@ async function main() {
           const noteIndex = await buildNoteIndex(wsPath);
           const migratedWidgets: Record<string, WidgetRecord> = {};
 
-          const hydratedNodes = await Promise.all(
+          let hydratedNodes = await Promise.all(
             manifest.nodes.map(async (node) => {
               if (hasAttachmentRuntimeData(node.type)) {
                 return {
@@ -1726,6 +1843,7 @@ async function main() {
           // re-runs the migration on every load. Only rewrite when a migration
           // actually occurred — and only patch migrated refs so hydrated
           // runtime content never pollutes the canvas JSON.
+          let diskNodes = manifest.nodes;
           if (Object.keys(migratedWidgets).length > 0) {
             try {
               const persistedNodes = buildManifestNodesAfterWidgetMigration(
@@ -1736,6 +1854,7 @@ async function main() {
                 ...manifest,
                 nodes: persistedNodes,
               });
+              diskNodes = persistedNodes;
             } catch (error) {
               console.warn(
                 '[persistence] Failed to persist checklist migration:',
@@ -1744,12 +1863,48 @@ async function main() {
             }
           }
 
+          const appVersion = (await getAppInfoData()).version;
+          const extensionMigration = await migrateLegacyCanvasNodes(
+            wsPath,
+            viewId,
+            hydratedNodes,
+            appVersion
+          );
+          if (extensionMigration.changed) {
+            hydratedNodes = extensionMigration.nodes;
+            try {
+              await writeManifest(wsPath, viewEntry.file, {
+                ...manifest,
+                nodes: buildManifestNodesAfterExtensionMigration(
+                  diskNodes,
+                  extensionMigration.nodes
+                ),
+              });
+            } catch (error) {
+              console.warn(
+                '[persistence] Failed to persist extension migration:',
+                error
+              );
+            }
+          }
+
+          tickExtensionTasks(wsPath).catch((error) => {
+            console.warn('[extensions] scheduler tick failed', error);
+          });
+
+          const instanceIds = collectExtensionInstanceIds(hydratedNodes);
+          const extensionInstances =
+            instanceIds.length > 0
+              ? await loadExtensionInstances(wsPath, instanceIds)
+              : undefined;
+
           // Viewport is intentionally omitted: camera state is session-only
           // in the renderer and is never restored from disk.
           return {
             nodes: hydratedNodes,
             edges: manifest.edges,
             widgets: hydratedWidgets,
+            extensionInstances,
           };
         },
 
@@ -2080,6 +2235,140 @@ async function main() {
             return { success: false };
           }
         },
+
+        extensionEnablementList: async () => {
+          const enablement = await loadExtensionEnablement(wsPath);
+          const instanceCounts = await countInstancesByCanvasType(wsPath);
+          return {
+            disabledCanvasTypes: enablement.disabledCanvasTypes,
+            instanceCounts,
+          };
+        },
+
+        extensionEnablementSetEnabled: async ({ canvasTypeId, enabled }) => {
+          try {
+            const enablement = await setCanvasTypeEnabled(
+              wsPath,
+              canvasTypeId,
+              enabled
+            );
+            return { success: true, enablement };
+          } catch (error) {
+            console.error('[extensions] setEnabled failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionInstanceCreate: async ({
+          canvasTypeId,
+          dataVersion,
+          id,
+          presentation,
+          state,
+        }) => {
+          try {
+            const appVersion = (await getAppInfoData()).version;
+            const record = await createExtensionInstance(wsPath, {
+              appVersion,
+              canvasTypeId,
+              dataVersion,
+              ...(id ? { id } : {}),
+              presentation,
+              state,
+            });
+            return { success: true, record };
+          } catch (error) {
+            console.error('[extensions] create instance failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionInstanceLoadMany: async ({ instanceIds }) => ({
+          records: await loadExtensionInstances(wsPath, instanceIds),
+        }),
+
+        extensionInstanceUpdate: async ({
+          expectedRevision,
+          instanceId,
+          presentation,
+          state,
+        }) => {
+          try {
+            const appVersion = (await getAppInfoData()).version;
+            const updated = await updateExtensionInstance(wsPath, {
+              appVersion,
+              expectedRevision,
+              instanceId,
+              presentation,
+              state,
+            });
+            if ('error' in updated) {
+              return { success: false };
+            }
+            return { success: true, record: updated.record };
+          } catch (error) {
+            console.error('[extensions] update instance failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionInstanceClone: async ({ instanceId }) => {
+          try {
+            const record = await cloneExtensionInstance(wsPath, instanceId);
+            if (!record) {
+              return { success: false };
+            }
+            return { success: true, record };
+          } catch (error) {
+            console.error('[extensions] clone instance failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionInstanceClearType: async ({ canvasTypeId }) => {
+          try {
+            const deleted = await deleteInstancesByCanvasType(
+              wsPath,
+              canvasTypeId
+            );
+            await Promise.all(
+              deleted.map(async (instanceId) => {
+                const tasks = await listExtensionTasks(wsPath, instanceId);
+                await Promise.all(
+                  tasks.map((task) => cancelExtensionTask(wsPath, task.id))
+                );
+              })
+            );
+            return { success: true, deleted: deleted.length };
+          } catch (error) {
+            console.error('[extensions] clear type data failed', error);
+            return { success: false, deleted: 0 };
+          }
+        },
+
+        extensionSchedulerSchedule: async (task) => {
+          try {
+            await scheduleExtensionTask(wsPath, task);
+            return { success: true };
+          } catch (error) {
+            console.error('[extensions] schedule failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionSchedulerCancel: async ({ taskId }) => {
+          try {
+            await cancelExtensionTask(wsPath, taskId);
+            return { success: true };
+          } catch (error) {
+            console.error('[extensions] cancel task failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionSchedulerList: async ({ instanceId }) => ({
+          tasks: await listExtensionTasks(wsPath, instanceId),
+        }),
 
         saveNote: async ({ noteId, frontmatter, body }) => {
           // Legacy markdown save path (checklist / plain-text cards). JSON

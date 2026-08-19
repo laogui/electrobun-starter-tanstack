@@ -18,6 +18,12 @@ import type {
   WorkspaceInfo,
 } from '@/settingsClient';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
+import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
+import type {
+  ExtensionInstanceLoadError,
+  ExtensionInstanceRecord,
+} from '../../shared/extensions/instance';
+import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
@@ -176,6 +182,144 @@ export async function rpcDeleteWidget(widgetId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteWidget({ widgetId });
+}
+
+export async function rpcListExtensionEnablement(): Promise<{
+  disabledCanvasTypes: string[];
+  instanceCounts: Record<string, number>;
+}> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { disabledCanvasTypes: [], instanceCounts: {} };
+  }
+  return eb.rpc.request.extensionEnablementList({});
+}
+
+export async function rpcClearExtensionTypeData(
+  canvasTypeId: string
+): Promise<{ deleted: number; success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, deleted: 0 };
+  }
+  return eb.rpc.request.extensionInstanceClearType({ canvasTypeId });
+}
+
+export async function rpcSetExtensionEnabled(
+  canvasTypeId: string,
+  enabled: boolean
+): Promise<{
+  enablement?: ExtensionEnablementFile;
+  success: boolean;
+}> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionEnablementSetEnabled({
+    canvasTypeId,
+    enabled,
+  });
+}
+
+export async function rpcCreateExtensionInstance(input: {
+  canvasTypeId: string;
+  dataVersion: number;
+  id?: string;
+  presentation: ExtensionPresentation;
+  state: unknown;
+}): Promise<
+  { record: ExtensionInstanceRecord; success: true } | { success: false }
+> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionInstanceCreate(input);
+}
+
+export async function rpcLoadExtensionInstances(
+  instanceIds: string[]
+): Promise<
+  Record<string, ExtensionInstanceRecord | ExtensionInstanceLoadError>
+> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return {};
+  }
+  const result = await eb.rpc.request.extensionInstanceLoadMany({
+    instanceIds,
+  });
+  return result.records;
+}
+
+export async function rpcUpdateExtensionInstance(input: {
+  expectedRevision?: number;
+  instanceId: string;
+  presentation: ExtensionPresentation;
+  state: unknown;
+}): Promise<
+  { record: ExtensionInstanceRecord; success: true } | { success: false }
+> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionInstanceUpdate(input);
+}
+
+export async function rpcCloneExtensionInstance(
+  instanceId: string
+): Promise<
+  { record: ExtensionInstanceRecord; success: true } | { success: false }
+> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionInstanceClone({ instanceId });
+}
+
+export async function rpcScheduleExtensionTask(task: {
+  canvasTypeId: string;
+  fireAt: string;
+  id: string;
+  instanceId: string;
+  payload?: unknown;
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+}): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionSchedulerSchedule(task);
+}
+
+export async function rpcCancelExtensionTask(
+  taskId: string
+): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionSchedulerCancel({ taskId });
+}
+
+export async function rpcListExtensionTasks(instanceId?: string): Promise<{
+  tasks: Array<{
+    canvasTypeId: string;
+    fireAt: string;
+    id: string;
+    instanceId: string;
+    payload?: unknown;
+    repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+  }>;
+}> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { tasks: [] };
+  }
+  return eb.rpc.request.extensionSchedulerList({ instanceId });
 }
 
 export async function rpcLoadBlockNote(noteId: string) {

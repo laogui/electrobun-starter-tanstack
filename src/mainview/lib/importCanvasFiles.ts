@@ -1,6 +1,6 @@
 import {
-  CANVAS_EXPORT_SCHEMA,
   type CanvasExportDocument,
+  isCanvasExportSchema,
 } from '@/lib/canvasExport';
 import { IMAGE_H, IMAGE_W } from '@/lib/canvasNodeRegistry';
 import { classifyFile } from '@/lib/contentTypes';
@@ -119,13 +119,19 @@ export function parseCanvasExportJson(
   if (!isPlainObject(parsed)) {
     return null;
   }
-  if (parsed.schema !== CANVAS_EXPORT_SCHEMA) {
+  if (!isCanvasExportSchema(parsed.schema)) {
     return null;
   }
   if (!(Array.isArray(parsed.nodes) && Array.isArray(parsed.edges))) {
     return null;
   }
   if (parsed.widgets !== undefined && !isPlainObject(parsed.widgets)) {
+    return null;
+  }
+  if (
+    parsed.extensionInstances !== undefined &&
+    !isPlainObject(parsed.extensionInstances)
+  ) {
     return null;
   }
   return parsed as unknown as CanvasExportDocument;
@@ -205,6 +211,53 @@ function readFileAsDataUrl(file: File): Promise<string> {
  * Persist a dropped/pasted image to workspace attachments and attach
  * thumbnail metadata. The canvas node should already show a blob preview.
  */
+export async function persistImportedImageFiles(file: File): Promise<{
+  imageFile?: string;
+  thumbnailFile?: string;
+  title: string;
+}> {
+  const imageUrl = await readFileAsDataUrl(file);
+  const title = file.name.replace(FILE_EXT_RE, '') || file.name;
+  let imageFile: string | undefined;
+  let thumbnailFile: string | undefined;
+  try {
+    const original = await rpcSaveAttachment(imageUrl, undefined, {
+      kind: 'image',
+      mimeType: file.type || classifyFile(file).mimeType,
+      suggestedName: file.name,
+    });
+    if (original?.filePath) {
+      imageFile = original.filePath;
+    }
+  } catch (error) {
+    console.error(
+      '[importCanvasFiles] Failed to save image attachment:',
+      error
+    );
+    throw error;
+  }
+  try {
+    const thumbnailDataUrl = await createImageThumbnail(imageUrl);
+    if (thumbnailDataUrl) {
+      const thumb = await rpcSaveAttachment(thumbnailDataUrl, undefined, {
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        suggestedName: `${title}-thumbnail.jpg`,
+      });
+      if (thumb?.filePath) {
+        thumbnailFile = thumb.filePath;
+      }
+    }
+  } catch (error) {
+    console.error('[importCanvasFiles] Failed to save image thumbnail:', error);
+  }
+  return {
+    title,
+    ...(imageFile ? { imageFile } : {}),
+    ...(thumbnailFile ? { thumbnailFile } : {}),
+  };
+}
+
 export async function persistImportedImage(
   nodeId: string,
   file: File,

@@ -10,18 +10,34 @@ import { toBlob } from 'html-to-image';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { rpcExportJson, rpcExportPng } from '@/lib/rpc';
 import type { WidgetLoadError, WidgetRecord } from '@/lib/widgetTypes';
+import type { ExtensionInstanceRecord } from '../../shared/extensions/instance';
+import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
 
-export const CANVAS_EXPORT_SCHEMA = 'ghostboard-canvas-export/v1' as const;
+export const CANVAS_EXPORT_SCHEMA_V1 = 'ghostboard-canvas-export/v1' as const;
+export const CANVAS_EXPORT_SCHEMA_V2 = 'ghostboard-canvas-export/v2' as const;
+export const CANVAS_EXPORT_SCHEMA = CANVAS_EXPORT_SCHEMA_V2;
+
+export type CanvasExportSchema =
+  | typeof CANVAS_EXPORT_SCHEMA_V1
+  | typeof CANVAS_EXPORT_SCHEMA_V2;
 
 export interface CanvasExportDocument {
   edges: Record<string, unknown>[];
   exportedAt: string;
+  extensionInstances?: Record<string, ExtensionInstanceRecord>;
   nodes: Record<string, unknown>[];
-  schema: typeof CANVAS_EXPORT_SCHEMA;
+  referencedCanvasTypes?: string[];
+  schema: CanvasExportSchema;
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
   widgets?: Record<string, WidgetRecord>;
+}
+
+export function isCanvasExportSchema(
+  value: unknown
+): value is CanvasExportSchema {
+  return value === CANVAS_EXPORT_SCHEMA_V1 || value === CANVAS_EXPORT_SCHEMA_V2;
 }
 
 const EXPORT_PADDING = 64;
@@ -424,6 +440,10 @@ export async function captureCanvasThumbnailDataUrl({
 
 interface BuildCanvasExportJsonInput {
   edges: Edge[];
+  extensionInstances?: Record<
+    string,
+    ExtensionInstanceRecord | { error: string; id: string }
+  >;
   nodes: Node[];
   viewId?: string;
   viewName?: string;
@@ -488,6 +508,7 @@ export function buildCanvasExportJson({
   viewName,
   viewport,
   widgets = {},
+  extensionInstances = {},
 }: BuildCanvasExportJsonInput): CanvasExportDocument {
   const visibleNodes = nodes.filter((node) => {
     const data = node.data as CanvasNodeData | undefined;
@@ -507,6 +528,17 @@ export function buildCanvasExportJson({
     }
   }
 
+  const exportedInstances: Record<string, ExtensionInstanceRecord> = {};
+  const referencedCanvasTypes = new Set<string>();
+  for (const instanceId of collectExtensionInstanceIds(visibleNodes)) {
+    const record = extensionInstances[instanceId];
+    if (!record || 'error' in record) {
+      continue;
+    }
+    exportedInstances[instanceId] = record;
+    referencedCanvasTypes.add(record.canvasTypeId);
+  }
+
   return {
     schema: CANVAS_EXPORT_SCHEMA,
     exportedAt: new Date().toISOString(),
@@ -517,6 +549,12 @@ export function buildCanvasExportJson({
     edges: sanitized.edges,
     ...(Object.keys(exportedWidgets).length > 0
       ? { widgets: exportedWidgets }
+      : {}),
+    ...(Object.keys(exportedInstances).length > 0
+      ? { extensionInstances: exportedInstances }
+      : {}),
+    ...(referencedCanvasTypes.size > 0
+      ? { referencedCanvasTypes: [...referencedCanvasTypes] }
       : {}),
   };
 }
@@ -555,6 +593,10 @@ async function requestBrowserSaveHandleForJson(fileName: string) {
 
 interface ExportCanvasJsonOptions {
   edges: Edge[];
+  extensionInstances?: Record<
+    string,
+    ExtensionInstanceRecord | { error: string; id: string }
+  >;
   fileName: string;
   nodes: Node[];
   viewId?: string;
@@ -581,6 +623,7 @@ export async function exportReactFlowCanvasToJson({
   viewName,
   viewport,
   widgets,
+  extensionInstances,
 }: ExportCanvasJsonOptions) {
   const document_ = buildCanvasExportJson({
     edges,
@@ -589,6 +632,7 @@ export async function exportReactFlowCanvasToJson({
     viewName,
     viewport,
     widgets,
+    extensionInstances,
   });
 
   if (document_.nodes.length === 0) {

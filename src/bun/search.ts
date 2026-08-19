@@ -1,4 +1,18 @@
+import {
+  CHECKLIST_CANVAS_TYPE_ID,
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+  POMODORO_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+  REMINDER_CANVAS_TYPE_ID,
+} from '../shared/extensions/builtinIds';
+import { isCanvasTypeEnabled } from '../shared/extensions/enablement';
+import { isExtensionInstanceLoadError } from '../shared/extensions/instance';
+import type { ExtensionSearchMetadata } from '../shared/extensions/protocol';
 import { blocksToPlainText } from './blocknotePreview';
+import { loadExtensionEnablement } from './extensions/enablement';
+import { loadExtensionInstances } from './extensions/instanceStore';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
 import { buildNoteIndex, loadNoteRecord, type NoteRecord } from './noteStore';
 import {
@@ -26,6 +40,7 @@ export type SearchResultKind =
   | 'link'
   | 'edge'
   | 'widget'
+  | 'extension'
   | 'view';
 
 export type SearchMatchField =
@@ -45,6 +60,7 @@ export type SearchMatchField =
 export interface SearchResult {
   edgeId?: string;
   excerpt: string;
+  extension?: ExtensionSearchMetadata;
   id: string;
   kind: SearchResultKind;
   matchField: SearchMatchField;
@@ -200,6 +216,7 @@ export async function searchWorkspace(
   // every node referencing that note.
   const noteIdToNodes = new Map<string, NodeRef[]>();
   const widgetIdToNodes = new Map<string, NodeRef[]>();
+  const instanceIdToNodes = new Map<string, NodeRef[]>();
 
   // Walk manifests once: collect noteId → node mapping AND search short text.
   const loadedManifests = await Promise.all(
@@ -247,6 +264,7 @@ export async function searchWorkspace(
         noteIdToNodes.set(noteId, list);
       }
       collectWidgetRefs(node, view.id, view.name, widgetIdToNodes);
+      collectExtensionRefs(node, view.id, view.name, instanceIdToNodes);
 
       addManifestNodeMatches(results, ref, queryLower);
     }
@@ -263,6 +281,7 @@ export async function searchWorkspace(
   // Scan content/**/*.md and join with noteIdToNodes
   await scanNotes(wsPath, queryLower, noteIdToNodes, results);
   await scanWidgets(wsPath, queryLower, widgetIdToNodes, results);
+  await scanExtensionInstances(wsPath, queryLower, instanceIdToNodes, results);
 
   results.sort((a, b) => b.score - a.score);
 
@@ -341,6 +360,100 @@ function collectWidgetRefs(
       viewId,
       viewName,
     });
+  }
+}
+
+function addInstanceRef(
+  map: Map<string, NodeRef[]>,
+  instanceId: string,
+  ref: NodeRef
+): void {
+  const list = map.get(instanceId) ?? [];
+  list.push(ref);
+  map.set(instanceId, list);
+}
+
+function collectExtensionRefs(
+  node: ManifestNode,
+  viewId: string,
+  viewName: string,
+  out: Map<string, NodeRef[]>
+): void {
+  const data = (node.data ?? {}) as Record<string, unknown>;
+  if (node.type === 'extension') {
+    const instanceId = asString(data.instanceId);
+    if (instanceId) {
+      addInstanceRef(out, instanceId, { node, viewId, viewName });
+    }
+    return;
+  }
+  if (node.type !== 'folder') {
+    return;
+  }
+  const children = data.children;
+  if (!Array.isArray(children)) {
+    return;
+  }
+  for (const rawChild of children) {
+    if (!rawChild || typeof rawChild !== 'object') {
+      continue;
+    }
+    const child = rawChild as {
+      data?: Record<string, unknown>;
+      id?: unknown;
+      type?: unknown;
+    };
+    if (child.type !== 'extension') {
+      continue;
+    }
+    const childData = (child.data ?? {}) as Record<string, unknown>;
+    const instanceId = asString(childData.instanceId);
+    const childId = asString(child.id);
+    if (!(instanceId && childId)) {
+      continue;
+    }
+    addInstanceRef(out, instanceId, {
+      node: {
+        ...node,
+        id: childId,
+        type: 'extension',
+        data: childData,
+      },
+      viewId,
+      viewName,
+    });
+  }
+}
+
+function searchKindForCanvasType(canvasTypeId: string): SearchResultKind {
+  switch (canvasTypeId) {
+    case IMAGE_CANVAS_TYPE_ID:
+      return 'image';
+    case FILE_CANVAS_TYPE_ID:
+      return 'asset';
+    case RECORDING_CANVAS_TYPE_ID:
+      return 'recording';
+    case LINK_CANVAS_TYPE_ID:
+      return 'link';
+    case CHECKLIST_CANVAS_TYPE_ID:
+    case POMODORO_CANVAS_TYPE_ID:
+    case REMINDER_CANVAS_TYPE_ID:
+      return 'widget';
+    default:
+      return 'extension';
+  }
+}
+
+function widgetKindForCanvasType(canvasTypeId: string): WidgetKind | undefined {
+  switch (canvasTypeId) {
+    case CHECKLIST_CANVAS_TYPE_ID:
+      return 'checklist';
+    case POMODORO_CANVAS_TYPE_ID:
+      return 'pomodoro';
+    case REMINDER_CANVAS_TYPE_ID:
+      return 'reminder';
+    default:
+      return;
   }
 }
 
@@ -484,6 +597,8 @@ function nodeKind(nodeType: string): SearchResultKind {
       return 'link';
     case 'widget':
       return 'widget';
+    case 'extension':
+      return 'extension';
     case 'card':
       return 'card';
     default:
@@ -570,6 +685,69 @@ async function scanWidgets(
           matchField: field,
           score: scoreFor(field, idx === 0),
           position: ref.node.position,
+        });
+      }
+    }
+  }
+}
+
+async function scanExtensionInstances(
+  wsPath: string,
+  queryLower: string,
+  instanceIdToNodes: Map<string, NodeRef[]>,
+  results: SearchResult[]
+): Promise<void> {
+  if (instanceIdToNodes.size === 0) {
+    return;
+  }
+  const enablement = await loadExtensionEnablement(wsPath);
+  const records = await loadExtensionInstances(wsPath, [
+    ...instanceIdToNodes.keys(),
+  ]);
+  for (const [instanceId, record] of Object.entries(records)) {
+    if (isExtensionInstanceLoadError(record)) {
+      continue;
+    }
+    const presentation = record.presentation;
+    const candidates: Array<{ field: SearchMatchField; value: string }> = [
+      { field: 'title', value: presentation.title },
+      { field: 'subtitle', value: presentation.subtitle ?? '' },
+      { field: 'content', value: presentation.plainText ?? '' },
+    ];
+    const availability = isCanvasTypeEnabled(
+      record.canvasTypeId,
+      enablement.disabledCanvasTypes
+    )
+      ? 'available'
+      : 'disabled';
+    const kind = searchKindForCanvasType(record.canvasTypeId);
+    const widgetKind = widgetKindForCanvasType(record.canvasTypeId);
+    for (const { field, value } of candidates) {
+      if (!value) {
+        continue;
+      }
+      const idx = indexOfCi(value, queryLower);
+      if (idx === -1) {
+        continue;
+      }
+      for (const ref of instanceIdToNodes.get(instanceId) ?? []) {
+        results.push({
+          id: `extension:${ref.viewId}:${ref.node.id}:${instanceId}:${field}`,
+          kind,
+          viewId: ref.viewId,
+          viewName: ref.viewName,
+          nodeId: ref.node.id,
+          widgetKind,
+          title: shortTextExcerpt(presentation.title || value),
+          excerpt: shortTextExcerpt(value),
+          matchField: field,
+          score: scoreFor(field, idx === 0),
+          position: ref.node.position,
+          extension: {
+            canvasTypeId: record.canvasTypeId,
+            instanceId,
+            availability,
+          },
         });
       }
     }

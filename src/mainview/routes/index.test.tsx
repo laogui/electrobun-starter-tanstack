@@ -28,6 +28,14 @@ const rpcMocks = vi.hoisted(() => ({
   rpcCreateWidget: vi.fn(),
   rpcSaveWidget: vi.fn(),
   rpcSetActiveView: vi.fn(),
+  rpcListExtensionEnablement: vi.fn(),
+  rpcCreateExtensionInstance: vi.fn(),
+  rpcLoadExtensionInstances: vi.fn(),
+  rpcUpdateExtensionInstance: vi.fn(),
+  rpcCloneExtensionInstance: vi.fn(),
+  rpcScheduleExtensionTask: vi.fn(),
+  rpcCancelExtensionTask: vi.fn(),
+  rpcListExtensionTasks: vi.fn(),
 }));
 
 const interactionMocks = vi.hoisted(() => ({
@@ -94,10 +102,21 @@ vi.mock('@/lib/rpc', () => ({
   rpcSaveWidget: rpcMocks.rpcSaveWidget,
   rpcCloneWidget: vi.fn(),
   rpcSetActiveView: rpcMocks.rpcSetActiveView,
+  rpcListExtensionEnablement: rpcMocks.rpcListExtensionEnablement,
+  rpcCreateExtensionInstance: rpcMocks.rpcCreateExtensionInstance,
+  rpcLoadExtensionInstances: rpcMocks.rpcLoadExtensionInstances,
+  rpcUpdateExtensionInstance: rpcMocks.rpcUpdateExtensionInstance,
+  rpcCloneExtensionInstance: rpcMocks.rpcCloneExtensionInstance,
+  rpcScheduleExtensionTask: rpcMocks.rpcScheduleExtensionTask,
+  rpcCancelExtensionTask: rpcMocks.rpcCancelExtensionTask,
+  rpcListExtensionTasks: rpcMocks.rpcListExtensionTasks,
 }));
 
 vi.mock('@/lib/canvasExport', () => ({
   CANVAS_EXPORT_SCHEMA: 'ghostboard-canvas-export/v1',
+  isCanvasExportSchema: (value: unknown) =>
+    value === 'ghostboard-canvas-export/v1' ||
+    value === 'ghostboard-canvas-export/v2',
   exportReactFlowCanvasToJson: exportMocks.exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng: exportMocks.exportReactFlowCanvasToPng,
   sanitizeExportFileName: exportMocks.sanitizeExportFileName,
@@ -263,6 +282,23 @@ const paraglideMessageMocks = vi.hoisted(() => ({
   view_rename_empty: () => 'Name cannot be empty',
   view_rename_too_long: () => 'Name is too long',
   view_rename_duplicate: () => 'A view with this name already exists',
+  canvas_bg_button_aria: () => 'Canvas background',
+  canvas_bg_picker_title: () => 'Canvas background',
+  canvas_bg_picker_description: () => 'Choose a canvas color.',
+  canvas_bg_add_color: () => 'Add color',
+  canvas_bg_color_picker_title: () => 'Custom color',
+  canvas_bg_remove_color: () => 'Remove color',
+  settings_canvas_bg_default: () => 'Default',
+  settings_canvas_bg_paper: () => 'Paper',
+  settings_canvas_bg_cream: () => 'Cream',
+  settings_canvas_bg_mono: () => 'Mono',
+  settings_canvas_bg_lavender: () => 'Lavender',
+  settings_canvas_bg_sage: () => 'Sage',
+  settings_canvas_bg_mist: () => 'Mist',
+  settings_canvas_bg_sand: () => 'Sand',
+  settings_canvas_bg_ivory: () => 'Ivory',
+  settings_canvas_bg_mint: () => 'Mint',
+  settings_canvas_bg_lichen: () => 'Lichen',
 }));
 vi.mock('../../../paraglide/messages.js', () => paraglideMessageMocks);
 vi.mock('../../paraglide/messages.js', () => paraglideMessageMocks);
@@ -628,6 +664,11 @@ describe('routes/index', () => {
     resetViewportPersistSuppression();
     resetStore();
     rpcMocks.loadCanvas.mockReset();
+    rpcMocks.rpcListExtensionEnablement.mockReset();
+    rpcMocks.rpcListExtensionEnablement.mockResolvedValue({
+      disabledCanvasTypes: [],
+      instanceCounts: {},
+    });
     rpcMocks.isRpcAvailable.mockReset();
     rpcMocks.rpcSaveManifest.mockReset();
     rpcMocks.rpcCreateView.mockReset();
@@ -641,6 +682,24 @@ describe('routes/index', () => {
       canceled: true,
       notes: [],
     });
+    rpcMocks.rpcCreateExtensionInstance.mockReset();
+    rpcMocks.rpcCreateExtensionInstance.mockImplementation(
+      async (input: { canvasTypeId: string }) => ({
+        success: true,
+        record: {
+          schema: 'ghostboard-extension-instance/v1',
+          id: `extinst_${input.canvasTypeId.replaceAll('/', '_')}`,
+          canvasTypeId: input.canvasTypeId,
+          appVersion: 'test',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-07-08T00:00:00.000Z',
+          updatedAt: '2026-07-08T00:00:00.000Z',
+          state: {},
+          presentation: { title: input.canvasTypeId },
+        },
+      })
+    );
     rpcMocks.rpcCreateWidget.mockReset();
     rpcMocks.rpcCreateWidget.mockImplementation(
       async (kind: string, title?: string) => ({
@@ -1187,13 +1246,11 @@ describe('routes/index', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pomodoro' }));
 
     await waitFor(() => {
-      expect(rpcMocks.rpcCreateWidget).toHaveBeenCalledWith(
-        'pomodoro',
-        undefined
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canvasTypeId: 'ghostboard.productivity/pomodoro',
+        })
       );
-      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('pomodoro', {
-        data: { widgetId: 'widget_menu_pomodoro', kind: 'pomodoro' },
-      });
     });
   });
 
@@ -1223,17 +1280,17 @@ describe('routes/index', () => {
         mimeType: 'audio/mp4',
         recordingNumber: 1,
       });
-      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('recording', {
-        anchorCenter: { x: 180, y: 240 },
-        data: {
-          attachmentFile: 'attachments/recording-1.m4a',
-          color: '#FFFFFF',
-          fileName: 'recording-1.m4a',
-          mimeType: 'audio/mp4',
-          recordingNumber: 1,
-          title: '',
-        },
-      });
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canvasTypeId: 'ghostboard.media/recording',
+          state: expect.objectContaining({
+            attachmentFile: 'attachments/recording-1.m4a',
+            fileName: 'recording-1.m4a',
+            mimeType: 'audio/mp4',
+            recordingNumber: 1,
+          }),
+        })
+      );
     });
   });
 
@@ -1381,12 +1438,16 @@ describe('routes/index', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
-    expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('link', {
-      data: {
-        url: 'https://example.com/docs',
-        title: 'example.com',
-        color: '#FFFFFF',
-      },
+    await waitFor(() => {
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canvasTypeId: 'ghostboard.web/link',
+          state: expect.objectContaining({
+            url: 'https://example.com/docs',
+            title: 'example.com',
+          }),
+        })
+      );
     });
   });
 
@@ -1413,16 +1474,16 @@ describe('routes/index', () => {
     globalThis.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('link', {
-      anchorCenter: {
-        x: 512,
-        y: 384,
-      },
-      data: {
-        url: 'https://example.com/pasted',
-        title: 'example.com',
-        color: '#FFFFFF',
-      },
+    await waitFor(() => {
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canvasTypeId: 'ghostboard.web/link',
+          state: expect.objectContaining({
+            url: 'https://example.com/pasted',
+            title: 'example.com',
+          }),
+        })
+      );
     });
   });
 
@@ -1443,18 +1504,16 @@ describe('routes/index', () => {
       expect(
         assetFileMocks.saveAssetFileWithProgressToast
       ).toHaveBeenCalledWith(expect.objectContaining({ name: 'notes.txt' }));
-      expect(interactionMocks.onCreateNode).toHaveBeenCalledWith('asset', {
-        anchorCenter: { x: 320, y: 420 },
-        data: {
-          attachmentFile: 'attachments/file_abc.txt',
-          color: '#FFFFFF',
-          fileName: 'notes.txt',
-          kind: 'file',
-          mimeType: 'text/plain',
-          size: 5,
-          title: 'notes.txt',
-        },
-      });
+      expect(rpcMocks.rpcCreateExtensionInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canvasTypeId: 'ghostboard.media/file',
+          state: expect.objectContaining({
+            attachmentFile: 'attachments/file_abc.txt',
+            fileName: 'notes.txt',
+            title: 'notes.txt',
+          }),
+        })
+      );
     });
   });
 

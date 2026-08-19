@@ -70,6 +70,45 @@ export function collectWidgetIdsFromCanvasExport(
   return [...ids];
 }
 
+function collectInstanceIdsFromImportedData(
+  type: unknown,
+  data: unknown,
+  ids: Set<string>
+): void {
+  if (!isRecord(data)) {
+    return;
+  }
+  if (type === 'extension') {
+    const instanceId = data.instanceId;
+    if (typeof instanceId === 'string' && instanceId) {
+      ids.add(instanceId);
+    }
+    return;
+  }
+  if (type !== 'folder' || !Array.isArray(data.children)) {
+    return;
+  }
+  for (const child of data.children) {
+    if (!isRecord(child)) {
+      continue;
+    }
+    collectInstanceIdsFromImportedData(child.type, child.data, ids);
+  }
+}
+
+export function collectExtensionInstanceIdsFromCanvasExport(
+  document_: CanvasExportDocument
+): string[] {
+  const ids = new Set<string>();
+  for (const node of document_.nodes) {
+    if (!isRecord(node)) {
+      continue;
+    }
+    collectInstanceIdsFromImportedData(node.type, node.data, ids);
+  }
+  return [...ids];
+}
+
 /**
  * Remap widget ids on imported data using the resolved id map. Widget nodes /
  * folder-child widgets whose id is NOT present in the map are dropped: the
@@ -123,18 +162,50 @@ function remapImportedWidgetData(
   return { data: { ...data, children: nextChildren }, dropped: false };
 }
 
+function remapImportedExtensionData(
+  type: unknown,
+  data: unknown,
+  instanceIdMap: Map<string, string>
+): Record<string, unknown> {
+  if (!isRecord(data)) {
+    return {};
+  }
+  if (type === 'extension') {
+    const instanceId = data.instanceId;
+    if (typeof instanceId === 'string' && instanceIdMap.has(instanceId)) {
+      return { ...data, instanceId: instanceIdMap.get(instanceId) };
+    }
+    return { ...data };
+  }
+  if (type !== 'folder' || !Array.isArray(data.children)) {
+    return { ...data };
+  }
+  const nextChildren = data.children.map((child) => {
+    if (!isRecord(child)) {
+      return child;
+    }
+    return {
+      ...child,
+      data: remapImportedExtensionData(child.type, child.data, instanceIdMap),
+    };
+  });
+  return { ...data, children: nextChildren };
+}
+
 /**
  * Build the imported nodes/edges payload from a canvas export document. Widget
  * nodes (top-level or nested in folder children) whose backing widget could not
  * be materialized are skipped entirely so the canvas never ends up with a node
- * referencing a foreign or missing widget id.
+ * referencing a foreign or missing widget id. Extension nodes are never dropped:
+ * unknown or disabled types still import as fallback nodes.
  */
 export function buildImportedCanvasPayload(
   document_: CanvasExportDocument,
   anchorCenter: { x: number; y: number },
   currentNodes: Node[],
   currentEdges: Edge[],
-  widgetIdMap: Map<string, string>
+  widgetIdMap: Map<string, string>,
+  instanceIdMap: Map<string, string> = new Map()
 ): { edges: Edge[]; nodes: Node[] } {
   const rawNodes = document_.nodes.filter(
     (node): node is Record<string, unknown> =>
@@ -181,6 +252,11 @@ export function buildImportedCanvasPayload(
       // Its id mapping is left in place so edges pointing at it are dropped below.
       return [];
     }
+    const remappedData = remapImportedExtensionData(
+      node.type,
+      remapped.data,
+      instanceIdMap
+    );
     const nextParentId =
       typeof rawParentId === 'string' ? nodeIdMap.get(rawParentId) : undefined;
     const position = readCanvasPoint(rawPosition);
@@ -193,7 +269,7 @@ export function buildImportedCanvasPayload(
         ...rest,
         id: nodeIdMap.get(id as string) as string,
         position: nextPosition,
-        data: remapped.data,
+        data: remappedData,
         selected: true,
         ...(nextParentId
           ? { parentId: nextParentId, extent: extent ?? 'parent' }

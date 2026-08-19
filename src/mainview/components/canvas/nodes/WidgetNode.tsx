@@ -39,7 +39,7 @@ function WidgetFallback({
   );
 }
 
-function ChecklistWidgetBody({
+export function ChecklistWidgetBody({
   nodeId,
   readOnly = false,
   title,

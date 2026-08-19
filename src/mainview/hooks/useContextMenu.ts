@@ -27,8 +27,8 @@ import {
   rpcRevealAttachment,
 } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
-
 import * as m from '../../paraglide/messages.js';
+import { parseCanvasTypeMenuActionId } from '../../shared/extensions/ids';
 
 interface UseContextMenuOptions {
   onDeleteNodes?: (ids: string[]) => void;
@@ -47,6 +47,10 @@ interface UseContextMenuOptions {
     kind: CreatableCanvasNodeKind,
     request: CanvasCreateRequest
   ) => void;
+  onRequestCreateCanvasType?: (
+    canvasTypeId: string,
+    request: CanvasCreateRequest
+  ) => void;
   rfInstance: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
@@ -59,7 +63,8 @@ type NodeContextTarget =
   | 'image'
   | 'link'
   | 'recording'
-  | 'widget';
+  | 'widget'
+  | 'extension';
 
 /**
  * Map a React Flow `node.type` to the context-menu `target` discriminator.
@@ -75,6 +80,7 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   link: 'link',
   recording: 'recording',
   widget: 'widget',
+  extension: 'extension',
 };
 
 function nodeContextMenuTarget(type: string | undefined): NodeContextTarget {
@@ -86,6 +92,7 @@ export function useContextMenu({
   onDeleteNodes,
   onReplaceNodeFile,
   onRequestCreate,
+  onRequestCreateCanvasType,
   rfInstance,
 }: UseContextMenuOptions) {
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
@@ -222,7 +229,15 @@ export function useContextMenu({
           case 'focus':
           case 'edit-url': {
             // Widgets (and other non-focusable kinds) never open FocusedView.
-            if (!(childRect && isFocusableNode(folderChild.type))) {
+            if (
+              !(
+                childRect &&
+                isFocusableNode(
+                  folderChild.type,
+                  childData as Record<string, unknown>
+                )
+              )
+            ) {
               return;
             }
             setFocusedNode({
@@ -380,6 +395,20 @@ export function useContextMenu({
         }
       }
 
+      const canvasTypeId = parseCanvasTypeMenuActionId(action);
+      if (canvasTypeId) {
+        const anchorCenter = contextMenu
+          ? screenToFlow(contextMenu.x, contextMenu.y)
+          : undefined;
+        onRequestCreateCanvasType?.(canvasTypeId, {
+          anchorCenter,
+          screen: contextMenu
+            ? { x: contextMenu.x, y: contextMenu.y }
+            : undefined,
+        });
+        return;
+      }
+
       const newType = resolveCreatableKind(action);
       if (newType) {
         const anchorCenter = contextMenu
@@ -486,7 +515,10 @@ export function useContextMenu({
             }
             const { nodes } = useCanvasStore.getState();
             const node = nodes.find((n) => n.id === nodeId);
-            if (node && isFocusableNode(node.type)) {
+            if (
+              node &&
+              isFocusableNode(node.type, node.data as Record<string, unknown>)
+            ) {
               setFocusedNode({
                 id: nodeId,
                 type: node.type,
@@ -870,6 +902,7 @@ export function useContextMenu({
       toggleNodesLocked,
       moveSelectedToView,
       onRequestCreate,
+      onRequestCreateCanvasType,
     ]
   );
 

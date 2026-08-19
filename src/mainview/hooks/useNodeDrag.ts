@@ -111,17 +111,6 @@ export function useNodeDrag() {
    */
   const originsRef = useRef<Map<string, Point> | null>(null);
 
-  /** Find the folder whose bounds contain the dragged node's center. */
-  const findOverlappingFolder = useCallback(
-    (draggedNode: Node, allNodes: Node[]) => {
-      if (!canAbsorbIntoFolder(draggedNode)) {
-        return null;
-      }
-      return findAnyOverlappingFolder(draggedNode, allNodes);
-    },
-    []
-  );
-
   /** Like {@link findOverlappingFolder} but ignores absorbability, so callers
    *  can detect a folder the dragged node overlaps even when it must be
    *  visually rejected (widgets, sticky, folders, groups). */
@@ -153,6 +142,17 @@ export function useNodeDrag() {
       );
     },
     []
+  );
+
+  /** Find the folder whose bounds contain the dragged node's center. */
+  const findOverlappingFolder = useCallback(
+    (draggedNode: Node, allNodes: Node[]) => {
+      if (!canAbsorbIntoFolder(draggedNode)) {
+        return null;
+      }
+      return findAnyOverlappingFolder(draggedNode, allNodes);
+    },
+    [findAnyOverlappingFolder]
   );
 
   /** Restore every pushed (non-dragged) node to its gesture-start origin.
@@ -225,7 +225,7 @@ export function useNodeDrag() {
       // --- Determine drop target ---
       let targetGroupId: string | null = null;
       let targetFolderId: string | null = null;
-      let rejectedFolderId = null;
+      let rejectedFolderId: string | null = null;
 
       // Content nodes (card/image/sticky/widgets) can go into groups or
       // folders. Widgets and sticky cannot enter a folder, so when one of them
@@ -240,7 +240,13 @@ export function useNodeDrag() {
           useCanvasStore.getState().nodes
         );
         targetFolderId = folder?.id || null;
-        if (!targetFolderId && isRejectedFolderChildNode(node.type)) {
+        if (
+          !targetFolderId &&
+          isRejectedFolderChildNode(
+            node.type,
+            node.data as Record<string, unknown>
+          )
+        ) {
           rejectedFolderId =
             findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)
               ?.id ?? null;
@@ -358,7 +364,10 @@ export function useNodeDrag() {
       // which may sit on top of a folder the node cannot enter. Re-derive the
       // rejected folder and push the dragged node out so it doesn't settle
       // inside the folder.
-      const rejectedFolderId = isRejectedFolderChildNode(node.type)
+      const rejectedFolderId = isRejectedFolderChildNode(
+        node.type,
+        node.data as Record<string, unknown>
+      )
         ? (findAnyOverlappingFolder(node, useCanvasStore.getState().nodes)
             ?.id ?? null)
         : null;

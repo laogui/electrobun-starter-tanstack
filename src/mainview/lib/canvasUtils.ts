@@ -5,14 +5,20 @@ import { isFolderChildNode, isGroupChildNode } from './canvasNodePredicates';
 /** Returns true when the child node type can be parented to the parent node. */
 export function canBeChildOf(parent: Node, child: Node): boolean {
   if (parent.type === 'group') {
-    return isGroupChildNode(child.type);
+    return isGroupChildNode(
+      child.type,
+      child.data as Record<string, unknown> | undefined
+    );
   }
   return false;
 }
 
 /** Returns true when a node can be absorbed into a folder's children array. */
 export function canAbsorbIntoFolder(child: Node): boolean {
-  return isFolderChildNode(child.type);
+  return isFolderChildNode(
+    child.type,
+    child.data as Record<string, unknown> | undefined
+  );
 }
 
 /** Strip invalid parent relationships (e.g. group-in-group from legacy data). */

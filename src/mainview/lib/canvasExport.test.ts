@@ -259,7 +259,7 @@ describe('canvas export helpers', () => {
       viewport: { x: 1, y: 2, zoom: 1.5 },
     });
 
-    expect(doc.schema).toBe(CANVAS_EXPORT_SCHEMA);
+    expect(doc.schema).toBe('ghostboard-canvas-export/v2');
     expect(doc.viewId).toBe('view_1');
     expect(doc.viewName).toBe('Roadmap');
     expect(doc.viewport).toEqual({ x: 1, y: 2, zoom: 1.5 });

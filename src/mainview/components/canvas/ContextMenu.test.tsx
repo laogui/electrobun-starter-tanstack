@@ -14,6 +14,8 @@ vi.mock('framer-motion', () => ({
 }));
 
 const COPY_RE = /^copy ⌘c$/i;
+const COPY_LABEL_RE = /Copy/;
+const DELETE_LABEL_RE = /Delete/;
 const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
 const edgeStoreState = {
@@ -410,8 +412,12 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /Copy/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: COPY_LABEL_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: DELETE_LABEL_RE })
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
   });
 

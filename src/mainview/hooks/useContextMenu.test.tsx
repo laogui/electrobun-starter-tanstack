@@ -15,12 +15,30 @@ const rpcMocks = vi.hoisted(() => ({
   rpcImportMarkdownFiles: vi.fn(),
 }));
 
+const hostMenuMocks = vi.hoisted(() => ({
+  cycleExtensionColor: vi.fn(() => true),
+  runExtensionMenuAction: vi.fn(async () => false),
+}));
+
 vi.mock('@/lib/rpc', () => ({
   rpcExportNoteMarkdown: vi.fn(),
   rpcExportNotesMarkdown: vi.fn(),
   rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
   rpcOpenExternalUrl: vi.fn(),
   rpcRevealAttachment: vi.fn(),
+}));
+
+vi.mock('@/extensions/hostMenu', () => ({
+  cycleExtensionColor: hostMenuMocks.cycleExtensionColor,
+  isHostGenericMenuAction: (actionId: string) =>
+    actionId === 'focus' ||
+    actionId === 'copy' ||
+    actionId === 'change-color' ||
+    actionId === 'edit-tag' ||
+    actionId === 'toggle-lock' ||
+    actionId === 'detach-from-canvas' ||
+    actionId === 'delete',
+  runExtensionMenuAction: hostMenuMocks.runExtensionMenuAction,
 }));
 
 const NODE_ID_RE = /^node-/;
@@ -94,6 +112,15 @@ const storeState = {
         mimeType: 'audio/mp4',
         recordingNumber: 1,
         title: '',
+      },
+    },
+    {
+      id: 'ext-link-1',
+      type: 'extension',
+      position: { x: 170, y: 180 },
+      data: {
+        canvasTypeId: 'ghostboard.web/link',
+        instanceId: 'extinst_link1',
       },
     },
   ] as TestNode[],
@@ -603,6 +630,22 @@ const Harness = () => {
       </button>
       <button
         onClick={() => {
+          handleContextMenuAction('change-color', 'ext-link-1');
+        }}
+        type="button"
+      >
+        color-extension
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('open-link', 'ext-link-1');
+        }}
+        type="button"
+      >
+        open-link-extension
+      </button>
+      <button
+        onClick={() => {
           handleContextMenuAction('new-child', 'folder-1');
         }}
         type="button"
@@ -684,6 +727,10 @@ describe('useContextMenu', () => {
   beforeEach(() => {
     screenToFlowPosition.mockClear();
     rpcMocks.rpcImportMarkdownFiles.mockReset();
+    hostMenuMocks.cycleExtensionColor.mockClear();
+    hostMenuMocks.runExtensionMenuAction.mockClear();
+    hostMenuMocks.runExtensionMenuAction.mockResolvedValue(false);
+    storeActions.changeNodeColor.mockClear();
     storeActions.commitFolderChildData.mockClear();
     storeActions.deleteFolderChild.mockClear();
     storeActions.moveFolderChildToCanvas.mockClear();
@@ -945,6 +992,39 @@ describe('useContextMenu', () => {
       pathType: 'bezier',
     });
     expect(storeActions.deleteEdge).toHaveBeenCalledWith('edge-1');
+  });
+
+  it('cycles extension color through instance state instead of canvasStore', () => {
+    storeActions.changeNodeColor.mockClear();
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'color-extension' }));
+
+    expect(hostMenuMocks.cycleExtensionColor).toHaveBeenCalledWith({
+      canvasTypeId: 'ghostboard.web/link',
+      instanceId: 'extinst_link1',
+    });
+    expect(storeActions.changeNodeColor).not.toHaveBeenCalled();
+  });
+
+  it('dispatches type-specific extension menu actions through the registry', async () => {
+    hostMenuMocks.runExtensionMenuAction.mockResolvedValue(true);
+    render(<Harness />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'open-link-extension' })
+    );
+
+    await waitFor(() => {
+      expect(hostMenuMocks.runExtensionMenuAction).toHaveBeenCalledWith({
+        actionId: 'open-link',
+        data: {
+          canvasTypeId: 'ghostboard.web/link',
+          instanceId: 'extinst_link1',
+        },
+        nodeId: 'ext-link-1',
+      });
+    });
   });
 
   it('copies nodes and focuses/open folders when rect is available', () => {

@@ -16,11 +16,13 @@ import {
   normalizeImageState,
 } from '../../../../shared/extensions/media/state';
 
-import type {
-  BuiltinCanvasType,
-  PreviewProps,
-  SurfaceProps,
+import {
+  type BuiltinCanvasType,
+  colorFieldInteractions,
+  type PreviewProps,
+  type SurfaceProps,
 } from '../../types';
+import { imageMenuActions } from './menuActions';
 
 function toImageData(state: ImageState): ImageData {
   return {
@@ -79,6 +81,11 @@ export const imageCanvasType: BuiltinCanvasType<ImageState> = {
   dataVersion: 1,
   createFlow: 'image',
   capabilities: ['assets'],
+  interactions: {
+    color: colorFieldInteractions<ImageState>(),
+    supportsTags: true,
+  },
+  menuActions: imageMenuActions,
   surface: {
     defaultSize: { width: 350, height: 350 },
     minSize: { width: 150, height: 150 },

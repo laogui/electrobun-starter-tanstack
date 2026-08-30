@@ -1,23 +1,44 @@
 import { toast } from 'sonner';
-import { classifyFile, normalizeLinkUrl } from '@/lib/contentTypes';
+import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
 import {
   rpcCancelExtensionTask,
   rpcListExtensionTasks,
   rpcLoadAttachment,
   rpcOpenAttachment,
   rpcOpenExternalUrl,
+  rpcRevealAttachment,
   rpcScheduleExtensionTask,
   rpcUnfurlLink,
-  uploadAttachmentBlob,
 } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import * as m from '../../paraglide/messages.js';
 import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type {
+  AssetMetadata,
   ExtensionStateSnapshot,
   GhostBoardHostAPI,
   Size,
 } from '../../shared/extensions/protocol';
+
+const importedAssetMetadata = new Map<string, AssetMetadata>();
+
+function metadataFromSavedAsset(data: AssetNodeData): AssetMetadata {
+  return {
+    mimeType: data.mimeType,
+    name: data.fileName,
+    size: data.size ?? 0,
+    kind: data.mimeType.startsWith('image/') ? 'image' : data.kind,
+    ...(data.thumbnailFile ? { thumbnailId: data.thumbnailFile } : {}),
+    ...(typeof data.duration === 'number' ? { duration: data.duration } : {}),
+    ...(data.previewExcerpt ? { previewExcerpt: data.previewExcerpt } : {}),
+    ...(data.waveform && data.waveform.length > 0
+      ? { waveform: data.waveform }
+      : {}),
+    ...(data.archiveSummary ? { archiveSummary: data.archiveSummary } : {}),
+  };
+}
 
 function pickFiles(accept?: string): Promise<File | null> {
   return new Promise((resolve) => {
@@ -35,11 +56,12 @@ function pickFiles(accept?: string): Promise<File | null> {
 
 export function createExtensionHostApi(input: {
   canvasTypeId: string;
+  folderId?: string;
   instanceId: string;
   nodeId?: string;
   onRequestResize?: (size: Partial<Size>) => Promise<Size>;
 }): GhostBoardHostAPI {
-  const { canvasTypeId, instanceId, nodeId, onRequestResize } = input;
+  const { canvasTypeId, folderId, instanceId, nodeId, onRequestResize } = input;
 
   return {
     instance: {
@@ -66,15 +88,48 @@ export function createExtensionHostApi(input: {
         if (!nodeId) {
           return;
         }
-        const node = useCanvasStore
-          .getState()
-          .nodes.find((entry) => entry.id === nodeId);
+        const { nodes, setFocusedNode } = useCanvasStore.getState();
+        if (folderId) {
+          const folder = nodes.find((entry) => entry.id === folderId);
+          const children =
+            (
+              folder?.data as
+                | {
+                    children?: ReadonlyArray<{
+                      data: Record<string, unknown>;
+                      id: string;
+                      type: string;
+                    }>;
+                  }
+                | undefined
+            )?.children ?? [];
+          const child = children.find((entry) => entry.id === nodeId);
+          if (!child) {
+            return;
+          }
+          const expanded = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '[data-folder-expanded-visual-id]'
+            )
+          ).find(
+            (element) => element.dataset.folderExpandedVisualId === child.id
+          );
+          setFocusedNode({
+            id: child.id,
+            type: child.type,
+            data: child.data,
+            folderId,
+            rect: expanded?.getBoundingClientRect() ?? new DOMRect(),
+          });
+          return;
+        }
+        const node = nodes.find((entry) => entry.id === nodeId);
         if (!node) {
           return;
         }
         const el = document.querySelector(`[data-id="${nodeId}"]`);
         const rect = el?.getBoundingClientRect() ?? new DOMRect();
-        useCanvasStore.getState().setFocusedNode({
+        setFocusedNode({
           id: nodeId,
           type: node.type ?? 'extension',
           data: (node.data ?? {}) as Record<string, unknown>,
@@ -84,6 +139,11 @@ export function createExtensionHostApi(input: {
       closeDetail: async () => {
         useCanvasStore.getState().setFocusedNode(null);
       },
+      requestTitleEdit: async () => {
+        if (nodeId) {
+          useCanvasStore.getState().setRenamingNodeId(nodeId);
+        }
+      },
     },
     assets: {
       importFile: async (options) => {
@@ -91,17 +151,19 @@ export function createExtensionHostApi(input: {
         if (!file) {
           return null;
         }
-        const classified = classifyFile(file);
-        const kind = file.type.startsWith('image/') ? 'image' : classified.kind;
-        const saved = await uploadAttachmentBlob(file, {
-          fileName: file.name,
-          kind,
-          mimeType: classified.mimeType,
-        });
-        if (!saved.filePath) {
+        try {
+          const saved = await saveAssetFileWithProgressToast(file);
+          if (!saved.attachmentFile) {
+            return null;
+          }
+          importedAssetMetadata.set(
+            saved.attachmentFile,
+            metadataFromSavedAsset(saved)
+          );
+          return { id: saved.attachmentFile };
+        } catch {
           return null;
         }
-        return { id: saved.filePath };
       },
       getUrl: async (assetId) => {
         const loaded = await rpcLoadAttachment(assetId);
@@ -111,6 +173,10 @@ export function createExtensionHostApi(input: {
         return loaded.dataUrl;
       },
       getMetadata: async (assetId) => {
+        const cached = importedAssetMetadata.get(assetId);
+        if (cached) {
+          return cached;
+        }
         const loaded = await rpcLoadAttachment(assetId);
         if (!loaded?.dataUrl) {
           throw new Error('Unable to load attachment metadata.');
@@ -122,6 +188,12 @@ export function createExtensionHostApi(input: {
         };
       },
       remove: async () => undefined,
+      reveal: async (assetId) => {
+        const result = await rpcRevealAttachment(assetId);
+        if (!result?.success) {
+          toast(m.toast_reveal_failed());
+        }
+      },
     },
     scheduler: {
       schedule: async (task) => {
@@ -155,7 +227,10 @@ export function createExtensionHostApi(input: {
       openUrl: async (url) => {
         const normalized = normalizeLinkUrl(url);
         if (normalized) {
-          await rpcOpenExternalUrl(normalized);
+          const result = await rpcOpenExternalUrl(normalized);
+          if (!result?.success) {
+            toast(m.toast_open_link_failed());
+          }
           return;
         }
         await rpcOpenAttachment(url);

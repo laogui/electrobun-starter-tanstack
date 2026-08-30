@@ -1,13 +1,29 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { NodeHandles } from '@/components/canvas/nodes/_shared/NodeHandles';
 import { ResizeHandle } from '@/components/canvas/nodes/_shared/ResizeHandle';
+import { NodeTagChips } from '@/components/card/NodeTagChips';
+import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
+import { isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { RECORDING_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
+import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
 
 import { ExtensionFallback } from './ExtensionFallback';
+import { canvasTypeRegistry } from './registry';
+import type { AnyBuiltinCanvasType } from './types';
 
 interface ExtensionErrorBoundaryProps {
   canvasTypeId: string;
@@ -48,6 +64,41 @@ class ExtensionErrorBoundary extends Component<
   }
 }
 
+function readInstanceFillColor(
+  canvasType: AnyBuiltinCanvasType | undefined,
+  record: Parameters<typeof isExtensionInstanceLoadError>[0]
+): string | undefined {
+  const color = canvasType?.interactions?.color;
+  if (
+    !(
+      color &&
+      record &&
+      !isExtensionInstanceLoadError(record) &&
+      canvasType.validateState(record.state)
+    )
+  ) {
+    return;
+  }
+  return color.get(record.state);
+}
+
+function readInstanceTitle(
+  record: Parameters<typeof isExtensionInstanceLoadError>[0]
+): string {
+  if (!record || isExtensionInstanceLoadError(record)) {
+    return '';
+  }
+  const state = record.state;
+  if (
+    state &&
+    typeof state === 'object' &&
+    typeof (state as { title?: unknown }).title === 'string'
+  ) {
+    return (state as { title: string }).title;
+  }
+  return record.presentation.title ?? '';
+}
+
 export function ExtensionHostShell({
   availability,
   canvasTypeId,
@@ -80,16 +131,74 @@ export function ExtensionHostShell({
   selected: boolean;
 }) {
   const showFallback = availability !== 'available';
+  const canvasType = canvasTypeRegistry.get(canvasTypeId);
+  const supportsTags = Boolean(canvasType?.interactions?.supportsTags);
+  const record = useExtensionInstanceStore((s) => s.records[instanceId]);
+  const fillColor = readInstanceFillColor(canvasType, record);
+  const isDark = fillColor
+    ? isColorDark(fillColor)
+    : document.documentElement.classList.contains('dark');
+  const isRenaming = useCanvasStore((s) => s.renamingNodeId === nodeId);
+  const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
+  const currentTitle = readInstanceTitle(record);
+  const [renameDraft, setRenameDraft] = useState(currentTitle);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
+    useNodeTagEditing(nodeId, {});
+  const showTagChips =
+    supportsTags && Boolean(tag || (tags && tags.length > 0));
+
+  useEffect(() => {
+    if (!isRenaming) {
+      return;
+    }
+    setRenameDraft(currentTitle);
+    const frame = requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentTitle, isRenaming]);
+
+  const commitRename = useCallback(() => {
+    const next = renameDraft.trim();
+    if (
+      next &&
+      next !== currentTitle &&
+      record &&
+      !isExtensionInstanceLoadError(record) &&
+      record.state &&
+      typeof record.state === 'object'
+    ) {
+      useExtensionInstanceStore
+        .getState()
+        .updateState(instanceId, {
+          history: 'record',
+          state: { ...(record.state as Record<string, unknown>), title: next },
+        })
+        .catch(() => undefined);
+    }
+    setRenamingNodeId(null);
+  }, [currentTitle, instanceId, record, renameDraft, setRenamingNodeId]);
+
+  const cancelRename = useCallback(() => {
+    setRenamingNodeId(null);
+  }, [setRenamingNodeId]);
 
   return (
     <div
-      className={cn('group/extension size-full', selected ? 'z-10' : undefined)}
+      className={cn(
+        'group/extension size-full transition-opacity',
+        selected ? 'z-10' : undefined,
+        supportsTags && dimmedByFilter ? 'opacity-30' : undefined
+      )}
       data-extension-instance={instanceId}
     >
+      {supportsTags ? tagEditor : null}
       <NodeHandles />
       <div
         className={cn(
-          'node-visual size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
+          'node-visual relative size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
           canvasTypeId === RECORDING_CANVAS_TYPE_ID
             ? 'rounded-2xl'
             : 'rounded-3xl'
@@ -115,6 +224,43 @@ export function ExtensionHostShell({
             {children}
           </ExtensionErrorBoundary>
         )}
+        {showTagChips ? (
+          <div className="pointer-events-none absolute right-3 bottom-3 left-3 z-10">
+            <NodeTagChips
+              isDark={isDark}
+              tag={tag}
+              tagColor={tagColor}
+              tagColors={tagColors}
+              tags={tags}
+            />
+          </div>
+        ) : null}
+        {isRenaming && !showFallback ? (
+          <div
+            className="absolute inset-x-4 bottom-14 z-20"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <input
+              aria-label="Rename"
+              className="nodrag nopan w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
+              onBlur={commitRename}
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitRename();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancelRename();
+                }
+              }}
+              ref={renameInputRef}
+              type="text"
+              value={renameDraft}
+            />
+          </div>
+        ) : null}
       </div>
       {resizable && !readOnly ? (
         <ResizeHandle

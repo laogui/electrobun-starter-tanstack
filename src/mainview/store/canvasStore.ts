@@ -2080,6 +2080,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   changeNodeColor: (nodeId) => {
+    const node = get().nodes.find((entry) => entry.id === nodeId);
+    if (!node || node.type === 'extension') {
+      return;
+    }
     get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes.map((n) => {

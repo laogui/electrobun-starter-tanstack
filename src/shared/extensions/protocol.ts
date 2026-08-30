@@ -56,9 +56,15 @@ export interface AssetHandle {
 }
 
 export interface AssetMetadata {
+  archiveSummary?: { entryCount: number; topFiles: string[] };
+  duration?: number;
+  kind?: 'audio' | 'file' | 'image' | 'video';
   mimeType: string;
   name: string;
+  previewExcerpt?: string;
   size: number;
+  thumbnailId?: string;
+  waveform?: number[];
 }
 
 export interface AssetImportOptions {
@@ -96,11 +102,13 @@ export interface GhostBoardHostAPI {
     getUrl(assetId: string): Promise<string>;
     importFile(options?: AssetImportOptions): Promise<AssetHandle | null>;
     remove(assetId: string): Promise<void>;
+    reveal(assetId: string): Promise<void>;
   };
   canvas: {
     closeDetail(): Promise<void>;
     openDetail(): Promise<void>;
     requestResize(size: Partial<Size>): Promise<Size>;
+    requestTitleEdit(): Promise<void>;
   };
   external: {
     openUrl(url: string): Promise<void>;

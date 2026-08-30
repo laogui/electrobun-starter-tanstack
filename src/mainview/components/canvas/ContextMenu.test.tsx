@@ -5,6 +5,16 @@ import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import {
+  CHECKLIST_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
+import { EXTENSION_INSTANCE_SCHEMA } from '../../../shared/extensions/instance';
+
+registerBuiltinCanvasTypes();
 
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) => children,
@@ -18,6 +28,8 @@ const COPY_LABEL_RE = /Copy/;
 const DELETE_LABEL_RE = /Delete/;
 const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
+const CHANGE_COLOR_RE = /Change color/;
+const EDIT_TAG_RE = /Edit Tag/;
 const edgeStoreState = {
   activeViewId: 'default',
   clipboard: [] as Array<{ id: string; data?: Record<string, unknown> }>,
@@ -100,13 +112,17 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_replace_file: () => 'Replace File',
   menu_reveal_in_finder: () => 'Reveal in Finder',
   menu_rename_asset: () => 'Rename',
+  menu_edit_url: () => 'Edit URL',
   menu_import_markdown: () => 'Import Markdown',
+  toast_color_change_failed: () => 'Could not change color',
 }));
 
 describe('canvasContextMenu', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    edgeStoreState.nodes = [];
+    useExtensionInstanceStore.setState({ records: {}, history: {} });
   });
 
   it('renders target-specific actions and dispatches them', () => {
@@ -419,6 +435,167 @@ describe('canvasContextMenu', () => {
       screen.getByRole('button', { name: DELETE_LABEL_RE })
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
+  });
+
+  it('renders host-generic actions for a migrated link extension', () => {
+    edgeStoreState.nodes = [
+      {
+        id: 'ext-link-1',
+        data: {
+          canvasTypeId: LINK_CANVAS_TYPE_ID,
+          instanceId: 'extinst_link1',
+        },
+      },
+    ];
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_link1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_link1',
+        canvasTypeId: LINK_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          url: 'https://example.com',
+          title: 'Example',
+          color: '#FFFFFF',
+        },
+        presentation: { title: 'Example' },
+      },
+    });
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'extension' as never,
+          nodeId: 'ext-link-1',
+        }}
+        onAction={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: OPEN_FOCUSED_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open Link' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Copy URL' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Refetch Preview' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit URL' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: CHANGE_COLOR_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: EDIT_TAG_RE })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: COPY_RE })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: DELETE_LABEL_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Move to Library' })
+    ).toBeNull();
+  });
+
+  it('renders image type actions for a migrated image extension', () => {
+    edgeStoreState.nodes = [
+      {
+        id: 'ext-image-1',
+        data: {
+          canvasTypeId: IMAGE_CANVAS_TYPE_ID,
+          instanceId: 'extinst_image1',
+        },
+      },
+    ];
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_image1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_image1',
+        canvasTypeId: IMAGE_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          color: '#FFFFFF',
+          imageFile: 'attachments/pic.png',
+          title: 'Pic',
+        },
+        presentation: { title: 'Pic' },
+      },
+    });
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'extension' as never,
+          nodeId: 'ext-image-1',
+        }}
+        onAction={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Replace Image…' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Copy Image Address' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reveal in Finder' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+  });
+
+  it('keeps widget-sized menus for productivity extensions', () => {
+    edgeStoreState.nodes = [
+      {
+        id: 'ext-check-1',
+        data: {
+          canvasTypeId: CHECKLIST_CANVAS_TYPE_ID,
+          instanceId: 'extinst_check1',
+        },
+      },
+    ];
+
+    render(
+      <CanvasContextMenu
+        menu={{
+          x: 40,
+          y: 60,
+          target: 'extension' as never,
+          nodeId: 'ext-check-1',
+        }}
+        onAction={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: COPY_LABEL_RE })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: DELETE_LABEL_RE })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
+    expect(screen.queryByRole('button', { name: CHANGE_COLOR_RE })).toBeNull();
+    expect(screen.queryByRole('button', { name: EDIT_TAG_RE })).toBeNull();
   });
 
   it('renders move-to-view submenu for multi-selection', () => {

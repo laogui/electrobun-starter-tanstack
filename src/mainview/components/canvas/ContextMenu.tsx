@@ -38,14 +38,22 @@ import {
   useState,
 } from 'react';
 import { getCanvasTypeMenuItems } from '@/extensions/createMenu';
+import {
+  type AssembledExtensionMenuItem,
+  assembleExtensionMenuItems,
+  type HostGenericMenuActionId,
+  resolveExtensionNodeRef,
+} from '@/extensions/hostMenu';
 import { resolveExtensionMessage } from '@/extensions/messages';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
+import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 
 interface MenuItem {
   danger?: boolean;
@@ -403,6 +411,64 @@ const getWidgetItems = (locked: boolean): MenuItem[] => [
   },
 ];
 
+const EXTENSION_HOST_MENU_ITEMS: Record<
+  HostGenericMenuActionId,
+  (locked: boolean) => MenuItem
+> = {
+  focus: () => ({
+    id: 'focus',
+    label: m.menu_open_focused(),
+    icon: Maximize2,
+    shortcut: 'Enter',
+  }),
+  copy: () => ({
+    id: 'copy',
+    label: m.menu_copy(),
+    icon: Copy,
+    shortcut: '⌘C',
+  }),
+  'change-color': () => ({
+    id: 'change-color',
+    label: m.menu_change_color(),
+    icon: Palette,
+  }),
+  'edit-tag': () => ({
+    id: 'edit-tag',
+    label: m.menu_edit_tag(),
+    icon: Tag,
+  }),
+  'toggle-lock': (locked) => lockItem(locked),
+  'detach-from-canvas': () => ({
+    id: 'detach-from-canvas',
+    label: m.menu_move_to_library(),
+    icon: BookOpen,
+  }),
+  delete: () => ({
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  }),
+};
+
+function getExtensionItems(
+  locked: boolean,
+  assembled: AssembledExtensionMenuItem[]
+): MenuItem[] {
+  return assembled.map((item) => {
+    if (item.source === 'host') {
+      return EXTENSION_HOST_MENU_ITEMS[item.id](locked);
+    }
+    return {
+      id: item.id,
+      label: resolveExtensionMessage(item.labelKey),
+      icon: item.icon,
+      ...(item.danger ? { danger: true } : {}),
+    };
+  });
+}
+
 const getRecordingItems = (locked: boolean): MenuItem[] => [
   {
     id: 'reveal-in-finder',
@@ -535,6 +601,28 @@ export function CanvasContextMenu({
       )
     );
   });
+  const extensionNodeRef = useCanvasStore((state) => {
+    if (menu?.target !== 'extension' || !menu.nodeId) {
+      return;
+    }
+    return resolveExtensionNodeRef(state.nodes, menu.nodeId, menu.folderId);
+  });
+  const extensionInstanceState = useExtensionInstanceStore((state) => {
+    if (!extensionNodeRef) {
+      return;
+    }
+    const record = state.records[extensionNodeRef.instanceId];
+    if (!record || isExtensionInstanceLoadError(record)) {
+      return;
+    }
+    return record.state;
+  });
+  const extensionMenuItems = assembleExtensionMenuItems({
+    canvasType: extensionNodeRef
+      ? canvasTypeRegistry.get(extensionNodeRef.canvasTypeId)
+      : undefined,
+    state: extensionInstanceState,
+  });
 
   const itemGetters: Record<string, () => MenuItem[]> = {
     edge: () => getEdgeItems(edgePathType),
@@ -547,7 +635,7 @@ export function CanvasContextMenu({
     asset: () => getAssetItems(nodeLocked),
     recording: () => getRecordingItems(nodeLocked),
     widget: () => getWidgetItems(nodeLocked),
-    extension: () => getWidgetItems(nodeLocked),
+    extension: () => getExtensionItems(nodeLocked, extensionMenuItems),
     card: () => getCardItems(nodeLocked),
     multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
     canvas: () => getCanvasItems(hasClipboard),

@@ -1,7 +1,8 @@
-import { Link as LinkIcon } from 'lucide-react';
+import { ExternalLink, Link as LinkIcon, RefreshCw } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import { LinkContent } from '@/components/canvas/nodes/LinkNode';
+import { resolveExtensionMessage } from '@/extensions/messages';
 import { LINK_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildLinkPresentation,
@@ -11,10 +12,12 @@ import {
   normalizeLinkState,
 } from '../../../../shared/extensions/web/link';
 
-import type {
-  BuiltinCanvasType,
-  PreviewProps,
-  SurfaceProps,
+import {
+  type BuiltinCanvasType,
+  type CanvasTypeMenuAction,
+  colorFieldInteractions,
+  type PreviewProps,
+  type SurfaceProps,
 } from '../../types';
 
 function applyUnfurl(state: LinkState, body: string): LinkState {
@@ -52,6 +55,65 @@ function applyUnfurl(state: LinkState, body: string): LinkState {
     };
   }
 }
+
+const linkMenuActions: readonly CanvasTypeMenuAction<LinkState>[] = [
+  {
+    id: 'open-link',
+    labelKey: 'menu_open_link',
+    icon: ExternalLink,
+    visible: (state) => Boolean(state.url),
+    run: async ({ host, state }) => {
+      if (state.url) {
+        await host.external.openUrl(state.url);
+      }
+    },
+  },
+  {
+    id: 'copy-url',
+    labelKey: 'menu_copy_url',
+    icon: LinkIcon,
+    visible: (state) => Boolean(state.url),
+    run: ({ host, state }) => {
+      if (!state.url) {
+        return;
+      }
+      navigator.clipboard
+        .writeText(state.url)
+        .then(() =>
+          host.notifications
+            .show({
+              title: resolveExtensionMessage('toast_copied'),
+            })
+            .catch(() => undefined)
+        )
+        .catch(() => undefined);
+    },
+  },
+  {
+    id: 'refetch-link',
+    labelKey: 'menu_refetch_link',
+    icon: RefreshCw,
+    visible: (state) => Boolean(state.url),
+    run: async ({ host, state }) => {
+      await host.instance.updateState({
+        history: 'record',
+        state: {
+          ...state,
+          unfurlStatus: 'idle',
+          unfurlError: undefined,
+        },
+      });
+    },
+  },
+  {
+    id: 'edit-url',
+    labelKey: 'menu_edit_url',
+    icon: LinkIcon,
+    run: async ({ host }) => {
+      await host.canvas.openDetail();
+    },
+  },
+];
 
 function LinkCanvasSurface({ context, host, state }: SurfaceProps<LinkState>) {
   const normalized = normalizeLinkState(state);
@@ -127,6 +189,11 @@ export const linkCanvasType: BuiltinCanvasType<LinkState> = {
   dataVersion: 1,
   createFlow: 'url',
   capabilities: ['network', 'external'],
+  interactions: {
+    color: colorFieldInteractions<LinkState>(),
+    supportsTags: true,
+  },
+  menuActions: linkMenuActions,
   surface: {
     defaultSize: { width: 380, height: 360 },
     minSize: { width: 320, height: 320 },

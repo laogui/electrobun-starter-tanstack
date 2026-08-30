@@ -11,11 +11,13 @@ import {
   type RecordingState,
 } from '../../../../shared/extensions/media/state';
 
-import type {
-  BuiltinCanvasType,
-  PreviewProps,
-  SurfaceProps,
+import {
+  type BuiltinCanvasType,
+  colorFieldInteractions,
+  type PreviewProps,
+  type SurfaceProps,
 } from '../../types';
+import { recordingMenuActions } from './menuActions';
 
 function RecordingCanvasSurface({ host, state }: SurfaceProps<RecordingState>) {
   const normalized = normalizeRecordingState(state);
@@ -60,6 +62,11 @@ export const recordingCanvasType: BuiltinCanvasType<RecordingState> = {
   dataVersion: 1,
   createFlow: 'recording',
   capabilities: ['assets'],
+  interactions: {
+    color: colorFieldInteractions<RecordingState>(),
+    supportsTags: true,
+  },
+  menuActions: recordingMenuActions,
   surface: {
     defaultSize: { width: 380, height: 150 },
     minSize: { width: 260, height: 120 },

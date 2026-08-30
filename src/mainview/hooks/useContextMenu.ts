@@ -3,6 +3,11 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
+import {
+  cycleExtensionColor,
+  isHostGenericMenuAction,
+  runExtensionMenuAction,
+} from '@/extensions/hostMenu';
 import { runAISummarize } from '@/lib/ai/runAISummarize';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
@@ -216,6 +221,20 @@ export function useContextMenu({
 
       if (folderId && folderChild) {
         const childData = folderChild.data;
+        if (
+          folderChild.type === 'extension' &&
+          !isHostGenericMenuAction(action)
+        ) {
+          const handled = await runExtensionMenuAction({
+            actionId: action,
+            data: childData,
+            nodeId: folderChild.id,
+            folderId,
+          });
+          if (handled) {
+            return;
+          }
+        }
         const expandedChildElement = Array.from(
           document.querySelectorAll<HTMLElement>(
             '[data-folder-expanded-visual-id]'
@@ -290,6 +309,10 @@ export function useContextMenu({
             return;
           }
           case 'change-color': {
+            if (folderChild.type === 'extension') {
+              cycleExtensionColor(childData);
+              return;
+            }
             const palette =
               folderChild.type === 'sticky' ? STICKY_COLORS : CARD_COLORS;
             const current =
@@ -435,6 +458,24 @@ export function useContextMenu({
           toast.error(m.toast_move_selection_failed());
         }
         return;
+      }
+
+      const canvasNode = nodeId
+        ? useCanvasStore.getState().nodes.find((n) => n.id === nodeId)
+        : undefined;
+      if (
+        nodeId &&
+        canvasNode?.type === 'extension' &&
+        !isHostGenericMenuAction(action)
+      ) {
+        const handled = await runExtensionMenuAction({
+          actionId: action,
+          data: (canvasNode.data ?? {}) as Record<string, unknown>,
+          nodeId,
+        });
+        if (handled) {
+          return;
+        }
       }
 
       switch (action) {
@@ -601,15 +642,21 @@ export function useContextMenu({
         }
         case 'change-color': {
           if (nodeId) {
-            const selected = useCanvasStore
-              .getState()
-              .nodes.filter((n) => n.selected);
+            const { nodes } = useCanvasStore.getState();
+            const selected = nodes.filter((n) => n.selected);
             const ids =
               selected.length > 1 && selected.some((n) => n.id === nodeId)
                 ? selected.map((n) => n.id)
                 : [nodeId];
             for (const id of ids) {
-              changeNodeColor(id);
+              const node = nodes.find((entry) => entry.id === id);
+              if (node?.type === 'extension') {
+                cycleExtensionColor(
+                  (node.data ?? {}) as Record<string, unknown>
+                );
+              } else {
+                changeNodeColor(id);
+              }
             }
           }
           break;

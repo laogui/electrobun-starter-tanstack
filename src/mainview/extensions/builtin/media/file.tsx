@@ -16,11 +16,13 @@ import {
   normalizeFileState,
 } from '../../../../shared/extensions/media/state';
 
-import type {
-  BuiltinCanvasType,
-  PreviewProps,
-  SurfaceProps,
+import {
+  type BuiltinCanvasType,
+  colorFieldInteractions,
+  type PreviewProps,
+  type SurfaceProps,
 } from '../../types';
+import { fileMenuActions } from './menuActions';
 
 function toAssetData(state: FileState): AssetNodeRuntimeData {
   return {
@@ -68,6 +70,11 @@ export const fileCanvasType: BuiltinCanvasType<FileState> = {
   dataVersion: 1,
   createFlow: 'file',
   capabilities: ['assets', 'external'],
+  interactions: {
+    color: colorFieldInteractions<FileState>(),
+    supportsTags: true,
+  },
+  menuActions: fileMenuActions,
   surface: {
     defaultSize: { width: 350, height: 260 },
     minSize: { width: 220, height: 180 },

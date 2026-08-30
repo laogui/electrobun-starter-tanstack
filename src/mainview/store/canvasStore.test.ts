@@ -1354,6 +1354,28 @@ describe('canvasStore — changeNodeColor', () => {
     // 'blue' is first GROUP_COLOR, next is 'green'
     expect(data.color).toBe('green');
   });
+
+  it('skips extension nodes so color stays in instance state', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('ext-1', {
+          type: 'extension',
+          data: {
+            canvasTypeId: 'ghostboard.web/link',
+            instanceId: 'extinst_link1',
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().changeNodeColor('ext-1');
+    const { data } = useCanvasStore.getState().nodes[0]!;
+
+    expect(data).toEqual({
+      canvasTypeId: 'ghostboard.web/link',
+      instanceId: 'extinst_link1',
+    });
+  });
 });
 
 describe('canvasStore — createNode', () => {

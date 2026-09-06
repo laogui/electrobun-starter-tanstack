@@ -130,3 +130,21 @@ export function isFocusableNode(
   }
   return type ? FOCUSABLE_NODE_TYPES.has(type) : false;
 }
+
+const LEGACY_DETACHABLE_NODE_TYPES = new Set<string>([
+  'card',
+  'image',
+  'link',
+  'asset',
+]);
+
+/** True when the node can move to the note library. Legacy types keep dual-read; extensions opt in via `canDetach`. */
+export function isDetachableNode(
+  type: string | undefined,
+  data?: Record<string, unknown> | null
+): boolean {
+  if (type === 'extension') {
+    return canvasTypeFromData(data)?.interactions?.canDetach === true;
+  }
+  return type ? LEGACY_DETACHABLE_NODE_TYPES.has(type) : false;
+}

@@ -114,6 +114,7 @@ export function ExtensionHostShell({
   readOnly,
   resizable,
   selected,
+  surface = 'canvas',
 }: {
   availability: ExtensionAvailability;
   canvasTypeId: string;
@@ -129,6 +130,8 @@ export function ExtensionHostShell({
   readOnly: boolean;
   resizable: boolean;
   selected: boolean;
+  /** Canvas node chrome vs focused-view host. Default `canvas`. */
+  surface?: 'canvas' | 'detail';
 }) {
   const showFallback = availability !== 'available';
   const canvasType = canvasTypeRegistry.get(canvasTypeId);
@@ -145,8 +148,9 @@ export function ExtensionHostShell({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(nodeId, {});
+  const isDetail = surface === 'detail';
   const showTagChips =
-    supportsTags && Boolean(tag || (tags && tags.length > 0));
+    !isDetail && supportsTags && Boolean(tag || (tags && tags.length > 0));
 
   useEffect(() => {
     if (!isRenaming) {
@@ -190,19 +194,23 @@ export function ExtensionHostShell({
       className={cn(
         'group/extension size-full transition-opacity',
         selected ? 'z-10' : undefined,
-        supportsTags && dimmedByFilter ? 'opacity-30' : undefined
+        supportsTags && !isDetail && dimmedByFilter ? 'opacity-30' : undefined
       )}
       data-extension-instance={instanceId}
     >
-      {supportsTags ? tagEditor : null}
-      <NodeHandles />
+      {isDetail || !supportsTags ? null : tagEditor}
+      {isDetail ? null : <NodeHandles />}
       <div
-        className={cn(
-          'node-visual relative size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
-          canvasTypeId === RECORDING_CANVAS_TYPE_ID
-            ? 'rounded-2xl'
-            : 'rounded-3xl'
-        )}
+        className={
+          isDetail
+            ? 'relative size-full overflow-hidden'
+            : cn(
+                'node-visual relative size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
+                canvasTypeId === RECORDING_CANVAS_TYPE_ID
+                  ? 'rounded-2xl'
+                  : 'rounded-3xl'
+              )
+        }
       >
         {showFallback ? (
           <ExtensionFallback
@@ -235,7 +243,7 @@ export function ExtensionHostShell({
             />
           </div>
         ) : null}
-        {isRenaming && !showFallback ? (
+        {isRenaming && !(showFallback || isDetail) ? (
           <div
             className="absolute inset-x-4 bottom-14 z-20"
             onClick={(event) => event.stopPropagation()}
@@ -262,7 +270,7 @@ export function ExtensionHostShell({
           </div>
         ) : null}
       </div>
-      {resizable && !readOnly ? (
+      {resizable && !readOnly && !isDetail ? (
         <ResizeHandle
           hoverClassName="group-hover/extension:opacity-100"
           maxHeight={maxHeight}

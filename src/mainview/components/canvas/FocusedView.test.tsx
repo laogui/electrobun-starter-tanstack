@@ -1,9 +1,49 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FocusedView } from '@/components/canvas/FocusedView';
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import {
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+} from '../../../shared/extensions/builtinIds';
+import { EXTENSION_INSTANCE_SCHEMA } from '../../../shared/extensions/instance';
+
+registerBuiltinCanvasTypes();
+
+vi.mock('@/lib/rpc', () => ({
+  rpcCloneExtensionInstance: vi.fn(),
+  rpcCreateExtensionInstance: vi.fn(),
+  rpcUpdateExtensionInstance: vi.fn(async () => ({ success: true })),
+  rpcSetExtensionEnabled: vi.fn(async () => ({ success: true })),
+}));
+
+vi.mock('@/components/canvas/nodes/_shared/NodeHandles', () => ({
+  NodeHandles: () => <div data-testid="handles" />,
+}));
+
+vi.mock('@/components/canvas/nodes/_shared/ResizeHandle', () => ({
+  ResizeHandle: () => <div data-testid="resize" />,
+}));
+
+vi.mock('@/components/card/useNodeTagEditing', () => ({
+  useNodeTagEditing: () => ({
+    dimmedByFilter: false,
+    openTagEditor: vi.fn(),
+    tag: undefined,
+    tagColor: undefined,
+    tagColors: undefined,
+    tagEditor: null,
+    tags: undefined,
+  }),
+}));
 
 const commitFolderChildDataMock = vi.fn();
 const commitNodeDataMock = vi.fn();
@@ -209,6 +249,7 @@ vi.mock('@/components/canvas/ImageZoomPan', () => ({
 }));
 
 const CLOSE_BUTTON = /close/i;
+const CANVAS_TYPE_ID_RE = /_CANVAS_TYPE_ID/;
 
 const rect = {
   x: 10,
@@ -238,6 +279,7 @@ describe('focusedView', () => {
     updateWidgetMock.mockReset();
     widgetRecordsMock = {};
     document.body.style.overflow = '';
+    useExtensionInstanceStore.setState({ records: {}, history: {} });
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -680,5 +722,135 @@ describe('focusedView', () => {
 
     expect(setCenterMock).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not branch on built-in canvas type ids', () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'FocusedView.tsx'),
+      'utf8'
+    );
+    expect(src).not.toMatch(CANVAS_TYPE_ID_RE);
+  });
+
+  it('renders a migrated image extension through DetailSurface as a lightbox', () => {
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_image1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_image1',
+        canvasTypeId: IMAGE_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          color: '#FFFFFF',
+          imageFile: 'attachments/pic.png',
+          title: 'Cover',
+        },
+        presentation: { title: 'Cover' },
+      },
+    });
+
+    const { container } = render(
+      <FocusedView
+        node={{
+          id: 'ext-image-1',
+          type: 'extension',
+          data: {
+            canvasTypeId: IMAGE_CANVAS_TYPE_ID,
+            instanceId: 'extinst_image1',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('image:Cover:none')).toBeInTheDocument();
+    expect(screen.getByText('Cover')).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass('bg-zinc-950');
+    expect(screen.queryByTestId('handles')).toBeNull();
+  });
+
+  it('renders a migrated file extension through DetailSurface in the wide panel', () => {
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_file1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_file1',
+        canvasTypeId: FILE_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          color: '#FFFFFF',
+          fileName: 'report.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          title: 'Report',
+        },
+        presentation: { title: 'Report' },
+      },
+    });
+
+    render(
+      <FocusedView
+        node={{
+          id: 'ext-file-1',
+          type: 'extension',
+          data: {
+            canvasTypeId: FILE_CANVAS_TYPE_ID,
+            instanceId: 'extinst_file1',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('asset:focused:Report')).toBeInTheDocument();
+  });
+
+  it('renders a migrated link extension through DetailSurface', () => {
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_link1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_link1',
+        canvasTypeId: LINK_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          color: '#FFFFFF',
+          title: 'Example',
+          url: 'https://example.com/',
+          unfurlStatus: 'ready',
+        },
+        presentation: { title: 'Example' },
+      },
+    });
+
+    render(
+      <FocusedView
+        node={{
+          id: 'ext-link-1',
+          type: 'extension',
+          data: {
+            canvasTypeId: LINK_CANVAS_TYPE_ID,
+            instanceId: 'extinst_link1',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText('link:focused:Example:https://example.com/')
+    ).toBeInTheDocument();
   });
 });

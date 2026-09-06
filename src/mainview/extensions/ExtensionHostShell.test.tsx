@@ -194,4 +194,29 @@ describe('ExtensionHostShell', () => {
       ).toMatchObject({ title: 'Renamed link' });
     });
   });
+
+  it('omits canvas node chrome in focused-view detail mode', () => {
+    render(
+      <ExtensionHostShell
+        availability="available"
+        canvasTypeId={LINK_CANVAS_TYPE_ID}
+        instanceId="extinst_link1"
+        minHeight={0}
+        minWidth={0}
+        nodeId="node-1"
+        readOnly={false}
+        resizable
+        selected
+        surface="detail"
+      >
+        <div>detail surface</div>
+      </ExtensionHostShell>
+    );
+
+    expect(screen.getByText('detail surface')).toBeInTheDocument();
+    expect(screen.queryByTestId('handles')).toBeNull();
+    expect(screen.queryByTestId('resize')).toBeNull();
+    expect(screen.queryByText('work')).toBeNull();
+    expect(screen.queryByTestId('tag-editor')).toBeNull();
+  });
 });

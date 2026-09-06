@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import { NoteEditorLoading } from '@/components/editor/NoteEditorLoading';
 import { SaveIndicator } from '@/components/editor/SaveIndicator';
 import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
+import { ExtensionFallback } from '@/extensions/ExtensionFallback';
+import { ExtensionHostShell } from '@/extensions/ExtensionHostShell';
 import { createExtensionHostApi } from '@/extensions/hostApi';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -32,13 +34,10 @@ import type {
 import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../../paraglide/messages.js';
-import {
-  FILE_CANVAS_TYPE_ID,
-  IMAGE_CANVAS_TYPE_ID,
-} from '../../../shared/extensions/builtinIds';
 import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { ImageZoomPan } from './ImageZoomPan';
@@ -390,6 +389,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const isText =
     node.type !== 'widget' &&
     node.type !== 'image' &&
+    node.type !== 'extension' &&
     (dataTypeRaw === 'text' || dataTypeRaw == null) &&
     FLAGS.focusedNoteEditor;
   const extensionCanvasTypeId =
@@ -406,23 +406,48 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const extensionRecord = useExtensionInstanceStore((s) =>
     extensionInstanceId ? s.records[extensionInstanceId] : undefined
   );
+  const disabledCanvasTypes = useExtensionEnablementStore(
+    (s) => s.disabledCanvasTypes
+  );
+  const setExtensionEnabled = useExtensionEnablementStore((s) => s.setEnabled);
   const locale = useAppSettingsStore((s) => s.locale);
   const presentationTitle =
     extensionRecord && !isExtensionInstanceLoadError(extensionRecord)
       ? extensionRecord.presentation.title.trim()
       : '';
   const title = envelopeTitle || presentationTitle || undefined;
-  const isImage =
-    node.type === 'image' || extensionCanvasTypeId === IMAGE_CANVAS_TYPE_ID;
-  const isFile =
-    node.type === 'asset' || extensionCanvasTypeId === FILE_CANVAS_TYPE_ID;
+  const extensionAvailability = extensionCanvasTypeId
+    ? canvasTypeRegistry.availability(
+        extensionCanvasTypeId,
+        disabledCanvasTypes
+      )
+    : 'unknown';
+  const extensionHost = useMemo(
+    () =>
+      extensionCanvasTypeId && extensionInstanceId
+        ? createExtensionHostApi({
+            canvasTypeId: extensionCanvasTypeId,
+            instanceId: extensionInstanceId,
+            nodeId: node.id,
+            ...(folderId ? { folderId } : {}),
+          })
+        : null,
+    [extensionCanvasTypeId, extensionInstanceId, folderId, node.id]
+  );
+  const isLightbox =
+    node.type === 'image' || extensionType?.surface.detailLayout === 'lightbox';
+  const isWide =
+    node.type === 'asset' || extensionType?.surface.detailLayout === 'wide';
   const isChecklist =
-    !(isImage || isFile) && node.type !== 'link' && dataTypeRaw === 'checklist';
+    node.type !== 'extension' &&
+    !(isLightbox || isWide) &&
+    node.type !== 'link' &&
+    dataTypeRaw === 'checklist';
   // Full-bleed surfaces own their entire layout; the others render inside the
   // centered detail shell.
   const isChecklistWidget = Boolean(checklistWidgetFocusedData && widgetId);
-  const isFullBleed = isText || isChecklist || isChecklistWidget || isImage;
-  const chromeButtonClass = isImage
+  const isFullBleed = isText || isChecklist || isChecklistWidget || isLightbox;
+  const chromeButtonClass = isLightbox
     ? 'bg-white/10 text-zinc-300 hover:bg-white/20'
     : 'bg-black/5 text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20';
 
@@ -555,7 +580,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
         'fixed inset-0 z-60 flex overflow-hidden',
-        isImage ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950'
+        isLightbox ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950'
       )}
       exit={{
         opacity: 0,
@@ -590,7 +615,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
       </motion.button>
 
       {/* Floating image caption (lightbox mode) */}
-      {isImage && title ? (
+      {isLightbox && title ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 z-70 flex justify-center">
           <span className="max-w-[70vw] truncate rounded-full bg-white/10 px-4 py-1.5 text-sm text-white/90 backdrop-blur-md">
             {title}
@@ -615,7 +640,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
           className={cn(
             isFullBleed && 'h-full w-full',
             !isFullBleed &&
-              (isFile
+              (isWide
                 ? 'h-full w-full max-w-6xl p-4 pt-16 md:p-10 md:pt-16'
                 : 'h-full w-full max-w-4xl p-4 pt-16 md:p-12 md:pt-16')
           )}
@@ -629,35 +654,92 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
             }
           >
             {node.type === 'extension' &&
-            extensionType?.DetailSurface &&
-            extensionRecord &&
-            !isExtensionInstanceLoadError(extensionRecord) &&
             extensionCanvasTypeId &&
             extensionInstanceId ? (
-              <extensionType.DetailSurface
-                context={{
-                  width: 0,
-                  height: 0,
-                  theme: document.documentElement.classList.contains('dark')
-                    ? 'dark'
-                    : 'light',
-                  locale,
-                  readOnly: false,
-                  selected: true,
-                  surface: 'detail',
-                }}
-                host={createExtensionHostApi({
-                  canvasTypeId: extensionCanvasTypeId,
-                  instanceId: extensionInstanceId,
-                  nodeId: node.id,
-                })}
-                presentation={extensionRecord.presentation}
-                state={
-                  extensionType.validateState(extensionRecord.state)
-                    ? extensionRecord.state
-                    : extensionType.createInitialState()
+              <ExtensionHostShell
+                availability={
+                  !extensionRecord ||
+                  isExtensionInstanceLoadError(extensionRecord)
+                    ? 'unknown'
+                    : extensionAvailability
                 }
-              />
+                canvasTypeId={extensionCanvasTypeId}
+                instanceId={extensionInstanceId}
+                minHeight={0}
+                minWidth={0}
+                nodeId={node.id}
+                onEnable={() => {
+                  setExtensionEnabled(extensionCanvasTypeId, true).catch(
+                    () => undefined
+                  );
+                }}
+                presentation={
+                  extensionRecord &&
+                  !isExtensionInstanceLoadError(extensionRecord)
+                    ? extensionRecord.presentation
+                    : undefined
+                }
+                readOnly={extensionAvailability !== 'available'}
+                resizable={false}
+                selected
+                surface="detail"
+              >
+                {extensionType?.DetailSurface &&
+                extensionHost &&
+                extensionRecord &&
+                !isExtensionInstanceLoadError(extensionRecord) &&
+                extensionAvailability === 'available' ? (
+                  <extensionType.DetailSurface
+                    context={{
+                      width: 0,
+                      height: 0,
+                      theme: document.documentElement.classList.contains('dark')
+                        ? 'dark'
+                        : 'light',
+                      locale,
+                      readOnly: false,
+                      selected: true,
+                      surface: 'detail',
+                    }}
+                    host={extensionHost}
+                    presentation={extensionRecord.presentation}
+                    state={
+                      extensionType.validateState(extensionRecord.state)
+                        ? extensionRecord.state
+                        : extensionType.createInitialState()
+                    }
+                  />
+                ) : (
+                  <ExtensionFallback
+                    availability={
+                      !extensionRecord ||
+                      isExtensionInstanceLoadError(extensionRecord)
+                        ? 'corrupted'
+                        : extensionAvailability
+                    }
+                    canvasTypeId={extensionCanvasTypeId}
+                    message={
+                      !extensionRecord ||
+                      isExtensionInstanceLoadError(extensionRecord)
+                        ? 'This instance could not be loaded. The original file is kept.'
+                        : extensionAvailability === 'disabled'
+                          ? 'This canvas type is disabled in the current workspace.'
+                          : 'This canvas type is from a newer app version. Data is kept.'
+                    }
+                    onEnable={() => {
+                      setExtensionEnabled(extensionCanvasTypeId, true).catch(
+                        () => undefined
+                      );
+                    }}
+                    presentation={
+                      extensionRecord &&
+                      !isExtensionInstanceLoadError(extensionRecord)
+                        ? extensionRecord.presentation
+                        : undefined
+                    }
+                  />
+                )}
+              </ExtensionHostShell>
             ) : node.type === 'image' ? (
               <ImageZoomPan>
                 <ImageContent

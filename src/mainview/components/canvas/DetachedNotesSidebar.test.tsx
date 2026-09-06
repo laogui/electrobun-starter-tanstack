@@ -4,7 +4,19 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import { LINK_CANVAS_TYPE_ID } from '../../../shared/extensions/builtinIds';
+import { EXTENSION_INSTANCE_SCHEMA } from '../../../shared/extensions/instance';
+
+registerBuiltinCanvasTypes();
+
+vi.mock('@/lib/rpc', () => ({
+  rpcCloneExtensionInstance: vi.fn(),
+  rpcCreateExtensionInstance: vi.fn(),
+  rpcUpdateExtensionInstance: vi.fn(async () => ({ success: true })),
+}));
 
 describe('DetachedNotesSidebar', () => {
   beforeEach(() => {
@@ -13,6 +25,7 @@ describe('DetachedNotesSidebar', () => {
 
   afterEach(() => {
     useCanvasStore.getState().reset();
+    useExtensionInstanceStore.setState({ records: {}, history: {} });
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -101,6 +114,61 @@ describe('DetachedNotesSidebar', () => {
 
     expect(pinNoteToCanvas).toHaveBeenCalledWith(
       'link-1',
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })
+    );
+  });
+
+  it('lists detached extension nodes from presentation and pins them back', () => {
+    const pinNoteToCanvas = vi.fn();
+    act(() => {
+      useExtensionInstanceStore.getState().hydrate({
+        extinst_link1: {
+          schema: EXTENSION_INSTANCE_SCHEMA,
+          id: 'extinst_link1',
+          canvasTypeId: LINK_CANVAS_TYPE_ID,
+          appVersion: '1.0.0',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-08-19T00:00:00.000Z',
+          updatedAt: '2026-08-19T00:01:00.000Z',
+          state: { url: 'https://example.com/spec', title: '' },
+          presentation: {
+            title: 'Spec docs',
+            subtitle: 'https://example.com/spec',
+            plainText: 'Spec docs',
+          },
+        },
+      });
+      useCanvasStore.setState({
+        nodes: [
+          {
+            id: 'ext-1',
+            type: 'extension',
+            position: { x: 0, y: 0 },
+            data: {
+              canvasTypeId: LINK_CANVAS_TYPE_ID,
+              instanceId: 'extinst_link1',
+              detached: true,
+            },
+          },
+        ] as any,
+        pinNoteToCanvas,
+      });
+    });
+
+    render(<DetachedNotesSidebar onClose={vi.fn()} />);
+
+    expect(screen.getAllByText('Spec docs').length).toBeGreaterThan(0);
+    expect(screen.getByText('https://example.com/spec')).toBeInTheDocument();
+
+    const item = screen.getAllByText('Spec docs')[0]?.closest('li');
+    expect(item).not.toBeNull();
+    fireEvent.click(
+      within(item!).getByRole('button', { name: 'Pin to canvas' })
+    );
+
+    expect(pinNoteToCanvas).toHaveBeenCalledWith(
+      'ext-1',
       expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })
     );
   });

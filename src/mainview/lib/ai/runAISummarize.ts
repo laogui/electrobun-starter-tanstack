@@ -7,6 +7,7 @@ import {
 import { rpcRunAITask } from '@/lib/rpc';
 import { useAIPanelStore } from '@/store/aiPanelStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
 import { parseAITaskResult } from '../../../shared/ai/schema';
@@ -24,15 +25,16 @@ export async function runAISummarize(): Promise<void> {
   const canvas = useCanvasStore.getState();
   const nodes = canvas.nodes;
   const sourceViewId = canvas.activeViewId;
+  const extensionInstances = useExtensionInstanceStore.getState().records;
 
-  if (!hasSummarizableSelection(nodes)) {
+  if (!hasSummarizableSelection(nodes, extensionInstances)) {
     toast.info(m.ai_error_empty_selection());
     return;
   }
 
   const requestId = ++nextRequestId;
   panel.openLoading('summarize_selection', requestId, sourceViewId);
-  const context = buildSelectionContext(nodes);
+  const context = buildSelectionContext(nodes, extensionInstances);
 
   let response: Awaited<ReturnType<typeof rpcRunAITask>>;
   try {

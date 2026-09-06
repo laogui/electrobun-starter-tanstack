@@ -82,6 +82,7 @@ export const imageCanvasType: BuiltinCanvasType<ImageState> = {
   createFlow: 'image',
   capabilities: ['assets'],
   interactions: {
+    canDetach: true,
     color: colorFieldInteractions<ImageState>(),
     supportsTags: true,
   },
@@ -93,6 +94,7 @@ export const imageCanvasType: BuiltinCanvasType<ImageState> = {
     resizable: true,
     preserveAspectRatio: true,
     openBehavior: 'detail',
+    detailLayout: 'lightbox',
     canEnterGroup: true,
     canEnterFolder: true,
   },

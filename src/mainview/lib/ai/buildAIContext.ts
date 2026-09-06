@@ -1,15 +1,27 @@
 import type { Node } from '@xyflow/react';
 
 import type { AINodeContext } from '../../../shared/ai/types';
+import {
+  type ExtensionInstanceLoadError,
+  type ExtensionInstanceRecord,
+  isExtensionInstanceLoadError,
+} from '../../../shared/extensions/instance';
 import { buildAbsoluteRects, type Rect } from '../collision';
 
 /**
  * Serialize the renderer's live selection into the `AINodeContext[]` the Bun
  * task layer consumes (docs/features/Backlog/ai-integration-plan.md §8.1).
  *
- * Only nodes that carry meaningful text are included — widgets, plain media
- * and hidden nodes contribute nothing to a summary and would waste tokens.
+ * Cards, stickies, groups, folders, and legacy media/link nodes contribute
+ * their node data. Migrated `extension` nodes contribute host presentation
+ * (`title` + `plainText`) only — never instance state. Hidden nodes and
+ * empty records are skipped.
  */
+
+export type ExtensionInstanceLookup = Record<
+  string,
+  ExtensionInstanceLoadError | ExtensionInstanceRecord
+>;
 
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value : undefined;
@@ -109,17 +121,41 @@ function extractFromData(
   }
 }
 
+function extractFromExtension(
+  data: Record<string, unknown>,
+  extensionInstances: ExtensionInstanceLookup | undefined
+): Pick<AINodeContext, 'content' | 'noteId' | 'tags' | 'title'> | null {
+  const instanceId = asString(data.instanceId);
+  if (!instanceId) {
+    return null;
+  }
+  const record = extensionInstances?.[instanceId];
+  if (!record || isExtensionInstanceLoadError(record)) {
+    return null;
+  }
+  const title = asString(record.presentation.title);
+  const content = asString(record.presentation.plainText);
+  if (!(title || content)) {
+    return null;
+  }
+  return { title, content };
+}
+
 /** Convert a single React Flow node to AI context, or null to skip it. */
 export function nodeToAIContext(
   node: Node,
-  absoluteRect?: Rect
+  absoluteRect?: Rect,
+  extensionInstances?: ExtensionInstanceLookup
 ): AINodeContext | null {
   const nodeType = node.type ?? '';
   const data = (node.data ?? {}) as Record<string, unknown>;
   if (data.isHidden === true) {
     return null;
   }
-  const extracted = extractFromData(nodeType, data);
+  const extracted =
+    nodeType === 'extension'
+      ? extractFromExtension(data, extensionInstances)
+      : extractFromData(nodeType, data);
   if (!extracted) {
     return null;
   }
@@ -139,12 +175,19 @@ export function nodeToAIContext(
 }
 
 /** Build the task context from the current selection. */
-export function buildSelectionContext(nodes: Node[]): AINodeContext[] {
+export function buildSelectionContext(
+  nodes: Node[],
+  extensionInstances?: ExtensionInstanceLookup
+): AINodeContext[] {
   const selected = nodes.filter((node) => node.selected);
   const absoluteRects = buildAbsoluteRects(nodes);
   const contexts: AINodeContext[] = [];
   for (const node of selected) {
-    const context = nodeToAIContext(node, absoluteRects.get(node.id));
+    const context = nodeToAIContext(
+      node,
+      absoluteRects.get(node.id),
+      extensionInstances
+    );
     if (context) {
       contexts.push(context);
     }
@@ -153,6 +196,13 @@ export function buildSelectionContext(nodes: Node[]): AINodeContext[] {
 }
 
 /** True when the selection contains at least one summarizable node. */
-export function hasSummarizableSelection(nodes: Node[]): boolean {
-  return nodes.some((node) => node.selected && nodeToAIContext(node) !== null);
+export function hasSummarizableSelection(
+  nodes: Node[],
+  extensionInstances?: ExtensionInstanceLookup
+): boolean {
+  return nodes.some(
+    (node) =>
+      node.selected &&
+      nodeToAIContext(node, undefined, extensionInstances) !== null
+  );
 }

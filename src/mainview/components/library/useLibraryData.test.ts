@@ -207,4 +207,42 @@ describe('buildLibrary', () => {
     expect(items[0]?.data.mimeType).toBe('application/pdf');
     expect(items[0]?.data.kind).toBe('file');
   });
+
+  it('groups detached extension nodes using presentation titles', () => {
+    const nodes: Node[] = [
+      makeNode('ext-link', 'extension', {
+        canvasTypeId: 'ghostboard.web/link',
+        instanceId: 'extinst_link1',
+        detached: true,
+      }),
+    ];
+
+    const { groups } = buildLibrary(
+      nodes,
+      '',
+      'name',
+      {},
+      {
+        extinst_link1: {
+          schema: 'ghostboard-extension-instance/v1',
+          id: 'extinst_link1',
+          canvasTypeId: 'ghostboard.web/link',
+          appVersion: '0.0.0',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+          state: { url: 'https://example.com', title: '' },
+          presentation: {
+            title: 'Example',
+            subtitle: 'https://example.com',
+          },
+        },
+      }
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.kind).toBe('detached');
+    expect(groups[0]?.items.map((item) => item.title)).toEqual(['Example']);
+  });
 });

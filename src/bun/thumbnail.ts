@@ -12,8 +12,7 @@ import { assertWorkspaceAttachmentPath } from './attachments';
  * the bun process to peek at the file: text excerpts (`text/*`, JSON,
  * markdown) and archive summaries (`.zip`).
  *
- * PDF page rasterization is intentionally out of scope here — see
- * `docs/product-detail-roadmap.md` Phase 2 for the rationale (the renderer
+ * PDF page rasterization is intentionally out of scope here (the renderer
  * already shows a styled PDF placeholder, and adding `pdfjs-dist` to the bun
  * process is too heavy for the value).
  *

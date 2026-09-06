@@ -190,6 +190,7 @@ export const linkCanvasType: BuiltinCanvasType<LinkState> = {
   createFlow: 'url',
   capabilities: ['network', 'external'],
   interactions: {
+    canDetach: true,
     color: colorFieldInteractions<LinkState>(),
     supportsTags: true,
   },

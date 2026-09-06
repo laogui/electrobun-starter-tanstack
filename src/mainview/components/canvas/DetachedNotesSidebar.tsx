@@ -1,3 +1,4 @@
+import type { Node } from '@xyflow/react';
 import {
   FileText,
   ImageIcon,
@@ -13,9 +14,18 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { NotePreview } from '@/components/preview/NotePreview';
+import { ExtensionNodeReadOnly } from '@/extensions/ExtensionNode';
 import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import {
+  type ExtensionInstanceLoadError,
+  type ExtensionInstanceRecord,
+  isExtensionInstanceLoadError,
+} from '../../../shared/extensions/instance';
+import type { ExtensionPresentation } from '../../../shared/extensions/presentation';
+import type { ExtensionNodeData } from '../../../shared/extensions/protocol';
 
 interface DetachedEntry {
   color?: string;
@@ -71,6 +81,36 @@ function makePreview(
     .trim();
 }
 
+const DETACHED_SIDEBAR_TYPES = new Set([
+  'card',
+  'image',
+  'link',
+  'asset',
+  'extension',
+]);
+
+function isDetachedSidebarNode(node: Node): boolean {
+  if (!DETACHED_SIDEBAR_TYPES.has(node.type ?? '')) {
+    return false;
+  }
+  return Boolean((node.data as Record<string, unknown> | undefined)?.detached);
+}
+
+function presentationFor(
+  data: Record<string, unknown>,
+  instances: Record<
+    string,
+    ExtensionInstanceRecord | ExtensionInstanceLoadError
+  >
+): ExtensionPresentation | undefined {
+  const instanceId = typeof data.instanceId === 'string' ? data.instanceId : '';
+  const record = instanceId ? instances[instanceId] : undefined;
+  if (!record || isExtensionInstanceLoadError(record)) {
+    return;
+  }
+  return record.presentation;
+}
+
 function typeIconFor(type: string | undefined, data: Record<string, unknown>) {
   if (type === 'image') {
     return ImageIcon;
@@ -98,39 +138,41 @@ const SCALE = THUMBNAIL_WIDTH / NATURAL_WIDTH;
 export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
   const nodes = useCanvasStore((s) => s.nodes);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
+  const instances = useExtensionInstanceStore((s) => s.records);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const entries: DetachedEntry[] = useMemo(() => {
     const out: DetachedEntry[] = [];
     for (const n of nodes) {
-      if (
-        (n.type === 'card' ||
-          n.type === 'image' ||
-          n.type === 'link' ||
-          n.type === 'asset') &&
-        (n.data as Record<string, unknown>).detached
-      ) {
-        const data = n.data as Record<string, unknown>;
-        out.push({
-          color: getString(data, 'color'),
-          data,
-          fileName: getString(data, 'fileName'),
-          id: `node:${n.id}`,
-          imageUrl: getString(data, 'imageUrl'),
-          mimeType: getString(data, 'mimeType'),
-          nodeId: n.id,
-          preview: makePreview(data, n.type),
-          thumbnailUrl: getString(data, 'thumbnailUrl'),
-          title: getString(data, 'title') || 'Untitled',
-          type: n.type,
-          updatedAt: readNumber(data, 'updatedAt'),
-          url: getString(data, 'url'),
-        });
+      if (!isDetachedSidebarNode(n)) {
+        continue;
       }
+      const data = n.data as Record<string, unknown>;
+      const presentation =
+        n.type === 'extension' ? presentationFor(data, instances) : undefined;
+      const preview =
+        n.type === 'extension'
+          ? (presentation?.subtitle || presentation?.plainText || '').trim()
+          : makePreview(data, n.type);
+      out.push({
+        color: getString(data, 'color'),
+        data,
+        fileName: getString(data, 'fileName'),
+        id: `node:${n.id}`,
+        imageUrl: getString(data, 'imageUrl'),
+        mimeType: getString(data, 'mimeType'),
+        nodeId: n.id,
+        preview,
+        thumbnailUrl: getString(data, 'thumbnailUrl'),
+        title: presentation?.title || getString(data, 'title') || 'Untitled',
+        type: n.type,
+        updatedAt: readNumber(data, 'updatedAt'),
+        url: getString(data, 'url'),
+      });
     }
     return out;
-  }, [nodes]);
+  }, [instances, nodes]);
 
   const validSelectedNodeId =
     selectedNodeId && entries.some((entry) => entry.nodeId === selectedNodeId)
@@ -144,12 +186,17 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
 
   const selectedData =
     selectedNode && (selectedNode.data as Record<string, unknown>);
-  const selectedTitle = selectedData
-    ? getString(selectedData, 'title') || 'Untitled'
-    : '';
+  const selectedPresentation =
+    selectedData && selectedNode?.type === 'extension'
+      ? presentationFor(selectedData, instances)
+      : undefined;
+  const selectedTitle =
+    selectedPresentation?.title ||
+    (selectedData ? getString(selectedData, 'title') || 'Untitled' : '');
   const selectedImageUrl = selectedData
     ? getString(selectedData, 'imageUrl')
     : '';
+  const isExtensionSelection = selectedNode?.type === 'extension';
   const isImageSelection = selectedNode?.type === 'image';
   const isLinkSelection = selectedNode?.type === 'link';
   const isAssetSelection = selectedNode?.type === 'asset';
@@ -248,7 +295,13 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
               <div className="mx-auto max-w-3xl px-8 py-8">
-                {isImageSelection && selectedImageUrl ? (
+                {isExtensionSelection && selectedData ? (
+                  <div className="overflow-hidden rounded-xl border border-black/5 dark:border-white/10">
+                    <ExtensionNodeReadOnly
+                      data={selectedData as ExtensionNodeData}
+                    />
+                  </div>
+                ) : isImageSelection && selectedImageUrl ? (
                   <img
                     alt={selectedTitle}
                     className="mx-auto h-auto max-w-full rounded-lg"

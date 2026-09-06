@@ -12,6 +12,22 @@ export function extensionNodeData(
   return { canvasTypeId, instanceId };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function persistableExtensionData(
+  node: Record<string, unknown>,
+  canvasTypeId: string,
+  instanceId: string
+): ExtensionNodeRef & { detached?: true } {
+  const data = isRecord(node.data) ? node.data : {};
+  return {
+    ...extensionNodeData(canvasTypeId, instanceId),
+    ...(data.detached === true ? { detached: true as const } : {}),
+  };
+}
+
 export function rewriteToExtensionNode<T extends Record<string, unknown>>(
   node: T,
   canvasTypeId: string,
@@ -20,15 +36,11 @@ export function rewriteToExtensionNode<T extends Record<string, unknown>>(
   return {
     ...node,
     type: EXTENSION_NODE_TYPE,
-    data: extensionNodeData(canvasTypeId, instanceId),
+    data: persistableExtensionData(node, canvasTypeId, instanceId),
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-/** Persist only the extension reference; drop hydrated runtime fields. */
+/** Persist the extension reference plus host flags such as `detached`. */
 export function persistableExtensionNode(
   node: Record<string, unknown>,
   canvasTypeId: string,
@@ -37,7 +49,7 @@ export function persistableExtensionNode(
   return {
     ...node,
     type: EXTENSION_NODE_TYPE,
-    data: extensionNodeData(canvasTypeId, instanceId),
+    data: persistableExtensionData(node, canvasTypeId, instanceId),
   };
 }
 

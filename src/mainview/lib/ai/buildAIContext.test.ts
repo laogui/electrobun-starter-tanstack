@@ -155,3 +155,91 @@ describe('hasSummarizableSelection', () => {
     ).toBe(false);
   });
 });
+
+describe('extension nodes', () => {
+  const linkNode = makeNode({
+    id: 'ext-link-1',
+    type: 'extension',
+    selected: true,
+    data: {
+      canvasTypeId: 'ghostboard.web/link',
+      instanceId: 'extinst_link1',
+    },
+  });
+
+  const linkRecord = {
+    schema: 'ghostboard-extension-instance/v1' as const,
+    id: 'extinst_link1',
+    canvasTypeId: 'ghostboard.web/link',
+    appVersion: '1.0.0',
+    dataVersion: 1,
+    revision: 1,
+    createdAt: '2026-08-19T00:00:00.000Z',
+    updatedAt: '2026-08-19T00:01:00.000Z',
+    state: { url: 'https://example.com', title: 'Example', color: '#FFFFFF' },
+    presentation: {
+      title: 'Example',
+      plainText: 'Example\nhttps://example.com',
+    },
+  };
+
+  it('uses presentation title and plainText when a record is present', () => {
+    const context = nodeToAIContext(linkNode, undefined, {
+      extinst_link1: linkRecord,
+    });
+    expect(context).toMatchObject({
+      id: 'ext-link-1',
+      nodeType: 'extension',
+      title: 'Example',
+      content: 'Example\nhttps://example.com',
+    });
+  });
+
+  it('skips extension nodes when the instance record is missing', () => {
+    expect(nodeToAIContext(linkNode, undefined, {})).toBeNull();
+    expect(nodeToAIContext(linkNode)).toBeNull();
+  });
+
+  it('still summarizes from last persisted presentation when the type is disabled', () => {
+    // Enablement is a host UI concern; AI context only reads presentation.
+    const context = nodeToAIContext(linkNode, undefined, {
+      extinst_link1: linkRecord,
+    });
+    expect(context?.title).toBe('Example');
+    expect(context?.content).toBe('Example\nhttps://example.com');
+  });
+
+  it('skips corrupted instance records and empty presentations', () => {
+    expect(
+      nodeToAIContext(linkNode, undefined, {
+        extinst_link1: { id: 'extinst_link1', error: 'corrupted' },
+      })
+    ).toBeNull();
+    expect(
+      nodeToAIContext(linkNode, undefined, {
+        extinst_link1: {
+          ...linkRecord,
+          presentation: { title: '' },
+        },
+      })
+    ).toBeNull();
+  });
+
+  it('includes extension nodes in mixed selections', () => {
+    const context = buildSelectionContext(
+      [
+        makeNode({ id: 'card-1', selected: true, data: { title: 'Card' } }),
+        linkNode,
+      ],
+      { extinst_link1: linkRecord }
+    );
+    expect(context.map((entry) => entry.id)).toEqual(['card-1', 'ext-link-1']);
+  });
+
+  it('treats a selected extension with presentation as summarizable', () => {
+    expect(
+      hasSummarizableSelection([linkNode], { extinst_link1: linkRecord })
+    ).toBe(true);
+    expect(hasSummarizableSelection([linkNode], {})).toBe(false);
+  });
+});

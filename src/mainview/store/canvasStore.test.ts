@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const NODE_ID_REGEX = /^node-/;
 const NOTE_ID_REGEX = /^note_/;
 
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import {
   CANVAS_NODE_SPECS,
   CARD_H,
@@ -20,6 +21,10 @@ import {
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import {
+  LINK_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+} from '../../shared/extensions/builtinIds';
 
 const PASTE_ID_RE = /^paste-/;
 const PASTE_EDGE_ID_RE = /^paste-edge-/;
@@ -2559,10 +2564,37 @@ describe('canvasStore — pinNoteToCanvas', () => {
       .nodes.find((n) => n.id === 'card-1')!;
     expect(node.position).toEqual({ x: 50, y: 50 });
   });
+
+  it('pins a detached extension node back onto the canvas', () => {
+    const nodes: Node[] = [
+      {
+        id: 'ext-1',
+        type: 'extension',
+        position: { x: 0, y: 0 },
+        data: {
+          canvasTypeId: LINK_CANVAS_TYPE_ID,
+          instanceId: 'extinst_1',
+          detached: true,
+        },
+      },
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
+
+    useCanvasStore.getState().pinNoteToCanvas('ext-1', { x: 120, y: 80 });
+
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === 'ext-1')!;
+    expect(node.position).toEqual({ x: 120, y: 80 });
+    expect((node.data as any).detached).toBeUndefined();
+    expect((node.data as any).canvasTypeId).toBe(LINK_CANVAS_TYPE_ID);
+    expect((node.data as any).instanceId).toBe('extinst_1');
+  });
 });
 
 describe('canvasStore — detachNoteFromCanvas', () => {
-  beforeEach(() => resetStore());
+  beforeEach(() => {
+    resetStore();
+    registerBuiltinCanvasTypes();
+  });
 
   it('sets detached: true and clears associated edges', () => {
     const nodes: Node[] = [
@@ -2660,5 +2692,56 @@ describe('canvasStore — detachNoteFromCanvas', () => {
       (state.nodes.find((n) => n.id === 'asset-1')?.data as any).detached
     ).toBe(true);
     expect(state.edges).toHaveLength(0);
+  });
+
+  it('detaches extension nodes whose type declares canDetach', () => {
+    const nodes: Node[] = [
+      {
+        id: 'ext-1',
+        type: 'extension',
+        position: { x: 80, y: 40 },
+        data: {
+          canvasTypeId: LINK_CANVAS_TYPE_ID,
+          instanceId: 'extinst_1',
+        },
+      },
+    ];
+    useCanvasStore.setState({
+      nodes,
+      edges: [{ id: 'e1', source: 'ext-1', target: 'card-2' }],
+      _hydrated: true,
+    });
+
+    useCanvasStore.getState().detachNoteFromCanvas('ext-1');
+
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === 'ext-1')!;
+    expect((node.data as any).detached).toBe(true);
+    expect((node.data as any).canvasTypeId).toBe(LINK_CANVAS_TYPE_ID);
+    expect((node.data as any).instanceId).toBe('extinst_1');
+    expect(node.position).toEqual({ x: 0, y: 0 });
+    expect(useCanvasStore.getState().edges).toHaveLength(0);
+  });
+
+  it('no-ops for recording extensions that do not declare canDetach', () => {
+    const nodes: Node[] = [
+      {
+        id: 'ext-rec',
+        type: 'extension',
+        position: { x: 40, y: 40 },
+        data: {
+          canvasTypeId: RECORDING_CANVAS_TYPE_ID,
+          instanceId: 'extinst_rec',
+        },
+      },
+    ];
+    useCanvasStore.setState({ nodes, _hydrated: true });
+
+    useCanvasStore.getState().detachNoteFromCanvas('ext-rec');
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'ext-rec')!;
+    expect((node.data as any).detached).toBeUndefined();
+    expect(node.position).toEqual({ x: 40, y: 40 });
   });
 });

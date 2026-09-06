@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
+import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import {
   isCanvasContentNode,
+  isDetachableNode,
   isFocusableNode,
   isFolderChildNode,
   isGroupChildNode,
   isRejectedFolderChildNode,
 } from '@/lib/canvasNodePredicates';
+import {
+  FILE_CANVAS_TYPE_ID,
+  IMAGE_CANVAS_TYPE_ID,
+  LINK_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
+} from '../../shared/extensions/builtinIds';
+
+registerBuiltinCanvasTypes();
 
 describe('isCanvasContentNode', () => {
   it.each([
@@ -93,5 +103,37 @@ describe('isFocusableNode', () => {
     // Widgets edit in place on the canvas; they must not open FocusedView.
     expect(isFocusableNode('widget')).toBe(false);
     expect(isFocusableNode(undefined)).toBe(false);
+  });
+});
+
+describe('isDetachableNode', () => {
+  it('keeps dual-read for legacy card, image, link, and asset types', () => {
+    expect(isDetachableNode('card')).toBe(true);
+    expect(isDetachableNode('image')).toBe(true);
+    expect(isDetachableNode('link')).toBe(true);
+    expect(isDetachableNode('asset')).toBe(true);
+  });
+
+  it('honors canDetach on link, image, and file extensions', () => {
+    expect(
+      isDetachableNode('extension', { canvasTypeId: LINK_CANVAS_TYPE_ID })
+    ).toBe(true);
+    expect(
+      isDetachableNode('extension', { canvasTypeId: IMAGE_CANVAS_TYPE_ID })
+    ).toBe(true);
+    expect(
+      isDetachableNode('extension', { canvasTypeId: FILE_CANVAS_TYPE_ID })
+    ).toBe(true);
+  });
+
+  it('rejects recording extensions and structural types', () => {
+    expect(
+      isDetachableNode('extension', {
+        canvasTypeId: RECORDING_CANVAS_TYPE_ID,
+      })
+    ).toBe(false);
+    expect(isDetachableNode('group')).toBe(false);
+    expect(isDetachableNode('recording')).toBe(false);
+    expect(isDetachableNode(undefined)).toBe(false);
   });
 });

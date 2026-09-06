@@ -10,6 +10,7 @@ import { getSelectedNodesFlowBounds } from '@/lib/ai/selectionBounds';
 import { cn } from '@/lib/utils';
 import { useAIPanelStore } from '@/store/aiPanelStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
 
@@ -24,11 +25,15 @@ const TOOLBAR_GAP = 8;
 export function SelectionAIToolbar() {
   const nodes = useCanvasStore((s) => s.nodes);
   const focusedNode = useCanvasStore((s) => s.focusedNode);
+  const extensionInstances = useExtensionInstanceStore((s) => s.records);
   const status = useAIPanelStore((s) => s.status);
   const { x, y, zoom } = useViewport();
 
   const bounds = useMemo(() => getSelectedNodesFlowBounds(nodes), [nodes]);
-  const canSummarize = useMemo(() => hasSummarizableSelection(nodes), [nodes]);
+  const canSummarize = useMemo(
+    () => hasSummarizableSelection(nodes, extensionInstances),
+    [extensionInstances, nodes]
+  );
   const loading = status === 'loading';
 
   const visible = Boolean(bounds && canSummarize && !focusedNode);

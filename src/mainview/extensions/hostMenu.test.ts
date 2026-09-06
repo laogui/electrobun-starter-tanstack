@@ -67,6 +67,7 @@ describe('listHostGenericMenuActions', () => {
       'change-color',
       'edit-tag',
       'toggle-lock',
+      'detach-from-canvas',
       'delete',
     ]);
   });
@@ -216,6 +217,7 @@ describe('assembleExtensionMenuItems', () => {
       'change-color',
       'edit-tag',
       'toggle-lock',
+      'detach-from-canvas',
       'delete',
     ]);
   });
@@ -233,6 +235,7 @@ describe('assembleExtensionMenuItems', () => {
       'change-color',
       'edit-tag',
       'toggle-lock',
+      'detach-from-canvas',
       'delete',
     ]);
   });

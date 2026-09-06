@@ -274,6 +274,26 @@ describe('sanitizeForPersistence', () => {
     expect(data.title).toBe('Detached note');
   });
 
+  it('preserves data.detached on extension nodes', () => {
+    const node = createNode({
+      type: 'extension',
+      data: {
+        canvasTypeId: 'ghostboard.web/link',
+        instanceId: 'extinst_1',
+        detached: true,
+      },
+    });
+
+    const result = sanitizeForPersistence([node], []);
+    const data = result.nodes[0]?.data as Record<string, unknown>;
+
+    expect(data).toEqual({
+      canvasTypeId: 'ghostboard.web/link',
+      instanceId: 'extinst_1',
+      detached: true,
+    });
+  });
+
   it('strips previewUrl and thumbnailUrl from top-level data', () => {
     const node = createNode({
       type: 'image',

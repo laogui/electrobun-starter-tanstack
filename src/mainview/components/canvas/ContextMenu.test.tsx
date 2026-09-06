@@ -505,8 +505,8 @@ describe('canvasContextMenu', () => {
       screen.getByRole('button', { name: DELETE_LABEL_RE })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Move to Library' })
-    ).toBeNull();
+      screen.getByRole('button', { name: 'Move to Library' })
+    ).toBeInTheDocument();
   });
 
   it('renders image type actions for a migrated image extension', () => {
@@ -561,6 +561,9 @@ describe('canvasContextMenu', () => {
       screen.getByRole('button', { name: 'Reveal in Finder' })
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Move to Library' })
+    ).toBeInTheDocument();
   });
 
   it('keeps widget-sized menus for productivity extensions', () => {
@@ -596,6 +599,9 @@ describe('canvasContextMenu', () => {
     expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
     expect(screen.queryByRole('button', { name: CHANGE_COLOR_RE })).toBeNull();
     expect(screen.queryByRole('button', { name: EDIT_TAG_RE })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Move to Library' })
+    ).toBeNull();
   });
 
   it('renders move-to-view submenu for multi-selection', () => {

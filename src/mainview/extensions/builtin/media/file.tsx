@@ -71,6 +71,7 @@ export const fileCanvasType: BuiltinCanvasType<FileState> = {
   createFlow: 'file',
   capabilities: ['assets', 'external'],
   interactions: {
+    canDetach: true,
     color: colorFieldInteractions<FileState>(),
     supportsTags: true,
   },
@@ -81,6 +82,7 @@ export const fileCanvasType: BuiltinCanvasType<FileState> = {
     maxSize: { width: 800, height: 900 },
     resizable: true,
     openBehavior: 'detail',
+    detailLayout: 'wide',
     canEnterGroup: true,
     canEnterFolder: true,
   },

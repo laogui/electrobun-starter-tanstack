@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { create } from 'zustand';
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import {
+  isDetachableNode,
   isFolderChildNode,
   isGroupChildNode,
 } from '@/lib/canvasNodePredicates';
@@ -2274,10 +2275,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (
       !(
         node &&
-        (node.type === 'card' ||
-          node.type === 'image' ||
-          node.type === 'link' ||
-          node.type === 'asset')
+        isDetachableNode(node.type, node.data as Record<string, unknown>)
       )
     ) {
       return;

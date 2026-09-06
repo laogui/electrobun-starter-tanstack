@@ -41,7 +41,7 @@ export interface PreviewProps<TState> {
  * `assertComplete`.
  */
 export interface CanvasTypeInteractions<TState> {
-  /** When true, host shows "Move to library". Enablement of the action is T4. */
+  /** When true, host shows "Move to library" and `detachNoteFromCanvas` honors the node. */
   canDetach?: boolean;
   /** Host shows "Change color" and writes through `updateState`. */
   color?: {
@@ -112,6 +112,12 @@ export interface BuiltinCanvasType<TState> {
     canEnterFolder: boolean;
     canEnterGroup: boolean;
     defaultSize: Size;
+    /**
+     * How FocusedView chromes this type's detail surface. Missing means the
+     * default contained panel. Host-owned; new types pick a layout here
+     * instead of adding branches in FocusedView.
+     */
+    detailLayout?: 'lightbox' | 'wide';
     maxSize?: Size;
     minSize?: Size;
     openBehavior: 'none' | 'detail';

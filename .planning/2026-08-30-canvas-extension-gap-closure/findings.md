@@ -30,3 +30,8 @@
 | Rename writes `state.title` via instance history; overlay lives in host shell | Old `setRenamingNodeId` targeted ImageNode/AssetNode, which extensions do not render |
 | `edit-url` calls `host.canvas.openDetail` | Same as the legacy handler; URL create popover is create-only |
 | `assets.reveal` wraps existing `rpcRevealAttachment` | Asset ids are workspace-relative attachment paths |
+| Extension AI context is `presentation.title` + `plainText` | RFC §14.2; `aiPanelStore` does not extract context — `runAISummarize` and the toolbar pass instance records |
+| Keep dual-read detach for card/image/link/asset | Unmigrated canvases still use old node types |
+| Preserve `detached` in `persistableExtensionNode` | Otherwise migrating a library link/asset would put it back on the canvas |
+| `surface.detailLayout` is host chrome, not protocol | Lightbox vs wide vs contained; FocusedView must not import `*_CANVAS_TYPE_ID` |
+| `ExtensionHostShell` `surface="detail"` drops node chrome | Handles, resize, tags, and rename belong on the canvas card |

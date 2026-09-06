@@ -16,7 +16,7 @@ Context menu legend (used in the last column):
 | Sticky | `sticky` | 200×200 | Canvas only | Yes | No | Inline text | Manifest content | Host: copy, change-color, edit-tag, ai-summarize, lock, delete |
 | Folder | `folder` | 280×280 | Expand / edit | Yes | No | Folder chrome | Title + children | Host: open-folder, edit-folder, new-child, lock, delete |
 | Group | `group` | 500×300 | Canvas only | No | No | Group chrome | Label | Host: change-color, lock, delete |
-| Image | `image` | 350×350 | Focused view | Yes | Yes | Image content | Attachment + title | Host: focus, copy, change-color, edit-tag, lock, delete. Type: replace-image, copy-image-address, reveal-in-finder, rename-asset |
+| Image | `image` | 350×350 | Focused view | Yes | Yes | Image content | Attachment + title | Host: focus, copy, change-color, edit-tag, lock, detach-from-canvas, delete. Type: replace-image, copy-image-address, reveal-in-finder, rename-asset |
 | File | `asset` | 350×260 | Focused view | Yes | Yes | Asset content | Attachment + title | Host: focus, copy, change-color, edit-tag, lock, detach-from-canvas, delete. Type: reveal-in-finder, replace-file, rename-asset |
 | Link | `link` | 380×360 | Focused view | Yes | Yes | Link content | URL + unfurl | Host: focus, copy, change-color, edit-tag, lock, detach-from-canvas, delete. Type: open-link, copy-url, refetch-link, edit-url |
 | Recording | `recording` | 380×150 | Canvas only | Yes | Yes | Recording content | Attachment + title | Host: copy, change-color, edit-tag, lock, delete (no focus; canvas only). Type: reveal-in-finder, rename-asset |

@@ -6,11 +6,11 @@ Close the four RFC-1 acceptance gaps so migrated extension nodes regain host-gen
 
 ## Next Step
 
-Implement T3: include extension nodes in AI selection context via presentation.
+Implement T6: centralize search-kind maps, update RFC, move the gap-closure plan out of In Progress.
 
 ## Current Phase
 
-Phase 4: T3 AI context from presentation
+Phase 7: T6 docs and search-kind cleanup
 
 ## Phases
 
@@ -36,18 +36,18 @@ Phase 4: T3 AI context from presentation
 
 ### Phase 4: T3 AI context from presentation
 
-- [ ] Include extension nodes in `buildAIContext`
-- **Status:** pending
+- [x] Include extension nodes in `buildAIContext`
+- **Status:** complete
 
 ### Phase 5: T4 move-to-library
 
-- [ ] Honor `canDetach` for extension nodes
-- **Status:** pending
+- [x] Honor `canDetach` for extension nodes
+- **Status:** complete
 
 ### Phase 6: T5 FocusedView via DetailSurface
 
-- [ ] Route extension focused view through DetailSurface
-- **Status:** pending
+- [x] Route extension focused view through DetailSurface
+- **Status:** complete
 
 ### Phase 7: T6 docs and search-kind cleanup
 
@@ -69,6 +69,10 @@ Phase 4: T3 AI context from presentation
 | Type actions insert after Focus, before Copy | Matches T0 matrix / legacy builders, not after Delete |
 | Rename is `updateState` of `title` plus `canvas.requestTitleEdit` | Old handler only set `renamingNodeId`; no `assets.rename` API |
 | `edit-url` opens detail via `host.canvas.openDetail` | Old handler was the same as Focus; create-flow URL popover would spawn a new node |
+| AI context for extensions is presentation only | RFC §14.2; do not read instance state. Missing/corrupt records are skipped; disabled types still summarize from last presentation |
+| Image `canDetach` is true even though the old image menu omitted it | Aligns with the old `detachNoteFromCanvas` guard (`card`/`image`/`link`/`asset`); recording stays false |
+| `persistableExtensionNode` keeps `detached` | Migration of already-library notes must not drop the flag; live save already round-trips unknown fields |
+| FocusedView chrome uses `surface.detailLayout` | Host stays type-id-free; image = lightbox, file = wide, link = default contained panel |
 
 ## Errors Encountered
 

@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const VIEW1_TMP_RE = /^.*view-1\.canvas\.json\.[\da-f]+\.tmp$/;
+const VIEWS_OR_TRASH_RE = /views\/ or trash\//;
+const RELATIVE_PATH_RE = /relative/;
 
 vi.mock('electrobun/bun', () => ({
   Utils: {
@@ -117,19 +119,17 @@ describe('manifest', () => {
 
     expect(() =>
       resolveWorkspaceManifestPath(workspaceRoot, '../../secrets.json')
-    ).toThrow(/views\/ or trash\//);
+    ).toThrow(VIEWS_OR_TRASH_RE);
     expect(() =>
       resolveWorkspaceManifestPath(workspaceRoot, '/tmp/escape.canvas.json')
-    ).toThrow(/relative/);
+    ).toThrow(RELATIVE_PATH_RE);
     expect(() =>
       resolveWorkspaceManifestPath(workspaceRoot, 'content/note.md')
-    ).toThrow(/views\/ or trash\//);
+    ).toThrow(VIEWS_OR_TRASH_RE);
 
     expect(
       resolveWorkspaceManifestPath(workspaceRoot, 'views/default.canvas.json')
-    ).toBe(
-      join(workspaceRoot, '.ghostboard', 'views', 'default.canvas.json')
-    );
+    ).toBe(join(workspaceRoot, '.ghostboard', 'views', 'default.canvas.json'));
     expect(
       resolveWorkspaceManifestPath(workspaceRoot, 'trash/trash_1.canvas.json')
     ).toBe(join(workspaceRoot, '.ghostboard', 'trash', 'trash_1.canvas.json'));
@@ -148,7 +148,7 @@ describe('manifest', () => {
         nodes: [],
         edges: [],
       })
-    ).rejects.toThrow(/views\/ or trash\//);
+    ).rejects.toThrow(VIEWS_OR_TRASH_RE);
   });
 
   it('loadManifest returns null and reports invalid JSON content', async () => {

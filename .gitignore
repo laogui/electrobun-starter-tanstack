@@ -54,6 +54,7 @@ next-env.d.ts
 
 # Other
 dev-dist
+.delta/
 
 .wrangler
 .dev.vars*

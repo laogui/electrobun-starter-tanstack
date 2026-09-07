@@ -7,7 +7,13 @@
     "ultracite/biome/vitest"
   ],
   "files": {
-    "includes": ["**", "!src/paraglide", "!src/mainview/routeTree.gen.ts"]
+    "includes": [
+      "**",
+      "!src/paraglide",
+      "!src/mainview/routeTree.gen.ts",
+      "!!.delta",
+      "!!.delta"
+    ]
   },
   "javascript": {
     "globals": ["Bun"],

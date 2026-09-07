@@ -4,21 +4,13 @@ import {
   invokeCommand,
   receivePluginMessage,
 } from '../../shared/plugins/session';
+import { compileHandlerSource } from './compileHandler';
 import { PluginDirectoryError } from './loadDirectory';
 import type { ProbeHost } from './probeHost';
-
-const EXPORT_ASYNC_FN_RE = /\bexport\s+async\s+function\b/g;
-const EXPORT_FN_RE = /\bexport\s+function\b/g;
 
 export interface CommandRunResult {
   preview?: Array<{ title: string; token: string }>;
   value: unknown;
-}
-
-function toCjs(source: string, exportName: string): string {
-  return `${source.replace(EXPORT_ASYNC_FN_RE, 'async function').replace(EXPORT_FN_RE, 'function')}
-module.exports = { ${exportName} };
-`;
 }
 
 function loadHandler(
@@ -26,7 +18,7 @@ function loadHandler(
   exportName: string
 ): (ctx: unknown) => Promise<unknown> {
   const module = { exports: {} as Record<string, unknown> };
-  runInNewContext(toCjs(source, exportName), {
+  runInNewContext(compileHandlerSource(source, exportName), {
     module,
     exports: module.exports,
     console,

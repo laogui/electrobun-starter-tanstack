@@ -4,13 +4,13 @@
 >
 > 创建日期：2026-08-19
 >
-> 修订日期：2026-08-19
+> 修订日期：2026-09-07
 >
 > 目标版本：当前开发分支 `feat/canvas-extension-platform`
 >
 > 适用范围：`src/mainview/`、`src/bun/`、`src/shared/`、画布/工作区数据格式
 >
-> 后续项目：第三方扩展平台见 `third-party-extension-platform.md`（RFC-2）
+> 后续项目：第三方扩展平台见 [公开插件系统整改方案](./public-plugin-platform-redesign.md)。2026-09-07 起，以新方案替代本文 §28 和旧 RFC-2 的“等待外部需求后立项”前提；本文的内置扩展迁移历史与验收记录保留。外部协议兼容性需要按新方案验证，不因本文的预留声明自动视为已达成。
 
 ## 0. 修订记录
 
@@ -28,6 +28,11 @@ v2 相对 v1 草案的主要变化：
 10. **Scheduler 事件投递语义定义**（§12.3）：持久化、重启恢复、过期任务合并触发。
 11. **性能预算加入冷启动基准**；工作量估算单列测试迁移成本。
 12. **Canvas Export v2 的 `requiredExtensions` 简化为 ID 列表**，删除无处解析的 `versionRange`。
+
+2026-09-07 gap-closure 收尾修订：
+
+1. **上下文菜单保持声明式宿主边界**：宿主通用动作由 `openBehavior` / `interactions` 派生，类型专属动作由 `menuActions` 声明；handler 只通过 Host API 与实例更新通道执行，不让 Surface 直接依赖 canvasStore 或 bridge。
+2. **内置搜索展示映射集中维护**：内置 Canvas Type 到 legacy search kind / widget kind 的适配与稳定 ID 同处 `src/shared/extensions/builtinIds.ts`；未知或第三方类型继续使用通用 `extension` 展示。
 
 ## 1. 摘要
 
@@ -623,6 +628,8 @@ interface ExtensionSearchMetadata {
 
 未知类型使用通用扩展图标。核心类型（card、sticky、folder、group）的搜索路径保持现状不变。
 
+内置类型映射回 `image` / `asset` / `recording` / `link` / `widget` 等既有 search kind，只是宿主搜索结果的展示层适配，不进入 manifest 或扩展协议。新增内置 Canvas Type 时必须同步 `src/shared/extensions/builtinIds.ts` 的穷尽映射；未知或第三方类型保持 `extension` fallback。
+
 ### 14.2 AI 上下文
 
 默认只向 AI 提供 presentation。类型贡献结构化 AI 上下文属于 RFC-2 的受权能力。
@@ -1122,5 +1129,6 @@ RFC-2（第三方扩展平台）依赖本 RFC 完成，且**只有在出现真�
 - Surface 与宿主 store/bridge 的隔离由 lint 强制，内置组件迁到受信任 adapter 无需改协议。
 - `capabilities` 声明已存在于 manifest，RFC-2 补充运行时授权即可。
 - Availability 的 `unknown` 状态与 RFC-2 的 `missing` / `incompatible` 语义兼容。
+- 已落地的上下文菜单机制保持声明式：宿主按 `openBehavior` / `interactions` 组装通用动作，类型通过 `menuActions` 贡献受信任 handler；handler 依赖 Host API 与实例通道而非 Surface 直连宿主 store。第三方运行时仍需在公开插件方案中把 label/icon/handler 转成可传输声明并实施权限校验，不能把内置 TS 函数对象直接当作公开协议。
 
-RFC-2 需要独立解决、本 RFC 刻意不碰的问题：沙箱容器选型（WKWebView 下 iframe 隔离）、**Snapshot 截图与隔离的矛盾**（宿主无法截取 cross-origin iframe，需原生截图桥接或扩展自报位图协议）、权限确认 UX、签名与分发。详见 `third-party-extension-platform.md`。
+RFC-2 需要独立解决、本 RFC 刻意不碰的问题：沙箱容器选型（WKWebView 下 iframe 隔离）、**Snapshot 截图与隔离的矛盾**（宿主无法截取 cross-origin iframe，需原生截图桥接或扩展自报位图协议）、权限确认 UX、签名与分发。详见 [公开插件系统整改方案](./public-plugin-platform-redesign.md)；旧 RFC-2 仅保留历史背景。

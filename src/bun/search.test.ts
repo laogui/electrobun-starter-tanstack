@@ -1,9 +1,23 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  REACHABILITY_CASES,
+  REACHABILITY_EXTENSION_ID,
+  REACHABILITY_EXTENSION_MARKER,
+  REACHABILITY_FOLDER_ID,
+  REACHABILITY_GROUP_ID,
+  REACHABILITY_VIEW_ID,
+  REACHABILITY_VIEW_NAME,
+  REACHABILITY_WIDGET_ID,
+  REACHABILITY_WIDGET_MARKER,
+  targetForReachabilityCase,
+  UNLINKED_REACHABILITY_CASES,
+} from '../test/reachabilityMatrix';
 
 vi.mock('electrobun/bun', () => ({
   Utils: { paths: { userData: '/mock-user-data' } },
@@ -36,6 +50,7 @@ const setBunFile = () => {
 interface ManifestNodeFixture {
   data: Record<string, unknown>;
   id: string;
+  parentId?: string;
   position: { x: number; y: number };
   type: string;
 }
@@ -114,6 +129,169 @@ function writeWorkspace(
   }
 }
 
+function writeReachabilityWorkspace(ws: string): void {
+  const folderChildren = REACHABILITY_CASES.filter(
+    (entry) => entry.location === 'folder'
+  ).map((entry) => ({
+    data: entry.data,
+    id: entry.nodeId,
+    type: entry.nodeType,
+  }));
+  const nodes = REACHABILITY_CASES.filter(
+    (entry) => entry.location !== 'folder'
+  ).map((entry, index) => ({
+    data:
+      entry.nodeId === REACHABILITY_FOLDER_ID
+        ? { ...entry.data, children: folderChildren }
+        : entry.data,
+    id: entry.nodeId,
+    ...(entry.parentId ? { parentId: entry.parentId } : {}),
+    position: { x: index * 10, y: index * 10 },
+    type: entry.nodeType,
+  }));
+  const notes: Record<string, { body: string; id: string; title: string }> = {};
+  for (const entry of REACHABILITY_CASES) {
+    if (entry.content?.kind !== 'note') {
+      continue;
+    }
+    const file = entry.data.file;
+    if (typeof file !== 'string' || !file.startsWith('content/')) {
+      continue;
+    }
+    notes[file.slice('content/'.length)] = {
+      body: `Backing body for ${entry.id}.`,
+      id: entry.content.id,
+      title: `Backing ${entry.id}`,
+    };
+  }
+  writeWorkspace(ws, {
+    activeViewId: REACHABILITY_VIEW_ID,
+    manifests: { [REACHABILITY_VIEW_ID]: { nodes } },
+    notes,
+    views: [
+      {
+        file: 'views/reachability.canvas.json',
+        id: REACHABILITY_VIEW_ID,
+        name: REACHABILITY_VIEW_NAME,
+      },
+    ],
+  });
+
+  mkdirSync(join(ws, '.ghostboard', 'widgets'), { recursive: true });
+  writeFileSync(
+    join(ws, '.ghostboard', 'widgets', `${REACHABILITY_WIDGET_ID}.json`),
+    JSON.stringify({
+      schema: 'ghostboard-widget/v1',
+      id: REACHABILITY_WIDGET_ID,
+      kind: 'checklist',
+      title: REACHABILITY_WIDGET_MARKER,
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+      data: {
+        items: [
+          {
+            checked: false,
+            id: 'reachability-item',
+            text: REACHABILITY_WIDGET_MARKER,
+          },
+        ],
+      },
+    })
+  );
+
+  mkdirSync(join(ws, '.ghostboard', 'extension-instances'), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(
+      ws,
+      '.ghostboard',
+      'extension-instances',
+      `${REACHABILITY_EXTENSION_ID}.json`
+    ),
+    JSON.stringify({
+      schema: 'ghostboard-extension-instance/v1',
+      id: REACHABILITY_EXTENSION_ID,
+      canvasTypeId: 'ghostboard.web/link',
+      appVersion: '1.0.0',
+      dataVersion: 1,
+      revision: 1,
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+      state: { url: 'https://example.com/reachability' },
+      presentation: {
+        title: REACHABILITY_EXTENSION_MARKER,
+        subtitle: 'Reachability extension',
+        plainText: REACHABILITY_EXTENSION_MARKER,
+      },
+    })
+  );
+}
+
+function writeUnlinkedReachabilityFiles(ws: string): void {
+  for (const entry of UNLINKED_REACHABILITY_CASES) {
+    const filePath = join(ws, entry.file);
+    mkdirSync(dirname(filePath), { recursive: true });
+
+    if (entry.type === 'markdown') {
+      const frontmatter = entry.noteId
+        ? `---\nid: ${entry.noteId}\ntitle: ${entry.title}\n---\n`
+        : '';
+      writeFileSync(filePath, `${frontmatter}Unlinked body ${entry.query}`);
+      continue;
+    }
+
+    if (entry.type === 'sidecar') {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          id: entry.noteId,
+          schema: 'ghostboard-blocknote/v1',
+          title: entry.title,
+          text: entry.query,
+        })
+      );
+      continue;
+    }
+
+    if (entry.type === 'widget') {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          schema: 'ghostboard-widget/v1',
+          id: entry.noteId,
+          kind: 'checklist',
+          title: entry.title,
+          createdAt: '2026-07-08T00:00:00.000Z',
+          updatedAt: '2026-07-08T00:00:00.000Z',
+          data: { items: [{ id: 'orphan-item', text: entry.query }] },
+        })
+      );
+      continue;
+    }
+
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        schema: 'ghostboard-extension-instance/v1',
+        id: entry.noteId,
+        canvasTypeId: 'ghostboard.web/link',
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-07-08T00:00:00.000Z',
+        updatedAt: '2026-07-08T00:00:00.000Z',
+        state: { url: `https://example.com/${entry.query}` },
+        presentation: {
+          title: entry.title,
+          subtitle: entry.query,
+          plainText: entry.query,
+        },
+      })
+    );
+  }
+}
+
 describe('search', () => {
   let workspaceRoot: string;
 
@@ -155,6 +333,7 @@ describe('search', () => {
       kind: 'view',
       viewId: 'v1',
       matchField: 'viewName',
+      target: { type: 'view', viewId: 'v1' },
     });
   });
 
@@ -414,6 +593,85 @@ describe('search', () => {
     const titleResult = results.find((r) => r.matchField === 'title');
     const subtitleResult = results.find((r) => r.matchField === 'subtitle');
     expect(titleResult!.score).toBeGreaterThan(subtitleResult!.score);
+    const edgeResult = results.find((r) => r.kind === 'edge');
+    expect(edgeResult?.target).toEqual({
+      type: 'edge',
+      viewId: 'v1',
+      edgeId: expect.any(String),
+    });
+  });
+
+  it('returns explicit target placement for top-level, grouped, and detached nodes', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'top-note',
+              type: 'card',
+              position: { x: 0, y: 0 },
+              data: { noteId: 'note-top', title: 'Target top' },
+            },
+            {
+              id: 'group-note',
+              type: 'card',
+              parentId: 'group-1',
+              position: { x: 20, y: 20 },
+              data: { noteId: 'note-group', title: 'Target group' },
+            },
+            {
+              id: 'detached-note',
+              type: 'card',
+              position: { x: 40, y: 40 },
+              data: {
+                detached: true,
+                noteId: 'note-detached',
+                title: 'Target detached',
+              },
+            },
+          ],
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+    const results = await searchWorkspace(workspaceRoot, { query: 'target' });
+
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'top-note',
+          target: {
+            type: 'node',
+            viewId: 'v1',
+            nodeId: 'top-note',
+            placement: 'top-level',
+            content: { kind: 'note', id: 'note-top' },
+          },
+        }),
+        expect.objectContaining({
+          nodeId: 'group-note',
+          target: {
+            type: 'node',
+            viewId: 'v1',
+            nodeId: 'group-note',
+            placement: 'group',
+            content: { kind: 'note', id: 'note-group' },
+          },
+        }),
+        expect.objectContaining({
+          nodeId: 'detached-note',
+          target: {
+            type: 'node',
+            viewId: 'v1',
+            nodeId: 'detached-note',
+            placement: 'detached',
+            content: { kind: 'note', id: 'note-detached' },
+          },
+        }),
+      ])
+    );
   });
 
   it('matches markdown body, joins to all nodes referencing the same noteId', async () => {
@@ -459,6 +717,90 @@ describe('search', () => {
     expect(bodyHits).toHaveLength(2);
     expect(bodyHits.map((r) => r.viewId).sort()).toEqual(['v1', 'v2']);
     expect(bodyHits[0]?.excerpt).toContain('ramen');
+    expect(bodyHits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: {
+            type: 'node',
+            viewId: 'v1',
+            nodeId: 'n1',
+            placement: 'top-level',
+            content: { kind: 'note', id: 'note-1' },
+          },
+        }),
+        expect.objectContaining({
+          target: {
+            type: 'node',
+            viewId: 'v2',
+            nodeId: 'n2',
+            placement: 'top-level',
+            content: { kind: 'note', id: 'note-1' },
+          },
+        }),
+      ])
+    );
+  });
+
+  it('matches Folder card children and keeps the owner container in the target', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'folder-1',
+              type: 'folder',
+              position: { x: 0, y: 0 },
+              data: {
+                title: 'Reading list',
+                children: [
+                  {
+                    id: 'folder-note-1',
+                    type: 'card',
+                    data: {
+                      noteId: 'note-folder-1',
+                      file: 'content/folder-note.md',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      notes: {
+        'folder-note.md': {
+          id: 'note-folder-1',
+          title: 'Folder research',
+          body: 'folder-only-search-marker',
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+
+    const results = await searchWorkspace(workspaceRoot, {
+      query: 'folder-only-search-marker',
+    });
+
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'note',
+          nodeId: 'folder-note-1',
+          noteId: 'note-folder-1',
+          matchField: 'body',
+          target: {
+            type: 'folder-child',
+            viewId: 'v1',
+            folderId: 'folder-1',
+            childId: 'folder-note-1',
+            placement: 'folder',
+            content: { kind: 'note', id: 'note-folder-1' },
+          },
+        }),
+      ])
+    );
   });
 
   it('matches BlockNote sidecar notes by title and flattened block text', async () => {
@@ -808,6 +1150,14 @@ describe('search', () => {
       widgetId: 'widget_reminder',
       widgetKind: 'reminder',
       nodeId: 'widget-reminder-child',
+      target: {
+        type: 'folder-child',
+        viewId: 'v1',
+        folderId: 'folder-1',
+        childId: 'widget-reminder-child',
+        placement: 'folder',
+        content: { kind: 'widget', id: 'widget_reminder' },
+      },
     });
 
     const dueHits = await searchWorkspace(workspaceRoot, {
@@ -827,6 +1177,43 @@ describe('search', () => {
       widgetId: 'widget_pomodoro',
       widgetKind: 'pomodoro',
     });
+  });
+
+  it('covers every backend-searchable position/type in the D1-4 matrix', async () => {
+    writeReachabilityWorkspace(workspaceRoot);
+    writeUnlinkedReachabilityFiles(workspaceRoot);
+    const { searchWorkspace } = await import('./search');
+
+    for (const entry of REACHABILITY_CASES) {
+      const results = await searchWorkspace(workspaceRoot, {
+        query: entry.query,
+      });
+      const match = results.find((result) => result.nodeId === entry.nodeId);
+
+      if (!entry.backend) {
+        expect(match, entry.id).toBeUndefined();
+        continue;
+      }
+
+      expect(match, entry.id).toBeDefined();
+      expect(match?.target, entry.id).toEqual(targetForReachabilityCase(entry));
+      if (entry.expectedKind) {
+        expect(match?.kind, entry.id).toBe(entry.expectedKind);
+      }
+    }
+
+    expect(
+      REACHABILITY_CASES.filter(
+        (entry) => entry.parentId === REACHABILITY_GROUP_ID
+      )
+    ).not.toHaveLength(0);
+
+    for (const entry of UNLINKED_REACHABILITY_CASES) {
+      const results = await searchWorkspace(workspaceRoot, {
+        query: entry.query,
+      });
+      expect(results, entry.id).toHaveLength(0);
+    }
   });
 
   it('cleanMarkdown strips fences, links, headings, bold/italic, lists', async () => {

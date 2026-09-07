@@ -49,7 +49,7 @@ export function useCanvasPersistence() {
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAvailable = useRef<boolean | null>(null);
   const dirty = useRef(false);
-  const skipHydrate = useRef(true);
+  const skipHydrate = useRef(!useCanvasStore.getState()._hydrated);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const viewIdRef = useRef(activeViewId);
 

@@ -51,7 +51,7 @@ function ExtensionNodeComponent({
 
   return (
     <ExtensionHostShell
-      availability={corrupted ? 'unknown' : availability}
+      availability={corrupted ? 'corrupted' : availability}
       canvasTypeId={canvasTypeId}
       instanceId={instanceId}
       maxHeight={canvasType?.surface.maxSize?.height}

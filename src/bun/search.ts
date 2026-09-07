@@ -1,15 +1,16 @@
 import {
-  CHECKLIST_CANVAS_TYPE_ID,
-  FILE_CANVAS_TYPE_ID,
-  IMAGE_CANVAS_TYPE_ID,
-  LINK_CANVAS_TYPE_ID,
-  POMODORO_CANVAS_TYPE_ID,
-  RECORDING_CANVAS_TYPE_ID,
-  REMINDER_CANVAS_TYPE_ID,
+  searchKindForCanvasType,
+  widgetKindForCanvasType,
 } from '../shared/extensions/builtinIds';
 import { isCanvasTypeEnabled } from '../shared/extensions/enablement';
 import { isExtensionInstanceLoadError } from '../shared/extensions/instance';
-import type { ExtensionSearchMetadata } from '../shared/extensions/protocol';
+import type {
+  SearchContentReference,
+  SearchMatchField,
+  SearchResult,
+  SearchResultKind,
+  SearchResultTarget,
+} from '../shared/searchTypes';
 import { blocksToPlainText } from './blocknotePreview';
 import { loadExtensionEnablement } from './extensions/enablement';
 import { loadExtensionInstances } from './extensions/instanceStore';
@@ -19,61 +20,19 @@ import {
   type ChecklistWidgetData,
   loadWidgets,
   type ReminderWidgetData,
-  type WidgetKind,
   type WidgetRecord,
 } from './widgets';
 import { loadWorkspaceConfig } from './workspace';
 
+export type {
+  SearchMatchField,
+  SearchResult,
+  SearchResultKind,
+} from '../shared/searchTypes';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type SearchResultKind =
-  | 'note'
-  | 'sticky'
-  | 'folder'
-  | 'group'
-  | 'image'
-  | 'card'
-  | 'asset'
-  | 'recording'
-  | 'link'
-  | 'edge'
-  | 'widget'
-  | 'extension'
-  | 'view';
-
-export type SearchMatchField =
-  | 'title'
-  | 'body'
-  | 'tag'
-  | 'content'
-  | 'label'
-  | 'subtitle'
-  | 'viewName'
-  | 'fileName'
-  | 'mimeType'
-  | 'url'
-  | 'description'
-  | 'siteName';
-
-export interface SearchResult {
-  edgeId?: string;
-  excerpt: string;
-  extension?: ExtensionSearchMetadata;
-  id: string;
-  kind: SearchResultKind;
-  matchField: SearchMatchField;
-  nodeId?: string;
-  noteId?: string;
-  position?: { x: number; y: number };
-  score: number;
-  title: string;
-  viewId: string;
-  viewName: string;
-  widgetId?: string;
-  widgetKind?: WidgetKind;
-}
 
 export interface SearchParams {
   limit?: number;
@@ -164,6 +123,8 @@ function scoreFor(field: SearchMatchField, isPrefix: boolean): number {
 // ---------------------------------------------------------------------------
 
 interface NodeRef {
+  containerId?: string;
+  containerType?: 'folder' | 'group';
   node: ManifestNode;
   viewId: string;
   viewName: string;
@@ -188,6 +149,73 @@ function indexOfCi(haystack: string, needle: string): number {
 
 function shortTextExcerpt(value: string): string {
   return value.length > 120 ? `${value.slice(0, 120)}…` : value;
+}
+
+function nodeRefContainer(
+  node: ManifestNode
+): Pick<NodeRef, 'containerId' | 'containerType'> {
+  return node.parentId
+    ? { containerId: node.parentId, containerType: 'group' }
+    : {};
+}
+
+function contentReferenceForNode(
+  nodeType: string,
+  data: Record<string, unknown>
+): SearchContentReference | undefined {
+  if (nodeType === 'card') {
+    const noteId = asString(data.noteId);
+    return noteId ? { kind: 'note', id: noteId } : undefined;
+  }
+  if (nodeType === 'widget') {
+    const widgetId = asString(data.widgetId);
+    return widgetId ? { kind: 'widget', id: widgetId } : undefined;
+  }
+  if (nodeType === 'extension') {
+    const instanceId = asString(data.instanceId);
+    return instanceId ? { kind: 'extension', id: instanceId } : undefined;
+  }
+  if (
+    nodeType === 'image' ||
+    nodeType === 'asset' ||
+    nodeType === 'recording'
+  ) {
+    const attachmentId =
+      asString(data.attachmentFile) ||
+      asString(data.imageFile) ||
+      asString(data.file);
+    return attachmentId ? { kind: 'attachment', id: attachmentId } : undefined;
+  }
+  return;
+}
+
+function targetForNodeRef(
+  ref: NodeRef,
+  content?: SearchContentReference
+): SearchResultTarget {
+  if (ref.containerType === 'folder' && ref.containerId) {
+    return {
+      type: 'folder-child',
+      viewId: ref.viewId,
+      folderId: ref.containerId,
+      childId: ref.node.id,
+      placement: 'folder',
+      ...(content ? { content } : {}),
+    };
+  }
+  const placement =
+    ref.node.data.detached === true
+      ? 'detached'
+      : ref.containerType === 'group'
+        ? 'group'
+        : 'top-level';
+  return {
+    type: 'node',
+    viewId: ref.viewId,
+    nodeId: ref.node.id,
+    placement,
+    ...(content ? { content } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +268,7 @@ export async function searchWorkspace(
       results.push({
         id: `view:${view.id}`,
         kind: 'view',
+        target: { type: 'view', viewId: view.id },
         viewId: view.id,
         viewName: view.name,
         title: view.name,
@@ -251,6 +280,7 @@ export async function searchWorkspace(
 
     for (const node of manifest.nodes) {
       const ref: NodeRef = {
+        ...nodeRefContainer(node),
         viewId: view.id,
         viewName: view.name,
         node,
@@ -265,6 +295,14 @@ export async function searchWorkspace(
       }
       collectWidgetRefs(node, view.id, view.name, widgetIdToNodes);
       collectExtensionRefs(node, view.id, view.name, instanceIdToNodes);
+      collectFolderChildMatches(
+        node,
+        view.id,
+        view.name,
+        queryLower,
+        noteIdToNodes,
+        results
+      );
 
       addManifestNodeMatches(results, ref, queryLower);
     }
@@ -319,7 +357,12 @@ function collectWidgetRefs(
   if (node.type === 'widget') {
     const widgetId = asString(data.widgetId);
     if (widgetId) {
-      addWidgetRef(out, widgetId, { node, viewId, viewName });
+      addWidgetRef(out, widgetId, {
+        ...nodeRefContainer(node),
+        node,
+        viewId,
+        viewName,
+      });
     }
     return;
   }
@@ -351,6 +394,8 @@ function collectWidgetRefs(
       continue;
     }
     addWidgetRef(out, widgetId, {
+      containerId: node.id,
+      containerType: 'folder',
       node: {
         ...node,
         id: childId,
@@ -360,6 +405,60 @@ function collectWidgetRefs(
       viewId,
       viewName,
     });
+  }
+}
+
+function collectFolderChildMatches(
+  node: ManifestNode,
+  viewId: string,
+  viewName: string,
+  queryLower: string,
+  noteIdToNodes: Map<string, NodeRef[]>,
+  results: SearchResult[]
+): void {
+  if (node.type !== 'folder') {
+    return;
+  }
+  const children = (node.data as Record<string, unknown>).children;
+  if (!Array.isArray(children)) {
+    return;
+  }
+  for (const rawChild of children) {
+    if (!rawChild || typeof rawChild !== 'object') {
+      continue;
+    }
+    const child = rawChild as {
+      data?: Record<string, unknown>;
+      id?: unknown;
+      type?: unknown;
+    };
+    const childId = asString(child.id);
+    const childType = asString(child.type);
+    if (!(childId && childType)) {
+      continue;
+    }
+    const childData = (child.data ?? {}) as Record<string, unknown>;
+    const childRef: NodeRef = {
+      containerId: node.id,
+      containerType: 'folder',
+      node: {
+        ...node,
+        id: childId,
+        type: childType,
+        data: childData,
+      },
+      viewId,
+      viewName,
+    };
+    const noteId = asString(childData.noteId);
+    if (noteId) {
+      const refs = noteIdToNodes.get(noteId) ?? [];
+      refs.push(childRef);
+      noteIdToNodes.set(noteId, refs);
+    }
+    // Widget/Extension bodies are joined by their dedicated sidecar scans;
+    // this call fills the manifest metadata gap for Card/media/link children.
+    addManifestNodeMatches(results, childRef, queryLower);
   }
 }
 
@@ -383,7 +482,12 @@ function collectExtensionRefs(
   if (node.type === 'extension') {
     const instanceId = asString(data.instanceId);
     if (instanceId) {
-      addInstanceRef(out, instanceId, { node, viewId, viewName });
+      addInstanceRef(out, instanceId, {
+        ...nodeRefContainer(node),
+        node,
+        viewId,
+        viewName,
+      });
     }
     return;
   }
@@ -413,6 +517,8 @@ function collectExtensionRefs(
       continue;
     }
     addInstanceRef(out, instanceId, {
+      containerId: node.id,
+      containerType: 'folder',
       node: {
         ...node,
         id: childId,
@@ -422,38 +528,6 @@ function collectExtensionRefs(
       viewId,
       viewName,
     });
-  }
-}
-
-function searchKindForCanvasType(canvasTypeId: string): SearchResultKind {
-  switch (canvasTypeId) {
-    case IMAGE_CANVAS_TYPE_ID:
-      return 'image';
-    case FILE_CANVAS_TYPE_ID:
-      return 'asset';
-    case RECORDING_CANVAS_TYPE_ID:
-      return 'recording';
-    case LINK_CANVAS_TYPE_ID:
-      return 'link';
-    case CHECKLIST_CANVAS_TYPE_ID:
-    case POMODORO_CANVAS_TYPE_ID:
-    case REMINDER_CANVAS_TYPE_ID:
-      return 'widget';
-    default:
-      return 'extension';
-  }
-}
-
-function widgetKindForCanvasType(canvasTypeId: string): WidgetKind | undefined {
-  switch (canvasTypeId) {
-    case CHECKLIST_CANVAS_TYPE_ID:
-      return 'checklist';
-    case POMODORO_CANVAS_TYPE_ID:
-      return 'pomodoro';
-    case REMINDER_CANVAS_TYPE_ID:
-      return 'reminder';
-    default:
-      return;
   }
 }
 
@@ -535,6 +609,7 @@ function addManifestNodeMatches(
       viewName,
       nodeId: node.id,
       noteId: asString(data.noteId) || undefined,
+      target: targetForNodeRef(ref, contentReferenceForNode(node.type, data)),
       title: shortTextExcerpt(asString(data.title) || value),
       excerpt: shortTextExcerpt(value),
       matchField: field,
@@ -568,6 +643,7 @@ function addEdgeMatches(
     results.push({
       id: `edge:${viewId}:${edge.id}:label`,
       kind: 'edge',
+      target: { type: 'edge', viewId, edgeId: edge.id },
       viewId,
       viewName,
       edgeId: edge.id,
@@ -680,6 +756,10 @@ async function scanWidgets(
           nodeId: ref.node.id,
           widgetId,
           widgetKind: record.kind,
+          target: targetForNodeRef(ref, {
+            kind: 'widget',
+            id: widgetId,
+          }),
           title: shortTextExcerpt(record.title || value),
           excerpt: shortTextExcerpt(value),
           matchField: field,
@@ -738,6 +818,10 @@ async function scanExtensionInstances(
           viewName: ref.viewName,
           nodeId: ref.node.id,
           widgetKind,
+          target: targetForNodeRef(ref, {
+            kind: 'extension',
+            id: instanceId,
+          }),
           title: shortTextExcerpt(presentation.title || value),
           excerpt: shortTextExcerpt(value),
           matchField: field,
@@ -907,6 +991,7 @@ function pushNoteResult(
     viewName,
     nodeId: node.id,
     noteId,
+    target: targetForNodeRef(ref, { kind: 'note', id: noteId }),
     title: shortTextExcerpt(title || excerpt),
     excerpt: shortTextExcerpt(excerpt),
     matchField: field,

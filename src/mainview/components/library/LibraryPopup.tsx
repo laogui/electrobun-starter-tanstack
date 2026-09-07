@@ -1,5 +1,5 @@
 import type { ReactFlowInstance } from '@xyflow/react';
-import { Folder, Library, Search, X } from 'lucide-react';
+import { FileWarning, Folder, Library, Search, X } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import type React from 'react';
@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { openFocusedById } from '@/lib/canvasFocus';
+import { rpcScanUnlinkedNotes } from '@/lib/rpc';
+import type { UnlinkedFileEntry } from '@/settingsClient';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -44,6 +46,29 @@ const SORT_OPTIONS: Array<{ value: LibrarySortKey; label: () => string }> = [
 
 const RECENT_RECOMMENDATION_LIMIT = 6;
 
+function isRecoverableUnlinkedNote(entry: UnlinkedFileEntry): boolean {
+  if (!entry.noteId) {
+    return false;
+  }
+  return (
+    (entry.file.startsWith('content/') && entry.file.endsWith('.md')) ||
+    entry.file.startsWith('content/.ghostboard/blocknote/')
+  );
+}
+
+function unlinkedTypeLabel(entry: UnlinkedFileEntry): string {
+  if (entry.file.startsWith('content/.ghostboard/blocknote/')) {
+    return 'Note sidecar';
+  }
+  if (entry.file.startsWith('.ghostboard/widgets/')) {
+    return 'Legacy widget';
+  }
+  if (entry.file.startsWith('.ghostboard/extension-instances/')) {
+    return 'Extension instance';
+  }
+  return 'Markdown note';
+}
+
 function flattenItems(groups: LibraryGroup[]): LibraryItem[] {
   return groups.flatMap((group) => group.items);
 }
@@ -52,10 +77,16 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
   const open = useCanvasStore((s) => s.libraryOpen);
   const setLibraryOpen = useCanvasStore((s) => s.setLibraryOpen);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
+  const createNode = useCanvasStore((s) => s.createNode);
 
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<LibrarySortKey>('recent');
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [unlinkedEntries, setUnlinkedEntries] = useState<
+    UnlinkedFileEntry[] | null
+  >(null);
+  const [unlinkedScanFailed, setUnlinkedScanFailed] = useState(false);
+  const [recoveringFile, setRecoveringFile] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { groups, totalItems } = useLibraryData({ query, sort });
@@ -94,6 +125,30 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
       setQuery('');
       setFocusedIndex(-1);
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let cancelled = false;
+    setUnlinkedScanFailed(false);
+    setUnlinkedEntries(null);
+    rpcScanUnlinkedNotes()
+      .then((entries) => {
+        if (!cancelled) {
+          setUnlinkedEntries(entries);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUnlinkedEntries([]);
+          setUnlinkedScanFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   // Changing the query invalidates the previous keyboard selection.
@@ -163,6 +218,36 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
       });
     },
     [close, pinNoteToCanvas, rfInstance]
+  );
+
+  const handleRecoverUnlinked = useCallback(
+    async (entry: UnlinkedFileEntry) => {
+      if (!isRecoverableUnlinkedNote(entry) || recoveringFile) {
+        return;
+      }
+      setRecoveringFile(entry.file);
+      try {
+        const nodeId = await createNode('card', rfInstance.current, {
+          canEnterGroup: false,
+          data: {
+            ...(entry.file.endsWith('.md') ? { file: entry.file } : {}),
+            noteId: entry.noteId,
+            title: entry.title,
+            type: 'text',
+          },
+        });
+        if (nodeId) {
+          setUnlinkedEntries(
+            (current) =>
+              current?.filter((candidate) => candidate.file !== entry.file) ??
+              current
+          );
+        }
+      } finally {
+        setRecoveringFile(null);
+      }
+    },
+    [createNode, recoveringFile, rfInstance]
   );
 
   const handleCardFocus = useCallback(
@@ -253,9 +338,13 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
               }}
               onItemClick={handleItemClick}
               onItemFocus={handleCardFocus}
+              onRecoverUnlinked={handleRecoverUnlinked}
               query={query}
               recentItems={recentItems}
+              recoveringFile={recoveringFile}
               totalItems={totalItems}
+              unlinkedEntries={unlinkedEntries}
+              unlinkedScanFailed={unlinkedScanFailed}
             />
           </motion.div>
         </motion.div>
@@ -372,9 +461,13 @@ interface LibraryBodyProps {
   onClearSearch: () => void;
   onItemClick: (item: LibraryItem) => void;
   onItemFocus: (item: LibraryItem) => void;
+  onRecoverUnlinked: (entry: UnlinkedFileEntry) => void;
   query: string;
   recentItems: LibraryItem[];
+  recoveringFile: string | null;
   totalItems: number;
+  unlinkedEntries: UnlinkedFileEntry[] | null;
+  unlinkedScanFailed: boolean;
 }
 
 function LibraryBody({
@@ -383,16 +476,31 @@ function LibraryBody({
   onClearSearch,
   onItemClick,
   onItemFocus,
+  onRecoverUnlinked,
   query,
   recentItems,
+  recoveringFile,
   totalItems,
+  unlinkedEntries,
+  unlinkedScanFailed,
 }: LibraryBodyProps) {
+  const unlinkedSection = (
+    <UnlinkedFilesSection
+      entries={unlinkedEntries}
+      onRecover={onRecoverUnlinked}
+      recoveringFile={recoveringFile}
+      scanFailed={unlinkedScanFailed}
+    />
+  );
   if (totalItems === 0) {
     const hasQuery = query.trim().length > 0;
     if (!hasQuery) {
       return (
-        <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-gray-400 text-sm dark:text-neutral-500">
-          {m.library_empty()}
+        <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-5">
+          <div className="flex items-center justify-center px-1 py-10 text-center text-gray-400 text-sm dark:text-neutral-500">
+            {m.library_empty()}
+          </div>
+          {unlinkedSection}
         </div>
       );
     }
@@ -422,6 +530,7 @@ function LibraryBody({
             </div>
           </section>
         ) : null}
+        {unlinkedSection}
       </div>
     );
   }
@@ -436,7 +545,110 @@ function LibraryBody({
           onItemFocus={onItemFocus}
         />
       ))}
+      {unlinkedSection}
     </div>
+  );
+}
+
+interface UnlinkedFilesSectionProps {
+  entries: UnlinkedFileEntry[] | null;
+  onRecover: (entry: UnlinkedFileEntry) => void;
+  recoveringFile: string | null;
+  scanFailed: boolean;
+}
+
+function UnlinkedFilesSection({
+  entries,
+  onRecover,
+  recoveringFile,
+  scanFailed,
+}: UnlinkedFilesSectionProps) {
+  if (entries === null) {
+    return (
+      <section className="mt-2 rounded-xl border border-gray-200 border-dashed px-4 py-3 dark:border-neutral-700">
+        <div className="flex items-center gap-2 text-gray-500 text-xs dark:text-neutral-400">
+          <FileWarning aria-hidden size={14} />
+          {m.settings_cleanup_scanning()}
+        </div>
+      </section>
+    );
+  }
+  if (scanFailed) {
+    return (
+      <section className="mt-2 rounded-xl border border-amber-200 border-dashed px-4 py-3 dark:border-amber-500/30">
+        <div className="flex items-center gap-2 text-amber-700 text-xs dark:text-amber-300">
+          <FileWarning aria-hidden size={14} />
+          {m.settings_cleanup_scan_failed()}
+        </div>
+      </section>
+    );
+  }
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center gap-2 px-0.5">
+        <FileWarning
+          aria-hidden
+          className="text-gray-400 dark:text-neutral-500"
+          size={13}
+          strokeWidth={1.75}
+        />
+        <h3 className="font-semibold text-[12px] text-gray-700 uppercase tracking-wide dark:text-neutral-300">
+          {m.settings_cleanup_title()}
+        </h3>
+        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-3xs text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+          {entries.length}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {entries.map((entry) => {
+          const recoverable = isRecoverableUnlinkedNote(entry);
+          const recovering = recoveringFile === entry.file;
+          return (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-900"
+              key={entry.file}
+            >
+              <FileWarning
+                aria-hidden
+                className="shrink-0 text-gray-400 dark:text-neutral-500"
+                size={16}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium text-[13px] text-gray-800 dark:text-gray-100">
+                  {entry.title.trim() || entry.file}
+                </p>
+                <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                  {unlinkedTypeLabel(entry)} · {entry.file}
+                </p>
+              </div>
+              {entry.noteId ? null : (
+                <span
+                  className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 font-medium text-3xs text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+                  title={m.settings_cleanup_no_id()}
+                >
+                  {m.settings_cleanup_no_id()}
+                </span>
+              )}
+              {recoverable ? (
+                <button
+                  className="shrink-0 rounded-lg px-2 py-1 font-medium text-[11px] text-accent-strong transition-colors hover:bg-accent-softer disabled:cursor-wait disabled:opacity-60"
+                  disabled={recoveringFile !== null}
+                  onClick={() => onRecover(entry)}
+                  type="button"
+                >
+                  {recovering
+                    ? m.settings_cleanup_scanning()
+                    : m.library_detached_pin_action()}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

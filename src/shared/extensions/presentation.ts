@@ -4,6 +4,7 @@ export const PRESENTATION_PLAIN_TEXT_MAX = 32 * 1024;
 const TITLE_MAX = 256;
 const SUBTITLE_MAX = 256;
 const ACCENT_COLOR_RE = /^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const DANGEROUS_BLOCK_RE = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 const TAG_RE = /<[^>]*>/g;
 
 export interface ExtensionPresentation {
@@ -15,7 +16,11 @@ export interface ExtensionPresentation {
 }
 
 export function stripMarkup(value: string): string {
-  return value.replace(TAG_RE, '').replaceAll('&nbsp;', ' ').trim();
+  return value
+    .replace(DANGEROUS_BLOCK_RE, '')
+    .replace(TAG_RE, '')
+    .replaceAll('&nbsp;', ' ')
+    .trim();
 }
 
 function clip(value: string, max: number): string {

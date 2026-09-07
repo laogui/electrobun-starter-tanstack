@@ -469,6 +469,18 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
 
   const locateInCurrentView = useCallback(
     (result: SearchResult) => {
+      if (result.target?.type === 'folder-child') {
+        // Folder children are render-only nodes. Route their target through
+        // the canvas navigation effect so it can open the owner Folder before
+        // resolving the child DOM element.
+        setPendingSearchTarget({
+          viewId: result.viewId,
+          nodeId: result.nodeId,
+          edgeId: result.edgeId,
+          target: result.target,
+        });
+        return;
+      }
       const inst = rfInstance?.current;
       if (result.nodeId) {
         const nodeId = result.nodeId;
@@ -504,7 +516,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
         }
       }
     },
-    [setNodes, setEdges, rfInstance]
+    [setEdges, setNodes, setPendingSearchTarget, rfInstance]
   );
 
   const closeSearch = useCallback(() => {
@@ -534,6 +546,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
             viewId: result.viewId,
             nodeId: result.nodeId,
             edgeId: result.edgeId,
+            ...(result.target ? { target: result.target } : {}),
           });
         }
         return;

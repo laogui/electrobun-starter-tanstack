@@ -1,6 +1,6 @@
 # 画布扩展化收尾开发计划(RFC-1 Gap Closure)
 
-> 状态:实施中（T0–T5 完成，下一步 T6）
+> 状态:已完成（T0–T6 代码、文档与回归已验收；本文已移出 In Progress）
 > 前置:`canvas-extension-platform-refactor.md`(RFC-1,Phase 0–6 已落地)
 > 背景:验收走查发现 RFC-1 有四处缺口——三处用户可感知的功能回归、一处架构债。本计划将其拆为可独立交付的任务,按优先级排序。
 
@@ -169,10 +169,12 @@
 
 ### T6 — 收尾与文档(1–2 天,P2)
 
-1. `bun/search.ts` 的 `searchKindForCanvasType`/`widgetKindForCanvasType` 内置映射表:迁到 `shared/extensions/builtinIds.ts` 旁集中维护,并在 RFC §14.1 补一句"内置类型的 search kind 映射是宿主侧展示层适配,新增内置类型需同步"。不引入协议字段(展示层适配,不值得进 manifest)。
-2. RFC-1 修订记录补一条:上下文菜单机制(T1/T2)的目标设计与 RFC-2 兼容性说明。
-3. 行为矩阵状态更新;本文档移入 `docs/features/`(完成后)。
-4. 全量回归:`bun run ci` + `bun run test`,人工过一遍矩阵行为。
+1. [x] `bun/search.ts` 的 `searchKindForCanvasType`/`widgetKindForCanvasType` 内置映射表:迁到 `shared/extensions/builtinIds.ts` 旁集中维护,并在 RFC §14.1 补一句"内置类型的 search kind 映射是宿主侧展示层适配,新增内置类型需同步"。不引入协议字段(展示层适配,不值得进 manifest)。
+2. [x] RFC-1 修订记录补一条:上下文菜单机制(T1/T2)的目标设计与 RFC-2 兼容性说明。
+3. [x] 行为矩阵状态更新;本文档在全量回归记录完成后移入 `docs/features/`。
+4. [x] 全量回归：`bun run check`、`bun run test -- --fileParallelism=false --maxWorkers=1`，并人工过一遍矩阵行为；`bun run type-check` 的依赖诊断与既有测试导入错误单独记录，不阻断本阶段源码验证。
+
+当前证据（2026-09-07）：共享 built-in 映射与 Bun 搜索回归 2 files / 19 tests 通过；9 个 shared extension suites / 34 tests 通过；D0-3 生命周期、实例存储、节点回退与附件缺失定向回归通过；完整串行回归 164 files / 1486 tests 通过；`bun run check` 检查 445 files。Productivity 桌面行为矩阵已完成，T0–T6 已关闭。
 
 ## 4. 实施顺序与 PR 切分
 

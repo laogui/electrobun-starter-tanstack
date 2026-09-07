@@ -9,6 +9,11 @@ import type {
   SearchResultKind,
 } from '@/lib/searchTypes';
 import { useCanvasStore } from '@/store/canvasStore';
+import { searchKindForCanvasType } from '../../shared/extensions/builtinIds';
+import type {
+  SearchContentReference,
+  SearchResultTarget,
+} from '../../shared/searchTypes';
 
 const DEFAULT_DEBOUNCE_MS = 200;
 const FALLBACK_LIMIT = 50;
@@ -148,7 +153,15 @@ function indexOfCi(haystack: string, needleLower: string): number {
   return haystack.toLowerCase().indexOf(needleLower);
 }
 
-function nodeKindFor(nodeType: string | undefined): SearchResultKind {
+function nodeKindFor(
+  nodeType: string | undefined,
+  data?: Record<string, unknown>
+): SearchResultKind {
+  if (nodeType === 'extension') {
+    const canvasTypeId =
+      typeof data?.canvasTypeId === 'string' ? data.canvasTypeId : '';
+    return searchKindForCanvasType(canvasTypeId);
+  }
   switch (nodeType) {
     case 'sticky':
       return 'sticky';
@@ -162,11 +175,125 @@ function nodeKindFor(nodeType: string | undefined): SearchResultKind {
       return 'asset';
     case 'link':
       return 'link';
+    case 'recording':
+      return 'recording';
     case 'widget':
       return 'widget';
     default:
       return 'card';
   }
+}
+
+interface SearchNodeRef {
+  containerId?: string;
+  node: Node;
+}
+
+function contentReferenceForNode(
+  nodeType: string | undefined,
+  data: Record<string, unknown>
+): SearchContentReference | undefined {
+  if (nodeType === 'card' || nodeType === 'note') {
+    const noteId = typeof data.noteId === 'string' ? data.noteId : '';
+    return noteId ? { kind: 'note', id: noteId } : undefined;
+  }
+  if (nodeType === 'widget') {
+    const widgetId = typeof data.widgetId === 'string' ? data.widgetId : '';
+    return widgetId ? { kind: 'widget', id: widgetId } : undefined;
+  }
+  if (nodeType === 'extension') {
+    const instanceId =
+      typeof data.instanceId === 'string' ? data.instanceId : '';
+    return instanceId ? { kind: 'extension', id: instanceId } : undefined;
+  }
+  if (
+    nodeType === 'image' ||
+    nodeType === 'asset' ||
+    nodeType === 'recording'
+  ) {
+    const attachmentId =
+      (typeof data.attachmentFile === 'string' && data.attachmentFile) ||
+      (typeof data.imageFile === 'string' && data.imageFile) ||
+      (typeof data.file === 'string' && data.file) ||
+      '';
+    return attachmentId ? { kind: 'attachment', id: attachmentId } : undefined;
+  }
+  return;
+}
+
+function targetForSearchNode(
+  ref: SearchNodeRef,
+  viewId: string,
+  content?: SearchContentReference
+): SearchResultTarget {
+  if (ref.containerId) {
+    return {
+      type: 'folder-child',
+      viewId,
+      folderId: ref.containerId,
+      childId: ref.node.id,
+      placement: 'folder',
+      ...(content ? { content } : {}),
+    };
+  }
+  const data = (ref.node.data ?? {}) as Record<string, unknown>;
+  const placement =
+    data.detached === true
+      ? 'detached'
+      : ref.node.parentId
+        ? 'group'
+        : 'top-level';
+  return {
+    type: 'node',
+    viewId,
+    nodeId: ref.node.id,
+    placement,
+    ...(content ? { content } : {}),
+  };
+}
+
+function searchNodeRefs(nodes: Node[]): SearchNodeRef[] {
+  const refs: SearchNodeRef[] = [];
+  for (const node of nodes) {
+    refs.push({ node });
+    if (node.type !== 'folder') {
+      continue;
+    }
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(data.children)) {
+      continue;
+    }
+    for (const rawChild of data.children) {
+      if (!rawChild || typeof rawChild !== 'object') {
+        continue;
+      }
+      const child = rawChild as {
+        data?: unknown;
+        id?: unknown;
+        type?: unknown;
+      };
+      if (typeof child.id !== 'string' || typeof child.type !== 'string') {
+        continue;
+      }
+      const childData =
+        child.data &&
+        typeof child.data === 'object' &&
+        !Array.isArray(child.data)
+          ? (child.data as Record<string, unknown>)
+          : {};
+      refs.push({
+        containerId: node.id,
+        node: {
+          ...node,
+          data: childData,
+          id: child.id,
+          parentId: undefined,
+          type: child.type,
+        } as Node,
+      });
+    }
+  }
+  return refs;
 }
 
 function shorten(value: string): string {
@@ -185,7 +312,8 @@ export function searchCurrentView(
     return [];
   }
   const out: SearchResult[] = [];
-  for (const node of nodes) {
+  for (const ref of searchNodeRefs(nodes)) {
+    const node = ref.node;
     const data = (node.data ?? {}) as Record<string, unknown>;
     const candidates: Array<{ field: SearchMatchField; value: string }> = [];
 
@@ -264,6 +392,56 @@ export function searchCurrentView(
           value: typeof data.siteName === 'string' ? data.siteName : '',
         });
         break;
+      case 'recording':
+        candidates.push({
+          field: 'title',
+          value: typeof data.title === 'string' ? data.title : '',
+        });
+        candidates.push({
+          field: 'fileName',
+          value: typeof data.fileName === 'string' ? data.fileName : '',
+        });
+        candidates.push({
+          field: 'mimeType',
+          value: typeof data.mimeType === 'string' ? data.mimeType : '',
+        });
+        break;
+      case 'extension': {
+        const presentation =
+          data.presentation &&
+          typeof data.presentation === 'object' &&
+          !Array.isArray(data.presentation)
+            ? (data.presentation as Record<string, unknown>)
+            : undefined;
+        candidates.push({
+          field: 'title',
+          value:
+            typeof data.title === 'string'
+              ? data.title
+              : typeof presentation?.title === 'string'
+                ? presentation.title
+                : '',
+        });
+        candidates.push({
+          field: 'subtitle',
+          value:
+            typeof data.subtitle === 'string'
+              ? data.subtitle
+              : typeof presentation?.subtitle === 'string'
+                ? presentation.subtitle
+                : '',
+        });
+        candidates.push({
+          field: 'content',
+          value:
+            typeof data.plainText === 'string'
+              ? data.plainText
+              : typeof presentation?.plainText === 'string'
+                ? presentation.plainText
+                : '',
+        });
+        break;
+      }
       case 'card':
         candidates.push({
           field: 'title',
@@ -296,12 +474,17 @@ export function searchCurrentView(
       const base = FIELD_BASE_SCORE[field];
       out.push({
         id: `node:${viewId}:${node.id}:${field}`,
-        kind: nodeKindFor(node.type),
+        kind: nodeKindFor(node.type, data),
         viewId,
         viewName,
         nodeId: node.id,
         noteId:
           typeof data.noteId === 'string' ? (data.noteId as string) : undefined,
+        target: targetForSearchNode(
+          ref,
+          viewId,
+          contentReferenceForNode(node.type, data)
+        ),
         title: shorten(
           typeof data.title === 'string' && data.title ? data.title : value
         ),

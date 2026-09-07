@@ -601,25 +601,33 @@ export function CanvasContextMenu({
       )
     );
   });
-  const extensionNodeRef = useCanvasStore((state) => {
+  const extensionCanvasTypeId = useCanvasStore((state) => {
     if (menu?.target !== 'extension' || !menu.nodeId) {
       return;
     }
-    return resolveExtensionNodeRef(state.nodes, menu.nodeId, menu.folderId);
+    return resolveExtensionNodeRef(state.nodes, menu.nodeId, menu.folderId)
+      ?.canvasTypeId;
   });
-  const extensionInstanceState = useExtensionInstanceStore((state) => {
-    if (!extensionNodeRef) {
+  const extensionInstanceId = useCanvasStore((state) => {
+    if (menu?.target !== 'extension' || !menu.nodeId) {
       return;
     }
-    const record = state.records[extensionNodeRef.instanceId];
+    return resolveExtensionNodeRef(state.nodes, menu.nodeId, menu.folderId)
+      ?.instanceId;
+  });
+  const extensionInstanceState = useExtensionInstanceStore((state) => {
+    if (!extensionInstanceId) {
+      return;
+    }
+    const record = state.records[extensionInstanceId];
     if (!record || isExtensionInstanceLoadError(record)) {
       return;
     }
     return record.state;
   });
   const extensionMenuItems = assembleExtensionMenuItems({
-    canvasType: extensionNodeRef
-      ? canvasTypeRegistry.get(extensionNodeRef.canvasTypeId)
+    canvasType: extensionCanvasTypeId
+      ? canvasTypeRegistry.get(extensionCanvasTypeId)
       : undefined,
     state: extensionInstanceState,
   });

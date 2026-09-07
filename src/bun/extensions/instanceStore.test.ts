@@ -153,6 +153,58 @@ describe('extension instance store', () => {
     expect(missing).toEqual({ id: 'extinst_missingxxxx', error: 'missing' });
   });
 
+  it('reports malformed JSON as corrupted without throwing', async () => {
+    const path = join(
+      wsPath,
+      '.ghostboard',
+      'extension-instances',
+      'extinst_bad_json.json'
+    );
+    await writeFile(path, '{"schema":"ghostboard-extension-instance/v1"');
+
+    await expect(
+      loadExtensionInstance(wsPath, 'extinst_bad_json')
+    ).resolves.toEqual({ id: 'extinst_bad_json', error: 'corrupted' });
+  });
+
+  it('keeps unknown canvas types opaque through load and clone', async () => {
+    const created = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'ghostboard.future/new-type',
+      dataVersion: 7,
+      state: { fromNewerApp: { answer: 42 } },
+      presentation: {
+        title: 'Future content',
+        plainText: 'Keep this opaque state',
+      },
+    });
+
+    const loaded = await loadExtensionInstance(wsPath, created.id);
+    expect(loaded).toMatchObject({
+      record: {
+        canvasTypeId: 'ghostboard.future/new-type',
+        dataVersion: 7,
+        state: { fromNewerApp: { answer: 42 } },
+        presentation: {
+          title: 'Future content',
+          plainText: 'Keep this opaque state',
+        },
+      },
+    });
+
+    const cloned = await cloneExtensionInstance(wsPath, created.id);
+    expect(cloned).toMatchObject({
+      canvasTypeId: 'ghostboard.future/new-type',
+      dataVersion: 7,
+      state: { fromNewerApp: { answer: 42 } },
+      presentation: {
+        title: 'Future content',
+        plainText: 'Keep this opaque state',
+      },
+    });
+    expect(cloned?.id).not.toBe(created.id);
+  });
+
   it('deletes only instances of the requested canvas type', async () => {
     const keep = await createExtensionInstance(wsPath, {
       appVersion: '1.0.0',

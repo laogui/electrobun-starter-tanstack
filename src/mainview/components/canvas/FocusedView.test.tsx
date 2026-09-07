@@ -10,6 +10,7 @@ import { FocusedView } from '@/components/canvas/FocusedView';
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import {
+  CHECKLIST_CANVAS_TYPE_ID,
   FILE_CANVAS_TYPE_ID,
   IMAGE_CANVAS_TYPE_ID,
   LINK_CANVAS_TYPE_ID,
@@ -17,6 +18,8 @@ import {
 import { EXTENSION_INSTANCE_SCHEMA } from '../../../shared/extensions/instance';
 
 registerBuiltinCanvasTypes();
+
+const CHECKLIST_ITEM_ID_RE = /^item_/;
 
 vi.mock('@/lib/rpc', () => ({
   rpcCloneExtensionInstance: vi.fn(),
@@ -852,5 +855,93 @@ describe('focusedView', () => {
     expect(
       screen.getByText('link:focused:Example:https://example.com/')
     ).toBeInTheDocument();
+  });
+
+  it('renders a migrated checklist extension through DetailSurface and records edits', () => {
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_checklist1: {
+        schema: EXTENSION_INSTANCE_SCHEMA,
+        id: 'extinst_checklist1',
+        canvasTypeId: CHECKLIST_CANVAS_TYPE_ID,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        updatedAt: '2026-08-19T00:01:00.000Z',
+        state: {
+          title: 'Launch checklist',
+          items: [
+            {
+              id: 'item_1',
+              text: 'Verify detail editing',
+              checked: false,
+              createdAt: '2026-08-19T00:00:00.000Z',
+            },
+          ],
+        },
+        presentation: {
+          title: 'Launch checklist',
+          subtitle: '1 open',
+          plainText: '[ ] Verify detail editing',
+        },
+      },
+    });
+
+    render(
+      <FocusedView
+        node={{
+          id: 'ext-checklist-1',
+          type: 'extension',
+          data: {
+            canvasTypeId: CHECKLIST_CANVAS_TYPE_ID,
+            instanceId: 'extinst_checklist1',
+          },
+          rect,
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByDisplayValue('Launch checklist')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('Verify detail editing')
+    ).toBeInTheDocument();
+
+    const titleInput = screen.getByLabelText('Checklist title');
+    fireEvent.change(titleInput, { target: { value: 'Release checklist' } });
+    fireEvent.blur(titleInput);
+
+    const newItemInput = screen.getByLabelText('New checklist item');
+    fireEvent.change(newItemInput, { target: { value: 'Ship the build' } });
+    fireEvent.keyDown(newItemInput, { key: 'Enter' });
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Mark as done' })[0]!
+    );
+
+    const state = useExtensionInstanceStore.getState();
+    expect(state.records.extinst_checklist1).toMatchObject({
+      state: {
+        title: 'Release checklist',
+        items: [
+          {
+            id: 'item_1',
+            text: 'Verify detail editing',
+            checked: true,
+            createdAt: '2026-08-19T00:00:00.000Z',
+          },
+          {
+            id: expect.stringMatching(CHECKLIST_ITEM_ID_RE),
+            text: 'Ship the build',
+            checked: false,
+          },
+        ],
+      },
+      presentation: {
+        title: 'Release checklist',
+        subtitle: '1 open',
+      },
+    });
+    expect(state.history.extinst_checklist1?.past).toHaveLength(3);
   });
 });

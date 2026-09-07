@@ -32,6 +32,54 @@ export const MEDIA_CANVAS_TYPE_IDS = [
   RECORDING_CANVAS_TYPE_ID,
 ] as const;
 
+export type BuiltinSearchKind =
+  | 'asset'
+  | 'extension'
+  | 'image'
+  | 'link'
+  | 'recording'
+  | 'widget';
+
+export type LegacyProductivityKind = 'checklist' | 'pomodoro' | 'reminder';
+
+const SEARCH_KIND_BY_CANVAS_TYPE_ID: Record<
+  BuiltinCanvasTypeId,
+  Exclude<BuiltinSearchKind, 'extension'>
+> = {
+  [CHECKLIST_CANVAS_TYPE_ID]: 'widget',
+  [POMODORO_CANVAS_TYPE_ID]: 'widget',
+  [REMINDER_CANVAS_TYPE_ID]: 'widget',
+  [LINK_CANVAS_TYPE_ID]: 'link',
+  [IMAGE_CANVAS_TYPE_ID]: 'image',
+  [FILE_CANVAS_TYPE_ID]: 'asset',
+  [RECORDING_CANVAS_TYPE_ID]: 'recording',
+};
+
+const WIDGET_KIND_BY_CANVAS_TYPE_ID: Partial<
+  Record<BuiltinCanvasTypeId, LegacyProductivityKind>
+> = {
+  [CHECKLIST_CANVAS_TYPE_ID]: 'checklist',
+  [POMODORO_CANVAS_TYPE_ID]: 'pomodoro',
+  [REMINDER_CANVAS_TYPE_ID]: 'reminder',
+};
+
+/** Host display adapter for search results; not part of the extension protocol. */
+export function searchKindForCanvasType(
+  canvasTypeId: string
+): BuiltinSearchKind {
+  return (
+    SEARCH_KIND_BY_CANVAS_TYPE_ID[canvasTypeId as BuiltinCanvasTypeId] ??
+    'extension'
+  );
+}
+
+/** Legacy Productivity badge adapter for migrated extension search results. */
+export function widgetKindForCanvasType(
+  canvasTypeId: string
+): LegacyProductivityKind | undefined {
+  return WIDGET_KIND_BY_CANVAS_TYPE_ID[canvasTypeId as BuiltinCanvasTypeId];
+}
+
 export function canvasTypeIdForWidgetKind(
   kind: string
 ):

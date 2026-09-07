@@ -359,6 +359,7 @@ function BlockNoteSurface({
   });
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
+  const titleDirtyRef = useRef(false);
 
   // If we recovered from markdown (no sidecar yet), import the markdown body
   // once the editor surface mounts.
@@ -403,7 +404,7 @@ function BlockNoteSurface({
     [importRecoveredMarkdown]
   );
 
-  const handleChange = useCallback(async () => {
+  const serializeCurrentDocument = useCallback(async () => {
     const blocks = editor.document as Block[];
     let markdown = '';
     try {
@@ -413,20 +414,48 @@ function BlockNoteSurface({
     }
     latestMarkdownRef.current = markdown;
     latestBlocksRef.current = blocks as PartialBlock[];
-    onMarkdownChange(markdown);
-    saveDebounced({ blocks: blocks as unknown as unknown[], markdown });
-  }, [
-    editor,
-    latestBlocksRef,
-    latestMarkdownRef,
-    onMarkdownChange,
-    saveDebounced,
-  ]);
+    return { blocks: blocks as unknown as unknown[], markdown };
+  }, [editor, latestBlocksRef, latestMarkdownRef]);
+
+  const handleChange = useCallback(async () => {
+    const payload = await serializeCurrentDocument();
+    titleDirtyRef.current = false;
+    onMarkdownChange(payload.markdown);
+    saveDebounced(payload);
+  }, [onMarkdownChange, saveDebounced, serializeCurrentDocument]);
+
+  const handleTitleChange = useCallback(
+    (nextTitle: string) => {
+      titleDirtyRef.current = true;
+      onTitleChange(nextTitle);
+    },
+    [onTitleChange]
+  );
 
   const handleBlur = useCallback(() => {
     onTitleBlur();
-    flushNow();
-  }, [flushNow, onTitleBlur]);
+    if (!titleDirtyRef.current) {
+      flushNow();
+      return;
+    }
+
+    titleDirtyRef.current = false;
+    serializeCurrentDocument()
+      .then((payload) => {
+        onMarkdownChange(payload.markdown);
+        saveDebounced(payload);
+        flushNow();
+      })
+      .catch((error) => {
+        console.error('[blocknote] Failed to save title change:', error);
+      });
+  }, [
+    flushNow,
+    onMarkdownChange,
+    onTitleBlur,
+    saveDebounced,
+    serializeCurrentDocument,
+  ]);
 
   // Enter in the title field moves focus into the editor body; Shift+Enter
   // keeps the native line-break behaviour of the autosizing textarea.
@@ -498,7 +527,7 @@ function BlockNoteSurface({
             maxRows={4}
             minRows={1}
             onBlur={handleBlur}
-            onChange={(event) => onTitleChange(event.target.value)}
+            onChange={(event) => handleTitleChange(event.target.value)}
             onKeyDown={handleTitleKeyDown}
             placeholder="Untitled"
             value={title}

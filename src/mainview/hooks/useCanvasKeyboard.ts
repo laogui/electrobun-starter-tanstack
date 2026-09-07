@@ -156,13 +156,17 @@ export function useCanvasKeyboard({
       }
 
       if (mod && key === 'z') {
+        const focused = useCanvasStore.getState().focusedNode;
         const extensionHost =
           e.target instanceof Element
             ? e.target.closest('[data-extension-instance]')
             : null;
-        const instanceId = extensionHost?.getAttribute(
-          'data-extension-instance'
-        );
+        const instanceId =
+          extensionHost?.getAttribute('data-extension-instance') ??
+          (focused?.type === 'extension' &&
+          typeof focused.data.instanceId === 'string'
+            ? focused.data.instanceId
+            : null);
         if (instanceId) {
           e.preventDefault();
           const extensionStore = useExtensionInstanceStore.getState();
@@ -173,7 +177,6 @@ export function useCanvasKeyboard({
           }
           return;
         }
-        const focused = useCanvasStore.getState().focusedNode;
         if (focused?.type === 'widget') {
           const widgetId = focused.data.widgetId;
           if (typeof widgetId === 'string' && widgetId) {

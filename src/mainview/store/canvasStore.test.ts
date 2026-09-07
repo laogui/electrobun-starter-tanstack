@@ -1725,6 +1725,43 @@ describe('canvasStore — createNode', () => {
       { duration: 240, zoom: 1 }
     );
   });
+
+  it('can force an explicitly recovered card to stay at the canvas root', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('group-1', {
+          type: 'group',
+          position: { x: 0, y: 0 },
+          style: { height: 800, width: 1200 },
+          data: { label: 'Existing group' },
+        }),
+      ],
+    });
+
+    const id = await useCanvasStore
+      .getState()
+      .createNode('card', createRfInstance({ x: 0, y: 0, zoom: 1 }), {
+        canEnterGroup: false,
+        data: { noteId: 'note-recovered', title: 'Recovered note' },
+        focusViewport: false,
+      });
+
+    const node = useCanvasStore
+      .getState()
+      .nodes.find((candidate) => candidate.id === id);
+    expect(node).toBeDefined();
+    expect(node).not.toHaveProperty('parentId');
+    expect(node?.data).toMatchObject({
+      noteId: 'note-recovered',
+      title: 'Recovered note',
+    });
+    expect(
+      (node?.position.x ?? 0) >= 1220 ||
+        (node?.position.y ?? 0) >= 820 ||
+        (node ? node.position.x + CARD_W <= -20 : false) ||
+        (node ? node.position.y + CARD_H <= -20 : false)
+    ).toBe(true);
+  });
 });
 
 describe('canvasStore — addFolderChild', () => {
@@ -2255,7 +2292,14 @@ describe('canvasStore — deleteNodes (folder children notes)', () => {
     const detached = useCanvasStore
       .getState()
       .nodes.find((n) => n.id === 'child-widget');
-    expect(detached).toBeDefined();
+    expect(detached).toMatchObject({
+      type: 'widget',
+      data: {
+        widgetId: 'widget_detached',
+        kind: 'checklist',
+        detached: true,
+      },
+    });
     expect(rpcDeleteWidgetMock).not.toHaveBeenCalled();
   });
 });
@@ -2497,6 +2541,102 @@ describe('canvasStore — moveFolderChildToCanvas', () => {
         x: 500 - assetSize.width / 2,
         y: 400 - assetSize.height / 2,
       },
+      selected: true,
+    });
+  });
+
+  it('restores a legacy widget child to the canvas without deleting its backing record', () => {
+    rpcDeleteWidgetMock.mockClear();
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: 'Legacy productivity',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-widget',
+                type: 'widget',
+                data: {
+                  widgetId: 'widget_legacy_checklist',
+                  kind: 'checklist',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore
+      .getState()
+      .moveFolderChildToCanvas('folder', 'child-widget', {
+        anchorCenter: { x: 500, y: 400 },
+      });
+
+    const state = useCanvasStore.getState();
+    expect(
+      state.nodes.find((node) => node.id === 'child-widget')
+    ).toMatchObject({
+      id: 'child-widget',
+      type: 'widget',
+      data: {
+        widgetId: 'widget_legacy_checklist',
+        kind: 'checklist',
+      },
+      selected: true,
+    });
+    expect(
+      state.nodes.find((node) => node.id === 'folder')?.data
+    ).toMatchObject({ children: [] });
+    expect(rpcDeleteWidgetMock).not.toHaveBeenCalled();
+  });
+
+  it('restores an extension child without coercing it to a card', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('folder', {
+          type: 'folder',
+          position: { x: 100, y: 120 },
+          data: {
+            title: 'Extension content',
+            subtitle: '',
+            children: [
+              {
+                id: 'child-extension',
+                type: 'extension',
+                size: { width: 380, height: 360 },
+                data: {
+                  canvasTypeId: LINK_CANVAS_TYPE_ID,
+                  instanceId: 'extinst_folder_link',
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    useCanvasStore
+      .getState()
+      .moveFolderChildToCanvas('folder', 'child-extension', {
+        anchorCenter: { x: 500, y: 400 },
+      });
+
+    const restored = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.id === 'child-extension');
+    expect(restored).toMatchObject({
+      id: 'child-extension',
+      type: 'extension',
+      data: {
+        canvasTypeId: LINK_CANVAS_TYPE_ID,
+        instanceId: 'extinst_folder_link',
+      },
+      position: { x: 310, y: 220 },
+      style: { width: 380, height: 360 },
       selected: true,
     });
   });

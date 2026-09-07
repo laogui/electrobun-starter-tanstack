@@ -54,6 +54,7 @@ import {
 import type { WidgetKind } from '@/lib/widgetTypes';
 import * as m from '../../paraglide/messages.js';
 import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
+import type { SearchResultTarget } from '../../shared/searchTypes';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,6 +78,7 @@ export interface FocusedItem {
 export interface PendingSearchTarget {
   edgeId?: string;
   nodeId?: string;
+  target?: SearchResultTarget;
   viewId: string;
 }
 
@@ -85,6 +87,8 @@ export interface CreateNodeOptions {
   anchor?: { x: number; y: number };
   /** Desired center of the new node in flow coords. */
   anchorCenter?: { x: number; y: number };
+  /** Override the node kind's group-adoption rule for this placement. */
+  canEnterGroup?: boolean;
   /** Additional data to merge over the node kind's registry defaults. */
   data?: Record<string, unknown>;
   /** When false, skip the post-create viewport pan (batch imports). Default true. */
@@ -423,15 +427,24 @@ function uniqueEdgeId(candidateId: string, usedEdgeIds: Set<string>): string {
   return id;
 }
 
-function resolveFolderChildSpec(childType: string | undefined) {
-  if (!childType) {
+function resolveFolderChildSpec(child: FolderChildEntry) {
+  if (!child.type) {
     return buildNewNodeSpec('card');
   }
-  const spec = findSpecByNodeType(childType);
-  if (!(spec && isFolderChildNode(spec.nodeType))) {
-    return buildNewNodeSpec('card');
+  const spec = findSpecByNodeType(child.type);
+  if (spec) {
+    return buildNewNodeSpec(spec.kind);
   }
-  return buildNewNodeSpec(spec.kind);
+  if (child.type === EXTENSION_NODE_TYPE) {
+    const fallback = buildNewNodeSpec('card');
+    return {
+      ...fallback,
+      base: { ...fallback.base, type: EXTENSION_NODE_TYPE },
+    };
+  }
+  // Unknown historical children retain their data but use the safe Card
+  // renderer until a compatible runtime type becomes available.
+  return buildNewNodeSpec('card');
 }
 
 function resolveFolderChildSize(child: FolderChildEntry, fallback: Size): Size {
@@ -457,7 +470,7 @@ function folderChildToDetachedNode(
   child: FolderChildEntry,
   usedNodeIds: Set<string>
 ): Node {
-  const spec = resolveFolderChildSpec(child.type);
+  const spec = resolveFolderChildSpec(child);
   const size = resolveFolderChildSize(child, spec.size);
   const {
     isDropTarget: _isDropTarget,
@@ -1885,6 +1898,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const specType = spec.base.type ?? 'card';
     const { placement, parentId, canPlace } = resolveNodePlacement({
       anchor,
+      canEnterGroup: options?.canEnterGroup,
       nodes,
       newType: specType,
       size,
@@ -2180,7 +2194,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return;
     }
 
-    const spec = resolveFolderChildSpec(child.type);
+    const spec = resolveFolderChildSpec(child);
     const childSize = resolveFolderChildSize(child, spec.size);
     const anchor =
       options?.anchor ??

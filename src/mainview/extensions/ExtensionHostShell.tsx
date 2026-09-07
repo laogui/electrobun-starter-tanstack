@@ -116,7 +116,7 @@ export function ExtensionHostShell({
   selected,
   surface = 'canvas',
 }: {
-  availability: ExtensionAvailability;
+  availability: ExtensionAvailability | 'corrupted';
   canvasTypeId: string;
   children: ReactNode;
   instanceId: string;
@@ -217,9 +217,11 @@ export function ExtensionHostShell({
             availability={availability}
             canvasTypeId={canvasTypeId}
             message={
-              availability === 'disabled'
-                ? 'This canvas type is disabled in the current workspace.'
-                : 'This canvas type is from a newer app version. Data is kept.'
+              availability === 'corrupted'
+                ? 'This instance could not be loaded. The original file is kept.'
+                : availability === 'disabled'
+                  ? 'This canvas type is disabled in the current workspace.'
+                  : 'This canvas type is from a newer app version. Data is kept.'
             }
             onEnable={onEnable}
             presentation={presentation}

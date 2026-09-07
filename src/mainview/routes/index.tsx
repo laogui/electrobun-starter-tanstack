@@ -1182,6 +1182,18 @@ function CanvasComponent() {
   const setEdges = useCanvasStore((s) => s.setEdges);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
 
+  const folderExpansionNodes = useMemo(
+    () =>
+      focusedFolderId
+        ? buildFolderExpansionNodes({
+            allNodes: nodes,
+            closing: closingFolderId === focusedFolderId,
+            folderId: focusedFolderId,
+          })
+        : [],
+    [closingFolderId, focusedFolderId, nodes]
+  );
+
   const onOpenNoteLibrary = useCallback(() => {
     setDetachedSidebarOpen(true);
   }, [setDetachedSidebarOpen]);
@@ -1245,6 +1257,79 @@ function CanvasComponent() {
       return;
     }
     if (pendingSearchTarget.viewId !== activeViewId) {
+      return;
+    }
+    const searchTarget = pendingSearchTarget.target;
+    if (searchTarget?.type === 'folder-child') {
+      const folder = nodes.find(
+        (node) => node.id === searchTarget.folderId && node.type === 'folder'
+      );
+      if (!folder) {
+        // A stale result should not leave the canvas blocked waiting for a
+        // container that no longer exists.
+        setPendingSearchTarget(null);
+        return;
+      }
+
+      const rawChildren = Array.isArray(
+        (folder.data as Record<string, unknown>).children
+      )
+        ? ((folder.data as Record<string, unknown>).children as Array<{
+            id?: unknown;
+          }>)
+        : [];
+      const childIsStored = rawChildren.some(
+        (child) => child?.id === searchTarget.childId
+      );
+      if (!childIsStored) {
+        setPendingSearchTarget(null);
+        return;
+      }
+
+      if (focusedFolder?.id !== folder.id) {
+        const folderElement = document.querySelector(
+          `[data-id="${folder.id}"]`
+        );
+        const rect = folderElement?.getBoundingClientRect();
+        if (!rect) {
+          return;
+        }
+        setFocusedNode(null);
+        setFocusedFolder({ id: folder.id, data: folder.data, rect });
+        return;
+      }
+
+      const expandedChild = folderExpansionNodes.find(
+        (node): node is Node<FolderExpandedChildData> =>
+          isFolderExpandedChildNode(node) &&
+          node.data.folderId === folder.id &&
+          node.data.child.id === searchTarget.childId
+      );
+      if (!expandedChild) {
+        return;
+      }
+
+      const childElement = document.querySelector(
+        `[data-id="${expandedChild.id}"]`
+      );
+      const rect = childElement?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+
+      const child = expandedChild.data.child;
+      if (isFocusableNode(child.type, child.data)) {
+        setFocusedNode({
+          id: child.id,
+          folderId: folder.id,
+          type: child.type,
+          data: child.data,
+          rect,
+        });
+      }
+      // Non-focusable legacy children are still reachable: the owner Folder
+      // remains open with the child visible for its in-place controls/menu.
+      setPendingSearchTarget(null);
       return;
     }
     const targetId = pendingSearchTarget.nodeId ?? pendingSearchTarget.edgeId;
@@ -1317,7 +1402,12 @@ function CanvasComponent() {
     hydrated,
     pendingSearchTarget,
     activeViewId,
+    focusedFolder,
+    folderExpansionNodes,
+    nodes,
     setPendingSearchTarget,
+    setFocusedFolder,
+    setFocusedNode,
     setNodes,
     setEdges,
   ]);
@@ -1620,18 +1710,6 @@ function CanvasComponent() {
       onNodesChange(changes);
     },
     [onNodesChange]
-  );
-
-  const folderExpansionNodes = useMemo(
-    () =>
-      focusedFolderId
-        ? buildFolderExpansionNodes({
-            allNodes: nodes,
-            closing: closingFolderId === focusedFolderId,
-            folderId: focusedFolderId,
-          })
-        : [],
-    [closingFolderId, focusedFolderId, nodes]
   );
 
   const renderSourceNodes = useMemo(() => {

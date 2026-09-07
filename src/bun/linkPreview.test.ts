@@ -236,4 +236,16 @@ describe('unfurlLink', () => {
     const result = await unfurlLink('https://example.com/missing');
     expect(result.status).toBe('failed');
   });
+
+  it('returns failed when the network request rejects', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('network unavailable');
+    }) as unknown as typeof fetch;
+
+    const result = await unfurlLink('https://offline.invalid/evidence');
+    expect(result).toMatchObject({
+      status: 'failed',
+      url: 'https://offline.invalid/evidence',
+    });
+  });
 });

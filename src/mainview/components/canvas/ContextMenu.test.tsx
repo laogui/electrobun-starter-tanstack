@@ -566,7 +566,7 @@ describe('canvasContextMenu', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps widget-sized menus for productivity extensions', () => {
+  it('adds the focused action to the Checklist extension menu', () => {
     edgeStoreState.nodes = [
       {
         id: 'ext-check-1',
@@ -596,7 +596,9 @@ describe('canvasContextMenu', () => {
     expect(
       screen.getByRole('button', { name: DELETE_LABEL_RE })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: OPEN_FOCUSED_RE })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: OPEN_FOCUSED_RE })
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: CHANGE_COLOR_RE })).toBeNull();
     expect(screen.queryByRole('button', { name: EDIT_TAG_RE })).toBeNull();
     expect(

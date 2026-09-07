@@ -31,11 +31,13 @@ describe('sanitizePresentation', () => {
         subtitle: '<script>alert(1)</script>hi',
         plainText: 'ok',
         accentColor: 'red',
+        accessibilityLabel: '<style>.hidden { color: red; }</style>Safe',
       })
     ).toEqual({
       title: 'Unsafe',
       subtitle: 'hi',
       plainText: 'ok',
+      accessibilityLabel: 'Safe',
     });
   });
 

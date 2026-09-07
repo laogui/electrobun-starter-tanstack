@@ -257,6 +257,43 @@ describe('useCanvasKeyboard', () => {
     expect(canvasRedo).not.toHaveBeenCalled();
   });
 
+  it('routes global undo and redo to the focused extension instance', () => {
+    const canvasUndo = vi.spyOn(useCanvasStore.getState(), 'undo');
+    const canvasRedo = vi.spyOn(useCanvasStore.getState(), 'redo');
+    const undoInstance = vi
+      .spyOn(useExtensionInstanceStore.getState(), 'undoInstance')
+      .mockImplementation(() => undefined);
+    const redoInstance = vi
+      .spyOn(useExtensionInstanceStore.getState(), 'redoInstance')
+      .mockImplementation(() => undefined);
+    useCanvasStore.setState({
+      focusedNode: {
+        id: 'extension-node-1',
+        type: 'extension',
+        data: {
+          canvasTypeId: 'ghostboard.productivity/checklist',
+          instanceId: 'extinst_focused',
+        },
+        rect: new DOMRect(0, 0, 100, 100),
+      },
+    });
+
+    render(<TestComponent />);
+
+    dispatchKeyboard({ key: 'z', metaKey: true, cancelable: true });
+    dispatchKeyboard({
+      key: 'Z',
+      metaKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+
+    expect(undoInstance).toHaveBeenCalledWith('extinst_focused');
+    expect(redoInstance).toHaveBeenCalledWith('extinst_focused');
+    expect(canvasUndo).not.toHaveBeenCalled();
+    expect(canvasRedo).not.toHaveBeenCalled();
+  });
+
   it('does not trigger global shortcuts while typing in inputs', () => {
     const copySelected = vi.spyOn(useCanvasStore.getState(), 'copySelected');
     const undo = vi.spyOn(useCanvasStore.getState(), 'undo');

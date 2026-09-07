@@ -9,12 +9,14 @@ import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { LINK_CANVAS_TYPE_ID } from '../../../shared/extensions/builtinIds';
 import { EXTENSION_INSTANCE_SCHEMA } from '../../../shared/extensions/instance';
+import { REACHABILITY_CASES } from '../../../test/reachabilityMatrix';
 
 registerBuiltinCanvasTypes();
 
 vi.mock('@/lib/rpc', () => ({
   rpcCloneExtensionInstance: vi.fn(),
   rpcCreateExtensionInstance: vi.fn(),
+  rpcLoadAttachment: vi.fn(),
   rpcUpdateExtensionInstance: vi.fn(async () => ({ success: true })),
 }));
 
@@ -116,6 +118,35 @@ describe('DetachedNotesSidebar', () => {
       'link-1',
       expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })
     );
+  });
+
+  it('browses every detachable detached entry in the D1-4 matrix', () => {
+    const entries = REACHABILITY_CASES.filter(
+      (entry) =>
+        entry.location === 'detached' &&
+        ['asset', 'card', 'image', 'link'].includes(entry.nodeType)
+    );
+    act(() => {
+      useCanvasStore.setState({
+        nodes: entries.map((entry) => ({
+          id: entry.nodeId,
+          type: entry.nodeType,
+          position: { x: 0, y: 0 },
+          data: entry.data,
+        })) as any,
+      });
+    });
+
+    render(<DetachedNotesSidebar onClose={vi.fn()} />);
+
+    for (const entry of entries) {
+      expect(
+        screen.getAllByText(String(entry.data.title)).length
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      screen.getAllByRole('button', { name: 'Pin to canvas' })
+    ).toHaveLength(entries.length);
   });
 
   it('lists detached extension nodes from presentation and pins them back', () => {

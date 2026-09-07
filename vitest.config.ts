@@ -11,16 +11,23 @@ export default defineConfig({
     include: [
       'src/mainview/**/*.{test,spec}.{ts,tsx}',
       'src/bun/**/*.{test,spec}.{ts,tsx}',
+      'src/shared/**/*.{test,spec}.{ts,tsx}',
     ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      include: ['src/mainview/**/*.{ts,tsx}', 'src/bun/**/*.{ts,tsx}'],
+      include: [
+        'src/mainview/**/*.{ts,tsx}',
+        'src/bun/**/*.{ts,tsx}',
+        'src/shared/**/*.{ts,tsx}',
+      ],
       exclude: [
         'src/mainview/**/*.test.{ts,tsx}',
         'src/mainview/**/*.spec.{ts,tsx}',
         'src/bun/**/*.test.{ts,tsx}',
         'src/bun/**/*.spec.{ts,tsx}',
+        'src/shared/**/*.test.{ts,tsx}',
+        'src/shared/**/*.spec.{ts,tsx}',
         'src/mainview/routeTree.gen.ts',
       ],
     },

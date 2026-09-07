@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { NodeMetadataMap } from '@/hooks/useNodeMetadata';
 
+import {
+  REACHABILITY_CASES,
+  REACHABILITY_FOLDER_ID,
+  REACHABILITY_GROUP_ID,
+  REACHABILITY_NOT_APPLICABLE,
+  REACHABILITY_VIEW_ID,
+  REACHABILITY_VIEW_NAME,
+  targetForReachabilityCase,
+} from '../../test/reachabilityMatrix';
 import { searchCurrentView } from './useSearch';
 
 function makeNode(
@@ -11,6 +20,30 @@ function makeNode(
   data: Record<string, unknown>
 ): Node {
   return { id, type, position: { x: 0, y: 0 }, data } as unknown as Node;
+}
+
+function buildReachabilityNodes(): Node[] {
+  const folderChildren = REACHABILITY_CASES.filter(
+    (entry) => entry.location === 'folder'
+  ).map((entry) => ({
+    data: entry.data,
+    id: entry.nodeId,
+    type: entry.nodeType,
+  }));
+
+  return REACHABILITY_CASES.filter((entry) => entry.location !== 'folder').map(
+    (entry) =>
+      ({
+        data:
+          entry.nodeId === REACHABILITY_FOLDER_ID
+            ? { ...entry.data, children: folderChildren }
+            : entry.data,
+        id: entry.nodeId,
+        ...(entry.parentId ? { parentId: entry.parentId } : {}),
+        position: { x: 0, y: 0 },
+        type: entry.nodeType,
+      }) as unknown as Node
+  );
 }
 
 describe('searchCurrentView', () => {
@@ -32,6 +65,12 @@ describe('searchCurrentView', () => {
     expect(titleHits.find((r) => r.matchField === 'title')).toMatchObject({
       kind: 'asset',
       nodeId: 'a1',
+      target: {
+        type: 'node',
+        viewId: 'v1',
+        nodeId: 'a1',
+        placement: 'top-level',
+      },
     });
 
     const fileHits = searchCurrentView('q3-financials', nodes, 'v1', 'View 1');
@@ -192,5 +231,74 @@ describe('searchCurrentView', () => {
       meta
     );
     expect(results.find((r) => r.matchField === 'tag')).toBeUndefined();
+  });
+
+  it('keeps Folder-child targets distinct from the owning Folder node', () => {
+    const nodes = [
+      makeNode('folder-1', 'folder', {
+        title: 'Research folder',
+        children: [
+          {
+            id: 'child-link',
+            type: 'link',
+            data: {
+              title: 'Child target',
+              url: 'https://example.com/child',
+            },
+          },
+        ],
+      }),
+    ];
+
+    const results = searchCurrentView('child target', nodes, 'v1', 'View 1');
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      nodeId: 'child-link',
+      target: {
+        type: 'folder-child',
+        viewId: 'v1',
+        folderId: 'folder-1',
+        childId: 'child-link',
+        placement: 'folder',
+      },
+    });
+  });
+
+  it('covers every supported position/type in the D1-4 fallback matrix', () => {
+    const nodes = buildReachabilityNodes();
+
+    for (const entry of REACHABILITY_CASES) {
+      const results = searchCurrentView(
+        entry.query,
+        nodes,
+        REACHABILITY_VIEW_ID,
+        REACHABILITY_VIEW_NAME
+      );
+      const match = results.find((result) => result.nodeId === entry.nodeId);
+
+      if (entry.fallback) {
+        expect(match, entry.id).toBeDefined();
+        expect(match?.target, entry.id).toEqual(
+          targetForReachabilityCase(entry)
+        );
+        if (entry.expectedKind) {
+          expect(match?.kind, entry.id).toBe(entry.expectedKind);
+        }
+      } else {
+        expect(match, entry.id).toBeUndefined();
+      }
+    }
+
+    expect(
+      REACHABILITY_CASES.filter(
+        (entry) => entry.parentId === REACHABILITY_GROUP_ID
+      )
+    ).not.toHaveLength(0);
+    expect(
+      REACHABILITY_NOT_APPLICABLE.every(
+        (entry) => entry.reason.trim().length > 0
+      )
+    ).toBe(true);
   });
 });

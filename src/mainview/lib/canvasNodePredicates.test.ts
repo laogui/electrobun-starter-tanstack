@@ -10,10 +10,13 @@ import {
   isRejectedFolderChildNode,
 } from '@/lib/canvasNodePredicates';
 import {
+  CHECKLIST_CANVAS_TYPE_ID,
   FILE_CANVAS_TYPE_ID,
   IMAGE_CANVAS_TYPE_ID,
   LINK_CANVAS_TYPE_ID,
+  POMODORO_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
+  REMINDER_CANVAS_TYPE_ID,
 } from '../../shared/extensions/builtinIds';
 
 registerBuiltinCanvasTypes();
@@ -66,6 +69,19 @@ describe('isFolderChildNode', () => {
   ] as const)('returns %s for %s', (type, expected) => {
     expect(isFolderChildNode(type)).toBe(expected);
   });
+
+  it('keeps all productivity extensions out of new Folder placement', () => {
+    for (const canvasTypeId of [
+      CHECKLIST_CANVAS_TYPE_ID,
+      POMODORO_CANVAS_TYPE_ID,
+      REMINDER_CANVAS_TYPE_ID,
+    ]) {
+      const data = { canvasTypeId };
+      expect(isFolderChildNode('extension', data)).toBe(false);
+      expect(isRejectedFolderChildNode('extension', data)).toBe(true);
+      expect(isGroupChildNode('extension', data)).toBe(true);
+    }
+  });
 });
 
 describe('isRejectedFolderChildNode', () => {
@@ -103,6 +119,24 @@ describe('isFocusableNode', () => {
     // Widgets edit in place on the canvas; they must not open FocusedView.
     expect(isFocusableNode('widget')).toBe(false);
     expect(isFocusableNode(undefined)).toBe(false);
+  });
+
+  it('opens Checklist extensions in detail but keeps timers canvas-only', () => {
+    expect(
+      isFocusableNode('extension', {
+        canvasTypeId: CHECKLIST_CANVAS_TYPE_ID,
+      })
+    ).toBe(true);
+    expect(
+      isFocusableNode('extension', {
+        canvasTypeId: POMODORO_CANVAS_TYPE_ID,
+      })
+    ).toBe(false);
+    expect(
+      isFocusableNode('extension', {
+        canvasTypeId: REMINDER_CANVAS_TYPE_ID,
+      })
+    ).toBe(false);
   });
 });
 

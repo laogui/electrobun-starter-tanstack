@@ -2,6 +2,12 @@ import type { Node } from '@xyflow/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { WidgetRecord } from '@/lib/widgetTypes';
 
+import {
+  REACHABILITY_CASES,
+  REACHABILITY_EXTENSION_ID,
+  REACHABILITY_FOLDER_ID,
+} from '../../../test/reachabilityMatrix';
+
 vi.mock('@/extensions/registry', () => ({
   canvasTypeRegistry: {
     get: (id: string) =>
@@ -244,5 +250,78 @@ describe('buildLibrary', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.kind).toBe('detached');
     expect(groups[0]?.items.map((item) => item.title)).toEqual(['Example']);
+  });
+
+  it('covers browse reachability for every focusable matrix entry', () => {
+    const folderChildren = REACHABILITY_CASES.filter(
+      (entry) => entry.location === 'folder'
+    ).map((entry) => ({
+      data: entry.data,
+      id: entry.nodeId,
+      type: entry.nodeType,
+    }));
+    const nodes = REACHABILITY_CASES.filter(
+      (entry) => entry.location !== 'folder'
+    ).map((entry) =>
+      makeNode(
+        entry.nodeId,
+        entry.nodeType,
+        entry.nodeId === REACHABILITY_FOLDER_ID
+          ? { ...entry.data, children: folderChildren }
+          : entry.data
+      )
+    );
+
+    const { groups } = buildLibrary(
+      nodes,
+      '',
+      'name',
+      {},
+      {
+        [REACHABILITY_EXTENSION_ID]: {
+          schema: 'ghostboard-extension-instance/v1',
+          id: REACHABILITY_EXTENSION_ID,
+          canvasTypeId: 'ghostboard.web/link',
+          appVersion: '1.0.0',
+          dataVersion: 1,
+          revision: 1,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-02T00:00:00.000Z',
+          state: { url: 'https://example.com/reachability' },
+          presentation: {
+            title: 'Reachability extension',
+            subtitle: 'https://example.com/reachability',
+            plainText: 'Reachability extension',
+          },
+        },
+      }
+    );
+    const items = groups.flatMap((group) => group.items);
+    const itemIds = new Set(items.map((item) => item.id));
+    const focusableTypes = new Set([
+      'asset',
+      'card',
+      'extension',
+      'image',
+      'link',
+    ]);
+
+    for (const entry of REACHABILITY_CASES) {
+      if (!focusableTypes.has(entry.nodeType)) {
+        continue;
+      }
+      const expectedId =
+        entry.location === 'folder'
+          ? `child:${REACHABILITY_FOLDER_ID}:${entry.nodeId}`
+          : `node:${entry.nodeId}`;
+      expect(itemIds, entry.id).toContain(expectedId);
+    }
+
+    expect(groups.find((group) => group.kind === 'folder')?.items.length).toBe(
+      5
+    );
+    expect(
+      groups.find((group) => group.kind === 'detached')?.items.length
+    ).toBe(4);
   });
 });

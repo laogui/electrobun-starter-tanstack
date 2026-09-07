@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -18,6 +19,10 @@ import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import {
+  REACHABILITY_CASES,
+  targetForReachabilityCase,
+} from '../../test/reachabilityMatrix';
 
 const FOCUSED_RE = /Focused/;
 const NEW_RE = /^new$/i;
@@ -940,6 +945,184 @@ describe('routes/index', () => {
     expect(renderedFolder?.zIndex).toBeGreaterThan(renderedChild?.zIndex ?? 0);
     expect(renderedFolder?.data.expansionChildren).toHaveLength(1);
     expect(reactFlowMocks.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('opens a focusable Folder-child search target inside its owning Folder', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Search Folder',
+            children: [
+              {
+                id: 'child-1',
+                type: 'card',
+                data: { title: 'Search child', content: 'unique body' },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Search Folder')).toBeInTheDocument();
+    });
+
+    act(() => {
+      useCanvasStore.getState().setPendingSearchTarget({
+        viewId: 'default',
+        nodeId: 'child-1',
+        target: {
+          type: 'folder-child',
+          viewId: 'default',
+          folderId: 'folder-1',
+          childId: 'child-1',
+          placement: 'folder',
+          content: { kind: 'note', id: 'note-child-1' },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().focusedFolder?.id).toBe('folder-1');
+      expect(useCanvasStore.getState().focusedNode?.id).toBe('child-1');
+      expect(screen.getByText('Focused child-1')).toBeInTheDocument();
+      expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+    });
+  });
+
+  it('opens the matrix Folder child target inside its owning Folder', async () => {
+    const entry = REACHABILITY_CASES.find(
+      (candidate) => candidate.id === 'folder-note'
+    )!;
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'reachability-folder',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Reachability Folder',
+            children: [
+              {
+                id: entry.nodeId,
+                type: entry.nodeType,
+                data: entry.data,
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Reachability Folder')).toBeInTheDocument();
+    });
+
+    const target = targetForReachabilityCase(entry);
+    if (target.type !== 'folder-child') {
+      throw new Error(
+        'The reachability Folder case must produce a child target'
+      );
+    }
+    act(() => {
+      useCanvasStore.getState().setPendingSearchTarget({
+        viewId: 'default',
+        nodeId: entry.nodeId,
+        target: { ...target, viewId: 'default' },
+      });
+    });
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().focusedFolder?.id).toBe(
+        'reachability-folder'
+      );
+      expect(useCanvasStore.getState().focusedNode?.id).toBe(entry.nodeId);
+      expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+    });
+  });
+
+  it('opens a cross-view Folder-child target and leaves non-focusable legacy content in the Folder layer', async () => {
+    useCanvasStore.setState({
+      views: [
+        { id: 'default', name: 'Default Canvas' },
+        { id: 'view-2', name: 'Second Canvas' },
+      ],
+    });
+    rpcMocks.loadCanvas.mockImplementation(async (viewId: string) =>
+      viewId === 'view-2'
+        ? {
+            nodes: [
+              {
+                id: 'folder-2',
+                type: 'folder',
+                position: { x: 0, y: 0 },
+                data: {
+                  title: 'Second Search Folder',
+                  children: [
+                    {
+                      id: 'legacy-widget-child',
+                      type: 'widget',
+                      data: {
+                        title: 'Legacy widget child',
+                        widgetId: 'widget-legacy-child',
+                        kind: 'checklist',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            edges: [],
+          }
+        : { nodes: [], edges: [] }
+    );
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState()._hydrated).toBe(true);
+    });
+
+    act(() => {
+      useCanvasStore.getState().setActiveView('view-2');
+    });
+    act(() => {
+      useCanvasStore.getState().setPendingSearchTarget({
+        viewId: 'view-2',
+        nodeId: 'legacy-widget-child',
+        target: {
+          type: 'folder-child',
+          viewId: 'view-2',
+          folderId: 'folder-2',
+          childId: 'legacy-widget-child',
+          placement: 'folder',
+          content: { kind: 'widget', id: 'widget-legacy-child' },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState()._hydrated).toBe(true);
+      expect(useCanvasStore.getState().focusedFolder?.id).toBe('folder-2');
+      expect(useCanvasStore.getState().focusedNode).toBeNull();
+      expect(
+        document.querySelector(
+          '[data-id="folderExpandedChild:folder-2:legacy-widget-child"]'
+        )
+      ).not.toBeNull();
+      expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+    });
   });
 
   it('does not open the focused view on a modifier-click (selection only)', async () => {

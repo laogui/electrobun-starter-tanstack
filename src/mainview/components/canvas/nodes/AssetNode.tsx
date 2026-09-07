@@ -251,6 +251,42 @@ function decodeTextDataUrl(dataUrl: string): string {
   }
 }
 
+/**
+ * WebKit's PDF viewer can render a corrupt data URL as a blank iframe without
+ * firing an error event. Check the small file signature before mounting that
+ * iframe so damaged local PDFs get the same actionable error surface as
+ * missing files. Non-data URLs are left to the browser's native viewer.
+ */
+function isLikelyPdfDataUrl(dataUrl: string): boolean {
+  if (!dataUrl.startsWith('data:')) {
+    return true;
+  }
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0) {
+    return false;
+  }
+  const metadata = dataUrl.slice(0, commaIndex).toLowerCase();
+  const payload = dataUrl.slice(commaIndex + 1);
+  try {
+    if (metadata.includes(';base64')) {
+      if (typeof globalThis.atob !== 'function') {
+        return true;
+      }
+      // The PDF magic bytes are in the first four base64 quartets. Decode a
+      // bounded prefix rather than duplicating a potentially large document.
+      const prefix = payload.slice(0, 64);
+      const padded = prefix.padEnd(
+        prefix.length + ((4 - (prefix.length % 4)) % 4),
+        '='
+      );
+      return globalThis.atob(padded).includes('%PDF-');
+    }
+    return decodeURIComponent(payload.slice(0, 1024)).includes('%PDF-');
+  } catch {
+    return false;
+  }
+}
+
 function useResolvedAttachmentPreview(
   previewUrl: string | undefined,
   attachmentFile: string | undefined
@@ -793,6 +829,13 @@ export const AssetContent = ({
       return;
     }
     if (asset.previewUrl) {
+      if (pdfPreview && !isLikelyPdfDataUrl(asset.previewUrl)) {
+        dispatchMedia({
+          message: 'Media file could not be loaded.',
+          type: 'failed',
+        });
+        return;
+      }
       dispatchMedia({ src: asset.previewUrl, type: 'ready' });
       return;
     }
@@ -849,6 +892,13 @@ export const AssetContent = ({
           }
           return;
         }
+        if (pdfPreview && !isLikelyPdfDataUrl(src)) {
+          dispatchMedia({
+            message: 'Media file could not be loaded.',
+            type: 'failed',
+          });
+          return;
+        }
         dispatchMedia({ src, type: 'loaded' });
       })
       .catch(() => {
@@ -877,6 +927,7 @@ export const AssetContent = ({
     isFocused,
     playableMedia,
     previewableFile,
+    pdfPreview,
   ]);
 
   if (isFocused) {

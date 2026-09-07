@@ -69,6 +69,33 @@ describe('useCanvasPersistence', () => {
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });
 
+  it('persists the first layout change when mounted after hydration', async () => {
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 5, y: 10 }, data: {} },
+      ]);
+
+    vi.advanceTimersByTime(2500);
+
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith(
+      'default',
+      [
+        {
+          id: 'node-1',
+          type: 'card',
+          position: { x: 5, y: 10 },
+          data: {},
+        },
+      ],
+      []
+    );
+  });
+
   it('debounces manifest persistence after subsequent node changes', async () => {
     render(<TestComponent />);
     await vi.runAllTicks();

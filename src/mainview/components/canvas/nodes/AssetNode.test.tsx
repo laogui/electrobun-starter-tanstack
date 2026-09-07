@@ -371,6 +371,33 @@ describe('AssetContent', () => {
     );
   });
 
+  it('shows an explicit error instead of a blank frame for corrupt PDFs', async () => {
+    rpcLoadAttachmentMock.mockResolvedValueOnce({
+      dataUrl: 'data:application/pdf;base64,VGhpcyBpcyBub3QgYSBQRGY=',
+    });
+
+    render(
+      <AssetContent
+        data={{
+          attachmentFile: 'attachments/corrupt.pdf',
+          color: '#ffffff',
+          fileName: 'corrupt.pdf',
+          kind: 'file',
+          mimeType: 'application/pdf',
+          title: 'Corrupt report',
+        }}
+        isFocused
+      />
+    );
+
+    expect(
+      await screen.findByText('Media file could not be loaded.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTitle('Corrupt report PDF preview')
+    ).not.toBeInTheDocument();
+  });
+
   it('renders the PDF placeholder badge on the canvas card', () => {
     render(
       <AssetContent

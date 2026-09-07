@@ -308,6 +308,46 @@ describe('searchDialog interactions', () => {
     ).toBe(true);
   });
 
+  it('passes a same-view Folder-child target to canvas navigation', async () => {
+    setSearch({
+      query: 'child',
+      results: [
+        makeResult({
+          id: 'node:default:child-1:title',
+          nodeId: 'child-1',
+          target: {
+            type: 'folder-child',
+            viewId: 'default',
+            folderId: 'folder-1',
+            childId: 'child-1',
+            placement: 'folder',
+            content: { kind: 'note', id: 'note-child-1' },
+          },
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+
+    fireEvent.click(activeResult(0));
+
+    await waitFor(() => {
+      expect(useCanvasStore.getState().pendingSearchTarget).toEqual({
+        viewId: 'default',
+        nodeId: 'child-1',
+        edgeId: undefined,
+        target: {
+          type: 'folder-child',
+          viewId: 'default',
+          folderId: 'folder-1',
+          childId: 'child-1',
+          placement: 'folder',
+          content: { kind: 'note', id: 'note-child-1' },
+        },
+      });
+    });
+    expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
   it('clicking a cross-view result saves the manifest, switches view, and sets the pending target', async () => {
     setSearch({
       query: 'h',
@@ -317,6 +357,12 @@ describe('searchDialog interactions', () => {
           viewId: 'other',
           viewName: 'Other Canvas',
           nodeId: 'n2',
+          target: {
+            type: 'node',
+            viewId: 'other',
+            nodeId: 'n2',
+            placement: 'top-level',
+          },
         }),
       ],
     });
@@ -330,8 +376,46 @@ describe('searchDialog interactions', () => {
       viewId: 'other',
       nodeId: 'n2',
       edgeId: undefined,
+      target: {
+        type: 'node',
+        viewId: 'other',
+        nodeId: 'n2',
+        placement: 'top-level',
+      },
     });
     expect(useCanvasStore.getState().searchOpen).toBe(false);
+  });
+
+  it('does not switch away from unsaved edits when a Folder-child jump cannot flush', async () => {
+    rpcMocks.rpcSaveManifest.mockResolvedValueOnce({ success: false });
+    setSearch({
+      query: 'child',
+      results: [
+        makeResult({
+          id: 'node:other:child-2:title',
+          viewId: 'other',
+          viewName: 'Other Canvas',
+          nodeId: 'child-2',
+          target: {
+            type: 'folder-child',
+            viewId: 'other',
+            folderId: 'folder-2',
+            childId: 'child-2',
+            placement: 'folder',
+          },
+        }),
+      ],
+    });
+    render(<SearchDialog />);
+
+    fireEvent.click(activeResult(0));
+
+    await waitFor(() => {
+      expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledTimes(1);
+      expect(useCanvasStore.getState().activeViewId).toBe('default');
+      expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+      expect(useCanvasStore.getState().searchOpen).toBe(false);
+    });
   });
 
   it('selecting a view-kind result switches view without setting a pending target', async () => {

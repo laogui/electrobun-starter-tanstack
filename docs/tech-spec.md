@@ -200,7 +200,7 @@ src/
 | `group`     | `GroupNode`     | manifest `data.label` + `data.color`                          | ❌            | ✅ NodeResizer (min 300×200) |
 | `sticky`    | `StickyNode`    | manifest `data.content` + `data.color` 内嵌                   | ❌ 原地编辑   | ✅ (120~500 × 120~500)       |
 
-> React Flow 的 `node.type` 对三种小组件统一为 `widget`；`canvasNodeRegistry` 的 **kind** 仍是 `checklist` / `pomodoro` / `reminder`，创建菜单与快捷创建走 kind。
+> 上表的 `widget` 路径描述 legacy 兼容模型。当前三个内置 Productivity 类型通过 Canvas Type 注册为 `extension` 节点：Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可新进入 Folder。已存在于 Folder 中的 legacy `widget` 或迁移后 `extension` 子项仍须可读取并无损 Extract。
 
 ### 3.2 TypeScript 类型定义
 
@@ -520,7 +520,7 @@ interface TagMutationResult {
 
 当前 sidecar-backed note 的 `displayHint` 存在 `content/.ghostboard/blocknote/<noteId>.json`；legacy Markdown fallback 才从 frontmatter 读取。映射仍复用 `src/bun/notes.ts` 的 `displayHintToType` / `typeToDisplayHint` / `noteToCardData`，但新的读取入口是 `src/bun/noteStore.ts`。
 
-**Widget（小组件）**：React Flow `node.type === 'widget'`，创建 kind 为 `checklist` / `pomodoro` / `reminder`。manifest 只保存 `{ widgetId, kind }`；完整内容在 `.ghostboard/widgets/<widgetId>.json`，运行时由 `widgetStore` 持有。产品语义见 [PRD](./PRD.md) §2.2 / §5。
+**Widget（小组件，legacy 兼容）**：旧 React Flow 节点使用 `node.type === 'widget'`，kind 为 `checklist` / `pomodoro` / `reminder`。manifest 只保存 `{ widgetId, kind }`；完整内容在 `.ghostboard/widgets/<widgetId>.json`，运行时由 `widgetStore` 持有。当前新建内置类型使用 `node.type === 'extension'`、`{ canvasTypeId, instanceId }` 引用与 `.ghostboard/extension-instances/<instanceId>.json` 状态；旧 Widget 路径继续承担加载、搜索与取回兼容。产品语义见 [PRD](./PRD.md) §2.2 / §5。
 
 | WidgetKind | 内容实体 | 说明 |
 | ---------- | -------- | ---- |
@@ -542,6 +542,7 @@ interface TagMutationResult {
 | ----------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
 | 画布交互状态      | **Zustand** (`canvasStore.ts`)  | `nodes`/`edges`、`focusedNode`/`focusedFolder`、`clipboard`、undo/redo 历史栈、节点 CRUD |
 | Widget 内容状态   | **Zustand** (`widgetStore.ts`)  | `records`、per-widget undo 栈、create/clone/update/save；**不**把 items/timer 写进 canvas 快照 |
+| Extension 实例状态 | **Zustand** (`extensionInstanceStore.ts`) | 已迁移 Canvas Type 的 state/presentation、per-instance history 与持久化调度；**不**把业务 state 写进 canvas manifest |
 | 异步/文件系统数据 | **TanStack React Query**        | 加载、缓存、重试、错误 toast                                                             |
 | 局部 UI 状态      | `useState` / Hook 内部          | 右键菜单位置、拖拽 dropTarget、helper lines 等                                           |
 
@@ -587,7 +588,7 @@ WidgetStore
 - **画布**：`undoRedo.ts` 导出 `pushSnapshot` / `undo` / `redo` 纯函数，不依赖 Zustand middleware。
 - **快照策略**：在破坏性操作前调用 `saveSnapshot()`（`createNode`、`deleteNodes`、`addConnection`、`pasteClipboard`、`changeNodeColor`、`addFolderChild`、`onNodeDragStart`）。
 - **历史栈上限**：画布与每个 widget 各自最多 **50** 步。
-- **双栈路由**：编辑焦点在某个 widget 内（inline 或 FocusedView 编辑 checklist 等）时，`Cmd+Z` / `Shift+Cmd+Z` 走 `undoWidget` / `redoWidget`；否则走画布 undo。两栈互不感知。
+- **历史路由**：已迁移 Canvas Type 的离散内容更新进入 per-instance history；legacy widget 编辑继续使用 `undoWidget` / `redoWidget`；其他画布操作走画布 undo。各内容历史与画布历史互不感知。
 - **生命周期**：仅存在于内存中，关闭应用后清空。
 - **与持久化的一致性**：撤销/重做仅回滚内存状态；下次 debounce 到期时以内存状态覆盖磁盘。
 
@@ -662,7 +663,7 @@ setActiveView(viewId)
   3. 源节点可隐藏（`data.isHidden`）避免双影
   4. 内容区：BlockNote 经 `lazy` + `Suspense`，fallback 为共享 `NoteEditorLoading`（与编辑器内 loading 同一组件）
 - `BoundingClientRect` 仅在进入/退出或跨项导航时读取，不进入平移/缩放/拖拽热路径。
-- Widget checklist 的 FocusedView 编辑写 `widgetStore`，**不**经 `commitNodeData` 把 items 写回 manifest。
+- Checklist 的 FocusedView 由 Canvas Type `DetailSurface` 提供。迁移后的编辑通过 host `instance.updateState({ history: 'record' })` 写 extension instance store；legacy widget 编辑仍写 `widgetStore`。两条路径都**不**经 `commitNodeData` 把 items 写回 manifest。
 
 ### 5.4 层级隔离与 Folder waterfall 展开
 
@@ -1317,15 +1318,16 @@ Bun 侧 `seedFirstRunIfNeeded()` 在 `.ghostboard/workspace.json` 不存在时�
 
 ### 7.6 Folder children 模型
 
-Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card child 已升级为与顶层 Card 对等的 `noteId` 轻引用；Widget child 为 `widgetId` 轻引用：
+Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card child 已升级为与顶层 Card 对等的 `noteId` 轻引用；legacy Widget child 为 `widgetId` 轻引用，迁移后的 Canvas Type child 为 extension instance 轻引用：
 
 - Card child：`{ id, noteId, type: "card", data: { noteId, file?, type } }`，加载时通过 `noteStore.ts` hydrate；sidecar-backed child 保存时只 merge metadata，legacy child 才写回 `.md`。
-- Widget child：`{ id, type: "widget", widgetId, data: { widgetId, kind } }`，内容在 `widgetStore` / `.ghostboard/widgets/`。
+- Widget child（legacy）：`{ id, type: "widget", widgetId, data: { widgetId, kind } }`，内容在 `widgetStore` / `.ghostboard/widgets/`。
+- Extension child：`{ id, type: "extension", data: { canvasTypeId, instanceId } }`，内容在 `extensionInstanceStore` / `.ghostboard/extension-instances/`。
 - Image child：继续走 `imageFile` / `thumbnailFile` 附件模式，不分配 `noteId`。
 - Asset child：走 `attachmentFile` / `thumbnailFile` / `waveform` 附件模式。
 - Link child：保存 URL 与 unfurl metadata。
 - Recording child：走 `attachmentFile` / `waveform` / `duration` / `recordingNumber` 附件模式。
-- **不允许** Folder / Group / Sticky 作为 Folder child。
+- **新准入不允许** Folder / Group / Sticky 作为 Folder child；当前 Checklist / Pomodoro / Reminder 的 Canvas Type 也声明 `canEnterFolder: false`。历史上已存入的 Widget / Extension child 是兼容数据，展开、搜索或 Extract 时必须保留其原 runtime type、引用和业务数据，不能因当前准入规则转成 Card。
 
 当前 Folder children 仍不是独立子画布：不持久化内部自由坐标（打开时用 waterfall 重算），不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
 

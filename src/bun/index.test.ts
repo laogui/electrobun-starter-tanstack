@@ -1153,6 +1153,42 @@ describe('src/bun/index helpers', () => {
     expect(noteMocks.deleteNoteFile).not.toHaveBeenCalled();
   });
 
+  it('saveBlockNote rejects a stale client revision', async () => {
+    await loadIndexModule();
+    atomicWriteMock.mockClear();
+    const canvasHandlers = getCanvasHandlers();
+    bunFileMock.mockImplementation((p: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          p.endsWith('/content/.ghostboard/blocknote/note_conflict.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_conflict',
+        revision: 7,
+        blocks: [{ type: 'paragraph' }],
+        preview: { html: '', excerpt: '', blocks: 0, version: 1 },
+      }),
+      text: vi.fn(),
+    }));
+
+    const result = await canvasHandlers.saveBlockNote({
+      noteId: 'note_conflict',
+      frontmatter: { id: 'note_conflict', title: 'Stale' },
+      blocks: [],
+      markdown: '',
+      revision: 6,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      conflict: true,
+      revision: 7,
+    });
+    expect(atomicWriteMock).not.toHaveBeenCalled();
+  });
+
   it('loadBlockNote returns sidecar blocks without any markdown reconcile', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();

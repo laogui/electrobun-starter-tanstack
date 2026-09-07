@@ -387,6 +387,62 @@ describe('workspace', () => {
     ).resolves.toEqual({ success: false });
   });
 
+  it('removeView and restoreView refuse crafted manifest paths', async () => {
+    const { initWorkspace, removeView, restoreView } = await import(
+      './workspace'
+    );
+    initWorkspace(workspaceRoot);
+
+    const configPath = join(workspaceRoot, '.ghostboard', 'workspace.json');
+    const escapedFile = join(workspaceRoot, 'escaped.canvas.json');
+    writeFileSync(escapedFile, '{"payload":"do not move"}');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        schema: 'ghostboard-workspace/v1',
+        activeViewId: 'default',
+        views: [
+          {
+            id: 'default',
+            name: 'Default Canvas',
+            file: 'views/default.canvas.json',
+          },
+          {
+            id: 'evil',
+            name: 'Evil',
+            file: '../../escaped.canvas.json',
+          },
+        ],
+        trash: [
+          {
+            trashId: 'trash_evil',
+            deletedAt: 100,
+            trashFile: '../../escaped.canvas.json',
+            view: {
+              id: 'evil-restore',
+              name: 'Evil restore',
+              file: 'views/evil.canvas.json',
+            },
+          },
+        ],
+      })
+    );
+
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await expect(removeView(workspaceRoot, 'evil')).resolves.toEqual({
+      success: false,
+    });
+    await expect(restoreView(workspaceRoot, 'trash_evil')).resolves.toEqual({
+      success: false,
+    });
+    expect(existsSync(escapedFile)).toBe(true);
+    expect(readFileSync(escapedFile, 'utf8')).toBe('{"payload":"do not move"}');
+  });
+
   it('keeps trash entries when moving them to system Trash fails', async () => {
     const { Utils } = await import('electrobun/bun');
     const { initWorkspace, clearAllTrash } = await import('./workspace');

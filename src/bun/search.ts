@@ -15,6 +15,7 @@ import { blocksToPlainText } from './blocknotePreview';
 import { loadExtensionEnablement } from './extensions/enablement';
 import { loadExtensionInstances } from './extensions/instanceStore';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
+import { loadAllMetadata, type NodeMetadata } from './nodeMetadata';
 import { buildNoteIndex, loadNoteRecord, type NoteRecord } from './noteStore';
 import {
   type ChecklistWidgetData,
@@ -237,6 +238,7 @@ export async function searchWorkspace(
   const views = params.viewId
     ? config.views.filter((v) => v.id === params.viewId)
     : config.views;
+  const metadata = await loadAllMetadata(wsPath);
 
   const results: SearchResult[] = [];
 
@@ -301,10 +303,11 @@ export async function searchWorkspace(
         view.name,
         queryLower,
         noteIdToNodes,
+        metadata,
         results
       );
 
-      addManifestNodeMatches(results, ref, queryLower);
+      addManifestNodeMatches(results, ref, queryLower, metadata);
     }
 
     for (const edge of manifest.edges) {
@@ -317,7 +320,7 @@ export async function searchWorkspace(
   }
 
   // Scan content/**/*.md and join with noteIdToNodes
-  await scanNotes(wsPath, queryLower, noteIdToNodes, results);
+  await scanNotes(wsPath, queryLower, noteIdToNodes, metadata, results);
   await scanWidgets(wsPath, queryLower, widgetIdToNodes, results);
   await scanExtensionInstances(wsPath, queryLower, instanceIdToNodes, results);
 
@@ -414,6 +417,7 @@ function collectFolderChildMatches(
   viewName: string,
   queryLower: string,
   noteIdToNodes: Map<string, NodeRef[]>,
+  metadata: Record<string, NodeMetadata>,
   results: SearchResult[]
 ): void {
   if (node.type !== 'folder') {
@@ -458,7 +462,7 @@ function collectFolderChildMatches(
     }
     // Widget/Extension bodies are joined by their dedicated sidecar scans;
     // this call fills the manifest metadata gap for Card/media/link children.
-    addManifestNodeMatches(results, childRef, queryLower);
+    addManifestNodeMatches(results, childRef, queryLower, metadata);
   }
 }
 
@@ -531,10 +535,31 @@ function collectExtensionRefs(
   }
 }
 
+function addMetadataTagCandidates(
+  candidates: Array<{ field: SearchMatchField; value: string }>,
+  metadata: Record<string, NodeMetadata>,
+  data: Record<string, unknown>,
+  nodeId: string
+): void {
+  const metaKey = asString(data.noteId) || nodeId;
+  const meta = metadata[metaKey];
+  if (meta?.tag) {
+    candidates.push({ field: 'tag', value: meta.tag });
+  }
+  if (Array.isArray(meta?.tags)) {
+    for (const rawTag of meta.tags) {
+      if (typeof rawTag === 'string' && rawTag) {
+        candidates.push({ field: 'tag', value: rawTag });
+      }
+    }
+  }
+}
+
 function addManifestNodeMatches(
   results: SearchResult[],
   ref: NodeRef,
-  queryLower: string
+  queryLower: string,
+  metadata: Record<string, NodeMetadata>
 ) {
   const { node, viewId, viewName } = ref;
   const data = node.data;
@@ -542,6 +567,7 @@ function addManifestNodeMatches(
   // For a card node, the manifest typically only carries noteId/file/type.
   // Body content is matched separately via Markdown scan.
   const candidates: Array<{ field: SearchMatchField; value: string }> = [];
+  addMetadataTagCandidates(candidates, metadata, data, node.id);
 
   switch (node.type) {
     case 'sticky':
@@ -842,6 +868,7 @@ async function scanNotes(
   wsPath: string,
   queryLower: string,
   noteIdToNodes: Map<string, NodeRef[]>,
+  metadata: Record<string, NodeMetadata>,
   results: SearchResult[]
 ) {
   const searchable: Array<{ record: NoteRecord; refs: NodeRef[] }> = [];
@@ -908,6 +935,19 @@ async function scanNotes(
       bodyText = cleanMarkdown(record.markdownDoc.body);
     } else {
       bodyText = blocksToPlainText(record.blocks);
+    }
+
+    const meta = metadata[record.noteId];
+    if (!tag && meta?.tag) {
+      tag = asString(meta.tag);
+    }
+    if (Array.isArray(meta?.tags)) {
+      for (const rawTag of meta.tags) {
+        const normalizedTag = asString(rawTag);
+        if (normalizedTag && !tags.includes(normalizedTag)) {
+          tags.push(normalizedTag);
+        }
+      }
     }
 
     const titleIdx = indexOfCi(title, queryLower);

@@ -110,6 +110,47 @@ describe('manifest', () => {
     ).resolves.toEqual(manifest);
   });
 
+  it('resolveWorkspaceManifestPath rejects traversal and absolute paths', async () => {
+    const { loadManifest, resolveWorkspaceManifestPath, saveManifest } =
+      await import('./manifest');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() =>
+      resolveWorkspaceManifestPath(workspaceRoot, '../../secrets.json')
+    ).toThrow(/views\/ or trash\//);
+    expect(() =>
+      resolveWorkspaceManifestPath(workspaceRoot, '/tmp/escape.canvas.json')
+    ).toThrow(/relative/);
+    expect(() =>
+      resolveWorkspaceManifestPath(workspaceRoot, 'content/note.md')
+    ).toThrow(/views\/ or trash\//);
+
+    expect(
+      resolveWorkspaceManifestPath(workspaceRoot, 'views/default.canvas.json')
+    ).toBe(
+      join(workspaceRoot, '.ghostboard', 'views', 'default.canvas.json')
+    );
+    expect(
+      resolveWorkspaceManifestPath(workspaceRoot, 'trash/trash_1.canvas.json')
+    ).toBe(join(workspaceRoot, '.ghostboard', 'trash', 'trash_1.canvas.json'));
+
+    await expect(
+      loadManifest(workspaceRoot, '../../secrets.json')
+    ).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[manifest] Refused to load')
+    );
+
+    await expect(
+      saveManifest(workspaceRoot, '../../secrets.json', {
+        schema: 'ghostboard-canvas/v1',
+        viewId: 'evil',
+        nodes: [],
+        edges: [],
+      })
+    ).rejects.toThrow(/views\/ or trash\//);
+  });
+
   it('loadManifest returns null and reports invalid JSON content', async () => {
     const { loadManifest } = await import('./manifest');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

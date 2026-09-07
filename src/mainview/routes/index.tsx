@@ -1261,6 +1261,12 @@ function CanvasComponent() {
     }
     const searchTarget = pendingSearchTarget.target;
     if (searchTarget?.type === 'folder-child') {
+      let waitTimeout: ReturnType<typeof setTimeout> | undefined;
+      const clearPendingAfterWait = () => {
+        waitTimeout = setTimeout(() => {
+          setPendingSearchTarget(null);
+        }, 2000);
+      };
       const folder = nodes.find(
         (node) => node.id === searchTarget.folderId && node.type === 'folder'
       );
@@ -1292,7 +1298,8 @@ function CanvasComponent() {
         );
         const rect = folderElement?.getBoundingClientRect();
         if (!rect) {
-          return;
+          clearPendingAfterWait();
+          return () => clearTimeout(waitTimeout);
         }
         setFocusedNode(null);
         setFocusedFolder({ id: folder.id, data: folder.data, rect });
@@ -1306,7 +1313,8 @@ function CanvasComponent() {
           node.data.child.id === searchTarget.childId
       );
       if (!expandedChild) {
-        return;
+        clearPendingAfterWait();
+        return () => clearTimeout(waitTimeout);
       }
 
       const childElement = document.querySelector(
@@ -1314,7 +1322,8 @@ function CanvasComponent() {
       );
       const rect = childElement?.getBoundingClientRect();
       if (!rect) {
-        return;
+        clearPendingAfterWait();
+        return () => clearTimeout(waitTimeout);
       }
 
       const child = expandedChild.data.child;

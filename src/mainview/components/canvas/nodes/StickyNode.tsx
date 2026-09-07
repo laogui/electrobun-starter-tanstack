@@ -176,13 +176,16 @@ const StickyNode = ({
   // pressed with this sticky as the sole selection.
   const editRequested = useCanvasStore((s) => s.editingStickyId === id);
   const setEditingStickyId = useCanvasStore((s) => s.setEditingStickyId);
-  if (editRequested) {
+  useEffect(() => {
+    if (!editRequested) {
+      return;
+    }
     if (!editing) {
       focusAfterEditRequestRef.current = true;
       setEditing(true);
     }
     setEditingStickyId(null);
-  }
+  }, [editRequested, editing, setEditingStickyId]);
   useEffect(() => {
     if (editing && focusAfterEditRequestRef.current) {
       focusAfterEditRequestRef.current = false;

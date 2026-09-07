@@ -1,11 +1,12 @@
 import { ListChecks } from 'lucide-react';
-
+import { toast } from 'sonner';
 import { ChecklistFocusedView } from '@/components/canvas/ChecklistFocusedView';
 import type {
   CardContentData,
   ChecklistItem as EditorChecklistItem,
 } from '@/components/canvas/nodes/CardNode';
 import { ChecklistWidgetBody } from '@/components/canvas/nodes/WidgetNode';
+import * as m from '../../../../paraglide/messages.js';
 import { CHECKLIST_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildChecklistPresentation,
@@ -105,7 +106,9 @@ function ChecklistDetailSurface({ host, state }: SurfaceProps<ChecklistState>) {
         };
         host.instance
           .updateState({ history: 'record', state: nextState })
-          .catch(() => undefined);
+          .catch(() => {
+            toast.error(m.toast_save_failed());
+          });
       }}
     />
   );

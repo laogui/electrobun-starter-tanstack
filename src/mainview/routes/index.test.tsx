@@ -1125,6 +1125,60 @@ describe('routes/index', () => {
     });
   });
 
+  it('clears a folder-child search target if the folder never mounts', async () => {
+    rpcMocks.loadCanvas.mockResolvedValueOnce({
+      nodes: [
+        {
+          id: 'folder-1',
+          type: 'folder',
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Search Folder',
+            children: [
+              {
+                id: 'child-1',
+                type: 'card',
+                data: { title: 'Search child' },
+              },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Search Folder')).toBeInTheDocument();
+    });
+
+    vi.useFakeTimers();
+    vi.spyOn(document, 'querySelector').mockReturnValue(null);
+    act(() => {
+      useCanvasStore.getState().setPendingSearchTarget({
+        viewId: 'default',
+        nodeId: 'child-1',
+        target: {
+          type: 'folder-child',
+          viewId: 'default',
+          folderId: 'folder-1',
+          childId: 'child-1',
+          placement: 'folder',
+        },
+      });
+    });
+
+    expect(useCanvasStore.getState().pendingSearchTarget).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(useCanvasStore.getState().pendingSearchTarget).toBeNull();
+    vi.useRealTimers();
+  });
+
   it('does not open the focused view on a modifier-click (selection only)', async () => {
     render(<CanvasRoute />);
 

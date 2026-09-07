@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
-
+import { toast } from 'sonner';
 import { rpcSaveNote } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
+
+import * as m from '../../paraglide/messages.js';
 
 const DEFAULT_NOTE_SAVE_DEBOUNCE_MS = 800;
 
@@ -133,9 +135,13 @@ export function useNoteSaver({
         if (
           requestId !== saveRequestRef.current ||
           changeVersion !== changeVersionRef.current ||
-          latestBodyRef.current !== body ||
-          !response.success
+          latestBodyRef.current !== body
         ) {
+          return;
+        }
+
+        if (!response.success) {
+          toast.error(m.toast_save_failed());
           return;
         }
 
@@ -148,6 +154,7 @@ export function useNoteSaver({
         }
       } catch (error) {
         console.error('[note] Failed to save note:', error);
+        toast.error(m.toast_save_failed());
       }
     },
     [nodeId]

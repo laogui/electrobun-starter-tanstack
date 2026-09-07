@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { create } from 'zustand';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import {
@@ -5,6 +6,7 @@ import {
   rpcCreateExtensionInstance,
   rpcUpdateExtensionInstance,
 } from '@/lib/rpc';
+import * as m from '../../paraglide/messages.js';
 import {
   type ExtensionInstanceLoadError,
   type ExtensionInstanceRecord,
@@ -238,15 +240,26 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         return;
       }
       const doSave = async () => {
-        const result = await rpcUpdateExtensionInstance({
-          instanceId,
-          state: record.state,
-          presentation: record.presentation,
-        });
-        if (result.success && result.record) {
-          set((s) => ({
-            records: { ...s.records, [instanceId]: result.record },
-          }));
+        try {
+          const result = await rpcUpdateExtensionInstance({
+            instanceId,
+            expectedRevision: record.revision,
+            state: record.state,
+            presentation: record.presentation,
+          });
+          if (result.success && result.record) {
+            set((s) => ({
+              records: { ...s.records, [instanceId]: result.record },
+            }));
+            return;
+          }
+          toast.error(m.toast_save_failed());
+        } catch (error) {
+          console.error(
+            `[extensionInstanceStore] Failed to save ${instanceId}:`,
+            error
+          );
+          toast.error(m.toast_save_failed());
         }
       };
       const previous = saveChains.get(instanceId) ?? Promise.resolve();

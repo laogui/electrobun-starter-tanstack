@@ -348,6 +348,7 @@ export async function rpcSaveBlockNote(
   if (!eb?.rpc) {
     return { success: false } as {
       success: boolean;
+      conflict?: boolean;
       revision?: number;
       preview?: {
         blocks: number;

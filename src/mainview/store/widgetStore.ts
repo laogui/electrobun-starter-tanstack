@@ -9,6 +9,7 @@ import type {
   WidgetRecord,
 } from '@/lib/widgetTypes';
 import { isWidgetLoadError } from '@/lib/widgetTypes';
+import * as m from '../../paraglide/messages.js';
 
 const SAVE_DEBOUNCE_MS = 400;
 const MAX_HISTORY_DEPTH = 50;
@@ -321,9 +322,15 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       return;
     }
     const doSave = async () => {
-      const result = await rpcSaveWidget(record);
-      if (!result.success) {
-        console.error(`[widgetStore] saveWidget failed for ${widgetId}`);
+      try {
+        const result = await rpcSaveWidget(record);
+        if (!result.success) {
+          console.error(`[widgetStore] saveWidget failed for ${widgetId}`);
+          toast.error(m.toast_save_failed());
+        }
+      } catch (error) {
+        console.error(`[widgetStore] saveWidget failed for ${widgetId}`, error);
+        toast.error(m.toast_save_failed());
       }
     };
     const previous = saveChains.get(widgetId) ?? Promise.resolve();

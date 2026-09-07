@@ -7,7 +7,18 @@ import { Utils } from 'electrobun/bun';
 import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
 import type { CanvasManifest } from './manifest';
-import { saveManifest } from './manifest';
+import { resolveWorkspaceManifestPath, saveManifest } from './manifest';
+
+function resolveManagedManifestPath(
+  wsPath: string,
+  viewFile: string
+): string | null {
+  try {
+    return resolveWorkspaceManifestPath(wsPath, viewFile);
+  } catch {
+    return null;
+  }
+}
 import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
 import { createNote, saveNote } from './notes';
 import type { TemplateManifest } from './templates';
@@ -204,8 +215,11 @@ export async function removeView(
   const trashId = `trash_${crypto.randomUUID().slice(0, 8)}`;
   const deletedAt = Date.now();
   const trashFile = `trash/${trashId}.canvas.json`;
-  const sourcePath = join(wsPath, '.ghostboard', viewEntry.file);
-  const trashPath = join(wsPath, '.ghostboard', trashFile);
+  const sourcePath = resolveManagedManifestPath(wsPath, viewEntry.file);
+  const trashPath = resolveManagedManifestPath(wsPath, trashFile);
+  if (!(sourcePath && trashPath)) {
+    return { success: false };
+  }
 
   // Move manifest into trash. If the source is missing we still record the
   // trash entry with an empty payload so restore can succeed gracefully.
@@ -254,8 +268,11 @@ export async function restoreView(
     return { success: false };
   }
 
-  const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
-  const restorePath = join(wsPath, '.ghostboard', entry.view.file);
+  const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+  const restorePath = resolveManagedManifestPath(wsPath, entry.view.file);
+  if (!(trashPath && restorePath)) {
+    return { success: false };
+  }
 
   // If the original id is somehow already taken, refuse rather than clobber.
   if (config.views.some((v) => v.id === entry.view.id)) {
@@ -302,7 +319,11 @@ export async function clearAllTrash(
   }
   const remaining: TrashEntry[] = [];
   for (const entry of trash) {
-    const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
+    const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+    if (!trashPath) {
+      remaining.push(entry);
+      continue;
+    }
     if (!existsSync(trashPath)) {
       continue;
     }
@@ -339,7 +360,10 @@ export async function purgeTrash(
   if (!entry) {
     return { success: false };
   }
-  const trashPath = join(wsPath, '.ghostboard', entry.trashFile);
+  const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+  if (!trashPath) {
+    return { success: false };
+  }
   if (existsSync(trashPath)) {
     try {
       const moved = Utils.moveToTrash(trashPath);

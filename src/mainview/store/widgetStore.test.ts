@@ -16,11 +16,18 @@ vi.mock('@/lib/rpc', () => ({
 }));
 
 const toastInfoMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock('sonner', () => ({
   toast: {
+    error: (...args: Parameters<typeof toastErrorMock>) =>
+      toastErrorMock(...args),
     info: (...args: Parameters<typeof toastInfoMock>) => toastInfoMock(...args),
   },
+}));
+
+vi.mock('../../paraglide/messages.js', () => ({
+  toast_save_failed: () => 'Could not save this note.',
 }));
 
 const rpcCloneWidgetMock = vi.mocked(rpcCloneWidget);
@@ -95,6 +102,7 @@ beforeEach(() => {
   rpcCreateWidgetMock.mockReset();
   rpcSaveWidgetMock.mockReset();
   toastInfoMock.mockReset();
+  toastErrorMock.mockReset();
   rpcSaveWidgetMock.mockResolvedValue({ success: true });
   useWidgetStore.setState({ records: {}, history: {} });
 });
@@ -520,6 +528,19 @@ describe('widgetStore', () => {
     expect(saveOrder).toEqual(['First', 'Second']);
     expect(rpcSaveWidgetMock).toHaveBeenCalledTimes(2);
 
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T12:00:00.000Z'));
+  });
+
+  it('toasts when saveWidgetNow fails', async () => {
+    vi.useRealTimers();
+    const record = checklistRecord({ id: 'widget_fail' });
+    useWidgetStore.setState({ records: { widget_fail: record } });
+    rpcSaveWidgetMock.mockResolvedValueOnce({ success: false });
+
+    await useWidgetStore.getState().saveWidgetNow('widget_fail');
+
+    expect(toastErrorMock).toHaveBeenCalledWith('Could not save this note.');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-08T12:00:00.000Z'));
   });

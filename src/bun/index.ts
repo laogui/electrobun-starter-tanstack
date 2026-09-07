@@ -925,6 +925,7 @@ interface CanvasRPC {
         };
         response: {
           success: boolean;
+          conflict?: boolean;
           revision?: number;
           preview?: PreviewArtifacts;
           blocknoteFile?: string;
@@ -2429,6 +2430,17 @@ async function main() {
           // hashes (ADR 0002). Note metadata (title/color/createdAt) and the
           // derived preview live in the sidecar alongside the blocks.
           const existing = await loadBlockNoteSidecar(wsPath, noteId);
+          if (
+            existing &&
+            typeof revision === 'number' &&
+            revision !== existing.revision
+          ) {
+            return {
+              success: false,
+              conflict: true,
+              revision: existing.revision,
+            };
+          }
           const nextRevision =
             (typeof revision === 'number'
               ? revision

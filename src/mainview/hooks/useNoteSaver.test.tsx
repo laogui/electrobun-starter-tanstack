@@ -7,11 +7,22 @@ import { buildTextNoteFrontmatter, useNoteSaver } from '@/hooks/useNoteSaver';
 
 const mocks = vi.hoisted(() => ({
   rpcSaveNote: vi.fn(),
+  toastError: vi.fn(),
   updateNodeData: vi.fn(),
 }));
 
 vi.mock('@/lib/rpc', () => ({
   rpcSaveNote: mocks.rpcSaveNote,
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => mocks.toastError(...args),
+  },
+}));
+
+vi.mock('../../paraglide/messages.js', () => ({
+  toast_save_failed: () => 'Could not save this note.',
 }));
 
 vi.mock('@/store/canvasStore', () => ({
@@ -71,6 +82,7 @@ describe('useNoteSaver', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     mocks.rpcSaveNote.mockReset();
+    mocks.toastError.mockReset();
     mocks.updateNodeData.mockReset();
   });
 
@@ -156,5 +168,49 @@ describe('useNoteSaver', () => {
 
     expect(mocks.rpcSaveNote).not.toHaveBeenCalled();
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
+  });
+
+  it('toasts and keeps the note dirty when a save fails', async () => {
+    mocks.rpcSaveNote.mockResolvedValueOnce({ success: false });
+    const { result } = renderHook(() =>
+      useNoteSaver({
+        frontmatter: { title: 'Title' },
+        nodeId: 'node-1',
+        noteId: 'note-1',
+      })
+    );
+
+    act(() => {
+      result.current.saveNoteDebounced('Body');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+      await Promise.resolve();
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Could not save this note.');
+    expect(mocks.updateNodeData).not.toHaveBeenCalled();
+
+    mocks.rpcSaveNote.mockResolvedValueOnce({
+      success: true,
+      preview: {
+        html: '<p>Retry</p>',
+        excerpt: 'Retry',
+        blocks: 1,
+        version: 1,
+      },
+    });
+    act(() => {
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.rpcSaveNote).toHaveBeenCalledTimes(2);
+    expect(mocks.updateNodeData).toHaveBeenCalledWith(
+      'node-1',
+      expect.objectContaining({ content: 'Body' })
+    );
   });
 });

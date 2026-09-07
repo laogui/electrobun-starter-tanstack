@@ -936,6 +936,59 @@ describe('search', () => {
     expect(tagHit?.noteId).toBe('note-1');
   });
 
+  it('matches sidecar notes by node-metadata tags', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'n-side',
+              type: 'card',
+              position: { x: 0, y: 0 },
+              data: { noteId: 'note_meta' },
+            },
+          ],
+        },
+      },
+    });
+    mkdirSync(join(workspaceRoot, 'content', '.ghostboard', 'blocknote'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(
+        workspaceRoot,
+        'content',
+        '.ghostboard',
+        'blocknote',
+        'note_meta.json'
+      ),
+      JSON.stringify({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_meta',
+        revision: 1,
+        title: 'Sidecar Trip',
+        displayHint: 'note',
+        blocks: [],
+      })
+    );
+    writeFileSync(
+      join(workspaceRoot, '.ghostboard', 'node-metadata.json'),
+      JSON.stringify({
+        schema: 'ghostboard-node-metadata/v1',
+        entries: {
+          note_meta: { tags: ['Travel', 'Japan'] },
+        },
+      })
+    );
+
+    const { searchWorkspace } = await import('./search');
+    const results = await searchWorkspace(workspaceRoot, { query: 'japan' });
+    const tagHit = results.find((r) => r.matchField === 'tag');
+    expect(tagHit?.noteId).toBe('note_meta');
+  });
+
   it('limits results and respects viewId scope', async () => {
     writeWorkspace(workspaceRoot, {
       activeViewId: 'v1',

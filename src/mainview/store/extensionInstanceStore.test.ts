@@ -24,6 +24,18 @@ vi.mock('@/lib/rpc', () => ({
   rpcUpdateExtensionInstance: rpcMocks.update,
 }));
 
+const toastErrorMock = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
+}));
+
+vi.mock('../../paraglide/messages.js', () => ({
+  toast_save_failed: () => 'Could not save this note.',
+}));
+
 registerBuiltinCanvasTypes();
 
 function makeRecord(
@@ -67,6 +79,7 @@ describe('extensionInstanceStore lifecycle', () => {
     rpcMocks.create.mockReset();
     rpcMocks.update.mockReset();
     rpcMocks.update.mockResolvedValue({ success: true });
+    toastErrorMock.mockReset();
   });
 
   afterEach(() => {
@@ -221,5 +234,21 @@ describe('extensionInstanceStore lifecycle', () => {
     });
     expect(clone.state).toEqual(source.state);
     expect(clone.state).not.toBe(source.state);
+  });
+
+  it('passes expectedRevision on save and toasts when the write fails', async () => {
+    const record = makeRecord('extinst_save');
+    useExtensionInstanceStore.getState().hydrate({ [record.id]: record });
+    rpcMocks.update.mockResolvedValueOnce({ success: false });
+
+    await useExtensionInstanceStore.getState().saveNow(record.id);
+
+    expect(rpcMocks.update).toHaveBeenCalledWith({
+      instanceId: record.id,
+      expectedRevision: record.revision,
+      state: record.state,
+      presentation: record.presentation,
+    });
+    expect(toastErrorMock).toHaveBeenCalledWith('Could not save this note.');
   });
 });

@@ -10,15 +10,19 @@ Scope: Electrobun/Bun main process (`src/bun/`), React/Vite renderer (`src/mainv
 
 GhostBoard is a well-structured local-first desktop app: Bun owns the filesystem and secrets, React owns the canvas, and the RPC/HTTP split is mostly intentional. Persistence is stronger than average (atomic writes, view-switch flush-before-clear, attachment/note path sandboxes with tests). Markdown preview XSS is handled seriously (markdown-it `html: false`, sanitize-html on write, DOMPurify + React whitelist on read).
 
-The highest practical security gap is **unvalidated `workspace.json` view/trash file paths**, which can escape `.ghostboard/` when a crafted or git-synced workspace is opened. Other notable issues: **backend search ignores `node-metadata` tags** (the renderer already searches them), **`saveBlockNote` does not conflict-check revisions**, **extension saves never send `expectedRevision`**, **offline license keys are locally forgeable** (documented), and **god-files** (`index.ts` ~3.1k, `canvasStore.ts` / canvas route ~2.3k each) will slow a solo developer soon.
+User-visible gaps first: **backend search ignores `node-metadata` tags** (cross-view `Cmd+K` misses tagged sidecar notes; the renderer already searches them on the current canvas), **legacy note/widget saves fail with only a console log**, and **god-files** (`index.ts` ~3.1k, `canvasStore.ts` / canvas route ~2.3k each) will slow a solo developer sooner than most of the security leftovers.
+
+Next tier: **`saveBlockNote` does not conflict-check revisions** (real if the same `noteId` is open in two places; rare in today's single window). **Manifest `view.file` paths are not sandboxed** — a crafted/git-synced `workspace.json` can escape `.ghostboard/`. App-created views never do this; treat it as an untrusted-workspace consistency gap, not a remote exploit. Offline license keys are **locally forgeable by design** (`docs/subscription.md` already says so) — product debt, not a broken activator.
 
 TanStack Router/Query are wired correctly but underused: almost all product UI lives on `/` with Zustand + hand-rolled RPC wrappers. Tests are unusually strong for canvas/store/search; the gaps that matter are shared markdown, BlockNote save, `hostApi`, and RPC contract drift.
+
+**How to read severities.** Threat model is a single-window, local-first desktop app. The renderer is privileged (it can call every RPC); preview XSS is the realistic way to abuse that, and that path is tight. **High** is reserved for untrusted input that escapes the workspace without a compromised renderer. **Medium** is user-visible incorrectness or a consistency hole worth fixing soon. **Low** is defense-in-depth, single-window races, or polish. Several items were originally ranked higher; they were calibrated down after a second pass.
 
 ---
 
 ## What's working well
 
-1. **Clear process split.** Renderer never touches the disk. Bun owns workspace I/O, attachments, AI keys, license, templates, and cleanup. Streaming (AI chat, media, unfurl, upload) correctly bypasses Electrobun RPC via a 127.0.0.1 HTTP bridge (`src/bun/localHttpServer.ts`).
+1. **Clear process split.** The renderer does not use Node FS. Bun owns workspace I/O, attachments, AI keys, license, templates, and cleanup. Streaming (AI chat, media, unfurl, upload) correctly bypasses Electrobun RPC via a 127.0.0.1 HTTP bridge (`src/bun/localHttpServer.ts`). The webview can still invoke every RPC (including setting the API key); the trust boundary is “after XSS,” not “renderer is unprivileged.”
 
 2. **Path sandboxing is a habit, not a one-off.** Attachments, notes, BlockNote sidecars, widgets, and extension instances all use `assert*Path` helpers that reject absolute paths, `..`, and root escape. Tests cover traversal (`attachments.test.ts`, `notes.test.ts`, `cleanup.test.ts`, `blocknote.test.ts`).
 
@@ -71,9 +75,9 @@ Local HTTP for streams is the right call: Electrobun RPC is a request/response s
 
 Severity: **Critical** (remote or untrusted-input compromise of user data / machine) / **High** / **Medium** / **Low** / **Nit**.
 
-Items marked **Bug** are incorrect or unsafe today. Items marked **Suggestion** are design debt or follow-ups.
+Items marked **Bug** are incorrect or unsafe today. Items marked **Suggestion** are design debt or follow-ups. Numbering is stable for citations; it is **not** priority order. Suggested read order for a solo maintainer: #2 (tags), #9 (silent saves), #11 (god-files), #3 (`saveBlockNote` conflict), #1 (manifest paths), then the Lows.
 
-### 1. High — Bug — Manifest / trash paths are not sandboxed
+### 1. Medium — Bug — Manifest / trash paths are not sandboxed
 
 **Where:** `src/bun/manifest.ts` 35–60; `src/bun/workspace.ts` 207–258, 305, 342; also `cleanup.ts` and `extensions/gc.ts` which consume `view.file` / `trashFile`.
 
@@ -92,13 +96,13 @@ export async function saveManifest(...) {
 }
 ```
 
-`addView` always writes `views/${id}.canvas.json`, but **load/save/restore trust `workspace.json`**. That file is user-editable and often git-synced. A crafted `"file": "../../userprefs.json"` or `"file": "../../../.ssh/id_rsa"` can read/write outside `.ghostboard/` with the app's OS permissions.
+`addView` always writes `views/${id}.canvas.json`, but **load/save/restore trust `workspace.json`**. That file is user-editable and often git-synced. A crafted `"file": "../../userprefs.json"` can read/write outside `.ghostboard/` with the app's OS permissions.
 
-**Why it matters:** Opening an untrusted or collaboratively-synced workspace is a realistic threat for a local-first notes app. Attachments and notes already have this guard; manifests do not.
+**Why it matters:** Attachments and notes already have this guard; manifests do not. For a single-user local workspace the app never writes a bad `file`. The realistic trigger is opening a crafted or collaboratively-synced workspace — same class as “untrusted folder,” not a remote exploit. Originally ranked High; calibrated to Medium because it requires that extra step.
 
 **Fix direction:** Add `assertWorkspaceManifestPath(wsPath, viewFile)` mirroring `assertWorkspaceAttachmentPath`: relative only, no `..`, must start with `views/` or `trash/`, then `relative(root, resolved)` containment. Apply it to restore/purge/cleanup/search as well. Add a traversal test next to `manifest.test.ts`.
 
-Not patched in this review: High, not Critical (requires a crafted workspace, no remote exploit).
+Not patched in this review: not Critical, and not trivial enough to slip into a review-only PR.
 
 ---
 
@@ -139,13 +143,13 @@ The renderer in-memory scan looks up tags via `useNodeMetadata()` for every node
 
 Client `revision` is incremented blindly. A stale focused-view write overwrites a newer sidecar. Extension instances already throw `revision-conflict` when `expectedRevision` mismatches (`instanceStore.ts` 187–191).
 
-**Why it matters:** Same note can appear on multiple canvases (`README.md`). Focused view + library + a second window (or a hung flush) can lose edits silently.
+**Why it matters:** Same `noteId` can appear on multiple canvases (`README.md`). Today's UI is still one window, so this is not “open the app and lose words.” It matters once two focused surfaces (or a hung flush + retry) write the same sidecar.
 
 **Fix direction:** If `existing && revision !== existing.revision`, return `{ success: false, conflict: true, revision: existing.revision }` and let `useBlockNoteSaver` reload/toast. Do not accept a client revision ahead of disk.
 
 ---
 
-### 4. Medium — Bug — Extension instance saves omit `expectedRevision`
+### 4. Low — Bug — Extension instance saves omit `expectedRevision`
 
 **Where:** `src/mainview/store/extensionInstanceStore.ts` 241–245. RPC wrapper already accepts it (`rpc.ts` 256–268). Bun already enforces it.
 
@@ -157,51 +161,51 @@ Client `revision` is incremented blindly. A stale focused-view write overwrites 
         });
 ```
 
-Saves are debounced and chained per id (good), but last-write-wins on disk if two surfaces (canvas + detail, or undo vs live edit) race.
+Saves are already debounced and chained per id, so sequential edits on one instance are ordered. Last-write-wins only if two surfaces (canvas + detail, or undo vs live) race. Small surface in the current UI. Originally Medium; calibrated to Low.
 
 **Fix direction:** Pass `expectedRevision: record.revision`. On `revision-conflict`, reload the instance and toast rather than clobbering.
 
 ---
 
-### 5. Medium — Bug — Offline license keys are locally forgeable
+### 5. Medium — Suggestion — Offline license is documented as bypassable
 
-**Where:** `src/bun/license.ts` 84–92, 143–158, 229–237. Documented in `docs/subscription.md`.
+**Where:** `src/bun/license.ts` 84–92, 143–158, 229–237. Already stated in `docs/subscription.md` (default offline XOR “可被离线绕过”).
 
 `validateKey` is a public checksum of the first three segments. `generateLicenseKey()` produces keys that pass it. Online verification is opt-in (`USE_ONLINE_LICENSE=true`) and off by default. Storage is XOR with a hostname/CPU/RAM fingerprint — obfuscation, not crypto.
 
-**Why it matters:** If paid activation ships with defaults, any reader of this MIT repo can unlock the 100-card gate. Not a user-data issue.
+**Why it matters:** This is unfinished commercialization, not a broken activator. If paid unlocks ship with current defaults, anyone who reads this MIT repo can pass the 100-card gate. Not a user-data issue. Originally labeled Bug; that overstated it.
 
-**Fix direction:** Treat local checksum as format-only. Require server activate/verify before setting `activated: true`, or ship with `USE_ONLINE_LICENSE=true` and fail closed when the API is unreachable *for first activation* (keep offline grace after a successful bind, as the subscription doc already intends).
+**Fix direction:** Product decision: require server activate/verify before `activated: true`, or stop calling it a license until that exists. Keep offline grace *after* a successful bind if you go online.
 
 ---
 
-### 6. Medium — Bug — `saveAttachmentFile` reads any absolute OS path
+### 6. Low — Suggestion — `saveAttachmentFile` reads any absolute OS path
 
 **Where:** `src/bun/attachments.ts` 310–341; RPC `src/bun/index.ts` (~2538).
 
 The destination is sandboxed. The **source** is any absolute path the renderer sends. Intended for native-picker imports, but nothing proves the path came from a dialog.
 
-**Why it matters:** A compromised renderer (or XSS in the webview) can copy SSH keys, browser profiles, etc. into `attachments/`. Exfiltration still needs a second step; aggregation is enough to treat this as Medium.
+**Why it matters:** Needs a compromised renderer. Preview XSS is the realistic path in, and that path is tight. Defense-in-depth, not a current incident. Originally Medium.
 
 **Fix direction:** Restrict to a picker-issued token, or only accept paths returned by a Bun-side `Utils.openFileDialog` in the same turn.
 
 ---
 
-### 7. Medium — Bug — Unbounded attachment upload / in-memory load
+### 7. Low — Suggestion — Unbounded attachment upload / in-memory load
 
 **Where:** `saveAttachmentStream` (`attachments.ts` 230–251) and `/attachment/upload` (`localHttpServer.ts` 220–244) have no size cap. `loadAttachment` (254–267) base64-encodes the whole file. Data-URL RPC path correctly caps at 25 MiB.
 
-**Why it matters:** A token-bearing renderer (or a leaked query token — see #14) can fill disk or OOM the main process on a large video.
+**Why it matters:** The caller already holds the per-launch localhost token. Filling the disk is mostly self-DoS. Worth a cap when you next touch uploads; not an incident. Originally Medium.
 
 **Fix direction:** Enforce a hard max on stream upload (and reject `loadAttachment` above a smaller cap; media should use the byte-range HTTP route, which already exists).
 
 ---
 
-### 8. Medium — Bug — `workspace.json` read-modify-write is unlocked
+### 8. Low — Suggestion — `workspace.json` read-modify-write is unlocked
 
 **Where:** `src/bun/workspace.ts` — `addView`, `removeView`, `restoreView`, `setActiveViewId`, trash purge all load → mutate → save.
 
-Concurrent RPC (delete view + rename + set active, or two windows) can drop an update. Same class of bug as #3, at workspace-config granularity.
+Concurrent RPC (delete view + rename + set active, or two windows) can drop an update. Today's UI is one window; this almost never fires. Same *class* as #3, much smaller *surface*. Originally Medium.
 
 **Fix direction:** Serialize workspace-config mutations on a per-`wsPath` queue (the extension save-chain pattern), or include a revision field and retry.
 
@@ -225,7 +229,7 @@ Widget saves have the same console-only pattern (`widgetStore.ts` 325–327).
 
 ---
 
-### 10. Medium — Bug — `setState` during render in `StickyNode`
+### 10. Low — Bug — `setState` during render in `StickyNode`
 
 **Where:** `src/mainview/components/canvas/nodes/StickyNode.tsx` 177–185.
 
@@ -241,7 +245,7 @@ Widget saves have the same console-only pattern (`widgetStore.ts` 325–327).
   }
 ```
 
-Updating a **Zustand store** while rendering this node can trip "Cannot update a component while rendering a different component" and drop the Enter-to-edit request. `BlockNoteEditor.tsx` 118–122 uses the same-component derived-state pattern (React-legal); the sticky case is not the same.
+Updating a **Zustand store** while rendering this node can trip "Cannot update a component while rendering a different component" and drop the Enter-to-edit request. `BlockNoteEditor.tsx` 118–122 uses the same-component derived-state pattern (React-legal); the sticky case is not the same. Flaky Enter-to-edit, not data loss. Originally Medium.
 
 **Fix direction:** Move the store clear + `setEditing(true)` into a `useEffect` on `editRequested`.
 
@@ -251,7 +255,7 @@ Updating a **Zustand store** while rendering this node can trip "Cannot update a
 
 **Where:** `src/bun/index.ts` (~3130 lines: window + 71 handlers + settings + AI config), `src/mainview/store/canvasStore.ts` (~2353), `src/mainview/routes/index.tsx` (~2345), `src/mainview/lib/rpc.ts` (~1094).
 
-**Why it matters:** The next feature (public plugins, more AI tasks, more node types) will land in these files. Review and regression cost grows faster than the test suite can compensate. `rpcSaveManifest(..., nodes: any[])` already shows contract drift.
+**Why it matters:** For a solo maintainer this outranks several Low security items. The next feature (public plugins, more AI tasks, more node types) will land in these files. Review and regression cost grows faster than the test suite can compensate. `rpcSaveManifest(..., nodes: any[])` already shows contract drift. Only split when you are already in the file.
 
 **Fix direction:** Extract `CanvasRPC` into `src/shared/rpc.ts` and import it from both sides. Split Bun handlers by domain (`rpc/notes.ts`, `rpc/views.ts`, …). Split the canvas route into hydration / search-target / chrome / node-types. Keep `canvasStore` as a facade over smaller slices (views, selection, clipboard).
 
@@ -315,11 +319,13 @@ Sidecar paths require `NOTE_ID_RE` (`^[A-Za-z0-9_-]+$`). A hand-edited or import
 
 ---
 
-### 18. Low — Suggestion — Folder-child search target can stall
+### 18. Low — Suggestion — Folder-child search waits without a timeout
 
-**Where:** `src/mainview/routes/index.tsx` 1289–1317. If the folder or expanded-child DOM rect is missing, the effect returns without clearing `pendingSearchTarget`. Usually self-heals on the next render; a broken expansion leaves search "stuck".
+**Where:** `src/mainview/routes/index.tsx` 1289–1317. See also the focused review of `0b99320`.
 
-**Fix direction:** Timeout / retry budget, then clear the pending target.
+`!expandedChild` is usually “wait for the next frame of folder expansion,” not a fault. `!rect` after a missed `querySelector` is the stuck case. xyflow typically keeps Folder nodes in the DOM, so this rarely fires. A stuck `pendingSearchTarget` holds search navigation, not the whole canvas (pan/click still work).
+
+**Fix direction:** Retry budget, then clear the pending target. Do not treat the intentional wait as a crash.
 
 ---
 
@@ -380,32 +386,32 @@ For boards in the low hundreds of nodes this is fine. The first cliff is "many c
 | `useBlockNoteSaver` / `hostApi` / `aiPanelStore` | No dedicated tests |
 | Legacy `useNoteSaver` failure UX | Partial hook tests; no toast/dirty assertion |
 | Sticky Enter-to-edit | Keyboard tests exist; render-phase store update is untested |
-| License online-off forgeability | `generateLicenseKey` is tested as a feature, not as a threat |
+| License (if you decide to make it real) | `generateLicenseKey` is tested as a feature; that matches today's "format-only" product |
 
-There is no E2E / Spectron-style Electrobun harness. For this stack that is understandable; the highest-ROI next tests are **unit tests on the path/search/revision bugs**, not a full desktop driver.
+There is no E2E / Spectron-style Electrobun harness. For this stack that is understandable; the highest-ROI next tests are **tag search + silent-save UX**, then manifest path traversal, not a full desktop driver.
 
 ---
 
 ## Testing / follow-up checklist
 
-Use this as a working list, not a patch series. Order is risk, not calendar.
+Use this as a working list, not a patch series. Order is what a solo maintainer should actually do first.
 
-### Security / integrity
-
-- [ ] Add `assertWorkspaceManifestPath` and reject `..` / absolute / non-`views|trash` prefixes. Test crafted `workspace.json`.
-- [ ] Cap `/attachment/upload` and `loadAttachment` size; keep byte-range streaming for media.
-- [ ] Restrict `saveAttachmentFile` source paths to dialog-selected files.
-- [ ] Conflict-check `saveBlockNote` against disk revision.
-- [ ] Pass `expectedRevision` from `extensionInstanceStore.saveNow` and handle conflict.
-- [ ] Serialize `workspace.json` mutations.
-- [ ] Decide license: online-required for first activate, or stop calling it a license.
-
-### Correctness / product
+### Correctness / product (do these)
 
 - [ ] Backend search: load `node-metadata.json` and match tags the same way `searchCurrentView` does.
 - [ ] Toast + dirty-keep on legacy note and widget save failure.
-- [ ] Move Sticky Enter-to-edit off the render path.
+- [ ] Conflict-check `saveBlockNote` against disk revision (same `noteId` on two surfaces).
+- [ ] Add `assertWorkspaceManifestPath` and reject `..` / absolute / non-`views|trash` prefixes. Test crafted `workspace.json`.
+- [ ] Move Sticky Enter-to-edit off the render path (flaky Enter, not data loss).
 - [ ] Optional: `Cmd+K` affordance for unlinked notes (today intentionally excluded).
+
+### Defense-in-depth / later
+
+- [ ] Pass `expectedRevision` from `extensionInstanceStore.saveNow` and handle conflict.
+- [ ] Cap `/attachment/upload` and `loadAttachment` size; keep byte-range streaming for media.
+- [ ] Restrict `saveAttachmentFile` source paths to dialog-selected files.
+- [ ] Serialize `workspace.json` mutations if a second window ever exists.
+- [ ] Product decision: require online activate, or stop calling it a license. Not a bug in the current code.
 
 ### Performance
 
@@ -445,23 +451,23 @@ Close the remaining canvas-extension / search gaps: restore Checklist focused de
 
 ### Verdict
 
-**No Critical or High issues in this diff.** The D0/D1 product paths are real, wired through, and have dedicated tests (route Folder-child navigation, Library recover markdown vs sidecar, Checklist `DetailSurface`, persistence-after-hydrate, reachability matrix). It is **not perfectly clean**: a few Low leftovers in the new navigation/recovery/detail paths, some dead contract surface, and the commit message over-claims D2 (link-preview / AI *source* files are not in the diff). Residual whole-repo risks (backend tag search, revision locking) are unchanged by this commit and are not re-listed here.
+**This commit can ship.** No Critical or High issues. D0/D1 are real, wired through, and have dedicated tests (route Folder-child navigation, Library recover markdown vs sidecar, Checklist `DetailSurface`, persistence-after-hydrate, reachability matrix). Leftovers are Low/Nit: a missing timeout on an intentional wait, the same silent-save habit as the rest of the app, a dead search-target variant, and a D2 commit-message over-claim. Residual whole-repo risks (backend tag search, revision locking) are unchanged and are not re-listed here. Do not block release on #4–#7 below.
 
 ### Findings specific to this commit
 
-#### 1. Low — Bug — Folder-child search can stall if the owner Folder (or expanded child) has no DOM rect
+#### 1. Low — Suggestion — Folder-child search waits without a timeout
 
 **Where:** `src/mainview/routes/index.tsx` (new effect branch ~1262–1317); triggered from `SearchDialog.tsx` `locateInCurrentView` when `result.target?.type === 'folder-child'`.
 
-The new navigator correctly refuses to treat Folder children as top-level RF nodes. If `querySelector('[data-id="…"]')` misses or `getBoundingClientRect()` is missing, the effect `return`s **without** clearing `pendingSearchTarget` (unlike the “folder/child no longer stored” branches, which do clear). A later layout usually self-heals; a broken expansion leaves search navigation stuck.
+The navigator correctly refuses to treat Folder children as top-level RF nodes. `!expandedChild` is the **intentional wait** for the next expansion frame. `!rect` after a missed `querySelector` is the stuck case. xyflow usually keeps Folder nodes in the DOM, so this rarely fires. A stuck `pendingSearchTarget` holds **search navigation**, not the canvas (pan/click still work). Missing-folder / missing-child-id branches already clear.
 
-`index.test.tsx` covers the happy path (focusable child, matrix child, cross-view non-focusable widget) with elements already in jsdom. There is no retry/timeout test.
+`index.test.tsx` covers the happy path (focusable child, matrix child, cross-view non-focusable widget). There is no timeout test.
 
-**Fix direction:** Retry budget or `requestAnimationFrame` loop, then clear the pending target. Do not block the canvas indefinitely.
+**Fix direction:** Retry budget, then clear. Do not treat the one-frame wait as a crash.
 
 ---
 
-#### 2. Low — Bug — Checklist detail commits swallow persistence errors
+#### 2. Low — Suggestion — Checklist detail commits swallow persistence errors
 
 **Where:** new `ChecklistDetailSurface` in `src/mainview/extensions/builtin/productivity/checklist.tsx`:
 
@@ -471,9 +477,9 @@ The new navigator correctly refuses to treat Folder children as top-level RF nod
           .catch(() => undefined);
 ```
 
-This is the newly restored detail path. A failed `updateState` (revision conflict, RPC down) looks like a successful edit. Canvas-surface checklist updates are not given a toast here either, but this commit is what made detail editing a first-class open.
+Same habit as the canvas-surface checklist and as whole-repo #9 (legacy `useNoteSaver`). This commit made detail a first-class open, so it is worth remembering — not a unique accident in this SHA.
 
-**Fix direction:** Surface the same save-error toast used by BlockNote focused view; keep the editor dirty.
+**Fix direction:** When you fix silent saves app-wide, include this `.catch`.
 
 ---
 
@@ -487,13 +493,13 @@ Browse is useful; the section title is the settings cleanup string, so users wil
 
 ---
 
-#### 4. Low — Residual — Title-only BlockNote flush still reads `frontmatterRef` updated in an effect
+#### 4. Low — Residual — Title-only flush can read a stale `frontmatterRef` in the same tick
 
-**Where:** new `handleTitleChange` / `handleBlur` in `BlockNoteEditor.tsx` 417–447; `useBlockNoteSaver` `frontmatterRef` is copied in `useEffect`.
+**Where:** new `handleTitleChange` / `handleBlur` in `BlockNoteEditor.tsx` 417–447; `useBlockNoteSaver` copies `frontmatter` in a `useEffect`.
 
-The fix is real: title edits now call `saveDebounced` + `flushNow`, and the integration test asserts that. `saveNow` still sends `frontmatterRef.current`. A same-tick blur (change + blur before the title `useEffect` runs) can persist the **previous** title. Pre-existing ref lag; this commit is what made title-only a flush path.
+The product fix is real: title edits now `saveDebounced` + `flushNow`. A **same-tick** change+blur (typical of `fireEvent` tests) can persist the previous title because `frontmatterRef` updates after paint. Real typing re-renders on each key, so blur almost always sees the new title. Do not treat this as “renaming a note saves the old name.”
 
-**Fix direction:** Pass the latest title into `flushNow` / `saveNow`, or update `frontmatterRef.current` synchronously when the title changes.
+**Fix direction:** Optional: write `frontmatterRef.current` synchronously on title change, or assert the title on `rpcSaveBlockNote` in the integration test. Not a release blocker.
 
 ---
 
@@ -534,12 +540,12 @@ Nothing Critical/High introduced or worsened.
 
 **Landed (good):** Folder-child open (focusable, matrix, cross-view non-focusable widget) in `routes/index.test.tsx`; SearchDialog target plumbing; `useSearch` recording/extension/folder-child; reachability matrix + `search.test.ts`; Library unlinked scan/fail/sidecar recover; Checklist `FocusedView` DetailSurface; persistence “first layout change when mounted after hydration”; ContextMenu primitive selectors; `builtinIds` search-kind mapping; presentation script/style strip; BlockNote title-only blur; AssetNode PDF signature.
 
-**Still missing for the new behavior:**
+**Still missing (optional; do not block on these):**
 
-- [ ] Folder-child pending target when the Folder node is not in the DOM (stall / timeout).
-- [ ] Title-only save asserts **frontmatter title** on `rpcSaveBlockNote`, not only that `saveDebounced` was called.
-- [ ] Checklist detail `updateState` rejection shows UI (today `.catch(() => undefined)`).
-- [ ] Recover-unlinked when `createNode` returns undefined (license / no placement) leaves the row and does not claim success.
+- [ ] Folder-child pending target timeout if expansion never mounts.
+- [ ] Recover-unlinked when `createNode` returns undefined (license / no placement) leaves the row.
+- [ ] Title-only save asserts frontmatter title on `rpcSaveBlockNote` (same-tick test gap).
+- [ ] Checklist detail save-error UI — fold into the app-wide silent-save fix.
 - [ ] `stripMarkup` unclosed `<script>` (documents residual, not a product XSS).
 
 ### Unfinished / dead / inconsistent (diff)
@@ -553,4 +559,4 @@ Nothing Critical/High introduced or worsened.
 | `unlinkedTypeLabel` | Lists types the recover button will not handle |
 | Planning markdown (~1.7k lines of `.planning/` + public-plugin redesign) | Not product risk; makes the SHA harder to review as a behavior change |
 
-No product code was changed for this focused pass.
+No product code was changed for this focused pass. Severities in this document were calibrated in a follow-up pass (High/Medium inflation walked back; this section’s “Bug” labels on wait/timeout and Checklist `.catch` were softened).

@@ -432,3 +432,125 @@ Use this as a working list, not a patch series. Order is risk, not calendar.
 ## Review method
 
 Read `package.json`, `electrobun.config.ts`, `docs/tech-spec.md`, `docs/subscription.md`, and `README.md` for intended architecture. Walked Bun RPC surface in `src/bun/index.ts`, path helpers, search, license, AI, local HTTP, workspace/manifest, and extension stores. Walked renderer RPC client, canvas/extension stores, search hook, preview/markdown pipeline, FocusedView / detach / AI apply, and test layout. Did not run the desktop app or change product code.
+
+---
+
+## Focused review: 0b99320 (2026-09-07 20:39 +08)
+
+Commit `0b993201321f70d559a102526f3b49cb6e97f61e` — `feat: extension detail and search reachability` (author date 2026-09-07 20:39:53 +0800). Reviewed from `git show` / `--stat` and surrounding call sites only. This is **not** a second whole-repo pass.
+
+### What the commit intended
+
+Close the remaining canvas-extension / search gaps: restore Checklist focused detail through the Canvas Type `DetailSurface` (Pomodoro/Reminder stay canvas-only), keep legacy Folder children recoverable instead of silently becoming cards, route Cmd+Z to the focused extension instance, stop context-menu subscribers from invalidating on every `nodes` identity change, and persist the first post-hydrate mutation. Search gets a shared `SearchResultTarget` (including Folder-child hit-to-open), in-memory fallback coverage for recordings/extensions/folder children, Note Library browse/recover of unlinked note files, a reachability matrix + project fixture, plus smaller D2 fixes (PDF magic-byte check, BlockNote title-only save). Presentation `stripMarkup` now drops closed `<script>`/`<style>` blocks. Lots of tests landed with the behavior.
+
+### Verdict
+
+**No Critical or High issues in this diff.** The D0/D1 product paths are real, wired through, and have dedicated tests (route Folder-child navigation, Library recover markdown vs sidecar, Checklist `DetailSurface`, persistence-after-hydrate, reachability matrix). It is **not perfectly clean**: a few Low leftovers in the new navigation/recovery/detail paths, some dead contract surface, and the commit message over-claims D2 (link-preview / AI *source* files are not in the diff). Residual whole-repo risks (backend tag search, revision locking) are unchanged by this commit and are not re-listed here.
+
+### Findings specific to this commit
+
+#### 1. Low — Bug — Folder-child search can stall if the owner Folder (or expanded child) has no DOM rect
+
+**Where:** `src/mainview/routes/index.tsx` (new effect branch ~1262–1317); triggered from `SearchDialog.tsx` `locateInCurrentView` when `result.target?.type === 'folder-child'`.
+
+The new navigator correctly refuses to treat Folder children as top-level RF nodes. If `querySelector('[data-id="…"]')` misses or `getBoundingClientRect()` is missing, the effect `return`s **without** clearing `pendingSearchTarget` (unlike the “folder/child no longer stored” branches, which do clear). A later layout usually self-heals; a broken expansion leaves search navigation stuck.
+
+`index.test.tsx` covers the happy path (focusable child, matrix child, cross-view non-focusable widget) with elements already in jsdom. There is no retry/timeout test.
+
+**Fix direction:** Retry budget or `requestAnimationFrame` loop, then clear the pending target. Do not block the canvas indefinitely.
+
+---
+
+#### 2. Low — Bug — Checklist detail commits swallow persistence errors
+
+**Where:** new `ChecklistDetailSurface` in `src/mainview/extensions/builtin/productivity/checklist.tsx`:
+
+```106:108:src/mainview/extensions/builtin/productivity/checklist.tsx
+        host.instance
+          .updateState({ history: 'record', state: nextState })
+          .catch(() => undefined);
+```
+
+This is the newly restored detail path. A failed `updateState` (revision conflict, RPC down) looks like a successful edit. Canvas-surface checklist updates are not given a toast here either, but this commit is what made detail editing a first-class open.
+
+**Fix direction:** Surface the same save-error toast used by BlockNote focused view; keep the editor dirty.
+
+---
+
+#### 3. Low — Inconsistency — Unlinked Library lists widgets/extensions but only notes are recoverable
+
+**Where:** `LibraryPopup.tsx` `isRecoverableUnlinkedNote` (markdown / BlockNote sidecar only) vs `unlinkedTypeLabel` which also names `.ghostboard/widgets/` and `extension-instances/`. Tests assert two “Place on canvas” buttons for the note rows and that typed records are not recovered as cards.
+
+Browse is useful; the section title is the settings cleanup string, so users will expect a recover action on every row. Widget/extension rows render with no button and no explanation.
+
+**Fix direction:** Hide non-note rows, or add an explicit “not recoverable here / use Settings cleanup” hint.
+
+---
+
+#### 4. Low — Residual — Title-only BlockNote flush still reads `frontmatterRef` updated in an effect
+
+**Where:** new `handleTitleChange` / `handleBlur` in `BlockNoteEditor.tsx` 417–447; `useBlockNoteSaver` `frontmatterRef` is copied in `useEffect`.
+
+The fix is real: title edits now call `saveDebounced` + `flushNow`, and the integration test asserts that. `saveNow` still sends `frontmatterRef.current`. A same-tick blur (change + blur before the title `useEffect` runs) can persist the **previous** title. Pre-existing ref lag; this commit is what made title-only a flush path.
+
+**Fix direction:** Pass the latest title into `flushNow` / `saveNow`, or update `frontmatterRef.current` synchronously when the title changes.
+
+---
+
+#### 5. Nit — Unfinished contract — `SearchResultTarget` type `'content'` / `placement: 'unlinked'` is never produced
+
+**Where:** `src/shared/searchTypes.ts` 49–53; `searchTypes.test.ts` only type-checks the shape. `search.ts` / `useSearch.ts` never emit `type: 'content'`. Unlinked recovery is a separate Library RPC (`rpcScanUnlinkedNotes`), not Cmd+K.
+
+`SearchResult.target` is also optional. Current emitters always set it; if a future caller omits `target` on a Folder child, `locateInCurrentView` falls through to `result.nodeId` and tries to select a node that is **not** on the canvas.
+
+**Fix direction:** Either emit unlinked hits from search or drop the unused variant until Cmd+K grows that feature. Consider making `target` required on `SearchResult`.
+
+---
+
+#### 6. Nit — Commit message vs diff — D2 “link preview/AI failure bounds” are not in this commit’s source
+
+`--stat` touches `src/bun/linkPreview.test.ts` and a large `src/test/projectFixture.ts`, but **not** `linkPreview.ts`, `ai.ts`, or `aiTasks.ts`. The actual D2 product hunks here are AssetNode PDF signature checks and the BlockNote title-only save. The extra tests may lock existing bounds; they are not a behavior change in this SHA.
+
+---
+
+#### 7. Nit — Duplicated target helpers and hardcoded English
+
+`contentReferenceForNode` / `targetForNodeRef` exist in both `src/bun/search.ts` and `src/mainview/hooks/useSearch.ts` (renderer also accepts `nodeType === 'note'`). Fine for a first cut; they will drift.
+
+New `unlinkedTypeLabel` strings (`Note sidecar`, `Legacy widget`, …) and the PDF failure copy in `AssetNode` are hardcoded English while the surrounding Library chrome is Paraglide.
+
+---
+
+### Security (this commit only)
+
+Nothing Critical/High introduced or worsened.
+
+- **Presentation sanitizer** (`presentation.ts`): `DANGEROUS_BLOCK_RE` now removes closed `<script>`/`<style>` **bodies** before `TAG_RE` strips tags. That is a small improvement for searchable/plain-text presentation (the old path left `alert(1)` in the string). Presentation is not rendered as HTML. Unclosed tags still leak text. Test already covers the closed-`<script>` case.
+- **Unlinked recover** passes `file` / `noteId` from `rpcScanUnlinkedNotes` into `createNode`. That RPC was already path-constrained; this commit does not add a new filesystem primitive.
+- **PDF check** decodes at most 64 base64 chars / 1 KiB URI payload before mounting an iframe. Sensible; not a new trust boundary.
+- Folder-child `querySelector(\`[data-id="${folder.id}"]\`)` assumes ids are CSS-safe. App-generated ids are; not a new XSS.
+
+### Tests added vs still missing
+
+**Landed (good):** Folder-child open (focusable, matrix, cross-view non-focusable widget) in `routes/index.test.tsx`; SearchDialog target plumbing; `useSearch` recording/extension/folder-child; reachability matrix + `search.test.ts`; Library unlinked scan/fail/sidecar recover; Checklist `FocusedView` DetailSurface; persistence “first layout change when mounted after hydration”; ContextMenu primitive selectors; `builtinIds` search-kind mapping; presentation script/style strip; BlockNote title-only blur; AssetNode PDF signature.
+
+**Still missing for the new behavior:**
+
+- [ ] Folder-child pending target when the Folder node is not in the DOM (stall / timeout).
+- [ ] Title-only save asserts **frontmatter title** on `rpcSaveBlockNote`, not only that `saveDebounced` was called.
+- [ ] Checklist detail `updateState` rejection shows UI (today `.catch(() => undefined)`).
+- [ ] Recover-unlinked when `createNode` returns undefined (license / no placement) leaves the row and does not claim success.
+- [ ] `stripMarkup` unclosed `<script>` (documents residual, not a product XSS).
+
+### Unfinished / dead / inconsistent (diff)
+
+| Item | Notes |
+| --- | --- |
+| `SearchResultTarget` `'content'` + `unlinked` | Typed and unit-tested as a shape; no producer in search |
+| `SearchResult.target?` optional | New navigation depends on it for Folder children |
+| D2 AI/unfurl “bounds” | Tests/fixture only; implementation files unchanged |
+| Duplicate target builders | Bun vs renderer copies |
+| `unlinkedTypeLabel` | Lists types the recover button will not handle |
+| Planning markdown (~1.7k lines of `.planning/` + public-plugin redesign) | Not product risk; makes the SHA harder to review as a behavior change |
+
+No product code was changed for this focused pass.

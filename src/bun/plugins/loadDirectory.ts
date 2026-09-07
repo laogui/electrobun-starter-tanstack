@@ -64,9 +64,12 @@ export async function loadPluginDirectory(
 
   const sources: Record<string, string> = {};
   const handlerFiles = new Set(
-    manifest.contributes.commands.map(
-      (command) => command.handler.split('#')[0] ?? ''
-    )
+    [
+      ...manifest.contributes.commands.map(
+        (command) => command.handler.split('#')[0] ?? ''
+      ),
+      ...manifest.contributes.panels.map((panel) => panel.entry),
+    ].filter(Boolean)
   );
   for (const relative of handlerFiles) {
     if (!relative || isAbsolute(relative) || relative.includes('..')) {

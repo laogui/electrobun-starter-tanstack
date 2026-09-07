@@ -8,6 +8,11 @@ import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
 import type { CanvasManifest } from './manifest';
 import { resolveWorkspaceManifestPath, saveManifest } from './manifest';
+import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
+import { createNote, saveNote } from './notes';
+import type { TemplateManifest } from './templates';
+import { loadTemplate } from './templates';
+import { saveWidget } from './widgets';
 
 function resolveManagedManifestPath(
   wsPath: string,
@@ -19,11 +24,6 @@ function resolveManagedManifestPath(
     return null;
   }
 }
-import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
-import { createNote, saveNote } from './notes';
-import type { TemplateManifest } from './templates';
-import { loadTemplate } from './templates';
-import { saveWidget } from './widgets';
 
 // Default workspace lives under ~/.ghostboard/{channel}/workspace
 export function getDefaultWorkspacePath(): string {

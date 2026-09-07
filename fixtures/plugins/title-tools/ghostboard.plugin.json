@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "id": "community.example.title-tools",
+  "name": "Title tools",
+  "version": "1.0.0",
+  "engines": {
+    "hostApi": ">=1.0.0 <2.0.0"
+  },
+  "permissions": {
+    "required": [
+      {
+        "id": "content.selection.read",
+        "reason": "Read titles of the current selection"
+      }
+    ]
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "normalize-titles",
+        "name": "Normalize selected titles",
+        "handler": "main.js#normalizeTitles",
+        "when": "selection.hasContent"
+      }
+    ]
+  }
+}

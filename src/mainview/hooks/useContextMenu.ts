@@ -127,6 +127,9 @@ export function useContextMenu({
   const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
   const toggleNodesLocked = useCanvasStore((s) => s.toggleNodesLocked);
   const moveSelectedToView = useCanvasStore((s) => s.moveSelectedToView);
+  const normalizeSelectedNoteTitles = useCanvasStore(
+    (s) => s.normalizeSelectedNoteTitles
+  );
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -493,6 +496,26 @@ export function useContextMenu({
           runAISummarize().catch((error) => {
             console.error('[AI] summarize task failed:', error);
           });
+          break;
+        }
+        case 'normalize-titles': {
+          Promise.resolve(normalizeSelectedNoteTitles())
+            .then((result) => {
+              if (result.success) {
+                toast.success(m.toast_titles_normalized(), {
+                  action: {
+                    label: m.toast_undo(),
+                    onClick: () => useCanvasStore.getState().undo(),
+                  },
+                });
+                return;
+              }
+              toast.error(m.toast_titles_normalize_failed());
+            })
+            .catch((error) => {
+              console.error('[canvas] Failed to normalize titles:', error);
+              toast.error(m.toast_titles_normalize_failed());
+            });
           break;
         }
         case 'paste': {
@@ -948,6 +971,7 @@ export function useContextMenu({
       toggleNodeLocked,
       toggleNodesLocked,
       moveSelectedToView,
+      normalizeSelectedNoteTitles,
       onRequestCreate,
       onRequestCreateCanvasType,
     ]

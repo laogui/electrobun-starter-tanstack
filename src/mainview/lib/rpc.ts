@@ -81,6 +81,15 @@ async function initElectrobun() {
           openSearch: () => {
             globalThis.dispatchEvent(new CustomEvent('open-search'));
           },
+          normalizeNoteTitles: () => {
+            globalThis.dispatchEvent(new CustomEvent('normalize-note-titles'));
+          },
+          canvasUndo: () => {
+            globalThis.dispatchEvent(new CustomEvent('canvas-undo'));
+          },
+          canvasRedo: () => {
+            globalThis.dispatchEvent(new CustomEvent('canvas-redo'));
+          },
           viewsUpdated: () => {
             globalThis.dispatchEvent(new CustomEvent('views-updated'));
           },
@@ -386,6 +395,50 @@ export async function rpcDeleteNote(noteId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteNote({ noteId });
+}
+
+export type PluginNoteTitlesResult =
+  | {
+      operationId: string;
+      success: true;
+      titles: Record<string, string>;
+    }
+  | { success: false };
+
+export type PluginNoteTitlesHistoryResult =
+  | { success: true; titles: Record<string, string> }
+  | { success: false };
+
+export async function rpcPluginNormalizeNoteTitles(
+  noteIds: string[]
+): Promise<PluginNoteTitlesResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginNormalizeNoteTitles({ noteIds });
+}
+
+export async function rpcPluginUndoNoteTitles(
+  operationId: string,
+  noteIds: string[]
+): Promise<PluginNoteTitlesHistoryResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginUndoNoteTitles({ operationId, noteIds });
+}
+
+export async function rpcPluginRedoNoteTitles(
+  operationId: string,
+  noteIds: string[]
+): Promise<PluginNoteTitlesHistoryResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginRedoNoteTitles({ operationId, noteIds });
 }
 
 export interface SaveAttachmentResult {

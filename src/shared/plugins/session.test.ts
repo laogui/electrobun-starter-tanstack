@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { PLUGIN_OPERATION_ID_RE } from './ids';
 import { isPluginManifestError, parsePluginManifest } from './manifest';
-import { PLUGIN_CONTROL_MESSAGE_MAX_BYTES } from './protocol';
+import {
+  PLUGIN_CONTROL_MESSAGE_MAX_BYTES,
+  parsePluginEnvelope,
+} from './protocol';
 import {
   authorizeHostCall,
   crashSession,
@@ -54,6 +57,45 @@ function operationSession(permissions: string[] = ['content.selection.read']) {
 }
 
 describe('plugin runtime session', () => {
+  it('never grants undeclared or unsupported permissions from supplied grants', () => {
+    const session = operationSession([
+      'content.selection.read',
+      'content.selection.write',
+      'future.magic',
+      'native-bridge',
+    ]);
+    expect([...session.grantedPermissions]).toEqual(['content.selection.read']);
+    expect(authorizeHostCall(session, 'content.applyBatch')).toBe(
+      'permission-denied'
+    );
+    expect(authorizeHostCall(session, 'native.bridge')).toBe(
+      'permission-denied'
+    );
+  });
+
+  it('returns structured errors for non-JSON control messages', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const session = operationSession();
+    for (const args of [1n, cyclic, Number.NaN, () => undefined]) {
+      expect(
+        receivePluginMessage(session, {
+          type: 'host-call',
+          payload: { method: 'content.readSelection', args },
+        })
+      ).toMatchObject({ ok: false, error: { code: 'protocol-error' } });
+    }
+    expect(
+      receivePluginMessage(session, {
+        type: 'host-call',
+        payload: { method: 'content.readSelection' },
+      }).ok
+    ).toBe(true);
+    expect(parsePluginEnvelope('null')).toMatchObject({
+      code: 'protocol-error',
+      message: 'message must have a type',
+    });
+  });
   it('issues host identity on handshake and keeps operation context free of instanceId', () => {
     const session = operationSession();
     const handshake = issueHandshake(session);

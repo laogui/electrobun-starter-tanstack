@@ -90,6 +90,30 @@ export interface HostCallPayload {
   method: PluginHostCallMethod;
 }
 
+export interface ContentSelectionItem {
+  ref: string;
+  revision: number;
+  title: string;
+  token: string;
+}
+
+export interface ContentApplyBatchOperation {
+  expectedRevision: number;
+  ref: string;
+  set: { title: string };
+}
+
+export interface ContentApplyBatchArgs {
+  label?: string;
+  operationId: string;
+  operations: ContentApplyBatchOperation[];
+}
+
+export interface ContentApplyBatchResult {
+  operationId: string;
+  results: Array<{ ref: string; revision: number; title: string }>;
+}
+
 export interface PermissionRequestPayload {
   permission: string;
 }
@@ -125,26 +149,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function encodedMessageSize(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  return new TextEncoder().encode(
+    JSON.stringify(value, (_key, entry: unknown) => {
+      if (
+        typeof entry === 'bigint' ||
+        typeof entry === 'function' ||
+        typeof entry === 'symbol' ||
+        (typeof entry === 'number' && !Number.isFinite(entry))
+      ) {
+        throw new Error('control messages must contain JSON values');
+      }
+      return entry;
+    })
+  ).byteLength;
 }
 
 export function parsePluginEnvelope(
   input: unknown
 ): PluginEnvelope | PluginProtocolError {
-  const value =
-    typeof input === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(input) as unknown;
-          } catch {
-            return null;
-          }
-        })()
-      : input;
-  if (value === null && typeof input === 'string') {
-    return { code: 'protocol-error', message: 'message is not valid JSON' };
+  if (
+    typeof input === 'string' &&
+    new TextEncoder().encode(input).byteLength >
+      PLUGIN_CONTROL_MESSAGE_MAX_BYTES
+  ) {
+    return {
+      code: 'resource-limit',
+      message: 'control message exceeds 256 KiB',
+    };
   }
-  if (encodedMessageSize(value) > PLUGIN_CONTROL_MESSAGE_MAX_BYTES) {
+  let value: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      value = JSON.parse(input) as unknown;
+    } catch {
+      return { code: 'protocol-error', message: 'message is not valid JSON' };
+    }
+  }
+  let size: number;
+  try {
+    size = encodedMessageSize(value);
+  } catch {
+    return {
+      code: 'protocol-error',
+      message: 'control message must be serializable JSON',
+    };
+  }
+  if (size > PLUGIN_CONTROL_MESSAGE_MAX_BYTES) {
     return {
       code: 'resource-limit',
       message: 'control message exceeds 256 KiB',

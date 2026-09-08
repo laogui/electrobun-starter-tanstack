@@ -33,6 +33,9 @@ const {
   loadCanvasMock,
   rpcDeleteNoteMock,
   rpcDeleteWidgetMock,
+  rpcPluginNormalizeNoteTitlesMock,
+  rpcPluginRedoNoteTitlesMock,
+  rpcPluginUndoNoteTitlesMock,
   rpcSaveManifestMock,
   rpcSetActiveViewMock,
   isRpcAvailableMock,
@@ -44,6 +47,9 @@ const {
   loadCanvasMock: vi.fn(),
   rpcDeleteNoteMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcDeleteWidgetMock: vi.fn(() => Promise.resolve({ success: true })),
+  rpcPluginNormalizeNoteTitlesMock: vi.fn(),
+  rpcPluginRedoNoteTitlesMock: vi.fn(),
+  rpcPluginUndoNoteTitlesMock: vi.fn(),
   rpcSaveManifestMock: vi.fn(() => Promise.resolve({ success: true })),
   rpcSetActiveViewMock: vi.fn(() => Promise.resolve({ success: true })),
   isRpcAvailableMock: vi.fn(() => Promise.resolve(true)),
@@ -61,6 +67,9 @@ vi.mock('@/lib/rpc', () => ({
   loadCanvas: loadCanvasMock,
   rpcDeleteNote: rpcDeleteNoteMock,
   rpcDeleteWidget: rpcDeleteWidgetMock,
+  rpcPluginNormalizeNoteTitles: rpcPluginNormalizeNoteTitlesMock,
+  rpcPluginRedoNoteTitles: rpcPluginRedoNoteTitlesMock,
+  rpcPluginUndoNoteTitles: rpcPluginUndoNoteTitlesMock,
   rpcSaveManifest: rpcSaveManifestMock,
   rpcSetActiveView: rpcSetActiveViewMock,
   isRpcAvailable: isRpcAvailableMock,
@@ -173,6 +182,22 @@ afterEach(() => {
   getCachedLicenseMock.mockReset();
   getCachedLicenseMock.mockReturnValue(null);
   loadCanvasMock.mockReset();
+  rpcPluginNormalizeNoteTitlesMock.mockReset();
+  rpcPluginNormalizeNoteTitlesMock.mockResolvedValue({
+    success: true,
+    operationId: 'plgop_1',
+    titles: { note_a: 'Hello world', note_b: 'Child' },
+  });
+  rpcPluginUndoNoteTitlesMock.mockReset();
+  rpcPluginUndoNoteTitlesMock.mockResolvedValue({
+    success: true,
+    titles: { note_a: '  Hello   world ', note_b: 'Child' },
+  });
+  rpcPluginRedoNoteTitlesMock.mockReset();
+  rpcPluginRedoNoteTitlesMock.mockResolvedValue({
+    success: true,
+    titles: { note_a: 'Hello world', note_b: 'Child' },
+  });
   rpcSaveManifestMock.mockReset();
   rpcSaveManifestMock.mockResolvedValue({ success: true });
   rpcSetActiveViewMock.mockReset();
@@ -237,6 +262,239 @@ describe('canvasStore — node operations', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.id).toBe('child');
     expect(remaining[0]?.parentId).toBeUndefined();
+  });
+
+  it('applyNoteTitles updates selected note occurrences and restores on undo', () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+        makeNode('b', {
+          selected: false,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          selected: true,
+          data: {
+            children: [
+              {
+                id: 'child',
+                noteId: 'note_b',
+                data: { noteId: 'note_b', title: 'Child' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(useCanvasStore.getState().collectSelectedNoteIds()).toEqual([
+      'note_a',
+      'note_b',
+    ]);
+    useCanvasStore.getState().applyNoteTitles({
+      note_a: 'Hello world',
+      note_b: 'Child',
+    });
+    const nodes = useCanvasStore.getState().nodes;
+    expect(nodes[0]?.data.title).toBe('Hello world');
+    expect(nodes[1]?.data.title).toBe('Hello world');
+    const children = nodes[2]?.data.children as Array<{
+      data: { title: string };
+    }>;
+    expect(children[0]?.data.title).toBe('Child');
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe(
+      '  Hello   world '
+    );
+    expect(rpcPluginUndoNoteTitlesMock).not.toHaveBeenCalled();
+  });
+
+  it('normalizeSelectedNoteTitles projects RPC titles and undoes sidecar with canvas undo', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+        makeNode('b', {
+          selected: false,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+        makeNode('folder', {
+          type: 'folder',
+          selected: true,
+          data: {
+            children: [
+              {
+                id: 'child',
+                noteId: 'note_b',
+                data: { noteId: 'note_b', title: 'Child' },
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    const applied = await useCanvasStore
+      .getState()
+      .normalizeSelectedNoteTitles();
+    expect(applied).toEqual({
+      success: true,
+      operationId: 'plgop_1',
+      titles: { note_a: 'Hello world', note_b: 'Child' },
+    });
+    expect(rpcPluginNormalizeNoteTitlesMock).toHaveBeenCalledWith([
+      'note_a',
+      'note_b',
+    ]);
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+    expect(useCanvasStore.getState().nodes[1]?.data.title).toBe('Hello world');
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe(
+      '  Hello   world '
+    );
+    expect(rpcPluginUndoNoteTitlesMock).toHaveBeenCalledWith('plgop_1', [
+      'note_a',
+      'note_b',
+    ]);
+
+    useCanvasStore.getState().redo();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+    expect(rpcPluginRedoNoteTitlesMock).toHaveBeenCalledWith('plgop_1', [
+      'note_a',
+      'note_b',
+    ]);
+  });
+
+  it('canvas undo of an intervening move does not undo the sidecar title batch', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          position: { x: 0, y: 0 },
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+      ],
+    });
+    await useCanvasStore.getState().normalizeSelectedNoteTitles();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+
+    useCanvasStore.getState().saveSnapshot();
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          position: { x: 40, y: 10 },
+          data: { noteId: 'note_a', title: 'Hello world' },
+        }),
+      ],
+    });
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]?.position).toEqual({
+      x: 0,
+      y: 0,
+    });
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+    expect(rpcPluginUndoNoteTitlesMock).not.toHaveBeenCalled();
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe(
+      '  Hello   world '
+    );
+    expect(rpcPluginUndoNoteTitlesMock).toHaveBeenCalledWith('plgop_1', [
+      'note_a',
+    ]);
+  });
+
+  it('two title batches undo sidecar operations in reverse order', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+        makeNode('b', {
+          selected: false,
+          data: { noteId: 'note_b', title: 'Child' },
+        }),
+      ],
+    });
+    rpcPluginNormalizeNoteTitlesMock.mockResolvedValueOnce({
+      success: true,
+      operationId: 'plgop_1',
+      titles: { note_a: 'Hello world' },
+    });
+    await useCanvasStore.getState().normalizeSelectedNoteTitles();
+
+    useCanvasStore.setState({
+      nodes: useCanvasStore.getState().nodes.map((node) => ({
+        ...node,
+        selected: node.id === 'b',
+      })),
+    });
+    rpcPluginNormalizeNoteTitlesMock.mockResolvedValueOnce({
+      success: true,
+      operationId: 'plgop_2',
+      titles: { note_b: 'Kid' },
+    });
+    await useCanvasStore.getState().normalizeSelectedNoteTitles();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+    expect(useCanvasStore.getState().nodes[1]?.data.title).toBe('Kid');
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[1]?.data.title).toBe('Child');
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Hello world');
+    expect(rpcPluginUndoNoteTitlesMock).toHaveBeenNthCalledWith(1, 'plgop_2', [
+      'note_b',
+    ]);
+
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe(
+      '  Hello   world '
+    );
+    expect(rpcPluginUndoNoteTitlesMock).toHaveBeenNthCalledWith(2, 'plgop_1', [
+      'note_a',
+    ]);
+  });
+
+  it('normalizeSelectedNoteTitles no-ops when nothing is selected or RPC fails', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: false,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+      ],
+    });
+    await expect(
+      useCanvasStore.getState().normalizeSelectedNoteTitles()
+    ).resolves.toEqual({ success: false });
+    expect(rpcPluginNormalizeNoteTitlesMock).not.toHaveBeenCalled();
+
+    useCanvasStore.setState({
+      nodes: [
+        makeNode('a', {
+          selected: true,
+          data: { noteId: 'note_a', title: '  Hello   world ' },
+        }),
+      ],
+    });
+    rpcPluginNormalizeNoteTitlesMock.mockResolvedValueOnce({ success: false });
+    await expect(
+      useCanvasStore.getState().normalizeSelectedNoteTitles()
+    ).resolves.toEqual({ success: false });
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe(
+      '  Hello   world '
+    );
+    expect(useCanvasStore.getState().canUndo()).toBe(false);
   });
 
   it('updateNodeData merges data into an existing node', () => {

@@ -23,6 +23,7 @@ import {
   Spline,
   Tag,
   Trash2,
+  Type,
   Unlock,
   ZoomIn,
 } from 'lucide-react';
@@ -155,6 +156,11 @@ const getCardItems = (locked: boolean): MenuItem[] => [
     id: 'ai-summarize',
     label: m.menu_ai_summarize(),
     icon: Sparkles,
+  },
+  {
+    id: 'normalize-titles',
+    label: m.menu_normalize_titles(),
+    icon: Type,
   },
   lockItem(locked),
   { id: 'detach-from-canvas', label: m.menu_move_to_library(), icon: BookOpen },
@@ -337,6 +343,11 @@ const getMultiItems = (
       id: 'ai-summarize',
       label: m.menu_ai_summarize(),
       icon: Sparkles,
+    },
+    {
+      id: 'normalize-titles',
+      label: m.menu_normalize_titles(),
+      icon: Type,
     },
     { id: 'change-color', label: m.menu_change_color(), icon: Palette },
     { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },

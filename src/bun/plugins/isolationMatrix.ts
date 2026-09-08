@@ -4,7 +4,7 @@ export interface PluginIsolationMatrix {
   extraBrowserView: IsolationEvidence;
   hostDom: IsolationEvidence;
   localFiles: IsolationEvidence;
-  logicWorkerTerminate: IsolationEvidence;
+  logicQuickJS: IsolationEvidence;
   nativeBridge: IsolationEvidence;
   network: IsolationEvidence;
   notes: string;
@@ -20,17 +20,17 @@ export function pluginIsolationMatrix(
   return {
     platform,
     rendererBundleCEF: false,
-    logicWorkerTerminate: 'verified',
-    sandboxIframe: 'host-proxy-only',
+    // Configuration is not per-platform execution evidence. Verification is
+    // recorded by an actual test run with its runtime and platform versions.
+    logicQuickJS: 'unverified',
+    sandboxIframe: 'unverified',
     extraBrowserView: 'unverified',
-    hostDom: 'host-proxy-only',
+    hostDom: 'unverified',
     nativeBridge: 'host-proxy-only',
     localFiles: 'host-proxy-only',
     network: 'host-proxy-only',
     otherPlugins: 'host-proxy-only',
     notes:
-      platform === 'darwin'
-        ? 'Logic isolation is a Bun worker that tests can terminate. The app ships a single BrowserWindow with bundleCEF false, so iframe/WebView DOM isolation is host-proxy plus renderer sandbox attributes, not a measured extra CEF process. Linux and Windows use the same config and remain unverified on those hosts.'
-        : 'Logic worker terminate is verified in this test runtime. Iframe and extra BrowserView isolation are unverified on this platform; Electrobun bundleCEF is false.',
+      'Static capability inventory only. Command tests exercise termination in their test runtime; they do not establish Bun/Electrobun or cross-platform isolation. No real panel container has been verified. Host-proxy checks do not prove direct file, network, or native access is blocked. A separate probe app bundled CEF Chromium 147 on macOS and failed native-bridge and network canaries; GhostBoard itself remains bundleCEF: false. A separate macOS WKWebView helper with zero script message handlers had no bunBridge; App Sandbox without network.client killed WebContent; WKContentRuleList block-all passed loopback fetch/WebSocket canaries as host policy; the same helper recovered after an infinite JS loop and a 64MiB allocation by destroying the WKWebView, and the orchestrator recovered by SIGTERM plus a new process. It is not wired into GhostBoard. Command and panel packages were also loaded from an out-of-repo sample directory without host imports or invented instanceId; title-only applyBatch writes JSON sidecar notes and bumps revision; canvas selection can project those titles onto nodes and folder children, but no product-window RPC or public install exists. Record actual runtime, platform, and test results separately.',
   };
 }

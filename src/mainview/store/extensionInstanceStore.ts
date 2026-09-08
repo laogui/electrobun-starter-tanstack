@@ -21,9 +21,15 @@ import type {
 const SAVE_DEBOUNCE_MS = 400;
 const MAX_HISTORY_DEPTH = 50;
 
+type InstanceContent = Pick<ExtensionInstanceRecord, 'state' | 'presentation'>;
+
 interface InstanceHistoryEntry {
-  future: ExtensionInstanceRecord[];
-  past: ExtensionInstanceRecord[];
+  future: InstanceContent[];
+  past: InstanceContent[];
+}
+
+function snapshotContent(record: ExtensionInstanceRecord): InstanceContent {
+  return { state: record.state, presentation: record.presentation };
 }
 
 interface PendingSave {
@@ -160,9 +166,10 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
             ? {
                 ...s.history,
                 [instanceId]: {
-                  past: [...(entry?.past ?? []), current].slice(
-                    -MAX_HISTORY_DEPTH
-                  ),
+                  past: [
+                    ...(entry?.past ?? []),
+                    snapshotContent(current),
+                  ].slice(-MAX_HISTORY_DEPTH),
                   future: [],
                 },
               }
@@ -183,19 +190,26 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
       const entry = get().history[instanceId];
       const current = get().records[instanceId];
       if (
-        !(entry && entry.past.length > 0) ||
+        !(entry && entry.past.length > 0 && current) ||
         isExtensionInstanceLoadError(current)
       ) {
         return;
       }
-      const previous = entry.past.at(-1) as ExtensionInstanceRecord;
+      const previous = entry.past.at(-1) as InstanceContent;
       set((s) => ({
-        records: { ...s.records, [instanceId]: previous },
+        records: {
+          ...s.records,
+          [instanceId]: {
+            ...current,
+            ...previous,
+            updatedAt: new Date().toISOString(),
+          },
+        },
         history: {
           ...s.history,
           [instanceId]: {
             past: entry.past.slice(0, -1),
-            future: [...entry.future, current as ExtensionInstanceRecord].slice(
+            future: [...entry.future, snapshotContent(current)].slice(
               -MAX_HISTORY_DEPTH
             ),
           },
@@ -208,18 +222,25 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
       const entry = get().history[instanceId];
       const current = get().records[instanceId];
       if (
-        !(entry && entry.future.length > 0) ||
+        !(entry && entry.future.length > 0 && current) ||
         isExtensionInstanceLoadError(current)
       ) {
         return;
       }
-      const next = entry.future.at(-1) as ExtensionInstanceRecord;
+      const next = entry.future.at(-1) as InstanceContent;
       set((s) => ({
-        records: { ...s.records, [instanceId]: next },
+        records: {
+          ...s.records,
+          [instanceId]: {
+            ...current,
+            ...next,
+            updatedAt: new Date().toISOString(),
+          },
+        },
         history: {
           ...s.history,
           [instanceId]: {
-            past: [...entry.past, current as ExtensionInstanceRecord].slice(
+            past: [...entry.past, snapshotContent(current)].slice(
               -MAX_HISTORY_DEPTH
             ),
             future: entry.future.slice(0, -1),
@@ -235,11 +256,12 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         clearTimeout(pending.timer);
         pendingSaves.delete(instanceId);
       }
-      const record = get().records[instanceId];
-      if (!record || isExtensionInstanceLoadError(record)) {
-        return;
-      }
       const doSave = async () => {
+        // Read inside the queue: earlier writes may have advanced revision.
+        const record = get().records[instanceId];
+        if (!record || isExtensionInstanceLoadError(record)) {
+          return;
+        }
         try {
           const result = await rpcUpdateExtensionInstance({
             instanceId,
@@ -248,9 +270,24 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
             presentation: record.presentation,
           });
           if (result.success && result.record) {
-            set((s) => ({
-              records: { ...s.records, [instanceId]: result.record },
-            }));
+            const saved = result.record;
+            set((s) => {
+              const current = s.records[instanceId];
+              if (!current || isExtensionInstanceLoadError(current)) {
+                return s;
+              }
+              // A successful write acknowledges the submitted snapshot, not
+              // edits made while the request was in flight.
+              return {
+                records: {
+                  ...s.records,
+                  [instanceId]:
+                    current === record
+                      ? saved
+                      : { ...current, revision: saved.revision },
+                },
+              };
+            });
             return;
           }
           toast.error(m.toast_save_failed());

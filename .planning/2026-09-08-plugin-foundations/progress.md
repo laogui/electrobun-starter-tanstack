@@ -1,0 +1,38 @@
+# Progress
+- 2026-09-08：读取 PRD、开发计划和旧规划；工作区干净，创建本批整改计划。
+- 内容历史仅 state/presentation；写队列执行时取状态，成功回包保留新编辑；新增保存后 Undo/Redo、在途编辑和失败重试回归。
+- 修复 hostApi 上下界比较、未知必需权限/贡献、别名冲突和非 JSON 消息；权限取已识别/已声明/已授权交集。
+- 合并命令执行到 logicRuntime 的 QuickJS WASM 入口，删除 Worker/Node VM 公开路径；请求与返回均校验，宿主回调异常隔离；静态隔离矩阵不再虚报 verified。
+- 定向测试 5 files / 43 tests passed；type-check 通过，过滤 29 条依赖诊断。
+- macOS arm64 / Bun 1.3.14 实跑：标题预览正常、BigInt/循环引用拒绝 protocol-error、死循环和未决 Promise timeout、内存上限触发 resource-limit、下一会话正常恢复；QuickJS 宿主全局 canary 均为不可见。
+- PRD/开发计划/v2.1 同步当前下一步：真实容器实验、仓库外样例、P1 标题事务闭环。P0 不再被 P4 签名/时区和 P1 schema 细节阻塞。
+- 上一轮最终：bun run test — 174 files / 1559 tests passed；bun run check — 475 files checked；bun run type-check 通过（29 条依赖诊断按原门禁过滤）；git diff --check 通过。
+- 额外归拢 workspace.ts 的既有 import 排列使全仓门禁通过，无业务行为变化。未执行桌面 UI/HTML 容器或 Linux/Windows 隔离验收，不提升 P0 整体验收状态。未创建提交。
+
+## 继续：真实容器实验
+- 使用 Context7 当前 Electrobun 文档及安装的 1.18.1 源码核对 sandbox、navigationRules、原生 handler 和 build 入口。
+- 创建 scripts/plugin-container-probe 独立应用；只使用临时哨兵文件、loopback 服务和 canary RPC，不加载 GhostBoard 工作区。
+- 原生 WebKit：sandbox 仍可 fetch 到测试服务器；iframe allow-scripts+CSP 可阻止当前 DOM/fetch/file/storage 路径，真实握手与重开成功，但底层 bunBridge canary 实际到达宿主两次。
+- 逻辑 VM：本机 Bun 1.3.14 与应用附带 Bun 1.3.13 均通过 module.constructor.constructor 暴露 process/Bun 存在性。未访问任何敏感内容。
+- 原始 JSON 和失败结论提交到 docs/features/In Progress/plugin-container-evidence/2026-09-08 与 plugin-container-experiment.md；当前两候选拒绝，不以 facade 缺失当隔离。
+- 探针独立 TypeScript 检查通过（0 项项目错误，沿用分类规则过滤 1 项依赖诊断）。
+- 继续轮最终：QuickJS 定向测试 3 files / 17 tests passed；全量 `bun run test` 为 175 files / 1567 tests，`bun run check` 检查 492 files，`bun run type-check` 和 `git diff --check` 通过。本机与打包 Electrobun 探针均完成宿主全局/JSON/中断验证。未接公开安装、未读取工作区、未创建提交。WebKit/旧 VM 失败证据保留，P0 未升级为已验收。
+- 继续轮补充：独立 launcher 子进程原型已接入打包探针。最新父探针 PID 41295、launcher PID 42760、子应用 worker PID 42761，子窗口以退出码 0 完成一次性报告；但 native WebKit 仍显示 `bunBridge`/`internalBridge`、发送 raw canary 成功并访问 loopback 网络。结果记录在 `plugin-container-evidence/2026-09-08/isolated-view-process.json`，因此只确认进程生命周期边界，仍拒绝该视图容器。
+- 最终回归：QuickJS host-call 配额、迟到 Promise 清理和 host-result 大小限制回归加入后，受控 2-worker 全量 Vitest 为 175 files / 1570 tests；`bun run check` 检查 492 files，`bun run type-check` 与 `git diff --check` 通过；`bun run build:canary` 成功，归档内含 `Contents/Resources/app/bun/emscripten-module.wasm` 与 `bun/index.js`。本机/打包 QuickJS 及独立视图探针均重跑，P0 仍未整体验收。
+- 入口边界补强：非对象 `permissions`、带穿越/绝对路径的 handler 与 canvas entry 均拒绝；loader 同时验证 command、importer、panel、canvas entry 文件，合法 JSON `null` 不再误报为解析失败。新增回归后全量为 175 files / 1570 tests（2 workers），插件相关定向测试通过；P0 视图容器结论不变。
+- 继续轮（CEF）：探针改为仅在独立实验应用上 `bundleCEF: true`，GhostBoard 仍为 `bundleCEF: false`。新增 CEF sandbox / 无 RPC 窗口、CEF 独立 launcher 子进程，以及 WebSocket、Worker、导航 iframe 与 20 次 canary 风暴检查。正在打包并实跑，未把产品隔离矩阵改成已验证。
+- CEF 实跑（macOS arm64 / Electrobun 1.18.1 / Chromium 147.0.7727.118 / Bun 1.3.13）：`cef-sandbox` 与 `cef-no-rpc` 均报告 `__electrobunBunBridge` 为 object、loopback fetch/WebSocket/Worker/storage/导航成功。注册 RPC 时宿主收到 21 次 `cef-sandbox` canary。创建日志为 `sandbox: NO`，dev 构建打开 `127.0.0.1:9222`。native 补充矩阵同样确认 WebSocket/Worker/导航/storage 成功。CEF 下 launcher 子进程输出 `Opening in existing browser session.`，身份 canary 失败。证据写入 `plugin-container-evidence/2026-09-08/cef.json`。P0 视图容器仍拒绝，未创建提交。
+- 继续轮（OS helper）：独立 Swift WKWebView，零 message handler，不链接 Electrobun。未沙箱 PID 56482 与沙箱+网络 PID 58342 均无 bunBridge，但 loopback fetch/WebSocket 命中。拒绝 `network.client` 的 PID 60111/60369 WebContent 终止。内容规则候选 PID 61315 无 loopback 命中，`contentRuleCompiled: true`。证据写入 `plugin-container-evidence/2026-09-08/os-webview.json`。公开安装仍关闭，未创建提交。
+- 继续轮（helper 生命周期）：2026-09-08T07:04:31.862Z。helper 内挂起页 `evaluateDuringHang: timeout`，心跳 3→13，恢复页桥/网络通过；64MiB 分配后再次恢复通过。进程杀 PID 7286 退出码 143，重建 PID 8855 通过。证据 `os-webview-lifecycle.json`。公开安装仍关闭，未创建提交。
+- 继续轮（仓库外样例）：独立仓库 `ghostboard-plugin-samples`（root commit 2c81b97）。宿主加载命令/面板 3 tests 通过；探针 2026-09-08T07:13:37.003Z，`insideHostRepo: false`，命令预览 `Hello world`，面板两次 viewSessionId 不同。契约写入 `plugin-p0-frozen-contract.md`。误在宿主仓库提交已 reset。公开安装仍关闭，宿主仓库未保留该提交。
+- 继续轮（P1 applyBatch）：`ContentBatchStore` 6 tests 通过。仓库外 title-tools 现提交标题批次；探针 2026-09-08T08:34:45.777Z 写入 `Hello world` 后 Undo 回到原标题。公开安装仍关闭，未接到画布 UI，宿主仓库未创建提交。
+- 继续轮（sidecar Note）：`applyNoteTitle` 与 `ContentBatchStore.openNotes` 通过。临时工作区 sidecar 标题从 `  Hello   world ` 写到 `Hello world`（revision 3→4），重启后 Undo 回到原标题/revision。legacy markdown 不进入批次。公开安装仍关闭，未创建提交。
+- 继续轮（画布选区投影）：`noteTitleProjection` 与 canvasStore 115 tests 中新增项通过。选中 note_a/note_b 收集去重；同一 noteId 的未选中节点也被投影；画布 Undo 恢复原标题。`runNormalizeTitlesOnWorkspaceNotes` 对 sidecar 跑 title-tools 后可 Undo。无公开安装、无 RPC、未创建提交。
+- 继续轮（RPC 接线）：`pluginNormalizeNoteTitles` / Undo / Redo 接到 `runNormalizeTitlesOnWorkspaceNotes`；画布 `normalizeSelectedNoteTitles` 投影选区；Undo/Redo 用节点数组引用匹配 sidecar 批次。中间移动只撤销画布；两次批次按栈序撤销。定向测试 4 files / 195 tests 通过（canvasStore 119、index 56、rpc 11、contentBatch 9）；`bun run type-check` 通过（过滤 29 条依赖诊断）；相关文件 biome check 通过。无命令面板、无公开安装、未做桌面走查、未创建提交。
+- 继续轮（CUA 桌面）：隔离 `GHOSTBOARD_DATA_DIR=/tmp/ghostboard-p1-title-cua`。CUA `Edit > Normalize Titles` 把 sidecar `  Hello   world `（revision 3）写成 `Hello world`（revision 4），journal `plgop_d5ea005cd494433d`。退出再开后 AX 标题仍是 Hello world。原生 `role:undo` / Cmd+Z 没有进画布 store，sidecar Undo 桌面未完成。CuaDriver 无 Screen Recording，无截图。公开安装仍关闭，未创建提交。
+- 继续轮（画布 Undo 菜单）：`routeUndoRedo` 替换原生 `role:undo/redo`。CUA 同会话 Normalize 后 Edit Undo：sidecar 回到 `  Hello   world ` revision 3，journal `undone: true`。证据 `p1-title-canvas-undo.json`。无公开安装、未创建提交。
+- 继续轮（ZIP 安装实验）：`loadPluginFromZip` 6 tests 通过。根目录 ZIP 与单层包裹可加载 title-tools 并跑 normalize-titles；穿越、缺 manifest、双 manifest、加密条目拒绝。未接产品 UI / 公开安装 / URL。未创建提交。
+- 继续轮（URL 下载实验）：`loadPluginFromZipUrl` 4 tests 通过。loopback HTTP（显式允许）下载 ZIP 并加载 title-tools；拒绝 file/http 公网/userinfo；HTML 响应 unsupported-source；同机 302 跟到 ZIP。未接产品 UI、未创建提交。
+- 继续轮（CUA 复测）：隔离工作区 `GHOSTBOARD_DATA_DIR=/tmp/ghostboard-p1-title-cua`。CUA 点选卡片后 `Edit > Normalize Titles` 把 sidecar `  Hello   world ` revision 3 写成 `Hello world` revision 4（journal `plgop_2ff4fa3532b444f3`）；`Edit > Undo` 回到原标题/revision 且 `undone: true`；`Edit > Redo` 再写成 Hello world 且 `undone: false`。无 Screen Recording，无 ZIP 安装 UI 可点。公开安装仍关闭，未创建提交。证据 `p1-title-cua-retest.json`。
+- 继续轮（安装事务）：`PluginInstallStore` 12 tests 通过。prepare/commit 把 title-tools 放到 `packages/<id>/<version>/<digest>`；重复摘要 `already-installed`，同版本不同摘要 `digest-conflict`，未提交 recover 取消，committing 崩溃补完，URL query 脱敏。CLI 提交 fixture ZIP，digest `1f3b8f19dbcbd858a9010678c6acb367db5f9de249722f8b5880647d78f7f29f`。`bun run type-check` 通过（过滤 29 条依赖诊断）。无设置页、无公开安装、未创建提交。
+- 继续轮（发布描述 JSON）：`parsePluginReleaseDocument` 4 tests 通过。合法文档可选出当前 hostApi 下最高兼容版本；拒绝 HTML/HTTP/保留 ID/超限；digest 必须匹配。无下载、无签名、无产品 UI、未创建提交。

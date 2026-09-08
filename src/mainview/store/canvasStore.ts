@@ -29,6 +29,10 @@ import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
+import {
+  applyNoteTitlesToCanvasNodes,
+  collectNoteIdsFromCanvasNodes,
+} from '@/lib/noteTitleProjection';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import {
@@ -36,6 +40,9 @@ import {
   loadCanvas,
   rpcDeleteNote,
   rpcDeleteWidget,
+  rpcPluginNormalizeNoteTitles,
+  rpcPluginRedoNoteTitles,
+  rpcPluginUndoNoteTitles,
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
@@ -73,6 +80,52 @@ export interface FocusedItem {
   id: string;
   rect: DOMRect;
   type?: string;
+}
+
+interface TitleBatchUndoEntry {
+  noteIds: string[];
+  operationId: string;
+  /** Node array captured by the canvas snapshot taken before projecting titles. */
+  preNodes: Node[];
+}
+
+function noteTitleMap(
+  titles: Record<string, string>
+): Map<string, string> | null {
+  const map = new Map(
+    Object.entries(titles).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
+  );
+  return map.size === 0 ? null : map;
+}
+
+function projectNoteTitles(
+  nodes: Node[],
+  focusedNode: FocusedItem | null,
+  map: Map<string, string>
+): { focusedNode: FocusedItem | null; nodes: Node[] } {
+  const nextNodes = applyNoteTitlesToCanvasNodes(nodes, map);
+  const focused = focusedNode
+    ? applyNoteTitlesToCanvasNodes(
+        [
+          {
+            id: focusedNode.id,
+            type: focusedNode.type,
+            position: { x: 0, y: 0 },
+            data: focusedNode.data,
+          },
+        ],
+        map
+      )[0]
+    : undefined;
+  return {
+    nodes: nextNodes,
+    focusedNode:
+      focusedNode && focused
+        ? { ...focusedNode, data: focused.data }
+        : focusedNode,
+  };
 }
 
 export interface PendingSearchTarget {
@@ -506,6 +559,8 @@ export interface CanvasState {
   _sessionViewports: Record<string, CanvasViewport>;
 
   // Undo / Redo
+  _titleBatchRedoStack: TitleBatchUndoEntry[];
+  _titleBatchStack: TitleBatchUndoEntry[];
   _undoRedo: UndoRedoState;
 
   // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
@@ -528,6 +583,10 @@ export interface CanvasState {
   addFolderChild: (folderId: string) => void;
   applyEdgesChange: (changes: EdgeChange[]) => void;
   applyNodesChange: (changes: NodeChange[]) => void;
+  applyNoteTitles: (
+    titles: Record<string, string>,
+    options?: { snapshot?: boolean }
+  ) => void;
   bringNodesForward: (ids: string[]) => void;
   bringNodesToFront: (ids: string[]) => void;
   canRedo: () => boolean;
@@ -537,6 +596,7 @@ export interface CanvasState {
   clearTagFilters: () => void;
   clipboard: Node[];
   clipboardEdges: Edge[];
+  collectSelectedNoteIds: () => string[];
   /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
   commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   commitFolderChildData: (
@@ -601,6 +661,15 @@ export interface CanvasState {
   nextNodeId: () => string;
   // Core data
   nodes: Node[];
+  /**
+   * Run out-of-repo title-tools on the current canvas selection via RPC,
+   * then project the returned titles onto every occurrence of those notes.
+   * No command palette; callers invoke this store method directly.
+   */
+  normalizeSelectedNoteTitles: () => Promise<
+    | { operationId: string; success: true; titles: Record<string, string> }
+    | { success: false }
+  >;
   pasteClipboard: (offset?: number) => Promise<void>;
 
   // Search
@@ -721,6 +790,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   editingTagNodeId: null,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
+  _titleBatchStack: [],
+  _titleBatchRedoStack: [],
   searchOpen: false,
   settingsOpen: false,
   pendingSearchQuery: null,
@@ -960,6 +1031,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       tagSidebarOpen: false,
       activeTagFilters: [],
       _undoRedo: createUndoRedoState(),
+      _titleBatchStack: [],
+      _titleBatchRedoStack: [],
     });
   },
 
@@ -1020,6 +1093,53 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   applyNodesChange: (changes) => {
     set((s) => ({ nodes: applyCanvasNodeChanges(changes, s.nodes) }));
+  },
+
+  collectSelectedNoteIds: () =>
+    collectNoteIdsFromCanvasNodes(get().nodes, { selectedOnly: true }),
+
+  applyNoteTitles: (titles, options) => {
+    const map = noteTitleMap(titles);
+    if (!map) {
+      return;
+    }
+    if (options?.snapshot !== false) {
+      get().saveSnapshot();
+    }
+    set((s) => projectNoteTitles(s.nodes, s.focusedNode, map));
+  },
+
+  normalizeSelectedNoteTitles: async () => {
+    const noteIds = get().collectSelectedNoteIds();
+    if (noteIds.length === 0) {
+      return { success: false };
+    }
+    const result = await rpcPluginNormalizeNoteTitles(noteIds);
+    if (!result.success) {
+      return { success: false };
+    }
+    const map = noteTitleMap(result.titles);
+    if (!map) {
+      return result;
+    }
+    const preNodes = get().nodes;
+    get().saveSnapshot();
+    set((s) => {
+      const projected = projectNoteTitles(s.nodes, s.focusedNode, map);
+      return {
+        ...projected,
+        _titleBatchStack: [
+          ...s._titleBatchStack,
+          {
+            operationId: result.operationId,
+            noteIds,
+            preNodes,
+          },
+        ],
+        _titleBatchRedoStack: [],
+      };
+    });
+    return result;
   },
 
   applyEdgesChange: (changes) => {
@@ -1538,6 +1658,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
+      _titleBatchStack: [],
+      _titleBatchRedoStack: [],
       _hydrated: false,
     });
   },
@@ -2315,6 +2437,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const { nodes, edges, viewport, _undoRedo } = get();
     set({
       _undoRedo: pushSnapshot(_undoRedo, { nodes, edges, viewport }),
+      _titleBatchRedoStack: [],
     });
   },
 
@@ -2323,29 +2446,70 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // stale snapshot value back would not move the camera — it would only corrupt
   // the session cache and cause a jump when re-entering the view.
   undo: () => {
-    const { nodes, edges, viewport, _undoRedo } = get();
+    const {
+      nodes,
+      edges,
+      viewport,
+      _undoRedo,
+      _titleBatchStack,
+      _titleBatchRedoStack,
+    } = get();
     const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });
     if (!result) {
       return;
     }
+    const top = _titleBatchStack.at(-1);
+    const matched =
+      top !== undefined && top.preNodes === result.snapshot.nodes ? top : null;
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
       _undoRedo: result.state,
+      _titleBatchStack: matched
+        ? _titleBatchStack.slice(0, -1)
+        : _titleBatchStack,
+      _titleBatchRedoStack: matched
+        ? [..._titleBatchRedoStack, matched]
+        : _titleBatchRedoStack,
     });
+    if (matched) {
+      rpcPluginUndoNoteTitles(matched.operationId, matched.noteIds).catch(
+        () => undefined
+      );
+    }
   },
 
   redo: () => {
-    const { nodes, edges, viewport, _undoRedo } = get();
+    const {
+      nodes,
+      edges,
+      viewport,
+      _undoRedo,
+      _titleBatchStack,
+      _titleBatchRedoStack,
+    } = get();
     const result = redoSnapshot(_undoRedo, { nodes, edges, viewport });
     if (!result) {
       return;
     }
+    const top = _titleBatchRedoStack.at(-1);
+    const matched = top !== undefined && top.preNodes === nodes ? top : null;
     set({
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
       _undoRedo: result.state,
+      _titleBatchRedoStack: matched
+        ? _titleBatchRedoStack.slice(0, -1)
+        : _titleBatchRedoStack,
+      _titleBatchStack: matched
+        ? [..._titleBatchStack, matched]
+        : _titleBatchStack,
     });
+    if (matched) {
+      rpcPluginRedoNoteTitles(matched.operationId, matched.noteIds).catch(
+        () => undefined
+      );
+    }
   },
 
   canUndo: () => get()._undoRedo.past.length > 0,

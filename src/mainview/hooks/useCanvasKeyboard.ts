@@ -4,10 +4,9 @@ import { toast } from 'sonner';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { routeUndoRedo } from '@/lib/routeUndoRedo';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
-import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 
 import * as m from '../../paraglide/messages.js';
 
@@ -90,7 +89,6 @@ export function useCanvasKeyboard({
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
   const ungroupSelected = useCanvasStore((s) => s.ungroupSelected);
   const undo = useCanvasStore((s) => s.undo);
-  const redo = useCanvasStore((s) => s.redo);
   const setSearchOpen = useCanvasStore((s) => s.setSearchOpen);
   const searchOpen = useCanvasStore((s) => s.searchOpen);
   const setPendingSearchQuery = useCanvasStore((s) => s.setPendingSearchQuery);
@@ -156,48 +154,12 @@ export function useCanvasKeyboard({
       }
 
       if (mod && key === 'z') {
-        const focused = useCanvasStore.getState().focusedNode;
-        const extensionHost =
-          e.target instanceof Element
-            ? e.target.closest('[data-extension-instance]')
-            : null;
-        const instanceId =
-          extensionHost?.getAttribute('data-extension-instance') ??
-          (focused?.type === 'extension' &&
-          typeof focused.data.instanceId === 'string'
-            ? focused.data.instanceId
-            : null);
-        if (instanceId) {
+        const handled = routeUndoRedo(e.shiftKey ? 'redo' : 'undo', {
+          eventTarget: e.target,
+          fromKeyboard: true,
+        });
+        if (handled) {
           e.preventDefault();
-          const extensionStore = useExtensionInstanceStore.getState();
-          if (e.shiftKey) {
-            extensionStore.redoInstance(instanceId);
-          } else {
-            extensionStore.undoInstance(instanceId);
-          }
-          return;
-        }
-        if (focused?.type === 'widget') {
-          const widgetId = focused.data.widgetId;
-          if (typeof widgetId === 'string' && widgetId) {
-            e.preventDefault();
-            const widgetStore = useWidgetStore.getState();
-            if (e.shiftKey) {
-              widgetStore.redoWidget(widgetId);
-            } else {
-              widgetStore.undoWidget(widgetId);
-            }
-            return;
-          }
-        }
-        if (isEditing()) {
-          return;
-        }
-        e.preventDefault();
-        if (e.shiftKey) {
-          redo();
-        } else {
-          undo();
         }
         return;
       }
@@ -399,9 +361,49 @@ export function useCanvasKeyboard({
     };
     globalThis.addEventListener('open-search', handleOpenSearch);
 
+    const handleNormalizeNoteTitles = () => {
+      const { normalizeSelectedNoteTitles } = useCanvasStore.getState();
+      Promise.resolve(normalizeSelectedNoteTitles())
+        .then((result) => {
+          if (result.success) {
+            toast.success(m.toast_titles_normalized(), {
+              action: {
+                label: m.toast_undo(),
+                onClick: () => useCanvasStore.getState().undo(),
+              },
+            });
+            return;
+          }
+          toast.error(m.toast_titles_normalize_failed());
+        })
+        .catch((error) => {
+          console.error('[canvas] Failed to normalize titles:', error);
+          toast.error(m.toast_titles_normalize_failed());
+        });
+    };
+    globalThis.addEventListener(
+      'normalize-note-titles',
+      handleNormalizeNoteTitles
+    );
+
+    const handleCanvasUndo = () => {
+      routeUndoRedo('undo');
+    };
+    const handleCanvasRedo = () => {
+      routeUndoRedo('redo');
+    };
+    globalThis.addEventListener('canvas-undo', handleCanvasUndo);
+    globalThis.addEventListener('canvas-redo', handleCanvasRedo);
+
     return () => {
       globalThis.removeEventListener('keydown', handleKeyDown);
       globalThis.removeEventListener('open-search', handleOpenSearch);
+      globalThis.removeEventListener(
+        'normalize-note-titles',
+        handleNormalizeNoteTitles
+      );
+      globalThis.removeEventListener('canvas-undo', handleCanvasUndo);
+      globalThis.removeEventListener('canvas-redo', handleCanvasRedo);
     };
   }, [
     // All Zustand actions here are stable references, so the listener is wired
@@ -424,6 +426,5 @@ export function useCanvasKeyboard({
     setSearchOpen,
     setPendingSearchQuery,
     undo,
-    redo,
   ]);
 }

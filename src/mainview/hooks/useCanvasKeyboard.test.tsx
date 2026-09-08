@@ -19,6 +19,8 @@ vi.mock('../../paraglide/messages.js', () => ({
     `${count} cards deleted`,
   toast_edge_deleted: () => 'Connection deleted',
   toast_undo: () => 'Undo',
+  toast_titles_normalized: () => 'Note titles updated',
+  toast_titles_normalize_failed: () => 'Could not normalize titles',
 }));
 
 const TestComponent = () => {
@@ -153,6 +155,20 @@ describe('useCanvasKeyboard', () => {
     expect(state.nodes).toHaveLength(2);
     expect(state.nodes[1]?.id).toMatch(PASTE_ID_RE);
     expect(state.nodes[1]?.selected).toBe(true);
+  });
+
+  it('routes native menu canvas-undo and canvas-redo events', () => {
+    const undo = vi.spyOn(useCanvasStore.getState(), 'undo');
+    const redo = vi.spyOn(useCanvasStore.getState(), 'redo');
+
+    render(<TestComponent />);
+    act(() => {
+      globalThis.dispatchEvent(new CustomEvent('canvas-undo'));
+      globalThis.dispatchEvent(new CustomEvent('canvas-redo'));
+    });
+
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(redo).toHaveBeenCalledTimes(1);
   });
 
   it('calls undo and redo with the correct shortcuts', () => {

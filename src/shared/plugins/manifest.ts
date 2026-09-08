@@ -81,18 +81,73 @@ export interface PluginManifestError {
 
 const HANDLER_RE = /^[A-Za-z0-9._/-]+#[A-Za-z_][A-Za-z0-9_]*$/;
 const ENTRY_RE = /^[A-Za-z0-9._/-]+\.(html|js|mjs)$/;
-const HOST_API_RANGE_RE = /^>=1\.\d+\.\d+ <2\.\d+\.\d+$/;
+// P0 supports stable, explicit inclusive-lower/exclusive-upper ranges only.
+const HOST_API_RANGE_RE = /^>=(\d+\.\d+\.\d+) <(\d+\.\d+\.\d+)$/;
 const PERMISSION_ID_RE = /^[a-z][a-z0-9.-]*$/;
+const PACKAGE_PATH_RE = /^[A-Za-z0-9._/-]+$/;
+export const SUPPORTED_PLUGIN_PERMISSIONS: ReadonlySet<string> = new Set([
+  'content.selection.read',
+  'content.selection.write',
+]);
 const KNOWN_CONTRIBUTE_KEYS = new Set([
   'commands',
   'views',
   'panels',
   'importers',
   'canvasTypes',
-  'menus',
-  'events',
-  'settings',
 ]);
+
+export function compareSemver(left: string, right: string): number {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let index = 0; index < 3; index++) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+}
+
+export function isHostApiRange(range: string): boolean {
+  const match = HOST_API_RANGE_RE.exec(range);
+  if (!(match?.[1] && match[2] && isSemver(match[1]) && isSemver(match[2]))) {
+    return false;
+  }
+  return compareSemver(match[1], match[2]) < 0;
+}
+
+export function hostApiRangeIncludes(range: string, version: string): boolean {
+  const match = HOST_API_RANGE_RE.exec(range);
+  if (!(match?.[1] && match[2] && isSemver(version))) {
+    return false;
+  }
+  const versions = [match[1], version, match[2]];
+  if (!versions.every(isSemver)) {
+    return false;
+  }
+  const [lower, host, upper] = versions.map((item) =>
+    item.split('.').map(Number)
+  );
+  if (
+    !(
+      lower &&
+      host &&
+      upper &&
+      [...lower, ...host, ...upper].every(Number.isSafeInteger)
+    )
+  ) {
+    return false;
+  }
+  return (
+    compareSemver(match[1], version) <= 0 &&
+    compareSemver(version, match[2]) < 0
+  );
+}
+
+function supportsHostApi(range: string): boolean {
+  return hostApiRangeIncludes(range, HOST_API_VERSION);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -100,6 +155,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function isSafePackagePath(value: string): boolean {
+  if (
+    !PACKAGE_PATH_RE.test(value) ||
+    value.startsWith('/') ||
+    value.includes('\\') ||
+    value.includes('\u0000')
+  ) {
+    return false;
+  }
+  return value
+    .split('/')
+    .every(
+      (segment) => segment.length > 0 && segment !== '.' && segment !== '..'
+    );
+}
+
+function isSafeEntryPath(value: string): boolean {
+  return ENTRY_RE.test(value) && isSafePackagePath(value);
 }
 
 function parsePermissionList(
@@ -157,7 +232,8 @@ function parseCommands(
         message: 'command id, name, and handler are required',
       };
     }
-    if (!HANDLER_RE.test(handler)) {
+    const handlerPath = handler.split('#')[0] ?? '';
+    if (!(HANDLER_RE.test(handler) && isSafePackagePath(handlerPath))) {
       return {
         code: 'invalid-manifest',
         message: `invalid command handler: ${handler}`,
@@ -199,7 +275,7 @@ function parsePanels(
         message: 'view id, name, and entry are required',
       };
     }
-    if (!ENTRY_RE.test(entryPath)) {
+    if (!isSafeEntryPath(entryPath)) {
       return {
         code: 'invalid-manifest',
         message: `invalid view entry: ${entryPath}`,
@@ -246,7 +322,8 @@ function parseImporters(
         message: 'importer id, name, and handler are required',
       };
     }
-    if (!HANDLER_RE.test(handler)) {
+    const handlerPath = handler.split('#')[0] ?? '';
+    if (!(HANDLER_RE.test(handler) && isSafePackagePath(handlerPath))) {
       return {
         code: 'invalid-manifest',
         message: `invalid importer handler: ${handler}`,
@@ -316,6 +393,12 @@ function parseCanvasTypes(
     }
     seen.add(id);
     const entryPath = asString(entry.entry);
+    if (entryPath && !isSafeEntryPath(entryPath)) {
+      return {
+        code: 'invalid-manifest',
+        message: `invalid canvas type entry: ${entryPath}`,
+      };
+    }
     types.push(
       entryPath
         ? { id, name, dataVersion, entry: entryPath }
@@ -348,18 +431,13 @@ export function parsePluginManifest(
   input: unknown,
   options?: { allowBuiltin?: boolean }
 ): PluginManifest | PluginManifestError {
-  const value =
-    typeof input === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(input) as unknown;
-          } catch {
-            return null;
-          }
-        })()
-      : input;
-  if (value === null && typeof input === 'string') {
-    return { code: 'invalid-json', message: 'manifest is not valid JSON' };
+  let value: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      value = JSON.parse(input) as unknown;
+    } catch {
+      return { code: 'invalid-json', message: 'manifest is not valid JSON' };
+    }
   }
   if (!isRecord(value)) {
     return { code: 'invalid-manifest', message: 'manifest must be an object' };
@@ -391,23 +469,32 @@ export function parsePluginManifest(
       message: 'engines.hostApi is required',
     };
   }
-  if (!HOST_API_RANGE_RE.test(value.engines.hostApi)) {
-    return {
-      code: 'incompatible-host-api',
-      message: `unsupported hostApi range: ${value.engines.hostApi}`,
-    };
-  }
-  if (!value.engines.hostApi.includes(HOST_API_VERSION.split('.')[0] ?? '1')) {
+  if (!supportsHostApi(value.engines.hostApi)) {
     return {
       code: 'incompatible-host-api',
       message: `hostApi ${HOST_API_VERSION} is outside ${value.engines.hostApi}`,
     };
   }
 
+  if (value.permissions !== undefined && !isRecord(value.permissions)) {
+    return {
+      code: 'invalid-manifest',
+      message: 'permissions must be an object',
+    };
+  }
   const permissionBlock = isRecord(value.permissions) ? value.permissions : {};
   const required = parsePermissionList(permissionBlock.required);
   if ('code' in required) {
     return required;
+  }
+  const unsupported = required.find(
+    (permission) => !SUPPORTED_PLUGIN_PERMISSIONS.has(permission.id)
+  );
+  if (unsupported) {
+    return {
+      code: 'invalid-manifest',
+      message: `unsupported required permission: ${unsupported.id}`,
+    };
   }
   const optional = parsePermissionList(permissionBlock.optional);
   if ('code' in optional) {
@@ -432,6 +519,15 @@ export function parsePluginManifest(
   const commands = parseCommands(value.contributes.commands);
   if ('code' in commands) {
     return commands;
+  }
+  if (
+    value.contributes.views !== undefined &&
+    value.contributes.panels !== undefined
+  ) {
+    return {
+      code: 'invalid-manifest',
+      message: 'use views or panels, not both',
+    };
   }
   const panels = parsePanels(
     value.contributes.views ?? value.contributes.panels

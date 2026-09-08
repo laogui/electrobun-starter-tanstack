@@ -127,4 +127,46 @@ describe('title-tools directory probe', () => {
       code: 'host-import',
     });
   });
+
+  it('requires every declared importer and canvas entry before activation', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'plugin-entry-files-'));
+    await writeFile(
+      join(dir, 'ghostboard.plugin.json'),
+      JSON.stringify({
+        manifestVersion: 1,
+        id: 'community.example.entry-files',
+        name: 'Entry files',
+        version: '1.0.0',
+        engines: { hostApi: '>=1.0.0 <2.0.0' },
+        contributes: {
+          importers: [
+            {
+              id: 'csv',
+              name: 'CSV',
+              handler: 'import.js#parseCsv',
+            },
+          ],
+          canvasTypes: [
+            {
+              id: 'counter',
+              name: 'Counter',
+              dataVersion: 1,
+              entry: 'counter.html',
+            },
+          ],
+        },
+      })
+    );
+    await writeFile(join(dir, 'import.js'), 'export function parseCsv() {}');
+
+    await expect(loadPluginDirectory(dir)).rejects.toMatchObject({
+      code: 'missing-handler',
+      message: expect.stringContaining('counter.html'),
+    });
+
+    await writeFile(join(dir, 'counter.html'), '<!doctype html>');
+    const loaded = await loadPluginDirectory(dir);
+    expect(loaded.sources['import.js']).toContain('parseCsv');
+    expect(loaded.sources['counter.html']).toContain('<!doctype html>');
+  });
 });

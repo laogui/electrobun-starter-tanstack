@@ -112,7 +112,14 @@ describe('extensionInstanceStore lifecycle', () => {
     expect(recordState(second.id)).toEqual(second.state);
     expect(useExtensionInstanceStore.getState().history[first.id]).toEqual({
       past: [],
-      future: [expect.objectContaining({ id: first.id })],
+      future: [
+        expect.objectContaining({
+          state: {
+            title: 'First updated',
+            items: [{ id: 'item-1', text: 'Keep me', checked: true }],
+          },
+        }),
+      ],
     });
 
     useExtensionInstanceStore.getState().redoInstance(first.id);
@@ -250,5 +257,109 @@ describe('extensionInstanceStore lifecycle', () => {
       presentation: record.presentation,
     });
     expect(toastErrorMock).toHaveBeenCalledWith('Could not save this note.');
+  });
+
+  it('persists undo and redo against the latest acknowledged revision', async () => {
+    const initial = makeRecord('extinst_saved_history');
+    let disk = initial;
+    rpcMocks.update.mockImplementation(async (input) => {
+      if (input.expectedRevision !== disk.revision) {
+        return { success: false };
+      }
+      disk = {
+        ...disk,
+        state: input.state,
+        presentation: input.presentation,
+        revision: disk.revision + 1,
+      };
+      return { success: true, record: disk };
+    });
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+    await store.updateState(initial.id, {
+      history: 'record',
+      state: { title: 'Edited', items: [] },
+    });
+    await store.saveNow(initial.id);
+    store.undoInstance(initial.id);
+    await store.saveNow(initial.id);
+    expect(disk.state).toEqual(initial.state);
+    store.redoInstance(initial.id);
+    await store.saveNow(initial.id);
+    expect(disk.state).toEqual({ title: 'Edited', items: [] });
+    expect(
+      rpcMocks.update.mock.calls.map(([input]) => input.expectedRevision)
+    ).toEqual([1, 2, 3]);
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves in-flight edits and sends queued writes with the acknowledged revision', async () => {
+    const initial = makeRecord('extinst_queued_edits');
+    let acknowledge: (result: unknown) => void = () => {
+      throw new Error('request not started');
+    };
+    rpcMocks.update.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        })
+    );
+    rpcMocks.update.mockImplementationOnce(async (input) => ({
+      success: true,
+      record: { ...initial, ...input, revision: 3 },
+    }));
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+    await store.updateState(initial.id, {
+      history: 'record',
+      state: { title: 'First', items: [] },
+    });
+    const firstSave = store.saveNow(initial.id);
+    await Promise.resolve();
+    const submitted = rpcMocks.update.mock.calls[0]![0];
+    await store.updateState(initial.id, {
+      history: 'record',
+      state: { title: 'Second', items: [] },
+    });
+    const secondSave = store.saveNow(initial.id);
+    acknowledge({
+      success: true,
+      record: { ...initial, ...submitted, revision: 2 },
+    });
+    await firstSave;
+    expect(recordState(initial.id)).toEqual({ title: 'Second', items: [] });
+    await secondSave;
+    expect(
+      rpcMocks.update.mock.calls.map(([input]) => [
+        input.expectedRevision,
+        input.state.title,
+      ])
+    ).toEqual([
+      [1, 'First'],
+      [2, 'Second'],
+    ]);
+    expect(recordState(initial.id)).toEqual({ title: 'Second', items: [] });
+  });
+
+  it('keeps unsaved content available for an explicit retry after failure', async () => {
+    const initial = makeRecord('extinst_retry');
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+    await store.updateState(initial.id, {
+      history: 'record',
+      state: { title: 'Unsaved', items: [] },
+    });
+    rpcMocks.update.mockResolvedValueOnce({ success: false });
+    await store.saveNow(initial.id);
+    expect(recordState(initial.id)).toEqual({ title: 'Unsaved', items: [] });
+    rpcMocks.update.mockImplementationOnce(async (input) => ({
+      success: true,
+      record: { ...initial, ...input, revision: 2 },
+    }));
+    await store.saveNow(initial.id);
+    expect(
+      rpcMocks.update.mock.calls.map(([input]) => input.expectedRevision)
+    ).toEqual([1, 1]);
+    expect(recordState(initial.id)).toEqual({ title: 'Unsaved', items: [] });
   });
 });

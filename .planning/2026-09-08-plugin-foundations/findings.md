@@ -1,0 +1,25 @@
+# Findings
+- PRD §7.1 指定公开插件 P0 为下一阶段；D3 无新增体验阻断则不启动。
+- HEAD fd4cec9 有 P0 manifest/session、命令 Worker 与内存面板生命周期，但尚无真实面板容器验收；本轮已将公开命令入口替换为 QuickJS WASM。
+- 前轮审查证实 Undo 恢复旧 revision，保存回包覆盖本地编辑，范围字符串误判兼容，未知能力静默接受，非 JSON 消息抛异常。
+- 基线：174 files / 1537 tests passed，type-check 通过（过滤 29 条依赖诊断）。
+- 本批新增 QuickJS 与入口文件边界回归，当前全量为 175 files / 1570 tests passed（受控为 2 workers）。QuickJS 在 Vitest、本机 Bun 1.3.14 和打包探针 Bun 1.3.13 均验证宿主全局不可见、JSON 边界、超时、内存限制与恢复；真实应用面板仍无验证结果。
+- QuickJS host-call 现在有每次调用预算（默认 256，可按探针覆盖）；本机和打包 canary 均确认超过预算返回 `resource-limit`，避免同步 host-call 风暴无限进入宿主。
+- 原 P0 把签名载荷、复杂 schema、重复调度时区同时作为入口门槛；已按能力所属阶段拆分为 P1/P4，P0 聚焦容器与最小协议，保持公开首版范围。
+- 后续真实实验：Electrobun 1.18.1 native sandbox 允许 loopback fetch（服务器收到请求）；iframe allow-scripts + CSP 阻止当前 DOM/fetch/file/storage 探针，但检测到原生 bridge，需要 canary 接口确认是否可调用。
+- 系统 WebKit loadHTML 页面没有 crypto.randomUUID；会话继续由 Bun 宿主签发。开发 launcher 固定加载 bun/index.js，实验入口据此使用 index.ts。
+- 打包探针可从运行中的 launcher 再启动独立 launcher 子进程；子进程窗口以不同 PID 完成报告并退出，但 native WebKit 仍能访问 loopback 网络并看到 raw bridge 对象，所以进程边界不能单独作为视图安全结论。
+- 独立探针 `bundleCEF: true` 后，CEF Chromium 147 窗口 user agent 为 Chrome/147，创建日志为 `sandbox: NO`。`sandbox: true` 的 CEF 页面没有 webkit messageHandlers，但 `__electrobunBunBridge` 为 object；注册实验 RPC 时宿主收到 21 次 canary。loopback fetch、WebSocket、blob Worker、storage 和 navigationRules 外 iframe 均成功。不注册应用 RPC 去不掉该桥。dev 构建还监听 `127.0.0.1:9222`。
+- 同一探针在 CEF 已运行时再 spawn launcher，子进程输出 `Opening in existing browser session.`，没有身份标记。这使 CEF 下的独立进程 canary 失败，但不改写此前 native-only 进程生命周期证据。
+- GhostBoard 产品配置保持 `bundleCEF: false`。CEF 失败只记录在探针证据中，不能据此给产品矩阵打已验证，也不能把 CEF 当作可上线视图容器。
+- 2026-09-08 macOS 26.6.2 / Swift 6.3.1 独立 WKWebView helper（无 Electrobun 链接）：零 `WKScriptMessageHandler` 时 `window.webkit` 与 bunBridge 均不存在。未沙箱和沙箱+`network.client` 仍能打到 loopback fetch/WebSocket。去掉 `network.client` 后 WebContent 立即退出，补 JIT entitlement 同样失败。`WKContentRuleList` 全拦截在对照可联网的前提下无 loopback 命中；这是宿主策略，拿掉规则后网络恢复。helper 未接入 GhostBoard，产品矩阵保持 unverified。
+- 同日生命周期探针：页面 `for (;;) {}` 后 `evaluateJavaScript("1+1")` 超时，helper UI 心跳 3→13，销毁 WKWebView 后恢复页无 bunBridge、无 loopback。JS 报告分配 64MiB，helper UI RSS 约 76MiB 几乎不变。编排侧 SIGTERM 挂起 helper（退出码 143）后再开新进程，恢复页同样通过。`WKProcessPool` 在当前 macOS 已无隔离效果。
+- 仓库外样例 `/Users/laogui/Project/ThirdParty/ghostboard-plugin-samples`：title-tools 命令在 QuickJS 中规范化标题预览；notes-panel 使用 viewSessionId，重开更换会话。无私有导入、无 instanceId。宿主仓库 fixtures 仍只作夹具。最小契约已按实现写下，applyBatch/公开安装未冻结。
+- P1 `ContentBatchStore`：冻结 `plgsel_` 令牌、标题-only applyBatch、越权 ref 拒绝、revision 冲突不写、Undo 跳过已前进实体、JSON 文件重启后仍可撤销。仓库外 title-tools 写入后 Undo 回到原标题。`openNotes` 把同一套规则接到 sidecar Note：`applyNoteTitle` 提升 revision 且不改 blocks/preview；canvas `mergeNoteMeta` 仍不 bump revision。
+- 画布 `collectSelectedNoteIds` / `applyNoteTitles`：选中卡片和 folder children 收集 noteId，同一实体多处节点同步标题，画布 Undo 恢复节点标题。`runNormalizeTitlesOnWorkspaceNotes` 对工作区 sidecar 跑 title-tools。
+- 产品 RPC `pluginNormalizeNoteTitles` / `pluginUndoNoteTitles` / `pluginRedoNoteTitles`：样例缺失或空选区返回 `{ success: false }`；否则对 `title-tools` 跑 sidecar 批次。画布 `normalizeSelectedNoteTitles` 先 RPC 再投影；`titleBatchStack` 用快照节点引用匹配 Undo/Redo，中间节点移动不撤销 sidecar。`ContentBatchStore.redo` 在 revision 仍为 before 时写回 after。
+- 产品窗口入口：原生 Edit「Normalize Titles」（⌘⇧T）和卡片/多选右键「整理标题」。Electrobun `{ role: 'undo' }` 会把 Cmd+Z 交给 WKWebView 编辑栈；已改为 `canvasUndo`/`canvasRedo` 经 `routeUndoRedo`（扩展 / widget / 输入框 / 画布）。CUA 同会话 Undo 恢复 sidecar。重启后画布历史为空，journal Undo 仍无 UI。无公开安装。
+- ZIP 安装实验：宿主 `loadPluginFromZip` 在 Node 下用中央目录解析 + deflate/store 解压，不依赖 `Bun.Archive`（只支持 tar）。接受根目录或一个包裹文件夹的 `ghostboard.plugin.json`；拒绝 `..`、绝对路径、加密、data descriptor、zip64、多 manifest。条目≤256、未压缩≤8MiB、压缩比≤100。产品窗口仍从仓库外目录加载 title-tools，不从 ZIP 安装。
+- URL 下载实验：默认只允许 HTTPS；`allowLoopback` 才允许 `127.0.0.1`/`localhost` HTTP。拒绝 userinfo、私网、HTML/JSON 页面、非 PK zip 魔数。最多 5 次重定向且禁止 https→http。下载上限与 ZIP 未压缩上限相同。发布描述 JSON 尚未实现。
+- 安装事务：`PluginInstallStore` 根目录为 `journals/`、`staging/<txid>/`、`packages/<id>/<version>/<digest>/`、`registry.json`。prepare 解包并校验 manifest 后停在 `ready-to-commit`，不执行插件代码。commit 原子改名并写 registry；cancel 清暂存；同 ID+版本+摘要重复安装拒绝；同版本不同摘要冲突；未提交 recover 标 cancelled，`committing` 补完。URL 来源只保留 origin+path。产品窗口仍不加载 `packages/`。
+- 发布描述 JSON：`ghostboard-plugin-release/v1`，HTTPS URL、64 hex SHA-256、`>=x.y.z <a.b.c` hostApi。选当前 host 可用的最高版本。digest 必须对上 manifest。无签名字段，不下载。

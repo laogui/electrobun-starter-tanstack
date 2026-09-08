@@ -109,6 +109,13 @@ import {
   saveNote,
   serializeChecklistItems,
 } from './notes';
+import { CONTENT_BATCH_MAX_OPERATIONS } from './plugins/contentBatch';
+import {
+  redoNormalizeTitlesOnWorkspaceNotes,
+  runNormalizeTitlesOnWorkspaceNotes,
+  undoNormalizeTitlesOnWorkspaceNotes,
+} from './plugins/noteTitleCommand';
+import { tryGhostboardPluginSamplesRoot } from './plugins/outOfRepoSamples';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -939,6 +946,28 @@ interface CanvasRPC {
         params: { noteId: string };
         response: { success: boolean };
       };
+      pluginNormalizeNoteTitles: {
+        params: { noteIds: string[] };
+        response:
+          | {
+              operationId: string;
+              success: true;
+              titles: Record<string, string>;
+            }
+          | { success: false };
+      };
+      pluginUndoNoteTitles: {
+        params: { noteIds: string[]; operationId: string };
+        response:
+          | { success: true; titles: Record<string, string> }
+          | { success: false };
+      };
+      pluginRedoNoteTitles: {
+        params: { noteIds: string[]; operationId: string };
+        response:
+          | { success: true; titles: Record<string, string> }
+          | { success: false };
+      };
       saveAttachment: {
         params: {
           dataUrl: string;
@@ -1195,7 +1224,10 @@ interface CanvasRPC {
   webview: {
     requests: Record<string, { params: unknown; response: unknown }>;
     messages: {
+      canvasRedo: Record<never, unknown>;
+      canvasUndo: Record<never, unknown>;
       openSearch: Record<never, unknown>;
+      normalizeNoteTitles: Record<never, unknown>;
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;
       viewsUpdated: Record<never, unknown>;
@@ -1300,6 +1332,32 @@ function includes<T extends string | number>(
   value: unknown
 ): value is T {
   return values.includes(value as T);
+}
+
+function parsePluginNoteIds(noteIds: unknown): string[] | null {
+  if (!Array.isArray(noteIds) || noteIds.length === 0) {
+    return null;
+  }
+  if (noteIds.length > CONTENT_BATCH_MAX_OPERATIONS) {
+    return null;
+  }
+  const parsed: string[] = [];
+  for (const noteId of noteIds) {
+    if (typeof noteId !== 'string' || noteId.length === 0) {
+      return null;
+    }
+    parsed.push(noteId);
+  }
+  return parsed;
+}
+
+function isPluginOperationId(operationId: unknown): operationId is string {
+  return typeof operationId === 'string' && operationId.length > 0;
+}
+
+function titleToolsPluginDirectory(): string | null {
+  const samplesRoot = tryGhostboardPluginSamplesRoot();
+  return samplesRoot ? join(samplesRoot, 'title-tools') : null;
 }
 
 function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
@@ -1575,8 +1633,22 @@ async function main() {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        {
+          label: 'Undo',
+          action: 'canvasUndo',
+          accelerator: 'CmdOrCtrl+Z',
+        },
+        {
+          label: 'Redo',
+          action: 'canvasRedo',
+          accelerator: 'CmdOrCtrl+Shift+Z',
+        },
+        { type: 'divider' },
+        {
+          label: 'Normalize Titles',
+          action: 'normalizeNoteTitles',
+          accelerator: 'CmdOrCtrl+Shift+T',
+        },
         { type: 'divider' },
         { role: 'cut' },
         { role: 'copy' },
@@ -1607,6 +1679,15 @@ async function main() {
     const e = event as { data?: { action?: string } };
     if (e.data?.action === 'openSearch') {
       mainRpc?.send?.openSearch({});
+    }
+    if (e.data?.action === 'normalizeNoteTitles') {
+      mainRpc?.send?.normalizeNoteTitles({});
+    }
+    if (e.data?.action === 'canvasUndo') {
+      mainRpc?.send?.canvasUndo({});
+    }
+    if (e.data?.action === 'canvasRedo') {
+      mainRpc?.send?.canvasRedo({});
     }
   });
 
@@ -2529,6 +2610,62 @@ async function main() {
             // ignore
           }
           return { success: deleted };
+        },
+
+        pluginNormalizeNoteTitles: async ({ noteIds }) => {
+          const parsed = parsePluginNoteIds(noteIds);
+          const pluginDirectory = titleToolsPluginDirectory();
+          if (!(parsed && pluginDirectory)) {
+            return { success: false };
+          }
+          try {
+            const result = await runNormalizeTitlesOnWorkspaceNotes({
+              noteIds: parsed,
+              pluginDirectory,
+              workspacePath: wsPath,
+            });
+            return {
+              success: true as const,
+              operationId: result.operationId,
+              titles: result.titles,
+            };
+          } catch {
+            return { success: false };
+          }
+        },
+
+        pluginUndoNoteTitles: async ({ noteIds, operationId }) => {
+          const parsed = parsePluginNoteIds(noteIds);
+          if (!(parsed && isPluginOperationId(operationId))) {
+            return { success: false };
+          }
+          try {
+            const titles = await undoNormalizeTitlesOnWorkspaceNotes({
+              noteIds: parsed,
+              operationId,
+              workspacePath: wsPath,
+            });
+            return { success: true as const, titles };
+          } catch {
+            return { success: false };
+          }
+        },
+
+        pluginRedoNoteTitles: async ({ noteIds, operationId }) => {
+          const parsed = parsePluginNoteIds(noteIds);
+          if (!(parsed && isPluginOperationId(operationId))) {
+            return { success: false };
+          }
+          try {
+            const titles = await redoNormalizeTitlesOnWorkspaceNotes({
+              noteIds: parsed,
+              operationId,
+              workspacePath: wsPath,
+            });
+            return { success: true as const, titles };
+          } catch {
+            return { success: false };
+          }
         },
 
         saveAttachment: async (params) => {

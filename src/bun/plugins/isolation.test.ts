@@ -9,8 +9,8 @@ import {
 } from '../../shared/plugins/session';
 import { pluginIsolationMatrix } from './isolationMatrix';
 import { loadPluginDirectory } from './loadDirectory';
+import { runPluginCommand } from './logicRuntime';
 import { createProbeHost } from './probeHost';
-import { runPluginCommandInWorker } from './workerRuntime';
 
 const TITLE_TOOLS_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -28,18 +28,59 @@ const CRASH_SOURCE = `export async function normalizeTitles() {
 `;
 
 describe('plugin isolation', () => {
+  it.each([
+    'return ctx.content.readSelection({ value: 1n });',
+    'const value = {}; value.self = value; return ctx.content.readSelection(value);',
+    'return { value: 1n };',
+  ])('rejects non-JSON QuickJS traffic without crashing the host: %s', async (body) => {
+    const loaded = await loadPluginDirectory(TITLE_TOOLS_DIR);
+    const session = createPluginSession({
+      manifest: loaded.manifest,
+      workspaceId: 'ws_invalid',
+      context: createOperationContext(),
+      grantedPermissions: ['content.selection.read'],
+    });
+    const probe = createProbeHost([]);
+    await expect(
+      runPluginCommand({
+        session,
+        commandId: 'normalize-titles',
+        source: `export async function normalizeTitles(ctx) { ${body} }`,
+        probe,
+      })
+    ).rejects.toMatchObject({ code: 'protocol-error' });
+    expect(probe.calls).toEqual([]);
+    expect(session.disposed).toBe(true);
+    expect(session.pendingRequestIds.size).toBe(0);
+    const next = createPluginSession({
+      manifest: loaded.manifest,
+      workspaceId: 'ws_invalid',
+      context: createOperationContext(),
+      grantedPermissions: ['content.selection.read'],
+    });
+    await expect(
+      runPluginCommand({
+        session: next,
+        commandId: 'normalize-titles',
+        source: loaded.sources['main.js'] ?? '',
+        probe,
+      })
+    ).resolves.toMatchObject({ preview: [] });
+  });
+
   it('records the current-desktop isolation matrix honestly', () => {
     const matrix = pluginIsolationMatrix();
     expect(matrix.rendererBundleCEF).toBe(false);
-    expect(matrix.logicWorkerTerminate).toBe('verified');
+    expect(matrix.logicQuickJS).toBe('unverified');
     expect(matrix.nativeBridge).toBe('host-proxy-only');
     expect(matrix.extraBrowserView).toBe('unverified');
-    if (process.platform === 'darwin') {
-      expect(matrix.sandboxIframe).toBe('host-proxy-only');
+    expect(matrix.sandboxIframe).toBe('unverified');
+    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+      expect(pluginIsolationMatrix(platform).logicQuickJS).toBe('unverified');
     }
   });
 
-  it('runs title-tools in a worker and keeps the host usable after timeout and crash', async () => {
+  it('runs title-tools in QuickJS and keeps the host usable after timeout and crash', async () => {
     const loaded = await loadPluginDirectory(TITLE_TOOLS_DIR);
     const probe = createProbeHost([
       { token: 'sel_a', title: '  Hello   world ', revision: 1 },
@@ -51,7 +92,7 @@ describe('plugin isolation', () => {
       context: createOperationContext(),
       grantedPermissions: ['content.selection.read'],
     });
-    const ok = await runPluginCommandInWorker({
+    const ok = await runPluginCommand({
       session: okSession,
       commandId: 'normalize-titles',
       source: loaded.sources['main.js'] ?? '',
@@ -68,7 +109,7 @@ describe('plugin isolation', () => {
     });
     const hangStarted = Date.now();
     await expect(
-      runPluginCommandInWorker({
+      runPluginCommand({
         session: hangSession,
         commandId: 'normalize-titles',
         source: HANG_SOURCE,
@@ -84,7 +125,7 @@ describe('plugin isolation', () => {
       context: createOperationContext(),
       grantedPermissions: ['content.selection.read'],
     });
-    const recovered = await runPluginCommandInWorker({
+    const recovered = await runPluginCommand({
       session: afterTimeout,
       commandId: 'normalize-titles',
       source: loaded.sources['main.js'] ?? '',
@@ -100,7 +141,7 @@ describe('plugin isolation', () => {
       grantedPermissions: ['content.selection.read'],
     });
     await expect(
-      runPluginCommandInWorker({
+      runPluginCommand({
         session: crashSession,
         commandId: 'normalize-titles',
         source: CRASH_SOURCE,
@@ -116,7 +157,7 @@ describe('plugin isolation', () => {
       context: createOperationContext(),
       grantedPermissions: ['content.selection.read'],
     });
-    const stillWorks = await runPluginCommandInWorker({
+    const stillWorks = await runPluginCommand({
       session: afterCrash,
       commandId: 'normalize-titles',
       source: loaded.sources['main.js'] ?? '',

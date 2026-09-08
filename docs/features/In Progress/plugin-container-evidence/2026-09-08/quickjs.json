@@ -1,0 +1,95 @@
+{
+  "date": "2026-09-08T01:37:29.329Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "bun": "1.3.14",
+  "quickjsPackage": "quickjs-emscripten@0.32.0",
+  "modulePerInvocation": true,
+  "cases": [
+    {
+      "name": "explicit-host-boundary",
+      "ok": true,
+      "hostCalls": [
+        {
+          "method": "content.readSelection",
+          "args": { "fields": ["title"] }
+        }
+      ],
+      "value": {
+        "hostProcessVisible": false,
+        "hostBunVisible": false,
+        "hostRequireVisible": false,
+        "operationId": "op_quickjs_probe",
+        "selectedItems": 2
+      }
+    },
+    {
+      "name": "infinite-loop-interrupt",
+      "ok": false,
+      "error": { "code": "timeout", "message": "interrupted" }
+    },
+    {
+      "name": "unsettled-promise-interrupt",
+      "ok": false,
+      "error": {
+        "code": "timeout",
+        "message": "plugin command timed out while awaiting a guest promise"
+      }
+    },
+    {
+      "name": "guest-bigint-rejected",
+      "ok": false,
+      "error": {
+        "code": "protocol-error",
+        "message": "guest value is not serializable JSON"
+      }
+    },
+    {
+      "name": "host-bigint-argument-rejected",
+      "ok": false,
+      "error": {
+        "code": "protocol-error",
+        "message": "guest value is not serializable JSON"
+      }
+    },
+    {
+      "name": "host-circular-argument-rejected",
+      "ok": false,
+      "error": {
+        "code": "protocol-error",
+        "message": "guest value is not serializable JSON"
+      }
+    },
+    {
+      "name": "host-call-flood-limited",
+      "ok": false,
+      "error": {
+        "code": "resource-limit",
+        "message": "plugin command exceeded the 8 host-call limit"
+      },
+      "hostCallsObserved": 8
+    },
+    {
+      "name": "memory-limit",
+      "ok": false,
+      "error": { "code": "resource-limit", "message": "out of memory" }
+    },
+    {
+      "name": "fresh-runtime-state",
+      "ok": true,
+      "value": "first-runtime"
+    },
+    {
+      "name": "fresh-runtime-does-not-leak",
+      "ok": true,
+      "value": true
+    }
+  ],
+  "hostCalls": [
+    {
+      "method": "content.readSelection",
+      "args": { "fields": ["title"] }
+    }
+  ],
+  "hostCallLimit": 256
+}

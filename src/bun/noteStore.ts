@@ -275,6 +275,32 @@ export async function mergeNoteMeta(
   return true;
 }
 
+/**
+ * Persist a title and revision for a JSON-backed note without rewriting
+ * blocks or preview. Used by plugin title batches. Canvas `saveManifest`
+ * still goes through {@link mergeNoteMeta} and does not bump revision.
+ */
+export async function applyNoteTitle(
+  wsPath: string,
+  noteId: string,
+  input: { revision: number; title: string }
+): Promise<void> {
+  const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
+  if (!sidecar || sidecar.corrupted) {
+    throw new Error(`note sidecar missing or corrupted: ${noteId}`);
+  }
+  await saveBlockNoteSidecar(wsPath, noteId, {
+    blocks: sidecar.blocks,
+    revision: input.revision,
+    createdAt: sidecar.createdAt,
+    updatedAt: new Date().toISOString(),
+    title: input.title,
+    displayHint: sidecar.displayHint,
+    color: sidecar.color,
+    preview: sidecar.preview ?? undefined,
+  });
+}
+
 /** Enumerate every note record in the workspace (sidecars + legacy md). */
 export async function listNoteRecords(wsPath: string): Promise<NoteRecord[]> {
   const index = await buildNoteIndex(wsPath);

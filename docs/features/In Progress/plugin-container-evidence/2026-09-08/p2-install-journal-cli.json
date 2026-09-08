@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-08T13:20:00.000Z",
+  "platform": "macOS",
+  "publicInstall": false,
+  "helperInProductWindow": false,
+  "productActivation": false,
+  "cli": "bun scripts/install-plugin-zip.ts",
+  "zip": "fixtures/plugins/community.example.title-tools-1.0.0.zip",
+  "pluginsRoot": "/tmp/ghostboard-plugin-install-BZAM",
+  "transactionId": "plginx_6baf86ce149047af",
+  "pluginId": "community.example.title-tools",
+  "version": "1.0.0",
+  "digest": "1f3b8f19dbcbd858a9010678c6acb367db5f9de249722f8b5880647d78f7f29f",
+  "layout": [
+    "packages/community.example.title-tools/1.0.0/<digest>/ghostboard.plugin.json",
+    "packages/community.example.title-tools/1.0.0/<digest>/main.js",
+    "journals/plginx_*.json",
+    "registry.json"
+  ],
+  "notes": [
+    "Host-only prepare+commit. Staging directory removed after commit.",
+    "Did not load the committed package in the GhostBoard product window.",
+    "Did not open public install or settings UI."
+  ]
+}

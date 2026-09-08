@@ -5,7 +5,7 @@ import {
   generatePluginSessionId,
   generatePluginViewSessionId,
 } from './ids';
-import type { PluginManifest } from './manifest';
+import { type PluginManifest, SUPPORTED_PLUGIN_PERMISSIONS } from './manifest';
 import {
   createEnvelope,
   createHandshakePayload,
@@ -66,7 +66,16 @@ export function createPluginSession(input: {
     identity,
     context: input.context,
     manifest: input.manifest,
-    grantedPermissions: new Set(input.grantedPermissions ?? []),
+    grantedPermissions: new Set(
+      [...(input.grantedPermissions ?? [])].filter(
+        (permission) =>
+          SUPPORTED_PLUGIN_PERMISSIONS.has(permission) &&
+          [
+            ...input.manifest.permissions.required,
+            ...input.manifest.permissions.optional,
+          ].some((declaration) => declaration.id === permission)
+      )
+    ),
     pendingRequestIds: new Set(),
     disposed: false,
   };

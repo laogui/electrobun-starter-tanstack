@@ -178,6 +178,7 @@ const storeActions = {
   commitFolderChildData: vi.fn(),
   deleteFolderChild: vi.fn(),
   duplicateSelected: vi.fn(),
+  normalizeSelectedNoteTitles: vi.fn(async () => ({ success: false })),
   groupSelected: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
@@ -243,6 +244,8 @@ vi.mock('../../paraglide/messages.js', () => ({
   toast_edge_deleted: () => 'Connection deleted',
   toast_undo: () => 'Undo',
   toast_move_selection_failed: () => 'Could not move selection',
+  toast_titles_normalized: () => 'Note titles updated',
+  toast_titles_normalize_failed: () => 'Could not normalize titles',
 }));
 
 vi.mock('nanoid', () => ({

@@ -6,6 +6,9 @@ const request = {
   saveNote: vi.fn(),
   createNote: vi.fn(),
   deleteNote: vi.fn(),
+  pluginNormalizeNoteTitles: vi.fn(),
+  pluginRedoNoteTitles: vi.fn(),
+  pluginUndoNoteTitles: vi.fn(),
   saveAttachment: vi.fn(),
   loadAttachment: vi.fn(),
   openAttachment: vi.fn(),
@@ -96,6 +99,17 @@ describe('rpc', () => {
     await expect(rpc.rpcDeleteNote('note-1')).resolves.toEqual({
       success: false,
     });
+    await expect(rpc.rpcPluginNormalizeNoteTitles(['note_a'])).resolves.toEqual(
+      {
+        success: false,
+      }
+    );
+    await expect(
+      rpc.rpcPluginUndoNoteTitles('plgop_1', ['note_a'])
+    ).resolves.toEqual({ success: false });
+    await expect(
+      rpc.rpcPluginRedoNoteTitles('plgop_1', ['note_a'])
+    ).resolves.toEqual({ success: false });
     await expect(
       rpc.rpcSaveAttachment('data:image/png;base64,abc')
     ).resolves.toBeNull();
@@ -239,6 +253,9 @@ describe('rpc', () => {
     await rpc.rpcSaveNote('note-1', { title: 'Title' }, 'Body');
     await rpc.rpcCreateNote('note-2', 'New', 'text');
     await rpc.rpcDeleteNote('note-2');
+    await rpc.rpcPluginNormalizeNoteTitles(['note_a']);
+    await rpc.rpcPluginUndoNoteTitles('plgop_1', ['note_a']);
+    await rpc.rpcPluginRedoNoteTitles('plgop_1', ['note_a']);
     await rpc.rpcSaveAttachment('data:image/png;base64,abc', 'images/a.png');
     await rpc.rpcSaveAttachment('data:application/pdf;base64,abc', undefined, {
       kind: 'file',
@@ -314,6 +331,17 @@ describe('rpc', () => {
       displayHint: 'text',
     });
     expect(request.deleteNote).toHaveBeenCalledWith({ noteId: 'note-2' });
+    expect(request.pluginNormalizeNoteTitles).toHaveBeenCalledWith({
+      noteIds: ['note_a'],
+    });
+    expect(request.pluginUndoNoteTitles).toHaveBeenCalledWith({
+      operationId: 'plgop_1',
+      noteIds: ['note_a'],
+    });
+    expect(request.pluginRedoNoteTitles).toHaveBeenCalledWith({
+      operationId: 'plgop_1',
+      noteIds: ['note_a'],
+    });
     expect(request.saveAttachment).toHaveBeenCalledWith({
       dataUrl: 'data:image/png;base64,abc',
       existingFile: 'images/a.png',

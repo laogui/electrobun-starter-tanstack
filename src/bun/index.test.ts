@@ -13,6 +13,9 @@ const localInfoChannelMock = vi.fn();
 const settingsUpdatedMock = vi.fn();
 const trashUpdatedMock = vi.fn();
 const viewsUpdatedMock = vi.fn();
+const normalizeNoteTitlesMock = vi.fn();
+const canvasUndoMock = vi.fn();
+const canvasRedoMock = vi.fn();
 const defineRpcMock = vi.fn<
   (config: {
     handlers: {
@@ -25,6 +28,9 @@ const defineRpcMock = vi.fn<
       settingsUpdated: typeof settingsUpdatedMock;
       trashUpdated: typeof trashUpdatedMock;
       viewsUpdated: typeof viewsUpdatedMock;
+      normalizeNoteTitles: typeof normalizeNoteTitlesMock;
+      canvasUndo: typeof canvasUndoMock;
+      canvasRedo: typeof canvasRedoMock;
     };
   }
 >(() => ({
@@ -32,6 +38,9 @@ const defineRpcMock = vi.fn<
     settingsUpdated: settingsUpdatedMock,
     trashUpdated: trashUpdatedMock,
     viewsUpdated: viewsUpdatedMock,
+    normalizeNoteTitles: normalizeNoteTitlesMock,
+    canvasUndo: canvasUndoMock,
+    canvasRedo: canvasRedoMock,
   },
 }));
 const browserWindowFocusMock = vi.fn();
@@ -276,6 +285,43 @@ vi.mock('./aicredentials', () => ({
     aiCredentialsMocks.saveAIApiKey(...args),
 }));
 
+const noteTitleCommandMocks = {
+  redoNormalizeTitlesOnWorkspaceNotes: vi.fn(),
+  runNormalizeTitlesOnWorkspaceNotes: vi.fn(),
+  undoNormalizeTitlesOnWorkspaceNotes: vi.fn(),
+};
+
+vi.mock('./plugins/noteTitleCommand', () => ({
+  redoNormalizeTitlesOnWorkspaceNotes: (
+    ...args: Parameters<
+      typeof noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes
+    >
+  ) => noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes(...args),
+  runNormalizeTitlesOnWorkspaceNotes: (
+    ...args: Parameters<
+      typeof noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
+    >
+  ) => noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes(...args),
+  undoNormalizeTitlesOnWorkspaceNotes: (
+    ...args: Parameters<
+      typeof noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes
+    >
+  ) => noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes(...args),
+}));
+
+const outOfRepoSamplesMocks = {
+  tryGhostboardPluginSamplesRoot: vi.fn(
+    (): string | null => '/tmp/ghostboard-plugin-samples'
+  ),
+};
+
+vi.mock('./plugins/outOfRepoSamples', () => ({
+  ghostboardPluginSamplesRoot: () => '/tmp/ghostboard-plugin-samples',
+  requireGhostboardPluginSamplesRoot: () => '/tmp/ghostboard-plugin-samples',
+  tryGhostboardPluginSamplesRoot: () =>
+    outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot(),
+}));
+
 const bunFileMock = vi.fn();
 const bunWriteMock = vi.fn();
 const bunServeMock = vi.fn(() => ({
@@ -330,6 +376,9 @@ interface CanvasHandlers {
   loadCanvas: AnyHandler;
   openAttachment: AnyHandler;
   openWorkspaceFolder: AnyHandler;
+  pluginNormalizeNoteTitles: AnyHandler;
+  pluginRedoNoteTitles: AnyHandler;
+  pluginUndoNoteTitles: AnyHandler;
   purgeTrash: AnyHandler;
   renameView: AnyHandler;
   restoreTrash: AnyHandler;
@@ -418,6 +467,19 @@ beforeEach(() => {
     blocks: 1,
     version: 1,
   });
+  noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
+    operationId: 'plgop_test',
+    titles: { note_a: 'Hello world' },
+  });
+  noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
+    note_a: '  Hello   world ',
+  });
+  noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
+    note_a: 'Hello world',
+  });
+  outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot.mockReturnValue(
+    '/tmp/ghostboard-plugin-samples'
+  );
   // Note store defaults: empty workspace, no-op meta merge.
   noteStoreMocks.buildNoteIndex.mockResolvedValue(new Map());
   noteStoreMocks.listNoteRecords.mockResolvedValue([]);
@@ -534,6 +596,82 @@ describe('src/bun/index helpers', () => {
         2
       )
     );
+  });
+
+  it('pluginNormalizeNoteTitles runs title-tools on workspace notes', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: ['note_a'] })
+    ).resolves.toEqual({
+      success: true,
+      operationId: 'plgop_test',
+      titles: { note_a: 'Hello world' },
+    });
+    expect(
+      noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
+    ).toHaveBeenCalledWith({
+      noteIds: ['note_a'],
+      pluginDirectory: '/tmp/ghostboard-plugin-samples/title-tools',
+      workspacePath: '/tmp/workspace',
+    });
+  });
+
+  it('pluginNormalizeNoteTitles returns success false without samples or noteIds', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: [] })
+    ).resolves.toEqual({ success: false });
+    outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot.mockReturnValueOnce(
+      null
+    );
+    await expect(
+      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: ['note_a'] })
+    ).resolves.toEqual({ success: false });
+    expect(
+      noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
+    ).not.toHaveBeenCalled();
+  });
+
+  it('pluginUndoNoteTitles and pluginRedoNoteTitles restore sidecar titles', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+
+    await expect(
+      canvasHandlers.pluginUndoNoteTitles({
+        noteIds: ['note_a'],
+        operationId: 'plgop_test',
+      })
+    ).resolves.toEqual({
+      success: true,
+      titles: { note_a: '  Hello   world ' },
+    });
+    await expect(
+      canvasHandlers.pluginRedoNoteTitles({
+        noteIds: ['note_a'],
+        operationId: 'plgop_test',
+      })
+    ).resolves.toEqual({
+      success: true,
+      titles: { note_a: 'Hello world' },
+    });
+    expect(
+      noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes
+    ).toHaveBeenCalledWith({
+      noteIds: ['note_a'],
+      operationId: 'plgop_test',
+      workspacePath: '/tmp/workspace',
+    });
+    expect(
+      noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes
+    ).toHaveBeenCalledWith({
+      noteIds: ['note_a'],
+      operationId: 'plgop_test',
+      workspacePath: '/tmp/workspace',
+    });
   });
 
   it('listViews returns workspace config from canvas RPC handlers', async () => {

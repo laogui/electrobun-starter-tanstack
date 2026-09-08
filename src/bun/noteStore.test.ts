@@ -241,6 +241,34 @@ describe('noteStore', () => {
       expect(saved.blocks).toHaveLength(1); // preserved
     });
 
+    it('applyNoteTitle writes title and bumps revision without touching blocks', async () => {
+      const { applyNoteTitle, loadNoteRecord } = await import('./noteStore');
+      writeSidecar(ws, 'note_title_batch', {
+        revision: 4,
+        title: '  Hello   world ',
+        displayHint: 'note',
+        preview: {
+          html: '<p>keep</p>',
+          excerpt: 'keep',
+          blocks: 1,
+          version: 1,
+        },
+        blocks: [paragraph('keep')],
+      });
+      await applyNoteTitle(ws, 'note_title_batch', {
+        title: 'Hello world',
+        revision: 5,
+      });
+      const record = await loadNoteRecord(ws, 'note_title_batch');
+      expect(record).toMatchObject({
+        title: 'Hello world',
+        revision: 5,
+        source: 'sidecar',
+      });
+      expect(record?.preview?.html).toBe('<p>keep</p>');
+      expect(record?.blocks).toHaveLength(1);
+    });
+
     it('does not write when metadata is unchanged', async () => {
       const { mergeNoteMeta } = await import('./noteStore');
       writeSidecar(ws, 'note_g', {

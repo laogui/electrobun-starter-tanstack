@@ -28,6 +28,7 @@ const COPY_LABEL_RE = /Copy/;
 const DELETE_LABEL_RE = /Delete/;
 const NEW_RE = /^new$/i;
 const OPEN_FOCUSED_RE = /Open focused/;
+const NORMALIZE_TITLES_RE = /Normalize titles/;
 const CHANGE_COLOR_RE = /Change color/;
 const EDIT_TAG_RE = /Edit Tag/;
 const edgeStoreState = {
@@ -85,6 +86,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_change_color: () => 'Change color',
   menu_edit_tag: () => 'Edit Tag',
   menu_ai_summarize: () => 'Summarize with AI',
+  menu_normalize_titles: () => 'Normalize titles',
   menu_delete: () => 'Delete',
   menu_open: () => 'Open',
   menu_rename: () => 'Rename',
@@ -141,6 +143,20 @@ describe('canvasContextMenu', () => {
 
     expect(onAction).toHaveBeenCalledWith('copy', 'node-1');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers normalize titles on a card', () => {
+    const onAction = vi.fn();
+    render(
+      <CanvasContextMenu
+        menu={{ x: 40, y: 60, target: 'card', nodeId: 'node-1' }}
+        onAction={onAction}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: NORMALIZE_TITLES_RE }));
+    expect(onAction).toHaveBeenCalledWith('normalize-titles', 'node-1');
   });
 
   it('shows supported card actions for an expanded folder child', () => {

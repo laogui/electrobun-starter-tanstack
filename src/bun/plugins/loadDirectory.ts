@@ -68,11 +68,24 @@ export async function loadPluginDirectory(
       ...manifest.contributes.commands.map(
         (command) => command.handler.split('#')[0] ?? ''
       ),
+      ...manifest.contributes.importers.map(
+        (importer) => importer.handler.split('#')[0] ?? ''
+      ),
       ...manifest.contributes.panels.map((panel) => panel.entry),
+      ...manifest.contributes.canvasTypes.map((canvasType) => canvasType.entry),
     ].filter(Boolean)
   );
   for (const relative of handlerFiles) {
-    if (!relative || isAbsolute(relative) || relative.includes('..')) {
+    const segments = relative?.split('/') ?? [];
+    if (
+      !relative ||
+      isAbsolute(relative) ||
+      relative.includes('\\') ||
+      relative.includes('\u0000') ||
+      segments.some(
+        (segment) => segment.length === 0 || segment === '.' || segment === '..'
+      )
+    ) {
       throw new PluginDirectoryError(
         'missing-handler',
         `handler path is not inside the plugin directory: ${relative}`

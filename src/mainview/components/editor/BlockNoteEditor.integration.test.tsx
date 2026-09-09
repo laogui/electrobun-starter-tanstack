@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => {
     saveDebounced: vi.fn(),
     setInitialRevision: vi.fn(),
     updateNodeData: vi.fn(),
+    setState: vi.fn(),
   };
 });
 
@@ -90,11 +91,14 @@ vi.mock('@/store/appSettingsStore', () => ({
 }));
 
 vi.mock('@/store/canvasStore', () => ({
-  useCanvasStore: (
-    selector: (state: {
-      updateNodeData: typeof mocks.updateNodeData;
-    }) => unknown
-  ) => selector({ updateNodeData: mocks.updateNodeData }),
+  useCanvasStore: Object.assign(
+    (
+      selector: (state: {
+        updateNodeData: typeof mocks.updateNodeData;
+      }) => unknown
+    ) => selector({ updateNodeData: mocks.updateNodeData }),
+    { setState: mocks.setState }
+  ),
 }));
 
 vi.mock('./blocknoteAttachments', () => ({
@@ -129,6 +133,59 @@ describe('BlockNoteEditor', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('pairs canonical metadata with the loaded revision when opening a stale placement', async () => {
+    const metadata = { title: 'Canonical title', color: 'blue' };
+    mocks.rpcLoadBlockNote.mockResolvedValueOnce({
+      success: true,
+      revision: 5,
+      blocks: mocks.editor.document,
+      frontmatter: metadata,
+    });
+    render(
+      <BlockNoteEditor
+        color="red"
+        data={{
+          noteId: 'note-1',
+          title: 'Stale title',
+          color: 'red',
+          blocknoteRevision: 1,
+        }}
+        markdown="Old body"
+        nodeId="node-1"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Stale title"
+      />
+    );
+    expect(await screen.findByLabelText('Note title')).toHaveValue(
+      'Canonical title'
+    );
+    expect(mocks.setInitialRevision).toHaveBeenCalledWith(5, metadata);
+    const project = mocks.setState.mock.calls[0]![0];
+    const projected = project({
+      nodes: [
+        {
+          data: {
+            noteId: 'note-1',
+            title: 'Stale title',
+            color: 'red',
+            blocknoteRevision: 1,
+            content: 'Local body retained',
+          },
+        },
+      ],
+      focusedNode: null,
+      focusedFolder: null,
+    });
+    expect(projected.nodes[0].data).toMatchObject({
+      title: 'Canonical title',
+      color: 'blue',
+      blocknoteRevision: 5,
+      content: 'Local body retained',
+    });
   });
 
   it('persists a title-only edit when the title field loses focus', async () => {

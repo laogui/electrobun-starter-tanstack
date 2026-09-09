@@ -203,7 +203,7 @@ describe('noteStore', () => {
   });
 
   describe('mergeNoteMeta', () => {
-    it('updates title/color while preserving blocks, preview, and revision', async () => {
+    it('updates title/color with a fresh revision while preserving blocks and preview', async () => {
       const { mergeNoteMeta } = await import('./noteStore');
       writeSidecar(ws, 'note_f', {
         revision: 7,
@@ -220,6 +220,7 @@ describe('noteStore', () => {
       });
 
       const wrote = await mergeNoteMeta(ws, 'note_f', {
+        expectedRevision: 7,
         title: 'New',
         color: '#fff',
       });
@@ -236,7 +237,7 @@ describe('noteStore', () => {
       };
       expect(saved.title).toBe('New');
       expect(saved.color).toBe('#fff');
-      expect(saved.revision).toBe(7); // preserved
+      expect(saved.revision).toBe(8);
       expect(saved.preview.html).toBe('<p>keep</p>'); // preserved
       expect(saved.blocks).toHaveLength(1); // preserved
     });

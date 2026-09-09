@@ -30,9 +30,11 @@ import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { applyNoteMetadataChanges } from '@/lib/noteMetadataProjection';
 import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
+import { useCanvasStore } from '@/store/canvasStore';
 import { getBlockNoteDebounceMs } from './blockNoteEditorTiming';
 import {
   resolveBlockNoteFileUrl,
@@ -116,6 +118,13 @@ export default function BlockNoteEditor({
   const latestBlocksRef = useRef<PartialBlock[] | undefined>(undefined);
   const initialNoteKeyRef = useRef<string | null>(noteKey);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
+  const initialMetadataRef = useRef({
+    noteId,
+    title: toText(title),
+    color: toText(data.color),
+    revision:
+      typeof data.blocknoteRevision === 'number' ? data.blocknoteRevision : 0,
+  });
 
   useEffect(() => {
     if (externalTitle === previousExternalTitleRef.current) {
@@ -126,6 +135,13 @@ export default function BlockNoteEditor({
   }, [externalTitle]);
 
   if (initialNoteKeyRef.current !== noteKey) {
+    initialMetadataRef.current = {
+      noteId,
+      title: toText(title),
+      color: toText(data.color),
+      revision:
+        typeof data.blocknoteRevision === 'number' ? data.blocknoteRevision : 0,
+    };
     initialNoteKeyRef.current = noteKey;
     latestBlocksRef.current = undefined;
     setInitial(noteKey === null ? createEmptyInitialContent() : null);
@@ -199,7 +215,34 @@ export default function BlockNoteEditor({
                 : undefined,
             recoveredFromMarkdown: Boolean(response.recoveredFromMarkdown),
           });
-          setInitialRevision(response.revision);
+          setInitialRevision(response.revision, response.frontmatter);
+          const metadata = response.frontmatter;
+          if (
+            metadata &&
+            typeof metadata.title === 'string' &&
+            typeof metadata.color === 'string' &&
+            typeof response.revision === 'number'
+          ) {
+            setTitleValue(metadata.title);
+            const baseline = initialMetadataRef.current;
+            const change = {
+              id: noteId,
+              before: {
+                title: baseline.title,
+                color: baseline.color,
+                revision: baseline.revision,
+              },
+              after: {
+                title: metadata.title,
+                color: metadata.color,
+                revision: response.revision,
+              },
+              metadataOnly: true,
+            };
+            useCanvasStore.setState((state) =>
+              applyNoteMetadataChanges(state, [change])
+            );
+          }
         } else {
           setInitial({
             blocks: undefined,

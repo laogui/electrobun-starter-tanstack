@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-
 import {
   blocknoteSidecarDir,
   isValidSidecarNoteId,
@@ -16,6 +15,7 @@ import {
   noteToCardData,
   parseFrontmatter,
 } from './notes';
+import { NoteTransactionError, withNoteWorkspace } from './noteTransactions';
 
 /**
  * Note store — the single read abstraction over note records.
@@ -221,6 +221,7 @@ export function noteRecordToCardData(
     title: record.title,
     color: record.color,
     editor: 'blocknote',
+    blocknoteRevision: record.revision,
   };
   if (record.createdAt) {
     data.createdAt = record.createdAt;
@@ -237,48 +238,51 @@ export function noteRecordToCardData(
   return data;
 }
 
-/**
- * Merge note metadata (title / color) into an existing sidecar without
- * touching its blocks, preview, or revision. Used by `saveManifest` so canvas
- * edits (e.g. color cycling, title) persist for JSON-backed notes without
- * rewriting content. Returns `true` when a write occurred.
- *
- * Single-window editing is assumed (ADR 0002 v0.2 A2): this read-modify-write
- * never races a concurrent blocks save for the same note in practice.
- */
+/** Merge metadata under the same revision discipline as editor/plugin writes. */
 export async function mergeNoteMeta(
   wsPath: string,
   noteId: string,
-  patch: { title?: string; color?: string }
+  patch: { title?: string; color?: string; expectedRevision?: number }
 ): Promise<boolean> {
-  const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
-  if (!sidecar || sidecar.corrupted) {
-    return false;
-  }
-  const currentTitle = sidecar.title ?? '';
-  const currentColor = sidecar.color ?? '';
-  const nextTitle = patch.title ?? currentTitle;
-  const nextColor = patch.color ?? currentColor;
-  if (currentTitle === nextTitle && currentColor === nextColor) {
-    return false;
-  }
-  await saveBlockNoteSidecar(wsPath, noteId, {
-    blocks: sidecar.blocks,
-    revision: sidecar.revision,
-    createdAt: sidecar.createdAt,
-    updatedAt: new Date().toISOString(),
-    title: nextTitle,
-    displayHint: sidecar.displayHint,
-    color: nextColor,
-    preview: sidecar.preview ?? undefined,
+  return withNoteWorkspace(wsPath, async () => {
+    const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
+    if (!sidecar || sidecar.corrupted) {
+      return false;
+    }
+    const currentTitle = sidecar.title ?? '';
+    const currentColor = sidecar.color ?? '';
+    const nextTitle = patch.title ?? currentTitle;
+    const nextColor = patch.color ?? currentColor;
+    if (currentTitle === nextTitle && currentColor === nextColor) {
+      return false;
+    }
+    if (
+      patch.expectedRevision !== sidecar.revision ||
+      !Number.isSafeInteger(sidecar.revision) ||
+      sidecar.revision >= Number.MAX_SAFE_INTEGER
+    ) {
+      throw new NoteTransactionError(
+        'revision-conflict',
+        `Stale manifest metadata for ${noteId}`
+      );
+    }
+    await saveBlockNoteSidecar(wsPath, noteId, {
+      blocks: sidecar.blocks,
+      revision: sidecar.revision + 1,
+      createdAt: sidecar.createdAt,
+      updatedAt: new Date().toISOString(),
+      title: nextTitle,
+      displayHint: sidecar.displayHint,
+      color: nextColor,
+      preview: sidecar.preview ?? undefined,
+    });
+    return true;
   });
-  return true;
 }
 
 /**
- * Persist a title and revision for a JSON-backed note without rewriting
- * blocks or preview. Used by plugin title batches. Canvas `saveManifest`
- * still goes through {@link mergeNoteMeta} and does not bump revision.
+ * Historical title-batch adapter. The public content service uses recoverable
+ * transactions rather than this legacy revision-restoring interface.
  */
 export async function applyNoteTitle(
   wsPath: string,

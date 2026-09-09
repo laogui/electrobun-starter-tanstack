@@ -47,6 +47,11 @@ if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
     stopPlugins();
   });
 }
+if (import.meta.env.VITE_PLUGIN_T2_CONTENT === '1') {
+  import('./plugins/t2-content/run')
+    .then(({ runT2ContentProbe }) => runT2ContentProbe())
+    .catch(console.error);
+}
 if (import.meta.env.VITE_PLUGIN_T2_A4 === '1') {
   import('./plugins/t2-a4/run')
     .then(({ runT2A4Probe }) => runT2A4Probe())

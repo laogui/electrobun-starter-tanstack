@@ -4,6 +4,7 @@ import { unlink } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { withNoteWorkspace } from './noteTransactions';
 import { notifyContentChanged } from './plugins/contentEvents';
 
 /** Schema version for the BlockNote JSON sidecar file. */
@@ -115,6 +116,13 @@ export async function loadBlockNoteSidecar(
   wsPath: string,
   noteId: string
 ): Promise<BlockNoteSidecarLoadResult | null> {
+  return withNoteWorkspace(wsPath, () => loadSidecarUnlocked(wsPath, noteId));
+}
+
+async function loadSidecarUnlocked(
+  wsPath: string,
+  noteId: string
+): Promise<BlockNoteSidecarLoadResult | null> {
   const relativePath = blocknoteSidecarRelativePath(noteId);
   const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
   const file = Bun.file(fullPath);
@@ -161,28 +169,52 @@ export async function saveBlockNoteSidecar(
     preview?: SidecarPreview;
   }
 ): Promise<{ relativePath: string; hash: string }> {
-  const relativePath = blocknoteSidecarRelativePath(noteId);
-  const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
-  const sidecar: BlockNoteSidecar = {
-    schema: BLOCKNOTE_SCHEMA,
-    noteId,
-    revision: payload.revision,
-    createdAt: payload.createdAt,
-    updatedAt: payload.updatedAt ?? new Date().toISOString(),
-    title: payload.title,
-    displayHint: payload.displayHint,
-    color: payload.color,
-    preview: payload.preview,
-    blocks: payload.blocks,
-  };
-  const serialized = JSON.stringify(sidecar, null, 2);
-  await atomicWrite(fullPath, serialized);
-  notifyContentChanged(wsPath, {
-    kind: 'note',
-    ids: [noteId],
-    operation: 'upsert',
+  return withNoteWorkspace(wsPath, async () => {
+    const before = await loadSidecarUnlocked(wsPath, noteId);
+    const relativePath = blocknoteSidecarRelativePath(noteId);
+    const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
+    const sidecar: BlockNoteSidecar = {
+      schema: BLOCKNOTE_SCHEMA,
+      noteId,
+      revision: payload.revision,
+      createdAt: payload.createdAt,
+      updatedAt: payload.updatedAt ?? new Date().toISOString(),
+      title: payload.title,
+      displayHint: payload.displayHint,
+      color: payload.color,
+      preview: payload.preview,
+      blocks: payload.blocks,
+    };
+    const serialized = JSON.stringify(sidecar, null, 2);
+    await atomicWrite(fullPath, serialized);
+    notifyContentChanged(wsPath, {
+      kind: 'note',
+      ids: [noteId],
+      operation: 'upsert',
+      noteChanges:
+        before && !before.corrupted
+          ? [
+              {
+                id: noteId,
+                before: {
+                  title: before.title ?? '',
+                  color: before.color ?? '',
+                  revision: before.revision,
+                },
+                after: {
+                  title: sidecar.title ?? '',
+                  color: sidecar.color ?? '',
+                  revision: sidecar.revision,
+                },
+                metadataOnly:
+                  JSON.stringify(before.blocks) ===
+                  JSON.stringify(sidecar.blocks),
+              },
+            ]
+          : undefined,
+    });
+    return { relativePath, hash: contentHash(serialized) };
   });
-  return { relativePath, hash: contentHash(serialized) };
 }
 
 /**
@@ -204,18 +236,20 @@ export async function deleteBlockNoteSidecar(
   wsPath: string,
   noteId: string
 ): Promise<boolean> {
-  const relativePath = blocknoteSidecarRelativePath(noteId);
-  const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
-  if (!existsSync(fullPath)) {
-    return false;
-  }
-  await unlink(fullPath);
-  notifyContentChanged(wsPath, {
-    kind: 'note',
-    ids: [noteId],
-    operation: 'delete',
+  return withNoteWorkspace(wsPath, async () => {
+    const relativePath = blocknoteSidecarRelativePath(noteId);
+    const fullPath = assertWorkspaceSidecarPath(wsPath, relativePath);
+    if (!existsSync(fullPath)) {
+      return false;
+    }
+    await unlink(fullPath);
+    notifyContentChanged(wsPath, {
+      kind: 'note',
+      ids: [noteId],
+      operation: 'delete',
+    });
+    return true;
   });
-  return true;
 }
 
 export function blocknoteSidecarDir(wsPath: string): string {

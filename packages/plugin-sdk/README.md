@@ -1,6 +1,6 @@
 # @ghostboard/sdk 0.1
 
-The trusted GhostBoard SDK for commands, panels, and the first T2 storage/event/task services. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
+The trusted GhostBoard SDK for commands, panels, persistent storage, events, tasks, and revision-checked note metadata transactions. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
 
 ## Runtime and types
 
@@ -158,7 +158,7 @@ export default definePlugin({
 | `selection.changed` | `{ workspaceId, viewId, placementIds }`. Active canvas selection membership or view changed; `viewId` is null while the canvas is unhydrated. IDs are placement IDs, not deduplicated content IDs. |
 | `workspace.activated` | `{ workspaceId }`. Delivered once to subscriptions registered during setup when **this activation** is published, including a successful reload/re-enable. Late subscriptions do not replay it. |
 
-These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect, no external filesystem watcher, and no promise of a full content snapshot/revision in this first slice. Canvas layout, tags and attachments are not content-record events. Content-query APIs and business React hooks remain subsequent T2 work.
+These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect or external filesystem watcher. The note metadata slice below adds optional `noteChanges` with title/color/revision transitions, but events do not contain full content snapshots. Canvas layout, tags and attachments are not content-record events. Note queries are available below; business React hooks remain subsequent T2 work.
 
 ### In-process tasks
 
@@ -168,8 +168,58 @@ These are live invalidations, not a durable event log or a transaction feed. Rep
 - Schedules exist only in memory while the plugin and workspace are active. Restart does not recover schedules or replay missed runs; setup must register them again. Intervals skip missed periods without a catch-up burst, and skip ticks while the same callback is still running. An already-running callback cannot be forcibly cancelled; respect `app.signal`.
 - Disable, workspace exit and disposal stop timers. Callback failures appear in diagnostics. Long absolute delays are split to avoid the browser's 32-bit timer overflow. There is no cron syntax, OS background service, or guarantee of precise timing while the app is suspended.
 
+## T2 second slice: note metadata transactions
+
+`app.content` currently addresses **notes only**. Sidecar-backed notes support title/color mutations; legacy Markdown notes can be queried but have `revision: null` and cannot be mutated through this API. Widgets, extension instances, rich-document writes and content creation are not covered by this slice.
+
+```js
+const { items, nextCursor } = await app.content.query({ text: 'project', limit: 100 });
+const writable = items.filter((item) => item.revision !== null);
+if (writable.length) {
+  const batch = await app.content.updateMany(
+    writable.map((item) => ({
+      id: item.id,
+      expectedRevision: item.revision,
+      changes: { title: item.title.trim() },
+    })),
+    { label: 'Trim project note titles' },
+  );
+  if (batch.changed) {
+    await app.content.undo(batch.operationId);
+    await app.content.redo(batch.operationId);
+  }
+}
+```
+
+### Reads and writes
+
+- `get(id, options?)` returns `{ id, kind: 'note', title, color, text, source, revision }` or `null` if absent. `text` is searchable text extracted from BlockNote blocks, or the legacy Markdown body; it is not a lossless rich-document export. Corrupt content produces an explicit error rather than an empty replacement.
+- `query({ text?, after?, limit? }?, options?)` searches title/text case-insensitively and returns `{ items, nextCursor }`, ordered by note ID. Default limit 100, range 1–500. Pass `nextCursor` as `after` for another page. Each request reads under the host workspace queue, but pages do not form a frozen multi-request snapshot.
+- `updateMany(updates, { label, operationId?, signal? })` accepts 1–100 **unique note IDs** and returns `{ operationId, items, changed }`. Every update requires `expectedRevision` and a nonempty `changes` containing only `title` (up to 256 characters) and/or `color` (up to 64 characters). Blocks, previews, timestamps other than `updatedAt`, and unknown sidecar fields are retained.
+- All revisions are checked before any batch content is written. A conflict fails the whole batch. A no-op retains its revision and returns `changed: false`; an entirely no-op batch has no undo entry. Other notes and unsupported fields cannot be silently skipped.
+
+### Recovery and retries
+
+The Bun host serializes editor, manifest metadata and plugin note read/check/write operations through a workspace queue. A plugin batch first records an intent containing exact before/after files plus its history update, then completes those writes. SDK reads and normal note writes recover a pending intent before proceeding. Recovery rolls the recorded transaction **forward**, not backward. If a file matches neither recorded version, it fails closed with `recovery-conflict` and preserves the original intent and external file for recovery; it never overwrites an independent edit to make recovery appear successful.
+
+This provides process-interruption recovery for host-managed operations, not a filesystem snapshot for external readers, cross-process arbitration, or a guarantee against arbitrary direct file edits. Power-loss/fsync fault testing is not claimed. The intent is limited to 32 MiB; operation receipts/history to 8 MiB. Oversized operations are rejected. History is not automatically pruned, and a full history reports `history-limit` before new content writes; automatic history archival remains future work.
+
+Every mutation accepts an optional caller-generated `operationId` (1–128 ASCII letters/digits/underscore/hyphen). Use the **same ID and identical input** to retry an uncertain result. Reuse with different input fails with `operation-mismatch`. The receipt survives restart and also records no-ops. A receipt is the original result, not a fresh snapshot: replaying an update after it has been undone returns the original receipt without applying it again. Read the note to inspect its current state.
+
+Server and transport errors expose `code` and, for mutations, `operationId`. Important codes include `revision-conflict`, `commit-pending`, `recovery-conflict`, `operation-mismatch`, `workspace-inactive`, `unsupported-content`, `corrupt-content`, `history-missing`, `history-state`, and `history-limit`. On `commit-pending`, retry the same request ID after the I/O problem is resolved; do not generate another operation as a substitute. Cancellation/timeout does not undo a committed intent. Calls bind to both the activation signal and any caller signal, with a 10-second transport deadline.
+
+### Undo, projections and editor drafts
+
+`undo(batchId, options?)` and `redo(batchId, options?)` address the **original update batch**, scoped to this plugin and workspace. Their optional `operationId` identifies the undo/redo request for retry, not the target batch. Each successful reversal writes fresh increasing revisions. If any affected note has changed since that history state, the whole reversal conflicts rather than partially succeeding or restoring an old revision.
+
+These are explicit SDK operations. Plugins should expose commands for them; the current native/canvas Ctrl/Cmd+Z dispatcher is not a unified plugin-history timeline. Closing/reopening a plugin does not erase its persisted history.
+
+`content.changed` may now carry `noteChanges: [{ id, before, after, metadataOnly }]`, with title/color/revision in `before` and `after`. A committed batch emits one such notification after its files/history are complete. Host-owned reconciliation updates duplicate placements, folders and focused metadata without remounting the editor or touching a dirty body. A matching metadata-only transition rebases the editor's private revision/frontmatter; genuine body changes, missing revision continuity and conflicting local title drafts fail closed instead of guessing. Loading an editor pairs its canonical metadata with the loaded revision. Stale manifest metadata cannot overwrite a newer committed note.
+
+Canvas layout snapshots are still separate history. Restoring an old snapshot can show stale metadata; its stale revision prevents persisting it over current content. Reopening the note loads canonical metadata. A unified ordered history and richer conflict-resolution UI remain T2 work.
+
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. The first T2 slice adds A4 above; general content queries/transactions, content selection snapshots, custom cards and `@ghostboard/sdk/react` business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4 and the note metadata transaction slice above. Content creation, body mutation, content selection snapshots, custom cards and `@ghostboard/sdk/react` business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.

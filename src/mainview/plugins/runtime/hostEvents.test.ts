@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { subscribeNoteMetadataChanges } from '@/lib/noteMetadataProjection';
 import { connectPluginHostEvents } from './hostEvents';
 import type { PluginRuntime } from './PluginRuntime';
 
@@ -7,19 +8,49 @@ const { state, listeners } = vi.hoisted(() => ({
   state: {
     _hydrated: true,
     activeViewId: 'view-a',
-    nodes: [{ id: 'placement-a', selected: true }],
+    nodes: [
+      {
+        id: 'placement-a',
+        selected: true,
+        data: {
+          noteId: 'note-a',
+          title: 'Before',
+          color: 'white',
+          blocknoteRevision: 4,
+        },
+      },
+    ],
+    focusedNode: null,
+    focusedFolder: null,
   },
   listeners: new Set<() => void>(),
 }));
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: {
     getState: () => state,
+    setState: (updater: (current: typeof state) => typeof state) => {
+      Object.assign(state, updater(state));
+    },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
   },
 }));
+beforeEach(() => {
+  state.nodes = [
+    {
+      id: 'placement-a',
+      selected: true,
+      data: {
+        noteId: 'note-a',
+        title: 'Before',
+        color: 'white',
+        blocknoteRevision: 4,
+      },
+    },
+  ];
+});
 afterEach(() => listeners.clear());
 
 it('forwards valid pushed content events, emits selection membership changes, and disconnects', () => {
@@ -73,4 +104,94 @@ it('forwards valid pushed content events, emits selection membership changes, an
     new CustomEvent('plugin-content-changed', { detail: payload })
   );
   expect(emitHostEvent).toHaveBeenCalledTimes(3);
+});
+
+it('filters workspaces, ignores stale revisions, clears cache on transitions, and stops reconciliation after disposal', () => {
+  let workspaceId = 'workspace-a';
+  let runtimeChanged!: () => void;
+  const runtime = {
+    getSnapshot: () => ({ workspaceId }),
+    subscribe: (listener: () => void) => {
+      runtimeChanged = listener;
+      return () => {};
+    },
+    emitHostEvent: vi.fn(),
+  } as unknown as PluginRuntime;
+  const disconnect = connectPluginHostEvents(runtime);
+  const observed = vi.fn();
+  const unsubscribe = subscribeNoteMetadataChanges(observed);
+  const change = {
+    id: 'note-a',
+    before: { title: 'Before', color: 'white', revision: 4 },
+    after: { title: 'Plugin', color: 'blue', revision: 5 },
+    metadataOnly: true,
+  };
+  const dispatch = (workspace = workspaceId, noteChange = change) =>
+    window.dispatchEvent(
+      new CustomEvent('plugin-content-changed', {
+        detail: {
+          workspaceId: workspace,
+          kind: 'note',
+          operation: 'upsert',
+          ids: ['note-a'],
+          noteChanges: [noteChange],
+        },
+      })
+    );
+  dispatch('other-workspace');
+  expect(observed).not.toHaveBeenCalled();
+  dispatch();
+  expect(state.nodes[0]?.data).toMatchObject({
+    title: 'Plugin',
+    color: 'blue',
+    blocknoteRevision: 5,
+  });
+  const projected = state.nodes;
+  dispatch();
+  dispatch(workspaceId, {
+    ...change,
+    before: { ...change.before, revision: 2 },
+    after: { ...change.after, revision: 3 },
+  });
+  expect(observed).toHaveBeenCalledOnce();
+  expect(state.nodes).toBe(projected);
+  workspaceId = 'workspace-b';
+  runtimeChanged();
+  state.nodes[0]!.data = {
+    noteId: 'note-a',
+    title: 'Before',
+    color: 'white',
+    blocknoteRevision: 4,
+  };
+  dispatch('workspace-a');
+  expect(state.nodes[0]?.data.title).toBe('Before');
+  dispatch();
+  expect(observed).toHaveBeenCalledTimes(2);
+  expect(state.nodes[0]?.data.title).toBe('Plugin');
+  disconnect();
+  dispatch();
+  expect(observed).toHaveBeenCalledTimes(2);
+  unsubscribe();
+});
+
+it('rejects malformed metadata rather than trusting a pushed DOM payload', () => {
+  const runtime = {
+    getSnapshot: () => ({ workspaceId: 'a' }),
+    subscribe: () => () => {},
+    emitHostEvent: vi.fn(),
+  } as unknown as PluginRuntime;
+  const disconnect = connectPluginHostEvents(runtime);
+  window.dispatchEvent(
+    new CustomEvent('plugin-content-changed', {
+      detail: {
+        workspaceId: 'a',
+        kind: 'note',
+        operation: 'upsert',
+        ids: ['note-a'],
+        noteChanges: [{ id: 'note-a', before: null }],
+      },
+    })
+  );
+  expect(runtime.emitHostEvent).not.toHaveBeenCalled();
+  disconnect();
 });

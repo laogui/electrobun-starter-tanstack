@@ -11,6 +11,7 @@ import type {
   PluginRuntimeSnapshot,
 } from '../../../shared/plugins/runtime';
 import { ActivationServices } from './activationServices';
+import { createPluginContent } from './content';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
 import {
   isEditingShortcut,
@@ -50,6 +51,7 @@ export interface RuntimeViewSnapshot {
 
 export interface PluginRuntimeOptions {
   cleanupTimeoutMs?: number;
+  contentTransport?: PluginStorageTransportOptions;
   importer?: (url: string) => Promise<unknown>;
   mountPanel?: MountPanel;
   onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
@@ -506,6 +508,10 @@ export class PluginRuntime {
       signal: instance.controller.signal,
     };
     return Object.freeze({
+      content: createPluginContent(
+        storageContext,
+        this.options.contentTransport
+      ),
       storage: {
         app: createPluginStorage(
           storageContext,

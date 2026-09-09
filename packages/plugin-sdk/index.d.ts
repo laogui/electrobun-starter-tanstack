@@ -41,9 +41,24 @@ export interface PluginStorage {
   set(key: string, value: JsonValue, options?: OperationOptions): Promise<void>;
 }
 
+export interface NoteMetadata {
+  color: string;
+  revision: number;
+  title: string;
+}
+
+export interface NoteMetadataChange {
+  after: NoteMetadata;
+  before: NoteMetadata;
+  id: string;
+  /** True only when the persisted BlockNote document is unchanged. */
+  metadataOnly: boolean;
+}
+
 export interface ContentChangedEvent {
   ids: readonly string[];
   kind: 'note' | 'widget' | 'extension';
+  noteChanges?: readonly NoteMetadataChange[];
   operation: 'upsert' | 'delete';
   workspaceId: string;
 }
@@ -62,10 +77,65 @@ export type TaskSchedule =
   | { every: number; at?: never }
   | { at: Date; every?: never };
 
+export interface NoteContentSnapshot {
+  color: string;
+  id: string;
+  kind: 'note';
+  /** Legacy Markdown is read-only through this API. */
+  revision: number | null;
+  source: 'sidecar' | 'markdown';
+  /** Plain text, not editor-internal blocks or a lossless export. */
+  text: string;
+  title: string;
+}
+
+export interface NoteContentUpdate {
+  changes: { title?: string; color?: string };
+  expectedRevision: number;
+  id: string;
+}
+
+export interface ContentBatchResult {
+  /** False for a batch containing only no-ops. */
+  changed: boolean;
+  items: (NoteMetadata & { id: string })[];
+  operationId: string;
+}
+
+export interface ContentMutationOptions extends OperationOptions {
+  /** Reuse this ID with identical input to retry an uncertain outcome. */
+  operationId?: string;
+}
+
+export interface PluginContent {
+  get(
+    id: string,
+    options?: OperationOptions
+  ): Promise<NoteContentSnapshot | null>;
+  query(
+    query?: { text?: string; after?: string; limit?: number },
+    options?: OperationOptions
+  ): Promise<{ items: NoteContentSnapshot[]; nextCursor: string | null }>;
+  redo(
+    batchId: string,
+    options?: ContentMutationOptions
+  ): Promise<ContentBatchResult>;
+  /** Batch IDs belong to this plugin and workspace. Undo conflicts fail as a whole. */
+  undo(
+    batchId: string,
+    options?: ContentMutationOptions
+  ): Promise<ContentBatchResult>;
+  updateMany(
+    updates: NoteContentUpdate[],
+    options: ContentMutationOptions & { label: string }
+  ): Promise<ContentBatchResult>;
+}
+
 export interface PluginContext {
   readonly commands: {
     register(command: CommandDefinition): Disposer;
   };
+  readonly content: PluginContent;
   readonly events: {
     on<K extends keyof PluginEventMap>(
       event: K,

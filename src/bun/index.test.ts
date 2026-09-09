@@ -1116,6 +1116,21 @@ describe('src/bun/index helpers', () => {
 
   it('saveBlockNote writes only the JSON sidecar (no markdown) with metadata + preview', async () => {
     await loadIndexModule();
+    bunFileMock.mockImplementation((path: string) => ({
+      exists: vi
+        .fn()
+        .mockResolvedValue(
+          path.endsWith('/content/.ghostboard/blocknote/note_x.json')
+        ),
+      json: vi.fn().mockResolvedValue({
+        schema: 'ghostboard-blocknote/v1',
+        noteId: 'note_x',
+        revision: 4,
+        title: 'Previous title',
+        blocks: [],
+      }),
+      text: vi.fn(),
+    }));
     const canvasHandlers = getCanvasHandlers();
     const blocks = [
       {

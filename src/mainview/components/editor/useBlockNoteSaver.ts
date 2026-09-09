@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import {
+  hasNoteMetadataConflict,
+  subscribeNoteMetadataChanges,
+} from '@/lib/noteMetadataProjection';
 import { rpcSaveBlockNote } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -83,13 +87,14 @@ export function useBlockNoteSaver({
   const onPreviewUpdateRef = useRef(onPreviewUpdate);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
   const frontmatterRef = useRef(frontmatter);
+  const previousFrontmatterRef = useRef(frontmatter);
   const noteIdRef = useRef(noteId);
   const enabledRef = useRef(enabled);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestPayloadRef = useRef<BlockNoteSavePayload | null>(null);
   const dirtyRef = useRef(false);
   const changeVersionRef = useRef(0);
-  const saveRequestRef = useRef(0);
+  const savingRef = useRef(false);
   const revisionRef = useRef<number | undefined>(undefined);
   const lastSavedAtRef = useRef<Date | null>(null);
   const statusRef = useRef<BlockNoteSaveStatus>('idle');
@@ -112,14 +117,55 @@ export function useBlockNoteSaver({
     onSaveStatusChangeRef.current = onSaveStatusChange;
   }, [onSaveStatusChange]);
   useEffect(() => {
-    frontmatterRef.current = frontmatter;
-  }, [frontmatter]);
+    const next = { ...frontmatter };
+    // React may render once with new node data but the old title input state.
+    // Unchanged props must not undo a synchronous host-event rebase.
+    if (noteIdRef.current === noteId) {
+      for (const key of ['title', 'color'] as const) {
+        if (frontmatter[key] === previousFrontmatterRef.current[key]) {
+          next[key] = frontmatterRef.current[key];
+        }
+      }
+    }
+    frontmatterRef.current = next;
+    previousFrontmatterRef.current = frontmatter;
+  }, [frontmatter, noteId]);
   useEffect(() => {
     noteIdRef.current = noteId;
   }, [noteId]);
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  useEffect(
+    () =>
+      subscribeNoteMetadataChanges((changes) => {
+        const conflicts: string[] = [];
+        for (const change of changes) {
+          if (change.id !== noteIdRef.current || !change.metadataOnly) {
+            continue;
+          }
+          if (hasNoteMetadataConflict(frontmatterRef.current, change)) {
+            conflicts.push(change.id);
+            if (dirtyRef.current) {
+              setStatus('error');
+            }
+            continue;
+          }
+          if (revisionRef.current !== change.before.revision) {
+            continue;
+          }
+          revisionRef.current = change.after.revision;
+          frontmatterRef.current = {
+            ...frontmatterRef.current,
+            title: change.after.title,
+            color: change.after.color,
+          };
+        }
+        return conflicts;
+      }),
+    [setStatus]
+  );
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -128,20 +174,20 @@ export function useBlockNoteSaver({
     }
   }, []);
 
-  const saveNow = useCallback(
-    async (payload: BlockNoteSavePayload, changeVersion: number) => {
-      const currentNoteId = noteIdRef.current;
-      if (!(enabledRef.current && isNonEmptyString(currentNoteId))) {
-        return;
-      }
-      const requestId = saveRequestRef.current + 1;
-      saveRequestRef.current = requestId;
-
-      setStatus('saving');
-
-      try {
-        // The stale-request guard below needs the response and request ordering after this save settles.
-        // react-doctor-disable-next-line react-doctor/async-defer-await
+  const saveNow = useCallback(async () => {
+    if (savingRef.current) {
+      return;
+    }
+    savingRef.current = true;
+    try {
+      while (dirtyRef.current && latestPayloadRef.current) {
+        const currentNoteId = noteIdRef.current;
+        if (!(enabledRef.current && isNonEmptyString(currentNoteId))) {
+          return;
+        }
+        const payload = latestPayloadRef.current;
+        const changeVersion = changeVersionRef.current;
+        setStatus('saving');
         const response = await rpcSaveBlockNote(
           currentNoteId,
           frontmatterRef.current,
@@ -149,29 +195,33 @@ export function useBlockNoteSaver({
           payload.markdown,
           revisionRef.current
         );
-
-        if (
-          requestId !== saveRequestRef.current ||
-          changeVersion !== changeVersionRef.current ||
-          latestPayloadRef.current !== payload
-        ) {
+        if (currentNoteId !== noteIdRef.current) {
           return;
         }
-
         if (!response.success) {
           setStatus('error');
           return;
         }
-
+        // Even an obsolete payload committed a revision. The next write must
+        // consume that acknowledgement, without replacing newer dirty content.
         if (typeof response.revision === 'number') {
-          revisionRef.current = response.revision;
+          revisionRef.current = Math.max(
+            revisionRef.current ?? 0,
+            response.revision
+          );
+        }
+        if (
+          changeVersion !== changeVersionRef.current ||
+          latestPayloadRef.current !== payload
+        ) {
+          clearTimer();
+          continue;
         }
         dirtyRef.current = false;
-
         const updates = previewToUpdates(
           payload.markdown,
           response.blocknoteFile,
-          response.revision,
+          revisionRef.current,
           response.preview
         );
         try {
@@ -186,21 +236,16 @@ export function useBlockNoteSaver({
             updateError
           );
         }
-
         lastSavedAtRef.current = new Date();
         setStatus('saved');
-      } catch (error) {
-        if (
-          requestId === saveRequestRef.current &&
-          changeVersion === changeVersionRef.current
-        ) {
-          setStatus('error');
-        }
-        console.error('[blocknote] Failed to save note:', error);
       }
-    },
-    [nodeId, setStatus]
-  );
+    } catch (error) {
+      setStatus('error');
+      console.error('[blocknote] Failed to save note:', error);
+    } finally {
+      savingRef.current = false;
+    }
+  }, [clearTimer, nodeId, setStatus]);
 
   const flushNow = useCallback(
     (payload?: BlockNoteSavePayload) => {
@@ -212,11 +257,9 @@ export function useBlockNoteSaver({
         return;
       }
       clearTimer();
-      saveNow(latestPayloadRef.current, changeVersionRef.current).catch(
-        (error) => {
-          console.error('[blocknote] Failed to flush note:', error);
-        }
-      );
+      saveNow().catch((error) => {
+        console.error('[blocknote] Failed to flush note:', error);
+      });
     },
     [clearTimer, saveNow]
   );
@@ -229,7 +272,6 @@ export function useBlockNoteSaver({
       }
       dirtyRef.current = true;
       changeVersionRef.current += 1;
-      const queuedVersion = changeVersionRef.current;
       clearTimer();
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
@@ -237,7 +279,7 @@ export function useBlockNoteSaver({
         if (!(dirtyRef.current && latest)) {
           return;
         }
-        saveNow(latest, queuedVersion).catch((error) => {
+        saveNow().catch((error) => {
           console.error('[blocknote] Failed to save queued note:', error);
         });
       }, debounceMs);
@@ -245,9 +287,15 @@ export function useBlockNoteSaver({
     [clearTimer, debounceMs, saveNow]
   );
 
-  const setInitialRevision = useCallback((revision: number | undefined) => {
-    revisionRef.current = revision;
-  }, []);
+  const setInitialRevision = useCallback(
+    (revision: number | undefined, metadata?: Record<string, unknown>) => {
+      revisionRef.current = revision;
+      if (metadata) {
+        frontmatterRef.current = { ...frontmatterRef.current, ...metadata };
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const handleWindowBlur = () => {

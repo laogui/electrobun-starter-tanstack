@@ -8,6 +8,7 @@ import {
 import { unfurlLink } from './linkPreview';
 import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
 import type { PluginHostController } from './plugins/hostController';
+import type { NoteContentService } from './plugins/noteContent';
 import type { PluginStorageHost } from './plugins/storage';
 import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
@@ -22,6 +23,7 @@ export interface LocalHttpServerOptions {
   getAIConfig: () => AIServerConfig | null;
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
+  pluginContent?: NoteContentService;
   pluginRuntime?: PluginHostController;
   pluginStorage?: PluginStorageHost;
 }
@@ -200,6 +202,13 @@ export function startLocalHttpServer(
           status: 401,
           headers: CORS_HEADERS,
         });
+      }
+      const contentResponse = await options.pluginContent?.handle(
+        req,
+        CORS_HEADERS
+      );
+      if (contentResponse) {
+        return contentResponse;
       }
       const storageResponse = await options.pluginStorage?.handle(
         req,

@@ -4,6 +4,8 @@
 
 状态：**A4 已实现并通过 macOS arm64 发行包验证；整个 T2 尚未通过。**
 
+本页记录 A4 当批验收。后续笔记查询、元数据事务 / 恢复及可选 `noteChanges` 已见 [T2 第二批证据](trusted-plugin-t2-content-evidence.md)；下文的下一步与事件边界保留为 A4 当时范围。
+
 依据：[主方案 §10](trusted-plugin-platform.md#10-实施阶段与退出条件)、[追加 1 §4 / §8](trusted-plugin-platform-addendum-1.md)。正式接口与完整语义见 [SDK README](../../../packages/plugin-sdk/README.md#t2-first-slice-storage-events-and-tasks-a4)。
 
 ## 1. 本批实现

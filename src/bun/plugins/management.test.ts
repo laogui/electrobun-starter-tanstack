@@ -31,6 +31,150 @@ async function setup() {
 }
 
 describe('PluginManagementService', () => {
+  it('allows disabling an enabled directory even while its manifest is broken', async () => {
+    const { service, root } = await setup();
+    const directory = join(root, 'broken-development');
+    await mkdir(directory);
+    const files = pluginFiles();
+    for (const [name, content] of Object.entries(files)) {
+      await writeFile(join(directory, name), content);
+    }
+    const preview = await service.prepareDevelopmentDirectory(directory);
+    const installed = await service.commit(preview.transactionId);
+    await service.enable(installed);
+    const original = await readFile(join(directory, 'manifest.json'), 'utf8');
+    await writeFile(join(directory, 'manifest.json'), '{broken');
+    expect((await service.list())[0]).toMatchObject({
+      enabled: true,
+      status: 'invalid',
+    });
+    expect(await service.disable(installed)).toMatchObject({
+      enabled: false,
+      status: 'invalid',
+    });
+    await writeFile(join(directory, 'manifest.json'), original);
+    expect((await service.list())[0]).toMatchObject({
+      enabled: false,
+      status: 'stored',
+    });
+  });
+
+  it('persists development reviews and connections, rejects source conflicts and serializes concurrent connections', async () => {
+    const { service, root, workspace, appDataRoot, file } = await setup();
+    const directory = join(root, 'development');
+    await mkdir(directory);
+    for (const [name, content] of Object.entries(pluginFiles())) {
+      await writeFile(join(directory, name), content);
+    }
+    const preview = await service.prepareDevelopmentDirectory(directory);
+    expect(await service.list()).toEqual([]);
+    const restarted = new PluginManagementService(workspace, { appDataRoot });
+    const second = await restarted.prepareDevelopmentDirectory(directory);
+    const results = await Promise.allSettled([
+      restarted.commit(preview.transactionId),
+      service.commit(second.transactionId),
+    ]);
+    expect(
+      results.filter((result) => result.status === 'fulfilled')
+    ).toHaveLength(1);
+    expect(await restarted.list()).toHaveLength(1);
+    await expect(service.prepareFromFile(file)).rejects.toMatchObject({
+      code: 'already-installed',
+    });
+    expect(await service.list()).toHaveLength(1);
+    const original = await readFile(
+      join(appDataRoot, 'plugins', 'development-directories.json'),
+      'utf8'
+    );
+    expect(
+      (JSON.parse(original) as { connections: unknown[] }).connections
+    ).toHaveLength(1);
+    await service.cancel(second.transactionId);
+    await writeFile(
+      join(appDataRoot, 'plugins', 'development-directories.json'),
+      '{broken'
+    );
+    await expect(
+      service.prepareDevelopmentDirectory(directory)
+    ).rejects.toThrow('preserved');
+    expect(
+      await readFile(
+        join(appDataRoot, 'plugins', 'development-directories.json'),
+        'utf8'
+      )
+    ).toBe('{broken');
+    await writeFile(
+      join(appDataRoot, 'plugins', 'development-directories.json'),
+      original
+    );
+    expect(await restarted.list()).toHaveLength(1);
+  });
+
+  it('rejects installed-source collisions even when the ZIP was prepared before the directory connection', async () => {
+    const { service, root, file } = await setup();
+    const directory = join(root, 'development');
+    await mkdir(directory);
+    for (const [name, content] of Object.entries(pluginFiles())) {
+      await writeFile(join(directory, name), content);
+    }
+    const zip = await service.prepareFromFile(file);
+    const development = await service.prepareDevelopmentDirectory(directory);
+    await service.commit(development.transactionId);
+    await expect(service.commit(zip.transactionId)).rejects.toMatchObject({
+      code: 'already-installed',
+    });
+    expect((await service.list())[0]?.development).toBe(true);
+  });
+
+  it('does not connect a changed review, legacy manifest or invalid entry', async () => {
+    const { service, root, file } = await setup();
+    const directory = join(root, 'development');
+    await mkdir(directory);
+    const files = pluginFiles();
+    const manifestSource = files['manifest.json'];
+    const entrySource = files['main.js'];
+    if (!(manifestSource && entrySource)) {
+      throw new Error('Test fixture must contain manifest and entry');
+    }
+    for (const [name, content] of Object.entries(files)) {
+      await writeFile(join(directory, name), content);
+    }
+    const review = await service.prepareDevelopmentDirectory(directory);
+    await writeFile(
+      join(directory, 'manifest.json'),
+      JSON.stringify({
+        ...(JSON.parse(manifestSource) as Record<string, unknown>),
+        id: 'example.changed',
+      })
+    );
+    await expect(service.commit(review.transactionId)).rejects.toThrow(
+      'changed since review'
+    );
+    expect(await service.list()).toEqual([]);
+    await service.cancel(review.transactionId);
+    await expect(service.commit(review.transactionId)).rejects.toMatchObject({
+      code: 'invalid-state',
+    });
+    await writeFile(
+      join(directory, 'manifest.json'),
+      JSON.stringify({ manifestVersion: 1 })
+    );
+    await expect(
+      service.prepareDevelopmentDirectory(directory)
+    ).rejects.toThrow();
+    await writeFile(join(directory, 'manifest.json'), manifestSource);
+    await rm(join(directory, 'main.js'));
+    await expect(
+      service.prepareDevelopmentDirectory(directory)
+    ).rejects.toThrow('entry');
+    await writeFile(join(directory, 'main.js'), entrySource);
+    const zip = await service.prepareFromFile(file);
+    await service.commit(zip.transactionId);
+    await expect(
+      service.prepareDevelopmentDirectory(directory)
+    ).rejects.toMatchObject({ code: 'already-installed' });
+    expect((await service.list())[0]?.development).toBeUndefined();
+  });
   it('reviews and commits at application scope without exposing paths or executing code', async () => {
     const { service, workspace, appDataRoot, file } = await setup();
     expect(pluginInstallRoot(appDataRoot)).toBe(join(appDataRoot, 'plugins'));

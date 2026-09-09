@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { router } from '@/router';
+import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
 
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
@@ -31,6 +32,19 @@ root.render(
         provide the animation features or they stay frozen at `initial`. */}
     <LazyMotion features={domAnimation}>
       <RouterProvider router={router} />
+      {import.meta.env.VITE_PLUGIN_T0 !== '1' ? <PluginWorkbench /> : null}
     </LazyMotion>
   </ThemeProvider>
 );
+
+if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
+  const stopPlugins = startPluginRuntime();
+  import.meta.hot?.dispose(() => {
+    stopPlugins();
+  });
+}
+if (import.meta.env.VITE_PLUGIN_T1 === '1') {
+  import('./plugins/t1/run')
+    .then(({ runT1Probe }) => runT1Probe())
+    .catch(console.error);
+}

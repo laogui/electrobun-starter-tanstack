@@ -214,6 +214,14 @@ export async function rpcPreparePluginInstallFromFile(): Promise<PluginInstallPr
   return eb.rpc.request.pluginPrepareInstallFromFile({});
 }
 
+export async function rpcPreparePluginDevelopmentDirectory(): Promise<PluginInstallPreparationResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginPrepareDevelopmentDirectory({});
+}
+
 export async function rpcPreparePluginInstallFromUrl(
   url: string
 ): Promise<PluginInstallPreparationResult> {
@@ -231,7 +239,11 @@ export async function rpcCommitPluginInstall(
   if (!eb?.rpc) {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
-  return eb.rpc.request.pluginCommitInstall({ transactionId });
+  const result = await eb.rpc.request.pluginCommitInstall({ transactionId });
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
 }
 
 export async function rpcCancelPluginInstall(
@@ -252,7 +264,11 @@ export async function rpcEnablePlugin(input: {
   if (!eb?.rpc) {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
-  return eb.rpc.request.pluginEnable(input);
+  const result = await eb.rpc.request.pluginEnable(input);
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
 }
 
 export async function rpcDisablePlugin(input: {
@@ -263,7 +279,11 @@ export async function rpcDisablePlugin(input: {
   if (!eb?.rpc) {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
-  return eb.rpc.request.pluginDisable(input);
+  const result = await eb.rpc.request.pluginDisable(input);
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
 }
 
 export async function rpcListExtensionEnablement(): Promise<{

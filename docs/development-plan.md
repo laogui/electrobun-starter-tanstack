@@ -35,7 +35,7 @@ D0–D2 的历史验收记录保留。审查新发现的实例保存回归作为
 
 1. **T0 装载验证**：在打包后的 macOS 发行包上验证本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、宿主代理 `net.fetch` 与 `files` 读写。任一机制不成立即回到方案 §12 修订架构。
 2. **旧运行时清理**（可与 T0 并行）：按方案 §9.1 删除 QuickJS 运行时、会话协议、权限授予记录与 `scripts/plugin-container-probe/`，移除 `quickjs-emscripten` 依赖与 wasm 拷贝；保留并改造 ZIP/URL 安装、安装事务、标题批次 journal/Undo、工作区启用与设置页。宿主对 v1 包拒绝加载并提示。
-3. **T1 命令与面板闭环**：manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；仓库外作者无需修改宿主即可开发命令与面板。
+3. **T1 命令与面板闭环**：manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；仓库外作者无需修改宿主即可开发命令与面板。T1 起同时执行 [追加 1](./features/In%20Progress/trusted-plugin-platform-addendum-1.md)：`PluginContext` 补 `generation` / `signal`、重载失败保留旧版本、运行时挂 `globalThis.__ghostboardPluginRuntime`、不共享宿主组件。
 4. 之后按 T2 画布类型、T3 导入器与分发、T4 安全模式与签名更新、T5 公开验收推进。2026-09-08 旧模型的容器实验与命令闭环验收见归档的 [容器实验](./features/Archive/plugin-container-experiment.md) 与 [P0 契约](./features/Archive/plugin-p0-frozen-contract.md)，不作为新模型任何阶段的完成证据。
 
 当前不增加小组件、设置或市场功能；没有新的基础项目体验阻断点就不启动 D3。

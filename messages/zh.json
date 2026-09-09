@@ -384,7 +384,7 @@
   "settings_canvas_types_clear_failed": "无法清除该画布类型的数据。",
   "settings_plugins_title": "插件",
   "settings_plugins_description": "插件安装在应用级目录，按工作区选择启用。",
-  "settings_plugins_runtime_notice": "运行时改造中：启用仅保存工作区配置。T1 SDK 与加载、T2 通用内容接口、T4 签名更新尚未实现。",
+  "settings_plugins_runtime_notice": "启用的命令与面板在宿主页面中运行。运行状态、错误及重载操作见插件菜单。T2 内容 API、T3 完整文件服务及 T4 签名更新仍待实现。",
   "settings_plugins_install_title": "安装插件包",
   "settings_plugins_choose_file": "选择插件包…",
   "settings_plugins_url_label": "插件包 URL",
@@ -567,7 +567,7 @@
   "date_picker_time": "时间",
   "date_picker_today": "今天",
   "date_picker_tomorrow": "明天",
-  "settings_plugins_enabled": "已为此工作区启用（运行时待完成）",
+  "settings_plugins_enabled": "已为此工作区启用",
   "settings_plugins_enable": "为此工作区启用",
   "settings_plugins_disable": "在此工作区停用",
   "settings_plugins_confirm_enable": "我信任此插件，启用",
@@ -577,5 +577,11 @@
   "settings_plugins_signature_unverified": "作者身份与签名未经验证，签名更新待 T4 实现。",
   "settings_plugins_no_update_source": "未声明",
   "settings_plugins_update_source": "声明的更新来源：{source}",
-  "settings_plugins_legacy": "旧契约，需重新安装 v2 版本"
+  "settings_plugins_legacy": "旧契约，需重新安装 v2 版本",
+  "settings_plugins_choose_directory": "连接开发目录…",
+  "settings_plugins_development_notice": "选择包含 manifest.json 与 app.js 的目录。启用后自动重载文件变化；反复重载可能保留旧模块闭包，需要时重新加载窗口。",
+  "settings_plugins_directory_preview": "此操作仅登记开发目录，不复制或执行代码。启用后，此目录中的代码变更会自动加载，不再重复询问。",
+  "settings_plugins_confirm_directory": "连接目录",
+  "settings_plugins_directory_fingerprint": "目录连接指纹（非包摘要）：{digest}",
+  "settings_plugins_development_source": "开发目录：{source}"
 }

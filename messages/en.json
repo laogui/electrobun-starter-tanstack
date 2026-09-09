@@ -384,7 +384,7 @@
   "settings_canvas_types_clear_failed": "Could not clear canvas type data.",
   "settings_plugins_title": "Plugins",
   "settings_plugins_description": "Install plugins for this application; choose which to enable in this workspace.",
-  "settings_plugins_runtime_notice": "Runtime migration in progress: enabling only saves a workspace preference. T1 SDK/loading, T2 general content API, and T4 signed updates are not implemented.",
+  "settings_plugins_runtime_notice": "Enabled commands and panels run in the host page. See the plugin menu for runtime status, errors, and reload controls. T2 content APIs, T3 complete file services, and T4 signed updates are still pending.",
   "settings_plugins_install_title": "Install a package",
   "settings_plugins_choose_file": "Choose package…",
   "settings_plugins_url_label": "Package URL",
@@ -567,7 +567,7 @@
   "date_picker_time": "Time",
   "date_picker_today": "Today",
   "date_picker_tomorrow": "Tomorrow",
-  "settings_plugins_enabled": "Enabled for this workspace (runtime pending)",
+  "settings_plugins_enabled": "Enabled for this workspace",
   "settings_plugins_enable": "Enable for workspace",
   "settings_plugins_disable": "Disable for workspace",
   "settings_plugins_confirm_enable": "I trust this plugin, enable",
@@ -577,5 +577,11 @@
   "settings_plugins_signature_unverified": "Author identity and signature not verified. Signed updates are pending T4.",
   "settings_plugins_no_update_source": "Not declared",
   "settings_plugins_update_source": "Declared update source: {source}",
-  "settings_plugins_legacy": "Legacy contract; reinstall a v2 version."
+  "settings_plugins_legacy": "Legacy contract; reinstall a v2 version.",
+  "settings_plugins_choose_directory": "Connect development directory…",
+  "settings_plugins_development_notice": "Choose a directory containing manifest.json and app.js. Changes reload automatically while enabled. Repeated reloads can retain old module closures; reload the window when needed.",
+  "settings_plugins_directory_preview": "This only registers the directory, without copying or executing code. Once enabled, code changes in this directory load automatically without another confirmation.",
+  "settings_plugins_confirm_directory": "Connect directory",
+  "settings_plugins_directory_fingerprint": "Directory identity (not an archive digest): {digest}",
+  "settings_plugins_development_source": "Development directory: {source}"
 }

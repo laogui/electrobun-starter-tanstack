@@ -51,6 +51,41 @@ function request(path: string, method = 'GET') {
 }
 
 describe('plugin HTTP directory mounts', () => {
+  it('includes generation in the whole module graph and rejects retired generations', async () => {
+    const current = { ...mount(), generation: 'new-generation' };
+    const base = pluginModulePath(token, current);
+    expect(base).toContain('/0.1.0/new-generation/');
+    const response = await servePluginAsset(
+      new Request(`http://127.0.0.1${base}relative.js`),
+      token,
+      [current],
+      headers
+    );
+    expect(response?.status).toBe(200);
+    const retired = base.replace('new-generation', 'old-generation');
+    expect(
+      (
+        await servePluginAsset(
+          new Request(`http://127.0.0.1${retired}relative.js`),
+          token,
+          [current],
+          headers
+        )
+      )?.status
+    ).toBe(404);
+    expect(
+      (
+        await servePluginAsset(
+          new Request(
+            `http://127.0.0.1${pluginModulePath(token, mount())}relative.js`
+          ),
+          token,
+          [current],
+          headers
+        )
+      )?.status
+    ).toBe(404);
+  });
   it('serves entry and relative imports with inherited authentication and JavaScript MIME', async () => {
     const base = pluginModulePath(token, mount());
     const entry = await request(`${base}app.js`);
@@ -88,6 +123,8 @@ describe('plugin HTTP directory mounts', () => {
       )?.status
     ).toBe(404);
     expect(await request('/ai/chat')).toBeNull();
+    expect(await request('/plugins/runtime')).toBeNull();
+    expect(await request('/plugins/reload', 'POST')).toBeNull();
   });
 
   it('rejects traversal and escaping symlinks without exposing host files', async () => {

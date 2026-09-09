@@ -1,0 +1,23 @@
+{
+  "name": "ghostboard-react-hello",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "build:shim": "vite build --config vite.shim.config.ts",
+    "dev": "vite build --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ghostboard/sdk": "file:./sdk",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.8"
+  }
+}

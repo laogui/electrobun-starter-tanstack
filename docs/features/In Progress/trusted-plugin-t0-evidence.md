@@ -2,6 +2,8 @@
 
 日期：2026-09-09。依据：[现行方案](trusted-plugin-platform.md) §4、§9.1、§10。
 
+本文保留第一批 T0 验收时的结果与阶段边界；下文“尚未完成 T1”描述的是当时状态。后续 T1 及追加 A1–A3 的实现/验收见 [T1 证据](trusted-plugin-t1-evidence.md)，当前阶段以主方案 §10 为准。
+
 ## 结论
 
 **T0 的 macOS arm64 装载门槛通过。** 使用 `electrobun build --env=canary` 生成的真实发行归档，解包后运行归档内的原生 launcher、内置 Bun 和 WKWebView。不是 Vite 开发页、浏览器模拟或内存运行器。插件样例复制到仓库外、应用 bundle 外的临时目录后原样运行，没有插件构建或依赖安装。

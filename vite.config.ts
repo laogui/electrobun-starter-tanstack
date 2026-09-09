@@ -17,7 +17,7 @@ const sharedEntries = {
   'host-jsx-runtime': 'shared/jsx-runtime.ts',
   ...(pluginT0
     ? { 'host-sdk': 't0/sdk.ts', 'host-sdk-react': 't0/react.ts' }
-    : {}),
+    : { 'host-sdk': '../../../packages/plugin-sdk/index.js' }),
 };
 const sharedImports = {
   react: 'host-react',
@@ -29,7 +29,7 @@ const sharedImports = {
         '@ghostboard/sdk': 'host-sdk',
         '@ghostboard/sdk/react': 'host-sdk-react',
       }
-    : {}),
+    : { '@ghostboard/sdk': 'host-sdk' }),
 };
 
 export default defineConfig(async ({ command }) => {
@@ -42,7 +42,32 @@ export default defineConfig(async ({ command }) => {
   const plugins = [
     {
       name: 'ghostboard-shared-plugin-imports',
-      apply: 'build',
+      enforce: 'pre',
+      resolveId(source, importer) {
+        if (
+          command !== 'build' ||
+          importer !==
+            resolve(
+              projectRoot,
+              'src/mainview/plugins/runtime/sharedRuntime.ts'
+            )
+        ) {
+          return;
+        }
+        const runtimeEntries: Record<string, string> = {
+          '../shared/react': 'host-react',
+          '../shared/react-dom': 'host-react-dom',
+          '../shared/react-dom-client': 'host-react-dom-client',
+          '../shared/jsx-runtime': 'host-jsx-runtime',
+          '../../../../packages/plugin-sdk/index.js': 'host-sdk',
+        };
+        const entry = runtimeEntries[source];
+        if (entry) {
+          // Native imports preserve the exact import-map module namespace, not
+          // a bundler-created namespace with merely equal exported functions.
+          return { id: `views://mainview/assets/${entry}.js`, external: true };
+        }
+      },
       transformIndexHtml: {
         order: 'post',
         handler: () => [
@@ -62,7 +87,11 @@ export default defineConfig(async ({ command }) => {
               imports: Object.fromEntries(
                 Object.entries(sharedImports).map(([specifier, name]) => [
                   specifier,
-                  `views://mainview/assets/${name}.js`,
+                  command === 'build'
+                    ? `views://mainview/assets/${name}.js`
+                    : name === 'host-sdk' && !pluginT0
+                      ? `/@fs${resolve(projectRoot, 'packages/plugin-sdk/index.js')}`
+                      : `/plugins/${sharedEntries[name as keyof typeof sharedEntries]}`,
                 ])
               ),
             }),

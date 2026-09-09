@@ -1,16 +1,21 @@
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
+const PLUGIN_ASSET_PATH = /^\/plugins\/[^/]+\//;
 const JAVASCRIPT_FILE = /\.(m?js)$/;
 
 export interface PluginDirectoryMount {
   directory: string;
+  generation?: string;
   id: string;
   version: string;
 }
 
 export function pluginModulePath(token: string, mount: PluginDirectoryMount) {
-  return `/plugins/${encodeURIComponent(token)}/${encodeURIComponent(mount.id)}/${encodeURIComponent(mount.version)}/`;
+  const generation = mount.generation
+    ? `${encodeURIComponent(mount.generation)}/`
+    : '';
+  return `/plugins/${encodeURIComponent(token)}/${encodeURIComponent(mount.id)}/${encodeURIComponent(mount.version)}/${generation}`;
 }
 
 export async function servePluginAsset(
@@ -20,7 +25,7 @@ export async function servePluginAsset(
   headers: HeadersInit
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/plugins/')) {
+  if (!PLUGIN_ASSET_PATH.test(url.pathname)) {
     return null;
   }
   const mount = mounts.find((entry) =>

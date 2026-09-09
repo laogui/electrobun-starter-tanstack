@@ -1,7 +1,7 @@
 import type { PluginCapability } from './manifest';
 
 export interface PluginSourceSummary {
-  kind: 'file' | 'url' | 'zip';
+  kind: 'directory' | 'file' | 'url' | 'zip';
   label: string;
 }
 
@@ -25,6 +25,7 @@ export interface PluginInstallPreview {
 }
 
 export interface InstalledPluginSummary {
+  development?: boolean;
   digest: string;
   enabled: boolean;
   installedAt: string;

@@ -20,6 +20,7 @@ const rpc = vi.hoisted(() => ({
   rpcEnablePlugin: vi.fn(),
   rpcListPluginPackages: vi.fn(),
   rpcPreparePluginInstallFromFile: vi.fn(),
+  rpcPreparePluginDevelopmentDirectory: vi.fn(),
   rpcPreparePluginInstallFromUrl: vi.fn(),
 }));
 
@@ -114,6 +115,44 @@ describe('PluginsPanel', () => {
     ).toBeVisible();
   });
 
+  it('reviews and connects a development directory without enabling or executing it', async () => {
+    const user = userEvent.setup();
+    const directoryPreview = {
+      ...preview,
+      source: { kind: 'directory' as const, label: '/outside/hello' },
+    };
+    rpc.rpcPreparePluginDevelopmentDirectory.mockResolvedValue({
+      success: true,
+      preview: directoryPreview,
+    });
+    rpc.rpcCommitPluginInstall.mockResolvedValue({
+      success: true,
+      plugin: { ...storedPlugin, source: directoryPreview.source },
+    });
+    render(<PluginsPanel strings={getLocaleStrings('en')} />);
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Connect development directory…',
+      })
+    );
+    expect(
+      await screen.findByText(getLocaleStrings('en').pluginsDirectoryPreview)
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        getLocaleStrings('en').pluginsDirectoryFingerprint(preview.digest)
+      )
+    ).toBeVisible();
+    expect(rpc.rpcCommitPluginInstall).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Connect directory' }));
+    await waitFor(() =>
+      expect(rpc.rpcCommitPluginInstall).toHaveBeenCalledWith(
+        preview.transactionId
+      )
+    );
+    expect(rpc.rpcEnablePlugin).not.toHaveBeenCalled();
+  });
+
   it('cancels a reviewed package without committing it', async () => {
     const user = userEvent.setup();
     rpc.rpcPreparePluginInstallFromFile.mockResolvedValue({
@@ -188,13 +227,43 @@ describe('PluginsPanel', () => {
         pluginId: storedPlugin.pluginId,
       });
     });
-    expect(
-      await screen.findByText('Enabled for this workspace (runtime pending)')
-    ).toBeVisible();
+    expect(await screen.findByText('Enabled for this workspace')).toBeVisible();
     expect(
       await screen.findByText('Saved workspace enablement for Title tools.')
     ).toBeVisible();
   });
+  it('keeps a disable action available for an invalid enabled plugin', async () => {
+    rpc.rpcListPluginPackages.mockResolvedValue({
+      available: true,
+      plugins: [
+        {
+          ...enabledPlugin,
+          status: 'invalid',
+          validationError: 'Broken manifest',
+        },
+      ],
+    });
+    rpc.rpcDisablePlugin.mockResolvedValue({
+      success: true,
+      plugin: { ...storedPlugin, status: 'invalid' },
+    });
+    render(<PluginsPanel strings={getLocaleStrings('en')} />);
+    const user = userEvent.setup();
+    expect(await screen.findByText('Broken manifest')).toBeVisible();
+    await user.click(
+      screen.getByRole('button', { name: 'Disable for workspace' })
+    );
+    await waitFor(() =>
+      expect(rpc.rpcDisablePlugin).toHaveBeenCalledWith({
+        pluginId: plugin.id,
+        digest: preview.digest,
+      })
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Enable for workspace' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows legacy packages without an enable action', async () => {
     rpc.rpcListPluginPackages.mockResolvedValue({
       available: true,

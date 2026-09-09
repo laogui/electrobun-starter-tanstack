@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -114,10 +115,12 @@ import {
   saveNote,
   serializeChecklistItems,
 } from './notes';
+import { PluginHostController } from './plugins/hostController';
 import {
   PluginManagementService,
   pluginInstallErrorMessage,
 } from './plugins/management';
+import { T1HostController } from './plugins/t1Host';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -826,6 +829,10 @@ interface CanvasRPC {
         response: { plugins: InstalledPluginSummary[] };
       };
       pluginPrepareInstallFromFile: {
+        params: Record<string, unknown>;
+        response: PluginInstallPreparationResult;
+      };
+      pluginPrepareDevelopmentDirectory: {
         params: Record<string, unknown>;
         response: PluginInstallPreparationResult;
       };
@@ -1696,6 +1703,16 @@ async function main() {
   localHttpServer = startLocalHttpServer({
     getAIConfig: () => buildAIConfig(),
     getWorkspacePath: () => wsPath,
+    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T1_DIR
+      ? new T1HostController(
+          pluginManagement,
+          createHash('sha256').update(resolve(wsPath)).digest('hex'),
+          process.env.GHOSTBOARD_PLUGIN_T1_DIR
+        )
+      : new PluginHostController(
+          pluginManagement,
+          createHash('sha256').update(resolve(wsPath)).digest('hex')
+        ),
   });
   const url = await getMainViewUrl();
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
@@ -2318,6 +2335,29 @@ async function main() {
             return {
               success: true,
               preview: await pluginManagement.prepareFromFile(filePath),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginPrepareDevelopmentDirectory: async () => {
+          const selected = await Utils.openFileDialog({
+            allowedFileTypes: '*',
+            allowsMultipleSelection: false,
+            canChooseDirectory: true,
+            canChooseFiles: false,
+            startingFolder: '~/',
+          });
+          const directory = selected.find(Boolean);
+          if (!directory) {
+            return { success: false, cancelled: true };
+          }
+          try {
+            return {
+              success: true,
+              preview:
+                await pluginManagement.prepareDevelopmentDirectory(directory),
             };
           } catch (error) {
             return { success: false, error: pluginInstallErrorMessage(error) };

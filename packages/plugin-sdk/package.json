@@ -1,0 +1,33 @@
+{
+  "name": "@ghostboard/sdk",
+  "version": "0.1.0",
+  "description": "GhostBoard trusted plugin commands and panels SDK",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "peerDependencies": {
+    "react": "19.2.x",
+    "react-dom": "19.2.x"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@types/react": "~19.2.0"
+  }
+}

@@ -1,0 +1,16 @@
+import { definePlugin } from '@ghostboard/sdk';
+const evidence = globalThis.__trustedPluginTest;
+export default definePlugin({
+  async setup(app) {
+    evidence.reactCandidate = app;
+    app.signal.addEventListener('abort', () => evidence.events.push('react:candidate:abort'));
+    app.onCleanup(() => evidence.events.push('react:candidate:cleanup'));
+    app.commands.register({ id: 'open', title: 'Must not publish', run() { evidence.events.push('react:candidate:command'); } });
+    app.panels.register({ id: 'panel', title: 'Must not mount', mount() { evidence.events.push('react:candidate:mount'); } });
+    app.panels.close('panel');
+    app.panels.open('panel');
+    evidence.events.push('react:candidate:setup');
+    await new Promise((resolve) => { evidence.rejectReactCandidate = resolve; });
+    throw new Error('t1-reload-setup-error');
+  },
+});

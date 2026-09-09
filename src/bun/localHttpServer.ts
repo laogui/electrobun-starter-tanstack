@@ -7,6 +7,7 @@ import {
 } from './attachments';
 import { unfurlLink } from './linkPreview';
 import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
+import type { PluginHostController } from './plugins/hostController';
 import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
 
@@ -20,6 +21,7 @@ export interface LocalHttpServerOptions {
   getAIConfig: () => AIServerConfig | null;
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
+  pluginRuntime?: PluginHostController;
 }
 
 // The renderer webview (http://localhost:5173 in dev, views:// in prod) calls
@@ -181,7 +183,11 @@ export function startLocalHttpServer(
       const pluginAsset = await servePluginAsset(
         req,
         token,
-        options.getPluginMounts?.() ?? t0?.mounts ?? [],
+        [
+          ...(options.pluginRuntime?.getMounts() ?? []),
+          ...(options.getPluginMounts?.() ?? []),
+          ...(t0?.mounts ?? []),
+        ],
         CORS_HEADERS
       );
       if (pluginAsset) {
@@ -192,6 +198,14 @@ export function startLocalHttpServer(
           status: 401,
           headers: CORS_HEADERS,
         });
+      }
+      const runtimeResponse = await options.pluginRuntime?.handle(
+        req,
+        token,
+        CORS_HEADERS
+      );
+      if (runtimeResponse) {
+        return runtimeResponse;
       }
       const t0Response = await t0?.handle(req, token, CORS_HEADERS);
       if (t0Response) {
@@ -308,6 +322,7 @@ export function startLocalHttpServer(
     token,
     stop: () => {
       clearTimeout(diagnostics);
+      options.pluginRuntime?.dispose();
       server.stop(true);
     },
   };

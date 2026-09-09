@@ -33,6 +33,7 @@ const request = {
   deleteWidget: vi.fn(),
   pluginInstallList: vi.fn(),
   pluginPrepareInstallFromFile: vi.fn(),
+  pluginPrepareDevelopmentDirectory: vi.fn(),
   pluginPrepareInstallFromUrl: vi.fn(),
   pluginCommitInstall: vi.fn(),
   pluginCancelInstall: vi.fn(),
@@ -260,6 +261,32 @@ describe('rpc', () => {
         maxRequestTime: Number.POSITIVE_INFINITY,
       })
     );
+  });
+
+  it('forwards development selection and notifies runtime only after successful changes', async () => {
+    vi.stubGlobal('__electrobunWebviewId', 'webview-1');
+    const dispatch = vi.fn();
+    vi.stubGlobal('dispatchEvent', dispatch);
+    const rpc = await loadModule();
+    request.pluginPrepareDevelopmentDirectory.mockResolvedValue({
+      cancelled: true,
+      success: false,
+    });
+    await rpc.rpcPreparePluginDevelopmentDirectory();
+    expect(request.pluginPrepareDevelopmentDirectory).toHaveBeenCalledWith({});
+    expect(dispatch).not.toHaveBeenCalled();
+    request.pluginEnable.mockResolvedValue({ success: true, plugin: {} });
+    await rpc.rpcEnablePlugin({ pluginId: 'example.app', digest: 'a' });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'plugins-changed' })
+    );
+    dispatch.mockClear();
+    request.pluginDisable.mockResolvedValue({
+      success: false,
+      error: 'disk full',
+    });
+    await rpc.rpcDisablePlugin({ pluginId: 'example.app', digest: 'a' });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('forwards all RPC calls with the expected payloads', async () => {

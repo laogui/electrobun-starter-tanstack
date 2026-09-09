@@ -1,6 +1,7 @@
 import {
   Check,
   FileArchive,
+  FolderOpen,
   Link,
   LoaderCircle,
   ShieldAlert,
@@ -13,6 +14,7 @@ import {
   rpcDisablePlugin,
   rpcEnablePlugin,
   rpcListPluginPackages,
+  rpcPreparePluginDevelopmentDirectory,
   rpcPreparePluginInstallFromFile,
   rpcPreparePluginInstallFromUrl,
 } from '@/lib/rpc';
@@ -38,7 +40,14 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
   const [activationCandidate, setActivationCandidate] =
     useState<InstalledPluginSummary | null>(null);
   const [busy, setBusy] = useState<
-    'cancel' | 'commit' | 'disable' | 'enable' | 'file' | 'url' | null
+    | 'cancel'
+    | 'commit'
+    | 'directory'
+    | 'disable'
+    | 'enable'
+    | 'file'
+    | 'url'
+    | null
   >(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [plugins, setPlugins] = useState<InstalledPluginSummary[]>([]);
@@ -81,6 +90,18 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     setFeedback(null);
     try {
       acceptPreparation(await rpcPreparePluginInstallFromFile());
+    } catch {
+      setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const inspectDirectory = async () => {
+    setBusy('directory');
+    setFeedback(null);
+    try {
+      acceptPreparation(await rpcPreparePluginDevelopmentDirectory());
     } catch {
       setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
     } finally {
@@ -243,7 +264,23 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                 )}
                 {strings.pluginsChooseFile}
               </button>
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                disabled={busy !== null || preview !== null}
+                onClick={inspectDirectory}
+                type="button"
+              >
+                {busy === 'directory' ? (
+                  <LoaderCircle className="animate-spin" size={14} />
+                ) : (
+                  <FolderOpen size={14} />
+                )}
+                {strings.pluginsChooseDirectory}
+              </button>
             </div>
+            <p className="text-[12px] text-neutral-500">
+              {strings.pluginsDevelopmentNotice}
+            </p>
             <form className="flex max-w-xl gap-2" onSubmit={inspectUrl}>
               <label className="sr-only" htmlFor="plugin-package-url">
                 {strings.pluginsUrlLabel}
@@ -289,13 +326,19 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                   {strings.pluginsPreviewTitle}
                 </h3>
                 <p className="mt-1 text-[12px] text-neutral-600 dark:text-neutral-300">
-                  {strings.pluginsPreviewDescription}
+                  {preview.source.kind === 'directory'
+                    ? strings.pluginsDirectoryPreview
+                    : strings.pluginsPreviewDescription}
                 </p>
               </div>
               <PluginDetails plugin={preview.plugin} strings={strings} />
               <div className="space-y-1 text-[11px] text-neutral-500 dark:text-neutral-400">
                 <p>{strings.pluginsPreviewSource(preview.source.label)}</p>
-                <p>{strings.pluginsPreviewDigest(preview.digest)}</p>
+                <p>
+                  {preview.source.kind === 'directory'
+                    ? strings.pluginsDirectoryFingerprint(preview.digest)
+                    : strings.pluginsPreviewDigest(preview.digest)}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -311,7 +354,9 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                   )}
                   {busy === 'commit'
                     ? strings.pluginsInstalling
-                    : strings.pluginsConfirmInstall}
+                    : preview.source.kind === 'directory'
+                      ? strings.pluginsConfirmDirectory
+                      : strings.pluginsConfirmInstall}
                 </button>
                 <button
                   className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-[12px] text-neutral-700 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-200 dark:hover:bg-white/10"
@@ -354,6 +399,11 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                         </p>
                       </div>
                     )}
+                    {plugin.source.kind === 'directory' ? (
+                      <p className="break-all text-[11px] text-neutral-500">
+                        {strings.pluginsDevelopmentSource(plugin.source.label)}
+                      </p>
+                    ) : null}
                     {plugin.status === 'stored' ? (
                       <PluginEnablementControls
                         activationCandidate={activationCandidate}
@@ -369,18 +419,30 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                         strings={strings}
                       />
                     ) : (
-                      <p
-                        className="flex items-start gap-1.5 text-[12px] text-red-600 dark:text-red-400"
-                        role="alert"
-                      >
-                        <ShieldAlert className="mt-0.5 shrink-0" size={14} />
-                        <span>
-                          {plugin.status === 'legacy'
-                            ? strings.pluginsLegacy
-                            : (plugin.validationError ??
-                              strings.pluginsInvalid)}
-                        </span>
-                      </p>
+                      <div className="space-y-2">
+                        <p
+                          className="flex items-start gap-1.5 text-[12px] text-red-600 dark:text-red-400"
+                          role="alert"
+                        >
+                          <ShieldAlert className="mt-0.5 shrink-0" size={14} />
+                          <span>
+                            {plugin.status === 'legacy'
+                              ? strings.pluginsLegacy
+                              : (plugin.validationError ??
+                                strings.pluginsInvalid)}
+                          </span>
+                        </p>
+                        {plugin.enabled ? (
+                          <button
+                            className="rounded-md border px-2 py-1 text-[12px]"
+                            disabled={busy !== null}
+                            onClick={() => disablePlugin(plugin)}
+                            type="button"
+                          >
+                            {strings.pluginsDisable}
+                          </button>
+                        ) : null}
+                      </div>
                     )}
                   </li>
                 ))}
@@ -408,7 +470,15 @@ function PluginEnablementControls({
   strings,
 }: {
   activationCandidate: InstalledPluginSummary | null;
-  busy: 'cancel' | 'commit' | 'disable' | 'enable' | 'file' | 'url' | null;
+  busy:
+    | 'cancel'
+    | 'commit'
+    | 'directory'
+    | 'disable'
+    | 'enable'
+    | 'file'
+    | 'url'
+    | null;
   onCancelEnable: () => void;
   onConfirmEnable: () => void;
   onDisable: () => void;

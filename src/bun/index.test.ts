@@ -289,6 +289,7 @@ const pluginManagementMocks = {
   enable: vi.fn(),
   list: vi.fn(async () => []),
   prepareFromFile: vi.fn(),
+  prepareDevelopmentDirectory: vi.fn(),
   prepareFromUrl: vi.fn(),
   recover: vi.fn(async () => undefined),
 };
@@ -301,6 +302,8 @@ vi.mock('./plugins/management', () => ({
     enable = pluginManagementMocks.enable;
     list = pluginManagementMocks.list;
     prepareFromFile = pluginManagementMocks.prepareFromFile;
+    prepareDevelopmentDirectory =
+      pluginManagementMocks.prepareDevelopmentDirectory;
     prepareFromUrl = pluginManagementMocks.prepareFromUrl;
     recover = pluginManagementMocks.recover;
   },
@@ -363,6 +366,7 @@ interface CanvasHandlers {
   openAttachment: AnyHandler;
   openWorkspaceFolder: AnyHandler;
   pluginEnable: AnyHandler;
+  pluginPrepareDevelopmentDirectory: AnyHandler;
   purgeTrash: AnyHandler;
   renameView: AnyHandler;
   restoreTrash: AnyHandler;
@@ -584,6 +588,30 @@ describe('src/bun/index helpers', () => {
       pluginId: 'example.app',
       digest: 'a'.repeat(64),
     });
+  });
+
+  it('reviews a selected development directory without enabling it', async () => {
+    await loadIndexModule();
+    openFileDialogMock.mockResolvedValueOnce(['/outside/hello']);
+    const preview = {
+      transactionId: 'dev_test',
+      source: { kind: 'directory', label: '/outside/hello' },
+    };
+    pluginManagementMocks.prepareDevelopmentDirectory.mockResolvedValueOnce(
+      preview
+    );
+    await expect(
+      getCanvasHandlers().pluginPrepareDevelopmentDirectory({})
+    ).resolves.toEqual({ success: true, preview });
+    expect(openFileDialogMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        canChooseDirectory: true,
+        canChooseFiles: false,
+      })
+    );
+    expect(
+      pluginManagementMocks.prepareDevelopmentDirectory
+    ).toHaveBeenCalledWith('/outside/hello');
   });
 
   it('listViews returns workspace config from canvas RPC handlers', async () => {

@@ -130,6 +130,14 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     pluginsRuntimeNotice: t('settings_plugins_runtime_notice'),
     pluginsInstallTitle: t('settings_plugins_install_title'),
     pluginsChooseFile: t('settings_plugins_choose_file'),
+    pluginsChooseDirectory: t('settings_plugins_choose_directory'),
+    pluginsDevelopmentNotice: t('settings_plugins_development_notice'),
+    pluginsDirectoryPreview: t('settings_plugins_directory_preview'),
+    pluginsConfirmDirectory: t('settings_plugins_confirm_directory'),
+    pluginsDirectoryFingerprint: (digest: string) =>
+      f('settings_plugins_directory_fingerprint', { digest }),
+    pluginsDevelopmentSource: (source: string) =>
+      f('settings_plugins_development_source', { source }),
     pluginsUrlLabel: t('settings_plugins_url_label'),
     pluginsUrlPlaceholder: t('settings_plugins_url_placeholder'),
     pluginsInspectUrl: t('settings_plugins_inspect_url'),

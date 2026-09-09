@@ -1,0 +1,9 @@
+{
+  "manifestVersion": 2,
+  "id": "t1.react",
+  "name": "T1 external React plugin",
+  "version": "0.1.0",
+  "engines": { "ghostboard": ">=1.0.0 <2.0.0" },
+  "entrypoints": { "app": "app.js" },
+  "capabilities": []
+}

@@ -14,6 +14,36 @@ const context = () => ({
 afterEach(() => vi.useRealTimers());
 
 describe('public content transport', () => {
+  it('reads note sets with ordered null slots and rejects identity or count mismatches', async () => {
+    const note = {
+      id: 'a',
+      kind: 'note',
+      source: 'sidecar',
+      revision: 1,
+      title: 'A',
+      color: '',
+      text: 'Body',
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [null, note] }))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(
+        Response.json({ items: [{ ...note, id: 'wrong' }] })
+      );
+    const content = createPluginContent(context(), {
+      getEndpoint: async () => endpoint,
+      fetch: fetcher,
+    });
+    expect(await content.getMany(['missing', 'a'])).toEqual([null, note]);
+    expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string)).toMatchObject(
+      { action: 'getMany', ids: ['missing', 'a'] }
+    );
+    await expect(content.getMany(['a'])).rejects.toThrow(
+      'Invalid content getMany response'
+    );
+    await expect(content.getMany(['a'])).rejects.toThrow('identity mismatch');
+  });
   it('captures plugin/workspace identities and uses stable operation ids for retries', async () => {
     const result = {
       operationId: 'retry-id',

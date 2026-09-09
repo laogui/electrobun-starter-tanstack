@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import type {
   Disposer,
   PanelDefinition,
+  PluginSelection,
 } from '../../../../packages/plugin-sdk';
+import { SelectionProvider } from '../../../../packages/plugin-sdk/react.js';
 
 export interface PanelMount {
   dispose: Disposer;
@@ -93,7 +95,8 @@ class PanelErrorBoundary extends Component<
 export function renderPanel(
   element: HTMLElement,
   panel: PanelDefinition,
-  report: (error: unknown) => void
+  report: (error: unknown) => void,
+  selection?: PluginSelection
 ): Disposer | undefined {
   if (panel.mount) {
     const cleanup = panel.mount(element);
@@ -111,7 +114,13 @@ export function renderPanel(
     const View = panel.component;
     root.render(
       <PanelErrorBoundary report={report}>
-        <View />
+        {selection ? (
+          <SelectionProvider selection={selection}>
+            <View />
+          </SelectionProvider>
+        ) : (
+          <View />
+        )}
       </PanelErrorBoundary>
     );
   } catch (error) {

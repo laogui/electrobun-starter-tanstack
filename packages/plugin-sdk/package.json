@@ -1,7 +1,7 @@
 {
   "name": "@ghostboard/sdk",
   "version": "0.1.0",
-  "description": "GhostBoard trusted plugin commands and panels SDK",
+  "description": "GhostBoard trusted plugin SDK with note transactions and selection hooks",
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
@@ -9,11 +9,17 @@
     ".": {
       "types": "./index.d.ts",
       "import": "./index.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "import": "./react.js"
     }
   },
   "files": [
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "react.js",
+    "react.d.ts"
   ],
   "peerDependencies": {
     "react": "19.2.x",

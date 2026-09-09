@@ -1,7 +1,7 @@
 # GhostBoard 高信任插件系统改造方案
 
 日期：2026-09-09（同日修订：去掉首版 Bun 后端入口、补充装载机制、能力声明与签名更新；同日采纳）  
-状态：**已采纳；T0 与 T1（含追加 A1–A3）macOS arm64 发行包验证通过，旧运行时清理完成；T2 实施中，首批 A4（KV / 事件 / 任务）及第二批笔记元数据事务已通过 macOS arm64 发行包验证，正文修改、内容创建与自定义卡片未验收**。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
+状态：**已采纳；T0 与 T1（含追加 A1–A3）macOS arm64 发行包验证通过，旧运行时清理完成；T2 实施中，首批 A4（KV / 事件 / 任务）、第二批笔记元数据事务及第三批笔记选区 / React hooks 已通过 macOS arm64 发行包验证，正文修改、内容创建与自定义卡片未验收**。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
 
 范围：公开插件的开发、运行、安装、生命周期、数据接口和交付验收。
 
@@ -209,7 +209,10 @@ export default definePlugin({
       id: 'normalize-titles',
       title: '整理选中资料的标题',
       async run() {
-        const items = await app.selection.get();
+        const selected = await app.selection.get();
+        const items = selected.filter((item) => item.revision !== null);
+        if (items.length > 100) throw new Error('一次最多整理 100 篇可写笔记');
+        if (!items.length) return;
         await app.content.updateMany(
           items.map((item) => ({
             id: item.id,
@@ -226,7 +229,7 @@ export default definePlugin({
 
 对于无构建 JavaScript，`@ghostboard/sdk` 由宿主 import map 解析（§4.1），作者不需要任何打包配置。不能一面宣称不需要构建，一面要求作者手动配置打包器才能导入 SDK。
 
-`selection.get()` 在此示例中返回去重后的内容快照；画布放置项选择通过另一明确接口获取，避免同一内容出现多次时重复编辑。批量 API 内部处理操作 ID、事务和撤销；`expectedRevision` 用于让冲突明确失败，不覆盖读取后发生的新编辑。
+`selection.get()` 已提供当前画布中选中笔记的去重持久内容快照；`selection.getPlacements()` 独立返回放置项身份。选择文件夹 / 分组不递归扩展子项，非笔记内容和缺失记录不进入笔记快照，legacy Markdown 可读但不可写。调用时固定所选 note ID，revision 来自随后的同一次宿主读取；读取完成后发生的新编辑仍由 `expectedRevision` 明确拒绝。批量 API 内部处理操作 ID、事务和撤销。
 
 ### 5.3 React 面板
 
@@ -391,7 +394,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | --- | --- | --- |
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
-| T2：内容与画布类型（实施中；A4 与笔记元数据批次已通过 macOS arm64 验证） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过 |
+| T2：内容与画布类型（实施中；A4、笔记元数据批次与选区 / React hooks 已通过 macOS arm64 验证） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过 |
 | T3：导入器与分发 | SDK `files` 完整流程、导入器、可安装构建、ZIP / HTTPS 安装、组合插件 | 四类样例均从独立包安装，最终用户无开发工具也能使用 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
@@ -404,6 +407,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-10（Asia/Singapore）T2 首批结果：[A4 持久 KV、事件与任务证据](trusted-plugin-t2-a4-evidence.md)。正式 SDK 提供应用级 / 工作区级 JSON KV、宿主内容和画布选区变化推送、激活事件、生命周期绑定的定时 / 单次任务。发行包通过首次启用、同工作区重启、切换工作区及返回原工作区验证；数据不串工作区，应用级 KV 共享，停用后事件和任务停止，原数据保留。A2 的候选准备不发布订阅 / 任务，失败仍保留旧代，成功交接后才启动新代。API 语义与限制见 [SDK README 的 A4 章节](../../../packages/plugin-sdk/README.md#t2-first-slice-storage-events-and-tasks-a4)。**本批不代表整个 T2 通过**：通用内容查询 / 批次事务 / 撤销、内容快照 hooks、第三方自定义卡片与迁移 / 缺失展示仍待实施与验收。
 
 2026-09-10（Asia/Singapore）T2 第二批结果：[笔记元数据事务与恢复证据](trusted-plugin-t2-content-evidence.md)。`app.content.get/query/updateMany/undo/redo` 已接入正式 SDK：读取笔记、按 revision 批量更新 sidecar 笔记的标题 / 颜色、持久化操作回执及撤销 / 重做。宿主编辑器、manifest 元数据与插件写入共用工作区写入队列；批次先写 intent，读取 / 写入前完成中断恢复，外部文件冲突不覆盖。发行包通过两笔记批量修改、画布 / 文件夹投影、搜索、陈旧 manifest 拒绝、重启后撤销及整批 redo 冲突。待保存正文在连续的 metadata-only 变更下保留并更新其 revision；不能证明连续性或本地标题存在冲突时保留草稿并拒绝覆盖。**本批仍不代表 T2 全部完成**：正文修改 / 内容创建、内容选区快照 / React hooks、统一历史顺序与冲突恢复 UI、第三方卡片 / 迁移 / 缺失展示均未验收。当前插件撤销使用显式 SDK / 插件命令，不冒充原生全局 Undo 已统一。
+
+2026-09-10（Asia/Singapore）T2 第三批结果：[笔记选区与 React hooks 证据](trusted-plugin-t2-selection-evidence.md)。`app.selection.get()` 去重并通过同一次宿主队列读取笔记快照，`getPlacements()` 独立保留画布放置身份；`subscribe/getSnapshot` 提供生命周期绑定的稳定缓存。正式 `@ghostboard/sdk/react` 提供 `useSelection/useSelectionState/useSelectedPlacements`，每个独立面板 root 由 SDK 自有 provider 绑定，dev / 发行 import map 和可选 global shim 共用同一 React / hooks 模块。发行包通过重复放置去重、只修改选中笔记、内容变化刷新面板且不重挂、旧 revision 拒绝、重启后 undo 更新 hooks 和停用清理。**本批仍不代表 T2 全部完成**：选区目前只读取当前画布中显式选中的持久化笔记，容器不递归、非笔记仅保留放置引用；正文修改 / 内容创建、第三方卡片与迁移 / 缺失展示、统一 undo、更多业务 hooks 仍待推进。上方各批结果中的“待实施”按当批范围保留，最新边界以本段及 SDK README 为准。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

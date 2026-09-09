@@ -253,6 +253,23 @@ export class NoteContentService {
         if (input.action === 'get') {
           return { item: await this.get(string(input.id)) };
         }
+        if (input.action === 'getMany') {
+          if (!Array.isArray(input.ids) || input.ids.length > 500) {
+            return invalid('getMany requires at most 500 note IDs');
+          }
+          const ids = input.ids.map((value) => string(value));
+          const index = await buildNoteIndex(this.workspace);
+          const items: (NoteContentSnapshot | null)[] = [];
+          for (const id of ids) {
+            request.signal.throwIfAborted();
+            const location = index.get(id);
+            const note = location
+              ? await loadNoteRecord(this.workspace, id, location.markdownFile)
+              : null;
+            items.push(note ? snapshot(note) : null);
+          }
+          return { items };
+        }
         if (input.action === 'query') {
           return this.query(input.query);
         }

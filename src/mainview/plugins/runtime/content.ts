@@ -165,6 +165,29 @@ export function createPluginContent(
       )
     );
   return {
+    async getMany(ids, options) {
+      const capturedIds = [...ids];
+      const result = await request(
+        { action: 'getMany', ids: capturedIds },
+        options
+      );
+      if (
+        !Array.isArray(result.items) ||
+        result.items.length !== capturedIds.length
+      ) {
+        throw new Error('Invalid content getMany response');
+      }
+      return result.items.map((value, index) => {
+        if (value === null) {
+          return null;
+        }
+        const item = parseSnapshot(value);
+        if (item.id !== capturedIds[index]) {
+          throw new Error('Content getMany response identity mismatch');
+        }
+        return item;
+      });
+    },
     async get(id, options) {
       const result = await request({ action: 'get', id }, options);
       return result.item === null ? null : parseSnapshot(result.item);

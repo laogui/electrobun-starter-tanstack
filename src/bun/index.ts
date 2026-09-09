@@ -1741,10 +1741,17 @@ async function main() {
               pluginWorkspaceId(wsPath),
               process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
             )
-          : new PluginHostController(
-              pluginManagement,
-              pluginWorkspaceId(wsPath)
-            ),
+          : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+            ? new T2ContentHostController(
+                pluginManagement,
+                pluginWorkspaceId(wsPath),
+                process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                'selection'
+              )
+            : new PluginHostController(
+                pluginManagement,
+                pluginWorkspaceId(wsPath)
+              ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);

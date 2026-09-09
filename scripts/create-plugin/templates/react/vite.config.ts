@@ -19,6 +19,7 @@ export default defineConfig({
         'react-dom/client',
         'react/jsx-runtime',
         '@ghostboard/sdk',
+        '@ghostboard/sdk/react',
       ],
     },
   },

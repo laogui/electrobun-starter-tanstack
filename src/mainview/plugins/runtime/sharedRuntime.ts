@@ -1,5 +1,6 @@
 import * as sdk from '../../../../packages/plugin-sdk/index.js';
 import sdkPackage from '../../../../packages/plugin-sdk/package.json';
+import * as sdkReact from '../../../../packages/plugin-sdk/react.js';
 import * as jsxRuntime from '../shared/jsx-runtime';
 import * as react from '../shared/react';
 import * as reactDom from '../shared/react-dom';
@@ -11,6 +12,7 @@ const sharedRuntime = Object.freeze({
   reactDomClient,
   jsxRuntime,
   sdk,
+  sdkReact,
   version: sdkPackage.version,
 });
 

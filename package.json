@@ -14,6 +14,7 @@
     "test:plugin-t1": "bun scripts/trusted-plugin-t1/run.ts",
     "test:plugin-t2-a4": "bun scripts/trusted-plugin-t2-a4/run.ts",
     "test:plugin-t2-content": "bun scripts/trusted-plugin-t2-content/run.ts",
+    "test:plugin-t2-selection": "bun scripts/trusted-plugin-t2-selection/run.ts",
     "plugin:create": "bun scripts/create-plugin.ts",
     "upload:r2": "bun scripts/upload-r2.ts",
     "release:canary": "bun run build:canary && bun scripts/upload-r2.ts --env=canary",

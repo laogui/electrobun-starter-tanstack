@@ -102,6 +102,64 @@ afterEach(async () => {
 });
 
 describe('public note content transactions', () => {
+  it('reads a requested note set in one operation, preserving order and missing slots', async () => {
+    const result = await call({
+      action: 'getMany',
+      ids: ['b', 'absent', 'a', 'b'],
+    });
+    expect(result.status).toBe(200);
+    expect(
+      result.result.items.map((item: { id: string } | null) => item?.id ?? null)
+    ).toEqual(['b', null, 'a', 'b']);
+    expect((await call({ action: 'getMany', ids: [] })).result.items).toEqual(
+      []
+    );
+    expect(
+      (await call({ action: 'getMany', ids: new Array(501).fill('a') })).status
+    ).toBe(400);
+    expect((await call({ action: 'getMany', ids: ['a', 42] })).status).toBe(
+      400
+    );
+  });
+
+  it('queues set reads behind a complete writer operation', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((done) => {
+      entered = done;
+    });
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const writer = withNoteWorkspace(workspace, async () => {
+      entered();
+      await mergeNoteMeta(workspace, 'a', {
+        title: 'Updated a',
+        expectedRevision: 1,
+      });
+      await gate;
+      await mergeNoteMeta(workspace, 'b', {
+        title: 'Updated b',
+        expectedRevision: 1,
+      });
+    });
+    await started;
+    const reading = call({ action: 'getMany', ids: ['a', 'b'] });
+    release();
+    await writer;
+    expect((await reading).result.items).toMatchObject([
+      { id: 'a', title: 'Updated a', revision: 2 },
+      { id: 'b', title: 'Updated b', revision: 2 },
+    ]);
+  });
+
+  it('does not present a partially successful set when a selected note is corrupt', async () => {
+    await writeFile(noteFilePath(workspace, 'b'), '{broken');
+    const result = await call({ action: 'getMany', ids: ['a', 'b'] });
+    expect(result.status).toBe(500);
+    expect(result.result.code).toBe('corrupt-content');
+    expect(result.result.items).toBeUndefined();
+  });
   it('reads plain text, pages in note-id order, and preserves rich content and extras in a batch', async () => {
     const original = await raw('a');
     original.futureMetadata = { keep: true };

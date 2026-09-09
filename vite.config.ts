@@ -17,19 +17,18 @@ const sharedEntries = {
   'host-jsx-runtime': 'shared/jsx-runtime.ts',
   ...(pluginT0
     ? { 'host-sdk': 't0/sdk.ts', 'host-sdk-react': 't0/react.ts' }
-    : { 'host-sdk': '../../../packages/plugin-sdk/index.js' }),
+    : {
+        'host-sdk': '../../../packages/plugin-sdk/index.js',
+        'host-sdk-react': '../../../packages/plugin-sdk/react.js',
+      }),
 };
 const sharedImports = {
   react: 'host-react',
   'react-dom': 'host-react-dom',
   'react-dom/client': 'host-react-dom-client',
   'react/jsx-runtime': 'host-jsx-runtime',
-  ...(pluginT0
-    ? {
-        '@ghostboard/sdk': 'host-sdk',
-        '@ghostboard/sdk/react': 'host-sdk-react',
-      }
-    : { '@ghostboard/sdk': 'host-sdk' }),
+  '@ghostboard/sdk': 'host-sdk',
+  '@ghostboard/sdk/react': 'host-sdk-react',
 };
 
 export default defineConfig(async ({ command }) => {
@@ -60,6 +59,9 @@ export default defineConfig(async ({ command }) => {
           '../shared/react-dom-client': 'host-react-dom-client',
           '../shared/jsx-runtime': 'host-jsx-runtime',
           '../../../../packages/plugin-sdk/index.js': 'host-sdk',
+          ...(pluginT0
+            ? {}
+            : { '../../../../packages/plugin-sdk/react.js': 'host-sdk-react' }),
         };
         const entry = runtimeEntries[source];
         if (entry) {
@@ -89,8 +91,9 @@ export default defineConfig(async ({ command }) => {
                   specifier,
                   command === 'build'
                     ? `views://mainview/assets/${name}.js`
-                    : name === 'host-sdk' && !pluginT0
-                      ? `/@fs${resolve(projectRoot, 'packages/plugin-sdk/index.js')}`
+                    : !pluginT0 &&
+                        (name === 'host-sdk' || name === 'host-sdk-react')
+                      ? `/@fs${resolve(projectRoot, 'src/mainview/plugins', sharedEntries[name])}`
                       : `/plugins/${sharedEntries[name as keyof typeof sharedEntries]}`,
                 ])
               ),

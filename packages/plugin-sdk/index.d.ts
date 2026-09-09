@@ -107,11 +107,46 @@ export interface ContentMutationOptions extends OperationOptions {
   operationId?: string;
 }
 
+export interface SelectionPlacement {
+  readonly content: {
+    readonly id: string;
+    readonly kind: 'note' | 'widget' | 'extension';
+  } | null;
+  readonly id: string;
+}
+
+export interface PlacementSelectionSnapshot {
+  readonly items: readonly SelectionPlacement[];
+  readonly viewId: string | null;
+}
+
+export interface SelectionSnapshot {
+  readonly error: { readonly code: string; readonly message: string } | null;
+  readonly items: readonly NoteContentSnapshot[];
+  readonly placements: PlacementSelectionSnapshot;
+  readonly status: 'loading' | 'ready' | 'error';
+}
+
+export interface PluginSelection {
+  /** Captures selected placements now, then reads their unique persisted notes. */
+  get(options?: OperationOptions): Promise<readonly NoteContentSnapshot[]>;
+  getPlacements(): PlacementSelectionSnapshot;
+  /** Stable cached state for subscriptions; empty items while loading or failed. */
+  getSnapshot(): SelectionSnapshot;
+  /** Subscriptions start at activation publication and stop on retirement. */
+  subscribe(listener: () => void): () => void;
+}
+
 export interface PluginContent {
   get(
     id: string,
     options?: OperationOptions
   ): Promise<NoteContentSnapshot | null>;
+  /** One host read operation; ordered results, null for missing notes. Max 500 IDs. */
+  getMany(
+    ids: readonly string[],
+    options?: OperationOptions
+  ): Promise<(NoteContentSnapshot | null)[]>;
   query(
     query?: { text?: string; after?: string; limit?: number },
     options?: OperationOptions
@@ -153,6 +188,7 @@ export interface PluginContext {
     close(id: string): void;
   };
   readonly pluginId: string;
+  readonly selection: PluginSelection;
   /** Aborted on retirement, not when a replacement merely starts preparing. */
   readonly signal: AbortSignal;
   readonly storage: {

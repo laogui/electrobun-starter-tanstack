@@ -47,6 +47,11 @@ if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
     stopPlugins();
   });
 }
+if (import.meta.env.VITE_PLUGIN_T2_SELECTION === '1') {
+  import('./plugins/t2-selection/run')
+    .then(({ runT2SelectionProbe }) => runT2SelectionProbe())
+    .catch(console.error);
+}
 if (import.meta.env.VITE_PLUGIN_T2_CONTENT === '1') {
   import('./plugins/t2-content/run')
     .then(({ runT2ContentProbe }) => runT2ContentProbe())

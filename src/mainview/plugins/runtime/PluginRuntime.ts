@@ -2,6 +2,7 @@ import type {
   CommandDefinition,
   Disposer,
   PanelDefinition,
+  PlacementSelectionSnapshot,
   PluginContext,
   PluginDefinition,
   PluginEventMap,
@@ -13,6 +14,11 @@ import type {
 import { ActivationServices } from './activationServices';
 import { createPluginContent } from './content';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
+import {
+  EMPTY_PLACEMENTS,
+  PluginSelectionStore,
+  SelectionSource,
+} from './selection';
 import {
   isEditingShortcut,
   matchesShortcut,
@@ -82,6 +88,7 @@ interface Activation {
   pendingCleanups: Set<Promise<void>>;
   ready: Promise<void>;
   retirement?: Promise<void>;
+  selection?: PluginSelectionStore;
   services?: ActivationServices;
   status: 'loading' | 'running' | 'failed';
   workspaceId: string;
@@ -116,6 +123,7 @@ function validateRegistration(value: { id: string; title: string }) {
 
 export class PluginRuntime {
   private readonly options: PluginRuntimeOptions;
+  private readonly selectionSource = new SelectionSource();
   private readonly activations = new Map<string, Activation>();
   private readonly candidates = new Map<string, Activation>();
   private readonly generations = new Map<string, number>();
@@ -212,6 +220,7 @@ export class PluginRuntime {
 
   async sync(snapshot: PluginRuntimeSnapshot): Promise<void> {
     const revision = ++this.revision;
+    const workspaceChanged = this.workspaceId !== snapshot.workspaceId;
     this.workspaceId = snapshot.workspaceId;
     this.hostDiagnostics = snapshot.diagnostics.map((diagnostic) => ({
       pluginId: diagnostic.pluginId,
@@ -232,6 +241,12 @@ export class PluginRuntime {
         }
       }
     }
+    if (revision !== this.revision) {
+      return;
+    }
+    if (workspaceChanged) {
+      this.selectionSource.set(EMPTY_PLACEMENTS);
+    }
     for (const descriptor of desired.values()) {
       if (revision !== this.revision) {
         return;
@@ -251,6 +266,15 @@ export class PluginRuntime {
     await Promise.all(this.retirements.values());
   }
 
+  updateSelection(
+    workspaceId: string,
+    snapshot: PlacementSelectionSnapshot
+  ): void {
+    if (workspaceId === this.workspaceId) {
+      this.selectionSource.set(snapshot);
+    }
+  }
+
   emitHostEvent<K extends keyof PluginEventMap>(
     event: K,
     payload: PluginEventMap[K]
@@ -260,6 +284,12 @@ export class PluginRuntime {
     }
     for (const instance of this.activations.values()) {
       if (instance.workspaceId === payload.workspaceId) {
+        if (event === 'content.changed') {
+          const change = payload as PluginEventMap['content.changed'];
+          if (change.kind === 'note') {
+            instance.selection?.invalidate(change.ids);
+          }
+        }
         instance.services?.emit(event, payload);
       }
     }
@@ -365,6 +395,7 @@ export class PluginRuntime {
       this.activations.set(id, instance);
       instance.status = 'running';
       this.publish();
+      instance.selection?.publish();
       instance.services?.publish();
       for (const panelId of instance.openPanels) {
         this.openPanel(id, panelId);
@@ -507,11 +538,20 @@ export class PluginRuntime {
       workspaceId: instance.workspaceId,
       signal: instance.controller.signal,
     };
+    const content = createPluginContent(
+      storageContext,
+      this.options.contentTransport
+    );
+    const selection = new PluginSelectionStore({
+      source: this.selectionSource,
+      content,
+      signal: instance.controller.signal,
+      report: (error) => this.report(pluginId, 'selection', error),
+    });
+    instance.selection = selection;
     return Object.freeze({
-      content: createPluginContent(
-        storageContext,
-        this.options.contentTransport
-      ),
+      content,
+      selection,
       storage: {
         app: createPluginStorage(
           storageContext,
@@ -704,8 +744,11 @@ export class PluginRuntime {
         this.clean(pluginId, release);
         return;
       }
-      unmount = renderPanel(element, panel.definition, (error) =>
-        this.report(pluginId, 'panel', error)
+      unmount = renderPanel(
+        element,
+        panel.definition,
+        (error) => this.report(pluginId, 'panel', error),
+        instance.selection
       );
       if (!instance.active || panel.close !== close) {
         if (unmount) {

@@ -6,14 +6,17 @@ import type { PluginManagementService } from './management';
 export class T2ContentHostController extends PluginHostController {
   private readonly management: PluginManagementService;
   private readonly directory: string;
+  private readonly scenario: 'content' | 'selection';
   constructor(
     management: PluginManagementService,
     workspaceId: string,
-    directory: string
+    directory: string,
+    scenario: 'content' | 'selection' = 'content'
   ) {
     super(management, workspaceId);
     this.management = management;
     this.directory = directory;
+    this.scenario = scenario;
   }
   override async handle(
     request: Request,
@@ -21,12 +24,13 @@ export class T2ContentHostController extends PluginHostController {
     cors: HeadersInit
   ): Promise<Response | null> {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/plugin-t2-content/')) {
+    if (!url.pathname.startsWith(`/plugin-t2-${this.scenario}/`)) {
       return super.handle(request, token, cors);
     }
     const headers = new Headers(cors);
     headers.set('Cache-Control', 'no-store');
-    const phase = process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_PHASE;
+    const phase =
+      process.env[`GHOSTBOARD_PLUGIN_T2_${this.scenario.toUpperCase()}_PHASE`];
     if (!(phase && ['initial', 'restart'].includes(phase))) {
       return new Response('Invalid test phase', { status: 400, headers });
     }

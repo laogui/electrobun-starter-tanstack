@@ -75,6 +75,15 @@ const modules: Record<string, { field: string; exports: string[] }> = {
     exports: ['Fragment', 'jsx', 'jsxs'],
   },
   '@ghostboard/sdk': { field: 'sdk', exports: ['definePlugin'] },
+  '@ghostboard/sdk/react': {
+    field: 'sdkReact',
+    exports: [
+      'SelectionProvider',
+      'useSelection',
+      'useSelectionState',
+      'useSelectedPlacements',
+    ],
+  },
 };
 const prefix = '\0ghostboard-runtime:';
 

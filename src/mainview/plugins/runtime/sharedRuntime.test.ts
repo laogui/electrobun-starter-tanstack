@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import * as sdk from '../../../../packages/plugin-sdk/index.js';
 import sdkPackage from '../../../../packages/plugin-sdk/package.json';
+import * as sdkReact from '../../../../packages/plugin-sdk/react.js';
 import * as jsxRuntime from '../shared/jsx-runtime';
 import * as react from '../shared/react';
 import * as reactDom from '../shared/react-dom';
@@ -29,6 +30,7 @@ it('publishes a frozen, repeatable runtime with only the documented fields', () 
     'reactDom',
     'reactDomClient',
     'sdk',
+    'sdkReact',
     'version',
   ]);
   expect(runtime.version).toBe(sdkPackage.version);
@@ -44,6 +46,8 @@ it('uses the import-map facade namespaces and the host export identities', () =>
   expect(runtime.reactDomClient).toBe(reactDomClient);
   expect(runtime.jsxRuntime).toBe(jsxRuntime);
   expect(runtime.sdk).toBe(sdk);
+  expect(runtime.sdkReact).toBe(sdkReact);
+  expect(runtime.sdkReact.SelectionProvider).toBe(sdkReact.SelectionProvider);
   expect(runtime.react.default).toBe(React);
   expect(runtime.react.useState).toBe(React.useState);
   expect(runtime.reactDomClient.createRoot).toBe(createRoot);

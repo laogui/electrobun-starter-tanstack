@@ -4,6 +4,8 @@
 
 状态：**笔记查询、标题 / 颜色批次和持久化撤销 / 重做已通过 macOS arm64 发行包验证；整个 T2 尚未通过。**
 
+本页保留第二批当时的验收范围；后续笔记选区快照、`getMany` 与 React 选区 hooks 见 [第三批证据](trusted-plugin-t2-selection-evidence.md)。
+
 依据：[主方案 §10](trusted-plugin-platform.md#10-实施阶段与退出条件)。完整公开契约见 [SDK README](../../../packages/plugin-sdk/README.md#t2-second-slice-note-metadata-transactions)，前一批服务见 [A4 证据](trusted-plugin-t2-a4-evidence.md)。
 
 ## 1. 本批实现

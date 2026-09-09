@@ -1,12 +1,12 @@
 # @ghostboard/sdk 0.1
 
-The trusted GhostBoard SDK for commands, panels, persistent storage, events, tasks, and revision-checked note metadata transactions. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
+The trusted GhostBoard SDK for commands, panels, storage, events, tasks, revision-checked note metadata transactions, and note selection with React hooks. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
 
 ## Runtime and types
 
 A plugin imports `@ghostboard/sdk` normally. GhostBoard's initial HTML import map resolves it to the host's stable module, so a plain JavaScript plugin needs no build or dependency install. This package supplies the same ESM helper and standalone TypeScript declarations for author tooling. It contains no host store imports.
 
-React panels use the host's **React / ReactDOM 19.2.x**. A bundler must externalize `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, and `@ghostboard/sdk`; other dependencies belong in the plugin's build. The package has optional React peers so a DOM-only JavaScript author does not have to use React.
+React panels use the host's **React / ReactDOM 19.2.x**. A bundler must externalize `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@ghostboard/sdk`, and `@ghostboard/sdk/react`; other dependencies belong in the plugin's build. The package has optional React peers so a DOM-only JavaScript author does not have to use React.
 
 ## Minimal plugin
 
@@ -78,7 +78,7 @@ Both generations' JavaScript can run during preparation. Only managed registrati
 
 ## Theme and component ownership (A1)
 
-The stable shared surface is React, `@ghostboard/sdk` (and hooks when their stage ships), and these **frozen SDK 0.1 CSS variable names and roles**. Values are not frozen: they follow the host theme, including `.dark`, and may improve with host releases.
+The stable shared surface is React, `@ghostboard/sdk` and `@ghostboard/sdk/react`, and these **frozen SDK 0.1 CSS variable names and roles**. Values are not frozen: they follow the host theme, including `.dark`, and may improve with host releases.
 
 | Variable | Role |
 | --- | --- |
@@ -113,13 +113,14 @@ globalThis.__ghostboardPluginRuntime = Object.freeze({
   reactDomClient, // react-dom/client
   jsxRuntime,     // react/jsx-runtime
   sdk,            // @ghostboard/sdk
+  sdkReact,       // @ghostboard/sdk/react; added in the T2 selection slice
   version,        // shared SDK package version, currently "0.1.0"
 });
 ```
 
-This is a **bundler shim target**, not an additional SDK. Only these six fields are public; React internals, host stores and private components are not. The module fields are the exact import-map facade namespaces, including their default/named export identities. The container is frozen, not React itself or every object React exports. `version` is the SDK version, not the React version or a lifecycle generation.
+This is a **bundler shim target**, not an additional SDK. Only these seven fields are public; React internals, host stores and private components are not. The module fields are the exact import-map facade namespaces, including their default/named export identities. The container is frozen, not React itself or every object React exports. `version` is the SDK version, not the React version or a lifecycle generation.
 
-The React author template defaults to bare externals. Its optional `vite.shim.config.ts` is a complete buildable example, selected with `bun run build:shim`: virtual ESM modules read the five namespaces from the global object, preserving each exported value without bundling another React or SDK implementation. Generated adapter namespaces are distinct from the native host namespaces; the exported functions/default objects retain identity. Neither config imports host-private files. A shim build is useful when import-map support is unreliable; it still requires the GhostBoard host and is not a standalone browser app. It exposes no T2 hooks.
+The React author template defaults to bare externals. Its optional `vite.shim.config.ts` is a complete buildable example, selected with `bun run build:shim`: virtual ESM modules read the six namespaces from the global object, preserving each exported value without bundling another React or SDK implementation. Generated adapter namespaces are distinct from the native host namespaces; the exported functions/default objects retain identity. Neither config imports host-private files. A shim build is useful when import-map support is unreliable; it still requires the GhostBoard host and is not a standalone browser app. It includes the T2 selection hooks through `sdkReact`.
 
 ## T2 first slice: storage, events and tasks (A4)
 
@@ -158,7 +159,7 @@ export default definePlugin({
 | `selection.changed` | `{ workspaceId, viewId, placementIds }`. Active canvas selection membership or view changed; `viewId` is null while the canvas is unhydrated. IDs are placement IDs, not deduplicated content IDs. |
 | `workspace.activated` | `{ workspaceId }`. Delivered once to subscriptions registered during setup when **this activation** is published, including a successful reload/re-enable. Late subscriptions do not replay it. |
 
-These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect or external filesystem watcher. The note metadata slice below adds optional `noteChanges` with title/color/revision transitions, but events do not contain full content snapshots. Canvas layout, tags and attachments are not content-record events. Note queries are available below; business React hooks remain subsequent T2 work.
+These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect or external filesystem watcher. The note metadata slice below adds optional `noteChanges` with title/color/revision transitions, but events do not contain full content snapshots. Canvas layout, tags and attachments are not content-record events. Note queries and note-selection React hooks are available below.
 
 ### In-process tasks
 
@@ -194,6 +195,7 @@ if (writable.length) {
 ### Reads and writes
 
 - `get(id, options?)` returns `{ id, kind: 'note', title, color, text, source, revision }` or `null` if absent. `text` is searchable text extracted from BlockNote blocks, or the legacy Markdown body; it is not a lossless rich-document export. Corrupt content produces an explicit error rather than an empty replacement.
+- `getMany(ids, options?)` reads up to 500 IDs in one workspace-queued operation. Results retain input order, including duplicate IDs and `null` slots for missing notes. An empty input returns an empty array. Corruption fails the request rather than returning partial success. This is the read path used for selection snapshots, not a series of independently interleaved `get` calls.
 - `query({ text?, after?, limit? }?, options?)` searches title/text case-insensitively and returns `{ items, nextCursor }`, ordered by note ID. Default limit 100, range 1–500. Pass `nextCursor` as `after` for another page. Each request reads under the host workspace queue, but pages do not form a frozen multi-request snapshot.
 - `updateMany(updates, { label, operationId?, signal? })` accepts 1–100 **unique note IDs** and returns `{ operationId, items, changed }`. Every update requires `expectedRevision` and a nonempty `changes` containing only `title` (up to 256 characters) and/or `color` (up to 64 characters). Blocks, previews, timestamps other than `updatedAt`, and unknown sidecar fields are retained.
 - All revisions are checked before any batch content is written. A conflict fails the whole batch. A no-op retains its revision and returns `changed: false`; an entirely no-op batch has no undo entry. Other notes and unsupported fields cannot be silently skipped.
@@ -218,8 +220,68 @@ These are explicit SDK operations. Plugins should expose commands for them; the 
 
 Canvas layout snapshots are still separate history. Restoring an old snapshot can show stale metadata; its stale revision prevents persisting it over current content. Reopening the note loads canonical metadata. A unified ordered history and richer conflict-resolution UI remain T2 work.
 
+## T2 third slice: note selection and React hooks
+
+### Snapshot and placement APIs
+
+`app.selection.get({ signal }?)` captures the selected placement membership **at invocation**, deduplicates its note IDs, then reads persisted notes together through `content.getMany`. It returns a frozen array of detached, frozen `NoteContentSnapshot` values ordered by note ID. Selection changes while the read is pending do not retarget that call. The note data/revisions are captured at the host read, not at the earlier click. Use `expectedRevision` when submitting mutations, since later edits may conflict.
+
+The current scope is selected, visible, non-detached nodes in the hydrated active canvas. Selection of a folder or group does **not** recursively select its contents. Focused editors, embedded folder rows, text ranges and other canvases are not additional selection sources. Only persisted notes appear in `get()`: missing references are omitted, legacy Markdown notes remain read-only, and widget/extension snapshots are not yet supported. A corrupt note fails the whole read. More than 500 distinct selected note IDs rejects without truncation; `updateMany` still has a separate 100-note limit.
+
+`app.selection.getPlacements()` is synchronous and returns a frozen `{ viewId, items }`, ordered by placement ID. Each item is `{ id, content }`: the placement ID remains distinct even for duplicate note references. `content` is `{ kind: 'note' | 'widget' | 'extension', id }` where a supported backing identity exists, otherwise `null` (for example folders and images). This method does not read records or verify that the referenced content still exists. Before canvas hydration it returns `{ viewId: null, items: [] }`. In an in-process workspace transition, selection stays empty until the host observes a new hydration cycle rather than relabelling the previous workspace's nodes.
+
+```js
+const selected = await app.selection.get();
+const writable = selected.filter((item) => item.revision !== null);
+if (writable.length > 100) throw new Error('Select at most 100 writable notes');
+if (writable.length) {
+  await app.content.updateMany(writable.map((item) => ({
+    id: item.id,
+    expectedRevision: item.revision,
+    changes: { title: item.title.trim() },
+  })), { label: 'Trim selected titles' });
+}
+```
+
+### Subscriptions and independent React roots
+
+`app.selection.getSnapshot()` exposes a stable, frozen cached state:
+
+```ts
+{
+  status: 'loading' | 'ready' | 'error';
+  items: readonly NoteContentSnapshot[];
+  placements: PlacementSelectionSnapshot;
+  error: { code: string; message: string } | null;
+}
+```
+
+`subscribe(listener)` returns a synchronous unsubscribe function. Subscriptions and background reads start only after activation publication. Candidate setup does not publish a replacement selection stream; a failed candidate leaves the old one intact. Explicit `get()` calls during setup are real reads, like other SDK reads. Selection membership/reference/view changes and host content invalidations for selected notes refresh the cache. Obsolete requests are cancelled and late results ignored. Loading and error states have **empty items**, never the previous selection's content. A subsequent selection change or selected-note invalidation retries a failed cache read; there is no timer retry or external filesystem watcher.
+
+Subscriptions stop at retirement; pending and new `get()` calls reject with `AbortError`. `getPlacements()` and new subscriptions also reject after retirement. `getSnapshot()` then contains empty selection with `activation-inactive`; retired observers are not invoked. Cached snapshot identity stays the same until state changes. Consumers must not mutate any returned state. These subscriptions are synchronous notifications, not async event handlers.
+
+The standalone package now exports `@ghostboard/sdk/react`:
+
+- `useSelection()` returns cached note items; it is empty while loading or failed.
+- `useSelectionState()` returns the complete status/items/placements/error state so an empty selection can be distinguished from a failed or pending read.
+- `useSelectedPlacements()` returns the cached placement snapshot, including non-note placements.
+- `SelectionProvider({ selection, children })` binds a `PluginSelection` for standalone author tests or author-created React roots. Host-managed React panels already receive it; normal plugin authors do not need to install a provider themselves.
+
+All hooks use `useSyncExternalStore`. Each plugin root receives its own SDK-owned provider, not inherited host contexts or a global current-plugin pointer. Hooks outside a provider report a descriptive error. The host and plugin share the same React and SDK React entry in dev and packaged builds; both supplied external-import and optional shim configurations preserve that identity.
+
+```tsx
+import { useSelectionState } from '@ghostboard/sdk/react';
+
+function SelectionPanel() {
+  const { status, error, items } = useSelectionState();
+  if (status === 'loading') return <p>Loading selection…</p>;
+  if (error) return <p role="alert">{error.message}</p>;
+  return <ul>{items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>;
+}
+```
+
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4 and the note metadata transaction slice above. Content creation, body mutation, content selection snapshots, custom cards and `@ghostboard/sdk/react` business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Content creation, body mutation, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.

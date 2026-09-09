@@ -38,6 +38,8 @@ vi.mock('@/store/canvasStore', () => ({
   },
 }));
 beforeEach(() => {
+  state._hydrated = true;
+  state.activeViewId = 'view-a';
   state.nodes = [
     {
       id: 'placement-a',
@@ -63,9 +65,20 @@ it('forwards valid pushed content events, emits selection membership changes, an
       runtimeChanged = listener;
       return unsubscribe;
     },
+    updateSelection: vi.fn(),
     emitHostEvent,
   } as unknown as PluginRuntime;
   const disconnect = connectPluginHostEvents(runtime);
+  expect(emitHostEvent).toHaveBeenLastCalledWith('selection.changed', {
+    workspaceId: 'workspace-a',
+    viewId: 'view-a',
+    placementIds: ['placement-a'],
+  });
+  expect(runtime.updateSelection).toHaveBeenCalledWith('workspace-a', {
+    viewId: 'view-a',
+    items: [{ id: 'placement-a', content: { kind: 'note', id: 'note-a' } }],
+  });
+  emitHostEvent.mockClear();
   const payload = {
     workspaceId: 'workspace-a',
     kind: 'note',
@@ -82,12 +95,7 @@ it('forwards valid pushed content events, emits selection membership changes, an
   expect(emitHostEvent).toHaveBeenCalledOnce();
   runtimeChanged();
   runtimeChanged();
-  expect(emitHostEvent).toHaveBeenCalledTimes(2);
-  expect(emitHostEvent).toHaveBeenLastCalledWith('selection.changed', {
-    workspaceId: 'workspace-a',
-    viewId: 'view-a',
-    placementIds: ['placement-a'],
-  });
+  expect(emitHostEvent).toHaveBeenCalledTimes(1);
   state.nodes[0]!.selected = false;
   for (const listener of listeners) {
     listener();
@@ -103,7 +111,7 @@ it('forwards valid pushed content events, emits selection membership changes, an
   window.dispatchEvent(
     new CustomEvent('plugin-content-changed', { detail: payload })
   );
-  expect(emitHostEvent).toHaveBeenCalledTimes(3);
+  expect(emitHostEvent).toHaveBeenCalledTimes(2);
 });
 
 it('filters workspaces, ignores stale revisions, clears cache on transitions, and stops reconciliation after disposal', () => {
@@ -115,6 +123,7 @@ it('filters workspaces, ignores stale revisions, clears cache on transitions, an
       runtimeChanged = listener;
       return () => {};
     },
+    updateSelection: vi.fn(),
     emitHostEvent: vi.fn(),
   } as unknown as PluginRuntime;
   const disconnect = connectPluginHostEvents(runtime);
@@ -157,6 +166,23 @@ it('filters workspaces, ignores stale revisions, clears cache on transitions, an
   expect(state.nodes).toBe(projected);
   workspaceId = 'workspace-b';
   runtimeChanged();
+  expect(runtime.updateSelection).toHaveBeenLastCalledWith('workspace-b', {
+    viewId: null,
+    items: [],
+  });
+  state._hydrated = false;
+  for (const listener of listeners) {
+    listener();
+  }
+  state._hydrated = true;
+  state.activeViewId = 'view-b';
+  for (const listener of listeners) {
+    listener();
+  }
+  expect(runtime.updateSelection).toHaveBeenLastCalledWith(
+    'workspace-b',
+    expect.objectContaining({ viewId: 'view-b' })
+  );
   state.nodes[0]!.data = {
     noteId: 'note-a',
     title: 'Before',
@@ -178,6 +204,7 @@ it('rejects malformed metadata rather than trusting a pushed DOM payload', () =>
   const runtime = {
     getSnapshot: () => ({ workspaceId: 'a' }),
     subscribe: () => () => {},
+    updateSelection: vi.fn(),
     emitHostEvent: vi.fn(),
   } as unknown as PluginRuntime;
   const disconnect = connectPluginHostEvents(runtime);
@@ -192,6 +219,9 @@ it('rejects malformed metadata rather than trusting a pushed DOM payload', () =>
       },
     })
   );
-  expect(runtime.emitHostEvent).not.toHaveBeenCalled();
+  expect(runtime.emitHostEvent).not.toHaveBeenCalledWith(
+    'content.changed',
+    expect.anything()
+  );
   disconnect();
 });

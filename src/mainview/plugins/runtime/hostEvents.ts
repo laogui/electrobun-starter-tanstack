@@ -5,7 +5,9 @@ import {
 } from '@/lib/noteMetadataProjection';
 import { useCanvasStore } from '@/store/canvasStore';
 import type { ContentChangedEvent } from '../../../../packages/plugin-sdk';
+import { canvasSelection } from './canvasSelection';
 import type { PluginRuntime } from './PluginRuntime';
+import { EMPTY_PLACEMENTS } from './selection';
 
 function isContentChange(value: unknown): value is ContentChangedEvent {
   if (!value || typeof value !== 'object') {
@@ -30,9 +32,15 @@ export function connectPluginHostEvents(
 ): () => void {
   let workspaceId = runtime.getSnapshot().workspaceId;
   const revisions = new Map<string, number>();
+  let selectionNeedsHydration = false;
+  let sawUnhydrated = false;
   const syncWorkspace = () => {
     const current = runtime.getSnapshot().workspaceId;
     if (current !== workspaceId) {
+      if (workspaceId) {
+        selectionNeedsHydration = true;
+        sawUnhydrated = false;
+      }
       workspaceId = current;
       revisions.clear();
     }
@@ -78,15 +86,21 @@ export function connectPluginHostEvents(
       return;
     }
     const state = useCanvasStore.getState();
+    if (selectionNeedsHydration) {
+      if (!state._hydrated) {
+        sawUnhydrated = true;
+      } else if (sawUnhydrated) {
+        selectionNeedsHydration = false;
+      }
+    }
+    const selection = selectionNeedsHydration
+      ? EMPTY_PLACEMENTS
+      : canvasSelection(state);
+    runtime.updateSelection(workspaceId, selection);
     const payload = {
       workspaceId,
-      viewId: state._hydrated ? state.activeViewId : null,
-      placementIds: state._hydrated
-        ? state.nodes
-            .filter((node) => node.selected)
-            .map((node) => node.id)
-            .sort()
-        : [],
+      viewId: selection.viewId,
+      placementIds: selection.items.map((item) => item.id),
     };
     const key = JSON.stringify(payload);
     if (key === lastSelection) {
@@ -98,7 +112,12 @@ export function connectPluginHostEvents(
   target.addEventListener('plugin-content-changed', contentChanged);
   const unsubscribeCanvas = useCanvasStore.subscribe(selectionChanged);
   const unsubscribeRuntime = runtime.subscribe(selectionChanged);
+  selectionChanged();
   return () => {
+    runtime.updateSelection(
+      runtime.getSnapshot().workspaceId,
+      EMPTY_PLACEMENTS
+    );
     target.removeEventListener('plugin-content-changed', contentChanged);
     unsubscribeCanvas();
     unsubscribeRuntime();

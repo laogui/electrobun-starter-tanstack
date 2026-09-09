@@ -1,12 +1,12 @@
-import { HOST_API_VERSION, isSemver, isThirdPartyPluginId } from './ids';
+import { GHOSTBOARD_VERSION, isSemver, isThirdPartyPluginId } from './ids';
 import {
   compareSemver,
-  hostApiRangeIncludes,
-  isHostApiRange,
+  hostVersionRangeIncludes,
+  isHostVersionRange,
   type PluginManifest,
 } from './manifest';
 
-export const PLUGIN_RELEASE_SCHEMA = 'ghostboard-plugin-release/v1';
+export const PLUGIN_RELEASE_SCHEMA = 'ghostboard-plugin-release/v2';
 export const PLUGIN_RELEASE_MAX_BYTES = 1024 * 1024;
 export const PLUGIN_RELEASE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CHANNEL_RE = /^[a-z][a-z0-9-]{0,31}$/;
@@ -14,7 +14,7 @@ const NOTES_MAX_LENGTH = 8 * 1024;
 const RELEASES_MAX = 50;
 
 export type PluginReleaseErrorCode =
-  | 'incompatible-host-api'
+  | 'incompatible-host-version'
   | 'invalid-json'
   | 'invalid-release'
   | 'resource-limit'
@@ -26,7 +26,7 @@ export interface PluginReleaseError {
 }
 
 export interface PluginReleaseRecord {
-  hostApi: string;
+  ghostboard: string;
   notes?: string;
   sha256: string;
   url: string;
@@ -82,14 +82,15 @@ function parseReleaseRecord(
     return invalid('release entries must be objects');
   }
   const version = typeof value.version === 'string' ? value.version : '';
-  const hostApi = typeof value.hostApi === 'string' ? value.hostApi : '';
+  const ghostboard =
+    typeof value.ghostboard === 'string' ? value.ghostboard : '';
   const sha256 = typeof value.sha256 === 'string' ? value.sha256 : '';
   const url = typeof value.url === 'string' ? value.url : '';
   if (!isSemver(version)) {
     return invalid('release version must be semver');
   }
-  if (!isHostApiRange(hostApi)) {
-    return invalid('release hostApi must be >=x.y.z <a.b.c');
+  if (!isHostVersionRange(ghostboard)) {
+    return invalid('release ghostboard must be >=x.y.z <a.b.c');
   }
   if (!PLUGIN_RELEASE_SHA256_RE.test(sha256)) {
     return invalid('release sha256 must be 64 lowercase hex characters');
@@ -100,7 +101,7 @@ function parseReleaseRecord(
   }
   const record: PluginReleaseRecord = {
     version,
-    hostApi,
+    ghostboard,
     url: parsedUrl,
     sha256,
   };
@@ -185,15 +186,15 @@ export function parsePluginReleaseDocument(
 
 export function selectCompatibleRelease(
   document: PluginReleaseDocument,
-  hostApi = HOST_API_VERSION
+  ghostboard = GHOSTBOARD_VERSION
 ): PluginReleaseRecord | PluginReleaseError {
   const compatible = document.releases.filter((release) =>
-    hostApiRangeIncludes(release.hostApi, hostApi)
+    hostVersionRangeIncludes(release.ghostboard, ghostboard)
   );
   if (compatible.length === 0) {
     return {
-      code: 'incompatible-host-api',
-      message: `no release supports hostApi ${hostApi}`,
+      code: 'incompatible-host-version',
+      message: `no release supports ghostboard ${ghostboard}`,
     };
   }
   return compatible.reduce((latest, release) =>

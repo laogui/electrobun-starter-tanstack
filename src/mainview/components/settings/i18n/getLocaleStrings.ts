@@ -119,6 +119,13 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     canvasTypesClearFailed: t('settings_canvas_types_clear_failed'),
 
     pluginsTitle: t('settings_plugins_title'),
+    pluginsCapabilities: t('settings_plugins_capabilities'),
+    pluginsNoCapabilities: t('settings_plugins_no_capabilities'),
+    pluginsSignatureUnverified: t('settings_plugins_signature_unverified'),
+    pluginsNoUpdateSource: t('settings_plugins_no_update_source'),
+    pluginsUpdateSource: (source: string) =>
+      f('settings_plugins_update_source', { source }),
+    pluginsLegacy: t('settings_plugins_legacy'),
     pluginsDescription: t('settings_plugins_description'),
     pluginsRuntimeNotice: t('settings_plugins_runtime_notice'),
     pluginsInstallTitle: t('settings_plugins_install_title'),
@@ -134,10 +141,6 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
       f('settings_plugins_preview_source', { source }),
     pluginsPreviewDigest: (digest: string) =>
       f('settings_plugins_preview_digest', { digest }),
-    pluginsContributions: t('settings_plugins_contributions'),
-    pluginsPermissions: t('settings_plugins_permissions'),
-    pluginsNoPermissions: t('settings_plugins_no_permissions'),
-    pluginsPermissionOptional: t('settings_plugins_permission_optional'),
     pluginsConfirmInstall: t('settings_plugins_confirm_install'),
     pluginsCancelInstall: t('settings_plugins_cancel_install'),
     pluginsInstalling: t('settings_plugins_installing'),
@@ -146,21 +149,18 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     pluginsInstalledTitle: t('settings_plugins_installed_title'),
     pluginsEmpty: t('settings_plugins_empty'),
     pluginsStored: t('settings_plugins_stored'),
-    pluginsCommandsEnabled: t('settings_plugins_commands_enabled'),
-    pluginsEnableCommands: (count: number) =>
-      f('settings_plugins_enable_commands', { count }),
-    pluginsDisableCommands: t('settings_plugins_disable_commands'),
+    pluginsEnabled: t('settings_plugins_enabled'),
+    pluginsEnable: t('settings_plugins_enable'),
+    pluginsDisable: t('settings_plugins_disable'),
     pluginsEnableReviewTitle: (name: string) =>
       f('settings_plugins_enable_review_title', { name }),
     pluginsEnableReviewDescription: t(
       'settings_plugins_enable_review_description'
     ),
-    pluginsConfirmEnableCommands: t('settings_plugins_confirm_enable_commands'),
-    pluginsCancelEnableCommands: t('settings_plugins_cancel_enable_commands'),
+    pluginsConfirmEnable: t('settings_plugins_confirm_enable'),
+    pluginsCancelEnable: t('settings_plugins_cancel_enable'),
     pluginsEnabling: t('settings_plugins_enabling'),
     pluginsDisabling: t('settings_plugins_disabling'),
-    pluginsRequiredGrants: (count: number) =>
-      f('settings_plugins_required_grants', { count }),
     pluginsEnableSuccess: (name: string) =>
       f('settings_plugins_enable_success', { name }),
     pluginsDisableSuccess: (name: string) =>
@@ -168,12 +168,6 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     pluginsInvalid: t('settings_plugins_invalid'),
     pluginsUnavailable: t('settings_plugins_unavailable'),
     pluginsUnknownError: t('settings_plugins_unknown_error'),
-    pluginsContributionCommand: t('settings_plugins_contribution_command'),
-    pluginsContributionPanel: t('settings_plugins_contribution_panel'),
-    pluginsContributionImporter: t('settings_plugins_contribution_importer'),
-    pluginsContributionCanvasType: t(
-      'settings_plugins_contribution_canvas_type'
-    ),
 
     cleanupTitle: t('settings_cleanup_title'),
     cleanupDescription: t('settings_cleanup_description'),

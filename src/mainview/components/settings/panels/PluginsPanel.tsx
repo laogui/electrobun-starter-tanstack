@@ -10,8 +10,8 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   rpcCancelPluginInstall,
   rpcCommitPluginInstall,
-  rpcDisablePluginCommands,
-  rpcEnablePluginCommands,
+  rpcDisablePlugin,
+  rpcEnablePlugin,
   rpcListPluginPackages,
   rpcPreparePluginInstallFromFile,
   rpcPreparePluginInstallFromUrl,
@@ -21,7 +21,6 @@ import type {
   PluginInstallPreview,
   PluginPackageSummary,
 } from '../../../../shared/plugins/management';
-import type { PluginContributionKind } from '../../../../shared/plugins/manifest';
 
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
@@ -34,28 +33,12 @@ interface Feedback {
   message: string;
 }
 
-const contributionLabels: Record<
-  PluginContributionKind,
-  keyof Pick<
-    SettingsLocaleStrings,
-    | 'pluginsContributionCanvasType'
-    | 'pluginsContributionCommand'
-    | 'pluginsContributionImporter'
-    | 'pluginsContributionPanel'
-  >
-> = {
-  canvasType: 'pluginsContributionCanvasType',
-  command: 'pluginsContributionCommand',
-  importer: 'pluginsContributionImporter',
-  panel: 'pluginsContributionPanel',
-};
-
 export function PluginsPanel({ strings }: PluginsPanelProps) {
   const [available, setAvailable] = useState(true);
   const [activationCandidate, setActivationCandidate] =
     useState<InstalledPluginSummary | null>(null);
   const [busy, setBusy] = useState<
-    'commit' | 'disable' | 'enable' | 'file' | 'url' | null
+    'cancel' | 'commit' | 'disable' | 'enable' | 'file' | 'url' | null
   >(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [plugins, setPlugins] = useState<InstalledPluginSummary[]>([]);
@@ -128,14 +111,18 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
       return;
     }
     const transactionId = preview.transactionId;
-    setPreview(null);
+    setBusy('cancel');
     try {
       const result = await rpcCancelPluginInstall(transactionId);
-      if (!result.success) {
+      if (result.success) {
+        setPreview(null);
+      } else {
         setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
       }
     } catch {
       setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -164,14 +151,14 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     }
   };
 
-  const enableCommands = async () => {
+  const enablePlugin = async () => {
     if (!activationCandidate) {
       return;
     }
     setBusy('enable');
     setFeedback(null);
     try {
-      const result = await rpcEnablePluginCommands({
+      const result = await rpcEnablePlugin({
         digest: activationCandidate.digest,
         pluginId: activationCandidate.pluginId,
       });
@@ -192,11 +179,11 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     }
   };
 
-  const disableCommands = async (plugin: InstalledPluginSummary) => {
+  const disablePlugin = async (plugin: InstalledPluginSummary) => {
     setBusy('disable');
     setFeedback(null);
     try {
-      const result = await rpcDisablePluginCommands({
+      const result = await rpcDisablePlugin({
         digest: plugin.digest,
         pluginId: plugin.pluginId,
       });
@@ -245,7 +232,7 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
-                disabled={busy !== null}
+                disabled={busy !== null || preview !== null}
                 onClick={inspectFile}
                 type="button"
               >
@@ -263,7 +250,7 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
               </label>
               <input
                 className="min-w-0 flex-1 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-[12px] shadow-sm outline-none placeholder:text-neutral-400 focus:border-accent dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
-                disabled={busy !== null}
+                disabled={busy !== null || preview !== null}
                 id="plugin-package-url"
                 onChange={(event) => setUrl(event.target.value)}
                 placeholder={strings.pluginsUrlPlaceholder}
@@ -272,7 +259,7 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
               />
               <button
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
-                disabled={busy !== null}
+                disabled={busy !== null || preview !== null}
                 type="submit"
               >
                 {busy === 'url' ? (
@@ -368,12 +355,12 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                       </div>
                     )}
                     {plugin.status === 'stored' ? (
-                      <PluginCommandControls
+                      <PluginEnablementControls
                         activationCandidate={activationCandidate}
                         busy={busy}
                         onCancelEnable={() => setActivationCandidate(null)}
-                        onConfirmEnable={enableCommands}
-                        onDisable={() => disableCommands(plugin)}
+                        onConfirmEnable={enablePlugin}
+                        onDisable={() => disablePlugin(plugin)}
                         onRequestEnable={() => {
                           setFeedback(null);
                           setActivationCandidate(plugin);
@@ -388,7 +375,10 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                       >
                         <ShieldAlert className="mt-0.5 shrink-0" size={14} />
                         <span>
-                          {plugin.validationError ?? strings.pluginsInvalid}
+                          {plugin.status === 'legacy'
+                            ? strings.pluginsLegacy
+                            : (plugin.validationError ??
+                              strings.pluginsInvalid)}
                         </span>
                       </p>
                     )}
@@ -407,7 +397,7 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
   );
 }
 
-function PluginCommandControls({
+function PluginEnablementControls({
   activationCandidate,
   busy,
   onCancelEnable,
@@ -418,7 +408,7 @@ function PluginCommandControls({
   strings,
 }: {
   activationCandidate: InstalledPluginSummary | null;
-  busy: 'commit' | 'disable' | 'enable' | 'file' | 'url' | null;
+  busy: 'cancel' | 'commit' | 'disable' | 'enable' | 'file' | 'url' | null;
   onCancelEnable: () => void;
   onConfirmEnable: () => void;
   onDisable: () => void;
@@ -426,27 +416,13 @@ function PluginCommandControls({
   plugin: InstalledPluginSummary;
   strings: SettingsLocaleStrings;
 }) {
-  const commandCount = plugin.plugin?.commands.length ?? 0;
-  if (commandCount === 0) {
-    return (
-      <p className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-        {strings.pluginsStored}
-      </p>
-    );
-  }
-
-  const commandsEnabled = plugin.commandActivation?.enabled === true;
+  const enabled = plugin.enabled;
   const confirming = activationCandidate?.pluginId === plugin.pluginId;
-  if (commandsEnabled) {
+  if (enabled) {
     return (
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-[11px] text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-          {strings.pluginsCommandsEnabled}
-        </span>
-        <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-          {strings.pluginsRequiredGrants(
-            plugin.commandActivation?.grantedPermissions.length ?? 0
-          )}
+          {strings.pluginsEnabled}
         </span>
         <button
           className="rounded-md px-2 py-1 font-medium text-[12px] text-neutral-700 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-200 dark:hover:bg-white/10"
@@ -456,7 +432,7 @@ function PluginCommandControls({
         >
           {busy === 'disable'
             ? strings.pluginsDisabling
-            : strings.pluginsDisableCommands}
+            : strings.pluginsDisable}
         </button>
       </div>
     );
@@ -474,7 +450,7 @@ function PluginCommandControls({
           onClick={onRequestEnable}
           type="button"
         >
-          {strings.pluginsEnableCommands(commandCount)}
+          {strings.pluginsEnable}
         </button>
       </div>
       {confirming ? (
@@ -492,7 +468,7 @@ function PluginCommandControls({
             >
               {busy === 'enable'
                 ? strings.pluginsEnabling
-                : strings.pluginsConfirmEnableCommands}
+                : strings.pluginsConfirmEnable}
             </button>
             <button
               className="rounded-md px-2.5 py-1 font-medium transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-white/10"
@@ -500,7 +476,7 @@ function PluginCommandControls({
               onClick={onCancelEnable}
               type="button"
             >
-              {strings.pluginsCancelEnableCommands}
+              {strings.pluginsCancelEnable}
             </button>
           </div>
         </div>
@@ -531,94 +507,30 @@ function PluginDetails({
   plugin: PluginPackageSummary;
   strings: SettingsLocaleStrings;
 }) {
-  const permissions = [
-    ...plugin.permissions.required.map((permission) => ({
-      ...permission,
-      optional: false,
-    })),
-    ...plugin.permissions.optional.map((permission) => ({
-      ...permission,
-      optional: true,
-    })),
-  ];
-
-  return (
-    <div className="space-y-2">
-      <div>
-        <p className="font-medium text-[13px] text-neutral-900 dark:text-neutral-50">
-          {plugin.name}
-        </p>
-        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-          {plugin.id} · {plugin.version} · API {plugin.hostApi}
-        </p>
-        {plugin.description ? (
-          <p className="mt-1 text-[12px] text-neutral-600 dark:text-neutral-300">
-            {plugin.description}
-          </p>
-        ) : null}
-      </div>
-      <PluginMetadata
-        contributionKinds={plugin.contributionKinds}
-        permissions={permissions}
-        strings={strings}
-      />
-    </div>
-  );
-}
-
-function PluginMetadata({
-  contributionKinds,
-  permissions,
-  strings,
-}: {
-  contributionKinds: PluginContributionKind[];
-  permissions: Array<{ id: string; optional: boolean; reason: string }>;
-  strings: SettingsLocaleStrings;
-}) {
   return (
     <div className="space-y-2 text-[12px]">
-      <div>
-        <p className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">
-          {strings.pluginsContributions}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {contributionKinds.map((kind) => (
-            <span
-              className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
-              key={kind}
-            >
-              {strings[contributionLabels[kind]]}
-            </span>
+      <p className="font-medium text-[13px]">{plugin.name}</p>
+      <p>
+        {plugin.id} · {plugin.version} · GhostBoard {plugin.ghostboard}
+      </p>
+      {plugin.author ? <p>{plugin.author}</p> : null}
+      {plugin.description ? <p>{plugin.description}</p> : null}
+      <p className="font-medium">{strings.pluginsCapabilities}</p>
+      {plugin.capabilities.length ? (
+        <ul>
+          {plugin.capabilities.map((capability) => (
+            <li key={capability}>{capability}</li>
           ))}
-        </div>
-      </div>
-      <div>
-        <p className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">
-          {strings.pluginsPermissions}
-        </p>
-        {permissions.length === 0 ? (
-          <p className="text-neutral-500 dark:text-neutral-400">
-            {strings.pluginsNoPermissions}
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {permissions.map((permission) => (
-              <li
-                className="text-neutral-600 dark:text-neutral-300"
-                key={permission.id}
-              >
-                <span className="font-medium">{permission.id}</span>
-                {permission.optional ? (
-                  <span className="ml-1 text-neutral-500">
-                    ({strings.pluginsPermissionOptional})
-                  </span>
-                ) : null}
-                <span className="text-neutral-500"> — {permission.reason}</span>
-              </li>
-            ))}
-          </ul>
+        </ul>
+      ) : (
+        <p>{strings.pluginsNoCapabilities}</p>
+      )}
+      <p>{strings.pluginsSignatureUnverified}</p>
+      <p>
+        {strings.pluginsUpdateSource(
+          plugin.updateUrl ?? strings.pluginsNoUpdateSource
         )}
-      </div>
+      </p>
     </div>
   );
 }

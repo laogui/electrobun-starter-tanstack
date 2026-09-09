@@ -6,6 +6,8 @@ import {
   saveAttachmentStream,
 } from './attachments';
 import { unfurlLink } from './linkPreview';
+import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
+import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
 
 export interface LocalHttpServerHandle {
@@ -16,6 +18,7 @@ export interface LocalHttpServerHandle {
 
 export interface LocalHttpServerOptions {
   getAIConfig: () => AIServerConfig | null;
+  getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
 }
 
@@ -165,6 +168,7 @@ export function startLocalHttpServer(
   options: LocalHttpServerOptions
 ): LocalHttpServerHandle {
   const token = randomUUID();
+  const t0 = createT0Host();
 
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -174,11 +178,24 @@ export function startLocalHttpServer(
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: CORS_HEADERS });
       }
+      const pluginAsset = await servePluginAsset(
+        req,
+        token,
+        options.getPluginMounts?.() ?? t0?.mounts ?? [],
+        CORS_HEADERS
+      );
+      if (pluginAsset) {
+        return pluginAsset;
+      }
       if (!readRequestToken(req, url, token)) {
         return new Response('Unauthorized', {
           status: 401,
           headers: CORS_HEADERS,
         });
+      }
+      const t0Response = await t0?.handle(req, token, CORS_HEADERS);
+      if (t0Response) {
+        return t0Response;
       }
       if (url.pathname === '/ai/chat' && req.method === 'POST') {
         const config = options.getAIConfig();
@@ -285,9 +302,13 @@ export function startLocalHttpServer(
     },
   });
 
+  const diagnostics = t0?.diagnose(`http://127.0.0.1:${server.port}`, token);
   return {
     baseUrl: `http://127.0.0.1:${server.port}`,
     token,
-    stop: () => server.stop(true),
+    stop: () => {
+      clearTimeout(diagnostics);
+      server.stop(true);
+    },
   };
 }

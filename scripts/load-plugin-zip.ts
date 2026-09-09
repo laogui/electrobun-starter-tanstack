@@ -27,10 +27,9 @@ console.log(
       id: loaded.manifest.id,
       name: loaded.manifest.name,
       version: loaded.manifest.version,
-      commands: loaded.manifest.contributes.commands.map((command) => ({
-        id: command.id,
-        handler: command.handler,
-      })),
+      app: loaded.manifest.entrypoints.app,
+      capabilities: loaded.manifest.capabilities,
+      execution: 'Not executed; T1 runtime is not implemented',
       files: Object.keys(loaded.sources),
     },
     null,

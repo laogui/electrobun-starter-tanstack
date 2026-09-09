@@ -16,86 +16,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
+import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
 import { loadPluginDirectory } from './loadDirectory';
-import { requireGhostboardPluginSamplesRoot } from './outOfRepoSamples';
 import { PluginInstallError, PluginInstallStore } from './pluginInstall';
-
-function writeU16(target: number[], value: number): void {
-  target.push(value % 256, Math.floor(value / 256) % 256);
-}
-
-function writeU32(target: number[], value: number): void {
-  writeU16(target, value % 65_536);
-  writeU16(target, Math.floor(value / 65_536) % 65_536);
-}
-
-function createStoredZip(files: Record<string, string>): Uint8Array {
-  const localParts: number[] = [];
-  const centralParts: number[] = [];
-  let offset = 0;
-  for (const [name, text] of Object.entries(files)) {
-    const nameBytes = new TextEncoder().encode(name);
-    const data = new TextEncoder().encode(text);
-    const localOffset = offset;
-    writeU32(localParts, 0x04_03_4b_50);
-    writeU16(localParts, 20);
-    writeU16(localParts, 0);
-    writeU16(localParts, 0);
-    writeU16(localParts, 0);
-    writeU16(localParts, 0);
-    writeU32(localParts, 0);
-    writeU32(localParts, data.length);
-    writeU32(localParts, data.length);
-    writeU16(localParts, nameBytes.length);
-    writeU16(localParts, 0);
-    localParts.push(...nameBytes, ...data);
-    offset += 30 + nameBytes.length + data.length;
-    writeU32(centralParts, 0x02_01_4b_50);
-    writeU16(centralParts, 20);
-    writeU16(centralParts, 20);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU32(centralParts, 0);
-    writeU32(centralParts, data.length);
-    writeU32(centralParts, data.length);
-    writeU16(centralParts, nameBytes.length);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU16(centralParts, 0);
-    writeU32(centralParts, 0);
-    writeU32(centralParts, localOffset);
-    centralParts.push(...nameBytes);
-  }
-  const eocd: number[] = [];
-  writeU32(eocd, 0x06_05_4b_50);
-  writeU16(eocd, 0);
-  writeU16(eocd, 0);
-  writeU16(eocd, Object.keys(files).length);
-  writeU16(eocd, Object.keys(files).length);
-  writeU32(eocd, centralParts.length);
-  writeU32(eocd, localParts.length);
-  writeU16(eocd, 0);
-  return Uint8Array.from([...localParts, ...centralParts, ...eocd]);
-}
-
-const TITLE_TOOLS_DIR = join(
-  requireGhostboardPluginSamplesRoot(),
-  'title-tools'
-);
-
-async function titleToolsFiles(): Promise<Record<string, string>> {
-  return {
-    'ghostboard.plugin.json': await readFile(
-      join(TITLE_TOOLS_DIR, 'ghostboard.plugin.json'),
-      'utf8'
-    ),
-    'main.js': await readFile(join(TITLE_TOOLS_DIR, 'main.js'), 'utf8'),
-  };
-}
 
 async function listen(
   handler: (req: IncomingMessage, res: ServerResponse) => void
@@ -137,9 +60,9 @@ describe('plugin install journal', () => {
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
-      zipBytes: createStoredZip(await titleToolsFiles()),
+      zipBytes: createStoredZip(pluginFiles()),
     });
-    expect(prepared.pluginId).toBe('community.example.title-tools');
+    expect(prepared.pluginId).toBe('community.example.app');
     expect(prepared.version).toBe('1.0.0');
     expect(prepared.journal.stage).toBe('ready-to-commit');
     expect(existsSync(join(root, 'staging', prepared.transactionId))).toBe(
@@ -148,22 +71,14 @@ describe('plugin install journal', () => {
 
     const installed = await store.commit(prepared.transactionId);
     expect(installed.directory).toBe(
-      join(
-        root,
-        'packages',
-        'community.example.title-tools',
-        '1.0.0',
-        prepared.digest
-      )
+      join(root, 'packages', 'community.example.app', '1.0.0', prepared.digest)
     );
-    expect(
-      existsSync(join(installed.directory, 'ghostboard.plugin.json'))
-    ).toBe(true);
+    expect(existsSync(join(installed.directory, 'manifest.json'))).toBe(true);
     expect(existsSync(join(root, 'staging', prepared.transactionId))).toBe(
       false
     );
     const loaded = await loadPluginDirectory(installed.directory);
-    expect(loaded.sources['main.js']).toContain('normalizeTitles');
+    expect(loaded.sources['main.js']).toBe(pluginFiles()['main.js']);
     const listed = await store.listInstalled();
     expect(listed).toHaveLength(1);
     expect(listed[0]?.digest).toBe(prepared.digest);
@@ -177,24 +92,22 @@ describe('plugin install journal', () => {
   });
 
   it('commits a wrapping-folder zip without keeping the wrap name', async () => {
-    const files = await titleToolsFiles();
+    const files = pluginFiles();
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-wrap-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
       zipBytes: createStoredZip({
-        'title-tools/ghostboard.plugin.json': files['ghostboard.plugin.json']!,
+        'title-tools/manifest.json': files['manifest.json']!,
         'title-tools/main.js': files['main.js']!,
       }),
     });
     const installed = await store.commit(prepared.transactionId);
-    expect(
-      existsSync(join(installed.directory, 'ghostboard.plugin.json'))
-    ).toBe(true);
+    expect(existsSync(join(installed.directory, 'manifest.json'))).toBe(true);
     expect(existsSync(join(installed.directory, 'title-tools'))).toBe(false);
   });
 
   it('rejects a second install of the same digest', async () => {
-    const zipBytes = createStoredZip(await titleToolsFiles());
+    const zipBytes = createStoredZip(pluginFiles());
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-dup-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({ zipBytes });
@@ -206,7 +119,7 @@ describe('plugin install journal', () => {
   });
 
   it('rejects the same version with a different digest', async () => {
-    const files = await titleToolsFiles();
+    const files = pluginFiles();
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-conflict-'));
     const store = new PluginInstallStore(root);
     const first = await store.prepareFromZip({
@@ -224,7 +137,7 @@ describe('plugin install journal', () => {
   });
 
   it('cancels a prepared install and allows a later retry', async () => {
-    const zipBytes = createStoredZip(await titleToolsFiles());
+    const zipBytes = createStoredZip(pluginFiles());
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-cancel-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({ zipBytes });
@@ -259,7 +172,7 @@ describe('plugin install journal', () => {
   });
 
   it('reuses an identical pending prepare while one is ready to commit', async () => {
-    const zipBytes = createStoredZip(await titleToolsFiles());
+    const zipBytes = createStoredZip(pluginFiles());
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-pending-'));
     const store = new PluginInstallStore(root);
     const first = await store.prepareFromZip({ zipBytes });
@@ -274,7 +187,7 @@ describe('plugin install journal', () => {
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-recover-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
-      zipBytes: createStoredZip(await titleToolsFiles()),
+      zipBytes: createStoredZip(pluginFiles()),
     });
     const recovered = await store.recover();
     const journal = recovered.find(
@@ -291,7 +204,7 @@ describe('plugin install journal', () => {
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-crash-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
-      zipBytes: createStoredZip(await titleToolsFiles()),
+      zipBytes: createStoredZip(pluginFiles()),
     });
     const dest = join(
       root,
@@ -324,7 +237,7 @@ describe('plugin install journal', () => {
   });
 
   it('downloads a loopback zip and redacts query credentials in the journal', async () => {
-    const zip = createStoredZip(await titleToolsFiles());
+    const zip = createStoredZip(pluginFiles());
     const server = await listen((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/zip' });
       res.end(Buffer.from(zip));
@@ -350,11 +263,11 @@ describe('plugin install journal', () => {
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-replaced-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
-      zipBytes: createStoredZip(await titleToolsFiles()),
+      zipBytes: createStoredZip(pluginFiles()),
     });
     await writeFile(
       join(root, 'staging', prepared.transactionId, 'package.zip'),
-      createStoredZip({ 'ghostboard.plugin.json': '{}' })
+      createStoredZip({ 'manifest.json': '{}' })
     );
     await expect(store.commit(prepared.transactionId)).rejects.toMatchObject({
       code: 'replaced',
@@ -366,7 +279,7 @@ describe('plugin install journal', () => {
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-nocancel-'));
     const store = new PluginInstallStore(root);
     const prepared = await store.prepareFromZip({
-      zipBytes: createStoredZip(await titleToolsFiles()),
+      zipBytes: createStoredZip(pluginFiles()),
     });
     await store.commit(prepared.transactionId);
     await expect(store.cancel(prepared.transactionId)).rejects.toBeInstanceOf(
@@ -375,5 +288,36 @@ describe('plugin install journal', () => {
     await expect(store.cancel(prepared.transactionId)).rejects.toMatchObject({
       code: 'invalid-state',
     });
+  });
+  it('refuses replacement with another version until signed updates exist', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'plugin-install-update-'));
+    const store = new PluginInstallStore(root);
+    const files = pluginFiles();
+    const prepared = await store.prepareFromZip({
+      zipBytes: createStoredZip(files),
+    });
+    await store.commit(prepared.transactionId);
+    const manifest = JSON.parse(files['manifest.json']!) as Record<
+      string,
+      unknown
+    >;
+    manifest.version = '1.1.0';
+    files['manifest.json'] = JSON.stringify(manifest);
+    await expect(
+      store.prepareFromZip({ zipBytes: createStoredZip(files) })
+    ).rejects.toMatchObject({ code: 'invalid-state' });
+    expect((await store.listInstalled()).map((item) => item.version)).toEqual([
+      '1.0.0',
+    ]);
+  });
+  it('rejects a legacy package without changing the installed registry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'plugin-install-legacy-'));
+    const store = new PluginInstallStore(root);
+    const files = pluginFiles();
+    files['manifest.json'] = JSON.stringify({ manifestVersion: 1 });
+    await expect(
+      store.prepareFromZip({ zipBytes: createStoredZip(files) })
+    ).rejects.toMatchObject({ code: 'invalid-package' });
+    expect(await store.listInstalled()).toEqual([]);
   });
 });

@@ -13,7 +13,6 @@ const localInfoChannelMock = vi.fn();
 const settingsUpdatedMock = vi.fn();
 const trashUpdatedMock = vi.fn();
 const viewsUpdatedMock = vi.fn();
-const normalizeNoteTitlesMock = vi.fn();
 const canvasUndoMock = vi.fn();
 const canvasRedoMock = vi.fn();
 const defineRpcMock = vi.fn<
@@ -28,7 +27,6 @@ const defineRpcMock = vi.fn<
       settingsUpdated: typeof settingsUpdatedMock;
       trashUpdated: typeof trashUpdatedMock;
       viewsUpdated: typeof viewsUpdatedMock;
-      normalizeNoteTitles: typeof normalizeNoteTitlesMock;
       canvasUndo: typeof canvasUndoMock;
       canvasRedo: typeof canvasRedoMock;
     };
@@ -38,7 +36,6 @@ const defineRpcMock = vi.fn<
     settingsUpdated: settingsUpdatedMock,
     trashUpdated: trashUpdatedMock,
     viewsUpdated: viewsUpdatedMock,
-    normalizeNoteTitles: normalizeNoteTitlesMock,
     canvasUndo: canvasUndoMock,
     canvasRedo: canvasRedoMock,
   },
@@ -285,41 +282,30 @@ vi.mock('./aicredentials', () => ({
     aiCredentialsMocks.saveAIApiKey(...args),
 }));
 
-const noteTitleCommandMocks = {
-  redoNormalizeTitlesOnWorkspaceNotes: vi.fn(),
-  runNormalizeTitlesOnWorkspaceNotes: vi.fn(),
-  undoNormalizeTitlesOnWorkspaceNotes: vi.fn(),
+const pluginManagementMocks = {
+  cancel: vi.fn(async () => undefined),
+  commit: vi.fn(),
+  disable: vi.fn(),
+  enable: vi.fn(),
+  list: vi.fn(async () => []),
+  prepareFromFile: vi.fn(),
+  prepareFromUrl: vi.fn(),
+  recover: vi.fn(async () => undefined),
 };
 
-vi.mock('./plugins/noteTitleCommand', () => ({
-  redoNormalizeTitlesOnWorkspaceNotes: (
-    ...args: Parameters<
-      typeof noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes
-    >
-  ) => noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes(...args),
-  runNormalizeTitlesOnWorkspaceNotes: (
-    ...args: Parameters<
-      typeof noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
-    >
-  ) => noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes(...args),
-  undoNormalizeTitlesOnWorkspaceNotes: (
-    ...args: Parameters<
-      typeof noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes
-    >
-  ) => noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes(...args),
-}));
-
-const outOfRepoSamplesMocks = {
-  tryGhostboardPluginSamplesRoot: vi.fn(
-    (): string | null => '/tmp/ghostboard-plugin-samples'
-  ),
-};
-
-vi.mock('./plugins/outOfRepoSamples', () => ({
-  ghostboardPluginSamplesRoot: () => '/tmp/ghostboard-plugin-samples',
-  requireGhostboardPluginSamplesRoot: () => '/tmp/ghostboard-plugin-samples',
-  tryGhostboardPluginSamplesRoot: () =>
-    outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot(),
+vi.mock('./plugins/management', () => ({
+  PluginManagementService: class {
+    cancel = pluginManagementMocks.cancel;
+    commit = pluginManagementMocks.commit;
+    disable = pluginManagementMocks.disable;
+    enable = pluginManagementMocks.enable;
+    list = pluginManagementMocks.list;
+    prepareFromFile = pluginManagementMocks.prepareFromFile;
+    prepareFromUrl = pluginManagementMocks.prepareFromUrl;
+    recover = pluginManagementMocks.recover;
+  },
+  pluginInstallErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : 'Plugin installation failed.',
 }));
 
 const bunFileMock = vi.fn();
@@ -376,9 +362,7 @@ interface CanvasHandlers {
   loadCanvas: AnyHandler;
   openAttachment: AnyHandler;
   openWorkspaceFolder: AnyHandler;
-  pluginNormalizeNoteTitles: AnyHandler;
-  pluginRedoNoteTitles: AnyHandler;
-  pluginUndoNoteTitles: AnyHandler;
+  pluginEnable: AnyHandler;
   purgeTrash: AnyHandler;
   renameView: AnyHandler;
   restoreTrash: AnyHandler;
@@ -467,19 +451,6 @@ beforeEach(() => {
     blocks: 1,
     version: 1,
   });
-  noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
-    operationId: 'plgop_test',
-    titles: { note_a: 'Hello world' },
-  });
-  noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
-    note_a: '  Hello   world ',
-  });
-  noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes.mockResolvedValue({
-    note_a: 'Hello world',
-  });
-  outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot.mockReturnValue(
-    '/tmp/ghostboard-plugin-samples'
-  );
   // Note store defaults: empty workspace, no-op meta merge.
   noteStoreMocks.buildNoteIndex.mockResolvedValue(new Map());
   noteStoreMocks.listNoteRecords.mockResolvedValue([]);
@@ -598,79 +569,20 @@ describe('src/bun/index helpers', () => {
     );
   });
 
-  it('pluginNormalizeNoteTitles runs title-tools on workspace notes', async () => {
+  it('removes the old runtime RPC while retaining workspace enablement', async () => {
     await loadIndexModule();
-    const canvasHandlers = getCanvasHandlers();
-
+    const handlers = getCanvasHandlers();
+    expect(handlers).not.toHaveProperty('pluginNormalizeNoteTitles');
+    expect(handlers).not.toHaveProperty('pluginRunCommand');
+    expect(handlers).not.toHaveProperty('pluginCommandEnable');
+    const plugin = { pluginId: 'example.app', enabled: true };
+    pluginManagementMocks.enable.mockResolvedValueOnce(plugin);
     await expect(
-      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: ['note_a'] })
-    ).resolves.toEqual({
-      success: true,
-      operationId: 'plgop_test',
-      titles: { note_a: 'Hello world' },
-    });
-    expect(
-      noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
-    ).toHaveBeenCalledWith({
-      noteIds: ['note_a'],
-      pluginDirectory: '/tmp/ghostboard-plugin-samples/title-tools',
-      workspacePath: '/tmp/workspace',
-    });
-  });
-
-  it('pluginNormalizeNoteTitles returns success false without samples or noteIds', async () => {
-    await loadIndexModule();
-    const canvasHandlers = getCanvasHandlers();
-
-    await expect(
-      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: [] })
-    ).resolves.toEqual({ success: false });
-    outOfRepoSamplesMocks.tryGhostboardPluginSamplesRoot.mockReturnValueOnce(
-      null
-    );
-    await expect(
-      canvasHandlers.pluginNormalizeNoteTitles({ noteIds: ['note_a'] })
-    ).resolves.toEqual({ success: false });
-    expect(
-      noteTitleCommandMocks.runNormalizeTitlesOnWorkspaceNotes
-    ).not.toHaveBeenCalled();
-  });
-
-  it('pluginUndoNoteTitles and pluginRedoNoteTitles restore sidecar titles', async () => {
-    await loadIndexModule();
-    const canvasHandlers = getCanvasHandlers();
-
-    await expect(
-      canvasHandlers.pluginUndoNoteTitles({
-        noteIds: ['note_a'],
-        operationId: 'plgop_test',
-      })
-    ).resolves.toEqual({
-      success: true,
-      titles: { note_a: '  Hello   world ' },
-    });
-    await expect(
-      canvasHandlers.pluginRedoNoteTitles({
-        noteIds: ['note_a'],
-        operationId: 'plgop_test',
-      })
-    ).resolves.toEqual({
-      success: true,
-      titles: { note_a: 'Hello world' },
-    });
-    expect(
-      noteTitleCommandMocks.undoNormalizeTitlesOnWorkspaceNotes
-    ).toHaveBeenCalledWith({
-      noteIds: ['note_a'],
-      operationId: 'plgop_test',
-      workspacePath: '/tmp/workspace',
-    });
-    expect(
-      noteTitleCommandMocks.redoNormalizeTitlesOnWorkspaceNotes
-    ).toHaveBeenCalledWith({
-      noteIds: ['note_a'],
-      operationId: 'plgop_test',
-      workspacePath: '/tmp/workspace',
+      handlers.pluginEnable({ pluginId: 'example.app', digest: 'a'.repeat(64) })
+    ).resolves.toEqual({ success: true, plugin });
+    expect(pluginManagementMocks.enable).toHaveBeenCalledWith({
+      pluginId: 'example.app',
+      digest: 'a'.repeat(64),
     });
   });
 

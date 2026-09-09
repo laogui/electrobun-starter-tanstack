@@ -6,9 +6,6 @@ const request = {
   saveNote: vi.fn(),
   createNote: vi.fn(),
   deleteNote: vi.fn(),
-  pluginNormalizeNoteTitles: vi.fn(),
-  pluginRedoNoteTitles: vi.fn(),
-  pluginUndoNoteTitles: vi.fn(),
   saveAttachment: vi.fn(),
   loadAttachment: vi.fn(),
   openAttachment: vi.fn(),
@@ -39,9 +36,8 @@ const request = {
   pluginPrepareInstallFromUrl: vi.fn(),
   pluginCommitInstall: vi.fn(),
   pluginCancelInstall: vi.fn(),
-  pluginCommandEnable: vi.fn(),
-  pluginCommandDisable: vi.fn(),
-  pluginRunCommand: vi.fn(),
+  pluginEnable: vi.fn(),
+  pluginDisable: vi.fn(),
   renameView: vi.fn(),
   cloneWidget: vi.fn(),
   saveWidget: vi.fn(),
@@ -105,24 +101,6 @@ describe('rpc', () => {
       rpc.rpcCreateNote('note-1', 'Title', 'text')
     ).resolves.toBeNull();
     await expect(rpc.rpcDeleteNote('note-1')).resolves.toEqual({
-      success: false,
-    });
-    await expect(rpc.rpcPluginNormalizeNoteTitles(['note_a'])).resolves.toEqual(
-      {
-        success: false,
-      }
-    );
-    await expect(
-      rpc.rpcPluginUndoNoteTitles('plgop_1', ['note_a'])
-    ).resolves.toEqual({ success: false });
-    await expect(
-      rpc.rpcPluginRedoNoteTitles('plgop_1', ['note_a'])
-    ).resolves.toEqual({ success: false });
-    await expect(
-      rpc.rpcSaveAttachment('data:image/png;base64,abc')
-    ).resolves.toBeNull();
-    await expect(rpc.rpcLoadAttachment('/tmp/a.png')).resolves.toBeNull();
-    await expect(rpc.rpcOpenAttachment('/tmp/a.png')).resolves.toEqual({
       success: false,
     });
     await expect(rpc.rpcGetSettings()).resolves.toBeNull();
@@ -237,21 +215,15 @@ describe('rpc', () => {
       success: false,
     });
     await expect(
-      rpc.rpcEnablePluginCommands({ digest: 'a'.repeat(64), pluginId: 'x' })
+      rpc.rpcEnablePlugin({ digest: 'a'.repeat(64), pluginId: 'x' })
     ).resolves.toEqual({
       error: 'Plugin management is unavailable.',
       success: false,
     });
     await expect(
-      rpc.rpcDisablePluginCommands({ digest: 'a'.repeat(64), pluginId: 'x' })
+      rpc.rpcDisablePlugin({ digest: 'a'.repeat(64), pluginId: 'x' })
     ).resolves.toEqual({
       error: 'Plugin management is unavailable.',
-      success: false,
-    });
-    await expect(
-      rpc.rpcPluginRunCommand('x', 'command', ['note_a'])
-    ).resolves.toEqual({
-      error: 'Plugin commands are unavailable.',
       success: false,
     });
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
@@ -301,9 +273,6 @@ describe('rpc', () => {
     await rpc.rpcSaveNote('note-1', { title: 'Title' }, 'Body');
     await rpc.rpcCreateNote('note-2', 'New', 'text');
     await rpc.rpcDeleteNote('note-2');
-    await rpc.rpcPluginNormalizeNoteTitles(['note_a']);
-    await rpc.rpcPluginUndoNoteTitles('plgop_1', ['note_a']);
-    await rpc.rpcPluginRedoNoteTitles('plgop_1', ['note_a']);
     await rpc.rpcSaveAttachment('data:image/png;base64,abc', 'images/a.png');
     await rpc.rpcSaveAttachment('data:application/pdf;base64,abc', undefined, {
       kind: 'file',
@@ -366,19 +335,14 @@ describe('rpc', () => {
     await rpc.rpcPreparePluginInstallFromUrl('https://example.com/plugin.zip');
     await rpc.rpcCommitPluginInstall('plginst_1');
     await rpc.rpcCancelPluginInstall('plginst_1');
-    await rpc.rpcEnablePluginCommands({
+    await rpc.rpcEnablePlugin({
       digest: 'a'.repeat(64),
       pluginId: 'community.example.title-tools',
     });
-    await rpc.rpcDisablePluginCommands({
+    await rpc.rpcDisablePlugin({
       digest: 'a'.repeat(64),
       pluginId: 'community.example.title-tools',
     });
-    await rpc.rpcPluginRunCommand(
-      'community.example.title-tools',
-      'normalize-titles',
-      ['note_a']
-    );
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -397,17 +361,6 @@ describe('rpc', () => {
       displayHint: 'text',
     });
     expect(request.deleteNote).toHaveBeenCalledWith({ noteId: 'note-2' });
-    expect(request.pluginNormalizeNoteTitles).toHaveBeenCalledWith({
-      noteIds: ['note_a'],
-    });
-    expect(request.pluginUndoNoteTitles).toHaveBeenCalledWith({
-      operationId: 'plgop_1',
-      noteIds: ['note_a'],
-    });
-    expect(request.pluginRedoNoteTitles).toHaveBeenCalledWith({
-      operationId: 'plgop_1',
-      noteIds: ['note_a'],
-    });
     expect(request.saveAttachment).toHaveBeenCalledWith({
       dataUrl: 'data:image/png;base64,abc',
       existingFile: 'images/a.png',
@@ -497,17 +450,12 @@ describe('rpc', () => {
     expect(request.pluginCancelInstall).toHaveBeenCalledWith({
       transactionId: 'plginst_1',
     });
-    expect(request.pluginCommandEnable).toHaveBeenCalledWith({
+    expect(request.pluginEnable).toHaveBeenCalledWith({
       digest: 'a'.repeat(64),
       pluginId: 'community.example.title-tools',
     });
-    expect(request.pluginCommandDisable).toHaveBeenCalledWith({
+    expect(request.pluginDisable).toHaveBeenCalledWith({
       digest: 'a'.repeat(64),
-      pluginId: 'community.example.title-tools',
-    });
-    expect(request.pluginRunCommand).toHaveBeenCalledWith({
-      commandId: 'normalize-titles',
-      noteIds: ['note_a'],
       pluginId: 'community.example.title-tools',
     });
   });

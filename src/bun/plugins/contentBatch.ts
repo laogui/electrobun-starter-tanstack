@@ -6,7 +6,7 @@ import type {
   ContentApplyBatchArgs,
   ContentApplyBatchResult,
   ContentSelectionItem,
-} from '../../shared/plugins/protocol';
+} from '../../shared/plugins/content';
 import { applyNoteTitle, loadNoteRecord } from '../noteStore';
 
 export const CONTENT_BATCH_MAX_OPERATIONS = 100;
@@ -17,7 +17,6 @@ export const NOTE_TITLE_BATCH_JOURNAL =
 export class ContentBatchError extends Error {
   code:
     | 'invalid-state'
-    | 'permission-denied'
     | 'protocol-error'
     | 'resource-limit'
     | 'revision-conflict'
@@ -297,7 +296,7 @@ export class ContentBatchStore {
       const frozen = byToken.get(operation.ref);
       if (!frozen) {
         throw new ContentBatchError(
-          'permission-denied',
+          'invalid-state',
           'batch ref is outside the frozen selection'
         );
       }

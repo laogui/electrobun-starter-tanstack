@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
-import { collectNoteIdsFromCanvasNodes } from '@/lib/noteTitleProjection';
 import { routeUndoRedo } from '@/lib/routeUndoRedo';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -76,7 +75,6 @@ export function useCanvasKeyboard({
 }: UseCanvasKeyboardOptions = {}) {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
-  const nodes = useCanvasStore((s) => s.nodes);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const setNodes = useCanvasStore((s) => s.setNodes);
@@ -111,21 +109,6 @@ export function useCanvasKeyboard({
   onDeleteNodesRef.current = onDeleteNodes;
   const rfInstanceRef = useRef(rfInstance);
   rfInstanceRef.current = rfInstance;
-
-  // Native application menus briefly move focus away from the renderer. Keep
-  // the most recent non-empty note selection so a menu command can still act
-  // on the notes the user selected immediately before opening the menu.
-  const lastSelectedNoteIdsRef = useRef<string[]>([]);
-  const lastSelectedAtRef = useRef(0);
-  useEffect(() => {
-    const selectedNoteIds = collectNoteIdsFromCanvasNodes(nodes, {
-      selectedOnly: true,
-    });
-    if (selectedNoteIds.length > 0) {
-      lastSelectedNoteIdsRef.current = selectedNoteIds;
-      lastSelectedAtRef.current = Date.now();
-    }
-  }, [nodes]);
 
   useEffect(() => {
     const isModal = () => focusedNodeRef.current || focusedFolderRef.current;
@@ -378,97 +361,6 @@ export function useCanvasKeyboard({
     };
     globalThis.addEventListener('open-search', handleOpenSearch);
 
-    const handleNormalizeNoteTitles = () => {
-      const { normalizeSelectedNoteTitles } = useCanvasStore.getState();
-      Promise.resolve(normalizeSelectedNoteTitles())
-        .then((result) => {
-          if (result.success) {
-            toast.success(m.toast_titles_normalized(), {
-              action: {
-                label: m.toast_undo(),
-                onClick: () => useCanvasStore.getState().undo(),
-              },
-            });
-            return;
-          }
-          toast.error(m.toast_titles_normalize_failed());
-        })
-        .catch((error) => {
-          console.error('[canvas] Failed to normalize titles:', error);
-          toast.error(m.toast_titles_normalize_failed());
-        });
-    };
-    globalThis.addEventListener(
-      'normalize-note-titles',
-      handleNormalizeNoteTitles
-    );
-
-    const handlePluginCommandRequested = (event: Event) => {
-      const detail = (event as CustomEvent<unknown>).detail;
-      if (
-        !(
-          detail &&
-          typeof detail === 'object' &&
-          typeof (detail as { commandId?: unknown }).commandId === 'string' &&
-          typeof (detail as { pluginId?: unknown }).pluginId === 'string'
-        )
-      ) {
-        return;
-      }
-      const { commandId, pluginId } = detail as {
-        commandId: string;
-        pluginId: string;
-      };
-      const { runEnabledPluginCommand } = useCanvasStore.getState();
-      const selectedNoteIds = useCanvasStore
-        .getState()
-        .collectSelectedNoteIds();
-      const hasFreshSelection =
-        selectedNoteIds.length === 0 &&
-        Date.now() - lastSelectedAtRef.current < 5000 &&
-        lastSelectedNoteIdsRef.current.length > 0;
-      const focusedNoteId = focusedNodeRef.current?.data.noteId;
-      const focusedNoteIds =
-        selectedNoteIds.length === 0 &&
-        !hasFreshSelection &&
-        typeof focusedNoteId === 'string' &&
-        focusedNoteId.length > 0
-          ? [focusedNoteId]
-          : undefined;
-      const resultPromise = hasFreshSelection
-        ? runEnabledPluginCommand(
-            pluginId,
-            commandId,
-            lastSelectedNoteIdsRef.current
-          )
-        : focusedNoteIds
-          ? runEnabledPluginCommand(pluginId, commandId, focusedNoteIds)
-          : runEnabledPluginCommand(pluginId, commandId);
-      Promise.resolve(resultPromise)
-        .then((result) => {
-          if (result.success) {
-            toast.success(m.toast_plugin_command_completed(), {
-              action: {
-                label: m.toast_undo(),
-                onClick: () => useCanvasStore.getState().undo(),
-              },
-            });
-            return;
-          }
-          toast.error(m.toast_plugin_command_failed(), {
-            description: result.error,
-          });
-        })
-        .catch((error) => {
-          console.error('[canvas] Failed to run plugin command:', error);
-          toast.error(m.toast_plugin_command_failed());
-        });
-    };
-    globalThis.addEventListener(
-      'plugin-command-requested',
-      handlePluginCommandRequested
-    );
-
     const handleCanvasUndo = () => {
       routeUndoRedo('undo');
     };
@@ -481,14 +373,6 @@ export function useCanvasKeyboard({
     return () => {
       globalThis.removeEventListener('keydown', handleKeyDown);
       globalThis.removeEventListener('open-search', handleOpenSearch);
-      globalThis.removeEventListener(
-        'normalize-note-titles',
-        handleNormalizeNoteTitles
-      );
-      globalThis.removeEventListener(
-        'plugin-command-requested',
-        handlePluginCommandRequested
-      );
       globalThis.removeEventListener('canvas-undo', handleCanvasUndo);
       globalThis.removeEventListener('canvas-redo', handleCanvasRedo);
     };

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   generatePluginInstallId,
   generatePluginOperationId,
-  generatePluginSessionId,
   isPluginId,
   isSemver,
   isThirdPartyPluginId,
@@ -23,10 +22,8 @@ describe('plugin ids', () => {
     expect(isPluginId('community')).toBe(false);
   });
 
-  it('generates host session and operation ids', () => {
-    const sessionId = generatePluginSessionId();
+  it('generates transaction ids', () => {
     const operationId = generatePluginOperationId();
-    expect(sessionId.startsWith('plgsess_')).toBe(true);
     expect(operationId.startsWith('plgop_')).toBe(true);
     expect(PLUGIN_INSTALL_ID_RE.test(generatePluginInstallId())).toBe(true);
     expect(isSemver('1.0.0')).toBe(true);

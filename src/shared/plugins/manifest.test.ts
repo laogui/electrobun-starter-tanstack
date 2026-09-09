@@ -1,209 +1,132 @@
 import { describe, expect, it } from 'vitest';
-
 import {
-  isPluginManifestError,
-  listContributionKinds,
+  compareSemver,
+  hostVersionRangeIncludes,
+  LEGACY_PLUGIN_MESSAGE,
   parsePluginManifest,
 } from './manifest';
 
-const TITLE_TOOLS_MANIFEST = {
-  manifestVersion: 1,
-  id: 'community.alice.title-tools',
-  name: '标题整理',
+const manifest = {
+  manifestVersion: 2,
+  id: 'example.hello',
+  name: 'Hello',
   version: '1.0.0',
-  engines: { hostApi: '>=1.0.0 <2.0.0' },
-  permissions: {
-    required: [
-      { id: 'content.selection.read', reason: '读取选中资料的标题' },
-      { id: 'content.selection.write', reason: '整理选中资料的标题' },
-    ],
-  },
-  contributes: {
-    commands: [
-      {
-        id: 'normalize-titles',
-        name: '整理选中资料标题',
-        handler: 'main.js#normalizeTitles',
-        when: 'selection.hasContent',
-      },
-    ],
-  },
+  engines: { ghostboard: '>=1.0.0 <2.0.0' },
+  entrypoints: { app: 'app.js' },
 };
 
-describe('parsePluginManifest', () => {
-  it.each([
-    ['>=1.0.0 <2.0.0', true],
-    ['>=0.9.0 <1.0.1', true],
-    ['>=1.0.1 <2.0.0', false],
-    ['>=1.99.0 <2.0.0', false],
-    ['>=0.9.0 <1.0.0', false],
-    ['>=2.0.0 <3.0.0', false],
-    ['>=1.0.0 <1.0.0', false],
-    ['>=01.0.0 <2.0.0', false],
-    ['^1.0.0', false],
-  ])('checks the actual host version against %s', (hostApi, compatible) => {
-    const result = parsePluginManifest({
-      ...TITLE_TOOLS_MANIFEST,
-      engines: { hostApi },
+describe('manifest v2', () => {
+  it('accepts a minimal app without static contributions or permissions', () => {
+    expect(parsePluginManifest(JSON.stringify(manifest))).toEqual({
+      ...manifest,
+      capabilities: [],
     });
-    expect(isPluginManifestError(result)).toBe(!compatible);
-    if (!compatible) {
-      expect(result).toMatchObject({ code: 'incompatible-host-api' });
-    }
   });
 
-  it('rejects unknown required permissions and retains unknown optional declarations without granting them', () => {
-    const unknown = [{ id: 'future.magic', reason: 'A future capability' }];
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        permissions: { required: unknown },
-      })
-    ).toMatchObject({ code: 'invalid-manifest' });
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        permissions: { optional: unknown },
-      })
-    ).toMatchObject({ permissions: { optional: unknown } });
+  it('preserves author claims and update metadata without claiming verification', () => {
+    const input = {
+      ...manifest,
+      capabilities: ['network', 'files', 'clipboard'],
+      publicKey: 'author-claim',
+      update: { url: 'https://example.com/latest.json' },
+      author: 'Example',
+    };
+    expect(parsePluginManifest(input)).toEqual(input);
+  });
+
+  it('rejects v1 rather than silently granting high trust', () => {
+    expect(parsePluginManifest({ ...manifest, manifestVersion: 1 })).toEqual({
+      code: 'legacy-contract',
+      message: LEGACY_PLUGIN_MESSAGE,
+    });
   });
 
   it.each([
-    'events',
-    'menus',
-    'settings',
-  ])('rejects unsupported %s alongside supported contributions', (kind) => {
+    'permissions',
+    'contributes',
+    'backend',
+  ])('rejects old or unsupported field %s', (field) => {
+    expect(parsePluginManifest({ ...manifest, [field]: {} })).toMatchObject({
+      code: 'invalid-manifest',
+    });
+  });
+
+  it.each([
+    '../app.js',
+    '/app.js',
+    'a/../../app.js',
+    'a\\app.js',
+    'a//app.js',
+    './app.js',
+    'app.html',
+    'https://host/app.js',
+    'app.js\0',
+  ])('rejects unsafe app entry %s', (app) => {
+    expect(
+      parsePluginManifest({ ...manifest, entrypoints: { app } })
+    ).toMatchObject({ code: 'invalid-manifest' });
+  });
+
+  it('requires a frontend entry and refuses a backend entry', () => {
+    expect(parsePluginManifest({ ...manifest, entrypoints: {} })).toMatchObject(
+      { code: 'invalid-manifest' }
+    );
     expect(
       parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        contributes: { ...TITLE_TOOLS_MANIFEST.contributes, [kind]: [] },
+        ...manifest,
+        entrypoints: { app: 'app.js', bun: 'backend.js' },
       })
     ).toMatchObject({ code: 'invalid-manifest' });
   });
 
-  it('rejects ambiguous view aliases instead of dropping contributions', () => {
+  it('validates capabilities as display metadata', () => {
+    for (const capabilities of [
+      ['network', 'network'],
+      ['content.selection.read'],
+      'files',
+    ]) {
+      expect(parsePluginManifest({ ...manifest, capabilities })).toMatchObject({
+        code: 'invalid-manifest',
+      });
+    }
+  });
+
+  it('enforces host compatibility and reserved ids', () => {
     expect(
       parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        contributes: {
-          ...TITLE_TOOLS_MANIFEST.contributes,
-          views: [],
-          panels: [{ id: 'p', name: 'Panel', entry: 'panel.html' }],
-        },
+        ...manifest,
+        engines: { ghostboard: '>=2.0.0 <3.0.0' },
+      })
+    ).toMatchObject({ code: 'incompatible-host-api' });
+    expect(
+      parsePluginManifest({
+        ...manifest,
+        engines: { hostApi: '>=1.0.0 <2.0.0' },
       })
     ).toMatchObject({ code: 'invalid-manifest' });
-  });
-
-  it('rejects malformed permission blocks and unsafe canvas entries', () => {
     expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        permissions: 'content.selection.read',
-      })
-    ).toMatchObject({
-      code: 'invalid-manifest',
-      message: 'permissions must be an object',
-    });
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        contributes: {
-          canvasTypes: [
-            {
-              id: 'counter',
-              name: 'Counter',
-              dataVersion: 1,
-              entry: '../counter.html',
-            },
-          ],
-        },
-      })
-    ).toMatchObject({
-      code: 'invalid-manifest',
-      message: 'invalid canvas type entry: ../counter.html',
-    });
-    expect(parsePluginManifest('null')).toMatchObject({
-      code: 'invalid-manifest',
-      message: 'manifest must be an object',
-    });
-  });
-
-  it('parses a command-only title-tools manifest without HTML or instance ids', () => {
-    const parsed = parsePluginManifest(TITLE_TOOLS_MANIFEST);
-    expect(isPluginManifestError(parsed)).toBe(false);
-    if (isPluginManifestError(parsed)) {
-      return;
-    }
-    expect(listContributionKinds(parsed)).toEqual(['command']);
-    expect(parsed.contributes.commands).toHaveLength(1);
-    expect(parsed.contributes.panels).toEqual([]);
-    expect(parsed.contributes.canvasTypes).toEqual([]);
-    expect(parsed.contributes.importers).toEqual([]);
-  });
-
-  it('accepts the four contribution kinds and rejects unknown kinds', () => {
-    const parsed = parsePluginManifest({
-      ...TITLE_TOOLS_MANIFEST,
-      contributes: {
-        commands: TITLE_TOOLS_MANIFEST.contributes.commands,
-        views: [{ id: 'probe', name: 'Probe', entry: 'panel.html' }],
-        importers: [
-          {
-            id: 'csv',
-            name: 'CSV',
-            handler: 'import.js#parseCsv',
-          },
-        ],
-        canvasTypes: [{ id: 'counter', name: 'Counter', dataVersion: 1 }],
-      },
-    });
-    expect(isPluginManifestError(parsed)).toBe(false);
-    if (isPluginManifestError(parsed)) {
-      return;
-    }
-    expect(listContributionKinds(parsed)).toEqual([
-      'command',
-      'panel',
-      'importer',
-      'canvasType',
-    ]);
-
-    const unknown = parsePluginManifest({
-      ...TITLE_TOOLS_MANIFEST,
-      contributes: { widgets: [{ id: 'x' }] },
-    });
-    expect(unknown).toMatchObject({
-      code: 'invalid-manifest',
-      message: 'unknown contribution kind: widgets',
-    });
-  });
-
-  it('rejects reserved builtin ids, empty contributions, and bad handlers', () => {
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        id: 'ghostboard.demo',
-      })
+      parsePluginManifest({ ...manifest, id: 'ghostboard.example' })
     ).toMatchObject({ code: 'reserved-plugin-id' });
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        contributes: { commands: [] },
-      })
-    ).toMatchObject({ code: 'missing-contribution' });
-    expect(
-      parsePluginManifest({
-        ...TITLE_TOOLS_MANIFEST,
-        contributes: {
-          commands: [
-            {
-              id: 'normalize-titles',
-              name: '整理选中资料标题',
-              handler: 'eval("boom")',
-            },
-          ],
-        },
-      })
-    ).toMatchObject({ code: 'invalid-manifest' });
+    expect(parsePluginManifest('{')).toMatchObject({ code: 'invalid-json' });
+  });
+
+  it.each([
+    'http://example.com/update',
+    'https://user:pass@example.com/update',
+    'not-a-url',
+  ])('rejects invalid update metadata %s', (url) => {
+    expect(parsePluginManifest({ ...manifest, update: { url } })).toMatchObject(
+      { code: 'invalid-manifest' }
+    );
+  });
+
+  it('compares release versions with prereleases correctly', () => {
+    expect(compareSemver('1.0.0-beta.2', '1.0.0-beta.10')).toBeLessThan(0);
+    expect(compareSemver('1.0.0-beta', '1.0.0')).toBeLessThan(0);
+    expect(hostVersionRangeIncludes('>=1.0.0 <2.0.0', '1.0.0')).toBe(true);
+    expect(hostVersionRangeIncludes('>=1.0.0 <2.0.0', '2.0.0')).toBe(false);
+    expect(hostVersionRangeIncludes('>=1.0.0 <2.0.0', '1.0.0-beta')).toBe(
+      false
+    );
   });
 });

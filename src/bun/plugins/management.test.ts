@@ -1,156 +1,149 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { describe, expect, it, vi } from 'vitest';
-
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LEGACY_PLUGIN_MESSAGE } from '../../shared/plugins/manifest';
+import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
 import { PluginManagementService, pluginInstallRoot } from './management';
 
-const FIXTURES_ROOT = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../fixtures/plugins'
-);
-const TITLE_TOOLS_ZIP = join(
-  FIXTURES_ROOT,
-  'community.example.title-tools-1.0.0.zip'
-);
+vi.mock('../appPaths', () => ({
+  getAppDataRoot: () => {
+    throw new Error('Tests must specify an application data root');
+  },
+}));
+
+const roots: string[] = [];
+afterEach(async () => {
+  await Promise.all(
+    roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))
+  );
+});
+
+async function setup() {
+  const root = await mkdtemp(join(tmpdir(), 'plugin-management-'));
+  roots.push(root);
+  const workspace = join(root, 'workspace');
+  const appDataRoot = join(root, 'app');
+  const file = join(root, 'example.zip');
+  await writeFile(file, createStoredZip(pluginFiles()));
+  const service = new PluginManagementService(workspace, { appDataRoot });
+  return { root, workspace, appDataRoot, file, service };
+}
 
 describe('PluginManagementService', () => {
-  it('previews and then commits a local package without exposing its path', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'plugin-management-'));
-    const appDataRoot = await mkdtemp(join(tmpdir(), 'plugin-management-app-'));
-    const service = new PluginManagementService(workspace, { appDataRoot });
-
-    expect(pluginInstallRoot(workspace)).toBe(
-      join(workspace, '.ghostboard', 'plugins')
-    );
+  it('reviews and commits at application scope without exposing paths or executing code', async () => {
+    const { service, workspace, appDataRoot, file } = await setup();
+    expect(pluginInstallRoot(appDataRoot)).toBe(join(appDataRoot, 'plugins'));
     expect(await service.list()).toEqual([]);
-
-    const preview = await service.prepareFromFile(TITLE_TOOLS_ZIP);
+    const preview = await service.prepareFromFile(file);
     expect(preview.plugin).toMatchObject({
-      id: 'community.example.title-tools',
-      name: '标题整理',
-      version: '1.0.0',
-      contributionKinds: ['command'],
+      id: 'community.example.app',
+      capabilities: ['files'],
+      signatureStatus: 'unverified',
     });
-    expect(preview.source).toEqual({
-      kind: 'file',
-      label: 'community.example.title-tools-1.0.0.zip',
-    });
-
+    expect(await service.list()).toEqual([]);
     const installed = await service.commit(preview.transactionId);
-    expect(installed).toMatchObject({
-      pluginId: 'community.example.title-tools',
-      name: '标题整理',
-      status: 'stored',
-      source: preview.source,
-      plugin: { contributionKinds: ['command'] },
-    });
+    expect(installed).toMatchObject({ enabled: false, status: 'stored' });
     expect(JSON.stringify(installed)).not.toContain(workspace);
-    expect(await service.list()).toEqual([installed]);
+    expect(
+      await new PluginManagementService(`${workspace}-other`, {
+        appDataRoot,
+      }).list()
+    ).toEqual([installed]);
   });
 
-  it('rejects a local file that is not a plugin archive before reading it', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'plugin-management-'));
-    const appDataRoot = await mkdtemp(join(tmpdir(), 'plugin-management-app-'));
-    const service = new PluginManagementService(workspace, { appDataRoot });
-
+  it('saves opt-in workspace enablement, never importing old grants', async () => {
+    const { service, workspace, appDataRoot, file } = await setup();
+    const preview = await service.prepareFromFile(file);
+    const installed = await service.commit(preview.transactionId);
+    const input = { pluginId: installed.pluginId, digest: installed.digest };
     await expect(
-      service.prepareFromFile('/tmp/not-a-plugin.txt')
-    ).rejects.toMatchObject({
-      code: 'invalid-package',
-    });
+      service.enable({ ...input, digest: 'stale' })
+    ).rejects.toMatchObject({ code: 'not-found' });
+    expect((await service.enable(input)).enabled).toBe(true);
+    expect(
+      (await new PluginManagementService(workspace, { appDataRoot }).list())[0]
+        ?.enabled
+    ).toBe(true);
+    expect(
+      (
+        await new PluginManagementService(`${workspace}-other`, {
+          appDataRoot,
+        }).list()
+      )[0]?.enabled
+    ).toBe(false);
+    expect((await service.disable(input)).enabled).toBe(false);
   });
 
-  it('activates only saved commands and runs them through the constrained title host', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'plugin-management-'));
-    const appDataRoot = await mkdtemp(join(tmpdir(), 'plugin-management-app-'));
-    mkdirSync(join(workspace, 'content', '.ghostboard', 'blocknote'), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(workspace, 'content', '.ghostboard', 'blocknote', 'note_a.json'),
-      JSON.stringify({
-        blocks: [],
-        noteId: 'note_a',
-        revision: 3,
-        schema: 'ghostboard-blocknote/v1',
-        title: '  Hello   world ',
-        updatedAt: new Date().toISOString(),
-      })
+  it('cancels inspection and refuses unsupported file types', async () => {
+    const { service, file } = await setup();
+    await expect(service.prepareFromFile('/missing.txt')).rejects.toMatchObject(
+      { code: 'invalid-package' }
     );
-    const fs = await import('node:fs');
-    vi.stubGlobal('Bun', {
-      file: vi.fn((filePath: string) => ({
-        exists: async () => fs.existsSync(filePath),
-        json: async () => JSON.parse(fs.readFileSync(filePath, 'utf8')),
-        text: async () => fs.readFileSync(filePath, 'utf8'),
-      })),
-      write: vi.fn(async (filePath: string, data: string) => {
-        await writeFile(filePath, data);
-      }),
+    const preview = await service.prepareFromFile(file);
+    await service.cancel(preview.transactionId);
+    await expect(service.commit(preview.transactionId)).rejects.toMatchObject({
+      code: 'invalid-state',
     });
-    try {
-      const service = new PluginManagementService(workspace, { appDataRoot });
-      const preview = await service.prepareFromFile(TITLE_TOOLS_ZIP);
-      const installed = await service.commit(preview.transactionId);
+    expect(await service.list()).toEqual([]);
+  });
 
-      expect(installed.commandActivation).toEqual({
-        enabled: false,
-        grantedPermissions: [],
-      });
-      await expect(
-        service.runEnabledCommand({
-          commandId: 'normalize-titles',
-          noteIds: ['note_a'],
-          pluginId: 'community.example.title-tools',
-        })
-      ).rejects.toMatchObject({ code: 'invalid-state' });
-
-      const enabled = await service.enableCommands({
-        digest: installed.digest,
-        pluginId: installed.pluginId,
-      });
-      expect(enabled.commandActivation).toEqual({
-        enabled: true,
-        grantedPermissions: [
-          'content.selection.read',
-          'content.selection.write',
-        ],
-      });
-      await expect(service.listEnabledCommands()).resolves.toEqual([
+  it('shows legacy workspace packages without changing their files or user data', async () => {
+    const { workspace, service, appDataRoot } = await setup();
+    const oldRoot = join(workspace, '.ghostboard', 'plugins');
+    const directory = join(
+      oldRoot,
+      'packages',
+      'example.old',
+      '1.0.0',
+      'a'.repeat(64)
+    );
+    await mkdir(directory, { recursive: true });
+    const oldManifest = JSON.stringify({
+      manifestVersion: 1,
+      id: 'example.old',
+    });
+    await writeFile(join(directory, 'ghostboard.plugin.json'), oldManifest);
+    const registry = JSON.stringify({
+      schema: 1,
+      packages: [
         {
-          commandId: 'normalize-titles',
-          commandName: '整理选中资料标题',
-          pluginId: 'community.example.title-tools',
-          pluginName: '标题整理',
+          pluginId: 'example.old',
+          name: 'Old',
+          version: '1.0.0',
+          digest: 'a'.repeat(64),
+          directory,
+          installedAt: new Date().toISOString(),
+          source: { kind: 'zip' },
         },
-      ]);
-
-      await expect(
-        service.runEnabledCommand({
-          commandId: 'normalize-titles',
-          noteIds: ['note_a'],
-          pluginId: 'community.example.title-tools',
-        })
-      ).resolves.toMatchObject({ titles: { note_a: 'Hello world' } });
-
-      await service.disableCommands({
-        digest: installed.digest,
-        pluginId: installed.pluginId,
-      });
-      await expect(service.listEnabledCommands()).resolves.toEqual([]);
-      await expect(
-        service.runEnabledCommand({
-          commandId: 'normalize-titles',
-          noteIds: ['note_a'],
-          pluginId: 'community.example.title-tools',
-        })
-      ).rejects.toMatchObject({ code: 'invalid-state' });
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      ],
+    });
+    await writeFile(join(oldRoot, 'registry.json'), registry);
+    await writeFile(join(workspace, 'canvas.json'), 'preserve canvas');
+    await service.recover();
+    expect(await service.list()).toMatchObject([
+      {
+        status: 'legacy',
+        enabled: false,
+        validationError: LEGACY_PLUGIN_MESSAGE,
+      },
+    ]);
+    await expect(
+      service.enable({ pluginId: 'example.old', digest: 'a'.repeat(64) })
+    ).rejects.toMatchObject({ code: 'not-found' });
+    expect(await readFile(join(oldRoot, 'registry.json'), 'utf8')).toBe(
+      registry
+    );
+    expect(
+      await readFile(join(directory, 'ghostboard.plugin.json'), 'utf8')
+    ).toBe(oldManifest);
+    expect(await readFile(join(workspace, 'canvas.json'), 'utf8')).toBe(
+      'preserve canvas'
+    );
+    expect(
+      await new PluginManagementService(`${workspace}-other`, {
+        appDataRoot,
+      }).list()
+    ).toEqual([]);
   });
 });

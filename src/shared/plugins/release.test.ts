@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { HOST_API_VERSION } from './ids';
+import { GHOSTBOARD_VERSION } from './ids';
 import type { PluginManifest } from './manifest';
 import {
   isPluginReleaseError,
@@ -22,7 +22,7 @@ function documentJson(overrides?: Record<string, unknown>): string {
     releases: [
       {
         version: '1.0.0',
-        hostApi: '>=1.0.0 <2.0.0',
+        ghostboard: '>=1.0.0 <2.0.0',
         url: 'https://plugins.example.com/title-tools/1.0.0.zip',
         sha256: SHA_A,
         notes: 'normalize titles',
@@ -34,23 +34,18 @@ function documentJson(overrides?: Record<string, unknown>): string {
 
 const MANIFEST: PluginManifest = {
   author: 'example',
-  contributes: {
-    canvasTypes: [],
-    commands: [],
-    importers: [],
-    panels: [],
-  },
   description: 'test',
-  engines: { hostApi: '>=1.0.0 <2.0.0' },
+  engines: { ghostboard: '>=1.0.0 <2.0.0' },
   id: 'community.example.title-tools',
-  manifestVersion: 1,
+  manifestVersion: 2,
   name: '标题整理',
-  permissions: { optional: [], required: [] },
+  capabilities: [],
+  entrypoints: { app: 'app.js' },
   version: '1.0.0',
 };
 
 describe('plugin release document', () => {
-  it('parses a valid release document and selects the current hostApi', () => {
+  it('parses a valid release document and selects the current ghostboard', () => {
     const parsed = parsePluginReleaseDocument(documentJson());
     expect(isPluginReleaseError(parsed)).toBe(false);
     if (isPluginReleaseError(parsed)) {
@@ -64,7 +59,7 @@ describe('plugin release document', () => {
       return;
     }
     expect(selected.version).toBe('1.0.0');
-    expect(hostApiMatches(selected.hostApi)).toBe(true);
+    expect(ghostboardMatches(selected.ghostboard)).toBe(true);
     expect(releaseMatchesManifest(parsed, MANIFEST, SHA_A)).toBeUndefined();
   });
 
@@ -74,19 +69,19 @@ describe('plugin release document', () => {
         releases: [
           {
             version: '1.0.0',
-            hostApi: '>=1.0.0 <2.0.0',
+            ghostboard: '>=1.0.0 <2.0.0',
             url: 'https://plugins.example.com/1.0.0.zip',
             sha256: SHA_A,
           },
           {
             version: '1.1.0',
-            hostApi: '>=1.0.0 <2.0.0',
+            ghostboard: '>=1.0.0 <2.0.0',
             url: 'https://plugins.example.com/1.1.0.zip',
             sha256: SHA_B,
           },
           {
             version: '2.0.0',
-            hostApi: '>=2.0.0 <3.0.0',
+            ghostboard: '>=2.0.0 <3.0.0',
             url: 'https://plugins.example.com/2.0.0.zip',
             sha256: 'c'.repeat(64),
           },
@@ -97,7 +92,7 @@ describe('plugin release document', () => {
     if (isPluginReleaseError(parsed)) {
       return;
     }
-    const selected = selectCompatibleRelease(parsed, HOST_API_VERSION);
+    const selected = selectCompatibleRelease(parsed, GHOSTBOARD_VERSION);
     expect(isPluginReleaseError(selected)).toBe(false);
     if (!isPluginReleaseError(selected)) {
       expect(selected.version).toBe('1.1.0');
@@ -114,7 +109,7 @@ describe('plugin release document', () => {
           releases: [
             {
               version: '1.0.0',
-              hostApi: '>=1.0.0 <2.0.0',
+              ghostboard: '>=1.0.0 <2.0.0',
               url: 'http://plugins.example.com/plugin.zip',
               sha256: SHA_A,
             },
@@ -144,6 +139,6 @@ describe('plugin release document', () => {
   });
 });
 
-function hostApiMatches(range: string): boolean {
+function ghostboardMatches(range: string): boolean {
   return range === '>=1.0.0 <2.0.0';
 }

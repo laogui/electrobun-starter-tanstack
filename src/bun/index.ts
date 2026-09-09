@@ -114,18 +114,10 @@ import {
   saveNote,
   serializeChecklistItems,
 } from './notes';
-import { CONTENT_BATCH_MAX_OPERATIONS } from './plugins/contentBatch';
 import {
-  type EnabledPluginCommand,
   PluginManagementService,
   pluginInstallErrorMessage,
 } from './plugins/management';
-import {
-  redoNormalizeTitlesOnWorkspaceNotes,
-  runNormalizeTitlesOnWorkspaceNotes,
-  undoNormalizeTitlesOnWorkspaceNotes,
-} from './plugins/noteTitleCommand';
-import { tryGhostboardPluginSamplesRoot } from './plugins/outOfRepoSamples';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -849,23 +841,13 @@ interface CanvasRPC {
         params: { transactionId: string };
         response: { success: boolean };
       };
-      pluginCommandEnable: {
+      pluginEnable: {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
       };
-      pluginCommandDisable: {
+      pluginDisable: {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
-      };
-      pluginRunCommand: {
-        params: { commandId: string; noteIds: string[]; pluginId: string };
-        response:
-          | {
-              operationId: string;
-              success: true;
-              titles: Record<string, string>;
-            }
-          | { error: string; success: false };
       };
       extensionEnablementList: {
         params: Record<string, unknown>;
@@ -993,28 +975,6 @@ interface CanvasRPC {
       deleteNote: {
         params: { noteId: string };
         response: { success: boolean };
-      };
-      pluginNormalizeNoteTitles: {
-        params: { noteIds: string[] };
-        response:
-          | {
-              operationId: string;
-              success: true;
-              titles: Record<string, string>;
-            }
-          | { success: false };
-      };
-      pluginUndoNoteTitles: {
-        params: { noteIds: string[]; operationId: string };
-        response:
-          | { success: true; titles: Record<string, string> }
-          | { success: false };
-      };
-      pluginRedoNoteTitles: {
-        params: { noteIds: string[]; operationId: string };
-        response:
-          | { success: true; titles: Record<string, string> }
-          | { success: false };
       };
       saveAttachment: {
         params: {
@@ -1275,8 +1235,6 @@ interface CanvasRPC {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
       openSearch: Record<never, unknown>;
-      normalizeNoteTitles: Record<never, unknown>;
-      pluginCommandRequested: { commandId: string; pluginId: string };
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;
       viewsUpdated: Record<never, unknown>;
@@ -1381,32 +1339,6 @@ function includes<T extends string | number>(
   value: unknown
 ): value is T {
   return values.includes(value as T);
-}
-
-function parsePluginNoteIds(noteIds: unknown): string[] | null {
-  if (!Array.isArray(noteIds) || noteIds.length === 0) {
-    return null;
-  }
-  if (noteIds.length > CONTENT_BATCH_MAX_OPERATIONS) {
-    return null;
-  }
-  const parsed: string[] = [];
-  for (const noteId of noteIds) {
-    if (typeof noteId !== 'string' || noteId.length === 0) {
-      return null;
-    }
-    parsed.push(noteId);
-  }
-  return parsed;
-}
-
-function isPluginOperationId(operationId: unknown): operationId is string {
-  return typeof operationId === 'string' && operationId.length > 0;
-}
-
-function titleToolsPluginDirectory(): string | null {
-  const samplesRoot = tryGhostboardPluginSamplesRoot();
-  return samplesRoot ? join(samplesRoot, 'title-tools') : null;
 }
 
 function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
@@ -1660,34 +1592,7 @@ async function switchWorkspaceImpl(): Promise<SwitchWorkspaceResponse> {
   return { success: true, path: target };
 }
 
-function pluginCommandMenuAction(command: EnabledPluginCommand): string {
-  return `pluginCommand:${command.pluginId}:${command.commandId}`;
-}
-
-function parsePluginCommandMenuAction(
-  action: string | undefined
-): { commandId: string; pluginId: string } | undefined {
-  if (!action?.startsWith('pluginCommand:')) {
-    return;
-  }
-  const [pluginId, commandId, ...unexpected] = action
-    .slice('pluginCommand:'.length)
-    .split(':');
-  if (!(pluginId && commandId && unexpected.length === 0)) {
-    return;
-  }
-  return { commandId, pluginId };
-}
-
-function setApplicationMenu(pluginCommands: EnabledPluginCommand[]) {
-  const pluginsSubmenu =
-    pluginCommands.length > 0
-      ? pluginCommands.map((command) => ({
-          action: pluginCommandMenuAction(command),
-          label: `${command.pluginName}: ${command.commandName}`,
-        }))
-      : [{ enabled: false, label: 'No enabled plugin commands' }];
-
+function setApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
     {
       label: 'GhostBoard',
@@ -1715,19 +1620,12 @@ function setApplicationMenu(pluginCommands: EnabledPluginCommand[]) {
           accelerator: 'CmdOrCtrl+Shift+Z',
         },
         { type: 'divider' },
-        {
-          label: 'Normalize Titles',
-          action: 'normalizeNoteTitles',
-          accelerator: 'CmdOrCtrl+Shift+T',
-        },
-        { type: 'divider' },
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
       ],
     },
-    { label: 'Plugins', submenu: pluginsSubmenu },
     {
       label: 'View',
       submenu: [
@@ -1754,25 +1652,18 @@ async function main() {
   // pasteAndMatchStyle, delete, selectAll). All other roles — including quit,
   // close, minimize, hide, hideOthers — require an explicit `accelerator`,
   // otherwise pressing the system shortcut does nothing.
-  setApplicationMenu([]);
+  setApplicationMenu();
 
   ApplicationMenu.on('application-menu-clicked', (event: unknown) => {
     const e = event as { data?: { action?: string } };
     if (e.data?.action === 'openSearch') {
       mainRpc?.send?.openSearch({});
     }
-    if (e.data?.action === 'normalizeNoteTitles') {
-      mainRpc?.send?.normalizeNoteTitles({});
-    }
     if (e.data?.action === 'canvasUndo') {
       mainRpc?.send?.canvasUndo({});
     }
     if (e.data?.action === 'canvasRedo') {
       mainRpc?.send?.canvasRedo({});
-    }
-    const pluginCommand = parsePluginCommandMenuAction(e.data?.action);
-    if (pluginCommand) {
-      mainRpc?.send?.pluginCommandRequested(pluginCommand);
     }
   });
 
@@ -1786,24 +1677,9 @@ async function main() {
   const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
   const pluginManagement = new PluginManagementService(wsPath);
-  const refreshPluginCommandMenu = async () => {
-    try {
-      setApplicationMenu(await pluginManagement.listEnabledCommands());
-    } catch (error) {
-      console.warn('[plugins] Failed to refresh command menu:', error);
-      setApplicationMenu([]);
-    }
-  };
-  // Recovery and menu discovery may touch the workspace package store. Keep
-  // them asynchronous so a slow or unavailable package directory never delays
-  // main-canvas RPC registration or first paint. The menu remains empty until
-  // the recovered registry has been inspected.
-  pluginManagement
-    .recover()
-    .catch((error) => {
-      console.warn('[plugins] Failed to recover package transactions:', error);
-    })
-    .then(refreshPluginCommandMenu);
+  pluginManagement.recover().catch((error) => {
+    console.warn('[plugins] Failed to recover package transactions:', error);
+  });
   const [, , aiCredentials] = await Promise.all([
     migrateLegacyTagsFromNotes(wsPath),
     loadSettings(wsPath),
@@ -2480,58 +2356,27 @@ async function main() {
           }
         },
 
-        pluginCommandEnable: async ({ digest, pluginId }) => {
+        pluginEnable: async ({ digest, pluginId }) => {
           try {
-            const plugin = await pluginManagement.enableCommands({
+            const plugin = await pluginManagement.enable({
               digest,
               pluginId,
             });
-            await refreshPluginCommandMenu();
             return { success: true, plugin };
           } catch (error) {
             return { success: false, error: pluginInstallErrorMessage(error) };
           }
         },
 
-        pluginCommandDisable: async ({ digest, pluginId }) => {
+        pluginDisable: async ({ digest, pluginId }) => {
           try {
-            const plugin = await pluginManagement.disableCommands({
+            const plugin = await pluginManagement.disable({
               digest,
               pluginId,
             });
-            await refreshPluginCommandMenu();
             return { success: true, plugin };
           } catch (error) {
             return { success: false, error: pluginInstallErrorMessage(error) };
-          }
-        },
-
-        pluginRunCommand: async ({ commandId, noteIds, pluginId }) => {
-          const parsed = parsePluginNoteIds(noteIds);
-          if (
-            !(
-              parsed &&
-              typeof commandId === 'string' &&
-              commandId.length > 0 &&
-              typeof pluginId === 'string' &&
-              pluginId.length > 0
-            )
-          ) {
-            return { success: false, error: 'A selected note is required.' };
-          }
-          try {
-            const result = await pluginManagement.runEnabledCommand({
-              commandId,
-              noteIds: parsed,
-              pluginId,
-            });
-            return { success: true, ...result };
-          } catch (error) {
-            console.warn('[plugins] Failed to run command:', error);
-            return {
-              success: false,
-              error: pluginInstallErrorMessage(error),
-            };
           }
         },
 
@@ -2827,62 +2672,6 @@ async function main() {
             // ignore
           }
           return { success: deleted };
-        },
-
-        pluginNormalizeNoteTitles: async ({ noteIds }) => {
-          const parsed = parsePluginNoteIds(noteIds);
-          const pluginDirectory = titleToolsPluginDirectory();
-          if (!(parsed && pluginDirectory)) {
-            return { success: false };
-          }
-          try {
-            const result = await runNormalizeTitlesOnWorkspaceNotes({
-              noteIds: parsed,
-              pluginDirectory,
-              workspacePath: wsPath,
-            });
-            return {
-              success: true as const,
-              operationId: result.operationId,
-              titles: result.titles,
-            };
-          } catch {
-            return { success: false };
-          }
-        },
-
-        pluginUndoNoteTitles: async ({ noteIds, operationId }) => {
-          const parsed = parsePluginNoteIds(noteIds);
-          if (!(parsed && isPluginOperationId(operationId))) {
-            return { success: false };
-          }
-          try {
-            const titles = await undoNormalizeTitlesOnWorkspaceNotes({
-              noteIds: parsed,
-              operationId,
-              workspacePath: wsPath,
-            });
-            return { success: true as const, titles };
-          } catch {
-            return { success: false };
-          }
-        },
-
-        pluginRedoNoteTitles: async ({ noteIds, operationId }) => {
-          const parsed = parsePluginNoteIds(noteIds);
-          if (!(parsed && isPluginOperationId(operationId))) {
-            return { success: false };
-          }
-          try {
-            const titles = await redoNormalizeTitlesOnWorkspaceNotes({
-              noteIds: parsed,
-              operationId,
-              workspacePath: wsPath,
-            });
-            return { success: true as const, titles };
-          } catch {
-            return { success: false };
-          }
         },
 
         saveAttachment: async (params) => {

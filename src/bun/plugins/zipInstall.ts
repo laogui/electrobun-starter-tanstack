@@ -14,7 +14,7 @@ export const PLUGIN_ZIP_MAX_RATIO = 100;
 const LOCAL_SIG = 0x04_03_4b_50;
 const CENTRAL_SIG = 0x02_01_4b_50;
 const EOCD_SIG = 0x06_05_4b_50;
-const MANIFEST = 'ghostboard.plugin.json';
+const MANIFEST = 'manifest.json';
 const IGNORED_PREFIXES = ['__macosx/', '.ds_store'];
 const WIN_ABS_RE = /^[a-zA-Z]:/;
 
@@ -311,7 +311,7 @@ function resolvePluginRoot(destDir: string, written: string[]): string {
   if (manifests.length === 0) {
     throw new PluginZipError(
       'invalid-layout',
-      'zip does not contain ghostboard.plugin.json at the root or in one wrapping folder'
+      'zip does not contain manifest.json at the root or in one wrapping folder; v1 packages must be reinstalled as v2'
     );
   }
   if (manifests.length > 1) {

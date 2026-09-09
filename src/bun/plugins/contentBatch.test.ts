@@ -4,26 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createOperationContext,
-  createPluginSession,
-} from '../../shared/plugins/session';
 import { ContentBatchError, ContentBatchStore } from './contentBatch';
-import { loadPluginDirectory } from './loadDirectory';
-import { runPluginCommand } from './logicRuntime';
-import {
-  redoNormalizeTitlesOnWorkspaceNotes,
-  runNormalizeTitlesOnWorkspaceNotes,
-  undoNormalizeTitlesOnWorkspaceNotes,
-} from './noteTitleCommand';
-import { requireGhostboardPluginSamplesRoot } from './outOfRepoSamples';
-import { createContentBatchProbeHost } from './probeHost';
-
-const TITLE_TOOLS_SAMPLE = join(
-  requireGhostboardPluginSamplesRoot(),
-  'title-tools'
-);
-const SELECTION_TOKEN = /^plgsel_/;
 
 function seedStore() {
   const store = new ContentBatchStore();
@@ -95,7 +76,7 @@ describe('content batch titles', () => {
           },
         ],
       })
-    ).rejects.toMatchObject({ code: 'permission-denied' });
+    ).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(
       store.applyBatch('plgop_two', 'ws_batch', {
         operationId: 'plgop_two',
@@ -194,34 +175,24 @@ describe('content batch titles', () => {
     });
   });
 
-  it('runs the out-of-repo title-tools command through applyBatch', async () => {
-    const loaded = await loadPluginDirectory(TITLE_TOOLS_SAMPLE);
+  it('validates the entire batch before changing any entity', async () => {
     const store = seedStore();
-    const session = createPluginSession({
-      manifest: loaded.manifest,
-      workspaceId: 'ws_batch',
-      context: createOperationContext(),
-      grantedPermissions: ['content.selection.read', 'content.selection.write'],
-    });
-    const operationId =
-      session.context.kind === 'operation' ? session.context.operationId : '';
-    await store.freezeSelection({
-      operationId,
+    const selection = await store.freezeSelection({
+      operationId: 'plgop_conflict',
       entityIds: ['note_a', 'note_b'],
     });
-    const result = await runPluginCommand({
-      session,
-      commandId: 'normalize-titles',
-      source: loaded.sources['main.js'] ?? '',
-      probe: createContentBatchProbeHost(store, operationId, 'ws_batch'),
-    });
-    expect(result.preview).toEqual([
-      { token: expect.stringMatching(SELECTION_TOKEN), title: 'Hello world' },
-      { token: expect.stringMatching(SELECTION_TOKEN), title: 'Notes' },
-    ]);
-    expect((await store.get('note_a'))?.title).toBe('Hello world');
-    await store.undo(operationId);
+    await expect(
+      store.applyBatch('plgop_conflict', 'ws_batch', {
+        operationId: 'plgop_conflict',
+        operations: selection.map((item, index) => ({
+          ref: item.ref,
+          expectedRevision: index === 0 ? item.revision : 0,
+          set: { title: 'Changed' },
+        })),
+      })
+    ).rejects.toMatchObject({ code: 'revision-conflict' });
     expect((await store.get('note_a'))?.title).toBe('  Hello   world ');
+    expect((await store.get('note_b'))?.title).toBe('Notes');
   });
 
   it('writes sidecar note titles and restores them after restart', async () => {
@@ -232,16 +203,20 @@ describe('content batch titles', () => {
       recursive: true,
     });
     const fs = await import('node:fs');
-    vi.stubGlobal('Bun', {
-      file: vi.fn((filePath: string) => ({
-        exists: async () => fs.existsSync(filePath),
-        text: async () => fs.readFileSync(filePath, 'utf8'),
-        json: async () => JSON.parse(fs.readFileSync(filePath, 'utf8')),
-      })),
-      write: vi.fn(async (filePath: string, data: string) => {
-        await writeFile(filePath, data);
-      }),
-    });
+    if (
+      Object.getOwnPropertyDescriptor(globalThis, 'Bun')?.configurable !== false
+    ) {
+      vi.stubGlobal('Bun', {
+        file: vi.fn((filePath: string) => ({
+          exists: async () => fs.existsSync(filePath),
+          text: async () => fs.readFileSync(filePath, 'utf8'),
+          json: async () => JSON.parse(fs.readFileSync(filePath, 'utf8')),
+        })),
+        write: vi.fn(async (filePath: string, data: string) => {
+          await writeFile(filePath, data);
+        }),
+      });
+    }
     writeFileSync(
       join(ws, 'content', '.ghostboard', 'blocknote', 'note_a.json'),
       JSON.stringify({
@@ -286,7 +261,7 @@ describe('content batch titles', () => {
     vi.unstubAllGlobals();
   });
 
-  it('normalizes sidecar notes from a canvas-like noteId selection', async () => {
+  it('applies, undoes, and redoes sidecar batches without a plugin runtime', async () => {
     const { mkdirSync, writeFileSync } = await import('node:fs');
     const { writeFile } = await import('node:fs/promises');
     const fs = await import('node:fs');
@@ -294,16 +269,20 @@ describe('content batch titles', () => {
     mkdirSync(join(ws, 'content', '.ghostboard', 'blocknote'), {
       recursive: true,
     });
-    vi.stubGlobal('Bun', {
-      file: vi.fn((filePath: string) => ({
-        exists: async () => fs.existsSync(filePath),
-        text: async () => fs.readFileSync(filePath, 'utf8'),
-        json: async () => JSON.parse(fs.readFileSync(filePath, 'utf8')),
-      })),
-      write: vi.fn(async (filePath: string, data: string) => {
-        await writeFile(filePath, data);
-      }),
-    });
+    if (
+      Object.getOwnPropertyDescriptor(globalThis, 'Bun')?.configurable !== false
+    ) {
+      vi.stubGlobal('Bun', {
+        file: vi.fn((filePath: string) => ({
+          exists: async () => fs.existsSync(filePath),
+          text: async () => fs.readFileSync(filePath, 'utf8'),
+          json: async () => JSON.parse(fs.readFileSync(filePath, 'utf8')),
+        })),
+        write: vi.fn(async (filePath: string, data: string) => {
+          await writeFile(filePath, data);
+        }),
+      });
+    }
     writeFileSync(
       join(ws, 'content', '.ghostboard', 'blocknote', 'note_a.json'),
       JSON.stringify({
@@ -315,33 +294,31 @@ describe('content batch titles', () => {
         updatedAt: new Date().toISOString(),
       })
     );
-    const applied = await runNormalizeTitlesOnWorkspaceNotes({
-      workspacePath: ws,
-      noteIds: ['note_a'],
-      pluginDirectory: TITLE_TOOLS_SAMPLE,
+    const store = await ContentBatchStore.openNotes(ws);
+    const selection = await store.freezeSelection({
+      operationId: 'plgop_sidecar',
+      entityIds: ['note_a'],
     });
-    expect(applied.titles.note_a).toBe('Hello world');
+    await store.applyBatch('plgop_sidecar', ws, {
+      operationId: 'plgop_sidecar',
+      operations: selection.map((item) => ({
+        ref: item.ref,
+        expectedRevision: item.revision,
+        set: { title: 'Hello world' },
+      })),
+    });
     const { loadNoteRecord } = await import('../noteStore');
     expect(await loadNoteRecord(ws, 'note_a')).toMatchObject({
       title: 'Hello world',
       revision: 4,
     });
-    const undone = await undoNormalizeTitlesOnWorkspaceNotes({
-      workspacePath: ws,
-      noteIds: ['note_a'],
-      operationId: applied.operationId,
-    });
-    expect(undone.note_a).toBe('  Hello   world ');
+    const restarted = await ContentBatchStore.openNotes(ws);
+    await restarted.undo('plgop_sidecar');
     expect(await loadNoteRecord(ws, 'note_a')).toMatchObject({
       title: '  Hello   world ',
       revision: 3,
     });
-    const redone = await redoNormalizeTitlesOnWorkspaceNotes({
-      workspacePath: ws,
-      noteIds: ['note_a'],
-      operationId: applied.operationId,
-    });
-    expect(redone.note_a).toBe('Hello world');
+    await restarted.redo('plgop_sidecar');
     expect(await loadNoteRecord(ws, 'note_a')).toMatchObject({
       title: 'Hello world',
       revision: 4,

@@ -1,8 +1,0 @@
-{
-  "name": "ghostboard-plugin-container-probe",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "quickjs-emscripten": "0.32.0"
-  }
-}

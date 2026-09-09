@@ -12,6 +12,12 @@ import './index.css';
 
 registerBuiltinCanvasTypes();
 
+if (import.meta.env.VITE_PLUGIN_T0 === '1') {
+  import('./plugins/t0/run')
+    .then(({ runT0Probe }) => runT0Probe())
+    .catch(console.error);
+}
+
 const rootElement = document.querySelector('#root');
 
 if (rootElement == null) {

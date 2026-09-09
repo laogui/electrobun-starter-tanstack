@@ -1,25 +1,23 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 
 import type {
   InstalledPluginSummary,
-  PluginCommandActivationSummary,
-  PluginCommandSummary,
   PluginInstallPreview,
   PluginPackageSummary,
   PluginSourceSummary,
 } from '../../shared/plugins/management';
 import {
-  listContributionKinds,
+  LEGACY_PLUGIN_MESSAGE,
   type PluginManifest,
 } from '../../shared/plugins/manifest';
-import { PluginCommandGrantStore } from './commandEnablement';
+import { getAppDataRoot } from '../appPaths';
 import {
   type LoadedPluginDirectory,
   loadPluginDirectory,
+  PluginDirectoryError,
 } from './loadDirectory';
-import { runPluginCommandOnWorkspaceNotes } from './noteTitleCommand';
 import {
   type InstalledPluginPackage,
   PluginInstallError,
@@ -27,28 +25,16 @@ import {
   PluginInstallStore,
 } from './pluginInstall';
 
-const PLUGIN_DIRECTORY = join('.ghostboard', 'plugins');
 const PACKAGE_EXTENSIONS = new Set(['.zip', '.ghostboard-plugin']);
+const stores = new Map<string, PluginInstallStore>();
+const enablementWrites = new Map<string, Promise<unknown>>();
 
-export interface EnabledPluginCommand {
-  commandId: string;
-  commandName: string;
-  pluginId: string;
-  pluginName: string;
-}
-
-export function pluginInstallRoot(workspacePath: string): string {
-  return join(workspacePath, PLUGIN_DIRECTORY);
+export function pluginInstallRoot(appDataRoot = getAppDataRoot()): string {
+  return join(appDataRoot, 'plugins');
 }
 
 export function pluginInstallErrorMessage(error: unknown): string {
-  if (error instanceof PluginInstallError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Plugin installation failed.';
+  return error instanceof Error ? error.message : 'Plugin installation failed.';
 }
 
 function sourceSummary(source: PluginInstallSource): PluginSourceSummary {
@@ -66,34 +52,14 @@ function packageSummary(manifest: PluginManifest): PluginPackageSummary {
   return {
     ...(manifest.author ? { author: manifest.author } : {}),
     ...(manifest.description ? { description: manifest.description } : {}),
-    commands: manifest.contributes.commands.map(
-      (command): PluginCommandSummary => ({
-        id: command.id,
-        name: command.name,
-        ...(command.when ? { when: command.when } : {}),
-      })
-    ),
-    contributionKinds: listContributionKinds(manifest),
-    hostApi: manifest.engines.hostApi,
+    capabilities: manifest.capabilities,
+    ghostboard: manifest.engines.ghostboard,
     id: manifest.id,
     name: manifest.name,
-    permissions: {
-      optional: manifest.permissions.optional,
-      required: manifest.permissions.required,
-    },
+    signatureStatus: 'unverified',
+    ...(manifest.update ? { updateUrl: manifest.update.url } : {}),
     version: manifest.version,
   };
-}
-
-function packageFingerprint(loaded: LoadedPluginDirectory): string {
-  const sources = Object.fromEntries(
-    Object.entries(loaded.sources).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )
-  );
-  return createHash('sha256')
-    .update(JSON.stringify({ manifest: loaded.manifest, sources }))
-    .digest('hex');
 }
 
 function previewFromPrepared(input: {
@@ -110,70 +76,38 @@ function previewFromPrepared(input: {
   };
 }
 
-async function installedSummary(
-  installed: InstalledPluginPackage,
-  commandGrants: PluginCommandGrantStore
-): Promise<InstalledPluginSummary> {
-  const base = {
+function baseSummary(installed: InstalledPluginPackage) {
+  return {
     digest: installed.digest,
+    enabled: false,
     installedAt: installed.installedAt,
     name: installed.name,
     pluginId: installed.pluginId,
     source: sourceSummary(installed.source),
     version: installed.version,
   };
-  try {
-    const loaded = await loadPluginDirectory(installed.directory);
-    if (
-      loaded.manifest.id !== installed.pluginId ||
-      loaded.manifest.version !== installed.version
-    ) {
-      throw new PluginInstallError(
-        'invalid-package',
-        `Stored plugin metadata does not match its package: ${installed.pluginId}`
-      );
-    }
-    const grantedPermissions = await commandGrants.get({
-      digest: installed.digest,
-      packageFingerprint: packageFingerprint(loaded),
-      pluginId: loaded.manifest.id,
-      version: loaded.manifest.version,
-    });
-    const commandActivation: PluginCommandActivationSummary | undefined =
-      loaded.manifest.contributes.commands.length > 0
-        ? {
-            enabled: grantedPermissions !== undefined,
-            grantedPermissions: grantedPermissions ?? [],
-          }
-        : undefined;
-    return {
-      ...base,
-      name: loaded.manifest.name,
-      plugin: packageSummary(loaded.manifest),
-      ...(commandActivation ? { commandActivation } : {}),
-      status: 'stored',
-    };
-  } catch (error) {
-    return {
-      ...base,
-      status: 'invalid',
-      validationError: pluginInstallErrorMessage(error),
-    };
-  }
 }
 
 export class PluginManagementService {
-  private readonly commandGrants: PluginCommandGrantStore;
   private readonly store: PluginInstallStore;
-  private readonly workspacePath: string;
+  private readonly legacyStore: PluginInstallStore;
+  private readonly enablementPath: string;
 
   constructor(workspacePath: string, options?: { appDataRoot?: string }) {
-    this.workspacePath = workspacePath;
-    this.store = new PluginInstallStore(pluginInstallRoot(workspacePath));
-    this.commandGrants = new PluginCommandGrantStore({
-      appDataRoot: options?.appDataRoot,
-      workspacePath,
-    });
+    const root = resolve(pluginInstallRoot(options?.appDataRoot));
+    let store = stores.get(root);
+    if (!store) {
+      store = new PluginInstallStore(root);
+      stores.set(root, store);
+    }
+    this.store = store;
+    this.legacyStore = new PluginInstallStore(
+      join(workspacePath, '.ghostboard', 'plugins')
+    );
+    const workspaceKey = createHash('sha256')
+      .update(resolve(workspacePath))
+      .digest('hex');
+    this.enablementPath = join(root, 'workspaces', `${workspaceKey}.json`);
   }
 
   async recover(): Promise<void> {
@@ -182,9 +116,22 @@ export class PluginManagementService {
 
   async list(): Promise<InstalledPluginSummary[]> {
     const installed = await this.store.listInstalled();
-    return await Promise.all(
-      installed.map((entry) => installedSummary(entry, this.commandGrants))
+    const summaries = await Promise.all(
+      installed.map((entry) => this.installedSummary(entry))
     );
+    const installedIds = new Set(installed.map((entry) => entry.pluginId));
+    // Old workspace installs are read-only diagnostics, never a source of activation.
+    const legacy = (await this.legacyStore.listInstalled()).filter(
+      (entry) => !installedIds.has(entry.pluginId)
+    );
+    return [
+      ...summaries,
+      ...legacy.map((entry) => ({
+        ...baseSummary(entry),
+        status: 'legacy' as const,
+        validationError: LEGACY_PLUGIN_MESSAGE,
+      })),
+    ];
   }
 
   async prepareFromFile(filePath: string): Promise<PluginInstallPreview> {
@@ -200,146 +147,158 @@ export class PluginManagementService {
       zipBytes: Uint8Array.from(await readFile(filePath)),
     });
     return previewFromPrepared({
-      digest: prepared.digest,
-      manifest: prepared.manifest,
+      ...prepared,
       source: prepared.journal.source,
-      transactionId: prepared.transactionId,
     });
   }
 
   async prepareFromUrl(url: string): Promise<PluginInstallPreview> {
     const prepared = await this.store.prepareFromUrl({ url });
     return previewFromPrepared({
-      digest: prepared.digest,
-      manifest: prepared.manifest,
+      ...prepared,
       source: prepared.journal.source,
-      transactionId: prepared.transactionId,
     });
   }
 
   async commit(transactionId: string): Promise<InstalledPluginSummary> {
-    return await installedSummary(
-      await this.store.commit(transactionId),
-      this.commandGrants
-    );
+    return await this.installedSummary(await this.store.commit(transactionId));
   }
 
   async cancel(transactionId: string): Promise<void> {
     await this.store.cancel(transactionId);
   }
 
-  async enableCommands(input: {
+  async enable(input: {
     digest: string;
     pluginId: string;
   }): Promise<InstalledPluginSummary> {
-    const resolved = await this.resolveStoredPackage(input);
-    const requiredPermissions =
-      resolved.loaded.manifest.permissions.required.map(
-        (permission) => permission.id
-      );
-    await this.commandGrants.enable({
-      digest: resolved.installed.digest,
-      grantedPermissions: requiredPermissions,
-      packageFingerprint: packageFingerprint(resolved.loaded),
-      pluginId: resolved.loaded.manifest.id,
-      version: resolved.loaded.manifest.version,
-    });
-    return await installedSummary(resolved.installed, this.commandGrants);
+    const { installed } = await this.resolveStoredPackage(input);
+    await this.writeEnablement(input.pluginId, input.digest);
+    return await this.installedSummary(installed);
   }
 
-  async disableCommands(input: {
+  async disable(input: {
     digest: string;
     pluginId: string;
   }): Promise<InstalledPluginSummary> {
-    const resolved = await this.resolveStoredPackage(input);
-    await this.commandGrants.disable(resolved.loaded.manifest.id);
-    return await installedSummary(resolved.installed, this.commandGrants);
-  }
-
-  async listEnabledCommands(): Promise<EnabledPluginCommand[]> {
-    const installed = await this.store.listInstalled();
-    const commands: EnabledPluginCommand[] = [];
-    for (const entry of installed) {
-      try {
-        const loaded = await loadPluginDirectory(entry.directory);
-        if (
-          loaded.manifest.id !== entry.pluginId ||
-          loaded.manifest.version !== entry.version
-        ) {
-          continue;
-        }
-        const grants = await this.commandGrants.get({
-          digest: entry.digest,
-          packageFingerprint: packageFingerprint(loaded),
-          pluginId: loaded.manifest.id,
-          version: loaded.manifest.version,
-        });
-        if (grants === undefined) {
-          continue;
-        }
-        for (const command of loaded.manifest.contributes.commands) {
-          commands.push({
-            commandId: command.id,
-            commandName: command.name,
-            pluginId: loaded.manifest.id,
-            pluginName: loaded.manifest.name,
-          });
-        }
-      } catch {
-        // A tampered or unavailable package cannot retain a runnable menu entry.
-      }
-    }
-    return commands;
-  }
-
-  async runEnabledCommand(input: {
-    commandId: string;
-    noteIds: string[];
-    pluginId: string;
-  }): Promise<{ operationId: string; titles: Record<string, string> }> {
-    const resolved = await this.resolveStoredPackage(input);
-    if (
-      !resolved.loaded.manifest.contributes.commands.some(
-        (command) => command.id === input.commandId
-      )
-    ) {
+    const installed = (await this.store.listInstalled()).find(
+      (entry) =>
+        entry.pluginId === input.pluginId && entry.digest === input.digest
+    );
+    if (!installed) {
       throw new PluginInstallError(
         'not-found',
-        `Plugin command is not available: ${input.commandId}`
+        `Stored plugin is not available: ${input.pluginId}`
       );
     }
-    const grants = await this.commandGrants.get({
-      digest: resolved.installed.digest,
-      packageFingerprint: packageFingerprint(resolved.loaded),
-      pluginId: resolved.loaded.manifest.id,
-      version: resolved.loaded.manifest.version,
-    });
-    if (grants === undefined) {
-      throw new PluginInstallError(
-        'invalid-state',
-        `Plugin commands are not enabled: ${input.pluginId}`
-      );
+    await this.writeEnablement(input.pluginId);
+    return await this.installedSummary(installed);
+  }
+
+  private async installedSummary(
+    installed: InstalledPluginPackage
+  ): Promise<InstalledPluginSummary> {
+    const base = baseSummary(installed);
+    try {
+      const { loaded } = await this.resolveStoredPackage({
+        pluginId: installed.pluginId,
+        digest: installed.digest,
+      });
+      const enabled =
+        (await this.readEnablement())[installed.pluginId] === installed.digest;
+      return {
+        ...base,
+        enabled,
+        name: loaded.manifest.name,
+        plugin: packageSummary(loaded.manifest),
+        status: 'stored',
+      };
+    } catch (error) {
+      return {
+        ...base,
+        status:
+          error instanceof PluginDirectoryError &&
+          error.code === 'legacy-contract'
+            ? 'legacy'
+            : 'invalid',
+        validationError: pluginInstallErrorMessage(error),
+      };
     }
-    return await runPluginCommandOnWorkspaceNotes({
-      commandId: input.commandId,
-      grantedPermissions: grants,
-      loaded: resolved.loaded,
-      noteIds: input.noteIds,
-      workspacePath: this.workspacePath,
-    });
+  }
+
+  private async readEnablement(): Promise<Record<string, string>> {
+    try {
+      const value: unknown = JSON.parse(
+        await readFile(this.enablementPath, 'utf8')
+      );
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        !('schema' in value) ||
+        value.schema !== 2 ||
+        !('enabled' in value) ||
+        !value.enabled ||
+        typeof value.enabled !== 'object' ||
+        Array.isArray(value.enabled)
+      ) {
+        return {};
+      }
+      return Object.fromEntries(
+        Object.entries(value.enabled).filter(
+          ([, digest]) => typeof digest === 'string'
+        )
+      );
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === 'ENOENT' ||
+        error instanceof SyntaxError
+      ) {
+        return {};
+      }
+      throw error;
+    }
+  }
+
+  private async writeEnablement(
+    pluginId: string,
+    digest?: string
+  ): Promise<void> {
+    const previous =
+      enablementWrites.get(this.enablementPath) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const enabled = await this.readEnablement();
+        if (digest) {
+          enabled[pluginId] = digest;
+        } else {
+          delete enabled[pluginId];
+        }
+        await mkdir(dirname(this.enablementPath), { recursive: true });
+        const temporary = `${this.enablementPath}.${crypto.randomUUID()}.tmp`;
+        await writeFile(temporary, JSON.stringify({ schema: 2, enabled }));
+        await rename(temporary, this.enablementPath);
+      });
+    enablementWrites.set(this.enablementPath, next);
+    try {
+      await next;
+    } finally {
+      if (enablementWrites.get(this.enablementPath) === next) {
+        enablementWrites.delete(this.enablementPath);
+      }
+    }
   }
 
   private async resolveStoredPackage(input: {
-    digest?: string;
+    digest: string;
     pluginId: string;
   }): Promise<{
     installed: InstalledPluginPackage;
-    loaded: Awaited<ReturnType<typeof loadPluginDirectory>>;
+    loaded: LoadedPluginDirectory;
   }> {
     const installed = (await this.store.listInstalled()).find(
       (entry) =>
-        entry.pluginId === input.pluginId &&
-        (input.digest === undefined || entry.digest === input.digest)
+        entry.pluginId === input.pluginId && entry.digest === input.digest
     );
     if (!installed) {
       throw new PluginInstallError(

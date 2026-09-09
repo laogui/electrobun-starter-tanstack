@@ -1,7 +1,8 @@
 # GhostBoard 高信任插件系统改造方案
 
 日期：2026-09-09（同日修订：去掉首版 Bun 后端入口、补充装载机制、能力声明与签名更新；同日采纳）  
-状态：**已采纳，T0 待开始**。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。本文不代表相关能力已经实现；阶段状态在 §10 维护。  
+状态：**已采纳；T0 macOS arm64 发行包验证通过，第一批旧运行时清理完成，T1 待实施**。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
+
 范围：公开插件的开发、运行、安装、生命周期、数据接口和交付验收。
 
 ## 1. 决策摘要
@@ -119,9 +120,12 @@ GhostBoard 拟采用**高信任插件模型：与宿主同 realm 运行的 JavaS
 - 插件文件在用户可写的应用级目录，不在应用 bundle 内，`views://` 无法直接覆盖。宿主用已有的本地 HTTP 服务把已启用插件的目录挂出，renderer 以 `import()` 加载入口。跨 origin 的 `import()` 仍在宿主 realm 内执行，拥有与宿主脚本完全相同的页面能力；本文所称“同 realm”即指此，不依赖 origin 相同。
 - 宿主 `index.html` 内置 `<script type="importmap">`，把 `react`、`react-dom`、`react/jsx-runtime`、`@ghostboard/sdk`、`@ghostboard/sdk/react` 映射到宿主导出的稳定模块 URL。这是无构建 JavaScript 插件能直接 `import '@ghostboard/sdk'` 的唯一机制，也是避免重复 React 实例的唯一机制。
 - 为此 Vite 构建需要把 React 与 SDK 输出为名称稳定、不带 hash 的独立 chunk（manual chunks），并确保宿主自身也从同一 chunk 导入。import map 必须在任何模块执行前存在，运行时不能追加。
+- 模块请求不能自行附加 `Authorization` header，入口 URL 的 query token 也不会传给包内相对 import。插件静态目录使用 `/plugins/<每次启动的 bearer token>/<id>/<version>/` 路径前缀，使相对模块和资源请求继承 token；其他宿主服务继续使用 Authorization header。此 token 只保护本地服务免于无凭据访问，不是插件权限边界；不得写入持久日志或向外部请求发送。
 - 插件构建模板默认将上述包标记为 external；其他依赖打包进插件，不要求用户安装 npm 依赖。
 - `views://` 为自定义 scheme，其 origin 在 WebView 中通常按 opaque 处理，插件在前端直接 `fetch` 第三方接口会被 CORS 拦截。因此 SDK 提供宿主代理的 `net.fetch`；这不是限制而是能力补足。
 - 共享依赖涉及版本兼容，宿主需发布支持范围，构建和加载时给出明确错误。不能让作者自行解决重复 React、隐式依赖宿主包版本等问题。
+
+- 模块地址以 §4.1 的带 token 目录前缀为准，图中的 URL 省略该凭据段。
 
 ### 4.2 前端运行与 DOM 边界
 
@@ -372,13 +376,15 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 
 | 阶段 | 工作 | 退出条件 |
 | --- | --- | --- |
-| T0：决策与装载验证 | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
+| T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环 | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示 |
 | T2：内容与画布类型 | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过 |
 | T3：导入器与分发 | SDK `files` 完整流程、导入器、可安装构建、ZIP / HTTPS 安装、组合插件 | 四类样例均从独立包安装，最终用户无开发工具也能使用 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
 | T6+（需求驱动）：后端入口 | 每插件一个 Bun Worker；仅在真实插件需要 Bun 原生能力时启动 | 有具名插件需求；Worker 生命周期、停用回收与发行包验证通过 |
+
+2026-09-09 第一批结果：[T0 发行包证据与平台差异](trusted-plugin-t0-evidence.md)。macOS arm64 的三项机制及 v1 拒绝/提示/数据保留通过，Linux/Windows 未运行。§9.1 旧运行时及权限协议已删除；保留模块完成 v2 基础适配，T2 内容字段扩展和 T4 签名更新按阶段保留待办。T1 尚未形成开发者闭环，当前工作区启用仅保存配置，不自动运行插件。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 
@@ -422,6 +428,7 @@ T0 是本方案最大的技术风险所在，其三项机制（import map 共享
 | --- | --- | --- |
 | 前端模型 | 同 realm React + DOM，独立 createRoot，挂载点内自由 | 开发自由度高，接受页面相互影响；挂载点外不支持 |
 | 共享依赖 | import map + 稳定 chunk | 无构建 JS 可直接导入 SDK；宿主构建需维护稳定导出 |
+| 本地模块鉴权 | 带每次启动 token 的目录前缀；服务调用继续使用 bearer header | 原生 import 不支持附加 header，query 不会被相对 import 继承；token 不构成插件权限边界 |
 | 后端拓扑 | 首版无后端入口；`files` / `net` 由宿主代理；后端按需以 Bun Worker 加入 | 去掉第二运行时与前后端 RPC；需要 Bun 原生能力的插件要等 T6+ |
 | 能力声明 | `capabilities` 仅展示，不强制 | 用户有知情基础；不构成任何限制 |
 | 更新签名 | 作者 ed25519 TOFU，T4 硬性 | 无账号 / CA 门槛；作者丢失密钥需以新插件身份重发 |

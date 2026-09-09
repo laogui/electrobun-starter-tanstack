@@ -1,0 +1,61 @@
+{
+  "archiveSha256": "232cb11f9feb23b0516c3497fb7db52795b7a0776d619f0f2602013ffaf68699",
+  "archive": "<PROJECT_ROOT>/build/plugin-t0-artifacts/canary-macos-arm64-GhostBoard-canary.app.tar.zst",
+  "app": "<T0_RUN_DIR>/release/GhostBoard-canary.app",
+  "pathNormalization": "Only the checkout root and temporary run directory have been replaced for portability.",
+  "sharedModules": [
+    "host-react",
+    "host-react-dom",
+    "host-react-dom-client",
+    "host-jsx-runtime",
+    "host-react-runtime",
+    "host-sdk",
+    "host-sdk-react"
+  ],
+  "importMapBeforeModules": true,
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "result": {
+    "stage": "T0",
+    "startedAt": "2026-09-09T14:45:24.969Z",
+    "page": "views://mainview/index.html",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+    "checks": {
+      "importMap": true,
+      "localHttpImport": true,
+      "relativeImport": true,
+      "sdkSingleton": true,
+      "sameRealm": true,
+      "plainCommand": "command-ran",
+      "reactSingleton": true,
+      "reactDomSingleton": true,
+      "useState": true,
+      "independentRoot": true,
+      "rootUnmount": true,
+      "effectCleanup": true,
+      "netFetch": {
+        "status": 200,
+        "url": "https://example.com/",
+        "bodyMatched": true
+      },
+      "filesWrite": true,
+      "filesRead": true,
+      "hostStillMounted": true,
+      "legacyContract": {
+        "rejected": true,
+        "listed": true,
+        "message": "旧契约，需重新安装 v2 版本",
+        "dataPreserved": true,
+        "canvasPreserved": true
+      }
+    },
+    "passed": true,
+    "finishedAt": "2026-09-09T14:45:25.640Z",
+    "host": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "bun": "1.3.13",
+      "execPath": "<T0_RUN_DIR>/release/GhostBoard-canary.app/Contents/MacOS/bun"
+    }
+  }
+}

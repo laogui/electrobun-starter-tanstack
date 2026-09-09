@@ -86,25 +86,6 @@ async function initElectrobun() {
           openSearch: () => {
             globalThis.dispatchEvent(new CustomEvent('open-search'));
           },
-          normalizeNoteTitles: () => {
-            globalThis.dispatchEvent(new CustomEvent('normalize-note-titles'));
-          },
-          pluginCommandRequested: (detail: unknown) => {
-            if (
-              !(
-                detail &&
-                typeof detail === 'object' &&
-                typeof (detail as { commandId?: unknown }).commandId ===
-                  'string' &&
-                typeof (detail as { pluginId?: unknown }).pluginId === 'string'
-              )
-            ) {
-              return;
-            }
-            globalThis.dispatchEvent(
-              new CustomEvent('plugin-command-requested', { detail })
-            );
-          },
           canvasUndo: () => {
             globalThis.dispatchEvent(new CustomEvent('canvas-undo'));
           },
@@ -263,7 +244,7 @@ export async function rpcCancelPluginInstall(
   return eb.rpc.request.pluginCancelInstall({ transactionId });
 }
 
-export async function rpcEnablePluginCommands(input: {
+export async function rpcEnablePlugin(input: {
   digest: string;
   pluginId: string;
 }): Promise<PluginInstallCommitResult> {
@@ -271,10 +252,10 @@ export async function rpcEnablePluginCommands(input: {
   if (!eb?.rpc) {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
-  return eb.rpc.request.pluginCommandEnable(input);
+  return eb.rpc.request.pluginEnable(input);
 }
 
-export async function rpcDisablePluginCommands(input: {
+export async function rpcDisablePlugin(input: {
   digest: string;
   pluginId: string;
 }): Promise<PluginInstallCommitResult> {
@@ -282,7 +263,7 @@ export async function rpcDisablePluginCommands(input: {
   if (!eb?.rpc) {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
-  return eb.rpc.request.pluginCommandDisable(input);
+  return eb.rpc.request.pluginDisable(input);
 }
 
 export async function rpcListExtensionEnablement(): Promise<{
@@ -487,66 +468,6 @@ export async function rpcDeleteNote(noteId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteNote({ noteId });
-}
-
-export type PluginNoteTitlesResult =
-  | {
-      operationId: string;
-      success: true;
-      titles: Record<string, string>;
-    }
-  | { success: false };
-
-export type PluginNoteTitlesHistoryResult =
-  | { success: true; titles: Record<string, string> }
-  | { success: false };
-
-export type PluginCommandRunResult =
-  | { operationId: string; success: true; titles: Record<string, string> }
-  | { error: string; success: false };
-
-export async function rpcPluginRunCommand(
-  pluginId: string,
-  commandId: string,
-  noteIds: string[]
-): Promise<PluginCommandRunResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin commands are unavailable.' };
-  }
-  return eb.rpc.request.pluginRunCommand({ commandId, noteIds, pluginId });
-}
-
-export async function rpcPluginNormalizeNoteTitles(
-  noteIds: string[]
-): Promise<PluginNoteTitlesResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginNormalizeNoteTitles({ noteIds });
-}
-
-export async function rpcPluginUndoNoteTitles(
-  operationId: string,
-  noteIds: string[]
-): Promise<PluginNoteTitlesHistoryResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginUndoNoteTitles({ operationId, noteIds });
-}
-
-export async function rpcPluginRedoNoteTitles(
-  operationId: string,
-  noteIds: string[]
-): Promise<PluginNoteTitlesHistoryResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginRedoNoteTitles({ operationId, noteIds });
 }
 
 export interface SaveAttachmentResult {

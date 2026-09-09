@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import type { ReactFlowInstance } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -171,84 +171,6 @@ describe('useCanvasKeyboard', () => {
 
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
-  });
-
-  it('runs a validated plugin command requested by the native Plugins menu', async () => {
-    const runCommand = vi
-      .spyOn(useCanvasStore.getState(), 'runEnabledPluginCommand')
-      .mockResolvedValue({
-        operationId: 'plgop_test',
-        success: true,
-        titles: { note_a: 'Hello world' },
-      });
-
-    render(<TestComponent />);
-    act(() => {
-      globalThis.dispatchEvent(
-        new CustomEvent('plugin-command-requested', {
-          detail: {
-            commandId: 'normalize-titles',
-            pluginId: 'community.example.title-tools',
-          },
-        })
-      );
-    });
-
-    await waitFor(() => {
-      expect(runCommand).toHaveBeenCalledWith(
-        'community.example.title-tools',
-        'normalize-titles'
-      );
-    });
-  });
-
-  it('uses the focused note when the native menu clears canvas selection', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      top: 0,
-      left: 0,
-      right: 100,
-      bottom: 100,
-      toJSON: () => ({}),
-    } as DOMRect;
-    useCanvasStore.setState({
-      focusedNode: {
-        data: { noteId: 'note_a' },
-        id: 'node_a',
-        rect,
-        type: 'card',
-      },
-    });
-    const runCommand = vi
-      .spyOn(useCanvasStore.getState(), 'runEnabledPluginCommand')
-      .mockResolvedValue({
-        operationId: 'plgop_focused',
-        success: true,
-        titles: { note_a: 'Hello world' },
-      });
-
-    render(<TestComponent />);
-    act(() => {
-      globalThis.dispatchEvent(
-        new CustomEvent('plugin-command-requested', {
-          detail: {
-            commandId: 'normalize-titles',
-            pluginId: 'community.example.title-tools',
-          },
-        })
-      );
-    });
-
-    await waitFor(() => {
-      expect(runCommand).toHaveBeenCalledWith(
-        'community.example.title-tools',
-        'normalize-titles',
-        ['note_a']
-      );
-    });
   });
 
   it('calls undo and redo with the correct shortcuts', () => {

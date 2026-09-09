@@ -16,8 +16,8 @@ import { PluginsPanel } from './PluginsPanel';
 const rpc = vi.hoisted(() => ({
   rpcCancelPluginInstall: vi.fn(),
   rpcCommitPluginInstall: vi.fn(),
-  rpcDisablePluginCommands: vi.fn(),
-  rpcEnablePluginCommands: vi.fn(),
+  rpcDisablePlugin: vi.fn(),
+  rpcEnablePlugin: vi.fn(),
   rpcListPluginPackages: vi.fn(),
   rpcPreparePluginInstallFromFile: vi.fn(),
   rpcPreparePluginInstallFromUrl: vi.fn(),
@@ -26,26 +26,12 @@ const rpc = vi.hoisted(() => ({
 vi.mock('@/lib/rpc', () => rpc);
 
 const plugin: PluginPackageSummary = {
-  commands: [
-    {
-      id: 'normalize-titles',
-      name: 'Normalize titles',
-    },
-  ],
-  contributionKinds: ['command'],
+  capabilities: ['files'],
+  signatureStatus: 'unverified',
   description: 'Normalize selected note titles.',
-  hostApi: '>=1.0.0 <2.0.0',
+  ghostboard: '>=1.0.0 <2.0.0',
   id: 'community.example.title-tools',
   name: 'Title tools',
-  permissions: {
-    optional: [],
-    required: [
-      {
-        id: 'content.selection.read',
-        reason: 'Reads the current selection to update titles.',
-      },
-    ],
-  },
   version: '1.0.0',
 };
 
@@ -58,6 +44,7 @@ const preview: PluginInstallPreview = {
 
 const storedPlugin: InstalledPluginSummary = {
   digest: preview.digest,
+  enabled: false,
   installedAt: '2026-09-08T12:00:00.000Z',
   name: plugin.name,
   plugin,
@@ -69,10 +56,7 @@ const storedPlugin: InstalledPluginSummary = {
 
 const enabledPlugin: InstalledPluginSummary = {
   ...storedPlugin,
-  commandActivation: {
-    enabled: true,
-    grantedPermissions: ['content.selection.read'],
-  },
+  enabled: true,
 };
 
 describe('PluginsPanel', () => {
@@ -101,9 +85,7 @@ describe('PluginsPanel', () => {
     render(<PluginsPanel strings={getLocaleStrings('en')} />);
 
     expect(
-      await screen.findByText(
-        'No plugin packages are stored in this workspace.'
-      )
+      await screen.findByText('No plugin packages are installed.')
     ).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Choose package…' }));
@@ -112,7 +94,7 @@ describe('PluginsPanel', () => {
     expect(screen.getByText('Title tools')).toBeVisible();
     expect(
       screen.getByText(
-        'GhostBoard checked this archive without executing its code. Review the package before storing it in this workspace.'
+        'GhostBoard checked this archive without executing its code. Review it before installing for this application. Installation does not enable it.'
       )
     ).toBeVisible();
     expect(rpc.rpcCommitPluginInstall).not.toHaveBeenCalled();
@@ -127,7 +109,9 @@ describe('PluginsPanel', () => {
       expect(rpc.rpcCommitPluginInstall).toHaveBeenCalledWith('plginst_123');
     });
     expect(await screen.findByText('Installed Title tools.')).toBeVisible();
-    expect(await screen.findByText('Stored — not activated')).toBeVisible();
+    expect(
+      await screen.findByText('Installed, not enabled in this workspace')
+    ).toBeVisible();
   });
 
   it('cancels a reviewed package without committing it', async () => {
@@ -176,12 +160,12 @@ describe('PluginsPanel', () => {
     expect(await screen.findByText('Review package')).toBeVisible();
   });
 
-  it('requires a second confirmation before granting and enabling commands', async () => {
+  it('requires high-trust confirmation before saving workspace enablement', async () => {
     const user = userEvent.setup();
     rpc.rpcListPluginPackages
       .mockResolvedValueOnce({ available: true, plugins: [storedPlugin] })
       .mockResolvedValueOnce({ available: true, plugins: [enabledPlugin] });
-    rpc.rpcEnablePluginCommands.mockResolvedValue({
+    rpc.rpcEnablePlugin.mockResolvedValue({
       plugin: enabledPlugin,
       success: true,
     });
@@ -189,26 +173,77 @@ describe('PluginsPanel', () => {
     render(<PluginsPanel strings={getLocaleStrings('en')} />);
 
     await user.click(
-      await screen.findByRole('button', { name: 'Enable 1 command(s)' })
+      await screen.findByRole('button', { name: 'Enable for workspace' })
     );
-    expect(
-      await screen.findByText('Enable Title tools commands?')
-    ).toBeVisible();
-    expect(rpc.rpcEnablePluginCommands).not.toHaveBeenCalled();
+    expect(await screen.findByText('Enable Title tools?')).toBeVisible();
+    expect(rpc.rpcEnablePlugin).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole('button', { name: 'Grant and enable commands' })
+      screen.getByRole('button', { name: 'I trust this plugin, enable' })
     );
 
     await waitFor(() => {
-      expect(rpc.rpcEnablePluginCommands).toHaveBeenCalledWith({
+      expect(rpc.rpcEnablePlugin).toHaveBeenCalledWith({
         digest: storedPlugin.digest,
         pluginId: storedPlugin.pluginId,
       });
     });
-    expect(await screen.findByText('Commands enabled')).toBeVisible();
     expect(
-      await screen.findByText('Enabled commands from Title tools.')
+      await screen.findByText('Enabled for this workspace (runtime pending)')
     ).toBeVisible();
+    expect(
+      await screen.findByText('Saved workspace enablement for Title tools.')
+    ).toBeVisible();
+  });
+  it('shows legacy packages without an enable action', async () => {
+    rpc.rpcListPluginPackages.mockResolvedValue({
+      available: true,
+      plugins: [{ ...storedPlugin, status: 'legacy', plugin: undefined }],
+    });
+    render(<PluginsPanel strings={getLocaleStrings('zh')} />);
+    expect(await screen.findByText('旧契约，需重新安装 v2 版本')).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: '为此工作区启用' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('displays capabilities as claims and makes unverified signatures explicit', async () => {
+    rpc.rpcListPluginPackages.mockResolvedValue({
+      available: true,
+      plugins: [storedPlugin],
+    });
+    render(<PluginsPanel strings={getLocaleStrings('en')} />);
+    expect(
+      await screen.findByText('Declared capabilities (not enforced)')
+    ).toBeVisible();
+    expect(screen.getByText('files')).toBeVisible();
+    expect(
+      screen.getByText(
+        'Author identity and signature not verified. Signed updates are pending T4.'
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByText('Declared update source: Not declared')
+    ).toBeVisible();
+  });
+  it('keeps a failed cancellation review available for retry', async () => {
+    const user = userEvent.setup();
+    rpc.rpcPreparePluginInstallFromFile.mockResolvedValue({
+      preview,
+      success: true,
+    });
+    rpc.rpcCancelPluginInstall.mockResolvedValueOnce({ success: false });
+    render(<PluginsPanel strings={getLocaleStrings('en')} />);
+    await user.click(
+      await screen.findByRole('button', { name: 'Choose package…' })
+    );
+    expect(await screen.findByText('Review package')).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Choose package…' })
+    ).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(screen.getByText('Review package')).toBeVisible();
+    expect(rpc.rpcCommitPluginInstall).not.toHaveBeenCalled();
   });
 });

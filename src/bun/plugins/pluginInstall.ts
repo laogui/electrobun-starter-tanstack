@@ -529,6 +529,14 @@ export class PluginInstallStore {
           `${loaded.manifest.id}@${loaded.manifest.version} is already installed with a different digest`
         );
       }
+      if (
+        registry.packages.some((entry) => entry.pluginId === loaded.manifest.id)
+      ) {
+        throw new PluginInstallError(
+          'invalid-state',
+          'Plugin updates are unavailable until T4 signed update verification is implemented.'
+        );
+      }
       const pending = this.findPending(
         await this.listJournals(),
         loaded.manifest.id,
@@ -667,9 +675,45 @@ export class PluginInstallStore {
         throw error;
       }
     }
+    const existing = (await this.readRegistry()).packages.find(
+      (entry) =>
+        entry.pluginId === pluginId &&
+        (entry.version !== version || entry.digest !== digest)
+    );
+    if (existing) {
+      const error = new PluginInstallError(
+        'invalid-state',
+        'Plugin updates require T4 signed update verification.'
+      );
+      await this.failLocked(journal, error);
+      throw error;
+    }
     await this.writeJournal({ ...journal, stage: 'committing' });
     const dest = this.packageDir(pluginId, version, digest);
     const sourceDir = resolve(staging, ...pluginRoot.split('/'));
+    const sourceRelative = relative(staging, sourceDir);
+    if (
+      !sourceRelative ||
+      sourceRelative.startsWith('..') ||
+      isAbsolute(sourceRelative)
+    ) {
+      throw new PluginInstallError(
+        'invalid-package',
+        'staged plugin root is outside staging'
+      );
+    }
+    const loaded = await loadPluginDirectory(
+      existsSync(dest) ? dest : sourceDir
+    );
+    if (
+      loaded.manifest.id !== pluginId ||
+      loaded.manifest.version !== version
+    ) {
+      throw new PluginInstallError(
+        'invalid-package',
+        'staged manifest does not match the reviewed package'
+      );
+    }
     if (!existsSync(dest)) {
       if (!existsSync(sourceDir)) {
         const error = new PluginInstallError(

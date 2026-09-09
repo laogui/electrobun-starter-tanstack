@@ -1,37 +1,20 @@
-import type {
-  PluginContributionKind,
-  PluginPermissionDeclaration,
-} from './manifest';
+import type { PluginCapability } from './manifest';
 
 export interface PluginSourceSummary {
   kind: 'file' | 'url' | 'zip';
   label: string;
 }
 
-export interface PluginCommandSummary {
-  id: string;
-  name: string;
-  when?: string;
-}
-
 export interface PluginPackageSummary {
   author?: string;
-  commands: PluginCommandSummary[];
-  contributionKinds: PluginContributionKind[];
+  capabilities: PluginCapability[];
   description?: string;
-  hostApi: string;
+  ghostboard: string;
   id: string;
   name: string;
-  permissions: {
-    optional: PluginPermissionDeclaration[];
-    required: PluginPermissionDeclaration[];
-  };
+  signatureStatus: 'unverified';
+  updateUrl?: string;
   version: string;
-}
-
-export interface PluginCommandActivationSummary {
-  enabled: boolean;
-  grantedPermissions: string[];
 }
 
 export interface PluginInstallPreview {
@@ -42,14 +25,14 @@ export interface PluginInstallPreview {
 }
 
 export interface InstalledPluginSummary {
-  commandActivation?: PluginCommandActivationSummary;
   digest: string;
+  enabled: boolean;
   installedAt: string;
   name: string;
   plugin?: PluginPackageSummary;
   pluginId: string;
   source: PluginSourceSummary;
-  status: 'invalid' | 'stored';
+  status: 'invalid' | 'legacy' | 'stored';
   validationError?: string;
   version: string;
 }

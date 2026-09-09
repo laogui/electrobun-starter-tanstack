@@ -1,0 +1,217 @@
+{
+  "archive": "/Users/laogui/Projects/electrobun-starter-tanstack/build/plugin-t2-a4-artifacts/canary-macos-arm64-GhostBoard-canary.app.tar.zst",
+  "archiveSha256": "4a031307a2baef436d73c784184d06a58b303c59d99e9f4395d95ee5950106a3",
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "results": [
+    {
+      "stage": "T2/A4 only",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "activationEvent": true,
+        "emptyWorkspaceKV": true,
+        "applicationKVScope": true,
+        "commandKVWrite": true,
+        "nullAndPrefix": true,
+        "deleteKV": true,
+        "pastTaskSkipped": true,
+        "contentWorkspaceIdentity": true,
+        "selectionPush": true,
+        "disabledTasksAndEventsStop": true,
+        "retiredStorageRejects": true,
+        "disableRetainsKV": true
+      },
+      "startedAt": "2026-09-09T16:08:00.848Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "workspaceId": "0b30cdb414d88bc937aaaac3691e85d1133fa05681c6547fe1d59f12fe9b68a7",
+      "finishedAt": "2026-09-09T16:08:01.596Z",
+      "phase": "initial",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    },
+    {
+      "stage": "T2/A4 only",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "activationEvent": true,
+        "restartWorkspaceKV": true,
+        "applicationKVScope": true,
+        "commandKVWrite": true,
+        "nullAndPrefix": true,
+        "deleteKV": true,
+        "pastTaskSkipped": true,
+        "contentWorkspaceIdentity": true,
+        "selectionPush": true,
+        "disabledTasksAndEventsStop": true,
+        "retiredStorageRejects": true,
+        "disableRetainsKV": true
+      },
+      "startedAt": "2026-09-09T16:08:02.613Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "workspaceId": "0b30cdb414d88bc937aaaac3691e85d1133fa05681c6547fe1d59f12fe9b68a7",
+      "finishedAt": "2026-09-09T16:08:03.224Z",
+      "phase": "restart",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    },
+    {
+      "stage": "T2/A4 only",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "newWorkspaceNotEnabled": true,
+        "activationEvent": true,
+        "emptyWorkspaceKV": true,
+        "applicationKVScope": true,
+        "nullAndPrefix": true,
+        "deleteKV": true,
+        "pastTaskSkipped": true,
+        "contentWorkspaceIdentity": true,
+        "selectionPush": true,
+        "disabledTasksAndEventsStop": true,
+        "retiredStorageRejects": true,
+        "disableRetainsKV": true
+      },
+      "startedAt": "2026-09-09T16:08:04.250Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "workspaceId": "d88483095cb9fae39e21dd1976eaac3219356d780610c83202497411e015d2b6",
+      "finishedAt": "2026-09-09T16:08:04.849Z",
+      "phase": "workspace",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    },
+    {
+      "stage": "T2/A4 only",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "activationEvent": true,
+        "restartWorkspaceKV": true,
+        "applicationKVScope": true,
+        "commandKVWrite": true,
+        "noCrossWorkspaceKey": true,
+        "nullAndPrefix": true,
+        "deleteKV": true,
+        "pastTaskSkipped": true,
+        "contentWorkspaceIdentity": true,
+        "selectionPush": true,
+        "disabledTasksAndEventsStop": true,
+        "retiredStorageRejects": true,
+        "disableRetainsKV": true
+      },
+      "startedAt": "2026-09-09T16:08:05.835Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "workspaceId": "0b30cdb414d88bc937aaaac3691e85d1133fa05681c6547fe1d59f12fe9b68a7",
+      "finishedAt": "2026-09-09T16:08:06.416Z",
+      "phase": "return",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    }
+  ],
+  "regressions": {
+    "t1": {
+      "archiveSha256": "e2aa33fce9cb898aeff3bdd80c50d2ee45591524600d6acf98dcde3e1dd832af",
+      "archive": "/Users/laogui/Projects/electrobun-starter-tanstack/build/plugin-t1-artifacts/canary-macos-arm64-GhostBoard-canary.app.tar.zst",
+      "app": "/var/folders/z9/923rxv8s00v774r2w1qyxjrh0000gn/T/ghostboard-plugin-t1-DoAg9Z/release/GhostBoard-canary.app",
+      "signingRequested": false,
+      "notarizationRequested": false,
+      "results": [
+        {
+          "stage": "T1",
+          "startedAt": "2026-09-09T16:08:34.305Z",
+          "page": "views://mainview/index.html",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+          "passed": true,
+          "checks": {
+            "workspaceId": "d01eb5c77d3a933bf1d22220dc840393fdac07df023b3c3d820d6dfe2fc7f6c1",
+            "directoryReviewDoesNotExecute": true,
+            "publicSdkSingleton": true,
+            "noBuildCommand": true,
+            "closePreservesCommands": true,
+            "domReopen": true,
+            "reactHooksAndFreshRoots": true,
+            "reactErrorRecovery": true,
+            "frozenSharedRuntimeIdentity": true,
+            "failedImportPreservesOriginal": true,
+            "failedSetupPreservesReactStateAndSignal": true,
+            "candidateRegistrationsArePrivate": true,
+            "oldLazyImportsSurviveFailure": true,
+            "numericGenerationAndCandidateAbort": true,
+            "sequentialReverseExactlyOnceCleanup": true,
+            "successfulHandoffReleasesOldGraph": true,
+            "relativeModuleHotReload": true,
+            "oldGenerationRevoked": true,
+            "manualReload": true,
+            "noDuplicateRegistrations": true,
+            "shortcutAndEditingProtection": true,
+            "failedSetupCleanup": true,
+            "failedPluginRecovery": true,
+            "publicThemeTokens": true,
+            "optionalBundlerShim": true,
+            "independentReactTemplate": true,
+            "asyncDisableRace": true,
+            "pendingSetupSignalAborted": true,
+            "trackedWorkerTerminated": true,
+            "disableCleanup": true,
+            "activeSignalAbortedOnDisable": true,
+            "legacyRejected": true,
+            "hostStillMounted": true
+          },
+          "finishedAt": "2026-09-09T16:08:46.479Z",
+          "host": {
+            "platform": "darwin",
+            "arch": "arm64",
+            "bun": "1.3.13",
+            "execPath": "/private/var/folders/z9/923rxv8s00v774r2w1qyxjrh0000gn/T/ghostboard-plugin-t1-DoAg9Z/release/GhostBoard-canary.app/Contents/MacOS/bun"
+          },
+          "phase": "lifecycle"
+        },
+        {
+          "stage": "T1",
+          "startedAt": "2026-09-09T16:08:47.468Z",
+          "page": "views://mainview/index.html",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+          "passed": true,
+          "checks": {
+            "workspaceId": "871d5f507d782dbd5b64e97d507e21796495b9a3a720f42d2899b2fcbaf531b9",
+            "applicationLevelDirectoriesRetained": true,
+            "workspaceDoesNotInheritEnablement": true,
+            "noPluginCodeExecuted": true
+          },
+          "finishedAt": "2026-09-09T16:08:49.011Z",
+          "host": {
+            "platform": "darwin",
+            "arch": "arm64",
+            "bun": "1.3.13",
+            "execPath": "/private/var/folders/z9/923rxv8s00v774r2w1qyxjrh0000gn/T/ghostboard-plugin-t1-DoAg9Z/release/GhostBoard-canary.app/Contents/MacOS/bun"
+          },
+          "phase": "workspace"
+        }
+      ]
+    },
+    "vitest": {
+      "files": 196,
+      "total": 1720,
+      "passed": 1720,
+      "failed": 0
+    }
+  }
+}

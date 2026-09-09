@@ -6,6 +6,8 @@ import ReactDOM from 'react-dom/client';
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { router } from '@/router';
 import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
+import { connectPluginHostEvents } from './plugins/runtime/hostEvents';
+import { pluginRuntime } from './plugins/runtime/PluginRuntime';
 
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
@@ -38,10 +40,17 @@ root.render(
 );
 
 if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
+  const disconnectEvents = connectPluginHostEvents(pluginRuntime);
   const stopPlugins = startPluginRuntime();
   import.meta.hot?.dispose(() => {
+    disconnectEvents();
     stopPlugins();
   });
+}
+if (import.meta.env.VITE_PLUGIN_T2_A4 === '1') {
+  import('./plugins/t2-a4/run')
+    .then(({ runT2A4Probe }) => runT2A4Probe())
+    .catch(console.error);
 }
 if (import.meta.env.VITE_PLUGIN_T1 === '1') {
   import('./plugins/t1/run')

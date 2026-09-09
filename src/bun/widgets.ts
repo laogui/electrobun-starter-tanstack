@@ -3,6 +3,7 @@ import { unlink } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { notifyContentChanged } from './plugins/contentEvents';
 
 /** Schema version for widget JSON files. */
 export const WIDGET_SCHEMA = 'ghostboard-widget/v1';
@@ -329,6 +330,11 @@ export async function saveWidget(
   const fullPath = assertWorkspaceWidgetPath(wsPath, relativePath);
   const serialized = JSON.stringify(validated, null, 2);
   await atomicWrite(fullPath, serialized);
+  notifyContentChanged(wsPath, {
+    kind: 'widget',
+    ids: [validated.id],
+    operation: 'upsert',
+  });
 }
 
 /** Delete the widget file for a given id. Returns true if a file was removed. */
@@ -342,6 +348,11 @@ export async function deleteWidget(
     return false;
   }
   await unlink(fullPath);
+  notifyContentChanged(wsPath, {
+    kind: 'widget',
+    ids: [widgetId],
+    operation: 'delete',
+  });
   return true;
 }
 

@@ -3,6 +3,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { notifyContentChanged } from './plugins/contentEvents';
 
 export interface NoteFrontmatter {
   color?: string;
@@ -226,6 +227,13 @@ export async function saveNote(
   const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
   const content = `---\n${serializeFrontmatter(frontmatter)}\n---\n${body}`;
   await atomicWrite(fullPath, content);
+  if (typeof frontmatter.id === 'string' && frontmatter.id) {
+    notifyContentChanged(wsPath, {
+      kind: 'note',
+      ids: [frontmatter.id],
+      operation: 'upsert',
+    });
+  }
 }
 
 const HEADING_RE = /^#\s+(.+)$/m;
@@ -319,7 +327,15 @@ export async function deleteNoteFile(
   if (!(await file.exists())) {
     return false;
   }
+  const note = await loadNote(wsPath, filePath).catch(() => null);
   await unlink(fullPath);
+  if (note?.frontmatter.id) {
+    notifyContentChanged(wsPath, {
+      kind: 'note',
+      ids: [note.frontmatter.id],
+      operation: 'delete',
+    });
+  }
   return true;
 }
 

@@ -17,6 +17,7 @@ import type {
   UpdateCheckResult,
   WorkspaceInfo,
 } from '@/settingsClient';
+import type { ContentChangedEvent } from '../../../packages/plugin-sdk';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
 import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
@@ -81,6 +82,11 @@ async function initElectrobun() {
               new CustomEvent('settings-updated', {
                 detail: settings,
               })
+            );
+          },
+          pluginContentChanged: (event: ContentChangedEvent) => {
+            globalThis.dispatchEvent(
+              new CustomEvent('plugin-content-changed', { detail: event })
             );
           },
           openSearch: () => {

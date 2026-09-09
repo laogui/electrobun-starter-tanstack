@@ -4,11 +4,13 @@ import type {
   PanelDefinition,
   PluginContext,
   PluginDefinition,
+  PluginEventMap,
 } from '../../../../packages/plugin-sdk';
 import type {
   PluginRuntimeDescriptor,
   PluginRuntimeSnapshot,
 } from '../../../shared/plugins/runtime';
+import { ActivationServices } from './activationServices';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
 import {
   isEditingShortcut,
@@ -16,6 +18,10 @@ import {
   parseShortcut,
   type Shortcut,
 } from './shortcuts';
+import {
+  createPluginStorage,
+  type PluginStorageTransportOptions,
+} from './storage';
 
 export interface RuntimeDiagnostic {
   message: string;
@@ -47,6 +53,7 @@ export interface PluginRuntimeOptions {
   importer?: (url: string) => Promise<unknown>;
   mountPanel?: MountPanel;
   onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
+  storageTransport?: PluginStorageTransportOptions;
 }
 
 interface CommandRegistration {
@@ -73,6 +80,7 @@ interface Activation {
   pendingCleanups: Set<Promise<void>>;
   ready: Promise<void>;
   retirement?: Promise<void>;
+  services?: ActivationServices;
   status: 'loading' | 'running' | 'failed';
   workspaceId: string;
 }
@@ -241,6 +249,20 @@ export class PluginRuntime {
     await Promise.all(this.retirements.values());
   }
 
+  emitHostEvent<K extends keyof PluginEventMap>(
+    event: K,
+    payload: PluginEventMap[K]
+  ): void {
+    if (payload.workspaceId !== this.workspaceId) {
+      return;
+    }
+    for (const instance of this.activations.values()) {
+      if (instance.workspaceId === payload.workspaceId) {
+        instance.services?.emit(event, payload);
+      }
+    }
+  }
+
   getReleasedGenerations(): readonly PluginRuntimeDescriptor[] {
     return [...this.released.values()];
   }
@@ -341,6 +363,7 @@ export class PluginRuntime {
       this.activations.set(id, instance);
       instance.status = 'running';
       this.publish();
+      instance.services?.publish();
       for (const panelId of instance.openPanels) {
         this.openPanel(id, panelId);
       }
@@ -468,7 +491,35 @@ export class PluginRuntime {
 
   private context(instance: Activation): PluginContext {
     const pluginId = instance.descriptor.pluginId;
+    const services = new ActivationServices({
+      assertActive: () => this.assertActive(instance),
+      isPublished: () => this.activations.get(pluginId) === instance,
+      report: (phase, error) => this.report(pluginId, phase, error),
+      signal: instance.controller.signal,
+      track: (cleanup) => this.track(instance, cleanup),
+      workspaceId: instance.workspaceId,
+    });
+    instance.services = services;
+    const storageContext = {
+      pluginId,
+      workspaceId: instance.workspaceId,
+      signal: instance.controller.signal,
+    };
     return Object.freeze({
+      storage: {
+        app: createPluginStorage(
+          storageContext,
+          'app',
+          this.options.storageTransport
+        ),
+        workspace: createPluginStorage(
+          storageContext,
+          'workspace',
+          this.options.storageTransport
+        ),
+      },
+      events: services.events,
+      tasks: services.scheduledTasks,
       pluginId,
       generation: instance.generation,
       signal: instance.controller.signal,

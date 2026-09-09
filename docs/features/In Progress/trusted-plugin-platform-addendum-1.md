@@ -119,7 +119,7 @@ bb 在应用内提供 Plugin Guide：按 surface 编号的线框图，每张卡�
 ## 8. 追加验收项
 
 - T1：候选 import / setup 失败时，旧 signal 未 abort、旧命令可用、同一已打开 React root 及其状态不变且有诊断，旧相对模块可延迟加载；成功交接后旧 signal abort、逆序恰好一次清理，然后发布新注册；候选取消、停用与工作区退出均 abort 对应 signal，晚到结果不复活；宿主不会发布两代注册；数字 generation 递增；`globalThis.__ghostboardPluginRuntime` 存在、冻结且与 import map 的导出同一实例。
-- T2：插件通过 `storage.workspace` 写入的数据在重启后可读且不串工作区；`events.on('content.changed')` 在宿主内容变化时触发；`tasks.schedule` 在工作区未激活时不触发。
+- T2：插件通过 `storage.workspace` 写入的数据在重启后可读且不串工作区；`events.on('content.changed')` 在宿主内容变化时触发；`tasks.schedule` 在工作区未激活时不触发。**2026-09-10 首批 A4 已通过 macOS arm64 发行包验证**，范围与限制见 [A4 验收记录](trusted-plugin-t2-a4-evidence.md)；不等于内容事务或自定义卡片已验收。
 - T3：模板自带测试使用 `@ghostboard/sdk/testing` 在无应用环境下通过。
 - T5：外部作者仅凭单文件参考与模板完成第一个插件，过程有记录；插件未使用任何宿主组件仍与宿主视觉一致。
 

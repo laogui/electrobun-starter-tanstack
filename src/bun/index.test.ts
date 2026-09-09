@@ -15,6 +15,7 @@ const trashUpdatedMock = vi.fn();
 const viewsUpdatedMock = vi.fn();
 const canvasUndoMock = vi.fn();
 const canvasRedoMock = vi.fn();
+const pluginContentChangedMock = vi.fn();
 const defineRpcMock = vi.fn<
   (config: {
     handlers: {
@@ -29,6 +30,7 @@ const defineRpcMock = vi.fn<
       viewsUpdated: typeof viewsUpdatedMock;
       canvasUndo: typeof canvasUndoMock;
       canvasRedo: typeof canvasRedoMock;
+      pluginContentChanged: typeof pluginContentChangedMock;
     };
   }
 >(() => ({
@@ -38,6 +40,7 @@ const defineRpcMock = vi.fn<
     viewsUpdated: viewsUpdatedMock,
     canvasUndo: canvasUndoMock,
     canvasRedo: canvasRedoMock,
+    pluginContentChanged: pluginContentChangedMock,
   },
 }));
 const browserWindowFocusMock = vi.fn();
@@ -92,6 +95,7 @@ vi.mock('electrobun/bun', () => ({
     },
   },
   Utils: {
+    paths: { userData: '/mock-user-data' },
     openFileDialog: openFileDialogMock,
     openPath: openPathMock,
     openExternal: openExternalMock,
@@ -470,6 +474,24 @@ beforeEach(() => {
 });
 
 describe('src/bun/index helpers', () => {
+  it('pushes committed content changes only from the captured workspace', async () => {
+    await loadIndexModule();
+    const { notifyContentChanged, pluginWorkspaceId } = await import(
+      './plugins/contentEvents'
+    );
+    const change = {
+      kind: 'note',
+      operation: 'upsert',
+      ids: ['note-test'],
+    } as const;
+    notifyContentChanged('/tmp/different-workspace', change);
+    expect(pluginContentChangedMock).not.toHaveBeenCalled();
+    notifyContentChanged('/tmp/workspace', change);
+    expect(pluginContentChangedMock).toHaveBeenCalledExactlyOnceWith({
+      ...change,
+      workspaceId: pluginWorkspaceId('/tmp/workspace'),
+    });
+  });
   it('getMainViewUrl returns dev server url when dev server is reachable', async () => {
     localInfoChannelMock.mockResolvedValue('dev');
     fetchMock.mockResolvedValue({ ok: true });

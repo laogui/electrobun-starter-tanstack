@@ -4,6 +4,7 @@ import { unlink } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { notifyContentChanged } from './plugins/contentEvents';
 
 /** Schema version for the BlockNote JSON sidecar file. */
 export const BLOCKNOTE_SCHEMA = 'ghostboard-blocknote/v1';
@@ -176,6 +177,11 @@ export async function saveBlockNoteSidecar(
   };
   const serialized = JSON.stringify(sidecar, null, 2);
   await atomicWrite(fullPath, serialized);
+  notifyContentChanged(wsPath, {
+    kind: 'note',
+    ids: [noteId],
+    operation: 'upsert',
+  });
   return { relativePath, hash: contentHash(serialized) };
 }
 
@@ -204,6 +210,11 @@ export async function deleteBlockNoteSidecar(
     return false;
   }
   await unlink(fullPath);
+  notifyContentChanged(wsPath, {
+    kind: 'note',
+    ids: [noteId],
+    operation: 'delete',
+  });
   return true;
 }
 

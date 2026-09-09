@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startLocalHttpServer } from './localHttpServer';
 import type { PluginHostController } from './plugins/hostController';
+import type { PluginStorageHost } from './plugins/storage';
 
 vi.mock('./ai', () => ({ handleAIChat: vi.fn() }));
 vi.mock('./attachments', () => ({
@@ -35,6 +36,28 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('local HTTP plugin host integration', () => {
+  it('authenticates persistent storage requests before dispatch', async () => {
+    const handle = vi.fn(async () => Response.json({ success: true }));
+    const server = startLocalHttpServer({
+      getAIConfig: () => null,
+      getWorkspacePath: () => '/workspace',
+      pluginStorage: { handle } as unknown as PluginStorageHost,
+    });
+    const url = `${server.baseUrl}/plugins/storage`;
+    expect(
+      (await fetchRequest(new Request(url, { method: 'POST' }))).status
+    ).toBe(401);
+    expect(handle).not.toHaveBeenCalled();
+    const response = await fetchRequest(
+      new Request(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${server.token}` },
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(handle).toHaveBeenCalledOnce();
+    server.stop();
+  });
   it('dispatches runtime and reload only after bearer authentication and combines active mounts with compatibility mounts', async () => {
     const handle = vi.fn(async () => Response.json({ plugins: [] }));
     const dispose = vi.fn();

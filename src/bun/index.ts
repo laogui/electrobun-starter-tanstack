@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
-
 import {
   ApplicationMenu,
   BrowserView,
@@ -9,6 +7,7 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
+import type { ContentChangedEvent } from '../../packages/plugin-sdk';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../shared/ai/types';
 import type { ExtensionEnablementFile } from '../shared/extensions/enablement';
 import type {
@@ -25,6 +24,7 @@ import type {
 import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import { runAITask } from './aiTasks';
+import { getAppDataRoot } from './appPaths';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
@@ -115,12 +115,18 @@ import {
   saveNote,
   serializeChecklistItems,
 } from './notes';
+import {
+  pluginWorkspaceId,
+  subscribeContentChanges,
+} from './plugins/contentEvents';
 import { PluginHostController } from './plugins/hostController';
 import {
   PluginManagementService,
   pluginInstallErrorMessage,
 } from './plugins/management';
+import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
+import { T2A4HostController } from './plugins/t2A4Host';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -1241,6 +1247,7 @@ interface CanvasRPC {
     messages: {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
+      pluginContentChanged: ContentChangedEvent;
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;
@@ -1703,16 +1710,27 @@ async function main() {
   localHttpServer = startLocalHttpServer({
     getAIConfig: () => buildAIConfig(),
     getWorkspacePath: () => wsPath,
+    pluginStorage: new PluginStorageHost({
+      appDataRoot: getAppDataRoot(),
+      workspacePath: wsPath,
+      workspaceId: pluginWorkspaceId(wsPath),
+    }),
     pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T1_DIR
       ? new T1HostController(
           pluginManagement,
-          createHash('sha256').update(resolve(wsPath)).digest('hex'),
+          pluginWorkspaceId(wsPath),
           process.env.GHOSTBOARD_PLUGIN_T1_DIR
         )
-      : new PluginHostController(
-          pluginManagement,
-          createHash('sha256').update(resolve(wsPath)).digest('hex')
-        ),
+      : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+        ? new T2A4HostController(
+            pluginManagement,
+            pluginWorkspaceId(wsPath),
+            process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+          )
+        : new PluginHostController(pluginManagement, pluginWorkspaceId(wsPath)),
+  });
+  subscribeContentChanges(wsPath, (event) => {
+    mainRpc?.send?.pluginContentChanged(event);
   });
   const url = await getMainViewUrl();
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';

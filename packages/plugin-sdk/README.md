@@ -1,6 +1,6 @@
 # @ghostboard/sdk 0.1
 
-The T1 SDK for trusted GhostBoard commands and panels. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
+The trusted GhostBoard SDK for commands, panels, and the first T2 storage/event/task services. Plugins execute in the host renderer's JavaScript realm. This package is not a sandbox or a permission system.
 
 ## Runtime and types
 
@@ -121,8 +121,55 @@ This is a **bundler shim target**, not an additional SDK. Only these six fields 
 
 The React author template defaults to bare externals. Its optional `vite.shim.config.ts` is a complete buildable example, selected with `bun run build:shim`: virtual ESM modules read the five namespaces from the global object, preserving each exported value without bundling another React or SDK implementation. Generated adapter namespaces are distinct from the native host namespaces; the exported functions/default objects retain identity. Neither config imports host-private files. A shim build is useful when import-map support is unreliable; it still requires the GhostBoard host and is not a standalone browser app. It exposes no T2 hooks.
 
+## T2 first slice: storage, events and tasks (A4)
+
+These services are available in `PluginContext`; they do not imply completion of the content or custom-card APIs.
+
+```js
+export default definePlugin({
+  async setup(app) {
+    const preferences = await app.storage.app.get('preferences');
+    const lastRun = await app.storage.workspace.get('last-run');
+
+    app.events.on('content.changed', ({ kind, ids, operation }) => {
+      console.log(kind, ids, operation);
+    });
+    app.tasks.schedule('refresh', { every: 60_000 }, async () => {
+      await app.storage.workspace.set('last-run', new Date().toISOString());
+    });
+  },
+});
+```
+
+### Persistent KV
+
+- `app.storage.app` is shared across workspaces for this plugin; `app.storage.workspace` belongs to its fixed activation workspace. Both provide `get(key, options?)`, `set(key, value, options?)`, `delete(key, options?)`, and `list(prefix?, options?)`. `get` returns `undefined` for a missing key, distinct from stored `null`; `list` returns sorted keys, not values. Deleting an absent key succeeds.
+- Values are detached JSON: finite numbers, strings, booleans, null, arrays and plain objects. No undefined, cycles, BigInt, dates, functions, class instances or sparse arrays. Keys contain 1–1024 characters and are dictionary keys, never paths. Limit: 1 MiB per JSON value, 64 nesting levels, 4 MiB per plugin/scope file.
+- The Bun host persists outside installed code: `<app-data>/plugin-data/<plugin-id>/kv.json` and `<workspace>/.ghostboard/plugin-data/<plugin-id>/kv.json`. Disable/reload does not delete KV. The single host process serializes operations per file and commits via atomic rename. Corrupt files are reported, not silently reset or overwritten. This is not a multi-key transaction or cross-process database.
+- All operations bind to `app.signal`; `{ signal }` combines a caller signal with it. The transport has a 10-second deadline and reports `AbortError` on cancellation/timeout. A successful write has reached the host's atomic file-write boundary. Cancellation or a lost response **does not roll back a committed write**; query the key again to settle an uncertain outcome. SDK calls during candidate setup are real reads/writes, not staged or transactional.
+
+### Host events
+
+`app.events.on(name, listener, { signal }?)` returns an owned disposer. Subscriptions start receiving events only after the activation is published. They stop on early disposal, caller abort, disable, successful replacement or workspace exit. Failed candidates never receive events; the old subscriptions remain active. Listener failures become plugin diagnostics and do not interrupt other listeners; payloads are copied for each listener.
+
+| Name | Payload and meaning |
+| --- | --- |
+| `content.changed` | `{ workspaceId, kind: 'note' \| 'widget' \| 'extension', ids, operation: 'upsert' \| 'delete' }`. Bun pushes invalidations after successful persisted note, legacy-widget and extension-instance writes/deletions, including their save-based undo/redo paths. IDs identify content records, not canvas placements. |
+| `selection.changed` | `{ workspaceId, viewId, placementIds }`. Active canvas selection membership or view changed; `viewId` is null while the canvas is unhydrated. IDs are placement IDs, not deduplicated content IDs. |
+| `workspace.activated` | `{ workspaceId }`. Delivered once to subscriptions registered during setup when **this activation** is published, including a successful reload/re-enable. Late subscriptions do not replay it. |
+
+These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect, no external filesystem watcher, and no promise of a full content snapshot/revision in this first slice. Canvas layout, tags and attachments are not content-record events. Content-query APIs and business React hooks remain subsequent T2 work.
+
+### In-process tasks
+
+`app.tasks.schedule(id, { every: milliseconds } | { at: Date }, callback)` returns an owned disposer. IDs must be unique within the activation, intervals must be positive safe-integer milliseconds, and dates must be valid.
+
+- Timers start only after successful publication, never during candidate setup. A failed reload leaves old tasks running; success retires old tasks before starting new ones. An absolute date already past at publication is skipped.
+- Schedules exist only in memory while the plugin and workspace are active. Restart does not recover schedules or replay missed runs; setup must register them again. Intervals skip missed periods without a catch-up burst, and skip ticks while the same callback is still running. An already-running callback cannot be forcibly cancelled; respect `app.signal`.
+- Disable, workspace exit and disposal stop timers. Callback failures appear in diagnostics. Long absolute delays are split to avoid the browser's 32-bit timer overflow. There is no cron syntax, OS background service, or guarantee of precise timing while the app is suspended.
+
 ## Stage boundaries
 
-T1 covers this command/panel lifecycle only. Content, selection subscriptions and `@ghostboard/sdk/react` business hooks are T2; complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. The first T2 slice adds A4 above; general content queries/transactions, content selection snapshots, custom cards and `@ghostboard/sdk/react` business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.

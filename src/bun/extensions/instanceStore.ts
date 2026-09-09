@@ -18,6 +18,7 @@ import {
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import { atomicWrite } from '../atomicWrite';
+import { notifyContentChanged } from '../plugins/contentEvents';
 
 export function instanceRelativePath(instanceId: string): string {
   if (!isInstanceId(instanceId)) {
@@ -168,6 +169,11 @@ export async function saveExtensionInstance(
     instanceRelativePath(validated.record.id)
   );
   await atomicWrite(fullPath, JSON.stringify(payload, null, 2));
+  notifyContentChanged(wsPath, {
+    kind: 'extension',
+    ids: [validated.record.id],
+    operation: 'upsert',
+  });
 }
 
 export async function updateExtensionInstance(
@@ -240,6 +246,11 @@ export async function deleteExtensionInstance(
     return false;
   }
   await unlink(fullPath);
+  notifyContentChanged(wsPath, {
+    kind: 'extension',
+    ids: [instanceId],
+    operation: 'delete',
+  });
   return true;
 }
 

@@ -8,6 +8,7 @@ import {
 import { unfurlLink } from './linkPreview';
 import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
 import type { PluginHostController } from './plugins/hostController';
+import type { PluginStorageHost } from './plugins/storage';
 import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
 
@@ -22,6 +23,7 @@ export interface LocalHttpServerOptions {
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
   pluginRuntime?: PluginHostController;
+  pluginStorage?: PluginStorageHost;
 }
 
 // The renderer webview (http://localhost:5173 in dev, views:// in prod) calls
@@ -198,6 +200,13 @@ export function startLocalHttpServer(
           status: 401,
           headers: CORS_HEADERS,
         });
+      }
+      const storageResponse = await options.pluginStorage?.handle(
+        req,
+        CORS_HEADERS
+      );
+      if (storageResponse) {
+        return storageResponse;
       }
       const runtimeResponse = await options.pluginRuntime?.handle(
         req,

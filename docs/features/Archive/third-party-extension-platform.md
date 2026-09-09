@@ -1,6 +1,6 @@
 # GhostBoard 第三方扩展平台（RFC-2）
 
-> 状态：历史备忘；已由 [公开插件系统整改方案](../In%20Progress/public-plugin-platform-redesign.md) 接替
+> 状态：历史备忘；先由 [公开插件系统整改方案 v2](./public-plugin-platform-redesign.md)（已归档）接替，现行方案为 [高信任插件系统改造方案](../In%20Progress/trusted-plugin-platform.md)
 >
 > 2026-09-07 更新：用户已明确要求公开开发、URL 下载与本地压缩包安装。以下延期条件和旧范围仅保留历史背景，当前实施设计以新方案为准；本说明不表示功能已经实现。
 >

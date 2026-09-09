@@ -38,7 +38,7 @@ describe('title-tools directory probe', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_probe',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const probe = createProbeHost([
       { token: 'sel_a', title: '  Hello   world ', revision: 3 },
@@ -59,6 +59,25 @@ describe('title-tools directory probe', () => {
     ]);
     expect(probe.calls).toEqual([
       { method: 'content.readSelection', args: { fields: ['title'] } },
+      {
+        method: 'content.applyBatch',
+        args: {
+          operationId: expect.any(String),
+          label: '整理资料标题',
+          operations: [
+            {
+              ref: 'sel_a',
+              expectedRevision: 3,
+              set: { title: 'Hello world' },
+            },
+            {
+              ref: 'sel_b',
+              expectedRevision: 1,
+              set: { title: 'Notes' },
+            },
+          ],
+        },
+      },
     ]);
   });
 

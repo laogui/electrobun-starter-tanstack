@@ -392,7 +392,7 @@ if (import.meta.main) {
   const evidence = await runOsViewLifecycleProbe();
   const outputDir = join(
     ROOT,
-    '../../docs/features/In Progress/plugin-container-evidence/2026-09-08'
+    '../../docs/features/Archive/plugin-container-evidence/2026-09-08'
   );
   await mkdir(outputDir, { recursive: true });
   const output = join(outputDir, 'os-webview-lifecycle.json');

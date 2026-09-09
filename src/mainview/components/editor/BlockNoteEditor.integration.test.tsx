@@ -157,4 +157,39 @@ describe('BlockNoteEditor', () => {
     });
     expect(mocks.flushNow).toHaveBeenCalled();
   });
+
+  it('syncs an external title update into the focused editor', async () => {
+    const view = render(
+      <BlockNoteEditor
+        color="#FFFFFF"
+        data={{ color: '#FFFFFF' }}
+        markdown="Body"
+        nodeId="node-1"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Original title"
+      />
+    );
+
+    await screen.findByLabelText('Note title');
+    view.rerender(
+      <BlockNoteEditor
+        color="#FFFFFF"
+        data={{ color: '#FFFFFF' }}
+        markdown="Body"
+        nodeId="node-1"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Updated by plugin"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Note title')).toHaveValue(
+        'Updated by plugin'
+      );
+    });
+  });
 });

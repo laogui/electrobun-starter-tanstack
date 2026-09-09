@@ -22,6 +22,17 @@ export interface ProbeHost {
 export function createProbeHost(selection: ProbeSelectionItem[]): ProbeHost {
   const calls: ProbeHost['calls'] = [];
   return {
+    applyBatch(args) {
+      calls.push({ method: 'content.applyBatch', args });
+      const operationId =
+        typeof args === 'object' &&
+        args !== null &&
+        'operationId' in args &&
+        typeof args.operationId === 'string'
+          ? args.operationId
+          : '';
+      return { operationId, results: [] };
+    },
     calls,
     readSelection() {
       calls.push({

@@ -42,6 +42,7 @@ import {
   rpcDeleteWidget,
   rpcPluginNormalizeNoteTitles,
   rpcPluginRedoNoteTitles,
+  rpcPluginRunCommand,
   rpcPluginUndoNoteTitles,
   rpcSaveManifest,
   rpcSetActiveView,
@@ -680,6 +681,14 @@ export interface CanvasState {
   /** Asset/image card id whose displayName is in inline-rename mode. */
   renamingNodeId: string | null;
   reset: () => void;
+  runEnabledPluginCommand: (
+    pluginId: string,
+    commandId: string,
+    noteIdsOverride?: string[]
+  ) => Promise<
+    | { operationId: string; success: true; titles: Record<string, string> }
+    | { error: string; success: false }
+  >;
   saveSnapshot: () => void;
   searchOpen: boolean;
   selectNodeInDirection: (
@@ -1117,6 +1126,42 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const result = await rpcPluginNormalizeNoteTitles(noteIds);
     if (!result.success) {
       return { success: false };
+    }
+    const map = noteTitleMap(result.titles);
+    if (!map) {
+      return result;
+    }
+    const preNodes = get().nodes;
+    get().saveSnapshot();
+    set((s) => {
+      const projected = projectNoteTitles(s.nodes, s.focusedNode, map);
+      return {
+        ...projected,
+        _titleBatchStack: [
+          ...s._titleBatchStack,
+          {
+            operationId: result.operationId,
+            noteIds,
+            preNodes,
+          },
+        ],
+        _titleBatchRedoStack: [],
+      };
+    });
+    return result;
+  },
+
+  runEnabledPluginCommand: async (pluginId, commandId, noteIdsOverride) => {
+    const noteIds =
+      noteIdsOverride && noteIdsOverride.length > 0
+        ? noteIdsOverride
+        : get().collectSelectedNoteIds();
+    if (noteIds.length === 0) {
+      return { success: false, error: 'A selected note is required.' };
+    }
+    const result = await rpcPluginRunCommand(pluginId, commandId, noteIds);
+    if (!result.success) {
+      return result;
     }
     const map = noteTitleMap(result.titles);
     if (!map) {

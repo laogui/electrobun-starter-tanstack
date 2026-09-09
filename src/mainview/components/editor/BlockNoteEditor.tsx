@@ -102,7 +102,9 @@ export default function BlockNoteEditor({
 }: BlockNoteEditorProps) {
   const initialMarkdown = toText(markdown);
   const noteKey = typeof noteId === 'string' ? noteId : null;
-  const [titleValue, setTitleValue] = useState(() => toText(title));
+  const externalTitle = toText(title);
+  const [titleValue, setTitleValue] = useState(() => externalTitle);
+  const previousExternalTitleRef = useRef(externalTitle);
   const [initial, setInitial] = useState<InitialContent | null>(() =>
     noteKey === null ? createEmptyInitialContent() : null
   );
@@ -114,6 +116,14 @@ export default function BlockNoteEditor({
   const latestBlocksRef = useRef<PartialBlock[] | undefined>(undefined);
   const initialNoteKeyRef = useRef<string | null>(noteKey);
   const onSaveStatusChangeRef = useRef(onSaveStatusChange);
+
+  useEffect(() => {
+    if (externalTitle === previousExternalTitleRef.current) {
+      return;
+    }
+    previousExternalTitleRef.current = externalTitle;
+    setTitleValue(externalTitle);
+  }, [externalTitle]);
 
   if (initialNoteKeyRef.current !== noteKey) {
     initialNoteKeyRef.current = noteKey;

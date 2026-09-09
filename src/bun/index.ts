@@ -16,6 +16,11 @@ import type {
 } from '../shared/extensions/instance';
 import type { ExtensionPresentation } from '../shared/extensions/presentation';
 import { collectExtensionInstanceIds } from '../shared/extensions/refs';
+import type {
+  InstalledPluginSummary,
+  PluginInstallCommitResult,
+  PluginInstallPreparationResult,
+} from '../shared/plugins/management';
 import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import { runAITask } from './aiTasks';
@@ -110,6 +115,11 @@ import {
   serializeChecklistItems,
 } from './notes';
 import { CONTENT_BATCH_MAX_OPERATIONS } from './plugins/contentBatch';
+import {
+  type EnabledPluginCommand,
+  PluginManagementService,
+  pluginInstallErrorMessage,
+} from './plugins/management';
 import {
   redoNormalizeTitlesOnWorkspaceNotes,
   runNormalizeTitlesOnWorkspaceNotes,
@@ -819,6 +829,44 @@ interface CanvasRPC {
         params: { widgetId: string };
         response: { success: boolean };
       };
+      pluginInstallList: {
+        params: Record<string, unknown>;
+        response: { plugins: InstalledPluginSummary[] };
+      };
+      pluginPrepareInstallFromFile: {
+        params: Record<string, unknown>;
+        response: PluginInstallPreparationResult;
+      };
+      pluginPrepareInstallFromUrl: {
+        params: { url: string };
+        response: PluginInstallPreparationResult;
+      };
+      pluginCommitInstall: {
+        params: { transactionId: string };
+        response: PluginInstallCommitResult;
+      };
+      pluginCancelInstall: {
+        params: { transactionId: string };
+        response: { success: boolean };
+      };
+      pluginCommandEnable: {
+        params: { digest: string; pluginId: string };
+        response: PluginInstallCommitResult;
+      };
+      pluginCommandDisable: {
+        params: { digest: string; pluginId: string };
+        response: PluginInstallCommitResult;
+      };
+      pluginRunCommand: {
+        params: { commandId: string; noteIds: string[]; pluginId: string };
+        response:
+          | {
+              operationId: string;
+              success: true;
+              titles: Record<string, string>;
+            }
+          | { error: string; success: false };
+      };
       extensionEnablementList: {
         params: Record<string, unknown>;
         response: {
@@ -1228,6 +1276,7 @@ interface CanvasRPC {
       canvasUndo: Record<never, unknown>;
       openSearch: Record<never, unknown>;
       normalizeNoteTitles: Record<never, unknown>;
+      pluginCommandRequested: { commandId: string; pluginId: string };
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;
       viewsUpdated: Record<never, unknown>;
@@ -1611,12 +1660,34 @@ async function switchWorkspaceImpl(): Promise<SwitchWorkspaceResponse> {
   return { success: true, path: target };
 }
 
-async function main() {
-  // NOTE on accelerators: Electrobun only auto-attaches standard macOS
-  // shortcuts for the text-editing roles (undo, redo, cut, copy, paste,
-  // pasteAndMatchStyle, delete, selectAll). All other roles — including quit,
-  // close, minimize, hide, hideOthers — require an explicit `accelerator`,
-  // otherwise pressing the system shortcut does nothing.
+function pluginCommandMenuAction(command: EnabledPluginCommand): string {
+  return `pluginCommand:${command.pluginId}:${command.commandId}`;
+}
+
+function parsePluginCommandMenuAction(
+  action: string | undefined
+): { commandId: string; pluginId: string } | undefined {
+  if (!action?.startsWith('pluginCommand:')) {
+    return;
+  }
+  const [pluginId, commandId, ...unexpected] = action
+    .slice('pluginCommand:'.length)
+    .split(':');
+  if (!(pluginId && commandId && unexpected.length === 0)) {
+    return;
+  }
+  return { commandId, pluginId };
+}
+
+function setApplicationMenu(pluginCommands: EnabledPluginCommand[]) {
+  const pluginsSubmenu =
+    pluginCommands.length > 0
+      ? pluginCommands.map((command) => ({
+          action: pluginCommandMenuAction(command),
+          label: `${command.pluginName}: ${command.commandName}`,
+        }))
+      : [{ enabled: false, label: 'No enabled plugin commands' }];
+
   ApplicationMenu.setApplicationMenu([
     {
       label: 'GhostBoard',
@@ -1656,6 +1727,7 @@ async function main() {
         { role: 'selectAll' },
       ],
     },
+    { label: 'Plugins', submenu: pluginsSubmenu },
     {
       label: 'View',
       submenu: [
@@ -1674,6 +1746,15 @@ async function main() {
       ],
     },
   ]);
+}
+
+async function main() {
+  // NOTE on accelerators: Electrobun only auto-attaches standard macOS
+  // shortcuts for the text-editing roles (undo, redo, cut, copy, paste,
+  // pasteAndMatchStyle, delete, selectAll). All other roles — including quit,
+  // close, minimize, hide, hideOthers — require an explicit `accelerator`,
+  // otherwise pressing the system shortcut does nothing.
+  setApplicationMenu([]);
 
   ApplicationMenu.on('application-menu-clicked', (event: unknown) => {
     const e = event as { data?: { action?: string } };
@@ -1689,6 +1770,10 @@ async function main() {
     if (e.data?.action === 'canvasRedo') {
       mainRpc?.send?.canvasRedo({});
     }
+    const pluginCommand = parsePluginCommandMenuAction(e.data?.action);
+    if (pluginCommand) {
+      mainRpc?.send?.pluginCommandRequested(pluginCommand);
+    }
   });
 
   // Resolve workspace path from user prefs first; fall back to the default
@@ -1700,6 +1785,25 @@ async function main() {
       : undefined;
   const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
+  const pluginManagement = new PluginManagementService(wsPath);
+  const refreshPluginCommandMenu = async () => {
+    try {
+      setApplicationMenu(await pluginManagement.listEnabledCommands());
+    } catch (error) {
+      console.warn('[plugins] Failed to refresh command menu:', error);
+      setApplicationMenu([]);
+    }
+  };
+  // Recovery and menu discovery may touch the workspace package store. Keep
+  // them asynchronous so a slow or unavailable package directory never delays
+  // main-canvas RPC registration or first paint. The menu remains empty until
+  // the recovered registry has been inspected.
+  pluginManagement
+    .recover()
+    .catch((error) => {
+      console.warn('[plugins] Failed to recover package transactions:', error);
+    })
+    .then(refreshPluginCommandMenu);
   const [, , aiCredentials] = await Promise.all([
     migrateLegacyTagsFromNotes(wsPath),
     loadSettings(wsPath),
@@ -2315,6 +2419,119 @@ async function main() {
           } catch (error) {
             console.error('[widgets] deleteWidget failed', error);
             return { success: false };
+          }
+        },
+
+        pluginInstallList: async () => ({
+          plugins: await pluginManagement.list(),
+        }),
+
+        pluginPrepareInstallFromFile: async () => {
+          const selected = await Utils.openFileDialog({
+            allowedFileTypes: '*',
+            allowsMultipleSelection: false,
+            canChooseDirectory: false,
+            canChooseFiles: true,
+            startingFolder: '~/',
+          });
+          const filePath = selected.find(Boolean);
+          if (!filePath) {
+            return { success: false, cancelled: true };
+          }
+          try {
+            return {
+              success: true,
+              preview: await pluginManagement.prepareFromFile(filePath),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginPrepareInstallFromUrl: async ({ url }) => {
+          try {
+            return {
+              success: true,
+              preview: await pluginManagement.prepareFromUrl(url),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginCommitInstall: async ({ transactionId }) => {
+          try {
+            return {
+              success: true,
+              plugin: await pluginManagement.commit(transactionId),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginCancelInstall: async ({ transactionId }) => {
+          try {
+            await pluginManagement.cancel(transactionId);
+            return { success: true };
+          } catch (error) {
+            console.warn('[plugins] Failed to cancel install:', error);
+            return { success: false };
+          }
+        },
+
+        pluginCommandEnable: async ({ digest, pluginId }) => {
+          try {
+            const plugin = await pluginManagement.enableCommands({
+              digest,
+              pluginId,
+            });
+            await refreshPluginCommandMenu();
+            return { success: true, plugin };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginCommandDisable: async ({ digest, pluginId }) => {
+          try {
+            const plugin = await pluginManagement.disableCommands({
+              digest,
+              pluginId,
+            });
+            await refreshPluginCommandMenu();
+            return { success: true, plugin };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginRunCommand: async ({ commandId, noteIds, pluginId }) => {
+          const parsed = parsePluginNoteIds(noteIds);
+          if (
+            !(
+              parsed &&
+              typeof commandId === 'string' &&
+              commandId.length > 0 &&
+              typeof pluginId === 'string' &&
+              pluginId.length > 0
+            )
+          ) {
+            return { success: false, error: 'A selected note is required.' };
+          }
+          try {
+            const result = await pluginManagement.runEnabledCommand({
+              commandId,
+              noteIds: parsed,
+              pluginId,
+            });
+            return { success: true, ...result };
+          } catch (error) {
+            console.warn('[plugins] Failed to run command:', error);
+            return {
+              success: false,
+              error: pluginInstallErrorMessage(error),
+            };
           }
         },
 

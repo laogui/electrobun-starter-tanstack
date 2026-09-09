@@ -3,7 +3,10 @@ import {
   createPluginSession,
 } from '../../shared/plugins/session';
 import { ContentBatchStore } from './contentBatch';
-import { loadPluginDirectory } from './loadDirectory';
+import {
+  type LoadedPluginDirectory,
+  loadPluginDirectory,
+} from './loadDirectory';
 import { runPluginCommand } from './logicRuntime';
 import { createContentBatchProbeHost } from './probeHost';
 
@@ -21,21 +24,42 @@ async function titlesFor(
   return titles;
 }
 
-export async function runNormalizeTitlesOnWorkspaceNotes(input: {
+export async function runPluginCommandOnWorkspaceNotes(input: {
+  commandId: string;
+  grantedPermissions: Iterable<string>;
+  loaded?: LoadedPluginDirectory;
   noteIds: string[];
-  pluginDirectory: string;
+  pluginDirectory?: string;
   workspacePath: string;
 }): Promise<{
   operationId: string;
   titles: Record<string, string>;
 }> {
-  const loaded = await loadPluginDirectory(input.pluginDirectory);
+  const loaded =
+    input.loaded ??
+    (input.pluginDirectory
+      ? await loadPluginDirectory(input.pluginDirectory)
+      : undefined);
+  if (!loaded) {
+    throw new Error('Plugin command package is unavailable.');
+  }
+  const command = loaded.manifest.contributes.commands.find(
+    (entry) => entry.id === input.commandId
+  );
+  if (!command) {
+    throw new Error(`Unknown plugin command: ${input.commandId}`);
+  }
+  const handlerPath = command.handler.split('#')[0] ?? '';
+  const source = loaded.sources[handlerPath];
+  if (source === undefined) {
+    throw new Error(`Missing plugin command source: ${handlerPath}`);
+  }
   const store = await ContentBatchStore.openNotes(input.workspacePath);
   const session = createPluginSession({
     manifest: loaded.manifest,
     workspaceId: input.workspacePath,
     context: createOperationContext(),
-    grantedPermissions: ['content.selection.read', 'content.selection.write'],
+    grantedPermissions: input.grantedPermissions,
   });
   const operationId =
     session.context.kind === 'operation' ? session.context.operationId : '';
@@ -45,14 +69,29 @@ export async function runNormalizeTitlesOnWorkspaceNotes(input: {
   });
   await runPluginCommand({
     session,
-    commandId: 'normalize-titles',
-    source: loaded.sources['main.js'] ?? '',
+    commandId: input.commandId,
+    source,
     probe: createContentBatchProbeHost(store, operationId, input.workspacePath),
   });
   return {
     operationId,
     titles: await titlesFor(store, input.noteIds),
   };
+}
+
+export async function runNormalizeTitlesOnWorkspaceNotes(input: {
+  noteIds: string[];
+  pluginDirectory: string;
+  workspacePath: string;
+}): Promise<{
+  operationId: string;
+  titles: Record<string, string>;
+}> {
+  return await runPluginCommandOnWorkspaceNotes({
+    ...input,
+    commandId: 'normalize-titles',
+    grantedPermissions: ['content.selection.read', 'content.selection.write'],
+  });
 }
 
 export async function undoNormalizeTitlesOnWorkspaceNotes(input: {

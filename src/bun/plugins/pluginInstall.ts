@@ -7,7 +7,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import {
   generatePluginInstallId,
@@ -535,6 +535,41 @@ export class PluginInstallStore {
         transactionId
       );
       if (pending) {
+        if (
+          pending.digest === digest &&
+          pending.pluginRoot &&
+          pending.version === loaded.manifest.version
+        ) {
+          const existingStaging = this.stagingDir(pending.transactionId);
+          const existingDirectory = resolve(
+            existingStaging,
+            pending.pluginRoot
+          );
+          const existingRelative = relative(existingStaging, existingDirectory);
+          if (
+            existingRelative &&
+            !existingRelative.startsWith('..') &&
+            !isAbsolute(existingRelative)
+          ) {
+            try {
+              const existing = await loadPluginDirectory(existingDirectory);
+              await this.removeStaging(transactionId);
+              await this.writeJournal({ ...journal, stage: 'cancelled' });
+              return {
+                transactionId: pending.transactionId,
+                pluginId: existing.manifest.id,
+                version: existing.manifest.version,
+                digest,
+                directory: existing.directory,
+                manifest: existing.manifest,
+                journal: pending,
+              };
+            } catch {
+              // Fall through to the normal pending-transaction error when
+              // the existing staged package is no longer readable.
+            }
+          }
+        }
         throw new PluginInstallError(
           'pending-transaction',
           `plugin ${loaded.manifest.id} already has a pending install ${pending.transactionId}`

@@ -21,7 +21,7 @@ import { createContentBatchProbeHost } from './probeHost';
 
 const SAMPLES_ROOT = requireGhostboardPluginSamplesRoot();
 const TITLE_TOOLS_DIR = join(SAMPLES_ROOT, 'title-tools');
-const NOTES_PANEL_DIR = join(SAMPLES_ROOT, 'notes-panel');
+const NOTES_PANEL_DIR = join(SAMPLES_ROOT, 'probe-panel');
 const HOST_MARKERS = [
   'instanceId',
   'useCanvasStore',
@@ -33,7 +33,7 @@ const HOST_MARKERS = [
   'src/mainview',
 ];
 
-describe('out-of-repo plugin samples', () => {
+describe('portable plugin samples', () => {
   it('loads the command package without host imports or instance identity', async () => {
     const loaded = await loadPluginDirectory(TITLE_TOOLS_DIR);
     expect(loaded.directory.startsWith(SAMPLES_ROOT)).toBe(true);
@@ -47,7 +47,7 @@ describe('out-of-repo plugin samples', () => {
     }
   });
 
-  it('runs normalize-titles from the out-of-repo command package', async () => {
+  it('runs normalize-titles from the resolved command package', async () => {
     const loaded = await loadPluginDirectory(TITLE_TOOLS_DIR);
     const store = new ContentBatchStore();
     store.seed([
@@ -84,7 +84,7 @@ describe('out-of-repo plugin samples', () => {
 
   it('loads the panel package on a host-issued view session without instanceId', async () => {
     const loaded = await loadPluginDirectory(NOTES_PANEL_DIR);
-    expect(loaded.manifest.id).toBe('community.example.notes-panel');
+    expect(loaded.manifest.id).toBe('community.example.probe-panel');
     expect(loaded.manifest.contributes.panels).toHaveLength(1);
     expect(loaded.manifest.contributes.commands).toEqual([]);
     const html = loaded.sources['panel.html'] ?? '';
@@ -96,7 +96,7 @@ describe('out-of-repo plugin samples', () => {
     const opened = openPluginPanel({
       manifest: loaded.manifest,
       workspaceId: 'ws_out_of_repo',
-      viewId: 'notes',
+      viewId: 'probe',
     });
     expect(opened.session.context.kind).toBe('view');
     if (opened.session.context.kind === 'view') {
@@ -110,7 +110,7 @@ describe('out-of-repo plugin samples', () => {
         ? opened.session.context.viewSessionId
         : '';
     const reply = communicateWithPanel(opened, { ping: true });
-    expect(reply.identity.pluginId).toBe('community.example.notes-panel');
+    expect(reply.identity.pluginId).toBe('community.example.probe-panel');
     expect(reply.context.kind).toBe('view');
 
     const reopened = reopenPluginPanel(opened);

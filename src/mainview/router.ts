@@ -11,22 +11,23 @@ import { queryClient } from '@/lib/queryClient';
 
 import { routeTree } from './routeTree.gen';
 
-const isHttpProtocol = ['http:', 'https:'].includes(
-  globalThis.location.protocol
-);
+export function createAppRouter(protocol = globalThis.location.protocol) {
+  const isHttpProtocol = ['http:', 'https:'].includes(protocol);
+  return createTanStackRouter({
+    routeTree,
+    history: isHttpProtocol ? undefined : createHashHistory(),
+    scrollRestoration: true,
+    defaultPreloadStaleTime: 0,
+    context: { queryClient },
+    defaultPendingComponent: () => createElement(Loader),
+    defaultErrorComponent: ErrorBoundaryFallback,
+    defaultNotFoundComponent: () => createElement('div', null, 'Not Found'),
+    Wrap: ({ children }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children),
+  });
+}
 
-export const router = createTanStackRouter({
-  routeTree,
-  history: isHttpProtocol ? undefined : createHashHistory(),
-  scrollRestoration: true,
-  defaultPreloadStaleTime: 0,
-  context: { queryClient },
-  defaultPendingComponent: () => createElement(Loader),
-  defaultErrorComponent: ErrorBoundaryFallback,
-  defaultNotFoundComponent: () => createElement('div', null, 'Not Found'),
-  Wrap: ({ children }) =>
-    createElement(QueryClientProvider, { client: queryClient }, children),
-});
+export const router = createAppRouter();
 
 declare module '@tanstack/react-router' {
   interface Register {

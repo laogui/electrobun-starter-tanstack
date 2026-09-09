@@ -5,6 +5,7 @@ export async function osWebViewPage(config: {
   candidate: string;
   fileUrl: string;
   origin: string;
+  stunUrl?: string;
   wsUrl: string;
 }) {
   const results: Record<string, unknown> = {};
@@ -21,6 +22,7 @@ export async function osWebViewPage(config: {
     __electrobun?: unknown;
     __electrobunBunBridge?: BridgeTarget;
     __electrobunEventBridge?: BridgeTarget;
+    __RESOURCE_MODULE_MARKER__?: string;
   };
   const knownHandlerNames = [
     'bunBridge',
@@ -108,6 +110,16 @@ export async function osWebViewPage(config: {
 
   results.bridgeDetails = inspectBridges();
   results.messageHandlerNames = listHandlerNames();
+  results.origin = location.origin;
+  results.protocol = location.protocol;
+  results.relativeModule =
+    pageWindow.__RESOURCE_MODULE_MARKER__ === 'relative-module-loaded';
+  const resourceProbe = document.getElementById('resource-scheme-probe');
+  results.relativeStyle =
+    resourceProbe !== null &&
+    getComputedStyle(resourceProbe)
+      .getPropertyValue('--ghostboard-resource-style')
+      .trim() === 'loaded';
   const channels = sendCanary();
   results.canaryChannels = channels;
   results.canarySent = channels.some((name) => !name.endsWith(':threw'));
@@ -150,6 +162,23 @@ export async function osWebViewPage(config: {
     });
   } catch {
     results.websocket = false;
+  }
+  try {
+    const image = new Image();
+    image.src = `${config.origin}/forbidden/${config.candidate}-image`;
+    results.imageSubresource = await new Promise<string>((resolve) => {
+      const timer = setTimeout(() => resolve('timeout'), 1000);
+      image.addEventListener('load', () => {
+        clearTimeout(timer);
+        resolve('loaded');
+      });
+      image.addEventListener('error', () => {
+        clearTimeout(timer);
+        resolve('error');
+      });
+    });
+  } catch {
+    results.imageSubresource = 'threw';
   }
   try {
     const worker = new Worker(
@@ -203,5 +232,54 @@ export async function osWebViewPage(config: {
   } catch {
     results.popup = false;
   }
+  try {
+    const target = document.createElement('iframe');
+    target.name = `form-target-${config.candidate}`;
+    target.hidden = true;
+    document.body.append(target);
+    const form = document.createElement('form');
+    form.action = `${config.origin}/forbidden/${config.candidate}-form`;
+    form.method = 'post';
+    form.target = target.name;
+    document.body.append(form);
+    form.submit();
+    results.formSubmissionAttempted = true;
+  } catch {
+    results.formSubmissionAttempted = false;
+  }
+  try {
+    results.beaconAccepted = navigator.sendBeacon(
+      `${config.origin}/forbidden/${config.candidate}-beacon`,
+      'probe-only-beacon'
+    );
+  } catch {
+    results.beaconAccepted = false;
+  }
+  try {
+    results.webrtcAvailable = typeof RTCPeerConnection === 'function';
+    if (results.webrtcAvailable) {
+      const peer = new RTCPeerConnection({
+        iceServers: config.stunUrl ? [{ urls: config.stunUrl }] : [],
+      });
+      results.webrtcStunConfigured = Boolean(config.stunUrl);
+      let candidateGathered = false;
+      peer.addEventListener('icecandidate', (event) => {
+        candidateGathered ||= event.candidate !== null;
+      });
+      const channel = peer.createDataChannel('probe-only');
+      await peer.setLocalDescription(await peer.createOffer());
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      channel.close();
+      peer.close();
+      results.webrtcCandidateGathered = candidateGathered;
+    }
+  } catch {
+    results.webrtcStunConfigured = false;
+    results.webrtcCandidateGathered = false;
+  }
+  // A beacon or targeted form navigation may be delivered just after its API
+  // call returns. Keep the harmless probe page alive long enough for the
+  // loopback server's hit list to be the source of truth.
+  await new Promise((resolve) => setTimeout(resolve, 150));
   publish();
 }

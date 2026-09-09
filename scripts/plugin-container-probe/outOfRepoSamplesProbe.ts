@@ -109,7 +109,7 @@ if (import.meta.main) {
   const evidence = await runOutOfRepoSamplesProbe();
   const outputDir = join(
     dirname(fileURLToPath(import.meta.url)),
-    '../../docs/features/In Progress/plugin-container-evidence/2026-09-08'
+    '../../docs/features/Archive/plugin-container-evidence/2026-09-08'
   );
   await mkdir(outputDir, { recursive: true });
   const output = join(outputDir, 'out-of-repo-samples.json');

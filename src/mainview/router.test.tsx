@@ -5,12 +5,16 @@ import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-const createHashHistoryMock = vi.fn(() => ({ type: 'hash-history' }));
-const createRouterMock = vi.fn((options) => options);
+import { createAppRouter, router } from './router';
+
+const routerMocks = vi.hoisted(() => ({
+  createHashHistory: vi.fn(() => ({ type: 'hash-history' })),
+  createRouter: vi.fn((options) => options),
+}));
 
 vi.mock('@tanstack/react-router', () => ({
-  createHashHistory: createHashHistoryMock,
-  createRouter: createRouterMock,
+  createHashHistory: routerMocks.createHashHistory,
+  createRouter: routerMocks.createRouter,
 }));
 
 vi.mock('@/components/layout/ErrorBoundaryFallback', () => ({
@@ -25,31 +29,31 @@ vi.mock('./routeTree.gen', () => ({
   routeTree: { id: 'route-tree' },
 }));
 
+interface RouterPresentation {
+  defaultErrorComponent: React.ComponentType;
+  defaultNotFoundComponent: React.ComponentType;
+  defaultPendingComponent: React.ComponentType;
+  history?: unknown;
+  Wrap: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+function presentRouter(value: unknown): RouterPresentation {
+  return value as RouterPresentation;
+}
+
 describe('router', () => {
   it('uses hash history outside http(s) protocols', async () => {
-    vi.stubGlobal('location', { protocol: 'tauri:' });
-    vi.resetModules();
+    routerMocks.createHashHistory.mockClear();
+    const nonHttpRouter = presentRouter(createAppRouter('tauri:'));
 
-    const module = await import('./router');
-
-    expect(createHashHistoryMock).toHaveBeenCalledTimes(1);
-    expect(module.router.history).toEqual({ type: 'hash-history' });
+    expect(routerMocks.createHashHistory).toHaveBeenCalledTimes(1);
+    expect(nonHttpRouter.history).toEqual({ type: 'hash-history' });
   });
 
   it('omits hash history for http protocol and wraps children in QueryClientProvider', async () => {
-    vi.stubGlobal('location', { protocol: 'http:' });
-    vi.resetModules();
-
-    const module = (await import('./router')) as unknown as {
-      router: {
-        Wrap: React.ComponentType<{ children: React.ReactNode }>;
-        defaultPendingComponent: React.ComponentType;
-        defaultNotFoundComponent: React.ComponentType;
-        defaultErrorComponent: React.ComponentType;
-        history?: unknown;
-      };
-    };
-    const Wrap = module.router.Wrap;
+    routerMocks.createHashHistory.mockClear();
+    const httpRouter = presentRouter(createAppRouter('http:'));
+    const Wrap = httpRouter.Wrap;
 
     render(
       <Wrap>
@@ -57,25 +61,16 @@ describe('router', () => {
       </Wrap>
     );
 
-    expect(createHashHistoryMock).not.toHaveBeenCalled();
-    expect(module.router.history).toBeUndefined();
+    expect(routerMocks.createHashHistory).not.toHaveBeenCalled();
+    expect(httpRouter.history).toBeUndefined();
     expect(screen.getByText('Child content')).toBeInTheDocument();
     expect(QueryClientProvider).toBeDefined();
   });
 
   it('exposes default pending, error, and not found components', async () => {
-    vi.stubGlobal('location', { protocol: 'http:' });
-    vi.resetModules();
-
-    const module = (await import('./router')) as unknown as {
-      router: {
-        defaultPendingComponent: React.ComponentType;
-        defaultNotFoundComponent: React.ComponentType;
-        defaultErrorComponent: React.ComponentType;
-      };
-    };
-    const Pending = module.router.defaultPendingComponent;
-    const NotFound = module.router.defaultNotFoundComponent;
+    const rootRouter = presentRouter(router);
+    const Pending = rootRouter.defaultPendingComponent;
+    const NotFound = rootRouter.defaultNotFoundComponent;
 
     render(
       <>
@@ -86,6 +81,6 @@ describe('router', () => {
 
     expect(screen.getByText('Loading route...')).toBeInTheDocument();
     expect(screen.getByText('Not Found')).toBeInTheDocument();
-    expect(module.router.defaultErrorComponent).toBeDefined();
+    expect(rootRouter.defaultErrorComponent).toBeDefined();
   });
 });

@@ -38,7 +38,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_invalid',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const probe = createProbeHost([]);
     await expect(
@@ -56,7 +56,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_invalid',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     await expect(
       runPluginCommand({
@@ -90,7 +90,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_iso',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const ok = await runPluginCommand({
       session: okSession,
@@ -105,7 +105,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_iso',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const hangStarted = Date.now();
     await expect(
@@ -123,7 +123,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_iso',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const recovered = await runPluginCommand({
       session: afterTimeout,
@@ -138,7 +138,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_iso',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     await expect(
       runPluginCommand({
@@ -155,7 +155,7 @@ describe('plugin isolation', () => {
       manifest: loaded.manifest,
       workspaceId: 'ws_iso',
       context: createOperationContext(),
-      grantedPermissions: ['content.selection.read'],
+      grantedPermissions: ['content.selection.read', 'content.selection.write'],
     });
     const stillWorks = await runPluginCommand({
       session: afterCrash,

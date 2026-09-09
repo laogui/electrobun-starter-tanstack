@@ -46,7 +46,7 @@ Run the macOS-only OS-level WKWebView helper from the repository root:
 bun scripts/plugin-container-probe/osViewProbe.ts
 ```
 
-It compiles a Swift helper that is not linked to Electrobun, never registers `WKScriptMessageHandler`s, and compares unsandboxed, App Sandbox with `network.client`, App Sandbox without `network.client`, and a `WKContentRuleList` block-all variant. Ground truth is the helper process identity, the page-visible bridge objects, and loopback `networkHits`. A pass on the content-rule variant is host WebKit policy, not operating-system network denial. Completion means the experiment finished, not that GhostBoard may load untrusted views.
+It compiles a Swift helper that is not linked to Electrobun, never registers `WKScriptMessageHandler`s, and compares unsandboxed, App Sandbox with `network.client`, App Sandbox without `network.client`, and a `WKContentRuleList` HTTP(S)/WS(S) rule. It additionally checks a host-owned in-memory `ghostboard-plugin:` URL scheme, whose relative CSS and ES modules must load without exposing a filesystem URL. Ground truth is the helper process identity, page-visible bridge objects, custom-resource result, loopback `networkHits`, and a response-free loopback UDP STUN sink. The blocklist candidate sent two WebRTC/STUN UDP packets to that sink despite the HTTP(S)/WS(S) URL rule, so its network verdict is **failed** rather than inconclusive. Even a URL-rule pass is host WebKit policy, not operating-system network denial. Completion means the experiment finished, not that GhostBoard may load untrusted views.
 
 Run the destroy/rebuild and memory canary:
 
@@ -64,4 +64,4 @@ bun scripts/plugin-container-probe/outOfRepoSamplesProbe.ts
 
 It loads `../ghostboard-plugin-samples` (or `GHOSTBOARD_PLUGIN_SAMPLES`), runs the title-tools command in QuickJS, and opens/reopens the notes panel on a host-issued view session. A pass means the packages do not import the host and do not invent `instanceId`. It does not mean public install is open.
 
-Not covered: IME/focus/clipboard manual checks, per-plugin file/network policy, infinite UI loops, Windows/Linux, or full GhostBoard persistence. The independent launcher canary covers process identity and one window lifecycle only; switching to CEF does not by itself prove a safe plugin container. See the recorded experiment under `docs/features/In Progress/` before reusing a candidate.
+Not covered: IME/focus/clipboard manual checks, per-plugin file/network policy, infinite UI loops, Windows/Linux, or full GhostBoard persistence. The independent launcher canary covers process identity and one window lifecycle only; switching to CEF does not by itself prove a safe plugin container. See the archived experiment under `docs/features/Archive/` before reusing a candidate. These probes served the abandoned sandbox model and are scheduled for removal with the old runtime.

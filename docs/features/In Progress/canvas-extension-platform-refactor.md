@@ -10,7 +10,7 @@
 >
 > 适用范围：`src/mainview/`、`src/bun/`、`src/shared/`、画布/工作区数据格式
 >
-> 后续项目：第三方扩展平台见 [公开插件系统整改方案](./public-plugin-platform-redesign.md)。2026-09-07 起，以新方案替代本文 §28 和旧 RFC-2 的“等待外部需求后立项”前提；本文的内置扩展迁移历史与验收记录保留。外部协议兼容性需要按新方案验证，不因本文的预留声明自动视为已达成。
+> 后续项目：第三方扩展平台见 [高信任插件系统改造方案](./trusted-plugin-platform.md)。2026-09-07 起以公开插件方案替代本文 §28 和旧 RFC-2 的“等待外部需求后立项”前提；2026-09-09 起插件模型改为高信任、同 realm 运行，本文为“RFC-2 沙箱化”预留的可序列化 Host API 约束不再是必要条件，但仍是良好的内部解耦实践。本文的内置扩展迁移历史与验收记录保留。
 
 ## 0. 修订记录
 
@@ -1131,4 +1131,4 @@ RFC-2（第三方扩展平台）依赖本 RFC 完成，且**只有在出现真�
 - Availability 的 `unknown` 状态与 RFC-2 的 `missing` / `incompatible` 语义兼容。
 - 已落地的上下文菜单机制保持声明式：宿主按 `openBehavior` / `interactions` 组装通用动作，类型通过 `menuActions` 贡献受信任 handler；handler 依赖 Host API 与实例通道而非 Surface 直连宿主 store。第三方运行时仍需在公开插件方案中把 label/icon/handler 转成可传输声明并实施权限校验，不能把内置 TS 函数对象直接当作公开协议。
 
-RFC-2 需要独立解决、本 RFC 刻意不碰的问题：沙箱容器选型（WKWebView 下 iframe 隔离）、**Snapshot 截图与隔离的矛盾**（宿主无法截取 cross-origin iframe，需原生截图桥接或扩展自报位图协议）、权限确认 UX、签名与分发。详见 [公开插件系统整改方案](./public-plugin-platform-redesign.md)；旧 RFC-2 仅保留历史背景。
+RFC-2 需要独立解决、本 RFC 刻意不碰的问题：沙箱容器选型、**Snapshot 截图与隔离的矛盾**、权限确认 UX、签名与分发。其中沙箱容器与细粒度权限已于 2026-09-09 被高信任模型放弃（同 realm 运行后截图矛盾也不再存在），签名与分发由 [高信任插件系统改造方案](./trusted-plugin-platform.md) §8 处理；旧 RFC-2 与 v2 方案见 `../Archive/`，仅保留历史背景。

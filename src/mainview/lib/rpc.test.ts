@@ -34,6 +34,14 @@ const request = {
   createWidget: vi.fn(),
   deleteView: vi.fn(),
   deleteWidget: vi.fn(),
+  pluginInstallList: vi.fn(),
+  pluginPrepareInstallFromFile: vi.fn(),
+  pluginPrepareInstallFromUrl: vi.fn(),
+  pluginCommitInstall: vi.fn(),
+  pluginCancelInstall: vi.fn(),
+  pluginCommandEnable: vi.fn(),
+  pluginCommandDisable: vi.fn(),
+  pluginRunCommand: vi.fn(),
   renameView: vi.fn(),
   cloneWidget: vi.fn(),
   saveWidget: vi.fn(),
@@ -207,6 +215,45 @@ describe('rpc', () => {
     await expect(rpc.rpcDeleteWidget('widget_1')).resolves.toEqual({
       success: false,
     });
+    await expect(rpc.rpcListPluginPackages()).resolves.toEqual({
+      available: false,
+      plugins: [],
+    });
+    await expect(rpc.rpcPreparePluginInstallFromFile()).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(
+      rpc.rpcPreparePluginInstallFromUrl('https://example.com/plugin.zip')
+    ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(rpc.rpcCommitPluginInstall('plginst_1')).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(rpc.rpcCancelPluginInstall('plginst_1')).resolves.toEqual({
+      success: false,
+    });
+    await expect(
+      rpc.rpcEnablePluginCommands({ digest: 'a'.repeat(64), pluginId: 'x' })
+    ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(
+      rpc.rpcDisablePluginCommands({ digest: 'a'.repeat(64), pluginId: 'x' })
+    ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(
+      rpc.rpcPluginRunCommand('x', 'command', ['note_a'])
+    ).resolves.toEqual({
+      error: 'Plugin commands are unavailable.',
+      success: false,
+    });
     await expect(rpc.isRpcAvailable()).resolves.toBe(false);
   });
 
@@ -247,6 +294,7 @@ describe('rpc', () => {
     vi.stubGlobal('__electrobunWebviewId', 'webview-1');
     const rpc = await loadModule();
     request.scanUnlinkedNotes.mockResolvedValue({ entries: [] });
+    request.pluginInstallList.mockResolvedValue({ plugins: [] });
 
     await rpc.loadCanvas('focus');
     await rpc.rpcSaveManifest('focus', [{ id: 'n1' }], [{ id: 'e1' }]);
@@ -313,6 +361,24 @@ describe('rpc', () => {
     await rpc.rpcCloneWidget('widget_1');
     await rpc.rpcSaveWidget(widgetRecord);
     await rpc.rpcDeleteWidget('widget_1');
+    await rpc.rpcListPluginPackages();
+    await rpc.rpcPreparePluginInstallFromFile();
+    await rpc.rpcPreparePluginInstallFromUrl('https://example.com/plugin.zip');
+    await rpc.rpcCommitPluginInstall('plginst_1');
+    await rpc.rpcCancelPluginInstall('plginst_1');
+    await rpc.rpcEnablePluginCommands({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    await rpc.rpcDisablePluginCommands({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    await rpc.rpcPluginRunCommand(
+      'community.example.title-tools',
+      'normalize-titles',
+      ['note_a']
+    );
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -419,6 +485,30 @@ describe('rpc', () => {
     expect(request.saveWidget).toHaveBeenCalledWith({ widget: widgetRecord });
     expect(request.deleteWidget).toHaveBeenCalledWith({
       widgetId: 'widget_1',
+    });
+    expect(request.pluginInstallList).toHaveBeenCalledWith({});
+    expect(request.pluginPrepareInstallFromFile).toHaveBeenCalledWith({});
+    expect(request.pluginPrepareInstallFromUrl).toHaveBeenCalledWith({
+      url: 'https://example.com/plugin.zip',
+    });
+    expect(request.pluginCommitInstall).toHaveBeenCalledWith({
+      transactionId: 'plginst_1',
+    });
+    expect(request.pluginCancelInstall).toHaveBeenCalledWith({
+      transactionId: 'plginst_1',
+    });
+    expect(request.pluginCommandEnable).toHaveBeenCalledWith({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    expect(request.pluginCommandDisable).toHaveBeenCalledWith({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    expect(request.pluginRunCommand).toHaveBeenCalledWith({
+      commandId: 'normalize-titles',
+      noteIds: ['note_a'],
+      pluginId: 'community.example.title-tools',
     });
   });
 

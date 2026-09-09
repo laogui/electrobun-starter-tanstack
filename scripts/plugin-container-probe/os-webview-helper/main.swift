@@ -17,6 +17,57 @@ struct HelperConfig: Decodable {
   var allocateBytes: Int?
   var blockNetwork: Bool?
   var mode: String?
+  var resourceEntryJs: String?
+  var resourceIndexHtml: String?
+  var resourceModuleJs: String?
+  var resourceStyleCss: String?
+}
+
+// The helper owns this tiny, fixed in-memory package. The page never receives
+// a filesystem URL, directory listing, script message handler, or host bridge.
+// Its only purpose is to verify that a future host-owned package resolver can
+// load relative HTML/CSS/ESM resources while WebKit's URL rules remain active.
+final class PluginResourceSchemeHandler: NSObject, WKURLSchemeHandler {
+  private let resources: [String: String]
+
+  init(resources: [String: String]) {
+    self.resources = resources
+  }
+
+  func webView(_: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+    guard let url = urlSchemeTask.request.url,
+      url.host == "p0",
+      !url.pathComponents.contains(".."),
+      let content = resources[url.path]
+    else {
+      urlSchemeTask.didFailWithError(
+        NSError(domain: "GhostBoardPluginResource", code: 404)
+      )
+      return
+    }
+    let mimeType: String
+    if url.path.hasSuffix(".html") {
+      mimeType = "text/html"
+    } else if url.path.hasSuffix(".js") {
+      mimeType = "text/javascript"
+    } else if url.path.hasSuffix(".css") {
+      mimeType = "text/css"
+    } else {
+      mimeType = "application/octet-stream"
+    }
+    let data = Data(content.utf8)
+    let response = URLResponse(
+      url: url,
+      mimeType: mimeType,
+      expectedContentLength: data.count,
+      textEncodingName: "utf-8"
+    )
+    urlSchemeTask.didReceive(response)
+    urlSchemeTask.didReceive(data)
+    urlSchemeTask.didFinish()
+  }
+
+  func webView(_: WKWebView, stop _: WKURLSchemeTask) {}
 }
 
 final class Runtime {
@@ -74,6 +125,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   var uiRssKbBeforeMemory = -1
   var uiRssKbAfterMemory = -1
   var uiRssKbAfterDestroy = -1
+  lazy var resourceSchemeHandler: PluginResourceSchemeHandler? = {
+    guard mode == "resource",
+      let index = config.resourceIndexHtml,
+      let entry = config.resourceEntryJs,
+      let module = config.resourceModuleJs,
+      let style = config.resourceStyleCss
+    else {
+      return nil
+    }
+    return PluginResourceSchemeHandler(resources: [
+      "/index.html": index,
+      "/entry.js": entry,
+      "/nested/resource-module.js": module,
+      "/resource.css": style,
+    ])
+  }()
 
   var mode: String { config.mode ?? "probe" }
 
@@ -107,6 +174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         self.runHangUntilKilled()
       case "lifecycle":
         self.runLifecycle()
+      case "resource":
+        self.runResourceProbe()
       default:
         self.replaceWebView(html: self.config.html) { [weak self] in
           self?.pollProbe()
@@ -137,9 +206,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       then()
       return
     }
+    // Keep the host-owned package scheme available for relative HTML/CSS/ESM
+    // resources. A blanket `.*` rule also blocks that safe scheme, which
+    // would force the host to serve package files over an ordinary network URL.
+    // Block the probe's HTTP(S) and WS(S) URL canaries explicitly and leave
+    // `ghostboard-plugin:` to the constrained in-memory scheme handler above.
+    // The separate STUN canary intentionally verifies that this URL policy is
+    // not mistaken for a complete network boundary.
     let rules = """
     [
-      {"trigger":{"url-filter":".*"},"action":{"type":"block"}}
+      {"trigger":{"url-filter":"^https?://.*"},"action":{"type":"block"}},
+      {"trigger":{"url-filter":"^wss?://.*"},"action":{"type":"block"}}
     ]
     """
     WKContentRuleListStore.default().compileContentRuleList(
@@ -169,6 +246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     configuration.websiteDataStore = .nonPersistent()
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+    if let resourceSchemeHandler {
+      configuration.setURLSchemeHandler(
+        resourceSchemeHandler,
+        forURLScheme: "ghostboard-plugin"
+      )
+    }
     configuration.applicationNameForUserAgent = "GhostBoardOsWebViewHelper/0"
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     if #available(macOS 12.3, *) {
@@ -177,7 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     return configuration
   }
 
-  func replaceWebView(html: String, then: @escaping () -> Void) {
+  func replaceWebView(
+    html: String,
+    useResourceScheme: Bool = false,
+    then: @escaping () -> Void
+  ) {
     destroyWebView()
     initialNavigationAllowed = false
     deniedNavigations = []
@@ -194,8 +281,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     window?.contentView = webView
     self.webView = webView
-    webView.loadHTMLString(html, baseURL: URL(string: "about:blank"))
+    if useResourceScheme, let url = URL(string: "ghostboard-plugin://p0/index.html") {
+      webView.load(URLRequest(url: url))
+    } else {
+      webView.loadHTMLString(html, baseURL: URL(string: "about:blank"))
+    }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: then)
+  }
+
+  func runResourceProbe() {
+    guard resourceSchemeHandler != nil else {
+      loadError = "resource probe is missing package resources"
+      collect(reason: "resource-config")
+      return
+    }
+    replaceWebView(html: "", useResourceScheme: true) { [weak self] in
+      self?.pollProbe()
+    }
   }
 
   func destroyWebView() {
@@ -427,7 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     hangTerminatedByWatchdog = true
-    if mode == "probe" {
+    if mode == "probe" || mode == "resource" {
       loadError = "webContent process terminated"
       collect(reason: "terminated")
     }

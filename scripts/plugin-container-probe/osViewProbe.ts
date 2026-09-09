@@ -17,9 +17,11 @@ const HTTP_SCHEME = /^http/u;
 type CandidateId =
   | 'os-webview-unsandboxed'
   | 'os-webview-sandbox-network'
+  | 'os-webview-sandbox-network-resource'
   | 'os-webview-sandbox-no-network'
   | 'os-webview-sandbox-no-network-jit'
-  | 'os-webview-sandbox-blocklist';
+  | 'os-webview-sandbox-blocklist'
+  | 'os-webview-sandbox-blocklist-resource';
 
 interface CandidateSpec {
   blockNetwork?: boolean;
@@ -29,6 +31,7 @@ interface CandidateSpec {
   expectSandbox: boolean;
   hardenedRuntime?: boolean;
   id: CandidateId;
+  resourceScheme?: boolean;
 }
 
 export interface HelperPayload {
@@ -61,10 +64,12 @@ interface CandidateEvidence {
   status: 'completed' | 'failed' | 'timeout' | 'unavailable';
   stderr: string;
   stdout: string;
+  stunPackets: number;
   verdict: {
     bridge: 'fail' | 'pass';
-    network: 'fail' | 'pass';
+    network: 'fail' | 'inconclusive' | 'pass';
     overall: 'fail' | 'inconclusive' | 'pass';
+    resources: 'fail' | 'n/a' | 'pass';
     sandbox: 'fail' | 'n/a' | 'pass';
   };
 }
@@ -87,6 +92,18 @@ const CANDIDATES: CandidateSpec[] = [
     ),
     expectSandbox: true,
     expectNetworkBlocked: false,
+  },
+  {
+    id: 'os-webview-sandbox-network-resource',
+    bundleId: 'com.ghostboard.plugin-probe.os-webview-sandbox-network-resource',
+    entitlements: join(
+      ROOT,
+      'os-webview-helper',
+      'sandbox-network.entitlements'
+    ),
+    expectSandbox: true,
+    expectNetworkBlocked: false,
+    resourceScheme: true,
   },
   {
     id: 'os-webview-sandbox-no-network',
@@ -122,6 +139,20 @@ const CANDIDATES: CandidateSpec[] = [
     expectSandbox: true,
     expectNetworkBlocked: true,
     blockNetwork: true,
+  },
+  {
+    id: 'os-webview-sandbox-blocklist-resource',
+    bundleId:
+      'com.ghostboard.plugin-probe.os-webview-sandbox-blocklist-resource',
+    entitlements: join(
+      ROOT,
+      'os-webview-helper',
+      'sandbox-network.entitlements'
+    ),
+    expectSandbox: true,
+    expectNetworkBlocked: true,
+    blockNetwork: true,
+    resourceScheme: true,
   },
 ];
 
@@ -166,6 +197,7 @@ export function pageHtml(config: {
   candidate: string;
   fileUrl: string;
   origin: string;
+  stunUrl?: string;
   wsUrl: string;
 }): string {
   const source = osWebViewPage
@@ -173,6 +205,30 @@ export function pageHtml(config: {
     .replaceAll('</', `<${String.fromCharCode(92)}/`);
   const payload = JSON.stringify(config).replaceAll('<', '\\u003c');
   return `<!doctype html><meta charset="utf-8"><title>OS WebView probe</title><h1>OS-level WKWebView probe</h1><pre>running…</pre><script>(${source})(${payload});</script>`;
+}
+
+function resourcePageConfig(config: {
+  candidate: string;
+  fileUrl: string;
+  origin: string;
+  stunUrl?: string;
+  wsUrl: string;
+}): {
+  entry: string;
+  index: string;
+  module: string;
+  style: string;
+} {
+  const source = osWebViewPage
+    .toString()
+    .replaceAll('</', `<${String.fromCharCode(92)}/`);
+  const payload = JSON.stringify(config).replaceAll('<', '\\u003c');
+  return {
+    index: `<!doctype html><meta charset="utf-8"><title>Plugin resource probe</title><link rel="stylesheet" href="./resource.css"><div id="resource-scheme-probe">resource probe</div><pre>running…</pre><script>window.__OS_PROBE_CONFIG__=${payload};</script><script type="module" src="./entry.js"></script>`,
+    entry: `import { marker } from './nested/resource-module.js'; window.__RESOURCE_MODULE_MARKER__ = marker; ${source}; osWebViewPage(window.__OS_PROBE_CONFIG__);`,
+    module: `export const marker = 'relative-module-loaded';`,
+    style: '#resource-scheme-probe { --ghostboard-resource-style: loaded; }',
+  };
 }
 
 async function runCommand(
@@ -340,6 +396,16 @@ export function bridgeFailed(
   return Boolean(page?.canarySent) || injected || named || channels.length > 0;
 }
 
+function relativeResourcesLoaded(
+  page: Record<string, unknown> | null | undefined
+): boolean {
+  return (
+    page?.protocol === 'ghostboard-plugin:' &&
+    page.relativeModule === true &&
+    page.relativeStyle === true
+  );
+}
+
 function sandboxApplied(helper: HelperPayload | null): boolean {
   if (!helper) {
     return false;
@@ -360,12 +426,14 @@ function verdictFor(
   spec: CandidateSpec,
   helper: HelperPayload | null,
   networkHits: string[],
+  stunPackets: number,
   status: CandidateEvidence['status']
 ): CandidateEvidence['verdict'] {
   if (status !== 'completed' || !helper?.pageResult) {
     return {
       bridge: 'fail',
       network: 'fail',
+      resources: spec.resourceScheme ? 'fail' : 'n/a',
       sandbox: spec.expectSandbox ? 'fail' : 'n/a',
       overall: 'inconclusive',
     };
@@ -373,8 +441,22 @@ function verdictFor(
   const page = helper.pageResult;
   const bridge = bridgeFailed(page) ? 'fail' : 'pass';
   const sawNetwork =
-    networkHits.length > 0 || page.network === true || page.websocket === true;
-  const network = sawNetwork ? 'fail' : 'pass';
+    networkHits.length > 0 ||
+    page.network === true ||
+    page.websocket === true ||
+    stunPackets > 0;
+  // A loopback STUN sink sees actual WebRTC UDP packets. When it receives
+  // none, exposed WebRTC remains inconclusive instead of becoming a pass.
+  const network = sawNetwork
+    ? 'fail'
+    : page.webrtcAvailable === true
+      ? 'inconclusive'
+      : 'pass';
+  const resources = spec.resourceScheme
+    ? relativeResourcesLoaded(page)
+      ? 'pass'
+      : 'fail'
+    : 'n/a';
   const sandbox = spec.expectSandbox
     ? sandboxApplied(helper)
       ? 'pass'
@@ -385,14 +467,21 @@ function verdictFor(
   // itself is inconclusive rather than a network-isolation pass.
   let overall: CandidateEvidence['verdict']['overall'] = 'fail';
   if (spec.expectNetworkBlocked) {
-    overall =
-      bridge === 'pass' && network === 'pass' && sandbox === 'pass'
-        ? 'pass'
-        : 'fail';
+    if (network === 'inconclusive') {
+      overall = 'inconclusive';
+    } else {
+      overall =
+        bridge === 'pass' &&
+        network === 'pass' &&
+        resources !== 'fail' &&
+        sandbox === 'pass'
+          ? 'pass'
+          : 'fail';
+    }
   } else if (!sawNetwork) {
     overall = 'inconclusive';
   }
-  return { bridge, network, sandbox, overall };
+  return { bridge, network, resources, sandbox, overall };
 }
 
 export async function runHelper(input: {
@@ -474,11 +563,13 @@ export async function runOsViewProbe(): Promise<{
         entitlementsDump: '',
         linkedLibraries: [],
         networkHits: [],
+        stunPackets: 0,
         helper: null,
         sandboxApplied: false,
         verdict: {
           bridge: 'fail',
           network: 'fail',
+          resources: spec.resourceScheme ? 'fail' : 'n/a',
           sandbox: spec.expectSandbox ? 'fail' : 'n/a',
           overall: 'inconclusive',
         },
@@ -490,6 +581,18 @@ export async function runOsViewProbe(): Promise<{
   const sentinel = join(directory, 'sentinel.txt');
   await writeFile(sentinel, 'probe-only-file');
   const hits: string[] = [];
+  const stunPackets: null[] = [];
+  const stunServer = await Bun.udpSocket({
+    hostname: '127.0.0.1',
+    port: 0,
+    socket: {
+      data() {
+        // Receipt is enough: the sink does not reply, inspect packet bytes, or
+        // retain source addresses. It only proves a direct UDP egress attempt.
+        stunPackets.push(null);
+      },
+    },
+  });
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -527,6 +630,7 @@ export async function runOsViewProbe(): Promise<{
     ELECTROBUN_LIBRARY.test(line)
   );
   const origin = server.url.origin;
+  const stunUrl = `stun:127.0.0.1:${stunServer.port}`;
   const wsUrl = `${origin.replace(HTTP_SCHEME, 'ws')}/ws`;
   const fileUrl = pathToFileURL(sentinel).href;
   const candidates: CandidateEvidence[] = [];
@@ -542,12 +646,23 @@ export async function runOsViewProbe(): Promise<{
         hardenedRuntime: spec.hardenedRuntime,
       });
       const hitMark = hits.length;
+      const stunMark = stunPackets.length;
       const html = pageHtml({
         candidate: spec.id,
         fileUrl,
         origin,
+        stunUrl,
         wsUrl,
       });
+      const resources = spec.resourceScheme
+        ? resourcePageConfig({
+            candidate: spec.id,
+            fileUrl,
+            origin,
+            stunUrl,
+            wsUrl,
+          })
+        : undefined;
       const run = await runHelper({
         appPath,
         timeoutMs: HELPER_TIMEOUT_MS,
@@ -555,13 +670,20 @@ export async function runOsViewProbe(): Promise<{
           candidate: spec.id,
           origin,
           fileUrl,
+          stunUrl,
           wsUrl,
           html,
           timeoutMs: 10_000,
           blockNetwork: Boolean(spec.blockNetwork),
+          mode: spec.resourceScheme ? 'resource' : 'probe',
+          resourceEntryJs: resources?.entry,
+          resourceIndexHtml: resources?.index,
+          resourceModuleJs: resources?.module,
+          resourceStyleCss: resources?.style,
         },
       });
       const networkHits = hits.slice(hitMark);
+      const candidateStunPackets = stunPackets.length - stunMark;
       let status: CandidateEvidence['status'] = 'completed';
       let reason: string | undefined;
       if (run.timedOut) {
@@ -590,10 +712,43 @@ export async function runOsViewProbe(): Promise<{
         entitlementsDump: signing.entitlementsDump,
         linkedLibraries: libraries,
         networkHits,
+        stunPackets: candidateStunPackets,
         helper: run.helper,
         sandboxApplied: sandboxApplied(run.helper),
-        verdict: verdictFor(spec, run.helper, networkHits, status),
+        verdict: verdictFor(
+          spec,
+          run.helper,
+          networkHits,
+          candidateStunPackets,
+          status
+        ),
       };
+      if (candidateStunPackets > 0) {
+        evidence.reason = [
+          evidence.reason,
+          spec.blockNetwork
+            ? 'loopback UDP STUN sink received a WebRTC packet despite URL content rules'
+            : 'loopback UDP STUN sink received a WebRTC packet',
+        ]
+          .filter(Boolean)
+          .join('; ');
+      }
+      if (evidence.verdict.network === 'inconclusive') {
+        evidence.reason = [
+          evidence.reason,
+          'WebRTC API is exposed; the URL content rule has not proven direct WebRTC traffic is denied',
+        ]
+          .filter(Boolean)
+          .join('; ');
+      }
+      if (spec.resourceScheme && evidence.verdict.resources !== 'pass') {
+        evidence.reason = [
+          evidence.reason,
+          'custom-scheme relative module/style canary did not complete',
+        ]
+          .filter(Boolean)
+          .join('; ');
+      }
       candidates.push(evidence);
     }
     const networkControl = candidates.find(
@@ -620,6 +775,7 @@ export async function runOsViewProbe(): Promise<{
     }
   } finally {
     server.stop(true);
+    stunServer.close();
   }
 
   return {
@@ -637,7 +793,7 @@ if (import.meta.main) {
   const evidence = await runOsViewProbe();
   const outputDir = join(
     ROOT,
-    '../../docs/features/In Progress/plugin-container-evidence/2026-09-08'
+    '../../docs/features/Archive/plugin-container-evidence/2026-09-08'
   );
   await mkdir(outputDir, { recursive: true });
   const output = join(outputDir, 'os-webview.json');

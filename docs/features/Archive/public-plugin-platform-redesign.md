@@ -1,6 +1,8 @@
-# GhostBoard 公开插件系统整改方案
+# GhostBoard 公开插件系统整改方案（v2，已归档）
 
-> 状态：实施中（P0 已有协议与命令运行原型，真实视图容器和公开平台尚未验收）
+> **归档说明（2026-09-09）**：本方案以“默认不受信任代码 + 细粒度权限 + 独立网络隔离容器”为前提。P0 容器实验证明该前提在 macOS WKWebView / CEF 上无法以可接受成本成立（WebRTC/STUN 绕过 URL 规则，见 [容器实验](./plugin-container-experiment.md)），产品随后改为高信任模型。现行方案为 [高信任插件系统改造方案](../In%20Progress/trusted-plugin-platform.md)；本文仅作历史记录，其中的 P0–P5 阶段、权限模型、QuickJS 命令入口与 WebView 容器要求均不再是交付目标。`manifestVersion: 1` 包格式已被新方案拒绝加载。
+>
+> 归档时状态：P0 命令子集已桌面验收；真实视图容器、面板/导入器/画布类型动态激活和公开平台未验收。
 >
 > 日期：2026-09-07
 >
@@ -8,7 +10,7 @@
 >
 > 目标：外部开发者独立开发和分发插件；普通用户通过 URL 下载或本地压缩包安装，无需修改或编译 GhostBoard。
 >
-> 本文接替 [旧 RFC-2](../Backlog/third-party-extension-platform.md) 作为公开插件系统的实施设计。旧文档保留历史背景，其“等待外部需求后再立项”的前提不再适用。
+> 本文接替 [旧 RFC-2](./third-party-extension-platform.md) 作为公开插件系统的实施设计。旧文档保留历史背景，其“等待外部需求后再立项”的前提不再适用。
 >
 > 本文中的包格式、SDK、CLI 和目录路径均为拟议契约，不代表当前已经实现或发布。运行容器必须通过 P0 实验后定型。
 
@@ -697,13 +699,13 @@ v2 增加内容批次事务、通用面板和导入器的实施成本，不能�
 | --- | --- | --- |
 | 基础保存与 P0 协议整改 | 待验收 | 已实现内容历史/revision 分离、执行时读取保存队列状态、回包保留新编辑；manifest 实际版本比较、未知必需权限/贡献拒绝、非 JSON 消息结构化错误。实例撤销保存的桌面复测待完成。 |
 | P0 命令运行原型 | 实施中 | `logicRuntime.ts` 统一在每次调用创建独立 QuickJS WASM module；宿主只注入显式 JSON API，不提供 `module`、`require`、Node 或 Bun 全局。macOS arm64 / Bun 1.3.14 下已执行标题预览、宿主全局 canary、BigInt/循环引用拒绝、死循环/未决 Promise 超时、内存上限、host-call 风暴限额与后续新会话恢复。证明逻辑边界候选，不证明不可信视图的文件/网络/原生访问隔离。 |
-| P0 真实容器实验 | 实施中 | 已用独立 Electrobun 应用实测 WebKit 原生 sandbox、无 RPC 对照、CSP iframe、CEF Chromium 147 sandbox/无 RPC，以及 WebSocket/Worker/导航风暴。独立 launcher 在未打包 CEF 时完成不同 PID 的窗口生命周期 canary；打包 CEF 后再启动子进程会并入已有 Chromium 会话。原生网络、WebSocket、Worker、CEF `__electrobunBunBridge` 与 iframe 底层桥均穿透。macOS 独立 WKWebView helper 无 bunBridge；`WKContentRuleList` 挡住 loopback；无限循环可销毁重建，进程可 SIGTERM 再开，64MiB 分配后恢复页仍无桥/网络。拒绝 `network.client` 时 WebContent 无法启动。helper 未接入 GhostBoard。QuickJS 逻辑候选已通过本机与打包探针。详见 [实验记录](./plugin-container-experiment.md)。 |
-| P0 独立样例与契约冻结 | 实施中 | 独立样例仓库 `../ghostboard-plugin-samples` 含标题整理命令和工作区笔记面板。宿主 QuickJS/会话入口已加载并运行。`loadPluginFromZip` / `loadPluginFromZipUrl` 可从 ZIP 或 loopback URL 加载 title-tools；穿越、HTML 页、userinfo 拒绝。`PluginInstallStore` 可 prepare/commit 到非公开 `packages/` 并写 journal；`parsePluginReleaseDocument` 解析发布描述 JSON。公开安装、签名更新和 SDK 包未冻结。产品窗口不加载已提交包。 |
-| P1 标题整理数据闭环 | 实施中 | 宿主可冻结 sidecar Note、标题-only `applyBatch`、Undo/Redo、journal 重启。产品 Edit 菜单 / 右键经 RPC 跑 title-tools。CUA 隔离工作区写入 sidecar，同会话 Edit Undo 恢复，重启后新标题仍在。重启后 journal Undo 无 UI。无公开安装。 |
+| P0 真实容器实验 | 实施中 | 已用独立 Electrobun 应用实测 WebKit 原生 sandbox、无 RPC 对照、CSP iframe、CEF Chromium 147 sandbox/无 RPC，以及 WebSocket/Worker/导航风暴。独立 launcher 在未打包 CEF 时完成不同 PID 的窗口生命周期 canary；打包 CEF 后再启动子进程会并入已有 Chromium 会话。原生网络、WebSocket、Worker、CEF `__electrobunBunBridge` 与 iframe 底层桥均穿透。macOS 独立 WKWebView helper 无 bunBridge；HTTP(S)/WS(S) `WKContentRuleList` 下 fetch/WebSocket/图片/beacon 均无 loopback 命中，受限 `ghostboard-plugin:` 内存 URL 可加载相对 CSS/ES module，且无限循环可销毁重建、进程可 SIGTERM 再开、64MiB 分配后恢复页仍无桥/URL 网络。但是 blocklist 候选仍向本机 UDP STUN 接收端发送了 2 个 WebRTC 包，证明 URL 规则未隔离该直接网络路径；helper 不得接入 GhostBoard。拒绝 `network.client` 时 WebContent 无法启动。QuickJS 逻辑候选已通过本机与打包探针。详见 [实验记录](./plugin-container-experiment.md)。 |
+| P0 独立样例与契约冻结 | 命令子集已桌面验收 | 独立样例可由 `GHOSTBOARD_PLUGIN_SAMPLES` 指向宿主仓库外的 `ghostboard-plugin-samples`；未设置时全量测试使用受控 `fixtures/plugins`。`loadPluginFromZip` / `loadPluginFromZipUrl` 可从 ZIP 或 loopback URL 加载 title-tools；穿越、HTML 页、userinfo 拒绝。`PluginInstallStore` 已通过设置 → 插件接入产品：本地 `.zip` / `.ghostboard-plugin` 或直接 HTTPS ZIP URL 会在主进程审阅，界面显示脱敏来源、digest、贡献和权限，用户确认后写入工作区 `.ghostboard/plugins/`。命令二次确认、应用本地工作区路径摘要授权、包版本/摘要和已加载源指纹绑定，以及原生 `Plugins` 菜单均通过真实桌面验收。签名更新、发布描述 URL、面板容器和 SDK 包未冻结。证据：[p0-title-tools-desktop-acceptance.json](./plugin-container-evidence/2026-09-08/p0-title-tools-desktop-acceptance.json)。 |
+| P1 标题整理数据闭环 | 已桌面验收（命令路径） | 宿主可冻结 sidecar Note、标题-only `applyBatch`、Undo/Redo、journal 重启。产品原生 `Plugins` 菜单经 RPC 跑 title-tools；已启用第三方命令使用相同的受限批次、投影与 Undo/Redo 链路。2026-09-09 CUA 在隔离工作区完成标题归一化、Edit Undo/Redo、停用后的菜单/RPC 拒绝、原工作区重启持久化，以及复制工作区不继承授权。重启后 journal Undo 仍无独立 UI；面板、导入器和画布类型的产品运行时仍未接入。证据：[p0-title-tools-desktop-acceptance.json](./plugin-container-evidence/2026-09-08/p0-title-tools-desktop-acceptance.json)。 |
 
 测试证据必须绑定运行日期、平台、运行时版本与测试范围。`pluginIsolationMatrix` 是静态能力清单，不能因为调用方传入平台名称就返回“已验证”。已有 macOS native WebKit 的失败证据；没有 Linux/Windows 的隔离结论，不存在已通过的公开容器。
 
-2026-09-08 自动化证据（macOS arm64，Vitest 4.1.4 / Node 26.7.0）：受控 2-worker 全量 Vitest 为 175 个文件 / 1570 项通过，本轮新增 33 项回归；`bun run check` 检查 492 个文件通过；`bun run type-check` 通过（沿用门禁过滤 29 条依赖诊断）。本机与打包应用的 QuickJS 1.3.14/1.3.13 探针均验证命令边界、宿主全局不可见、非 JSON 消息、超时、内存和 host-call 配额；QuickJS 单元回归另外覆盖迟到 Promise 清理、host-result 大小限制和恢复。打包探针的独立 launcher 子进程以不同 PID 完成窗口 canary，但 native WebKit 仍报告底层桥和网络可达。以上不代替真实桌面撤销保存和 HTML 容器验收。
+2026-09-09 自动化与桌面证据（macOS arm64）：全量 Vitest 为 186 个文件 / 1637 项通过，`bun run check`、`bun run type-check` 与 `git diff --check` 均通过。真实 GhostBoard-dev 隔离工作区通过设置页安装并二次授权 `community.example.title-tools`，原生 `Plugins` 菜单成功修改 sidecar 标题；Edit Undo/Redo、停用后的菜单/RPC 拒绝、重启持久化和复制工作区授权隔离均已验证，详见 [p0-title-tools-desktop-acceptance.json](./plugin-container-evidence/2026-09-08/p0-title-tools-desktop-acceptance.json)。本机与打包应用的 QuickJS 1.3.14/1.3.13 探针均验证命令边界、宿主全局不可见、非 JSON 消息、超时、内存和 host-call 配额；QuickJS 单元回归另外覆盖迟到 Promise 清理、host-result 大小限制和恢复。聚焦编辑器新增外部标题同步回归，重建 dev app 后桌面命令执行时输入框与 sidecar 同步；打包探针的独立 launcher 子进程以不同 PID 完成窗口 canary，但 native WebKit 仍报告底层桥和网络可达；第三方面板仍受 WebRTC/STUN 直连绕过 URL 规则的 P0 阻断。未将命令闭环误报为四类插件平台完成。
 
 ### 19.2 本次修正的设计约束
 
@@ -771,11 +773,11 @@ P0 必须确定的工程细节：实际运行容器及资源协议、受限数�
 
 ## 22. 文档关系与执行入口
 
-- [旧 RFC-2](../Backlog/third-party-extension-platform.md)：历史问题清单，本方案取代其延期前提和实现范围。
+- [旧 RFC-2](./third-party-extension-platform.md)：历史问题清单，本方案取代其延期前提和实现范围。
 - [RFC-1](./canvas-extension-platform-refactor.md)：现有内置扩展化基础，保留已实现数据兼容约束；公开协议以本方案及后续 P0 契约为准。
 - [扩展收尾计划](../canvas-extension-gap-closure.md)：已有类型的行为回归已完成；不因新方案自动扩大 D0 范围。
 - [项目开发计划](../../development-plan.md)：保留既有 D0–D3 任务状态，本方案增加公开插件工作流，不将旧任务重复排期。
 
-P0 已有标题整理、QuickJS 逻辑边界实验、真实面板实验、独立 launcher 进程 canary、CEF 探针、macOS 独立 WKWebView helper，以及仓库外命令/面板样例。当前 WebKit iframe/子进程原生桥、CEF `__electrobunBunBridge`、loopback 网络和旧 Worker/VM canary 未通过；helper 去掉了 bunBridge，内容规则挡住了 loopback，并完成无限循环销毁/重建与 64MiB 分配后恢复。拒绝 `network.client` 不能承载 WebContent。QuickJS 本机与打包探针已通过。P0 最小契约已按实现冻结。P1 标题-only `applyBatch`、Undo 和批次文件重启已有宿主存储证据，尚未接到画布 UI。公开安装未启动。随后让这些包经本地 ZIP 和 URL 安装，再加入 CSV 导入和 Counter，逐步验证完整通用插件模型。
+P0 已有标题整理、QuickJS 逻辑边界实验、真实面板实验、独立 launcher 进程 canary、CEF 探针、macOS 独立 WKWebView helper，以及仓库外命令/面板样例。当前 WebKit iframe/子进程原生桥、CEF `__electrobunBunBridge`、loopback 网络和旧 Worker/VM canary 未通过；helper 去掉了 bunBridge，HTTP(S)/WS(S) 内容规则挡住了 loopback fetch/WebSocket/图片/beacon，并让 `ghostboard-plugin:` 内存资源成功加载相对 CSS/ES module，且完成无限循环销毁/重建与 64MiB 分配后恢复。但 blocklist helper 仍向本机 UDP STUN 接收端发送了 2 个 WebRTC/STUN UDP 包，实证该直接网络路径绕过 URL 规则，不能作为 P0 容器接入。拒绝 `network.client` 不能承载 WebContent。QuickJS 本机与打包探针已通过。P0 最小契约已按实现冻结。P1 标题-only `applyBatch`、Undo 和批次文件重启已有宿主存储证据，尚未接到画布 UI。产品现在可在设置中对本地 ZIP 或 HTTPS 直链包做审阅并提交到当前工作区，但包只保存、不注册或执行。后续再让这些包动态激活，加入 CSV 导入和 Counter，逐步验证完整通用插件模型。
 
 本次架构借鉴 Obsidian 的多种注册入口和独立资源生命周期，未假设两者运行权限模型相同。参考：[官方 Plugin API](https://github.com/obsidianmd/obsidian-api/blob/master/obsidian.d.ts)、[生命周期管理](https://docs.obsidian.md/plugins/guides/lifecycle-management)、[插件安全说明](https://obsidian.md/help/plugin-security)。本方案保留受控宿主调用；不把 Obsidian 的接口直接视为可运行的 GhostBoard SDK。

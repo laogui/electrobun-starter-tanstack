@@ -1,0 +1,66 @@
+{
+  "date": "2026-09-09",
+  "platform": "macOS arm64",
+  "app": "GhostBoard-dev",
+  "build": "build/dev-macos-arm64/GhostBoard-dev.app",
+  "workspace": "/tmp/ghostboard-plugin-desktop-dZuv0i",
+  "copiedWorkspace": "/tmp/ghostboard-plugin-desktop-copy-dZuv0i",
+  "plugin": {
+    "id": "community.example.title-tools",
+    "version": "1.0.0",
+    "digest": "1f3b8f19dbcbd858a9010678c6acb367db5f9de249722f8b5880647d78f7f29f",
+    "requiredPermissions": ["content.selection.read", "content.selection.write"]
+  },
+  "transport": {
+    "install": "Settings > Plugins local ZIP picker",
+    "activation": "Settings > Plugins second confirmation",
+    "execution": "native Plugins menu > 标题整理: 整理选中资料标题",
+    "selectionFallback": "native menu focus loss retains the focused note ID for the command request",
+    "focusedEditorSync": "rebuilt dev app updates the focused title input together with the sidecar after the native command"
+  },
+  "steps": [
+    {
+      "action": "install and review",
+      "result": "installed from the local title-tools ZIP; Settings showed the stored package, command declaration, digest-derived package identity, and the two required permissions"
+    },
+    {
+      "action": "explicit authorization",
+      "result": "second confirmation granted exactly the two required permissions; Settings showed Commands enabled"
+    },
+    {
+      "action": "native command execution",
+      "input": "sidecar title `  Hello   world  ` on note_085fabc5",
+      "result": "native Plugins command completed; sidecar title became `Hello world` and the batch journal recorded the operation"
+    },
+    {
+      "action": "Undo and Redo",
+      "result": "native Edit > Undo restored the padded title; native Edit > Redo restored `Hello world`"
+    },
+    {
+      "action": "disable",
+      "result": "Settings changed to Stored — not activated; native Plugins menu showed disabled No enabled plugin commands"
+    },
+    {
+      "action": "RPC refusal after disable",
+      "result": {
+        "errorCode": "invalid-state",
+        "message": "Plugin commands are not enabled: community.example.title-tools"
+      }
+    },
+    {
+      "action": "restart persistence",
+      "result": "after quitting and reopening GhostBoard on the original workspace, the grant and native Plugins command remained available"
+    },
+    {
+      "action": "copy workspace isolation",
+      "result": "the copied workspace contained the package and content, but Settings showed Stored — not activated and its native Plugins menu showed disabled No enabled plugin commands; switching back to the original workspace restored its grant"
+    }
+  ],
+  "qualityGates": {
+    "fullVitest": "186 files / 1637 tests passed",
+    "typeCheck": "passed",
+    "check": "passed",
+    "diffCheck": "passed"
+  },
+  "remainingBlock": "Third-party panels remain blocked: the macOS WebRTC/STUN experiment showed direct UDP traffic bypassing URL network rules."
+}

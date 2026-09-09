@@ -36,6 +36,7 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     navGeneral: t('settings_nav_general'),
     navWorkspace: t('settings_nav_workspace'),
     navCanvasTypes: t('settings_nav_canvas_types'),
+    navPlugins: t('settings_nav_plugins'),
     navAi: t('settings_nav_ai'),
     navShortcuts: t('settings_nav_shortcuts'),
     navAbout: t('settings_nav_about'),
@@ -116,6 +117,63 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     canvasTypesClearConfirm: (count: number, name: string) =>
       f('settings_canvas_types_clear_confirm', { count, name }),
     canvasTypesClearFailed: t('settings_canvas_types_clear_failed'),
+
+    pluginsTitle: t('settings_plugins_title'),
+    pluginsDescription: t('settings_plugins_description'),
+    pluginsRuntimeNotice: t('settings_plugins_runtime_notice'),
+    pluginsInstallTitle: t('settings_plugins_install_title'),
+    pluginsChooseFile: t('settings_plugins_choose_file'),
+    pluginsUrlLabel: t('settings_plugins_url_label'),
+    pluginsUrlPlaceholder: t('settings_plugins_url_placeholder'),
+    pluginsInspectUrl: t('settings_plugins_inspect_url'),
+    pluginsInspecting: t('settings_plugins_inspecting'),
+    pluginsUrlRequired: t('settings_plugins_url_required'),
+    pluginsPreviewTitle: t('settings_plugins_preview_title'),
+    pluginsPreviewDescription: t('settings_plugins_preview_description'),
+    pluginsPreviewSource: (source: string) =>
+      f('settings_plugins_preview_source', { source }),
+    pluginsPreviewDigest: (digest: string) =>
+      f('settings_plugins_preview_digest', { digest }),
+    pluginsContributions: t('settings_plugins_contributions'),
+    pluginsPermissions: t('settings_plugins_permissions'),
+    pluginsNoPermissions: t('settings_plugins_no_permissions'),
+    pluginsPermissionOptional: t('settings_plugins_permission_optional'),
+    pluginsConfirmInstall: t('settings_plugins_confirm_install'),
+    pluginsCancelInstall: t('settings_plugins_cancel_install'),
+    pluginsInstalling: t('settings_plugins_installing'),
+    pluginsInstallSuccess: (name: string) =>
+      f('settings_plugins_install_success', { name }),
+    pluginsInstalledTitle: t('settings_plugins_installed_title'),
+    pluginsEmpty: t('settings_plugins_empty'),
+    pluginsStored: t('settings_plugins_stored'),
+    pluginsCommandsEnabled: t('settings_plugins_commands_enabled'),
+    pluginsEnableCommands: (count: number) =>
+      f('settings_plugins_enable_commands', { count }),
+    pluginsDisableCommands: t('settings_plugins_disable_commands'),
+    pluginsEnableReviewTitle: (name: string) =>
+      f('settings_plugins_enable_review_title', { name }),
+    pluginsEnableReviewDescription: t(
+      'settings_plugins_enable_review_description'
+    ),
+    pluginsConfirmEnableCommands: t('settings_plugins_confirm_enable_commands'),
+    pluginsCancelEnableCommands: t('settings_plugins_cancel_enable_commands'),
+    pluginsEnabling: t('settings_plugins_enabling'),
+    pluginsDisabling: t('settings_plugins_disabling'),
+    pluginsRequiredGrants: (count: number) =>
+      f('settings_plugins_required_grants', { count }),
+    pluginsEnableSuccess: (name: string) =>
+      f('settings_plugins_enable_success', { name }),
+    pluginsDisableSuccess: (name: string) =>
+      f('settings_plugins_disable_success', { name }),
+    pluginsInvalid: t('settings_plugins_invalid'),
+    pluginsUnavailable: t('settings_plugins_unavailable'),
+    pluginsUnknownError: t('settings_plugins_unknown_error'),
+    pluginsContributionCommand: t('settings_plugins_contribution_command'),
+    pluginsContributionPanel: t('settings_plugins_contribution_panel'),
+    pluginsContributionImporter: t('settings_plugins_contribution_importer'),
+    pluginsContributionCanvasType: t(
+      'settings_plugins_contribution_canvas_type'
+    ),
 
     cleanupTitle: t('settings_cleanup_title'),
     cleanupDescription: t('settings_cleanup_description'),

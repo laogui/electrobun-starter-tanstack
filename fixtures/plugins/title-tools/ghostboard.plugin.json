@@ -1,16 +1,22 @@
 {
   "manifestVersion": 1,
   "id": "community.example.title-tools",
-  "name": "Title tools",
+  "name": "标题整理",
   "version": "1.0.0",
   "engines": {
     "hostApi": ">=1.0.0 <2.0.0"
   },
+  "description": "Normalize titles of the current selection. Command-only; no HTML view.",
+  "author": "GhostBoard examples",
   "permissions": {
     "required": [
       {
         "id": "content.selection.read",
-        "reason": "Read titles of the current selection"
+        "reason": "读取选中资料的标题"
+      },
+      {
+        "id": "content.selection.write",
+        "reason": "整理选中资料的标题"
       }
     ]
   },
@@ -18,7 +24,7 @@
     "commands": [
       {
         "id": "normalize-titles",
-        "name": "Normalize selected titles",
+        "name": "整理选中资料标题",
         "handler": "main.js#normalizeTitles",
         "when": "selection.hasContent"
       }

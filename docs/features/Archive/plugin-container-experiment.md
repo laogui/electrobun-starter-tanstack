@@ -1,10 +1,12 @@
-# P0 运行容器实验：当前候选未通过
+# P0 运行容器实验：当前候选未通过（已归档）
+
+> **归档说明（2026-09-09）**：本实验的结论直接导致产品放弃“不受信任第三方 UI 的网络隔离容器”目标，转向 [高信任插件系统改造方案](../In%20Progress/trusted-plugin-platform.md)。文中记录的 canary、证据文件与复现步骤保留，供日后重新评估沙箱路线时参考；`scripts/plugin-container-probe/` 探针代码计划随旧运行时一并移除。
 
 日期：2026-09-08。范围：macOS 26.6.2 arm64、Electrobun 1.18.1。GhostBoard 产品配置仍为 native WKWebView、`bundleCEF: false`。独立探针应用在同一 Electrobun 版本下额外打包 CEF Chromium 147.0.7727.118。桌面应用携带 Bun 1.3.13，本机 CLI 为 Bun 1.3.14。
 
 ## 结论与实施决定
 
-**WebKit 视图、CEF 视图和旧 Worker/VM 均不能接入不可信第三方插件。独立 launcher 进程原型在未打包 CEF 时完成过进程边界 canary，但它携带的 native WebKit 仍可访问网络并暴露底层桥；打包 CEF 后，第二次 launcher 会并入已有 Chromium 会话，进程身份 canary 失败。不经过 Electrobun 的 macOS WKWebView helper 不再出现 bunBridge；去掉 `network.client` 的 App Sandbox 无法启动 WebContent。带 `WKContentRuleList` 全拦截的 helper 在对照可联网的前提下挡住了 loopback fetch/WebSocket，这是宿主策略，不是操作系统拒绝网络。QuickJS WASM 逻辑候选通过本机边界探针。P0 仍保持实施中，公开安装和 P1 正式外部运行不启动。**
+**WebKit 视图、CEF 视图和旧 Worker/VM 均不能接入不可信第三方插件。独立 launcher 进程原型在未打包 CEF 时完成过进程边界 canary，但它携带的 native WebKit 仍可访问网络并暴露底层桥；打包 CEF 后，第二次 launcher 会并入已有 Chromium 会话，进程身份 canary 失败。不经过 Electrobun 的 macOS WKWebView helper 不再出现 bunBridge；去掉 `network.client` 的 App Sandbox 无法启动 WebContent。helper 的 `WKContentRuleList` 在保留宿主 `ghostboard-plugin:` 内存资源方案时，已挡住 loopback fetch/WebSocket/图片子资源/beacon；相对 CSS/ES module 可加载。但 blocklist helper 仍向本机响应自由的 UDP STUN 接收端发送了 2 个 WebRTC 包，证明 URL 规则不能约束该直接网络路径，因此 helper 也已被拒绝，不能接入产品。QuickJS WASM 逻辑候选通过本机边界探针。P0 仍保持实施中，公开安装和 P1 正式外部运行不启动。**
 
 1. 原生 `sandbox: true` 不阻止普通 fetch。测试 loopback 服务器实际收到了 `/forbidden/native-fetch`，不能将这个配置当作网络权限隔离。
 2. `sandbox: true` 的原生窗口内再放置 `sandbox="allow-scripts"` iframe，并不能隔离原生桥。子框架通过 `window.webkit.messageHandlers.bunBridge.postMessage` 调用了仅供实验的 `containerCanary`。宿主记录两次调用，分别对应打开与重开。没有向子框架显式注入这个接口，没有使用正式应用 RPC 或用户数据。
@@ -14,7 +16,7 @@
 6. 同一探针在已有 CEF 会话时再启动 launcher 子进程，子进程打印 `Opening in existing browser session.`，没有报告独立窗口身份。这不能推翻此前 native-only 的进程生命周期 canary，但说明 CEF 单例会话使该路径失效。
 7. 独立 Swift helper 创建 WKWebView，从不调用 `WKUserContentController.add(_:name:)`，也不链接 Electrobun。页面上 `window.webkit`、`bunBridge`、`__electrobunBunBridge` 均为 undefined，canary 未发出。未沙箱和“沙箱但允许 `network.client`”的对照仍能 fetch/WebSocket 打到 loopback 服务器。
 8. App Sandbox 去掉 `network.client` 后，WebContent 进程立即终止，页面结果为空。补 `allow-unsigned-executable-memory` 并关掉 hardened runtime 同样失败。该路径不能承载插件视图，不能把它写成网络隔离通过。
-9. 同一 helper 在保留 `network.client` 的沙箱里编译 `url-filter: .*` 的 `WKContentRuleList` 后，loopback fetch、WebSocket 和导航请求均未到达测试服务器，页面报告 `network/websocket` 为 false。对照运行证明拿掉这条规则后网络立刻恢复，因此这是宿主策略，不是操作系统拒绝网络。
+9. 同一 helper 在保留 `network.client` 的沙箱里编译只拒绝 `http(s)` / `ws(s)` 的 `WKContentRuleList` 后，loopback fetch、WebSocket、图片子资源与 beacon 均未到达测试服务器；表单与 iframe 导航仍由 `WKNavigationDelegate` 取消。`ghostboard-plugin:` 的受限内存 URL scheme 未被规则拦截，并成功加载包内相对 CSS/ES module。对照运行证明拿掉规则后网络立刻恢复，因此这是宿主策略，不是操作系统拒绝网络。页面可构造 `RTCPeerConnection`，并向响应自由的本机 UDP STUN 接收端发送了 2 个包；故 URL 规则没有阻断 WebRTC 直接流量，候选失败。
 
 不得以隐藏全局变量、前端代理函数、删除对象属性或再包一层 iframe 关闭上述问题。未修复的 native message handler 或宿主对象仍可成为入口；改动后必须重跑原始 canary。把 content blocker 从 helper 里拿掉也必须视为候选失败，需要重跑 canary。
 
@@ -44,7 +46,7 @@
 | OS helper 零 script-message-handler | `window.webkit` / bunBridge / `__electrobunBunBridge` 均为 undefined；canary 未发出；otool 无 Electrobun | 不经过 Electrobun BrowserWindow 可以去掉底层桥 |
 | OS helper 未沙箱 / 沙箱允许网络 | loopback fetch 与 WebSocket 到达测试服务器；导航 iframe 被 `WKNavigationDelegate` 取消 | 零 handler 不等于网络隔离；导航拒绝是宿主代理策略 |
 | OS helper App Sandbox 拒绝 `network.client` | 沙箱已应用，但 WebContent 立即终止；补 JIT entitlement 同样失败 | 该 OS 网络拒绝方式不能承载视图 |
-| OS helper 沙箱 + `WKContentRuleList` 全拦截 | 测试服务器无 fetch/ws/nav 命中；页面 `network/websocket` 为 false；对照拿掉规则后网络恢复 | 桥和 loopback canary 通过；这是宿主内容规则，不是 OS 拒绝网络；未测 WebRTC 等旁路，也未接入 GhostBoard |
+| OS helper 沙箱 + `WKContentRuleList` HTTP(S)/WS(S) 规则 | 测试服务器无 fetch/ws/图片/beacon 命中；表单/iframe 导航由 delegate 取消；`ghostboard-plugin:` 可加载相对 CSS/ES module；无桥；本机 UDP STUN 接收端收到 2 个包 | URL 型 loopback canary 与包资源路径通过，但 WebRTC 直接 UDP 路径绕过 URL 规则；整体失败，不能接入 GhostBoard |
 | OS helper 无限循环销毁/重建 | JS `for (;;) {}` 后 `evaluateJavaScript("1+1")` 超时；UI 心跳 3→13；销毁后恢复页无 bunBridge、无 loopback 命中 | helper UI 线程不被页面死循环拖死，可丢弃 WKWebView 再挂一页 |
 | OS helper 内存增长后重建 | 页面报告分配 64MiB；helper UI RSS 约 76MiB 几乎不变；销毁后再挂恢复页仍无桥/网络 | 证明 helper 进程还活着并能重建；不能把 UI RSS 写成 WebContent 堆被回收 |
 | OS helper 进程 SIGTERM 重建 | 挂起 helper PID 7286 退出码 143，无残留 `OsWebViewHelper`；新 PID 8855 恢复页桥/网络通过 | 编排进程可以杀掉失控 helper 再开一个；不证明 WebKit XPC 子进程账本 |
@@ -56,7 +58,7 @@
 
 ## 下一项工程任务
 
-QuickJS WASM 逻辑入口已经在本机和打包探针复测通过。native WebKit、CEF Chromium 147 和独立 Electrobun launcher 都没有通过视图能力隔离。macOS 上不经过 Electrobun 的 WKWebView helper 已经通过桥 canary；拒绝 `network.client` 的 App Sandbox 不能启动 WebContent。当前可运行的视图候选是 **独立 helper + 零 script-message-handler + 宿主 `WKContentRuleList` 拦截 + 导航代理拒绝**。该 helper 已通过无限循环销毁/重建、进程杀掉重建，以及 64MiB JS 分配后的恢复页 canary。仓库外样例已验证命令和面板包，最小契约见 [plugin-p0-frozen-contract.md](./plugin-p0-frozen-contract.md)。不能把 content blocker 写成操作系统网络沙箱，不能把 helper UI RSS 写成 WebContent 内存上限，也不能把它接到 GhostBoard 产品窗口里冒充已验收。P1 标题-only `applyBatch` 已写入 sidecar Note（提升 revision）。2026-09-08 CUA：隔离工作区 Edit「Normalize Titles」把 `  Hello   world ` 写成 `Hello world` 并重启仍在；随后自定义 Edit Undo 把 sidecar 拉回原标题。宿主 `loadPluginFromZip` / `loadPluginFromZipUrl` 可从 ZIP 或显式允许的 loopback URL 加载 title-tools；公开安装仍关闭。
+QuickJS WASM 逻辑入口已经在本机和打包探针复测通过。native WebKit、CEF Chromium 147 和独立 Electrobun launcher 都没有通过视图能力隔离。macOS 上不经过 Electrobun 的 WKWebView helper 已经通过桥 canary；拒绝 `network.client` 的 App Sandbox 不能启动 WebContent。独立 helper + 零 script-message-handler + HTTP(S)/WS(S) 内容规则 + 导航代理能够运行受限 `ghostboard-plugin:` 包资源，并已通过无限循环销毁/重建、进程杀掉重建，以及 64MiB JS 分配后的恢复页 canary；但 blocklist 候选仍向响应自由的本机 UDP STUN 接收端发送了 2 个 WebRTC 包，实证直接网络路径绕过 URL 规则，**因此不是可接入的 P0 容器**。仓库外样例已验证命令和面板包，最小契约见 [plugin-p0-frozen-contract.md](./plugin-p0-frozen-contract.md)。不能把 content blocker 写成操作系统网络沙箱，不能把 helper UI RSS 写成 WebContent 内存上限，也不能把它接到 GhostBoard 产品窗口里冒充已验收。P1 标题-only `applyBatch` 已写入 sidecar Note（提升 revision）。2026-09-08 CUA：隔离工作区 Edit「Normalize Titles」把 `  Hello   world ` 写成 `Hello world` 并重启仍在；随后自定义 Edit Undo 把 sidecar 拉回原标题。宿主 `loadPluginFromZip` / `loadPluginFromZipUrl` 可从 ZIP 或显式允许的 loopback URL 加载 title-tools；公开安装仍关闭。
 
 逻辑入口继续保持宿主全局、JSON、资源上限、终止恢复和跨调用状态 canary；视图入口仍必须通过原生桥 canary、网络、文件和生命周期矩阵。两条门槛分别记录，不能用逻辑候选的通过替代视图隔离。
 
@@ -64,7 +66,7 @@ QuickJS WASM 逻辑入口已经在本机和打包探针复测通过。native Web
 
 逻辑路径采用 QuickJS WASM 的显式句柄边界；若后续改为独立进程，文件、网络和子进程权限还需由平台约束验证。仅把现有 VM 搬到另一 Bun 进程不能满足要求。QuickJS 的同进程优势是可控 API 和资源终止，剩余风险由打包应用 canary、依赖升级锁定和必要的进程级隔离继续验证。
 
-WebSocket、Worker、导航 iframe 和 canary 风暴已在失败的 WebKit/CEF 候选上测过，结果同样拒绝。OS helper 的内容规则候选挡住了 fetch/WebSocket，也把 blob Worker 一起挡住；导航由 `WKNavigationDelegate` 取消。无限循环时 helper UI 仍心跳，销毁 WKWebView 后可再挂恢复页；编排侧 SIGTERM 可杀掉 helper 再开。64MiB 分配后恢复页仍无桥/网络，但 helper UI RSS 几乎不动，WebContent 堆没有独立计量。尚未测量 WebRTC、跨工作区恢复。IME、焦点、剪贴板、实际旧 epoch 投递、Windows/Linux，以及 GhostBoard 编辑保存/撤销/重启桌面回归仍待完成。本轮没有这些项目的通过证据。
+WebSocket、Worker、导航 iframe 和 canary 风暴已在失败的 WebKit/CEF 候选上测过，结果同样拒绝。OS helper 的内容规则候选挡住了 fetch/WebSocket/图片/beacon，保留 blob Worker 和受限包资源；导航与表单目标由 `WKNavigationDelegate` 取消。无限循环时 helper UI 仍心跳，销毁 WKWebView 后可再挂恢复页；编排侧 SIGTERM 可杀掉 helper 再开。64MiB 分配后恢复页仍无桥/URL 网络，但 helper UI RSS 几乎不动，WebContent 堆没有独立计量。blocklist helper 向本机 UDP STUN 接收端发送了 2 个 WebRTC 包，已实证 URL 内容规则不是完整网络策略；必须找到可验证的禁用/代理方案或改用别的真实容器。跨工作区恢复、IME、焦点、剪贴板、实际旧 epoch 投递、Windows/Linux，以及 GhostBoard 编辑保存/撤销/重启桌面回归仍待完成。本轮没有这些项目的通过证据。
 
 ## 文档与实现核对
 
@@ -74,6 +76,6 @@ WebSocket、Worker、导航 iframe 和 canary 风暴已在失败的 WebKit/CEF �
 - [Electrobun bundling CEF 文档](https://github.com/blackboardsh/electrobun/blob/main/docs/src/content/docs/electrobun/apis/bundling-cef.mdx) 说明 `bundleCEF` 与 `renderer: "cef"`；探针仅在独立应用启用，产品配置未改。
 - CEF `OnContextCreated` 会预先设置桥对象，sandbox preload 里的 `window.__electrobunBunBridge = window.__electrobunBunBridge || ...` 会保留它。运行结果与该顺序一致。
 - Apple `WKUserContentController.add(_:name:)` 只会在调用后安装 `window.webkit.messageHandlers.<name>.postMessage`；helper 从不调用该方法。`WKWebsiteDataStore.nonPersistent()` 只保证不落盘，不隔离网络。
-- `WKContentRuleList` 全拦截与 `WKNavigationDelegate` 取消是宿主策略。对照在同一 entitlement 下不加载规则时 loopback 仍然成功，因此不能写成 App Sandbox 拒绝了网络。
+- `WKContentRuleList` 对 HTTP(S)/WS(S) 的 URL 拦截与 `WKNavigationDelegate` 取消是宿主策略。对照在同一 entitlement 下不加载规则时 loopback 仍然成功，因此不能写成 App Sandbox 拒绝了网络；blocklist helper 发往本机 STUN 接收端的 2 个 UDP 包进一步证明该规则不约束 WebRTC 流量。
 - 当前 SDK 标注 `WKProcessPool` 多实例不再有效；helper 靠销毁 `WKWebView` 和杀掉 helper 进程恢复，不以进程池当隔离。
-- 当前发布门槛仍是 [整改方案 §11 / §19](./public-plugin-platform-redesign.md)，不因局部可运行而降低。
+- 归档时的发布门槛为 [整改方案 §11 / §19](./public-plugin-platform-redesign.md)（已归档）；现行门槛见新方案 §10–11。

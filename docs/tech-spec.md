@@ -1415,7 +1415,7 @@ BlockNote 编辑器将文档结构保存为 JSON sidecar 文件（`content/.ghos
 
 - 消息文件：`messages/en.json`、`messages/zh.json`
 - 运行时引用：`import * as m from '../../paraglide/messages.js'`，调用 `m.key_name()`
-- 添加新 key 后运行 `bun run machine-translate`
+- 添加或修改 key 后运行 `bun run machine-translate`（需要机器翻译时）；`bun run type-check` 会先重新生成 Paraglide 输出和声明，再做 TypeScript 检查。
 - `src/paraglide/` 为生成目录，不手动编辑
 
 ### 8.4 生成文件

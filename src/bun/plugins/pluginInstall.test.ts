@@ -258,14 +258,16 @@ describe('plugin install journal', () => {
     expect(await readdir(join(root, 'staging'))).toEqual([]);
   });
 
-  it('refuses a second prepare while one is ready to commit', async () => {
+  it('reuses an identical pending prepare while one is ready to commit', async () => {
     const zipBytes = createStoredZip(await titleToolsFiles());
     const root = await mkdtemp(join(tmpdir(), 'plugin-install-pending-'));
     const store = new PluginInstallStore(root);
-    await store.prepareFromZip({ zipBytes });
-    await expect(store.prepareFromZip({ zipBytes })).rejects.toMatchObject({
-      code: 'pending-transaction',
-    });
+    const first = await store.prepareFromZip({ zipBytes });
+    const second = await store.prepareFromZip({ zipBytes });
+    expect(second.transactionId).toBe(first.transactionId);
+    expect(second.digest).toBe(first.digest);
+    expect(second.manifest.id).toBe(first.manifest.id);
+    expect(await readdir(join(root, 'staging'))).toEqual([first.transactionId]);
   });
 
   it('cancels uncommitted staging on recover', async () => {

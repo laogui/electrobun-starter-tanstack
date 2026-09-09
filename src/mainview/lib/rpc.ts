@@ -24,6 +24,11 @@ import type {
   ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
+import type {
+  InstalledPluginSummary,
+  PluginInstallCommitResult,
+  PluginInstallPreparationResult,
+} from '../../shared/plugins/management';
 
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
@@ -83,6 +88,22 @@ async function initElectrobun() {
           },
           normalizeNoteTitles: () => {
             globalThis.dispatchEvent(new CustomEvent('normalize-note-titles'));
+          },
+          pluginCommandRequested: (detail: unknown) => {
+            if (
+              !(
+                detail &&
+                typeof detail === 'object' &&
+                typeof (detail as { commandId?: unknown }).commandId ===
+                  'string' &&
+                typeof (detail as { pluginId?: unknown }).pluginId === 'string'
+              )
+            ) {
+              return;
+            }
+            globalThis.dispatchEvent(
+              new CustomEvent('plugin-command-requested', { detail })
+            );
           },
           canvasUndo: () => {
             globalThis.dispatchEvent(new CustomEvent('canvas-undo'));
@@ -191,6 +212,77 @@ export async function rpcDeleteWidget(widgetId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteWidget({ widgetId });
+}
+
+export async function rpcListPluginPackages(): Promise<{
+  available: boolean;
+  plugins: InstalledPluginSummary[];
+}> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { available: false, plugins: [] };
+  }
+  return { available: true, ...(await eb.rpc.request.pluginInstallList({})) };
+}
+
+export async function rpcPreparePluginInstallFromFile(): Promise<PluginInstallPreparationResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginPrepareInstallFromFile({});
+}
+
+export async function rpcPreparePluginInstallFromUrl(
+  url: string
+): Promise<PluginInstallPreparationResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginPrepareInstallFromUrl({ url });
+}
+
+export async function rpcCommitPluginInstall(
+  transactionId: string
+): Promise<PluginInstallCommitResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginCommitInstall({ transactionId });
+}
+
+export async function rpcCancelPluginInstall(
+  transactionId: string
+): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginCancelInstall({ transactionId });
+}
+
+export async function rpcEnablePluginCommands(input: {
+  digest: string;
+  pluginId: string;
+}): Promise<PluginInstallCommitResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginCommandEnable(input);
+}
+
+export async function rpcDisablePluginCommands(input: {
+  digest: string;
+  pluginId: string;
+}): Promise<PluginInstallCommitResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginCommandDisable(input);
 }
 
 export async function rpcListExtensionEnablement(): Promise<{
@@ -408,6 +500,22 @@ export type PluginNoteTitlesResult =
 export type PluginNoteTitlesHistoryResult =
   | { success: true; titles: Record<string, string> }
   | { success: false };
+
+export type PluginCommandRunResult =
+  | { operationId: string; success: true; titles: Record<string, string> }
+  | { error: string; success: false };
+
+export async function rpcPluginRunCommand(
+  pluginId: string,
+  commandId: string,
+  noteIds: string[]
+): Promise<PluginCommandRunResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin commands are unavailable.' };
+  }
+  return eb.rpc.request.pluginRunCommand({ commandId, noteIds, pluginId });
+}
 
 export async function rpcPluginNormalizeNoteTitles(
   noteIds: string[]

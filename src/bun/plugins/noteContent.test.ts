@@ -18,6 +18,7 @@ import { NoteContentService } from './noteContent';
 let workspace: string;
 let service: NoteContentService;
 const disposers: (() => void)[] = [];
+const CREATED_NOTE_ID = /^plugin_note_[a-f0-9]{32}$/;
 const write = async (path: string, value: string) => {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, value);
@@ -102,6 +103,252 @@ afterEach(async () => {
 });
 
 describe('public note content transactions', () => {
+  it('creates detached notes with stable receipts and restores the same IDs across restart undo/redo', async () => {
+    const events: any[] = [];
+    disposers.push(
+      subscribeContentChanges(workspace, (event) => events.push(event))
+    );
+    const input = {
+      action: 'create',
+      operationId: 'create-batch',
+      label: 'Create notes',
+      notes: [
+        { title: 'Created first', text: 'First body\r\n第二段', color: 'blue' },
+        { title: 'Created empty' },
+      ],
+    };
+    const created = await call(input);
+    expect(created.status).toBe(200);
+    const ids = created.result.items.map((item: { id: string }) => item.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.every((id: string) => CREATED_NOTE_ID.test(id))).toBe(true);
+    expect(await raw(ids[0])).toMatchObject({
+      schema: 'ghostboard-blocknote/v1',
+      revision: 1,
+      title: 'Created first',
+      color: 'blue',
+      displayHint: 'note',
+    });
+    expect(
+      (await call({ action: 'query', query: { text: '第二段' } })).result
+        .items[0].id
+    ).toBe(ids[0]);
+    expect((await call(input)).result).toEqual(created.result);
+    expect(events).toHaveLength(1);
+    expect(
+      (await call({ ...input, notes: [{ title: 'Different' }] })).result.code
+    ).toBe('operation-mismatch');
+    service = new NoteContentService(workspace, 'workspace');
+    const undo = {
+      action: 'undo',
+      batchId: 'create-batch',
+      operationId: 'undo-create',
+    };
+    expect((await call(undo)).result).toMatchObject({
+      items: [],
+      removedIds: ids,
+    });
+    expect(events.at(-1)).toMatchObject({ operation: 'delete', ids });
+    expect((await call({ action: 'getMany', ids })).result.items).toEqual([
+      null,
+      null,
+    ]);
+    expect((await call(input)).result).toEqual(created.result);
+    expect((await call({ action: 'get', id: ids[0] })).result.item).toBeNull();
+    const redo = await call({
+      action: 'redo',
+      batchId: 'create-batch',
+      operationId: 'redo-create',
+    });
+    expect(
+      redo.result.items.map((item: any) => [item.id, item.revision])
+    ).toEqual(ids.map((id: string) => [id, 3]));
+    expect((await call(undo)).result.removedIds).toEqual(ids);
+    expect((await raw(ids[0])).revision).toBe(3);
+    // Subsequent metadata mutations must not downgrade creation history.
+    await call(batch('post-create-update', [update('a')]));
+    expect(
+      JSON.parse(await readFile(join(workspace, NOTE_HISTORY_PATH), 'utf8'))
+    ).toMatchObject({ schema: 'ghostboard-content-history/v3' });
+  });
+
+  it('rejects invalid create batches without writing a receipt', async () => {
+    for (const notes of [
+      [],
+      new Array(101).fill({ title: 'X' }),
+      [{ title: 42 }],
+      [{ title: 'X', id: '../bad' }],
+      [{ title: 'X', text: '界'.repeat(90_000) }],
+    ]) {
+      expect(
+        (
+          await call({
+            action: 'create',
+            notes,
+            label: 'Create',
+            operationId: 'invalid-create',
+          })
+        ).status
+      ).toBe(400);
+    }
+    expect(existsSync(join(workspace, NOTE_HISTORY_PATH))).toBe(false);
+  });
+
+  it.each([
+    'modified',
+    'live',
+    'canvas',
+    'trash',
+    'backlink',
+    'corrupt-manifest',
+  ])('preserves the whole creation batch when %s makes undo unsafe', async (reason) => {
+    const result = await call({
+      action: 'create',
+      notes: [{ title: 'One' }, { title: 'Two' }],
+      label: 'Create',
+      operationId: 'create',
+    });
+    const ids = result.result.items.map((item: any) => item.id);
+    let protectedIds: string[] = [];
+    if (reason === 'modified') {
+      await call(
+        batch('edit-created', [
+          { id: ids[1], expectedRevision: 1, changes: { text: 'Edited' } },
+        ])
+      );
+    }
+    if (reason === 'live') {
+      protectedIds = [ids[1]];
+    }
+    if (reason === 'canvas' || reason === 'trash') {
+      await write(
+        join(
+          workspace,
+          '.ghostboard',
+          reason === 'canvas' ? 'views' : 'trash',
+          'view.json'
+        ),
+        JSON.stringify({
+          nodes: [{ data: { children: [{ data: { noteId: ids[1] } }] } }],
+        })
+      );
+    }
+    if (reason === 'backlink') {
+      await write(join(workspace, 'content', 'backlink.md'), `Link: ${ids[1]}`);
+    }
+    if (reason === 'corrupt-manifest') {
+      await write(join(workspace, '.ghostboard/views/view.json'), '{bad');
+    }
+    const failed = await call({
+      action: 'undo',
+      batchId: 'create',
+      operationId: 'undo',
+      protectedIds,
+    });
+    expect(failed.status).not.toBe(200);
+    expect(
+      (await call({ action: 'getMany', ids })).result.items.every(Boolean)
+    ).toBe(true);
+    expect((await raw(ids[0])).revision).toBe(1);
+  });
+
+  it('refuses creation redo when another record has occupied the ID', async () => {
+    const result = await call({
+      action: 'create',
+      notes: [{ title: 'One' }],
+      label: 'Create',
+      operationId: 'create',
+    });
+    const id = result.result.items[0].id;
+    await call({ action: 'undo', batchId: 'create', operationId: 'undo' });
+    await write(
+      join(workspace, 'content', 'occupied.md'),
+      `---\nid: ${id}\ntitle: Occupied\n---\nExternal body`
+    );
+    expect(
+      (await call({ action: 'redo', batchId: 'create', operationId: 'redo' }))
+        .result.code
+    ).toBe('content-exists');
+    expect(existsSync(noteFilePath(workspace, id))).toBe(false);
+  });
+
+  it('recovers interrupted creation before a retry without allocating duplicate notes', async () => {
+    let fail = true;
+    vi.mocked(Bun.write).mockImplementation(async (path, value) => {
+      if (fail && String(path).includes('/plugin-content-history.json.')) {
+        fail = false;
+        throw new Error('disk failure');
+      }
+      return (await write(String(path), String(value))) as never;
+    });
+    const input = {
+      action: 'create',
+      notes: [{ title: 'Recovered creation' }],
+      label: 'Create',
+      operationId: 'create-recovery',
+    };
+    expect((await call(input)).result.code).toBe('commit-pending');
+    service = new NoteContentService(workspace, 'workspace');
+    const retried = await call(input);
+    expect(retried.status).toBe(200);
+    expect(
+      (await call({ action: 'query', query: { text: 'Recovered creation' } }))
+        .result.items
+    ).toHaveLength(1);
+    fail = true;
+    expect(
+      (
+        await call({
+          action: 'undo',
+          batchId: 'create-recovery',
+          operationId: 'undo-recovery',
+        })
+      ).result.code
+    ).toBe('commit-pending');
+    expect(
+      (await call({ action: 'get', id: retried.result.items[0].id })).result
+        .item
+    ).toBeNull();
+    expect(
+      (
+        await call({
+          action: 'redo',
+          batchId: 'create-recovery',
+          operationId: 'redo-recovery',
+        })
+      ).status
+    ).toBe(200);
+  });
+
+  it('rejects inconsistent creation history without deleting a note', async () => {
+    const created = await call({
+      action: 'create',
+      notes: [{ title: 'Keep me' }],
+      label: 'Create',
+      operationId: 'create-corrupt-history',
+    });
+    const id = created.result.items[0].id;
+    const historyPath = join(workspace, NOTE_HISTORY_PATH);
+    const history = JSON.parse(await readFile(historyPath, 'utf8')) as {
+      batches: { created: { currentRevision: number }[] }[];
+    };
+    const createdHistory = history.batches.at(0)?.created.at(0);
+    if (!createdHistory) {
+      throw new Error('Missing creation history fixture');
+    }
+    createdHistory.currentRevision = 7;
+    await writeFile(historyPath, JSON.stringify(history));
+
+    const failed = await call({
+      action: 'undo',
+      batchId: 'create-corrupt-history',
+      operationId: 'undo-corrupt-history',
+    });
+    expect(failed.status).toBe(500);
+    expect(failed.result.code).toBe('corrupt-history');
+    expect((await raw(id)).title).toBe('Keep me');
+  });
+
   it('replaces bodies atomically, refreshes safe previews and restores rich text across restart', async () => {
     const original = await raw('a');
     original.blocks[0].type = 'heading';

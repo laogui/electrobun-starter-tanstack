@@ -113,7 +113,8 @@ function parseIntent(text: string): Intent {
   > | null;
   if (
     (history?.schema !== 'ghostboard-content-history/v1' &&
-      history?.schema !== 'ghostboard-content-history/v2') ||
+      history?.schema !== 'ghostboard-content-history/v2' &&
+      history?.schema !== 'ghostboard-content-history/v3') ||
     !Array.isArray(history.operations)
   ) {
     throw new NoteTransactionError(
@@ -197,12 +198,27 @@ async function recoverUnlocked(workspace: string): Promise<void> {
         },
       ];
     });
-    notifyContentChanged(workspace, {
-      kind: 'note',
-      ids: intent.changes.map((change) => change.id),
-      operation: 'upsert',
-      noteChanges,
-    });
+    const upserts = intent.changes
+      .filter((change) => change.after !== null)
+      .map((change) => change.id);
+    const removed = intent.changes
+      .filter((change) => change.after === null)
+      .map((change) => change.id);
+    if (upserts.length) {
+      notifyContentChanged(workspace, {
+        kind: 'note',
+        ids: upserts,
+        operation: 'upsert',
+        noteChanges,
+      });
+    }
+    if (removed.length) {
+      notifyContentChanged(workspace, {
+        kind: 'note',
+        ids: removed,
+        operation: 'delete',
+      });
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+import { getLiveNoteReferences } from '@/lib/noteReferences';
 import { rpcGetLocalHttpEndpoint } from '@/lib/rpc';
 import type {
   ContentBatchResult,
@@ -15,6 +16,9 @@ function parseBatch(value: unknown): ContentBatchResult {
     !result ||
     typeof result.operationId !== 'string' ||
     typeof result.changed !== 'boolean' ||
+    (result.removedIds !== undefined &&
+      (!Array.isArray(result.removedIds) ||
+        result.removedIds.some((id) => typeof id !== 'string'))) ||
     !Array.isArray(result.items) ||
     !result.items.every(
       (item) =>
@@ -165,6 +169,8 @@ export function createPluginContent(
       )
     );
   return {
+    createMany: (notes, options) =>
+      mutate({ action: 'create', notes, label: options.label }, options),
     async getMany(ids, options) {
       const capturedIds = [...ids];
       const result = await request(
@@ -212,7 +218,15 @@ export function createPluginContent(
     },
     updateMany: (updates, options) =>
       mutate({ action: 'update', updates, label: options.label }, options),
-    undo: (batchId, options) => mutate({ action: 'undo', batchId }, options),
+    undo: (batchId, options) =>
+      mutate(
+        {
+          action: 'undo',
+          batchId,
+          protectedIds: getLiveNoteReferences(context.workspaceId),
+        },
+        options
+      ),
     redo: (batchId, options) => mutate({ action: 'redo', batchId }, options),
   };
 }

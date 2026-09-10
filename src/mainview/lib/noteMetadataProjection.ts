@@ -80,10 +80,11 @@ export function isNoteMetadataChange(
 
 function projectMetadata(
   data: Record<string, unknown>,
-  change: NoteMetadataChange | undefined
+  change: NoteMetadataChange | undefined,
+  body?: Record<string, unknown>
 ): Record<string, unknown> {
   if (
-    !change?.metadataOnly ||
+    !(change && (change.metadataOnly || body)) ||
     hasNoteMetadataConflict(data, change) ||
     (data.blocknoteRevision !== change.before.revision &&
       data.blocknoteRevision !== change.after.revision)
@@ -92,20 +93,22 @@ function projectMetadata(
   }
   const { title, color, revision } = change.after;
   if (
+    !body &&
     data.title === title &&
     data.color === color &&
     data.blocknoteRevision === revision
   ) {
     return data;
   }
-  return { ...data, title, color, blocknoteRevision: revision };
+  return { ...data, ...body, title, color, blocknoteRevision: revision };
 }
 
 function projectData(
   data: Record<string, unknown>,
-  changes: ReadonlyMap<string, NoteMetadataChange>
+  changes: ReadonlyMap<string, NoteMetadataChange>,
+  body?: Record<string, unknown>
 ): Record<string, unknown> {
-  let next = projectMetadata(data, changes.get(data.noteId as string));
+  let next = projectMetadata(data, changes.get(data.noteId as string), body);
   if (!Array.isArray(data.children)) {
     return next;
   }
@@ -119,7 +122,7 @@ function projectData(
     const change = changes.get(id);
     // Nested children keep their editable fields in data; legacy children are flat.
     const source = nested ?? child;
-    const projected = projectMetadata(source, change);
+    const projected = projectMetadata(source, change, body);
     if (source === projected) {
       return child;
     }
@@ -128,7 +131,12 @@ function projectData(
       return projected;
     }
     const result: Record<string, unknown> = { ...child, data: projected };
-    for (const key of ['title', 'color', 'blocknoteRevision'] as const) {
+    for (const key of [
+      'title',
+      'color',
+      'blocknoteRevision',
+      ...Object.keys(body ?? {}),
+    ]) {
       if (key in child) {
         result[key] = projected[key];
       }
@@ -143,14 +151,15 @@ function projectData(
 
 export function applyNoteMetadataChanges<S extends ProjectionState>(
   state: S,
-  changes: readonly NoteMetadataChange[]
+  changes: readonly NoteMetadataChange[],
+  body?: Record<string, unknown>
 ): S {
   let next = state;
   // Preserve transaction ordering when a batch contains multiple revisions of a note.
   for (const change of changes) {
     const map = new Map([[change.id, change]]);
     const projectItem = <T extends Item>(item: T): T => {
-      const data = projectData(item.data, map);
+      const data = projectData(item.data, map, body);
       return data === item.data ? item : { ...item, data };
     };
     const nodes = next.nodes.map(projectItem);

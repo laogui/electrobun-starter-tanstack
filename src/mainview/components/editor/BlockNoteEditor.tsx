@@ -30,6 +30,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { registerNoteBodyEditor } from '@/lib/noteBodySync';
 import { applyNoteMetadataChanges } from '@/lib/noteMetadataProjection';
 import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
@@ -76,6 +77,7 @@ interface InitialContent {
   markdown?: string;
   recoveredFromMarkdown: boolean;
   revision: number | undefined;
+  workspaceId?: string;
 }
 
 function createEmptyInitialContent(): InitialContent {
@@ -174,7 +176,13 @@ export default function BlockNoteEditor({
   const autoSaveInterval = useAppSettingsStore((s) => s.autoSaveInterval);
   const debounceMs = getBlockNoteDebounceMs(autoSaveInterval);
 
-  const { flushNow, saveDebounced, setInitialRevision } = useBlockNoteSaver({
+  const {
+    flushNow,
+    saveDebounced,
+    setInitialRevision,
+    markDirty,
+    canApplyExternal,
+  } = useBlockNoteSaver({
     debounceMs,
     enabled: typeof noteId === 'string',
     frontmatter,
@@ -202,6 +210,7 @@ export default function BlockNoteEditor({
         }
         if (response.success) {
           setInitial({
+            workspaceId: response.workspaceId,
             blocks: Array.isArray(response.blocks)
               ? (response.blocks as PartialBlock[])
               : undefined,
@@ -303,6 +312,7 @@ export default function BlockNoteEditor({
 
   return (
     <BlockNoteSurface
+      canApplyExternal={canApplyExternal}
       color={colorValue}
       flushNow={flushNow}
       initial={initial}
@@ -313,7 +323,9 @@ export default function BlockNoteEditor({
       latestMarkdownRef={latestMarkdownRef}
       loadFailed={loadFailed}
       localHttpEndpoint={localHttpEndpoint}
+      markDirty={markDirty}
       noteId={typeof noteId === 'string' ? noteId : undefined}
+      onExternalTitle={setTitleValue}
       onMarkdownChange={onMarkdownChange}
       onTitleBlur={() => {
         // flush latest payload — handled inside BlockNoteSurface after
@@ -324,6 +336,7 @@ export default function BlockNoteEditor({
         onTitleChange(next);
       }}
       saveDebounced={saveDebounced}
+      setInitialRevision={setInitialRevision}
       title={titleValue}
     />
   );
@@ -332,6 +345,7 @@ export default function BlockNoteEditor({
 export type { BlockNoteSaveStatus };
 
 interface BlockNoteSurfaceProps {
+  canApplyExternal: ReturnType<typeof useBlockNoteSaver>['canApplyExternal'];
   color: string;
   flushNow: () => void;
   initial: InitialContent;
@@ -341,15 +355,26 @@ interface BlockNoteSurfaceProps {
   latestMarkdownRef: React.MutableRefObject<string>;
   loadFailed: boolean;
   localHttpEndpoint: LocalHttpEndpointInfo;
+  markDirty: () => void;
   noteId: string | undefined;
+  onExternalTitle: (title: string) => void;
   onMarkdownChange: (markdown: string) => void;
   onTitleBlur: () => void;
   onTitleChange: (next: string) => void;
   saveDebounced: (payload: { blocks: unknown[]; markdown: string }) => void;
+  setInitialRevision: (
+    revision: number | undefined,
+    metadata?: Record<string, unknown>
+  ) => void;
   title: string;
 }
 
 function BlockNoteSurface({
+  noteId,
+  markDirty,
+  canApplyExternal,
+  setInitialRevision,
+  onExternalTitle,
   localHttpEndpoint,
   color,
   flushNow,
@@ -413,6 +438,56 @@ function BlockNoteSurface({
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
   const titleDirtyRef = useRef(false);
+  const applyingExternalRef = useRef(false);
+  const externalDocumentRef = useRef<string | null>(null);
+  const serializationRef = useRef(0);
+
+  useEffect(() => {
+    if (!(noteId && initial.workspaceId)) {
+      return;
+    }
+    const unregister = registerNoteBodyEditor(
+      noteId,
+      {
+        canApply: (snapshot) =>
+          !titleDirtyRef.current &&
+          canApplyExternal(snapshot.revision, {
+            before: snapshot.before,
+            after: snapshot,
+          }),
+        apply: (snapshot) => {
+          applyingExternalRef.current = true;
+          try {
+            editor.replaceBlocks(
+              editor.document,
+              snapshot.blocks as PartialBlock[]
+            );
+            externalDocumentRef.current = JSON.stringify(editor.document);
+            latestBlocksRef.current = editor.document as PartialBlock[];
+            latestMarkdownRef.current = snapshot.text;
+            setInitialRevision(snapshot.revision, {
+              title: snapshot.title,
+              color: snapshot.color,
+            });
+            onExternalTitle(snapshot.title);
+          } finally {
+            applyingExternalRef.current = false;
+          }
+        },
+      },
+      initial.workspaceId
+    );
+    return unregister;
+  }, [
+    noteId,
+    initial.workspaceId,
+    editor,
+    canApplyExternal,
+    latestBlocksRef,
+    latestMarkdownRef,
+    setInitialRevision,
+    onExternalTitle,
+  ]);
 
   // If we recovered from markdown (no sidecar yet), import the markdown body
   // once the editor surface mounts.
@@ -465,24 +540,46 @@ function BlockNoteSurface({
     } catch (error) {
       console.error('[blocknote] Failed to serialize markdown:', error);
     }
-    latestMarkdownRef.current = markdown;
-    latestBlocksRef.current = blocks as PartialBlock[];
     return { blocks: blocks as unknown as unknown[], markdown };
-  }, [editor, latestBlocksRef, latestMarkdownRef]);
+  }, [editor]);
 
   const handleChange = useCallback(async () => {
+    if (
+      applyingExternalRef.current ||
+      (externalDocumentRef.current !== null &&
+        externalDocumentRef.current === JSON.stringify(editor.document))
+    ) {
+      return;
+    }
+    externalDocumentRef.current = null;
+    markDirty();
+    const version = ++serializationRef.current;
     const payload = await serializeCurrentDocument();
+    if (version !== serializationRef.current) {
+      return;
+    }
+    latestMarkdownRef.current = payload.markdown;
+    latestBlocksRef.current = payload.blocks as PartialBlock[];
     titleDirtyRef.current = false;
     onMarkdownChange(payload.markdown);
     saveDebounced(payload);
-  }, [onMarkdownChange, saveDebounced, serializeCurrentDocument]);
+  }, [
+    editor,
+    markDirty,
+    latestBlocksRef,
+    latestMarkdownRef,
+    onMarkdownChange,
+    saveDebounced,
+    serializeCurrentDocument,
+  ]);
 
   const handleTitleChange = useCallback(
     (nextTitle: string) => {
+      markDirty();
       titleDirtyRef.current = true;
       onTitleChange(nextTitle);
     },
-    [onTitleChange]
+    [markDirty, onTitleChange]
   );
 
   const handleBlur = useCallback(() => {
@@ -493,8 +590,14 @@ function BlockNoteSurface({
     }
 
     titleDirtyRef.current = false;
+    const version = ++serializationRef.current;
     serializeCurrentDocument()
       .then((payload) => {
+        if (version !== serializationRef.current) {
+          return;
+        }
+        latestMarkdownRef.current = payload.markdown;
+        latestBlocksRef.current = payload.blocks as PartialBlock[];
         onMarkdownChange(payload.markdown);
         saveDebounced(payload);
         flushNow();
@@ -506,6 +609,8 @@ function BlockNoteSurface({
     flushNow,
     onMarkdownChange,
     onTitleBlur,
+    latestBlocksRef,
+    latestMarkdownRef,
     saveDebounced,
     serializeCurrentDocument,
   ]);

@@ -287,6 +287,32 @@ export function useBlockNoteSaver({
     [clearTimer, debounceMs, saveNow]
   );
 
+  // Protect edits before asynchronous document serialization has completed.
+  const markDirty = useCallback(() => {
+    latestPayloadRef.current = null;
+    dirtyRef.current = true;
+    changeVersionRef.current += 1;
+  }, []);
+  const canApplyExternal = useCallback(
+    (
+      revision: number,
+      metadata?: {
+        before: { title: string; color: string };
+        after: { title: string; color: string };
+      }
+    ) =>
+      !(dirtyRef.current || savingRef.current) &&
+      revisionRef.current !== undefined &&
+      revision >= revisionRef.current &&
+      (!metadata ||
+        (['title', 'color'] as const).every(
+          (key) =>
+            frontmatterRef.current[key] === metadata.before[key] ||
+            frontmatterRef.current[key] === metadata.after[key]
+        )),
+    []
+  );
+
   const setInitialRevision = useCallback(
     (revision: number | undefined, metadata?: Record<string, unknown>) => {
       revisionRef.current = revision;
@@ -323,6 +349,8 @@ export function useBlockNoteSaver({
 
   return {
     flushNow,
+    markDirty,
+    canApplyExternal,
     saveDebounced,
     setInitialRevision,
     status: statusRef.current,

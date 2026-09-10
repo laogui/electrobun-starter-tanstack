@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { registerNoteReferences } from '@/lib/noteReferences';
 import { createPluginContent } from './content';
 
 const endpoint = {
@@ -14,6 +15,47 @@ const context = () => ({
 afterEach(() => vi.useRealTimers());
 
 describe('public content transport', () => {
+  it('sends creation input and snapshots live references for creation undo', async () => {
+    const result = {
+      operationId: 'creation',
+      changed: true,
+      items: [{ id: 'new', title: 'New', color: '', revision: 1 }],
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => Response.json(result));
+    const content = createPluginContent(context(), {
+      getEndpoint: async () => endpoint,
+      fetch: fetcher,
+    });
+    const notes = [{ title: 'New', text: 'Body' }];
+    expect(
+      await content.createMany(notes, {
+        label: 'Create',
+        operationId: 'creation',
+      })
+    ).toEqual(result);
+    expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string)).toMatchObject(
+      {
+        action: 'create',
+        notes,
+        operationId: 'creation',
+        workspaceId: 'fixed-workspace',
+      }
+    );
+    const unprotect = registerNoteReferences((workspace) =>
+      workspace === 'fixed-workspace' ? ['new'] : []
+    );
+    try {
+      await content.undo('creation');
+      expect(
+        JSON.parse(fetcher.mock.calls[1]![1]!.body as string)
+      ).toMatchObject({ action: 'undo', protectedIds: ['new'] });
+    } finally {
+      unprotect();
+    }
+  });
+
   it('reads note sets with ordered null slots and rejects identity or count mismatches', async () => {
     const note = {
       id: 'a',

@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import BlockNoteEditor from '@/components/editor/BlockNoteEditor';
 import {
   rpcCommitPluginInstall,
   rpcCreateNote,
@@ -8,6 +11,7 @@ import {
   rpcLoadBlockNote,
   rpcSaveBlockNote,
   rpcSaveManifest,
+  rpcScanUnlinkedNotes,
   rpcSearchCanvas,
 } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -64,7 +68,7 @@ export async function runT2ContentProbe() {
   };
   const checks: Record<string, boolean> = {};
   const report: Record<string, unknown> = {
-    stage: 'T2/note metadata and plain-text body transactions',
+    stage: 'T2/note creation, transactions and live reconciliation',
     passed: false,
     checks,
     startedAt: new Date().toISOString(),
@@ -76,6 +80,46 @@ export async function runT2ContentProbe() {
     if (!value) {
       throw new Error(`Failed: ${name}`);
     }
+  };
+  let bodyRoot: Root | undefined;
+  let bodyElement: HTMLDivElement | undefined;
+  const mountBodyEditor = async (app: PluginContext) => {
+    const note = await app.content.get('t2-note-body');
+    if (!note || note.revision === null) {
+      throw new Error('Missing body note');
+    }
+    const data = {
+      noteId: note.id,
+      title: note.title,
+      color: note.color,
+      blocknoteRevision: note.revision,
+      content: note.text,
+    };
+    const node = {
+      id: 'body-live-placement',
+      type: 'card',
+      position: { x: 300, y: 0 },
+      data,
+    };
+    useCanvasStore.setState((state) => ({ nodes: [...state.nodes, node] }));
+    bodyElement = document.createElement('div');
+    document.body.append(bodyElement);
+    bodyRoot = createRoot(bodyElement);
+    bodyRoot.render(
+      createElement(BlockNoteEditor, {
+        nodeId: node.id,
+        noteId: note.id,
+        data,
+        title: note.title,
+        color: note.color,
+        onMarkdownChange: () => {},
+        onTitleChange: () => {},
+      })
+    );
+    await waitFor(
+      () => Boolean(bodyElement?.querySelector('.bn-editor')),
+      'real editor mount'
+    );
   };
   const originalTitle = (id: string) => `  T2   Content probe ${id}  `;
   try {
@@ -305,6 +349,7 @@ export async function runT2ContentProbe() {
         0
       );
       check('bodySeed', seeded.success && seeded.revision === 1);
+      await mountBodyEditor(probe.app);
       const result = await probe.app.content.updateMany(
         [
           {
@@ -320,6 +365,26 @@ export async function runT2ContentProbe() {
       check(
         'bodyReplacement',
         result.changed && result.items[0]?.revision === 2
+      );
+      await waitFor(
+        () => Boolean(bodyElement?.textContent?.includes('Replacement body')),
+        'live editor body replacement'
+      );
+      await waitFor(
+        () =>
+          useCanvasStore
+            .getState()
+            .nodes.find((node) => node.id === 'body-live-placement')?.data
+            .blocknoteRevision === 2,
+        'live canvas preview'
+      );
+      check(
+        'liveEditorAndPlacement',
+        useCanvasStore
+          .getState()
+          .nodes.find((node) => node.id === 'body-live-placement')
+          ?.data.previewExcerpt?.toString()
+          .includes('Replacement body') === true
       );
       const loaded = await rpcLoadBlockNote('t2-note-body');
       check(
@@ -340,7 +405,13 @@ export async function runT2ContentProbe() {
           '第二行'
         ) === true
       );
+      await mountBodyEditor(probe.app);
       await probe.app.content.undo('body-batch', { operationId: 'body-undo' });
+      await waitFor(
+        () => Boolean(bodyElement?.textContent?.includes('Original rich body')),
+        'live editor undo'
+      );
+      check('liveRichUndo', Boolean(bodyElement?.querySelector('h2')));
       const restoredBody = await rpcLoadBlockNote('t2-note-body');
       check(
         'bodyUndoRestoresRichBlocks',
@@ -348,6 +419,10 @@ export async function runT2ContentProbe() {
           JSON.stringify(restoredBody.blocks).includes('"bold":true')
       );
       await probe.app.content.redo('body-batch', { operationId: 'body-redo' });
+      await waitFor(
+        () => Boolean(bodyElement?.textContent?.includes('Replacement body')),
+        'live editor redo'
+      );
       check(
         'bodyRedo',
         (await probe.app.content.get('t2-note-body'))?.revision === 4
@@ -363,6 +438,158 @@ export async function runT2ContentProbe() {
       'body change notification'
     );
     check('bodyEventsAreNotMetadataOnly', true);
+    const creationInput = [
+      {
+        title: 'SDK created first',
+        text: 'Created through SDK\n第二段',
+        color: 'blue',
+      },
+      { title: 'SDK created empty' },
+    ];
+    if (phase === 'initial') {
+      const created = await probe.app.content.createMany(creationInput, {
+        label: 'Create two notes',
+        operationId: 'creation-batch',
+      });
+      check(
+        'createTwoNotes',
+        created.items.length === 2 &&
+          created.items.every((note) => note.revision === 1)
+      );
+      const ids = created.items.map((note) => note.id);
+      await probe.app.storage.workspace.set('created-ids', ids);
+      const repeated = await probe.app.content.createMany(creationInput, {
+        label: 'Create two notes',
+        operationId: 'creation-batch',
+      });
+      check(
+        'creationRetryKeepsIds',
+        JSON.stringify(repeated) === JSON.stringify(created)
+      );
+      const library = await rpcScanUnlinkedNotes();
+      check(
+        'creationDiscoverableInLibrary',
+        ids.every((id) => library.some((entry) => entry.noteId === id))
+      );
+      const beforePlacement = useCanvasStore.getState().nodes;
+      const note = created.items[0]!;
+      const placement = {
+        id: 'creation-reference',
+        type: 'card',
+        position: { x: 400, y: 0 },
+        data: {
+          noteId: note.id,
+          title: note.title,
+          color: note.color,
+          blocknoteRevision: note.revision,
+        },
+      };
+      useCanvasStore.setState({ nodes: [...beforePlacement, placement] });
+      let protectedLive = false;
+      try {
+        await probe.app.content.undo('creation-batch');
+      } catch (error) {
+        protectedLive =
+          (error as { code?: string }).code === 'content-referenced';
+      }
+      check('creationUndoProtectsLivePlacement', protectedLive);
+      check(
+        'persistCreatedPlacement',
+        (
+          await rpcSaveManifest(
+            useCanvasStore.getState().activeViewId,
+            [...beforePlacement, placement],
+            []
+          )
+        ).success
+      );
+      useCanvasStore.setState({ nodes: beforePlacement });
+      let protectedPersisted = false;
+      try {
+        await probe.app.content.undo('creation-batch');
+      } catch (error) {
+        protectedPersisted =
+          (error as { code?: string }).code === 'content-referenced';
+      }
+      check('creationUndoProtectsPersistedPlacement', protectedPersisted);
+      check(
+        'removeCreatedPlacement',
+        (
+          await rpcSaveManifest(
+            useCanvasStore.getState().activeViewId,
+            beforePlacement,
+            []
+          )
+        ).success
+      );
+    } else {
+      const ids = (await probe.app.storage.workspace.get(
+        'created-ids'
+      )) as string[];
+      check(
+        'createdNotesSurviveRestart',
+        (await probe.app.content.getMany(ids)).every(
+          (note) => note?.revision === 1
+        )
+      );
+      const undone = await probe.app.content.undo('creation-batch', {
+        operationId: 'creation-undo',
+      });
+      check(
+        'creationUndoRemovesBatch',
+        undone.removedIds?.length === 2 &&
+          (await probe.app.content.getMany(ids)).every((note) => note === null)
+      );
+      const library = await rpcScanUnlinkedNotes();
+      check(
+        'creationUndoRemovesLibraryEntries',
+        !library.some((entry) => ids.includes(entry.noteId ?? ''))
+      );
+      check(
+        'stalePlacementCannotRecreateUndoneNote',
+        !(
+          await rpcSaveManifest(
+            useCanvasStore.getState().activeViewId,
+            [
+              {
+                id: 'stale-creation',
+                type: 'card',
+                position: { x: 0, y: 0 },
+                data: { noteId: ids[0], title: 'Stale', blocknoteRevision: 1 },
+              },
+            ],
+            []
+          )
+        ).success
+      );
+      const redone = await probe.app.content.redo('creation-batch');
+      check(
+        'creationRedoRestoresIds',
+        redone.items.every(
+          (note, index) => note.id === ids[index] && note.revision === 3
+        )
+      );
+      await probe.app.content.updateMany(
+        [
+          {
+            id: ids[1]!,
+            expectedRevision: 3,
+            changes: { text: 'User-modified creation' },
+          },
+        ],
+        { label: 'Edit created note' }
+      );
+      let conflict = false;
+      try {
+        await probe.app.content.undo('creation-batch');
+      } catch (error) {
+        conflict = (error as { code?: string }).code === 'revision-conflict';
+      }
+      check(
+        'creationUndoPreservesModifiedBatch',
+        conflict && (await probe.app.content.get(ids[0]!))?.revision === 3
+      );
+    }
     useCanvasStore.setState({ nodes: originalNodes });
     check(
       'contentEventsCarryMetadata',
@@ -397,6 +624,9 @@ export async function runT2ContentProbe() {
         ? `${error.message}\n${error.stack ?? ''}`
         : String(error);
     report.runtime = pluginRuntime.getSnapshot();
+  } finally {
+    bodyRoot?.unmount();
+    bodyElement?.remove();
   }
   report.finishedAt = new Date().toISOString();
   await request('report', report);

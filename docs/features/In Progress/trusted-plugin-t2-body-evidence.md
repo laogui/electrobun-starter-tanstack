@@ -4,6 +4,8 @@
 
 状态：**已有笔记的纯文本正文批次替换已通过 macOS arm64 发行包验证。整个 T2 尚未完成。**
 
+后续干净编辑器与画布实时刷新见 [第五批证据](trusted-plugin-t2-body-sync-evidence.md)；本页保留第四批当时的范围与限制。
+
 ## 实现范围
 
 - 正式 SDK `app.content.updateMany` 新增 `changes.text`。每篇最多 256 KiB UTF-8，CRLF / CR 规范为 LF，每行一个普通段落，空字符串生成空段落。它显式替换整个富文档，HTML / Markdown 按普通文本处理，不是无损富文本编辑接口。

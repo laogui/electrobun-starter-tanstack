@@ -1,8 +1,13 @@
+import { createNoteBodySync } from '@/lib/noteBodySync';
 import {
   applyNoteMetadataChanges,
   isNoteMetadataChange,
   publishNoteMetadataChanges,
 } from '@/lib/noteMetadataProjection';
+import {
+  collectNoteReferences,
+  registerNoteReferences,
+} from '@/lib/noteReferences';
 import { useCanvasStore } from '@/store/canvasStore';
 import type { ContentChangedEvent } from '../../../../packages/plugin-sdk';
 import { canvasSelection } from './canvasSelection';
@@ -31,7 +36,21 @@ export function connectPluginHostEvents(
   target: Window = window
 ): () => void {
   let workspaceId = runtime.getSnapshot().workspaceId;
+  const unprotect = registerNoteReferences((current) => {
+    if (runtime.getSnapshot().workspaceId !== current) {
+      return [];
+    }
+    const state = useCanvasStore.getState();
+    return collectNoteReferences([
+      state.nodes,
+      state.focusedNode,
+      state.focusedFolder,
+    ]);
+  });
   const revisions = new Map<string, number>();
+  const bodies = createNoteBodySync<ReturnType<typeof useCanvasStore.getState>>(
+    (apply) => useCanvasStore.setState(apply)
+  );
   let selectionNeedsHydration = false;
   let sawUnhydrated = false;
   const syncWorkspace = () => {
@@ -43,6 +62,7 @@ export function connectPluginHostEvents(
       }
       workspaceId = current;
       revisions.clear();
+      bodies.reset();
     }
   };
   const contentChanged = (event: Event) => {
@@ -71,6 +91,9 @@ export function connectPluginHostEvents(
       });
       if (changes.length > 0) {
         const projectable = publishNoteMetadataChanges(changes);
+        for (const change of changes) {
+          bodies.refresh(workspaceId, change);
+        }
         useCanvasStore.setState((state) =>
           applyNoteMetadataChanges(state, projectable)
         );
@@ -114,6 +137,8 @@ export function connectPluginHostEvents(
   const unsubscribeRuntime = runtime.subscribe(selectionChanged);
   selectionChanged();
   return () => {
+    bodies.reset();
+    unprotect();
     runtime.updateSelection(
       runtime.getSnapshot().workspaceId,
       EMPTY_PLACEMENTS

@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
   ContentBatchResult,
+  NoteContentCreate,
   NoteContentSnapshot,
   NoteContentUpdate,
   NoteMetadata,
@@ -19,6 +20,7 @@ import {
   readOptionalText,
   withNoteWorkspace,
 } from '../noteTransactions';
+import { assertCreationUnreferenced } from './noteCreation';
 
 const OPERATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_HISTORY_BYTES = 8 * 1024 * 1024;
@@ -34,8 +36,14 @@ interface Change {
   currentRevision: number;
   id: string;
 }
+interface CreatedNote {
+  currentRevision: number;
+  document: string;
+  id: string;
+}
 interface Batch {
   changes: Change[];
+  created?: CreatedNote[];
   id: string;
   label: string;
   pluginId: string;
@@ -50,7 +58,10 @@ interface Receipt {
 interface History {
   batches: Batch[];
   operations: Receipt[];
-  schema: 'ghostboard-content-history/v1' | 'ghostboard-content-history/v2';
+  schema:
+    | 'ghostboard-content-history/v1'
+    | 'ghostboard-content-history/v2'
+    | 'ghostboard-content-history/v3';
 }
 
 function invalid(message: string): never {
@@ -135,6 +146,45 @@ function parseUpdates(value: unknown): NoteContentUpdate[] {
   });
 }
 
+function plainBody(text: string, id: string): Body {
+  const blocks = text.split('\n').map((line, index) => ({
+    id: `plugin-${id}-${index}`,
+    type: 'paragraph',
+    content: line ? [{ type: 'text', text: line, styles: {} }] : [],
+    children: [],
+  }));
+  return { blocks, preview: buildBlockNotePreview(blocks) };
+}
+function parseCreates(value: unknown): NoteContentCreate[] {
+  if (!(Array.isArray(value) && value.length) || value.length > 100) {
+    invalid('A batch requires 1–100 notes');
+  }
+  return value.map((raw) => {
+    const note = record(raw);
+    if (
+      Object.keys(note).some((key) => !['title', 'color', 'text'].includes(key))
+    ) {
+      invalid('Unsupported creation field');
+    }
+    const parsed = parseUpdates([
+      {
+        id: 'validation',
+        expectedRevision: 0,
+        changes: {
+          title: note.title,
+          ...(note.color === undefined ? {} : { color: note.color }),
+          ...(note.text === undefined ? {} : { text: note.text }),
+        },
+      },
+    ])[0]!;
+    return {
+      title: parsed.changes.title!,
+      color: parsed.changes.color ?? '',
+      text: parsed.changes.text ?? '',
+    };
+  });
+}
+
 async function readHistory(workspace: string): Promise<History> {
   const text = await readOptionalText(join(workspace, NOTE_HISTORY_PATH));
   if (text === null) {
@@ -153,7 +203,8 @@ async function readHistory(workspace: string): Promise<History> {
   const data = record(JSON.parse(text));
   if (
     (data.schema !== 'ghostboard-content-history/v1' &&
-      data.schema !== 'ghostboard-content-history/v2') ||
+      data.schema !== 'ghostboard-content-history/v2' &&
+      data.schema !== 'ghostboard-content-history/v3') ||
     !Array.isArray(data.batches) ||
     !Array.isArray(data.operations)
   ) {
@@ -176,6 +227,57 @@ async function readHistory(workspace: string): Promise<History> {
         'corrupt-history',
         'Invalid content history batch'
       );
+    }
+    if (batch.created !== undefined) {
+      if (
+        data.schema !== 'ghostboard-content-history/v3' ||
+        !Array.isArray(batch.created) ||
+        !batch.created.length ||
+        batch.created.length > 100 ||
+        batch.changes.length
+      ) {
+        throw new NoteTransactionError(
+          'corrupt-history',
+          'Invalid creation history'
+        );
+      }
+      const createdIds = new Set<string>();
+      for (const rawCreated of batch.created) {
+        const created = record(rawCreated);
+        const createdId = string(created.id);
+        noteFilePath(workspace, createdId);
+        if (createdIds.has(createdId)) {
+          throw new NoteTransactionError(
+            'corrupt-history',
+            'Duplicate note in creation history'
+          );
+        }
+        createdIds.add(createdId);
+        const currentRevision = revision(created.currentRevision);
+        const doc = record(
+          JSON.parse(string(created.document, MAX_HISTORY_BYTES))
+        );
+        if (
+          doc.schema !== 'ghostboard-blocknote/v1' ||
+          doc.noteId !== created.id ||
+          !Array.isArray(doc.blocks)
+        ) {
+          throw new NoteTransactionError(
+            'corrupt-history',
+            'Invalid created document'
+          );
+        }
+        const documentRevision = metadata(doc).revision;
+        if (
+          (batch.undone && currentRevision !== documentRevision + 1) ||
+          (!batch.undone && currentRevision !== documentRevision)
+        ) {
+          throw new NoteTransactionError(
+            'corrupt-history',
+            'Invalid creation history revision'
+          );
+        }
+      }
     }
     for (const rawChange of batch.changes) {
       const change = record(rawChange);
@@ -212,7 +314,22 @@ async function readHistory(workspace: string): Promise<History> {
       );
     }
     for (const item of result.items) {
-      metadata(record(item));
+      const resultItem = record(item);
+      noteFilePath(workspace, string(resultItem.id));
+      metadata(resultItem);
+    }
+    if (
+      result.removedIds !== undefined &&
+      (!Array.isArray(result.removedIds) ||
+        result.removedIds.some((id) => typeof id !== 'string'))
+    ) {
+      throw new NoteTransactionError(
+        'corrupt-history',
+        'Invalid removed note receipt'
+      );
+    }
+    for (const removedId of result.removedIds ?? []) {
+      noteFilePath(workspace, removedId as string);
     }
   }
   return data as unknown as History;
@@ -299,7 +416,9 @@ export class NoteContentService {
         if (input.action === 'query') {
           return this.query(input.query);
         }
-        if (!['update', 'undo', 'redo'].includes(input.action as string)) {
+        if (
+          !['create', 'update', 'undo', 'redo'].includes(input.action as string)
+        ) {
           return invalid('Unsupported content action');
         }
         return this.mutate(pluginId, input, request.signal);
@@ -321,6 +440,8 @@ export class NoteContentService {
             'workspace-inactive',
             'operation-mismatch',
             'history-state',
+            'content-referenced',
+            'content-exists',
           ].includes(code)
             ? 409
             : code === 'invalid-input'
@@ -404,16 +525,27 @@ export class NoteContentService {
     signal: AbortSignal
   ): Promise<ContentBatchResult> {
     const id = operationId(input.operationId);
-    const action = input.action as 'update' | 'undo' | 'redo';
+    const action = input.action as 'create' | 'update' | 'undo' | 'redo';
+    const creating = action === 'create';
+    const forward = creating || action === 'update';
+    const notes = creating ? parseCreates(input.notes) : undefined;
     const updates =
       action === 'update' ? parseUpdates(input.updates) : undefined;
-    const label = action === 'update' ? string(input.label) : undefined;
-    if (action === 'update' && !label?.trim()) {
+    const label = forward ? string(input.label) : undefined;
+    if (forward && !label?.trim()) {
       return invalid('A batch label is required');
     }
-    const target = action === 'update' ? undefined : operationId(input.batchId);
+    const target = forward ? undefined : operationId(input.batchId);
     const fingerprint = createHash('sha256')
-      .update(JSON.stringify({ action, updates, label, target }))
+      .update(
+        JSON.stringify({
+          action,
+          updates,
+          label,
+          target,
+          ...(notes ? { notes } : {}),
+        })
+      )
       .digest('hex');
     const history = await readHistory(this.workspace);
     const receipt = history.operations.find(
@@ -429,7 +561,7 @@ export class NoteContentService {
       return receipt.result;
     }
     let batch: Batch;
-    if (action === 'update') {
+    if (forward) {
       batch = { id, pluginId, label: label!, changes: [], undone: false };
     } else {
       const found = history.batches.find(
@@ -448,6 +580,19 @@ export class NoteContentService {
         );
       }
       batch = found;
+    }
+    if (creating || batch.created) {
+      return this.mutateCreation({
+        batch,
+        notes,
+        action,
+        input,
+        history,
+        id,
+        pluginId,
+        fingerprint,
+        signal,
+      });
     }
     const planned: (NoteContentUpdate & { body?: Body })[] =
       updates ??
@@ -493,13 +638,7 @@ export class NoteContentService {
       const { text, ...fields } = update.changes;
       let body = update.body;
       if (text !== undefined) {
-        const blocks = text.split('\n').map((line, index) => ({
-          id: `plugin-${id}-${index}`,
-          type: 'paragraph',
-          content: line ? [{ type: 'text', text: line, styles: {} }] : [],
-          children: [],
-        }));
-        body = { blocks, preview: buildBlockNotePreview(blocks) };
+        body = plainBody(text, id);
       }
       const bodyChanged =
         body !== undefined &&
@@ -552,7 +691,10 @@ export class NoteContentService {
         )!.currentRevision = next.revision;
       }
     }
-    if (batch.changes.some((change) => change.beforeBody !== undefined)) {
+    if (
+      history.schema !== 'ghostboard-content-history/v3' &&
+      batch.changes.some((change) => change.beforeBody !== undefined)
+    ) {
       // Older hosts must reject this history instead of undoing metadata alone.
       history.schema = 'ghostboard-content-history/v2';
     }
@@ -567,6 +709,21 @@ export class NoteContentService {
       items,
       changed: files.length > 0,
     };
+    await this.commitMutation(
+      history,
+      files,
+      { id, pluginId, fingerprint, result },
+      signal
+    );
+    return result;
+  }
+  private async commitMutation(
+    history: History,
+    files: NoteFileChange[],
+    receipt: Receipt,
+    signal: AbortSignal
+  ): Promise<void> {
+    const { id, pluginId, fingerprint, result } = receipt;
     history.operations.push({ id, pluginId, fingerprint, result });
     const historyText = JSON.stringify(history);
     if (Buffer.byteLength(historyText) > MAX_HISTORY_BYTES) {
@@ -590,6 +747,123 @@ export class NoteContentService {
       }
       throw error;
     }
+  }
+
+  private async mutateCreation({
+    batch,
+    notes,
+    action,
+    input,
+    history,
+    id,
+    pluginId,
+    fingerprint,
+    signal,
+  }: {
+    batch: Batch;
+    notes?: NoteContentCreate[];
+    action: string;
+    input: Record<string, unknown>;
+    history: History;
+    id: string;
+    pluginId: string;
+    fingerprint: string;
+    signal: AbortSignal;
+  }): Promise<ContentBatchResult> {
+    const index = await buildNoteIndex(this.workspace);
+    if (notes) {
+      batch.created = notes.map((note) => {
+        const noteId = `plugin_note_${randomUUID().replaceAll('-', '')}`;
+        const body = plainBody(note.text ?? '', noteId);
+        const now = new Date().toISOString();
+        return {
+          id: noteId,
+          currentRevision: 1,
+          document: JSON.stringify(
+            {
+              schema: 'ghostboard-blocknote/v1',
+              noteId,
+              title: note.title,
+              color: note.color ?? '',
+              displayHint: 'note',
+              revision: 1,
+              createdAt: now,
+              updatedAt: now,
+              ...body,
+            },
+            null,
+            2
+          ),
+        };
+      });
+    }
+    const created = batch.created!;
+    if (action === 'undo') {
+      await assertCreationUnreferenced(
+        this.workspace,
+        created.map((note) => note.id),
+        input.protectedIds ?? []
+      );
+    }
+    const files: NoteFileChange[] = [];
+    const items: ContentBatchResult['items'] = [];
+    for (const note of created) {
+      const path = noteFilePath(this.workspace, note.id);
+      const before = await readOptionalText(path);
+      if (action === 'undo') {
+        if (before !== note.document) {
+          throw new NoteTransactionError(
+            'revision-conflict',
+            'A created note has changed; creation undo rejected'
+          );
+        }
+        note.currentRevision = revision(note.currentRevision) + 1;
+        files.push({ id: note.id, before, after: null });
+      } else {
+        if (before !== null || index.has(note.id)) {
+          throw new NoteTransactionError(
+            'content-exists',
+            'Created note ID is already occupied'
+          );
+        }
+        if (action === 'redo') {
+          note.currentRevision = revision(note.currentRevision) + 1;
+          note.document = JSON.stringify(
+            {
+              ...record(JSON.parse(note.document)),
+              revision: note.currentRevision,
+              updatedAt: new Date().toISOString(),
+            },
+            null,
+            2
+          );
+        }
+        files.push({ id: note.id, before: null, after: note.document });
+        items.push({
+          id: note.id,
+          ...metadata(record(JSON.parse(note.document))),
+        });
+      }
+    }
+    history.schema = 'ghostboard-content-history/v3';
+    if (notes) {
+      history.batches.push(batch);
+    }
+    batch.undone = action === 'undo';
+    const result: ContentBatchResult = {
+      operationId: id,
+      changed: true,
+      items,
+      ...(action === 'undo'
+        ? { removedIds: created.map((note) => note.id) }
+        : {}),
+    };
+    await this.commitMutation(
+      history,
+      files,
+      { id, pluginId, fingerprint, result },
+      signal
+    );
     return result;
   }
 }

@@ -46,6 +46,31 @@ afterEach(() => {
 });
 
 describe('metadata-aware BlockNote saver', () => {
+  it('does not accept a body refresh over unsaved metadata props', () => {
+    const { result } = setup('Local title');
+    expect(result.current.canApplyExternal(5, change)).toBe(false);
+  });
+
+  it('protects edits immediately before serialization and never flushes an older payload as the newer draft', async () => {
+    const { result } = setup();
+    expect(result.current.canApplyExternal(5)).toBe(true);
+    expect(result.current.canApplyExternal(3)).toBe(false);
+    act(() => {
+      result.current.saveDebounced(payload('Older serialized body'));
+      result.current.markDirty();
+      result.current.flushNow();
+    });
+    expect(result.current.canApplyExternal(5)).toBe(false);
+    expect(mocks.save).not.toHaveBeenCalled();
+    await act(async () => {
+      result.current.saveDebounced(payload('Newest body'));
+      result.current.flushNow();
+      await Promise.resolve();
+    });
+    expect(mocks.save.mock.calls[0]?.[3]).toBe('Newest body');
+    expect(result.current.canApplyExternal(7)).toBe(true);
+  });
+
   it('saves initial canonical metadata rather than stale placement props with the loaded revision', async () => {
     const { result, rerender } = setup('Stale title');
     act(() =>

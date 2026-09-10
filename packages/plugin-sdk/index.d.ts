@@ -102,11 +102,20 @@ export interface NoteContentUpdate {
   id: string;
 }
 
+export interface NoteContentCreate {
+  color?: string;
+  /** Plain-text paragraphs, same limits and semantics as updateMany changes.text. */
+  text?: string;
+  title: string;
+}
+
 export interface ContentBatchResult {
   /** False for a batch containing only no-ops. */
   changed: boolean;
   items: (NoteMetadata & { id: string })[];
   operationId: string;
+  /** Only creation undo: removed notes are absent from items. */
+  removedIds?: string[];
 }
 
 export interface ContentMutationOptions extends OperationOptions {
@@ -145,6 +154,11 @@ export interface PluginSelection {
 }
 
 export interface PluginContent {
+  /** Creates 1–100 detached sidecar notes, with host-generated IDs. */
+  createMany(
+    notes: NoteContentCreate[],
+    options: ContentMutationOptions & { label: string }
+  ): Promise<ContentBatchResult>;
   get(
     id: string,
     options?: OperationOptions

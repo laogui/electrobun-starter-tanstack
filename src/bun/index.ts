@@ -39,6 +39,7 @@ import {
   loadBlockNoteSidecar,
   saveBlockNoteSidecar,
 } from './blocknote';
+import { blocksToPlainText } from './blocknotePreview';
 import {
   deleteUnlinkedNotes,
   scanUnlinkedNotes,
@@ -962,7 +963,7 @@ interface CanvasRPC {
         response: { preview?: PreviewArtifacts; success: boolean };
       };
       loadBlockNote: {
-        params: { noteId: string };
+        params: { noteId: string; workspaceId?: string };
         response: {
           success: boolean;
           blocks?: unknown[];
@@ -970,6 +971,9 @@ interface CanvasRPC {
           frontmatter?: Record<string, unknown>;
           revision?: number;
           recoveredFromMarkdown?: boolean;
+          preview?: PreviewArtifacts;
+          text?: string;
+          workspaceId?: string;
         };
       };
       saveBlockNote: {
@@ -2030,216 +2034,274 @@ async function main() {
         },
 
         saveManifest: async ({ viewId, nodes, edges }) => {
-          try {
-            const config = await loadWorkspaceConfig(wsPath);
-            const viewEntry = config.views.find((v) => v.id === viewId);
-            if (!viewEntry) {
-              return { success: false };
-            }
-
-            // Build note index (sidecars + legacy markdown) so we can find
-            // existing notes and decide sidecar vs legacy handling.
-            const noteIndex = await buildNoteIndex(wsPath);
-
-            // Resolve (or allocate) a note location for a card. Brand-new notes
-            // get a legacy markdown stub which migrates to a sidecar on their
-            // first focused-view edit.
-            const resolveCardLocation = async (
-              noteId: string,
-              title: unknown,
-              type: unknown
-            ): Promise<NoteLocation> => {
-              const existing = noteIndex.get(noteId);
-              if (existing) {
-                return existing;
+          const workspace = wsPath;
+          return withNoteWorkspace(workspace, async () => {
+            try {
+              const config = await loadWorkspaceConfig(workspace);
+              const viewEntry = config.views.find((v) => v.id === viewId);
+              if (!viewEntry) {
+                return { success: false };
               }
-              const markdownFile = await createNote(
-                wsPath,
-                noteId,
-                String(title || ''),
-                String(type || 'note')
-              );
-              const loc: NoteLocation = {
-                noteId,
-                hasSidecar: false,
-                markdownFile,
-              };
-              noteIndex.set(noteId, loc);
-              return loc;
-            };
 
-            // Phase 1: Serially pre-allocate note locations for new card notes
-            // (both top-level cards AND folder card-children) to avoid
-            // concurrent createNote calls producing conflicting paths.
-            const nodeLocMap = new Map<number, NoteLocation>();
-            const folderChildLocMap = new Map<
-              number,
-              Map<number, NoteLocation>
-            >();
-            for (const [idx, node] of nodes.entries()) {
-              if (node.type === 'card') {
-                const noteId =
-                  (node.data.noteId as string) ||
-                  `note_${crypto.randomUUID().slice(0, 8)}`;
-                // Attach noteId so phase 2 can read it back
-                node.data.noteId = noteId;
-                nodeLocMap.set(
-                  idx,
-                  // react-doctor-disable-next-line react-doctor/async-await-in-loop
-                  await resolveCardLocation(
-                    noteId,
-                    node.data.title,
-                    node.data.type
-                  )
+              // Build note index (sidecars + legacy markdown) so we can find
+              // existing notes and decide sidecar vs legacy handling.
+              const noteIndex = await buildNoteIndex(workspace);
+
+              // Resolve (or allocate) a note location for a card. Brand-new notes
+              // get a legacy markdown stub which migrates to a sidecar on their
+              // first focused-view edit.
+              const resolveCardLocation = async (
+                noteId: string,
+                title: unknown,
+                type: unknown
+              ): Promise<NoteLocation> => {
+                const existing = noteIndex.get(noteId);
+                if (existing) {
+                  return existing;
+                }
+                if (noteId.startsWith('plugin_note_')) {
+                  throw new Error(
+                    'Plugin-created note is missing; restore it before saving a placement'
+                  );
+                }
+                const markdownFile = await createNote(
+                  workspace,
+                  noteId,
+                  String(title || ''),
+                  String(type || 'note')
                 );
-                continue;
-              }
-              if (node.type === 'folder') {
-                const children = (node.data.children ?? []) as Array<{
-                  data?: Record<string, unknown>;
-                  id: string;
-                  noteId?: string;
-                  type?: string;
-                }>;
-                const childMap = new Map<number, NoteLocation>();
-                for (const [cidx, child] of children.entries()) {
-                  if (child.type !== 'card') {
-                    continue;
-                  }
-                  const childData = (child.data ?? {}) as Record<
-                    string,
-                    unknown
-                  >;
+                const loc: NoteLocation = {
+                  noteId,
+                  hasSidecar: false,
+                  markdownFile,
+                };
+                noteIndex.set(noteId, loc);
+                return loc;
+              };
+
+              // Phase 1: Serially pre-allocate note locations for new card notes
+              // (both top-level cards AND folder card-children) to avoid
+              // concurrent createNote calls producing conflicting paths.
+              const nodeLocMap = new Map<number, NoteLocation>();
+              const folderChildLocMap = new Map<
+                number,
+                Map<number, NoteLocation>
+              >();
+              for (const [idx, node] of nodes.entries()) {
+                if (node.type === 'card') {
                   const noteId =
-                    child.noteId ||
-                    (childData.noteId as string) ||
+                    (node.data.noteId as string) ||
                     `note_${crypto.randomUUID().slice(0, 8)}`;
-                  // Stamp noteId so phase 2 can read it back from both places
-                  child.noteId = noteId;
-                  childData.noteId = noteId;
-                  child.data = childData;
-                  childMap.set(
-                    cidx,
+                  // Attach noteId so phase 2 can read it back
+                  node.data.noteId = noteId;
+                  nodeLocMap.set(
+                    idx,
                     // react-doctor-disable-next-line react-doctor/async-await-in-loop
                     await resolveCardLocation(
                       noteId,
-                      childData.title,
-                      childData.type
+                      node.data.title,
+                      node.data.type
                     )
                   );
+                  continue;
                 }
-                if (childMap.size > 0) {
-                  folderChildLocMap.set(idx, childMap);
-                }
-              }
-            }
-
-            // Phase 2: Write content in parallel (paths are now unique)
-            const manifestNodes = await Promise.all(
-              nodes.map(async (node, idx) => {
-                // Image nodes: strip imageUrl / thumbnailUrl (large base64),
-                // keep imageFile / thumbnailFile references.
-                if (node.type === 'image') {
-                  return {
-                    id: node.id,
-                    type: node.type,
-                    position: node.position,
-                    ...(node.style ? { style: node.style } : {}),
-                    ...(node.parentId ? { parentId: node.parentId } : {}),
-                    ...(node.extent ? { extent: node.extent } : {}),
-                    data: await serializeImageDataForManifest(
-                      wsPath,
-                      node.data
-                    ),
-                  };
-                }
-
-                if (hasAttachmentRuntimeData(node.type)) {
-                  return {
-                    id: node.id,
-                    type: node.type,
-                    position: node.position,
-                    ...(node.style ? { style: node.style } : {}),
-                    ...(node.parentId ? { parentId: node.parentId } : {}),
-                    ...(node.extent ? { extent: node.extent } : {}),
-                    data: stripAttachmentRuntimeData(node.data),
-                  };
-                }
-
-                // Folder nodes: write each card-child's .md file and serialize
-                // children as thin references (mirrors top-level card flow).
                 if (node.type === 'folder') {
-                  const rawChildren = (node.data.children ?? []) as Array<{
+                  const children = (node.data.children ?? []) as Array<{
                     data?: Record<string, unknown>;
                     id: string;
                     noteId?: string;
                     type?: string;
                   }>;
-                  const childLocMap = folderChildLocMap.get(idx);
-                  const serializedChildren = await Promise.all(
-                    rawChildren.map(async (child, cidx) => {
-                      if (hasAttachmentRuntimeData(child.type)) {
-                        return {
-                          ...child,
-                          data: stripAttachmentRuntimeData(
-                            (child.data ?? {}) as Record<string, unknown>
-                          ),
-                        };
-                      }
-                      if (child.type === 'image') {
+                  const childMap = new Map<number, NoteLocation>();
+                  for (const [cidx, child] of children.entries()) {
+                    if (child.type !== 'card') {
+                      continue;
+                    }
+                    const childData = (child.data ?? {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    const noteId =
+                      child.noteId ||
+                      (childData.noteId as string) ||
+                      `note_${crypto.randomUUID().slice(0, 8)}`;
+                    // Stamp noteId so phase 2 can read it back from both places
+                    child.noteId = noteId;
+                    childData.noteId = noteId;
+                    child.data = childData;
+                    childMap.set(
+                      cidx,
+                      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+                      await resolveCardLocation(
+                        noteId,
+                        childData.title,
+                        childData.type
+                      )
+                    );
+                  }
+                  if (childMap.size > 0) {
+                    folderChildLocMap.set(idx, childMap);
+                  }
+                }
+              }
+
+              // Phase 2: Write content in parallel (paths are now unique)
+              const manifestNodes = await Promise.all(
+                nodes.map(async (node, idx) => {
+                  // Image nodes: strip imageUrl / thumbnailUrl (large base64),
+                  // keep imageFile / thumbnailFile references.
+                  if (node.type === 'image') {
+                    return {
+                      id: node.id,
+                      type: node.type,
+                      position: node.position,
+                      ...(node.style ? { style: node.style } : {}),
+                      ...(node.parentId ? { parentId: node.parentId } : {}),
+                      ...(node.extent ? { extent: node.extent } : {}),
+                      data: await serializeImageDataForManifest(
+                        workspace,
+                        node.data
+                      ),
+                    };
+                  }
+
+                  if (hasAttachmentRuntimeData(node.type)) {
+                    return {
+                      id: node.id,
+                      type: node.type,
+                      position: node.position,
+                      ...(node.style ? { style: node.style } : {}),
+                      ...(node.parentId ? { parentId: node.parentId } : {}),
+                      ...(node.extent ? { extent: node.extent } : {}),
+                      data: stripAttachmentRuntimeData(node.data),
+                    };
+                  }
+
+                  // Folder nodes: write each card-child's .md file and serialize
+                  // children as thin references (mirrors top-level card flow).
+                  if (node.type === 'folder') {
+                    const rawChildren = (node.data.children ?? []) as Array<{
+                      data?: Record<string, unknown>;
+                      id: string;
+                      noteId?: string;
+                      type?: string;
+                    }>;
+                    const childLocMap = folderChildLocMap.get(idx);
+                    const serializedChildren = await Promise.all(
+                      rawChildren.map(async (child, cidx) => {
+                        if (hasAttachmentRuntimeData(child.type)) {
+                          return {
+                            ...child,
+                            data: stripAttachmentRuntimeData(
+                              (child.data ?? {}) as Record<string, unknown>
+                            ),
+                          };
+                        }
+                        if (child.type === 'image') {
+                          const childData = (child.data ?? {}) as Record<
+                            string,
+                            unknown
+                          >;
+                          return {
+                            ...child,
+                            data: await serializeImageDataForManifest(
+                              workspace,
+                              childData
+                            ),
+                          };
+                        }
+                        if (child.type === 'widget') {
+                          return {
+                            id: child.id,
+                            type: child.type,
+                            data: serializeWidgetReference(child.data),
+                          };
+                        }
+                        if (child.type !== 'card') {
+                          return child;
+                        }
+                        const location = childLocMap?.get(cidx);
+                        const noteId = child.noteId as string | undefined;
+                        if (!(location && noteId)) {
+                          return child;
+                        }
                         const childData = (child.data ?? {}) as Record<
                           string,
                           unknown
                         >;
-                        return {
-                          ...child,
-                          data: await serializeImageDataForManifest(
-                            wsPath,
-                            childData
-                          ),
-                        };
-                      }
-                      if (child.type === 'widget') {
+                        // Persist note content (sidecar-aware): sidecar-backed
+                        // notes merge metadata only; legacy cards round-trip md.
+                        await persistManifestCardNote(
+                          workspace,
+                          location,
+                          noteId,
+                          childData
+                        );
                         return {
                           id: child.id,
-                          type: child.type,
-                          data: serializeWidgetReference(child.data),
-                        };
-                      }
-                      if (child.type !== 'card') {
-                        return child;
-                      }
-                      const location = childLocMap?.get(cidx);
-                      const noteId = child.noteId as string | undefined;
-                      if (!(location && noteId)) {
-                        return child;
-                      }
-                      const childData = (child.data ?? {}) as Record<
-                        string,
-                        unknown
-                      >;
-                      // Persist note content (sidecar-aware): sidecar-backed
-                      // notes merge metadata only; legacy cards round-trip md.
-                      await persistManifestCardNote(
-                        wsPath,
-                        location,
-                        noteId,
-                        childData
-                      );
-                      return {
-                        id: child.id,
-                        noteId,
-                        type: 'card' as const,
-                        data: {
                           noteId,
-                          ...(location.markdownFile
-                            ? { file: location.markdownFile }
-                            : {}),
-                          type: childData.type,
-                        },
-                      };
-                    })
+                          type: 'card' as const,
+                          data: {
+                            noteId,
+                            ...(location.markdownFile
+                              ? { file: location.markdownFile }
+                              : {}),
+                            type: childData.type,
+                          },
+                        };
+                      })
+                    );
+                    return {
+                      id: node.id,
+                      type: node.type,
+                      position: node.position,
+                      ...(node.style ? { style: node.style } : {}),
+                      ...(node.parentId ? { parentId: node.parentId } : {}),
+                      ...(node.extent ? { extent: node.extent } : {}),
+                      data: {
+                        ...node.data,
+                        children: serializedChildren,
+                      },
+                    };
+                  }
+
+                  // Only extract content for card nodes
+                  if (node.type === 'widget') {
+                    return {
+                      id: node.id,
+                      type: node.type,
+                      position: node.position,
+                      ...(node.style ? { style: node.style } : {}),
+                      ...(node.parentId ? { parentId: node.parentId } : {}),
+                      ...(node.extent ? { extent: node.extent } : {}),
+                      data: serializeWidgetReference(node.data),
+                    };
+                  }
+                  if (node.type !== 'card') {
+                    return node;
+                  }
+
+                  const noteId = node.data.noteId as string | undefined;
+                  const location = nodeLocMap.get(idx);
+                  if (!(location && noteId)) {
+                    // Phase 1 should always pre-allocate a location for every card.
+                    // If one is missing (logic error, or a future refactor that
+                    // makes Phase 1 tolerant of single-note failures), skip the
+                    // note write and keep the node as-is instead of crashing the
+                    // whole save. Mirrors the folder-child guard above.
+                    return node;
+                  }
+
+                  // Persist note content (sidecar-aware): sidecar-backed notes merge
+                  // metadata only; legacy cards round-trip markdown.
+                  await persistManifestCardNote(
+                    workspace,
+                    location,
+                    noteId,
+                    node.data
                   );
+
+                  // Return manifest-only node: strip content fields, keep reference
                   return {
                     id: node.id,
                     type: node.type,
@@ -2248,81 +2310,31 @@ async function main() {
                     ...(node.parentId ? { parentId: node.parentId } : {}),
                     ...(node.extent ? { extent: node.extent } : {}),
                     data: {
-                      ...node.data,
-                      children: serializedChildren,
+                      noteId,
+                      ...(location.markdownFile
+                        ? { file: location.markdownFile }
+                        : {}),
+                      type: node.data.type, // keep for quick component selection
+                      ...(node.data.detached ? { detached: true } : {}),
                     },
                   };
-                }
+                })
+              );
 
-                // Only extract content for card nodes
-                if (node.type === 'widget') {
-                  return {
-                    id: node.id,
-                    type: node.type,
-                    position: node.position,
-                    ...(node.style ? { style: node.style } : {}),
-                    ...(node.parentId ? { parentId: node.parentId } : {}),
-                    ...(node.extent ? { extent: node.extent } : {}),
-                    data: serializeWidgetReference(node.data),
-                  };
-                }
-                if (node.type !== 'card') {
-                  return node;
-                }
-
-                const noteId = node.data.noteId as string | undefined;
-                const location = nodeLocMap.get(idx);
-                if (!(location && noteId)) {
-                  // Phase 1 should always pre-allocate a location for every card.
-                  // If one is missing (logic error, or a future refactor that
-                  // makes Phase 1 tolerant of single-note failures), skip the
-                  // note write and keep the node as-is instead of crashing the
-                  // whole save. Mirrors the folder-child guard above.
-                  return node;
-                }
-
-                // Persist note content (sidecar-aware): sidecar-backed notes merge
-                // metadata only; legacy cards round-trip markdown.
-                await persistManifestCardNote(
-                  wsPath,
-                  location,
-                  noteId,
-                  node.data
-                );
-
-                // Return manifest-only node: strip content fields, keep reference
-                return {
-                  id: node.id,
-                  type: node.type,
-                  position: node.position,
-                  ...(node.style ? { style: node.style } : {}),
-                  ...(node.parentId ? { parentId: node.parentId } : {}),
-                  ...(node.extent ? { extent: node.extent } : {}),
-                  data: {
-                    noteId,
-                    ...(location.markdownFile
-                      ? { file: location.markdownFile }
-                      : {}),
-                    type: node.data.type, // keep for quick component selection
-                    ...(node.data.detached ? { detached: true } : {}),
-                  },
-                };
-              })
-            );
-
-            // Omit viewport so legacy values are stripped on the next save.
-            const manifest: CanvasManifest = {
-              schema: 'ghostboard-canvas/v1',
-              viewId,
-              nodes: manifestNodes,
-              edges,
-            };
-            await writeManifest(wsPath, viewEntry.file, manifest);
-            return { success: true };
-          } catch (error) {
-            console.warn('[persistence] Manifest save rejected:', error);
-            return { success: false };
-          }
+              // Omit viewport so legacy values are stripped on the next save.
+              const manifest: CanvasManifest = {
+                schema: 'ghostboard-canvas/v1',
+                viewId,
+                nodes: manifestNodes,
+                edges,
+              };
+              await writeManifest(workspace, viewEntry.file, manifest);
+              return { success: true };
+            } catch (error) {
+              console.warn('[persistence] Manifest save rejected:', error);
+              return { success: false };
+            }
+          });
         },
 
         createWidget: async ({ kind, title }) => {
@@ -2625,47 +2637,59 @@ async function main() {
           return { success: true, preview };
         },
 
-        loadBlockNote: async ({ noteId }) => {
-          // Sidecar JSON is the only source of truth — no Markdown reconcile.
-          const sidecar = await loadBlockNoteSidecar(wsPath, noteId);
-          if (sidecar && !sidecar.corrupted) {
-            return {
-              success: true,
-              blocks: sidecar.blocks,
-              revision: sidecar.revision,
-              frontmatter: {
-                id: noteId,
-                title: sidecar.title ?? '',
-                color: sidecar.color ?? '',
-                displayHint: sidecar.displayHint ?? 'note',
-                createdAt: sidecar.createdAt,
-              },
-            };
+        loadBlockNote: async ({ noteId, workspaceId }) => {
+          const workspace = wsPath;
+          const currentWorkspaceId = pluginWorkspaceId(workspace);
+          if (workspaceId && workspaceId !== currentWorkspaceId) {
+            return { success: false };
           }
-
-          // No valid sidecar — offer a one-time import from a legacy `.md`.
-          const noteIndex = await buildNoteIndex(wsPath);
-          const markdownFile = noteIndex.get(noteId)?.markdownFile;
-          if (markdownFile) {
-            const note = await loadNote(wsPath, markdownFile);
-            if (note) {
+          return withNoteWorkspace(workspace, async () => {
+            // Sidecar JSON is the only source of truth — no Markdown reconcile.
+            const sidecar = await loadBlockNoteSidecar(workspace, noteId);
+            if (sidecar && !sidecar.corrupted) {
               return {
                 success: true,
-                blocks: undefined,
-                markdown: note.body,
-                frontmatter: note.frontmatter,
-                revision: sidecar?.revision,
-                recoveredFromMarkdown: true,
+                blocks: sidecar.blocks,
+                preview: buildNotePreviewFromBlocks(sidecar.blocks),
+                text: blocksToPlainText(sidecar.blocks),
+                workspaceId: currentWorkspaceId,
+                revision: sidecar.revision,
+                frontmatter: {
+                  id: noteId,
+                  title: sidecar.title ?? '',
+                  color: sidecar.color ?? '',
+                  displayHint: sidecar.displayHint ?? 'note',
+                  createdAt: sidecar.createdAt,
+                },
               };
             }
-          }
 
-          // Brand-new / empty note — start blank; first save creates a sidecar.
-          return {
-            success: true,
-            blocks: [],
-            revision: sidecar?.revision ?? 0,
-          };
+            // No valid sidecar — offer a one-time import from a legacy `.md`.
+            const noteIndex = await buildNoteIndex(workspace);
+            const markdownFile = noteIndex.get(noteId)?.markdownFile;
+            if (markdownFile) {
+              const note = await loadNote(workspace, markdownFile);
+              if (note) {
+                return {
+                  success: true,
+                  workspaceId: currentWorkspaceId,
+                  blocks: undefined,
+                  markdown: note.body,
+                  frontmatter: note.frontmatter,
+                  revision: sidecar?.revision,
+                  recoveredFromMarkdown: true,
+                };
+              }
+            }
+
+            // Brand-new / empty note — start blank; first save creates a sidecar.
+            return {
+              success: true,
+              workspaceId: currentWorkspaceId,
+              blocks: [],
+              revision: sidecar?.revision ?? 0,
+            };
+          });
         },
 
         saveBlockNote: async ({ noteId, frontmatter, blocks, revision }) =>

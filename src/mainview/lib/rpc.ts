@@ -430,7 +430,7 @@ export async function rpcListExtensionTasks(instanceId?: string): Promise<{
   return eb.rpc.request.extensionSchedulerList({ instanceId });
 }
 
-export async function rpcLoadBlockNote(noteId: string) {
+export async function rpcLoadBlockNote(noteId: string, workspaceId?: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false } as {
@@ -440,9 +440,17 @@ export async function rpcLoadBlockNote(noteId: string) {
       frontmatter?: Record<string, unknown>;
       revision?: number;
       recoveredFromMarkdown?: boolean;
+      text?: string;
+      workspaceId?: string;
+      preview?: {
+        html: string;
+        excerpt: string;
+        blocks: number;
+        version: number;
+      };
     };
   }
-  return eb.rpc.request.loadBlockNote({ noteId });
+  return eb.rpc.request.loadBlockNote({ noteId, workspaceId });
 }
 
 export async function rpcSaveBlockNote(

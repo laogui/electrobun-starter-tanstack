@@ -1071,6 +1071,34 @@ describe('src/bun/index helpers', () => {
     expect(manifest.nodes[0]?.data).not.toHaveProperty('file');
   });
 
+  it('saveManifest cannot resurrect an undone plugin-created note as a legacy stub', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    noteStoreMocks.buildNoteIndex.mockResolvedValueOnce(new Map());
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: [
+          {
+            id: 'stale-plugin-card',
+            type: 'card',
+            position: { x: 0, y: 0 },
+            data: {
+              noteId: 'plugin_note_0123456789abcdef0123456789abcdef',
+              title: 'Already undone',
+              blocknoteRevision: 1,
+            },
+          },
+        ],
+        edges: [],
+      })
+    ).resolves.toEqual({ success: false });
+
+    expect(noteMocks.createNote).not.toHaveBeenCalled();
+    expect(manifestMocks.saveManifest).not.toHaveBeenCalled();
+  });
+
   it('saveNote returns generated preview metadata', async () => {
     await loadIndexModule();
     const canvasHandlers = getCanvasHandlers();
@@ -1302,6 +1330,15 @@ describe('src/bun/index helpers', () => {
       revision: 7,
     });
     expect(atomicWriteMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body refresh addressed to a previous workspace before loading the note', async () => {
+    await loadIndexModule();
+    const result = await getCanvasHandlers().loadBlockNote({
+      noteId: 'note_y',
+      workspaceId: 'retired-workspace',
+    });
+    expect(result).toEqual({ success: false });
   });
 
   it('loadBlockNote returns sidecar blocks without any markdown reconcile', async () => {

@@ -282,7 +282,7 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Content creation, rich-document editing, live host body reconciliation, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Rich-document editing, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
@@ -304,4 +304,38 @@ The same operation can change title/color and body across multiple notes. Revisi
 
 The first body mutation upgrades the history file to schema v2; this host reads existing v1 histories, while older hosts reject v2 instead of silently undoing metadata alone. Body history stores original blocks and preview, so undo restores rich content exactly and redo restores the replacement, including after app restart. Previews are regenerated with escaped text. Existing 1 MiB request and 8 MiB history limits also apply; large rich originals can cause `history-limit` before any write. Legacy Markdown remains read-only.
 
-Body notifications have `metadataOnly: false`; SDK selection subscriptions refresh their persisted snapshots. **Live host canvas previews and an already open editor do not automatically reload body changes in this slice.** Reopen the note or reload the workspace to read canonical content. An unsaved editor keeps its draft and previous revision; an attempted stale save fails instead of overwriting the plugin change. Unified history, automatic clean-editor refresh and conflict-resolution UI remain later T2 work.
+Body notifications have `metadataOnly: false`; SDK selection subscriptions refresh their persisted snapshots. The next slice below adds automatic clean-editor and placement refresh. An unsaved editor keeps its draft and previous revision; an attempted stale save fails instead of overwriting the plugin change. Unified history and conflict-resolution UI remain later T2 work.
+
+## T2 fifth slice: live host body reconciliation
+
+After a committed body event, the host reads the canonical blocks, plain text and derived preview under the workspace queue. It binds the read and any mounted editor to the workspace identity and discards obsolete responses after workspace switches, disconnection or newer changes. Consecutive body/metadata changes retain the original placement baseline while fetching the latest revision.
+
+For clean notes, the host updates duplicate placements, folder children and focused data, and replaces blocks in the existing editor instance. Undo/redo therefore refresh the visible rich document too. This does not trigger an automatic save of the replacement. The canvas `content` cache uses plain text; the canonical rich document remains in the sidecar and the rendered preview is derived from it.
+
+A dirty body, in-flight save, local title/color conflict or title being edited prevents refresh for that note's open editors and placements. Editing is marked dirty before asynchronous Markdown serialization; older serialization results cannot overwrite a newer one. The draft and its revision remain intact, and a stale save still conflicts. Close/reopen to load canonical content only after preserving any draft you want to keep; a merge/discard conflict UI is not included yet.
+
+This is driven by host content notifications, not external file watching. Failed reads do not replace existing content; a later event can retry. Preview projection requires matching known placement revisions and metadata, so unknown or conflicting cached state is retained rather than guessed. No new public SDK API or unified native/plugin undo timeline is introduced.
+
+## T2 sixth slice: detached note creation
+
+`createMany(notes, { label, operationId?, signal? })` creates 1–100 sidecar-backed notes in one transaction. The host generates opaque note IDs; callers provide a required title and optional color and plain-text body. The body has the same line normalization, literal-text behavior and 256 KiB UTF-8 limit as `updateMany({ changes: { text } })`.
+
+```js
+const batch = await app.content.createMany(
+  [
+    { title: 'Research question', text: 'What changed?\nWhy?' },
+    { title: 'Empty follow-up', color: '#bfdbfe' },
+  ],
+  { label: 'Create research notes', operationId: 'import-page-17' },
+);
+
+const [firstId] = batch.items.map((item) => item.id);
+```
+
+Created notes start at revision 1 and appear as unlinked notes in the workspace library. This API creates content records; it does not place cards on a canvas. Retrying identical input with the same operation ID returns the original IDs and receipt, including after restart. Different input with that ID fails with `operation-mismatch`.
+
+The original creation batch can be passed to `undo`. A successful creation undo removes every note in the batch and returns `items: []` plus `removedIds`; `redo` recreates the same IDs with increasing revisions. Undo rejects the whole batch if any created note changed, is open or present in the current renderer state, is referenced by an active or trashed canvas, or is mentioned by persisted workspace content. An unreadable reference source also fails closed. Remove saved and live references before undoing creation. An old canvas save cannot recreate an undone `plugin_note_*` record as an empty legacy note.
+
+Creation, its history update and recovery intent share the note workspace queue with editor and canvas saves. The first creation upgrades history to schema v3; older hosts reject it instead of interpreting creation as an ordinary update. Creation/upsert and creation-undo/delete notifications are emitted only after the transaction finishes or recovery completes. The normal 1 MiB request, 8 MiB history and 32 MiB intent limits still apply. History is not pruned automatically.
+
+The live-reference check is a reliability guard for the official SDK path. It does not provide a security boundary against high-trust plugin code, and it does not promise general backlink semantics. Rich-text creation, caller-specified IDs, attachments, canvas placement and a unified native/plugin undo timeline remain outside this slice.

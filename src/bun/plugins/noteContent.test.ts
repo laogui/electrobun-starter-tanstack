@@ -102,6 +102,113 @@ afterEach(async () => {
 });
 
 describe('public note content transactions', () => {
+  it('replaces bodies atomically, refreshes safe previews and restores rich text across restart', async () => {
+    const original = await raw('a');
+    original.blocks[0].type = 'heading';
+    original.blocks[0].content[0].styles = { bold: true };
+    await writeFile(noteFilePath(workspace, 'a'), JSON.stringify(original));
+    const events: any[] = [];
+    disposers.push(
+      subscribeContentChanges(workspace, (event) => events.push(event))
+    );
+    const input = batch('body', [
+      {
+        id: 'a',
+        expectedRevision: 1,
+        changes: {
+          text: '<script>alert(1)</script>\r\n第二行',
+          title: 'Body changed',
+        },
+      },
+      { id: 'b', expectedRevision: 1, changes: { text: '' } },
+    ]);
+    const result = await call(input);
+    expect(result.status).toBe(200);
+    expect(result.result.items[0]).toEqual({
+      id: 'a',
+      title: 'Body changed',
+      color: 'red',
+      revision: 2,
+    });
+    expect(
+      JSON.parse(await readFile(join(workspace, NOTE_HISTORY_PATH), 'utf8'))
+    ).toMatchObject({ schema: 'ghostboard-content-history/v2' });
+    const replaced = await raw('a');
+    expect(replaced.blocks).toHaveLength(2);
+    expect(replaced.preview.html).not.toContain('<script>');
+    expect(replaced.preview.html).toContain('&lt;script&gt;');
+    expect((await call({ action: 'get', id: 'a' })).result.item.text).toContain(
+      '第二行'
+    );
+    expect(
+      (await call({ action: 'query', query: { text: '第二行' } })).result.items
+    ).toHaveLength(1);
+    expect((await raw('b')).blocks[0].content).toEqual([]);
+    expect(
+      events
+        .at(-1)
+        .noteChanges.every((change: any) => change.metadataOnly === false)
+    ).toBe(true);
+    service = new NoteContentService(workspace, 'workspace');
+    expect((await call(input)).result).toEqual(result.result);
+    expect(
+      (
+        await call({
+          action: 'undo',
+          batchId: 'body',
+          operationId: 'undo-body',
+        })
+      ).status
+    ).toBe(200);
+    expect(await raw('a')).toMatchObject({
+      blocks: original.blocks,
+      preview: original.preview,
+      title: original.title,
+      revision: 3,
+    });
+    expect(
+      (
+        await call({
+          action: 'redo',
+          batchId: 'body',
+          operationId: 'redo-body',
+        })
+      ).status
+    ).toBe(200);
+    expect(await raw('a')).toMatchObject({
+      blocks: replaced.blocks,
+      preview: replaced.preview,
+      revision: 4,
+    });
+  });
+
+  it('rejects invalid bodies and conflicts without changing any note', async () => {
+    const original = await raw('a');
+    for (const text of [null, {}, '界'.repeat(90_000)]) {
+      expect(
+        (
+          await call({
+            action: 'update',
+            operationId: 'invalid-body',
+            label: 'Invalid',
+            updates: [{ id: 'a', expectedRevision: 1, changes: { text } }],
+          })
+        ).status
+      ).toBe(400);
+    }
+    expect(
+      (
+        await call(
+          batch('conflict-body', [
+            { id: 'a', expectedRevision: 1, changes: { text: 'Changed' } },
+            { id: 'b', expectedRevision: 0, changes: { text: 'Conflict' } },
+          ])
+        )
+      ).status
+    ).toBe(409);
+    expect(await raw('a')).toEqual(original);
+  });
+
   it('reads a requested note set in one operation, preserving order and missing slots', async () => {
     const result = await call({
       action: 'getMany',
@@ -326,6 +433,8 @@ describe('public note content transactions', () => {
   it.each([
     'note',
     'history',
+    'body-note',
+    'body-history',
   ])('recovers an interrupted %s write before the next SDK read or retry', async (failure) => {
     let fail = true;
     vi.mocked(Bun.write).mockImplementation(async (path, value) => {
@@ -333,7 +442,9 @@ describe('public note content transactions', () => {
       if (
         fail &&
         file.includes(
-          failure === 'note' ? '/b.json.' : '/plugin-content-history.json.'
+          failure.endsWith('note')
+            ? '/b.json.'
+            : '/plugin-content-history.json.'
         )
       ) {
         fail = false;
@@ -346,7 +457,16 @@ describe('public note content transactions', () => {
     });
     const changed = vi.fn();
     disposers.push(subscribeContentChanges(workspace, changed));
-    const input = batch('recover', [update('a'), update('b')]);
+    const input = batch(
+      'recover',
+      [update('a'), update('b')].map((item) => ({
+        ...item,
+        changes: {
+          ...item.changes,
+          ...(failure.startsWith('body-') ? { text: 'Recovered body' } : {}),
+        },
+      }))
+    );
     expect((await call(input)).result.code).toBe('commit-pending');
     expect(existsSync(join(workspace, NOTE_INTENT_PATH))).toBe(true);
     expect(changed).not.toHaveBeenCalled();
@@ -358,6 +478,23 @@ describe('public note content transactions', () => {
     expect((await call(input)).result.items).toHaveLength(2);
     expect(existsSync(join(workspace, NOTE_INTENT_PATH))).toBe(false);
     expect(changed).toHaveBeenCalledOnce();
+    if (failure.startsWith('body-')) {
+      expect((await call({ action: 'get', id: 'b' })).result.item.text).toBe(
+        'Recovered body'
+      );
+      expect(
+        (
+          await call({
+            action: 'undo',
+            batchId: 'recover',
+            operationId: 'recover-undo',
+          })
+        ).status
+      ).toBe(200);
+      expect((await call({ action: 'get', id: 'b' })).result.item.text).toBe(
+        'Retain my body'
+      );
+    }
   });
 
   it('preserves external edits instead of overwriting them during recovery', async () => {

@@ -5,6 +5,7 @@ import {
   rpcEnablePlugin,
   rpcGetLocalHttpEndpoint,
   rpcListPluginPackages,
+  rpcLoadBlockNote,
   rpcSaveBlockNote,
   rpcSaveManifest,
   rpcSearchCanvas,
@@ -63,7 +64,7 @@ export async function runT2ContentProbe() {
   };
   const checks: Record<string, boolean> = {};
   const report: Record<string, unknown> = {
-    stage: 'T2/note metadata only',
+    stage: 'T2/note metadata and plain-text body transactions',
     passed: false,
     checks,
     startedAt: new Date().toISOString(),
@@ -280,6 +281,88 @@ export async function runT2ContentProbe() {
         conflict && (await probe.app.content.get('t2-note-b'))?.revision === 5
       );
     }
+    if (phase === 'initial') {
+      await rpcCreateNote('t2-note-body', 'Body replacement', 'note');
+      const seeded = await rpcSaveBlockNote(
+        't2-note-body',
+        { title: 'Body replacement', color: 'red' },
+        [
+          {
+            id: 'rich-original',
+            type: 'heading',
+            props: { level: 2 },
+            content: [
+              {
+                type: 'text',
+                text: 'Original rich body',
+                styles: { bold: true },
+              },
+            ],
+            children: [],
+          },
+        ],
+        '',
+        0
+      );
+      check('bodySeed', seeded.success && seeded.revision === 1);
+      const result = await probe.app.content.updateMany(
+        [
+          {
+            id: 't2-note-body',
+            expectedRevision: 1,
+            changes: {
+              text: 'Replacement body\n第二行 <script>literal</script>',
+            },
+          },
+        ],
+        { label: 'Replace body', operationId: 'body-batch' }
+      );
+      check(
+        'bodyReplacement',
+        result.changed && result.items[0]?.revision === 2
+      );
+      const loaded = await rpcLoadBlockNote('t2-note-body');
+      check(
+        'bodyLoadsLiteralText',
+        loaded.success &&
+          JSON.stringify(loaded.blocks).includes('<script>literal</script>')
+      );
+      check(
+        'bodyQueryable',
+        (
+          await probe.app.content.query({ text: 'Replacement body' })
+        ).items.some((item) => item.id === 't2-note-body')
+      );
+    } else {
+      check(
+        'bodyPersistsAcrossRestart',
+        (await probe.app.content.get('t2-note-body'))?.text.includes(
+          '第二行'
+        ) === true
+      );
+      await probe.app.content.undo('body-batch', { operationId: 'body-undo' });
+      const restoredBody = await rpcLoadBlockNote('t2-note-body');
+      check(
+        'bodyUndoRestoresRichBlocks',
+        JSON.stringify(restoredBody.blocks).includes('rich-original') &&
+          JSON.stringify(restoredBody.blocks).includes('"bold":true')
+      );
+      await probe.app.content.redo('body-batch', { operationId: 'body-redo' });
+      check(
+        'bodyRedo',
+        (await probe.app.content.get('t2-note-body'))?.revision === 4
+      );
+    }
+    await waitFor(
+      () =>
+        probe.events.some((event) =>
+          event.noteChanges?.some(
+            (change) => change.id === 't2-note-body' && !change.metadataOnly
+          )
+        ),
+      'body change notification'
+    );
+    check('bodyEventsAreNotMetadataOnly', true);
     useCanvasStore.setState({ nodes: originalNodes });
     check(
       'contentEventsCarryMetadata',

@@ -7,7 +7,7 @@ import type {
   NoteMetadata,
 } from '../../../packages/plugin-sdk';
 import { isPluginId } from '../../shared/plugins/ids';
-import { blocksToPlainText } from '../blocknotePreview';
+import { blocksToPlainText, buildBlockNotePreview } from '../blocknotePreview';
 import { buildNoteIndex, loadNoteRecord, type NoteRecord } from '../noteStore';
 import {
   commitNoteFiles,
@@ -22,9 +22,15 @@ import {
 
 const OPERATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_HISTORY_BYTES = 8 * 1024 * 1024;
+interface Body {
+  blocks: unknown[];
+  preview?: unknown;
+}
 interface Change {
   after: NoteMetadata;
+  afterBody?: Body;
   before: NoteMetadata;
+  beforeBody?: Body;
   currentRevision: number;
   id: string;
 }
@@ -44,7 +50,7 @@ interface Receipt {
 interface History {
   batches: Batch[];
   operations: Receipt[];
-  schema: 'ghostboard-content-history/v1';
+  schema: 'ghostboard-content-history/v1' | 'ghostboard-content-history/v2';
 }
 
 function invalid(message: string): never {
@@ -102,16 +108,25 @@ function parseUpdates(value: unknown): NoteContentUpdate[] {
     const fields = record(item.changes);
     if (
       !Object.keys(fields).length ||
-      Object.keys(fields).some((key) => !['title', 'color'].includes(key)) ||
+      Object.keys(fields).some(
+        (key) => !['title', 'color', 'text'].includes(key)
+      ) ||
       Object.keys(item).some(
         (key) => !['id', 'expectedRevision', 'changes'].includes(key)
       )
     ) {
-      return invalid('Only title and color updates are supported');
+      return invalid('Only title, color and text updates are supported');
     }
     const changes: NoteContentUpdate['changes'] = {};
     if ('title' in fields) {
       changes.title = string(fields.title);
+    }
+    if ('text' in fields) {
+      const text = string(fields.text, 262_144);
+      if (Buffer.byteLength(text) > 262_144) {
+        return invalid('Body text exceeds 256 KiB');
+      }
+      changes.text = text.replace(/\r\n?/g, '\n');
     }
     if ('color' in fields) {
       changes.color = string(fields.color, 64);
@@ -137,7 +152,8 @@ async function readHistory(workspace: string): Promise<History> {
   }
   const data = record(JSON.parse(text));
   if (
-    data.schema !== 'ghostboard-content-history/v1' ||
+    (data.schema !== 'ghostboard-content-history/v1' &&
+      data.schema !== 'ghostboard-content-history/v2') ||
     !Array.isArray(data.batches) ||
     !Array.isArray(data.operations)
   ) {
@@ -167,6 +183,16 @@ async function readHistory(workspace: string): Promise<History> {
       metadata(record(change.before));
       metadata(record(change.after));
       revision(change.currentRevision);
+      if ('beforeBody' in change || 'afterBody' in change) {
+        for (const body of [change.beforeBody, change.afterBody]) {
+          if (!Array.isArray(record(body).blocks)) {
+            throw new NoteTransactionError(
+              'corrupt-history',
+              'Invalid body history'
+            );
+          }
+        }
+      }
     }
   }
   for (const raw of data.operations) {
@@ -423,11 +449,12 @@ export class NoteContentService {
       }
       batch = found;
     }
-    const planned =
+    const planned: (NoteContentUpdate & { body?: Body })[] =
       updates ??
       batch.changes.map((change) => ({
         id: change.id,
         expectedRevision: change.currentRevision,
+        body: action === 'undo' ? change.beforeBody : change.afterBody,
         changes:
           action === 'undo'
             ? { title: change.before.title, color: change.before.color }
@@ -463,14 +490,39 @@ export class NoteContentService {
           `Note ${update.id} changed since it was read`
         );
       }
-      const next = { ...current, ...update.changes };
-      if (next.title !== current.title || next.color !== current.color) {
+      const { text, ...fields } = update.changes;
+      let body = update.body;
+      if (text !== undefined) {
+        const blocks = text.split('\n').map((line, index) => ({
+          id: `plugin-${id}-${index}`,
+          type: 'paragraph',
+          content: line ? [{ type: 'text', text: line, styles: {} }] : [],
+          children: [],
+        }));
+        body = { blocks, preview: buildBlockNotePreview(blocks) };
+      }
+      const bodyChanged =
+        body !== undefined &&
+        JSON.stringify(body.blocks) !== JSON.stringify(before.blocks);
+      const next = { ...current, ...fields };
+      if (
+        next.title !== current.title ||
+        next.color !== current.color ||
+        bodyChanged
+      ) {
         next.revision = current.revision + 1;
         files.push({
           id: update.id,
           before: beforeText,
           after: JSON.stringify(
-            { ...before, ...next, updatedAt: new Date().toISOString() },
+            {
+              ...before,
+              ...next,
+              ...(bodyChanged
+                ? { blocks: body!.blocks, preview: body!.preview }
+                : {}),
+              updatedAt: new Date().toISOString(),
+            },
             null,
             2
           ),
@@ -480,6 +532,15 @@ export class NoteContentService {
             id: update.id,
             before: current,
             after: next,
+            ...(bodyChanged
+              ? {
+                  beforeBody: {
+                    blocks: before.blocks as unknown[],
+                    preview: before.preview,
+                  },
+                  afterBody: body,
+                }
+              : {}),
             currentRevision: next.revision,
           });
         }
@@ -490,6 +551,10 @@ export class NoteContentService {
           (change) => change.id === update.id
         )!.currentRevision = next.revision;
       }
+    }
+    if (batch.changes.some((change) => change.beforeBody !== undefined)) {
+      // Older hosts must reject this history instead of undoing metadata alone.
+      history.schema = 'ghostboard-content-history/v2';
     }
     if (action === 'update' && files.length) {
       history.batches.push(batch);

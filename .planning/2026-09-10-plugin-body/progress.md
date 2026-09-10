@@ -1,0 +1,10 @@
+# Progress
+2026-09-10: inspected SDK, service, history, existing packaged acceptance. Started body mutation slice.
+Implemented changes.text (256 KiB UTF-8, normalized lines, explicit plain paragraphs), lossless body/preview history, preview regeneration, typed SDK. Host tests: 16/16 pass. Type checking passes. Extended existing packaged content probe with a rich-body replacement/restart/undo/redo scenario. Existing native editor body notifications do not rebase local drafts; automatic live body reload is outside this slice and must be stated explicitly.
+Initial fixture lookup used main.js; actual file app.js. Initial hostEvents lookup was one directory short; located runtime/hostEvents.ts. No product errors.
+Packaged attempt 1: all metadata and body write checks passed; preview assertion used rpcLoadBlockNote.preview, but that RPC does not return previews. Fixed probe to verify literal text via loaded blocks; escaping remains covered directly by service test. Retrying packaged run with corrected assertion.
+Packaged attempt 2 passed initial + restart, including literal body loading and rich undo/redo. Added history schema v2 on first body transaction so older hosts reject rather than partially undo body history. Existing v1 histories remain readable. Final archive must be rebuilt for this change.
+Final type check caught TS2571 in the new JSON.parse schema assertion (ts-reset returns unknown); changed assertion to toMatchObject without unsafe access. No production error. Full style check passed.
+Schema upgrade packaged run exposed a second validator in noteTransactions.parseIntent still accepting only v1. Updated recovery validator to accept v2 as well; focused body service + editor saver tests pass (26/26). Rebuilding final package.
+
+Final: packaged initial/restart passed; archive df9b3241437afeca1d8cbc32a78e2e360abc59e8d43e38bafcc055b0f57abd0b. Full regression 204 files / 1782 passed, 0 failed/pending. Type checking, Ultracite and diff checks pass. SDK reference, main phase status, development-plan stale summary, machine results and body evidence updated. No commit created. All phases in this slice complete; T2 remains in progress.

@@ -394,7 +394,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | --- | --- | --- |
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
-| T2：内容与画布类型（实施中；A4、笔记元数据批次与选区 / React hooks 已通过 macOS arm64 验证） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过 |
+| T2：内容与画布类型（实施中；A4、笔记元数据批次、选区 / React hooks 与纯文本正文替换已通过 macOS arm64 验证） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过 |
 | T3：导入器与分发 | SDK `files` 完整流程、导入器、可安装构建、ZIP / HTTPS 安装、组合插件 | 四类样例均从独立包安装，最终用户无开发工具也能使用 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
@@ -409,6 +409,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-10（Asia/Singapore）T2 第二批结果：[笔记元数据事务与恢复证据](trusted-plugin-t2-content-evidence.md)。`app.content.get/query/updateMany/undo/redo` 已接入正式 SDK：读取笔记、按 revision 批量更新 sidecar 笔记的标题 / 颜色、持久化操作回执及撤销 / 重做。宿主编辑器、manifest 元数据与插件写入共用工作区写入队列；批次先写 intent，读取 / 写入前完成中断恢复，外部文件冲突不覆盖。发行包通过两笔记批量修改、画布 / 文件夹投影、搜索、陈旧 manifest 拒绝、重启后撤销及整批 redo 冲突。待保存正文在连续的 metadata-only 变更下保留并更新其 revision；不能证明连续性或本地标题存在冲突时保留草稿并拒绝覆盖。**本批仍不代表 T2 全部完成**：正文修改 / 内容创建、内容选区快照 / React hooks、统一历史顺序与冲突恢复 UI、第三方卡片 / 迁移 / 缺失展示均未验收。当前插件撤销使用显式 SDK / 插件命令，不冒充原生全局 Undo 已统一。
 
 2026-09-10（Asia/Singapore）T2 第三批结果：[笔记选区与 React hooks 证据](trusted-plugin-t2-selection-evidence.md)。`app.selection.get()` 去重并通过同一次宿主队列读取笔记快照，`getPlacements()` 独立保留画布放置身份；`subscribe/getSnapshot` 提供生命周期绑定的稳定缓存。正式 `@ghostboard/sdk/react` 提供 `useSelection/useSelectionState/useSelectedPlacements`，每个独立面板 root 由 SDK 自有 provider 绑定，dev / 发行 import map 和可选 global shim 共用同一 React / hooks 模块。发行包通过重复放置去重、只修改选中笔记、内容变化刷新面板且不重挂、旧 revision 拒绝、重启后 undo 更新 hooks 和停用清理。**本批仍不代表 T2 全部完成**：选区目前只读取当前画布中显式选中的持久化笔记，容器不递归、非笔记仅保留放置引用；正文修改 / 内容创建、第三方卡片与迁移 / 缺失展示、统一 undo、更多业务 hooks 仍待推进。上方各批结果中的“待实施”按当批范围保留，最新边界以本段及 SDK README 为准。
+
+2026-09-10 T2 第四批结果：[纯文本正文替换证据](trusted-plugin-t2-body-evidence.md)。`updateMany` 增加 `changes.text`，显式将已有笔记正文替换为纯文本段落；沿用 revision 校验、批次 intent 与回执，重建转义预览，历史保存原始富文本 blocks / preview，支持重启后 undo / redo。首次正文历史升级为 v2，旧宿主拒绝读取以避免只恢复元数据。**本批不是 T2 退出**：宿主已打开编辑器和画布预览不会自动重载正文；本地草稿保留且旧 revision 保存被拒绝。内容创建、富文档编辑、宿主正文同步与冲突 UI、自定义卡片 / 迁移 / 缺失展示、统一 undo 仍待推进。前三批“待实施”保留为当批记录，最新边界以本段与 SDK README 为准。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

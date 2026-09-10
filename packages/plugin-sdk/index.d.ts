@@ -90,7 +90,14 @@ export interface NoteContentSnapshot {
 }
 
 export interface NoteContentUpdate {
-  changes: { title?: string; color?: string };
+  changes: {
+    title?: string;
+    color?: string;
+    /** Replaces the entire rich-text body with plain paragraphs (LF/CRLF lines).
+     * Undo restores the original rich text. Max 256 KiB UTF-8; no Markdown parsing.
+     */
+    text?: string;
+  };
   expectedRevision: number;
   id: string;
 }

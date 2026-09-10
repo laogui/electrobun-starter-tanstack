@@ -197,7 +197,7 @@ if (writable.length) {
 - `get(id, options?)` returns `{ id, kind: 'note', title, color, text, source, revision }` or `null` if absent. `text` is searchable text extracted from BlockNote blocks, or the legacy Markdown body; it is not a lossless rich-document export. Corrupt content produces an explicit error rather than an empty replacement.
 - `getMany(ids, options?)` reads up to 500 IDs in one workspace-queued operation. Results retain input order, including duplicate IDs and `null` slots for missing notes. An empty input returns an empty array. Corruption fails the request rather than returning partial success. This is the read path used for selection snapshots, not a series of independently interleaved `get` calls.
 - `query({ text?, after?, limit? }?, options?)` searches title/text case-insensitively and returns `{ items, nextCursor }`, ordered by note ID. Default limit 100, range 1–500. Pass `nextCursor` as `after` for another page. Each request reads under the host workspace queue, but pages do not form a frozen multi-request snapshot.
-- `updateMany(updates, { label, operationId?, signal? })` accepts 1–100 **unique note IDs** and returns `{ operationId, items, changed }`. Every update requires `expectedRevision` and a nonempty `changes` containing only `title` (up to 256 characters) and/or `color` (up to 64 characters). Blocks, previews, timestamps other than `updatedAt`, and unknown sidecar fields are retained.
+- `updateMany(updates, { label, operationId?, signal? })` accepts 1–100 **unique note IDs** and returns `{ operationId, items, changed }`. Every update requires `expectedRevision` and a nonempty `changes` containing `title` (up to 256 characters), `color` (up to 64 characters), and/or `text` (up to 256 KiB UTF-8). Without `text`, blocks and previews are retained. Timestamps other than `updatedAt` and unknown sidecar fields are retained.
 - All revisions are checked before any batch content is written. A conflict fails the whole batch. A no-op retains its revision and returns `changed: false`; an entirely no-op batch has no undo entry. Other notes and unsupported fields cannot be silently skipped.
 
 ### Recovery and retries
@@ -282,6 +282,26 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Content creation, body mutation, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Content creation, rich-document editing, live host body reconciliation, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
+
+## T2 fourth slice: explicit plain-text body replacement
+
+`updateMany([{ id, expectedRevision, changes: { text } }], { label })` replaces the entire body of an existing sidecar note with plain paragraphs. CRLF and CR normalize to LF; each line becomes a paragraph, including blank lines. An empty string clears the body to one empty paragraph. This is an explicit replacement: Markdown and HTML are literal text, and existing rich formatting, links, tables and attachments are removed from the new document. Attachment files are not deleted. Do not use `snapshot.text` for a lossless round trip.
+
+```js
+const note = await app.content.get(noteId);
+if (note?.revision != null) {
+  await app.content.updateMany([
+    { id: note.id, expectedRevision: note.revision,
+      changes: { text: 'First paragraph\nSecond paragraph' } },
+  ], { label: 'Replace note body' });
+}
+```
+
+The same operation can change title/color and body across multiple notes. Revision conflicts reject the whole batch. Use the same operation ID with identical input for uncertain retries; replacement with a fresh operation ID creates fresh paragraph identities and a new revision, even for identical text. Results still contain metadata, not bodies; read with `get`/`getMany` afterward.
+
+The first body mutation upgrades the history file to schema v2; this host reads existing v1 histories, while older hosts reject v2 instead of silently undoing metadata alone. Body history stores original blocks and preview, so undo restores rich content exactly and redo restores the replacement, including after app restart. Previews are regenerated with escaped text. Existing 1 MiB request and 8 MiB history limits also apply; large rich originals can cause `history-limit` before any write. Legacy Markdown remains read-only.
+
+Body notifications have `metadataOnly: false`; SDK selection subscriptions refresh their persisted snapshots. **Live host canvas previews and an already open editor do not automatically reload body changes in this slice.** Reopen the note or reload the workspace to read canonical content. An unsaved editor keeps its draft and previous revision; an attempted stale save fails instead of overwriting the plugin change. Unified history, automatic clean-editor refresh and conflict-resolution UI remain later T2 work.

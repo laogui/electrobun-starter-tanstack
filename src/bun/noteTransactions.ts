@@ -112,7 +112,8 @@ function parseIntent(text: string): Intent {
     unknown
   > | null;
   if (
-    history?.schema !== 'ghostboard-content-history/v1' ||
+    (history?.schema !== 'ghostboard-content-history/v1' &&
+      history?.schema !== 'ghostboard-content-history/v2') ||
     !Array.isArray(history.operations)
   ) {
     throw new NoteTransactionError(

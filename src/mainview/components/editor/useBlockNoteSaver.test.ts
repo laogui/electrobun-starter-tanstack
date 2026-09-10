@@ -208,6 +208,38 @@ describe('metadata-aware BlockNote saver', () => {
     ]);
   });
 
+  it('retains a dirty body and its old revision when a plugin body replacement makes saving conflict', async () => {
+    mocks.save.mockResolvedValue({
+      success: false,
+      error: 'revision-conflict',
+    });
+    const { result, status } = setup();
+    const draft = payload('Unsaved rich body');
+    act(() => {
+      result.current.saveDebounced(draft);
+      publishNoteMetadataChanges([{ ...change, metadataOnly: false }]);
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.save.mock.calls[0]?.slice(2)).toEqual([
+      draft.blocks,
+      draft.markdown,
+      4,
+    ]);
+    expect(status).toHaveBeenLastCalledWith('error');
+    expect(mocks.update).not.toHaveBeenCalled();
+    await act(async () => {
+      result.current.flushNow();
+    });
+    expect(mocks.save.mock.calls[1]?.slice(2)).toEqual([
+      draft.blocks,
+      draft.markdown,
+      4,
+    ]);
+  });
+
   it('retains the latest draft when an in-flight write fails', async () => {
     let reject!: (value: { success: boolean }) => void;
     mocks.save.mockImplementationOnce(

@@ -78,6 +78,17 @@ export interface ScheduledTask {
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
 }
 
+/**
+ * Handed to a canvas type when one of its tasks comes due. `missedCount` is
+ * greater than one when repeats elapsed while the app was closed; they
+ * collapse into a single delivery.
+ */
+export interface ScheduledTaskFiredEvent {
+  lastDueAt: string;
+  missedCount: number;
+  task: ScheduledTask;
+}
+
 export interface ExtensionNotification {
   body?: string;
   title: string;

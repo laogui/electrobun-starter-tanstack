@@ -1,6 +1,10 @@
 import { resolve } from 'node:path';
 
 import type { ScheduledTask } from '../../shared/extensions/protocol';
+import type {
+  FiredTask,
+  PersistedScheduledTask,
+} from '../../shared/extensions/scheduling';
 import { atomicWrite } from '../atomicWrite';
 import { withFileQueue } from '../persistence/fileQueue';
 
@@ -9,21 +13,11 @@ const MAX_TASKS = 500;
 const MAX_PAYLOAD_JSON = 8 * 1024;
 const TASK_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 
-export interface PersistedScheduledTask extends ScheduledTask {
-  canvasTypeId: string;
-  instanceId: string;
-  lastFiredAt?: string;
-}
+export type { FiredTask, PersistedScheduledTask };
 
 export interface ExtensionTaskFile {
   schema: typeof EXTENSION_TASKS_SCHEMA;
   tasks: PersistedScheduledTask[];
-}
-
-export interface FiredTask {
-  lastDueAt: string;
-  missedCount: number;
-  task: PersistedScheduledTask;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -315,22 +309,4 @@ export function tickExtensionTasks(
     await saveExtensionTasks(wsPath, consumed.file);
     return consumed.fired;
   });
-}
-
-/** Milliseconds until the earliest pending task, or null when idle. */
-export function nextExtensionTaskDelay(
-  file: ExtensionTaskFile,
-  nowMs = Date.now()
-): number | null {
-  let earliest = Number.POSITIVE_INFINITY;
-  for (const task of file.tasks) {
-    const fireAt = Date.parse(task.fireAt);
-    if (Number.isFinite(fireAt) && fireAt < earliest) {
-      earliest = fireAt;
-    }
-  }
-  if (!Number.isFinite(earliest)) {
-    return null;
-  }
-  return Math.max(0, earliest - nowMs);
 }

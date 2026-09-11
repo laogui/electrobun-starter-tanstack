@@ -24,6 +24,7 @@ import type {
   ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
+import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 import type {
   InstalledPluginSummary,
@@ -87,6 +88,11 @@ async function initElectrobun() {
           pluginContentChanged: (event: HostContentChangedEvent) => {
             globalThis.dispatchEvent(
               new CustomEvent('plugin-content-changed', { detail: event })
+            );
+          },
+          extensionTaskFired: (delivery: ExtensionTaskDelivery) => {
+            globalThis.dispatchEvent(
+              new CustomEvent('extension-task-fired', { detail: delivery })
             );
           },
           openSearch: () => {
@@ -413,6 +419,16 @@ export async function rpcCancelExtensionTask(
     return { success: false };
   }
   return eb.rpc.request.extensionSchedulerCancel({ instanceId, taskId });
+}
+
+export async function rpcAckExtensionTasks(
+  deliveryId: string
+): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.extensionSchedulerAck({ deliveryId });
 }
 
 export async function rpcListExtensionTasks(instanceId?: string): Promise<{

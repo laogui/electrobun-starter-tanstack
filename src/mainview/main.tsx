@@ -4,6 +4,7 @@ import { domAnimation, LazyMotion } from 'motion/react';
 import ReactDOM from 'react-dom/client';
 
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { connectExtensionTaskDispatcher } from '@/extensions/taskDispatcher';
 import { router } from '@/router';
 import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
 import { connectPluginHostEvents } from './plugins/runtime/hostEvents';
@@ -41,9 +42,11 @@ root.render(
 
 if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
   const disconnectEvents = connectPluginHostEvents(pluginRuntime);
+  const disconnectTasks = connectExtensionTaskDispatcher();
   const stopPlugins = startPluginRuntime();
   import.meta.hot?.dispose(() => {
     disconnectEvents();
+    disconnectTasks();
     stopPlugins();
   });
 }

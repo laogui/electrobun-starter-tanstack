@@ -15,6 +15,7 @@ import type {
 } from '../shared/extensions/instance';
 import type { ExtensionPresentation } from '../shared/extensions/presentation';
 import { collectExtensionInstanceIds } from '../shared/extensions/refs';
+import type { ExtensionTaskDelivery } from '../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../shared/plugins/contentHistory';
 import type {
   InstalledPluginSummary,
@@ -66,8 +67,8 @@ import {
   cancelExtensionTasksByInstance,
   listExtensionTasks,
   scheduleExtensionTask,
-  tickExtensionTasks,
 } from './extensions/scheduler';
+import { createExtensionSchedulerService } from './extensions/schedulerService';
 import {
   activateLicense as activateLicenseKey,
   checkLicenseStatus,
@@ -943,6 +944,10 @@ interface CanvasRPC {
         params: { instanceId: string; taskId: string };
         response: { success: boolean };
       };
+      extensionSchedulerAck: {
+        params: { deliveryId: string };
+        response: { success: boolean };
+      };
       extensionSchedulerList: {
         params: { instanceId?: string };
         response: {
@@ -1260,6 +1265,7 @@ interface CanvasRPC {
     messages: {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
+      extensionTaskFired: ExtensionTaskDelivery;
       pluginContentChanged: HostContentChangedEvent;
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;
@@ -1769,6 +1775,12 @@ async function main() {
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);
   });
+  const extensionScheduler = createExtensionSchedulerService({
+    wsPath,
+    deliver: (delivery) => {
+      mainRpc?.send?.extensionTaskFired(delivery);
+    },
+  });
   const url = await getMainViewUrl();
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
@@ -2022,7 +2034,10 @@ async function main() {
             }
           }
 
-          tickExtensionTasks(wsPath).catch((error) => {
+          // Catch up on anything that came due while the app was closed. The
+          // service owns the timer from here; this only shortens the wait for
+          // overdue tasks when a canvas opens.
+          extensionScheduler.tick().catch((error) => {
             console.warn('[extensions] scheduler tick failed', error);
           });
 
@@ -2602,6 +2617,7 @@ async function main() {
         extensionSchedulerSchedule: async (task) => {
           try {
             await scheduleExtensionTask(wsPath, task);
+            await extensionScheduler.notifyTasksChanged();
             return { success: true };
           } catch (error) {
             console.error('[extensions] schedule failed', error);
@@ -2612,9 +2628,20 @@ async function main() {
         extensionSchedulerCancel: async ({ instanceId, taskId }) => {
           try {
             await cancelExtensionTask(wsPath, instanceId, taskId);
+            await extensionScheduler.notifyTasksChanged();
             return { success: true };
           } catch (error) {
             console.error('[extensions] cancel task failed', error);
+            return { success: false };
+          }
+        },
+
+        extensionSchedulerAck: async ({ deliveryId }) => {
+          try {
+            await extensionScheduler.ack(deliveryId);
+            return { success: true };
+          } catch (error) {
+            console.error('[extensions] scheduler ack failed', error);
             return { success: false };
           }
         },
@@ -3412,6 +3439,12 @@ async function main() {
       x: 200,
       y: 200,
     },
+  });
+
+  // Arm the host timer for this workspace. Tasks that come due before the
+  // renderer is listening are re-delivered until it acks.
+  extensionScheduler.tick().catch((error) => {
+    console.warn('[extensions] scheduler start failed', error);
   });
 
   return mainWindow;

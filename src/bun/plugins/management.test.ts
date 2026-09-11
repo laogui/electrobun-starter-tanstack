@@ -13,6 +13,7 @@ vi.mock('../appPaths', () => ({
   },
 }));
 
+const TREE_DIGEST = /^[a-f0-9]{64}$/;
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -337,5 +338,99 @@ describe('damaged enablement state', () => {
     });
     await rm(path);
     expect(await service.enable(installed)).toMatchObject({ enabled: true });
+  });
+});
+
+describe('installed package integrity', () => {
+  async function installEnabled() {
+    const context = await setup();
+    const preview = await context.service.prepareFromFile(context.file);
+    const installed = await context.service.commit(preview.transactionId);
+    await context.service.enable(installed);
+    const packageDir = join(
+      pluginInstallRoot(context.appDataRoot),
+      'packages',
+      installed.pluginId,
+      installed.version,
+      installed.digest
+    );
+    return { ...context, installed, packageDir };
+  }
+
+  it('records a tree digest at install', async () => {
+    const { installed } = await installEnabled();
+    expect(installed.treeDigest).toMatch(TREE_DIGEST);
+  });
+
+  it('disables a plugin whose installed files were edited', async () => {
+    const { appDataRoot, installed, packageDir, workspace } =
+      await installEnabled();
+    await writeFile(join(packageDir, 'main.js'), '// tampered\n');
+
+    const restarted = new PluginManagementService(workspace, { appDataRoot });
+    const listed = await restarted.list();
+    const row = listed.find((entry) => entry.pluginId === installed.pluginId);
+    expect(row).toMatchObject({
+      enabled: false,
+      status: 'invalid',
+      validationError: expect.stringContaining('no longer match'),
+    });
+    // Quarantine persists: enablement no longer names this package, so a
+    // later run refuses it before it even reaches the integrity check.
+    await expect(
+      new PluginManagementService(workspace, {
+        appDataRoot,
+      }).resolveRuntimePackage(installed)
+    ).rejects.toMatchObject({ code: 'not-found' });
+  });
+
+  it('rejects an added file just like an edited one', async () => {
+    const { appDataRoot, installed, packageDir, workspace } =
+      await installEnabled();
+    await writeFile(join(packageDir, 'extra.js'), 'globalThis.pwned = true;\n');
+
+    // A fresh service has no memo of the verified tree, which is the state
+    // after a restart.
+    const restarted = new PluginManagementService(workspace, { appDataRoot });
+    await expect(
+      restarted.resolveRuntimePackage(installed)
+    ).rejects.toMatchObject({ code: 'integrity' });
+  });
+
+  it('recovers once the original files are back and the plugin is re-enabled', async () => {
+    const { appDataRoot, installed, packageDir, workspace } =
+      await installEnabled();
+    const original = await readFile(join(packageDir, 'main.js'), 'utf8');
+    await writeFile(join(packageDir, 'main.js'), '// tampered\n');
+    const restarted = new PluginManagementService(workspace, { appDataRoot });
+    await restarted.list();
+
+    await writeFile(join(packageDir, 'main.js'), original);
+    const recovered = new PluginManagementService(workspace, { appDataRoot });
+    const row = (await recovered.list()).find(
+      (entry) => entry.pluginId === installed.pluginId
+    );
+    expect(row).toMatchObject({ enabled: false, status: 'stored' });
+    await recovered.enable(row!);
+    await expect(recovered.resolveRuntimePackage(row!)).resolves.toBeTruthy();
+  });
+
+  it('keeps hot reloading a development directory that changes', async () => {
+    const { root, service } = await setup();
+    const directory = join(root, 'development');
+    await mkdir(directory);
+    for (const [name, content] of Object.entries(pluginFiles())) {
+      await writeFile(join(directory, name), content);
+    }
+    const preview = await service.prepareDevelopmentDirectory(directory);
+    const installed = await service.commit(preview.transactionId);
+    await service.enable(installed);
+
+    await writeFile(join(directory, 'app.js'), '// edited while developing\n');
+    const listed = await service.list();
+    expect(listed[0]).toMatchObject({ enabled: true, status: 'stored' });
+    await expect(
+      service.resolveRuntimePackage(listed[0]!)
+    ).resolves.toBeTruthy();
   });
 });

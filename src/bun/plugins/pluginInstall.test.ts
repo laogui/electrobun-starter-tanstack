@@ -19,7 +19,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
 import { loadPluginDirectory } from './loadDirectory';
-import { PluginInstallError, PluginInstallStore } from './pluginInstall';
+import {
+  PLUGIN_PACKAGE_DIGEST_RE,
+  PluginInstallError,
+  PluginInstallStore,
+} from './pluginInstall';
 
 async function listen(
   handler: (req: IncomingMessage, res: ServerResponse) => void
@@ -352,10 +356,15 @@ describe('registry corruption recovery', () => {
 
     const reopened = new PluginInstallStore(root);
     // installedAt comes from the journal, so it may differ by milliseconds
-    // from the timestamp the lost registry recorded.
-    const { installedAt, ...identity } = installed;
-    expect(await reopened.listInstalled()).toMatchObject([identity]);
+    // from the timestamp the lost registry recorded. treeDigest is deliberately
+    // not rebuilt: adopting the current tree is trust on first use and belongs
+    // in the single place that already does it.
+    const { installedAt, treeDigest, ...identity } = installed;
+    const rebuilt = await reopened.listInstalled();
+    expect(rebuilt).toMatchObject([identity]);
+    expect(rebuilt[0]?.treeDigest).toBeUndefined();
     expect(installedAt).toBeTruthy();
+    expect(treeDigest).toMatch(PLUGIN_PACKAGE_DIGEST_RE);
     expect(await readFile(await corruptBackup(root), 'utf8')).toBe(
       '{"schema":1,"packa'
     );

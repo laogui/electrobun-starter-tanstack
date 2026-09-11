@@ -15,6 +15,11 @@ import {
   type PluginManagementService,
   pluginInstallErrorMessage,
 } from './management';
+import { PluginInstallError } from './pluginInstall';
+
+function isIntegrityFailure(error: unknown): boolean {
+  return error instanceof PluginInstallError && error.code === 'integrity';
+}
 
 interface RuntimeGeneration {
   development: boolean;
@@ -202,6 +207,23 @@ export class PluginHostController {
   ): Promise<RuntimeGeneration> {
     const loaded = await this.service.resolveRuntimePackage(summary);
     const contents = await readPluginContents(loaded.directory);
+    if (
+      summary.development !== true &&
+      summary.treeDigest &&
+      contents.digest !== summary.treeDigest
+    ) {
+      // Installed packages never change in place, so refuse to build a
+      // generation from files that drifted since install. Development
+      // directories are expected to change and keep hot reloading.
+      await this.service.reportIntegrityMismatch({
+        directory: loaded.directory,
+        pluginId: summary.pluginId,
+      });
+      throw new PluginInstallError(
+        'integrity',
+        `Installed files for ${summary.pluginId} no longer match the package recorded at install. The plugin was disabled; reinstall it to continue.`
+      );
+    }
     const previous = this.latest.get(summary.pluginId);
     if (
       previous?.digest === contents.digest &&
@@ -307,6 +329,12 @@ export class PluginHostController {
         try {
           current = await this.generation(summary);
         } catch (error) {
+          if (isIntegrityFailure(error)) {
+            // Unlike a transient load error, tampering must not leave the
+            // last good generation serving code.
+            current = undefined;
+            await this.remove(summary.pluginId);
+          }
           snapshot.diagnostics.push({
             pluginId: summary.pluginId,
             message: pluginInstallErrorMessage(error),

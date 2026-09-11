@@ -19,6 +19,7 @@ import {
   type DevelopmentDirectoryRecord,
   withPluginSourceLock,
 } from './developmentDirectories';
+import { readPluginContents } from './directoryContents';
 import {
   type LoadedPluginDirectory,
   loadPluginDirectory,
@@ -129,6 +130,7 @@ function baseSummary(installed: InstalledPluginPackage) {
     name: installed.name,
     pluginId: installed.pluginId,
     source: sourceSummary(installed.source),
+    treeDigest: installed.treeDigest,
     version: installed.version,
   };
 }
@@ -139,6 +141,8 @@ export class PluginManagementService {
   private readonly store: PluginInstallStore;
   private readonly legacyStore: PluginInstallStore;
   private readonly enablementPath: string;
+  /** Installed package directory → tree digest verified by this service. */
+  private readonly verifiedTrees = new Map<string, string>();
 
   constructor(workspacePath: string, options?: { appDataRoot?: string }) {
     const root = resolve(pluginInstallRoot(options?.appDataRoot));
@@ -441,11 +445,7 @@ export class PluginManagementService {
   private async installedSummary(
     installed: InstalledPluginPackage
   ): Promise<InstalledPluginSummary> {
-    const base = {
-      ...baseSummary(installed),
-      enabled:
-        (await this.readEnablement())[installed.pluginId] === installed.digest,
-    };
+    const base = baseSummary(installed);
     try {
       const { loaded } = await this.resolveStoredPackage({
         pluginId: installed.pluginId,
@@ -453,6 +453,7 @@ export class PluginManagementService {
       });
       return {
         ...base,
+        enabled: await this.isEnabled(installed),
         name: loaded.manifest.name,
         plugin: packageSummary(loaded.manifest),
         status: 'stored',
@@ -460,6 +461,9 @@ export class PluginManagementService {
     } catch (error) {
       return {
         ...base,
+        // Read after resolution: a failed integrity check disables the plugin,
+        // and the row must not still claim it is running.
+        enabled: await this.isEnabled(installed),
         status:
           error instanceof PluginDirectoryError &&
           error.code === 'legacy-contract'
@@ -468,6 +472,12 @@ export class PluginManagementService {
         validationError: pluginInstallErrorMessage(error),
       };
     }
+  }
+
+  private async isEnabled(installed: InstalledPluginPackage): Promise<boolean> {
+    return (
+      (await this.readEnablement())[installed.pluginId] === installed.digest
+    );
   }
 
   private async readEnablement(): Promise<Record<string, string>> {
@@ -546,6 +556,7 @@ export class PluginManagementService {
       );
     }
     await this.assertNoDirectorySource(input.pluginId);
+    await this.verifyStoredTree(installed);
     const loaded = await loadPluginDirectory(installed.directory);
     if (
       loaded.manifest.id !== installed.pluginId ||
@@ -557,5 +568,60 @@ export class PluginManagementService {
       );
     }
     return { installed, loaded };
+  }
+
+  /**
+   * Installed packages are immutable once committed, so any change to their
+   * files is tampering or corruption. Hashing the whole tree is too expensive
+   * to repeat on every settings read, so it happens once per directory per
+   * service; the host controller re-compares the digest on every runtime
+   * refresh using the tree it already reads to build a generation.
+   */
+  private async verifyStoredTree(
+    installed: InstalledPluginPackage
+  ): Promise<void> {
+    if (this.verifiedTrees.get(installed.directory) === installed.treeDigest) {
+      return;
+    }
+    const treeDigest = (await readPluginContents(installed.directory)).digest;
+    if (!installed.treeDigest) {
+      await this.store.adoptTreeDigest({
+        digest: installed.digest,
+        pluginId: installed.pluginId,
+        treeDigest,
+      });
+      this.verifiedTrees.set(installed.directory, treeDigest);
+      return;
+    }
+    if (treeDigest !== installed.treeDigest) {
+      await this.quarantine(installed.pluginId);
+      throw new PluginInstallError(
+        'integrity',
+        `Installed files for ${installed.pluginId} no longer match the package recorded at install. The plugin was disabled; reinstall it to continue.`
+      );
+    }
+    this.verifiedTrees.set(installed.directory, treeDigest);
+  }
+
+  /**
+   * Called by the host controller when the tree it read to build a generation
+   * does not match the registry. That check runs on every refresh, so it sees
+   * edits made after this service already verified the directory.
+   */
+  async reportIntegrityMismatch(input: {
+    directory: string;
+    pluginId: string;
+  }): Promise<void> {
+    this.verifiedTrees.delete(input.directory);
+    await this.quarantine(input.pluginId);
+  }
+
+  /** Fails closed by disabling the plugin so nothing loads its code again. */
+  private async quarantine(pluginId: string): Promise<void> {
+    try {
+      await this.writeEnablement(pluginId, undefined);
+    } catch (error) {
+      console.error('[plugins] quarantine failed', pluginId, error);
+    }
   }
 }

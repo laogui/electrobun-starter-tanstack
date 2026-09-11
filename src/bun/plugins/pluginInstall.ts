@@ -15,6 +15,7 @@ import {
 } from '../../shared/plugins/ids';
 import type { PluginManifest } from '../../shared/plugins/manifest';
 import { readJsonOrEmpty } from '../persistence/corruptFile';
+import { readPluginContents } from './directoryContents';
 import { loadPluginDirectory, PluginDirectoryError } from './loadDirectory';
 import { downloadPluginZip, PluginDownloadError } from './urlInstall';
 import { PluginZipError, unpackPluginZip } from './zipInstall';
@@ -56,6 +57,7 @@ export type PluginInstallErrorCode =
   | 'digest-conflict'
   | 'download-failed'
   | 'enablement-corrupt'
+  | 'integrity'
   | 'invalid-package'
   | 'invalid-state'
   | 'not-found'
@@ -95,6 +97,12 @@ export interface InstalledPluginPackage {
   name: string;
   pluginId: string;
   source: PluginInstallSource;
+  /**
+   * Canonical digest of the installed file tree, recorded at commit. `digest`
+   * covers the delivered zip; this covers what actually sits on disk, so
+   * later edits to the installed files are detectable.
+   */
+  treeDigest?: string;
   version: string;
 }
 
@@ -285,7 +293,7 @@ function parseRegistry(value: unknown): PluginRegistryFile {
     ) {
       continue;
     }
-    packages.push({
+    const parsed: InstalledPluginPackage = {
       pluginId: entry.pluginId,
       version: entry.version,
       digest: entry.digest,
@@ -293,7 +301,14 @@ function parseRegistry(value: unknown): PluginRegistryFile {
       name: entry.name,
       source,
       installedAt: entry.installedAt,
-    });
+    };
+    if (
+      typeof entry.treeDigest === 'string' &&
+      PLUGIN_PACKAGE_DIGEST_RE.test(entry.treeDigest)
+    ) {
+      parsed.treeDigest = entry.treeDigest;
+    }
+    packages.push(parsed);
   }
   return { schema: PLUGIN_INSTALL_SCHEMA, packages };
 }
@@ -840,11 +855,42 @@ export class PluginInstallStore {
       name: journal.name ?? pluginId,
       source: journal.source,
       installedAt: nowIso(),
+      treeDigest: (await readPluginContents(dest)).digest,
     };
     await this.upsertRegistry(installed);
     await this.writeJournal({ ...journal, stage: 'installed' });
     await this.removeStaging(journal.transactionId);
     return installed;
+  }
+
+  /**
+   * Adopts the tree digest of a package installed before this field existed,
+   * or rebuilt from disk. Trust on first use: there is nothing older to
+   * compare against, so the goal is only to detect later edits.
+   */
+  adoptTreeDigest(input: {
+    digest: string;
+    pluginId: string;
+    treeDigest: string;
+  }): Promise<void> {
+    return this.enqueue(async () => {
+      const registry = await this.readRegistry();
+      let changed = false;
+      const packages = registry.packages.map((entry) => {
+        if (
+          entry.pluginId !== input.pluginId ||
+          entry.digest !== input.digest ||
+          entry.treeDigest
+        ) {
+          return entry;
+        }
+        changed = true;
+        return { ...entry, treeDigest: input.treeDigest };
+      });
+      if (changed) {
+        await this.writeRegistry({ schema: PLUGIN_INSTALL_SCHEMA, packages });
+      }
+    });
   }
 
   private async upsertRegistry(

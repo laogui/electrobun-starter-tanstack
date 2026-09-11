@@ -34,6 +34,8 @@ export interface InstalledPluginSummary {
   pluginId: string;
   source: PluginSourceSummary;
   status: 'invalid' | 'legacy' | 'stored';
+  /** Canonical digest of the installed tree; absent for development sources. */
+  treeDigest?: string;
   validationError?: string;
   version: string;
 }

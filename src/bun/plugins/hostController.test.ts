@@ -498,3 +498,60 @@ describe('trusted plugin host', () => {
     ).toBe(410);
   });
 });
+
+const INTEGRITY_ERROR = /no longer match/;
+
+describe('installed package integrity at runtime', () => {
+  async function installed() {
+    const manager = service();
+    const file = join(root, 'example.zip');
+    await writeFile(file, createStoredZip(pluginFiles()));
+    const preview = await manager.prepareFromFile(file);
+    const entry = await manager.commit(preview.transactionId);
+    await manager.enable(entry);
+    return { entry, host: hostFor(manager), manager };
+  }
+
+  it('refuses a new generation after the installed files change', async () => {
+    const { entry, host } = await installed();
+    const first = await snapshot(host);
+    expect(firstPlugin(first).pluginId).toBe(entry.pluginId);
+
+    const packageDir = join(
+      root,
+      'app',
+      'plugins',
+      'packages',
+      entry.pluginId,
+      entry.version,
+      entry.digest
+    );
+    await writeFile(join(packageDir, 'main.js'), '// swapped after install\n');
+    await post(host, 'reload', { pluginId: entry.pluginId });
+
+    const second = await snapshot(host);
+    expect(second.plugins).toEqual([]);
+    expect(second.diagnostics[0]?.message).toMatch(INTEGRITY_ERROR);
+  });
+
+  it('still hot reloads a development directory', async () => {
+    const {
+      manager,
+      installed: connectedPlugin,
+      path,
+      host,
+    } = await connected();
+    await manager.enable(connectedPlugin);
+    const first = firstPlugin(await snapshot(host));
+
+    await writeFile(join(path, 'relative.js'), 'export const value = 3;');
+    await post(host, 'reload', { pluginId: connectedPlugin.pluginId });
+    const second = firstPlugin(await snapshot(host));
+    expect(second.generation).not.toBe(first.generation);
+    expect(
+      await (
+        await asset(host, new URL('./relative.js', second.entryUrl).href)
+      )?.text()
+    ).toContain('value = 3');
+  });
+});

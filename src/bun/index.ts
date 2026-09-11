@@ -63,6 +63,7 @@ import {
 } from './extensions/migration';
 import {
   cancelExtensionTask,
+  cancelExtensionTasksByInstance,
   listExtensionTasks,
   scheduleExtensionTask,
   tickExtensionTasks,
@@ -939,7 +940,7 @@ interface CanvasRPC {
         response: { success: boolean };
       };
       extensionSchedulerCancel: {
-        params: { taskId: string };
+        params: { instanceId: string; taskId: string };
         response: { success: boolean };
       };
       extensionSchedulerList: {
@@ -2590,14 +2591,7 @@ async function main() {
               wsPath,
               canvasTypeId
             );
-            await Promise.all(
-              deleted.map(async (instanceId) => {
-                const tasks = await listExtensionTasks(wsPath, instanceId);
-                await Promise.all(
-                  tasks.map((task) => cancelExtensionTask(wsPath, task.id))
-                );
-              })
-            );
+            await cancelExtensionTasksByInstance(wsPath, deleted);
             return { success: true, deleted: deleted.length };
           } catch (error) {
             console.error('[extensions] clear type data failed', error);
@@ -2615,9 +2609,9 @@ async function main() {
           }
         },
 
-        extensionSchedulerCancel: async ({ taskId }) => {
+        extensionSchedulerCancel: async ({ instanceId, taskId }) => {
           try {
-            await cancelExtensionTask(wsPath, taskId);
+            await cancelExtensionTask(wsPath, instanceId, taskId);
             return { success: true };
           } catch (error) {
             console.error('[extensions] cancel task failed', error);

@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 
 import type { ScheduledTask } from '../../shared/extensions/protocol';
 import { atomicWrite } from '../atomicWrite';
+import { withFileQueue } from '../persistence/fileQueue';
 
 export const EXTENSION_TASKS_SCHEMA = 'ghostboard-extension-tasks/v1' as const;
 const MAX_TASKS = 500;
@@ -84,6 +85,18 @@ export function parseExtensionTaskFile(input: unknown): ExtensionTaskFile {
   return { schema: EXTENSION_TASKS_SCHEMA, tasks };
 }
 
+/**
+ * Thrown when `extension-tasks.json` exists but cannot be read as a task file.
+ * Callers must fail closed rather than treat it as "no tasks", which would
+ * silently drop every reminder the user scheduled.
+ */
+export class ExtensionTaskFileError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ExtensionTaskFileError';
+  }
+}
+
 export async function loadExtensionTasks(
   wsPath: string
 ): Promise<ExtensionTaskFile> {
@@ -91,11 +104,20 @@ export async function loadExtensionTasks(
   if (!(await file.exists())) {
     return { schema: EXTENSION_TASKS_SCHEMA, tasks: [] };
   }
+  let contents: unknown;
   try {
-    return parseExtensionTaskFile(await file.json());
-  } catch {
-    return { schema: EXTENSION_TASKS_SCHEMA, tasks: [] };
+    contents = await file.json();
+  } catch (error) {
+    throw new ExtensionTaskFileError('extension-tasks.json is not valid JSON', {
+      cause: error,
+    });
   }
+  if (!(isRecord(contents) && Array.isArray(contents.tasks))) {
+    throw new ExtensionTaskFileError(
+      'extension-tasks.json does not match the task file schema'
+    );
+  }
+  return parseExtensionTaskFile(contents);
 }
 
 export async function saveExtensionTasks(
@@ -183,6 +205,29 @@ export function consumeDueTasks(
   };
 }
 
+/**
+ * Runs one read-modify-write cycle against the task file with the whole cycle
+ * serialized per workspace. Every mutation goes through here so a concurrent
+ * `tick` cannot write back a snapshot taken before a `schedule`.
+ */
+export function withExtensionTasks<T>(
+  wsPath: string,
+  mutator: (file: ExtensionTaskFile) => Promise<T> | T
+): Promise<T> {
+  return withFileQueue(extensionTasksPath(wsPath), async () =>
+    mutator(await loadExtensionTasks(wsPath))
+  );
+}
+
+/** Tasks are owned by an instance, so only `(instanceId, id)` is unique. */
+function isSameTask(
+  task: PersistedScheduledTask,
+  instanceId: string,
+  taskId: string
+): boolean {
+  return task.instanceId === instanceId && task.id === taskId;
+}
+
 export async function scheduleExtensionTask(
   wsPath: string,
   task: PersistedScheduledTask
@@ -198,48 +243,94 @@ export async function scheduleExtensionTask(
   ) {
     throw new Error('Scheduled task payload is too large.');
   }
-  const file = await loadExtensionTasks(wsPath);
-  const tasks = file.tasks.filter((entry) => entry.id !== parsed.id);
-  if (tasks.length >= MAX_TASKS) {
-    throw new Error('Too many scheduled tasks.');
-  }
-  tasks.push(parsed);
-  await saveExtensionTasks(wsPath, { schema: EXTENSION_TASKS_SCHEMA, tasks });
+  await withExtensionTasks(wsPath, async (file) => {
+    const tasks = file.tasks.filter(
+      (entry) => !isSameTask(entry, parsed.instanceId, parsed.id)
+    );
+    if (tasks.length >= MAX_TASKS) {
+      throw new Error('Too many scheduled tasks.');
+    }
+    tasks.push(parsed);
+    await saveExtensionTasks(wsPath, { schema: EXTENSION_TASKS_SCHEMA, tasks });
+  });
 }
 
-export async function cancelExtensionTask(
+export function cancelExtensionTask(
   wsPath: string,
+  instanceId: string,
   taskId: string
 ): Promise<boolean> {
-  const file = await loadExtensionTasks(wsPath);
-  const tasks = file.tasks.filter((entry) => entry.id !== taskId);
-  if (tasks.length === file.tasks.length) {
-    return false;
-  }
-  await saveExtensionTasks(wsPath, { schema: EXTENSION_TASKS_SCHEMA, tasks });
-  return true;
+  return withExtensionTasks(wsPath, async (file) => {
+    const tasks = file.tasks.filter(
+      (entry) => !isSameTask(entry, instanceId, taskId)
+    );
+    if (tasks.length === file.tasks.length) {
+      return false;
+    }
+    await saveExtensionTasks(wsPath, { schema: EXTENSION_TASKS_SCHEMA, tasks });
+    return true;
+  });
 }
 
-export async function listExtensionTasks(
+/** One read, one filter, one write — used when instances are deleted en masse. */
+export function cancelExtensionTasksByInstance(
+  wsPath: string,
+  instanceIds: readonly string[]
+): Promise<number> {
+  const owners = new Set(instanceIds);
+  if (owners.size === 0) {
+    return Promise.resolve(0);
+  }
+  return withExtensionTasks(wsPath, async (file) => {
+    const tasks = file.tasks.filter((task) => !owners.has(task.instanceId));
+    const removed = file.tasks.length - tasks.length;
+    if (removed === 0) {
+      return 0;
+    }
+    await saveExtensionTasks(wsPath, { schema: EXTENSION_TASKS_SCHEMA, tasks });
+    return removed;
+  });
+}
+
+export function listExtensionTasks(
   wsPath: string,
   instanceId?: string
 ): Promise<PersistedScheduledTask[]> {
-  const file = await loadExtensionTasks(wsPath);
-  if (!instanceId) {
-    return file.tasks;
-  }
-  return file.tasks.filter((task) => task.instanceId === instanceId);
+  return withExtensionTasks(wsPath, (file) =>
+    instanceId
+      ? file.tasks.filter((task) => task.instanceId === instanceId)
+      : file.tasks
+  );
 }
 
-export async function tickExtensionTasks(
+export function tickExtensionTasks(
   wsPath: string,
   nowMs = Date.now()
 ): Promise<FiredTask[]> {
-  const file = await loadExtensionTasks(wsPath);
-  const consumed = consumeDueTasks(file, nowMs);
-  if (consumed.fired.length === 0) {
-    return [];
+  return withExtensionTasks(wsPath, async (file) => {
+    const consumed = consumeDueTasks(file, nowMs);
+    if (consumed.fired.length === 0) {
+      return [];
+    }
+    await saveExtensionTasks(wsPath, consumed.file);
+    return consumed.fired;
+  });
+}
+
+/** Milliseconds until the earliest pending task, or null when idle. */
+export function nextExtensionTaskDelay(
+  file: ExtensionTaskFile,
+  nowMs = Date.now()
+): number | null {
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const task of file.tasks) {
+    const fireAt = Date.parse(task.fireAt);
+    if (Number.isFinite(fireAt) && fireAt < earliest) {
+      earliest = fireAt;
+    }
   }
-  await saveExtensionTasks(wsPath, consumed.file);
-  return consumed.fired;
+  if (!Number.isFinite(earliest)) {
+    return null;
+  }
+  return Math.max(0, earliest - nowMs);
 }

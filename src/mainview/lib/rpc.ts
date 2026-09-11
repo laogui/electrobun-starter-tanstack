@@ -405,13 +405,14 @@ export async function rpcScheduleExtensionTask(task: {
 }
 
 export async function rpcCancelExtensionTask(
+  instanceId: string,
   taskId: string
 ): Promise<{ success: boolean }> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false };
   }
-  return eb.rpc.request.extensionSchedulerCancel({ taskId });
+  return eb.rpc.request.extensionSchedulerCancel({ instanceId, taskId });
 }
 
 export async function rpcListExtensionTasks(instanceId?: string): Promise<{

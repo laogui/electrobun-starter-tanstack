@@ -204,7 +204,7 @@ export function createExtensionHostApi(input: {
         });
       },
       cancel: async (taskId) => {
-        await rpcCancelExtensionTask(taskId);
+        await rpcCancelExtensionTask(instanceId, taskId);
       },
       list: async () => {
         const result = await rpcListExtensionTasks(instanceId);

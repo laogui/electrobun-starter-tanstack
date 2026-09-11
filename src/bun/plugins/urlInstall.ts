@@ -1,11 +1,14 @@
+import { lookup } from 'node:dns/promises';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { isIpLiteral, isPublicAddress } from '../net/outboundPolicy';
 import type { LoadedPluginDirectory } from './loadDirectory';
 import { loadPluginFromZip, PLUGIN_ZIP_MAX_UNCOMPRESSED } from './zipInstall';
 
 export const PLUGIN_DOWNLOAD_MAX_BYTES = PLUGIN_ZIP_MAX_UNCOMPRESSED;
 export const PLUGIN_DOWNLOAD_MAX_REDIRECTS = 5;
+export const PLUGIN_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 export class PluginDownloadError extends Error {
   code:
@@ -23,24 +26,11 @@ export class PluginDownloadError extends Error {
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
-const PRIVATE_V4_RE = /^(10\.|192\.168\.|127\.|169\.254\.)/;
+const BRACKETS_RE = /^\[|\]$/g;
 
 function isLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const host = hostname.toLowerCase().replace(BRACKETS_RE, '');
   return LOOPBACK_HOSTS.has(host);
-}
-
-function isPrivateV4Host(hostname: string): boolean {
-  if (PRIVATE_V4_RE.test(hostname)) {
-    return true;
-  }
-  const parts = hostname.split('.');
-  if (parts.length !== 4) {
-    return false;
-  }
-  const first = Number(parts[0]);
-  const second = Number(parts[1]);
-  return first === 172 && second >= 16 && second <= 31;
 }
 
 export function parsePluginDownloadUrl(
@@ -71,7 +61,11 @@ export function parsePluginDownloadUrl(
         'loopback plugin downloads are not allowed'
       );
     }
-    if (!loopback && isPrivateV4Host(parsed.hostname)) {
+    if (
+      !loopback &&
+      isIpLiteral(parsed.hostname) &&
+      !isPublicAddress(parsed.hostname)
+    ) {
       throw new PluginDownloadError(
         'forbidden-target',
         'private-network plugin downloads are not allowed'
@@ -88,6 +82,53 @@ export function parsePluginDownloadUrl(
   );
 }
 
+/**
+ * Rejects a hop whose hostname resolves to anything non-public.
+ *
+ * There is a TOCTOU window between this lookup and the socket connect: Bun's
+ * `fetch` has no `lookup` hook, and dialing the resolved IP directly would
+ * break SNI and certificate validation. We accept the window rather than
+ * weaken TLS.
+ */
+async function assertPublicTarget(
+  url: URL,
+  allowLoopback: boolean
+): Promise<void> {
+  if (allowLoopback && isLoopbackHost(url.hostname)) {
+    return;
+  }
+  const hostname = url.hostname.replace(BRACKETS_RE, '');
+  let addresses: string[];
+  if (isIpLiteral(hostname)) {
+    addresses = [hostname];
+  } else {
+    try {
+      addresses = (await lookup(hostname, { all: true })).map(
+        (entry) => entry.address
+      );
+    } catch {
+      throw new PluginDownloadError(
+        'download-failed',
+        `plugin download host could not be resolved: ${hostname}`
+      );
+    }
+  }
+  if (addresses.length === 0) {
+    throw new PluginDownloadError(
+      'download-failed',
+      `plugin download host could not be resolved: ${hostname}`
+    );
+  }
+  for (const address of addresses) {
+    if (!isPublicAddress(address)) {
+      throw new PluginDownloadError(
+        'forbidden-target',
+        `plugin download host resolves to a non-public address: ${address}`
+      );
+    }
+  }
+}
+
 function looksLikeZip(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
@@ -100,18 +141,72 @@ function isJsonContentType(value: string | null): boolean {
   return (value ?? '').toLowerCase().includes('application/json');
 }
 
+/**
+ * Reads the body a chunk at a time and aborts the moment it passes the byte
+ * budget, so a server that omits or lies about `Content-Length` cannot make us
+ * buffer an unbounded response.
+ */
+async function readBodyWithinBudget(response: Response): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new PluginDownloadError(
+      'download-failed',
+      'plugin download response had no body'
+    );
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let result = await reader.read();
+  while (!result.done) {
+    const chunk = result.value;
+    if (chunk) {
+      total += chunk.length;
+      if (total > PLUGIN_DOWNLOAD_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new PluginDownloadError(
+          'resource-limit',
+          `plugin download exceeds ${PLUGIN_DOWNLOAD_MAX_BYTES} bytes`
+        );
+      }
+      chunks.push(chunk);
+    }
+    result = await reader.read();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
 export async function downloadPluginZip(
   rawUrl: string,
   options?: { allowLoopback?: boolean }
 ): Promise<Uint8Array> {
+  const allowLoopback = options?.allowLoopback === true;
   let current = parsePluginDownloadUrl(rawUrl, options);
   for (let hop = 0; hop <= PLUGIN_DOWNLOAD_MAX_REDIRECTS; hop += 1) {
-    const response = await fetch(current, {
-      redirect: 'manual',
-      headers: {
-        accept: 'application/zip, application/octet-stream',
-      },
-    });
+    await assertPublicTarget(current, allowLoopback);
+    let response: Response;
+    try {
+      response = await fetch(current, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(PLUGIN_DOWNLOAD_TIMEOUT_MS),
+        headers: {
+          accept: 'application/zip, application/octet-stream',
+        },
+      });
+    } catch (error) {
+      if (error instanceof PluginDownloadError) {
+        throw error;
+      }
+      throw new PluginDownloadError(
+        'download-failed',
+        `plugin download failed: ${(error as Error).message}`
+      );
+    }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (!location) {
@@ -146,6 +241,8 @@ export async function downloadPluginZip(
         'plugin download must be a zip archive, not an html or json page'
       );
     }
+    // A declared length only buys us an early rejection; the real limit is
+    // enforced while streaming.
     const declared = Number(response.headers.get('content-length'));
     if (Number.isFinite(declared) && declared > PLUGIN_DOWNLOAD_MAX_BYTES) {
       throw new PluginDownloadError(
@@ -153,13 +250,7 @@ export async function downloadPluginZip(
         `plugin download exceeds ${PLUGIN_DOWNLOAD_MAX_BYTES} bytes`
       );
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length > PLUGIN_DOWNLOAD_MAX_BYTES) {
-      throw new PluginDownloadError(
-        'resource-limit',
-        `plugin download exceeds ${PLUGIN_DOWNLOAD_MAX_BYTES} bytes`
-      );
-    }
+    const bytes = await readBodyWithinBudget(response);
     if (!looksLikeZip(bytes)) {
       throw new PluginDownloadError(
         'unsupported-source',

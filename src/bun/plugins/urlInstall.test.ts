@@ -7,11 +7,17 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
+
+const lookupMock = vi.hoisted(() => vi.fn());
+vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
+
 import {
+  downloadPluginZip,
   loadPluginFromZipUrl,
+  PLUGIN_DOWNLOAD_MAX_BYTES,
   PluginDownloadError,
   parsePluginDownloadUrl,
 } from './urlInstall';
@@ -44,6 +50,11 @@ async function listen(
 
 describe('plugin zip url download', () => {
   const closers: Array<() => Promise<void>> = [];
+
+  beforeEach(() => {
+    lookupMock.mockReset();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+  });
 
   afterEach(async () => {
     while (closers.length > 0) {
@@ -132,5 +143,126 @@ describe('plugin zip url download', () => {
         allowLoopback: true,
       })
     ).rejects.toMatchObject({ code: 'unsupported-source' });
+  });
+
+  it('rejects literal private addresses in every family', () => {
+    for (const host of [
+      'https://10.1.2.3/p.zip',
+      'https://172.16.0.1/p.zip',
+      'https://192.168.1.1/p.zip',
+      'https://169.254.169.254/p.zip',
+      'https://100.64.0.1/p.zip',
+      'https://0.0.0.0/p.zip',
+      'https://[fd00::1]/p.zip',
+      'https://[fe80::1]/p.zip',
+      'https://[::ffff:10.0.0.1]/p.zip',
+      'https://[::]/p.zip',
+      'https://[ff02::1]/p.zip',
+    ]) {
+      expect(() => parsePluginDownloadUrl(host), host).toThrow(
+        PluginDownloadError
+      );
+    }
+  });
+
+  it.each([
+    ['127.0.0.1'],
+    ['10.0.0.5'],
+    ['169.254.169.254'],
+    ['fd00::1'],
+    ['fe80::1'],
+    ['::ffff:10.0.0.1'],
+  ])('rejects a hostname that resolves to %s', async (address) => {
+    lookupMock.mockResolvedValue([{ address, family: 4 }]);
+    const dest = await mkdtemp(join(tmpdir(), 'plugin-url-dns-'));
+
+    await expect(
+      loadPluginFromZipUrl({
+        url: 'https://plugins.example.com/p.zip',
+        destDir: dest,
+      })
+    ).rejects.toMatchObject({ code: 'forbidden-target' });
+    expect(lookupMock).toHaveBeenCalledWith('plugins.example.com', {
+      all: true,
+    });
+  });
+
+  it('rejects when any resolved address is private', async () => {
+    lookupMock.mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+    ]);
+    const dest = await mkdtemp(join(tmpdir(), 'plugin-url-dns-mixed-'));
+
+    await expect(
+      loadPluginFromZipUrl({
+        url: 'https://plugins.example.com/p.zip',
+        destDir: dest,
+      })
+    ).rejects.toMatchObject({ code: 'forbidden-target' });
+  });
+
+  it('rejects a redirect from a public host into the private network', async () => {
+    const server = await listen((_req, res) => {
+      res.writeHead(302, { location: 'http://169.254.169.254/latest/meta' });
+      res.end();
+    });
+    closers.push(server.close);
+    const dest = await mkdtemp(join(tmpdir(), 'plugin-url-ssrf-'));
+    await expect(
+      loadPluginFromZipUrl({
+        url: `${server.baseUrl}/go`,
+        destDir: dest,
+        allowLoopback: true,
+      })
+    ).rejects.toMatchObject({ code: 'forbidden-target' });
+  });
+
+  it('aborts a chunked body once it passes the byte budget', async () => {
+    const chunk = Buffer.alloc(256 * 1024, 0x50);
+    let sent = 0;
+    const server = await listen((_req, res) => {
+      // No content-length: the only defence is the streaming budget.
+      res.writeHead(200, { 'content-type': 'application/zip' });
+      const pump = () => {
+        while (sent < PLUGIN_DOWNLOAD_MAX_BYTES * 4) {
+          sent += chunk.length;
+          if (!res.write(chunk)) {
+            res.once('drain', pump);
+            return;
+          }
+        }
+        res.end();
+      };
+      pump();
+    });
+    closers.push(server.close);
+    const dest = await mkdtemp(join(tmpdir(), 'plugin-url-budget-'));
+
+    await expect(
+      loadPluginFromZipUrl({
+        url: `${server.baseUrl}/plugin.zip`,
+        destDir: dest,
+        allowLoopback: true,
+      })
+    ).rejects.toMatchObject({ code: 'resource-limit' });
+
+    // The reader stopped near the budget instead of draining the whole body.
+    expect(sent).toBeLessThan(PLUGIN_DOWNLOAD_MAX_BYTES * 4);
+  });
+
+  it('gives up on a server that never responds', async () => {
+    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => realTimeout(200));
+    const server = await listen(() => {
+      // Never write a response.
+    });
+    closers.push(server.close);
+
+    await expect(
+      downloadPluginZip(`${server.baseUrl}/plugin.zip`, {
+        allowLoopback: true,
+      })
+    ).rejects.toMatchObject({ code: 'download-failed' });
   });
 });

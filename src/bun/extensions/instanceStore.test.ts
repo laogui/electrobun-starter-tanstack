@@ -48,6 +48,11 @@ import {
   loadExtensionInstances,
   updateExtensionInstance,
 } from './instanceStore';
+import {
+  cancelExtensionTasksByInstance,
+  listExtensionTasks,
+  scheduleExtensionTask,
+} from './scheduler';
 
 describe('extension instance store', () => {
   let wsPath: string;
@@ -271,5 +276,42 @@ describe('extension instance store', () => {
     expect(await loadExtensionInstance(wsPath, remove.id)).toMatchObject({
       error: 'missing',
     });
+  });
+
+  it('leaves no scheduled tasks behind after clearing a canvas type', async () => {
+    const keep = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'ghostboard.demo/counter',
+      dataVersion: 1,
+      presentation: { title: 'Keep' },
+      state: { count: 1 },
+    });
+    const remove = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'ghostboard.productivity/reminder',
+      dataVersion: 1,
+      presentation: { title: 'Remove' },
+      state: {},
+    });
+    for (const instance of [keep, remove]) {
+      await scheduleExtensionTask(wsPath, {
+        canvasTypeId: instance.canvasTypeId,
+        fireAt: '2030-01-01T00:00:00.000Z',
+        id: 'reminder',
+        instanceId: instance.id,
+        repeat: 'none',
+      });
+    }
+
+    // Mirrors the extensionInstanceClearType handler in src/bun/index.ts.
+    const deleted = await deleteInstancesByCanvasType(
+      wsPath,
+      'ghostboard.productivity/reminder'
+    );
+    await cancelExtensionTasksByInstance(wsPath, deleted);
+
+    expect(
+      (await listExtensionTasks(wsPath)).map((task) => task.instanceId)
+    ).toEqual([keep.id]);
   });
 });

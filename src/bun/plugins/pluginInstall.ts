@@ -459,6 +459,13 @@ export class PluginInstallStore {
       backupPath: read.backupPath,
       message: `registry.json was unreadable and was rebuilt from installed packages; the original is at ${read.backupPath}`,
     };
+    if (!existsSync(read.backupPath)) {
+      // Never overwrite the damaged file unless the copy really landed.
+      throw new PluginInstallError(
+        'registry-corrupt',
+        'registry.json is unreadable and its backup is missing, so it was left untouched'
+      );
+    }
     await this.writeRegistry(rebuilt);
     return rebuilt;
   }

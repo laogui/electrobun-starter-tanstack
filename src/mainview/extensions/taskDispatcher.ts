@@ -1,4 +1,5 @@
 import { rpcAckExtensionTasks, rpcLoadExtensionInstances } from '@/lib/rpc';
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type {
@@ -33,6 +34,12 @@ async function handleFired(fired: FiredTask): Promise<void> {
   const { canvasTypeId, instanceId } = fired.task;
   const canvasType = canvasTypeRegistry.get(canvasTypeId);
   if (!canvasType?.onTaskFired) {
+    return;
+  }
+  if (!useExtensionEnablementStore.getState().isEnabled(canvasTypeId)) {
+    // Disabling a type stops its notifications and state writes. The task is
+    // still acked below, so a one-shot is consumed and a repeat rolls to its
+    // next cycle rather than piling up while the type is off.
     return;
   }
   const state = await resolveState(canvasType, instanceId);

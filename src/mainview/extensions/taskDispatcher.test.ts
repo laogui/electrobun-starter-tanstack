@@ -28,8 +28,10 @@ vi.mock('@/lib/rpc', () => ({
   rpcCloneExtensionInstance: vi.fn(async () => ({ success: false })),
   rpcCreateExtensionInstance: vi.fn(async () => ({ success: false })),
   rpcUpdateExtensionInstance: vi.fn(async () => ({ success: false })),
+  rpcSetExtensionEnabled: vi.fn(async () => ({ success: true })),
 }));
 
+import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { dispatchExtensionTaskDelivery } from './taskDispatcher';
 
@@ -100,6 +102,7 @@ describe('extension task dispatcher', () => {
     loadExtensionInstances.mockReset();
     loadExtensionInstances.mockResolvedValue({});
     useExtensionInstanceStore.setState({ records: {}, history: {} });
+    useExtensionEnablementStore.setState({ disabledCanvasTypes: [] });
     try {
       canvasTypeRegistry.register(testCanvasType);
     } catch {
@@ -147,6 +150,21 @@ describe('extension task dispatcher', () => {
     await expect(
       dispatchExtensionTaskDelivery(unknown)
     ).resolves.toBeUndefined();
+    expect(ackExtensionTasks).toHaveBeenCalledWith('delivery_1');
+  });
+
+  it('skips the handler but settles the task when the type is disabled', async () => {
+    useExtensionInstanceStore.setState({
+      records: { extinst_a: record('extinst_a', { value: 7 }) },
+    });
+    useExtensionEnablementStore.setState({
+      disabledCanvasTypes: [CANVAS_TYPE_ID],
+    });
+
+    await dispatchExtensionTaskDelivery(delivery('extinst_a'));
+
+    expect(onTaskFired).not.toHaveBeenCalled();
+    expect(loadExtensionInstances).not.toHaveBeenCalled();
     expect(ackExtensionTasks).toHaveBeenCalledWith('delivery_1');
   });
 

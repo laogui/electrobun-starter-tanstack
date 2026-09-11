@@ -34,8 +34,9 @@ async function preserveCorruptFile(
     }
   }
   const stamp = new Date().toISOString().replace(UNSAFE_TIMESTAMP_RE, '-');
-  const target = join(dir, `${prefix}${stamp}`);
-  const temporary = `${target}.${crypto.randomUUID().slice(0, 8)}.tmp`;
+  const unique = crypto.randomUUID().slice(0, 8);
+  const target = join(dir, `${prefix}${stamp}-${unique}`);
+  const temporary = `${target}.tmp`;
   await writeFile(temporary, contents);
   await rename(temporary, target);
   return target;

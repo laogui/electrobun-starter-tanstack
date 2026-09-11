@@ -86,12 +86,22 @@ describe('readJsonOrEmpty', () => {
     const root = await scratch();
     const path = join(root, 'state.json');
     await writeFile(path, 'first damage');
-    await readJsonOrEmpty(path, requireCount);
+    const first = await readJsonOrEmpty(path, requireCount);
     await writeFile(path, 'second damage');
-    await readJsonOrEmpty(path, requireCount);
+    const second = await readJsonOrEmpty(path, requireCount);
     const backups = (await readdir(root)).filter((name) =>
       name.includes('.corrupt-')
     );
     expect(backups).toHaveLength(2);
+    expect(first).toMatchObject({ kind: 'corrupt' });
+    expect(second).toMatchObject({ kind: 'corrupt' });
+    expect((first as { backupPath: string }).backupPath).not.toBe(
+      (second as { backupPath: string }).backupPath
+    );
+    expect(
+      await Promise.all(
+        backups.map((backup) => readFile(join(root, backup), 'utf8'))
+      )
+    ).toEqual(expect.arrayContaining(['first damage', 'second damage']));
   });
 });

@@ -269,9 +269,11 @@ describe('BlockNoteEditor', () => {
       expect(project).not.toHaveBeenCalled();
       expect(mocks.markDirty).toHaveBeenCalled();
     } else {
-      expect(mocks.editor.replaceBlocks).toHaveBeenCalledWith(
-        mocks.editor.document,
-        blocks
+      await waitFor(() =>
+        expect(mocks.editor.replaceBlocks).toHaveBeenCalledWith(
+          mocks.editor.document,
+          blocks
+        )
       );
       expect(mocks.setInitialRevision).toHaveBeenLastCalledWith(2, {
         title: 'Plugin title',

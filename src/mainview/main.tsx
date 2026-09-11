@@ -60,6 +60,11 @@ if (import.meta.env.VITE_PLUGIN_T2_CANVAS === '1') {
     .then(({ runT2CanvasProbe }) => runT2CanvasProbe())
     .catch(console.error);
 }
+if (import.meta.env.VITE_PLUGIN_T2_HISTORY === '1') {
+  import('./plugins/t2-history/run')
+    .then(({ runT2HistoryProbe }) => runT2HistoryProbe())
+    .catch(console.error);
+}
 if (import.meta.env.VITE_PLUGIN_T2_CONTENT === '1') {
   import('./plugins/t2-content/run')
     .then(({ runT2ContentProbe }) => runT2ContentProbe())

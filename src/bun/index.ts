@@ -1755,24 +1755,31 @@ async function main() {
               pluginWorkspaceId(wsPath),
               process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
+          : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
             ? new T2ContentHostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-                'canvas'
+                process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+                'history'
               )
-            : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+            : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
               ? new T2ContentHostController(
                   pluginManagement,
                   pluginWorkspaceId(wsPath),
-                  process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                  'selection'
+                  process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                  'canvas'
                 )
-              : new PluginHostController(
-                  pluginManagement,
-                  pluginWorkspaceId(wsPath)
-                ),
+              : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                ? new T2ContentHostController(
+                    pluginManagement,
+                    pluginWorkspaceId(wsPath),
+                    process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                    'selection'
+                  )
+                : new PluginHostController(
+                    pluginManagement,
+                    pluginWorkspaceId(wsPath)
+                  ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);

@@ -12,6 +12,7 @@ import {
   type ExtensionInstanceLoadError,
   type ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
+import { ExtensionRevisionConflictError } from '../../shared/extensions/revisionConflict';
 import { counterCanvasType } from '../extensions/builtin/counter';
 
 const rpcMocks = vi.hoisted(() => ({
@@ -462,5 +463,71 @@ describe('extensionInstanceStore lifecycle', () => {
       rpcMocks.update.mock.calls.map(([input]) => input.expectedRevision)
     ).toEqual([1, 1]);
     expect(recordState(initial.id)).toEqual({ title: 'Unsaved', items: [] });
+  });
+});
+
+describe('extensionInstanceStore expectedRevision', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useExtensionInstanceStore.setState({ history: {}, records: {} });
+    rpcMocks.update.mockReset();
+    rpcMocks.update.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    useExtensionInstanceStore.setState({ history: {}, records: {} });
+  });
+
+  it('rejects a stale revision and leaves the state untouched', async () => {
+    const initial = makeRecord('extinst_cas', { revision: 4 });
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+
+    const rejected = store.updateState(initial.id, {
+      expectedRevision: 3,
+      history: 'record',
+      state: { items: [], title: 'Clobber' },
+    });
+    await expect(rejected).rejects.toBeInstanceOf(
+      ExtensionRevisionConflictError
+    );
+    await expect(rejected).rejects.toMatchObject({
+      message: 'revision-conflict',
+      snapshot: { revision: 4 },
+    });
+    expect(recordState(initial.id)).toEqual(initial.state);
+    vi.runOnlyPendingTimers();
+    expect(rpcMocks.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts a matching revision', async () => {
+    const initial = makeRecord('extinst_cas_ok', { revision: 4 });
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+
+    const snapshot = await store.updateState(initial.id, {
+      expectedRevision: 4,
+      history: 'record',
+      state: { items: [], title: 'Accepted' },
+    });
+    expect(snapshot.revision).toBe(4);
+    expect(recordState(initial.id)).toEqual({ items: [], title: 'Accepted' });
+  });
+
+  it('leaves callers that omit the field unaffected', async () => {
+    const initial = makeRecord('extinst_cas_absent', { revision: 9 });
+    const store = useExtensionInstanceStore.getState();
+    store.hydrate({ [initial.id]: initial });
+
+    await store.updateState(initial.id, {
+      history: 'record',
+      state: { items: [], title: 'No expectation' },
+    });
+    expect(recordState(initial.id)).toEqual({
+      items: [],
+      title: 'No expectation',
+    });
   });
 });

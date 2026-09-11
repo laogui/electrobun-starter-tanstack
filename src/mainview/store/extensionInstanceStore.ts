@@ -17,6 +17,7 @@ import type {
   ExtensionStateSnapshot,
   ExtensionStateUpdate,
 } from '../../shared/extensions/protocol';
+import { ExtensionRevisionConflictError } from '../../shared/extensions/revisionConflict';
 
 const SAVE_DEBOUNCE_MS = 400;
 const MAX_HISTORY_DEPTH = 50;
@@ -219,6 +220,18 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
       const current = get().records[instanceId];
       if (!current || isExtensionInstanceLoadError(current)) {
         return { revision: 0, state: null, presentation: { title: '' } };
+      }
+      if (
+        request.expectedRevision != null &&
+        request.expectedRevision !== current.revision
+      ) {
+        // Compare-and-set: the caller read an older instance, so drop the
+        // write instead of clobbering whatever landed in between.
+        throw new ExtensionRevisionConflictError({
+          presentation: current.presentation,
+          revision: current.revision,
+          state: current.state,
+        });
       }
       const canvasType = canvasTypeRegistry.get(current.canvasTypeId);
       const nextState = request.state;

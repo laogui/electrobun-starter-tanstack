@@ -76,6 +76,21 @@ export function SaveIndicator({
     );
   }
 
+  if (status === 'conflict') {
+    return (
+      <div
+        aria-live="assertive"
+        className={cn(
+          'inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-amber-200 text-xs',
+          className
+        )}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        <span>{m.save_status_conflict()}</span>
+      </div>
+    );
+  }
+
   if (status === 'saved' && lastSavedAt) {
     return (
       <div

@@ -19,16 +19,21 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
+    conflict: null as unknown,
+    conflictDraftReady: true,
     editor,
     flushNow: vi.fn(),
+    keepLocalVersion: vi.fn(async () => undefined),
     markDirty: vi.fn(),
     canApplyExternal: vi.fn(() => true),
+    retryConflictLoad: vi.fn(),
     rpcGetLocalHttpEndpoint: vi.fn(),
     rpcLoadBlockNote: vi.fn(),
     saveDebounced: vi.fn(),
     setInitialRevision: vi.fn(),
     updateNodeData: vi.fn(),
     setState: vi.fn(),
+    acceptSavedVersion: vi.fn(),
   };
 });
 
@@ -118,9 +123,14 @@ vi.mock('./blocknoteAttachments', () => ({
 
 vi.mock('./useBlockNoteSaver', () => ({
   useBlockNoteSaver: () => ({
+    acceptSavedVersion: mocks.acceptSavedVersion,
+    conflict: mocks.conflict,
+    conflictDraftReady: mocks.conflictDraftReady,
     flushNow: mocks.flushNow,
+    keepLocalVersion: mocks.keepLocalVersion,
     markDirty: mocks.markDirty,
     canApplyExternal: mocks.canApplyExternal,
+    retryConflictLoad: mocks.retryConflictLoad,
     saveDebounced: mocks.saveDebounced,
     setInitialRevision: mocks.setInitialRevision,
   }),
@@ -131,6 +141,8 @@ import BlockNoteEditor from './BlockNoteEditor';
 
 describe('BlockNoteEditor', () => {
   beforeEach(() => {
+    mocks.conflict = null;
+    mocks.conflictDraftReady = true;
     mocks.rpcGetLocalHttpEndpoint.mockResolvedValue({
       aiEnabled: false,
       baseUrl: '',
@@ -143,6 +155,7 @@ describe('BlockNoteEditor', () => {
       workspaceId: 'workspace',
       success: true,
     });
+    mocks.acceptSavedVersion.mockReset();
   });
 
   afterEach(() => {
@@ -272,6 +285,154 @@ describe('BlockNoteEditor', () => {
     view.unmount();
   });
 
+  it('shows both conflict versions and applies the saved version to the editor and every projection', async () => {
+    const saved = {
+      blocks: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Saved body', styles: {} }],
+          children: [],
+        },
+      ],
+      color: 'blue',
+      noteId: 'note-1',
+      preview: {
+        blocks: 1,
+        excerpt: 'Saved body',
+        html: '<p>Saved body</p>',
+        version: 1,
+      },
+      revision: 2,
+      text: 'Saved body',
+      title: 'Saved title',
+      workspaceId: 'workspace',
+    };
+    mocks.conflict = { snapshot: saved, status: 'ready' };
+    mocks.acceptSavedVersion.mockImplementation(
+      (apply: (snapshot: typeof saved) => void) => apply(saved)
+    );
+    render(
+      <BlockNoteEditor
+        color="red"
+        data={{
+          noteId: 'note-1',
+          title: 'Original',
+          color: 'red',
+          blocknoteRevision: 1,
+        }}
+        markdown="Local draft body"
+        nodeId="placement"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Local draft title"
+      />
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This note changed elsewhere'
+    );
+    expect(screen.getAllByText('Local draft title')).toHaveLength(2);
+    expect(screen.getByText('Saved title')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Use saved version' }));
+
+    expect(mocks.editor.replaceBlocks).toHaveBeenCalledWith(
+      mocks.editor.document,
+      saved.blocks
+    );
+    expect(screen.getByLabelText('Note title')).toHaveValue('Saved title');
+    const project = mocks.setState.mock.calls.at(-1)?.[0];
+    const state = {
+      focusedFolder: null,
+      focusedNode: null,
+      nodes: [
+        {
+          data: {
+            blocknoteRevision: 1,
+            color: 'red',
+            content: 'Local draft body',
+            noteId: 'note-1',
+            title: 'Local draft title',
+          },
+        },
+      ],
+    };
+    expect(project(state).nodes[0].data).toMatchObject({
+      blocknoteRevision: 2,
+      color: 'blue',
+      content: 'Saved body',
+      previewHtml: '<p>Saved body</p>',
+      title: 'Saved title',
+    });
+  });
+
+  it('keeps the conflict banner actionable when choosing the local version', async () => {
+    mocks.conflict = {
+      snapshot: {
+        blocks: [],
+        color: 'blue',
+        noteId: 'note-1',
+        preview: { blocks: 0, excerpt: '', html: '', version: 1 },
+        revision: 2,
+        text: '',
+        title: 'Saved title',
+        workspaceId: 'workspace',
+      },
+      status: 'ready',
+    };
+    render(
+      <BlockNoteEditor
+        color="red"
+        data={{}}
+        markdown="Local draft"
+        nodeId="placement"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Local title"
+      />
+    );
+
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep my version' }));
+    expect(mocks.keepLocalVersion).toHaveBeenCalledOnce();
+  });
+
+  it('disables keep-local until the latest conflict draft is serialized', async () => {
+    mocks.conflictDraftReady = false;
+    mocks.conflict = {
+      snapshot: {
+        blocks: [],
+        color: 'blue',
+        noteId: 'note-1',
+        preview: { blocks: 0, excerpt: '', html: '', version: 1 },
+        revision: 2,
+        text: 'Saved body',
+        title: 'Saved title',
+        workspaceId: 'workspace',
+      },
+      status: 'ready',
+    };
+    render(
+      <BlockNoteEditor
+        color="red"
+        data={{ noteId: 'note-1' }}
+        nodeId="placement"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Local title"
+      />
+    );
+
+    const keepButton = await screen.findByRole('button', {
+      name: 'Keep my version',
+    });
+    expect(keepButton).toBeDisabled();
+    fireEvent.click(keepButton);
+    expect(mocks.keepLocalVersion).not.toHaveBeenCalled();
+  });
+
   it('pairs canonical metadata with the loaded revision when opening a stale placement', async () => {
     const metadata = { title: 'Canonical title', color: 'blue' };
     mocks.rpcLoadBlockNote.mockResolvedValueOnce({
@@ -300,7 +461,11 @@ describe('BlockNoteEditor', () => {
     expect(await screen.findByLabelText('Note title')).toHaveValue(
       'Canonical title'
     );
-    expect(mocks.setInitialRevision).toHaveBeenCalledWith(5, metadata);
+    expect(mocks.setInitialRevision).toHaveBeenCalledWith(
+      5,
+      metadata,
+      undefined
+    );
     const project = mocks.setState.mock.calls[0]![0];
     const projected = project({
       nodes: [

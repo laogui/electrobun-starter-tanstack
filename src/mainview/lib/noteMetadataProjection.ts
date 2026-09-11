@@ -185,3 +185,73 @@ export function applyNoteMetadataChanges<S extends ProjectionState>(
   }
   return next;
 }
+
+/**
+ * Projects a canonical note snapshot after the user explicitly discards a
+ * local draft. Unlike event reconciliation, this intentionally replaces
+ * conflicting cached metadata and revisions because the choice is explicit.
+ */
+export function applyCanonicalNoteSnapshot<S extends ProjectionState>(
+  state: S,
+  noteId: string,
+  updates: Record<string, unknown>
+): S {
+  const projectData = (
+    data: Record<string, unknown>
+  ): Record<string, unknown> => {
+    let next = data.noteId === noteId ? { ...data, ...updates } : data;
+    if (!Array.isArray(data.children)) {
+      return next;
+    }
+    let childrenChanged = false;
+    const children = data.children.map((child: unknown) => {
+      if (!isRecord(child)) {
+        return child;
+      }
+      const nested = isRecord(child.data) ? child.data : undefined;
+      const source = nested ?? child;
+      if ((source.noteId ?? child.noteId) !== noteId) {
+        return child;
+      }
+      childrenChanged = true;
+      const projected = { ...source, ...updates };
+      if (!nested) {
+        return projected;
+      }
+      const result: Record<string, unknown> = { ...child, data: projected };
+      for (const key of Object.keys(updates)) {
+        if (key in child) {
+          result[key] = updates[key];
+        }
+      }
+      return result;
+    });
+    if (childrenChanged) {
+      next = { ...next, children };
+    }
+    return next;
+  };
+  const projectItem = <T extends Item>(item: T): T => {
+    const data = projectData(item.data);
+    return data === item.data ? item : { ...item, data };
+  };
+  const nodes = state.nodes.map(projectItem);
+  const focusedNode = state.focusedNode ? projectItem(state.focusedNode) : null;
+  const focusedFolder = state.focusedFolder
+    ? projectItem(state.focusedFolder)
+    : null;
+  const nodesChanged = nodes.some((node, index) => node !== state.nodes[index]);
+  if (
+    !nodesChanged &&
+    focusedNode === state.focusedNode &&
+    focusedFolder === state.focusedFolder
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    nodes: nodesChanged ? nodes : state.nodes,
+    focusedNode,
+    focusedFolder,
+  };
+}

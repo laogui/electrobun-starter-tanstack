@@ -4,8 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publishNoteMetadataChanges } from '@/lib/noteMetadataProjection';
 import { useBlockNoteSaver } from './useBlockNoteSaver';
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), update: vi.fn() }));
-vi.mock('@/lib/rpc', () => ({ rpcSaveBlockNote: mocks.save }));
+const mocks = vi.hoisted(() => ({
+  load: vi.fn(),
+  save: vi.fn(),
+  update: vi.fn(),
+}));
+vi.mock('@/lib/rpc', () => ({
+  rpcLoadBlockNote: mocks.load,
+  rpcSaveBlockNote: mocks.save,
+}));
 vi.mock('@/store/canvasStore', () => ({
   useCanvasStore: (
     selector: (state: { updateNodeData: typeof mocks.update }) => unknown
@@ -31,7 +38,7 @@ const setup = (title = 'Before') => {
       onSaveStatusChange: status,
     })
   );
-  act(() => hook.result.current.setInitialRevision(4));
+  act(() => hook.result.current.setInitialRevision(4, undefined, 'workspace'));
   return { ...hook, status };
 };
 
@@ -39,6 +46,20 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
   mocks.save.mockResolvedValue({ success: true, revision: 6 });
+  mocks.load.mockResolvedValue({
+    blocks: [{ text: 'Saved body' }],
+    frontmatter: { color: 'blue', title: 'Saved title' },
+    preview: {
+      blocks: 1,
+      excerpt: 'Saved body',
+      html: '<p>Saved body</p>',
+      version: 1,
+    },
+    revision: 5,
+    success: true,
+    text: 'Saved body',
+    workspaceId: 'workspace',
+  });
 });
 afterEach(() => {
   cleanup();
@@ -233,10 +254,11 @@ describe('metadata-aware BlockNote saver', () => {
     ]);
   });
 
-  it('retains a dirty body and its old revision when a plugin body replacement makes saving conflict', async () => {
+  it('loads the canonical version and stops automatic retries after a revision conflict', async () => {
     mocks.save.mockResolvedValue({
+      conflict: true,
+      revision: 5,
       success: false,
-      error: 'revision-conflict',
     });
     const { result, status } = setup();
     const draft = payload('Unsaved rich body');
@@ -253,16 +275,216 @@ describe('metadata-aware BlockNote saver', () => {
       draft.markdown,
       4,
     ]);
-    expect(status).toHaveBeenLastCalledWith('error');
+    expect(status).toHaveBeenLastCalledWith('conflict');
     expect(mocks.update).not.toHaveBeenCalled();
     await act(async () => {
       result.current.flushNow();
     });
-    expect(mocks.save.mock.calls[1]?.slice(2)).toEqual([
+    expect(mocks.save).toHaveBeenCalledOnce();
+    expect(mocks.load).toHaveBeenCalledWith('note-a', 'workspace');
+    expect(result.current.conflict).toEqual({
+      status: 'ready',
+      snapshot: expect.objectContaining({
+        noteId: 'note-a',
+        revision: 5,
+        text: 'Saved body',
+        title: 'Saved title',
+      }),
+    });
+  });
+
+  it('keeps the local draft through a compare-and-swap against the loaded revision', async () => {
+    mocks.save
+      .mockResolvedValueOnce({ success: false, conflict: true, revision: 5 })
+      .mockResolvedValueOnce({ success: true, revision: 6 });
+    const { result, status } = setup();
+    const draft = payload('My draft');
+    act(() => {
+      result.current.saveDebounced(draft);
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.conflict?.status).toBe('ready');
+
+    await act(async () => {
+      await result.current.keepLocalVersion();
+    });
+
+    expect(mocks.save.mock.calls.map((call) => call[4])).toEqual([4, 5]);
+    expect(mocks.save.mock.calls[1]?.slice(2, 4)).toEqual([
       draft.blocks,
       draft.markdown,
-      4,
     ]);
+    expect(result.current.conflict).toBeNull();
+    expect(status).toHaveBeenLastCalledWith('saved');
+  });
+
+  it('waits for the latest conflict draft serialization before enabling keep-local', async () => {
+    mocks.save.mockResolvedValueOnce({
+      success: false,
+      conflict: true,
+      revision: 5,
+    });
+    const { result } = setup();
+    act(() => {
+      result.current.saveDebounced(payload('Initial draft'));
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.conflict?.status).toBe('ready');
+    expect(result.current.conflictDraftReady).toBe(true);
+
+    act(() => result.current.markDirty());
+    expect(result.current.conflictDraftReady).toBe(false);
+    await act(async () => {
+      await result.current.keepLocalVersion();
+    });
+    expect(mocks.save).toHaveBeenCalledOnce();
+
+    act(() => result.current.saveDebounced(payload('Newest draft')));
+    expect(result.current.conflictDraftReady).toBe(true);
+  });
+
+  it('returns to conflict state when keeping the draft loses a second race', async () => {
+    mocks.save
+      .mockResolvedValueOnce({ success: false, conflict: true, revision: 5 })
+      .mockResolvedValueOnce({ success: false, conflict: true, revision: 6 });
+    mocks.load
+      .mockResolvedValueOnce({
+        blocks: [{ text: 'First saved body' }],
+        frontmatter: { color: 'blue', title: 'First saved title' },
+        preview: {
+          blocks: 1,
+          excerpt: 'First saved body',
+          html: '<p>First saved body</p>',
+          version: 1,
+        },
+        revision: 5,
+        success: true,
+        text: 'First saved body',
+        workspaceId: 'workspace',
+      })
+      .mockResolvedValueOnce({
+        blocks: [{ text: 'Newer saved body' }],
+        frontmatter: { color: 'purple', title: 'Newer saved title' },
+        preview: {
+          blocks: 1,
+          excerpt: 'Newer saved body',
+          html: '<p>Newer saved body</p>',
+          version: 1,
+        },
+        revision: 6,
+        success: true,
+        text: 'Newer saved body',
+        workspaceId: 'workspace',
+      });
+    const { result, status } = setup();
+    act(() => {
+      result.current.saveDebounced(payload('My draft'));
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.keepLocalVersion();
+    });
+
+    expect(mocks.save.mock.calls.map((call) => call[4])).toEqual([4, 5]);
+    expect(result.current.conflict).toEqual({
+      status: 'ready',
+      snapshot: expect.objectContaining({
+        revision: 6,
+        text: 'Newer saved body',
+      }),
+    });
+    expect(status).toHaveBeenLastCalledWith('conflict');
+  });
+
+  it('discards the local draft only after applying the loaded saved version', async () => {
+    mocks.save.mockResolvedValueOnce({
+      success: false,
+      conflict: true,
+      revision: 5,
+    });
+    const { result, status } = setup();
+    act(() => {
+      result.current.saveDebounced(payload('My draft'));
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const apply = vi.fn();
+    act(() => {
+      result.current.acceptSavedVersion(apply);
+      result.current.flushNow();
+    });
+
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 5, text: 'Saved body' })
+    );
+    expect(result.current.conflict).toBeNull();
+    expect(mocks.save).toHaveBeenCalledOnce();
+    expect(status).toHaveBeenLastCalledWith('idle');
+    expect(result.current.canApplyExternal(5)).toBe(true);
+  });
+
+  it('keeps the draft and allows retrying a failed canonical conflict read', async () => {
+    mocks.save.mockResolvedValueOnce({
+      success: false,
+      conflict: true,
+      revision: 5,
+    });
+    mocks.load.mockResolvedValueOnce({ success: false }).mockResolvedValueOnce({
+      blocks: [{ text: 'New saved body' }],
+      frontmatter: { color: 'green', title: 'New saved title' },
+      preview: {
+        blocks: 1,
+        excerpt: 'New saved body',
+        html: '<p>New saved body</p>',
+        version: 1,
+      },
+      revision: 6,
+      success: true,
+      text: 'New saved body',
+      workspaceId: 'workspace',
+    });
+    const { result } = setup();
+    act(() => {
+      result.current.saveDebounced(payload('My draft'));
+      result.current.flushNow();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.conflict).toEqual({
+      revision: 5,
+      status: 'load-error',
+    });
+
+    act(() => result.current.retryConflictLoad());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.conflict).toEqual({
+      status: 'ready',
+      snapshot: expect.objectContaining({
+        revision: 6,
+        text: 'New saved body',
+      }),
+    });
   });
 
   it('retains the latest draft when an in-flight write fails', async () => {

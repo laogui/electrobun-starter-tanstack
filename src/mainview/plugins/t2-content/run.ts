@@ -44,6 +44,19 @@ async function waitFor(check: () => boolean, label: string) {
     await sleep(30);
   }
 }
+
+function setTextAreaValue(element: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    'value'
+  )?.set;
+  if (!setter) {
+    throw new Error('Textarea value setter unavailable');
+  }
+  element.focus();
+  setter.call(element, value);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+}
 export async function runT2ContentProbe() {
   const endpoint = await rpcGetLocalHttpEndpoint();
   if (!endpoint) {
@@ -83,6 +96,8 @@ export async function runT2ContentProbe() {
   };
   let bodyRoot: Root | undefined;
   let bodyElement: HTMLDivElement | undefined;
+  let conflictRoot: Root | undefined;
+  let conflictElement: HTMLDivElement | undefined;
   const mountBodyEditor = async (app: PluginContext) => {
     const note = await app.content.get('t2-note-body');
     if (!note || note.revision === null) {
@@ -119,6 +134,44 @@ export async function runT2ContentProbe() {
     await waitFor(
       () => Boolean(bodyElement?.querySelector('.bn-editor')),
       'real editor mount'
+    );
+  };
+  const mountConflictEditor = async (app: PluginContext) => {
+    const note = await app.content.get('t2-note-conflict');
+    if (!note || note.revision === null) {
+      throw new Error('Missing conflict note');
+    }
+    const data = {
+      noteId: note.id,
+      title: note.title,
+      color: note.color,
+      blocknoteRevision: note.revision,
+      content: note.text,
+    };
+    const node = {
+      id: 'conflict-live-placement',
+      type: 'card',
+      position: { x: 500, y: 0 },
+      data,
+    };
+    useCanvasStore.setState((state) => ({ nodes: [...state.nodes, node] }));
+    conflictElement = document.createElement('div');
+    document.body.append(conflictElement);
+    conflictRoot = createRoot(conflictElement);
+    conflictRoot.render(
+      createElement(BlockNoteEditor, {
+        nodeId: node.id,
+        noteId: note.id,
+        data,
+        title: note.title,
+        color: note.color,
+        onMarkdownChange: () => {},
+        onTitleChange: () => {},
+      })
+    );
+    await waitFor(
+      () => Boolean(conflictElement?.querySelector('.bn-editor')),
+      'real conflict editor mount'
     );
   };
   const originalTitle = (id: string) => `  T2   Content probe ${id}  `;
@@ -438,6 +491,149 @@ export async function runT2ContentProbe() {
       'body change notification'
     );
     check('bodyEventsAreNotMetadataOnly', true);
+    if (phase === 'initial') {
+      await rpcCreateNote('t2-note-conflict', 'Conflict probe', 'note');
+      const seeded = await rpcSaveBlockNote(
+        't2-note-conflict',
+        { title: 'Conflict probe', color: 'red' },
+        [
+          {
+            id: 'conflict-original',
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Original conflict body',
+                styles: {},
+              },
+            ],
+            children: [],
+          },
+        ],
+        '',
+        0
+      );
+      check('conflictSeed', seeded.success && seeded.revision === 1);
+      await mountConflictEditor(probe.app);
+      const titleInput = conflictElement?.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Note title"]'
+      );
+      if (!titleInput) {
+        throw new Error('Real editor title input missing');
+      }
+      const localDiscardedTitle = 'Local draft to discard';
+      setTextAreaValue(titleInput, localDiscardedTitle);
+      check(
+        'localDraftVisibleBeforeConflict',
+        titleInput.value === localDiscardedTitle
+      );
+      const beforeSavedChoice = await probe.app.content.get('t2-note-conflict');
+      if (!beforeSavedChoice || beforeSavedChoice.revision === null) {
+        throw new Error('Conflict note missing before saved-version choice');
+      }
+      await probe.app.content.updateMany(
+        [
+          {
+            id: 't2-note-conflict',
+            expectedRevision: beforeSavedChoice.revision,
+            changes: {
+              text: 'Saved plugin version wins first conflict',
+              title: 'Saved plugin title',
+            },
+          },
+        ],
+        {
+          label: 'Create saved-version conflict',
+          operationId: 'conflict-saved',
+        }
+      );
+      await sleep(50);
+      check(
+        'pluginRefreshPreservesDirtyDraft',
+        titleInput.value === localDiscardedTitle &&
+          !conflictElement?.textContent?.includes('Saved plugin version wins')
+      );
+      titleInput.blur();
+      await waitFor(
+        () =>
+          conflictElement?.querySelector('[data-note-conflict="ready"]') !==
+          null,
+        'saved-version conflict banner'
+      );
+      check(
+        'conflictComparisonShowsBothVersions',
+        Boolean(
+          conflictElement?.textContent?.includes(localDiscardedTitle) &&
+            conflictElement.textContent.includes('Saved plugin title')
+        )
+      );
+      conflictElement
+        ?.querySelector<HTMLElement>('[data-note-conflict-action="saved"]')
+        ?.click();
+      await waitFor(
+        () =>
+          titleInput.value === 'Saved plugin title' &&
+          Boolean(
+            conflictElement?.textContent?.includes(
+              'Saved plugin version wins first conflict'
+            )
+          ) &&
+          conflictElement?.querySelector('[data-note-conflict]') === null,
+        'adopt saved version'
+      );
+      const adopted = await probe.app.content.get('t2-note-conflict');
+      check(
+        'savedChoiceDoesNotWriteDraft',
+        adopted?.title === 'Saved plugin title' &&
+          adopted.text.includes('Saved plugin version wins first conflict') &&
+          adopted.revision === beforeSavedChoice.revision + 1
+      );
+
+      const localKeptTitle = 'Local draft kept intentionally';
+      setTextAreaValue(titleInput, localKeptTitle);
+      await probe.app.content.updateMany(
+        [
+          {
+            id: 't2-note-conflict',
+            expectedRevision: adopted!.revision!,
+            changes: {
+              text: 'Newer plugin version loses second conflict',
+              title: 'Newer plugin title',
+            },
+          },
+        ],
+        {
+          label: 'Create local-version conflict',
+          operationId: 'conflict-local',
+        }
+      );
+      await sleep(50);
+      check(
+        'secondConflictPreservesDraft',
+        titleInput.value === localKeptTitle
+      );
+      titleInput.blur();
+      await waitFor(
+        () =>
+          conflictElement?.querySelector('[data-note-conflict="ready"]') !==
+          null,
+        'local-version conflict banner'
+      );
+      conflictElement
+        ?.querySelector<HTMLElement>('[data-note-conflict-action="local"]')
+        ?.click();
+      await waitFor(
+        () => conflictElement?.querySelector('[data-note-conflict]') === null,
+        'keep local version'
+      );
+      const kept = await probe.app.content.get('t2-note-conflict');
+      check(
+        'localChoiceRebasesAndSaves',
+        kept?.title === localKeptTitle &&
+          kept.text.includes('Saved plugin version wins first conflict') &&
+          kept.revision === adopted!.revision! + 2
+      );
+    }
     const creationInput = [
       {
         title: 'SDK created first',
@@ -625,6 +821,8 @@ export async function runT2ContentProbe() {
         : String(error);
     report.runtime = pluginRuntime.getSnapshot();
   } finally {
+    conflictRoot?.unmount();
+    conflictElement?.remove();
     bodyRoot?.unmount();
     bodyElement?.remove();
   }

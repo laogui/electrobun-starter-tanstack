@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FocusedView } from '@/components/canvas/FocusedView';
@@ -175,6 +176,7 @@ interface EditorMockProps {
   markdown?: string;
   onMarkdownChange: (value: string) => void;
   onPreviewUpdate?: (value: Record<string, unknown>) => void;
+  onSaveStatusChange?: (status: 'conflict', savedAt: Date | null) => void;
   onTitleChange: (value: string) => void;
   title?: string;
 }
@@ -183,6 +185,7 @@ const EditorMockComponent = ({
   markdown,
   onMarkdownChange,
   onPreviewUpdate,
+  onSaveStatusChange,
   onTitleChange,
   title,
 }: EditorMockProps) => (
@@ -213,6 +216,14 @@ const EditorMockComponent = ({
       type="button"
     >
       mutate preview
+    </button>
+    <button
+      onClick={() => {
+        onSaveStatusChange?.('conflict', null);
+      }}
+      type="button"
+    >
+      signal conflict
     </button>
   </div>
 );
@@ -325,6 +336,47 @@ describe('focusedView', () => {
       previewHtml: undefined,
       previewVersion: undefined,
     });
+  });
+
+  it('requires explicit confirmation before closing an unresolved draft conflict', async () => {
+    const onClose = vi.fn();
+    const warning = vi.spyOn(toast, 'warning').mockImplementation(() => 'id');
+    render(
+      <FocusedView
+        node={{
+          id: 'card-conflict',
+          type: 'card',
+          data: {
+            title: 'Draft',
+            content: 'Local body',
+            noteId: 'note-conflict',
+          },
+          rect,
+        }}
+        onClose={onClose}
+      />
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'signal conflict' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: CLOSE_BUTTON }));
+
+    expect(warning).toHaveBeenCalledWith(
+      'Your unresolved draft will be lost if you close this note. Close anyway?',
+      expect.objectContaining({
+        action: expect.objectContaining({ label: 'Close and discard' }),
+      })
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    const action = warning.mock.calls[0]?.[1]?.action as
+      | { onClick?: () => void }
+      | undefined;
+    if (!action) {
+      throw new Error('Expected close action');
+    }
+    action.onClick?.();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('preserves an existing body scroll lock when it unmounts', () => {

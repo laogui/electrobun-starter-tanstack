@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { applyNoteMetadataChanges } from './noteMetadataProjection';
+import {
+  applyCanonicalNoteSnapshot,
+  applyNoteMetadataChanges,
+} from './noteMetadataProjection';
 
 const change = {
   id: 'note-a',
@@ -125,5 +128,55 @@ describe('applyNoteMetadataChanges', () => {
     const next = applyNoteMetadataChanges(state, [change]);
     expect(next.nodes).toBe(state.nodes);
     expect(next.focusedNode.data.title).toBe('Plugin');
+  });
+});
+
+describe('applyCanonicalNoteSnapshot', () => {
+  it('replaces explicitly discarded local projections, including embedded copies', () => {
+    const conflicting = {
+      ...item('draft'),
+      data: {
+        ...data(),
+        blocknoteRevision: 4,
+        content: 'Local draft',
+        title: 'Local title',
+      },
+    };
+    const folder = {
+      id: 'folder',
+      data: {
+        children: [
+          {
+            id: 'nested',
+            title: 'Local title',
+            data: { ...conflicting.data },
+          },
+        ],
+      },
+    };
+    const state = {
+      focusedFolder: folder,
+      focusedNode: conflicting,
+      history: { keep: true },
+      nodes: [conflicting, folder],
+    };
+    const updates = {
+      blocknoteRevision: 5,
+      color: 'blue',
+      content: 'Saved body',
+      previewHtml: '<p>Saved body</p>',
+      title: 'Saved title',
+    };
+
+    const next = applyCanonicalNoteSnapshot(state, 'note-a', updates);
+
+    expect(next.nodes[0]?.data).toMatchObject(updates);
+    expect(next.focusedNode.data).toMatchObject(updates);
+    expect(next.focusedFolder.data.children[0]).toMatchObject({
+      title: 'Saved title',
+      data: updates,
+    });
+    expect(next.history).toBe(state.history);
+    expect(applyCanonicalNoteSnapshot(next, 'missing', updates)).toBe(next);
   });
 });

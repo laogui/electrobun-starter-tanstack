@@ -218,7 +218,7 @@ These are explicit SDK operations. Plugins should expose commands for them; the 
 
 `content.changed` may now carry `noteChanges: [{ id, before, after, metadataOnly }]`, with title/color/revision in `before` and `after`. A committed batch emits one such notification after its files/history are complete. Host-owned reconciliation updates duplicate placements, folders and focused metadata without remounting the editor or touching a dirty body. A matching metadata-only transition rebases the editor's private revision/frontmatter; genuine body changes, missing revision continuity and conflicting local title drafts fail closed instead of guessing. Loading an editor pairs its canonical metadata with the loaded revision. Stale manifest metadata cannot overwrite a newer committed note.
 
-Canvas layout snapshots are still separate history. Restoring an old snapshot can show stale metadata; its stale revision prevents persisting it over current content. Reopening the note loads canonical metadata. A unified ordered history and richer conflict-resolution UI remain T2 work.
+Canvas layout snapshots are still separate history. Restoring an old snapshot can show stale metadata; its stale revision prevents persisting it over current content. Reopening the note loads canonical metadata. The focused editor conflict UI described below resolves local-draft conflicts, but a unified ordered history remains T2 work.
 
 ## T2 third slice: note selection and React hooks
 
@@ -282,7 +282,7 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, and the custom canvas types described below. Rich-document authoring APIs, a merge/discard conflict UI, one ordered native/plugin history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, and the focused-editor conflict recovery described below. Rich-document authoring APIs, one ordered native/plugin history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
@@ -312,7 +312,7 @@ After a committed body event, the host reads the canonical blocks, plain text an
 
 For clean notes, the host updates duplicate placements, folder children and focused data, and replaces blocks in the existing editor instance. Undo/redo therefore refresh the visible rich document too. This does not trigger an automatic save of the replacement. The canvas `content` cache uses plain text; the canonical rich document remains in the sidecar and the rendered preview is derived from it.
 
-A dirty body, in-flight save, local title/color conflict or title being edited prevents refresh for that note's open editors and placements. Editing is marked dirty before asynchronous Markdown serialization; older serialization results cannot overwrite a newer one. The draft and its revision remain intact, and a stale save still conflicts. Close/reopen to load canonical content only after preserving any draft you want to keep; a merge/discard conflict UI is not included yet.
+A dirty body, in-flight save, local title/color conflict or title being edited prevents refresh for that note's open editors and placements. Editing is marked dirty before asynchronous Markdown serialization; older serialization results cannot overwrite a newer one. The draft and its revision remain intact, and a stale save enters the focused-editor recovery flow described in the eighth slice below.
 
 This is driven by host content notifications, not external file watching. Failed reads do not replace existing content; a later event can retry. Preview projection requires matching known placement revisions and metadata, so unknown or conflicting cached state is retained rather than guessed. No new public SDK API or unified native/plugin undo timeline is introduced.
 
@@ -391,3 +391,11 @@ The host sanitizes `title`, `subtitle`, `plainText`, `accessibilityLabel` and `a
 When `dataVersion` increases, provide synchronous `migrateState(oldState, fromVersion)`. Migration runs lazily when a referenced card is opened with the new type, validates the returned JSON state, rebuilds its summary and writes it with the old revision plus the new monotonic data version. A concurrent edit, invalid result, missing migration, newer on-disk version or failed write leaves the original state/summary intact and shows the compatible-migration fallback. Unvisited canvases are not eagerly migrated; they migrate when loaded. Plugin downgrade is never written over newer state.
 
 This slice supports immediate create-menu cards, shared React rendering, an optional preview component, bounded sizing/resizing and optional detail opening. It does not expose host UI components, arbitrary create flows, plugin menu contributions, rich editor internals, programmatic canvas placement, background migration of unopened canvases, or a single ordered history spanning note transactions and canvas layout.
+
+## T2 eighth slice: focused-editor conflict recovery
+
+When a normal BlockNote save loses a revision race to a plugin content transaction, the host keeps the current title/body draft in the mounted editor, stops automatic retries against the stale revision, and reloads the current canonical record using the editor's bound workspace ID. The persistent alert can expand to compare the local title/plain-text excerpt with the saved title/plain-text excerpt.
+
+`Use saved version` performs no write. It clears the local dirty payload, replaces the mounted blocks/title, adopts the canonical revision and preview, and deliberately refreshes all current canvas/folder/focused projections even when their cached metadata conflicts. `Keep my version` retains the still-current editor payload, rebases it onto the loaded revision, and runs the same revision-checked save. Another concurrent write returns to the conflict alert with the newer saved version rather than overwriting it. If the canonical read fails, the draft remains editable and the alert offers a reload; resolving or explicitly confirming close is required before the in-memory draft is discarded.
+
+This is deterministic choose-one-version recovery, not automatic rich-text merging. It applies to the host BlockNote editor's local draft versus canonical note content; plugin commands still receive machine-readable `revision-conflict` errors for their own batches. Plugin batch history, canvas layout snapshots, BlockNote's editor-local undo, widget/extension record history and native canvas undo remain separate timelines. Defining a single ordering, persisted cursor, ownership and conflict policy across those histories is the next T2 boundary.

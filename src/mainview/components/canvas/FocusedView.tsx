@@ -505,7 +505,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
 
   const { setCenter, getViewport, getNodes } = useReactFlow();
 
-  const handleClose = useCallback(() => {
+  const finishClose = useCallback(() => {
     const rfNodes = getNodes();
     const targetId = folderId ?? node.id;
     const rfNode = rfNodes.find((n) => n.id === targetId) as
@@ -536,6 +536,21 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     }
     onClose();
   }, [getNodes, getViewport, setCenter, folderId, node.id, onClose]);
+
+  const handleClose = useCallback(() => {
+    if (saveStatus === 'conflict') {
+      toast.warning(m.note_conflict_close_warning(), {
+        action: {
+          label: m.note_conflict_close_anyway(),
+          onClick: finishClose,
+        },
+        duration: 10_000,
+        id: `note-conflict-close-${node.id}`,
+      });
+      return;
+    }
+    finishClose();
+  }, [finishClose, node.id, saveStatus]);
 
   useBodyScrollLock();
 

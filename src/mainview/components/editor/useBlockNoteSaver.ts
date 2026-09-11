@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   hasNoteMetadataConflict,
   subscribeNoteMetadataChanges,
 } from '@/lib/noteMetadataProjection';
-import { rpcSaveBlockNote } from '@/lib/rpc';
+import { rpcLoadBlockNote, rpcSaveBlockNote } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
 const DEFAULT_DEBOUNCE_MS = 800;
 
-export type BlockNoteSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type BlockNoteSaveStatus =
+  | 'idle'
+  | 'saving'
+  | 'saved'
+  | 'error'
+  | 'conflict';
 
 interface PreviewResponse {
   blocks: number;
@@ -17,6 +22,21 @@ interface PreviewResponse {
   html: string;
   version: number;
 }
+
+export interface BlockNoteConflictSnapshot {
+  blocks: unknown[];
+  color: string;
+  noteId: string;
+  preview: PreviewResponse;
+  revision: number;
+  text: string;
+  title: string;
+  workspaceId: string;
+}
+
+export type BlockNoteSaveConflict =
+  | { revision: number; status: 'loading' | 'load-error' }
+  | { snapshot: BlockNoteConflictSnapshot; status: 'ready' };
 
 interface UseBlockNoteSaverOptions {
   debounceMs?: number;
@@ -96,6 +116,13 @@ export function useBlockNoteSaver({
   const changeVersionRef = useRef(0);
   const savingRef = useRef(false);
   const revisionRef = useRef<number | undefined>(undefined);
+  const workspaceIdRef = useRef<string | undefined>(undefined);
+  const conflictLoadVersionRef = useRef(0);
+  const conflictRef = useRef<BlockNoteSaveConflict | null>(null);
+  const [conflict, setConflictState] = useState<BlockNoteSaveConflict | null>(
+    null
+  );
+  const [conflictDraftReady, setConflictDraftReady] = useState(true);
   const lastSavedAtRef = useRef<Date | null>(null);
   const statusRef = useRef<BlockNoteSaveStatus>('idle');
 
@@ -105,6 +132,11 @@ export function useBlockNoteSaver({
     }
     statusRef.current = next;
     onSaveStatusChangeRef.current?.(next);
+  }, []);
+
+  const setConflict = useCallback((next: BlockNoteSaveConflict | null) => {
+    conflictRef.current = next;
+    setConflictState(next);
   }, []);
 
   useEffect(() => {
@@ -130,9 +162,6 @@ export function useBlockNoteSaver({
     frontmatterRef.current = next;
     previousFrontmatterRef.current = frontmatter;
   }, [frontmatter, noteId]);
-  useEffect(() => {
-    noteIdRef.current = noteId;
-  }, [noteId]);
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
@@ -174,6 +203,66 @@ export function useBlockNoteSaver({
     }
   }, []);
 
+  const loadConflictSnapshot = useCallback(
+    async (currentNoteId: string, revision: number) => {
+      const workspaceId = workspaceIdRef.current;
+      const version = ++conflictLoadVersionRef.current;
+      setConflictDraftReady(latestPayloadRef.current !== null);
+      setConflict({ revision, status: 'loading' });
+      if (!workspaceId) {
+        setConflict({ revision, status: 'load-error' });
+        return;
+      }
+      try {
+        const response = await rpcLoadBlockNote(currentNoteId, workspaceId);
+        if (
+          version !== conflictLoadVersionRef.current ||
+          currentNoteId !== noteIdRef.current
+        ) {
+          return;
+        }
+        const metadata = response.frontmatter;
+        if (
+          !response.success ||
+          response.workspaceId !== workspaceId ||
+          !Array.isArray(response.blocks) ||
+          !response.preview ||
+          typeof response.text !== 'string' ||
+          typeof response.revision !== 'number' ||
+          response.revision < revision ||
+          !metadata ||
+          typeof metadata.title !== 'string' ||
+          typeof metadata.color !== 'string'
+        ) {
+          setConflict({ revision, status: 'load-error' });
+          return;
+        }
+        setConflict({
+          status: 'ready',
+          snapshot: {
+            blocks: response.blocks,
+            color: metadata.color,
+            noteId: currentNoteId,
+            preview: response.preview,
+            revision: response.revision,
+            text: response.text,
+            title: metadata.title,
+            workspaceId,
+          },
+        });
+      } catch (error) {
+        if (
+          version === conflictLoadVersionRef.current &&
+          currentNoteId === noteIdRef.current
+        ) {
+          console.error('[blocknote] Failed to load conflicting note:', error);
+          setConflict({ revision, status: 'load-error' });
+        }
+      }
+    },
+    [setConflict]
+  );
+
   const saveNow = useCallback(async () => {
     if (savingRef.current) {
       return;
@@ -199,7 +288,16 @@ export function useBlockNoteSaver({
           return;
         }
         if (!response.success) {
-          setStatus('error');
+          if (response.conflict) {
+            const latestRevision =
+              typeof response.revision === 'number'
+                ? response.revision
+                : (revisionRef.current ?? 0);
+            setStatus('conflict');
+            await loadConflictSnapshot(currentNoteId, latestRevision);
+          } else {
+            setStatus('error');
+          }
           return;
         }
         // Even an obsolete payload committed a revision. The next write must
@@ -245,12 +343,16 @@ export function useBlockNoteSaver({
     } finally {
       savingRef.current = false;
     }
-  }, [clearTimer, nodeId, setStatus]);
+  }, [clearTimer, loadConflictSnapshot, nodeId, setStatus]);
 
   const flushNow = useCallback(
     (payload?: BlockNoteSavePayload) => {
       if (payload) {
         latestPayloadRef.current = payload;
+      }
+      if (conflictRef.current) {
+        clearTimer();
+        return;
       }
       if (!dirtyRef.current || latestPayloadRef.current === null) {
         clearTimer();
@@ -264,6 +366,25 @@ export function useBlockNoteSaver({
     [clearTimer, saveNow]
   );
 
+  useEffect(() => {
+    if (noteIdRef.current === noteId) {
+      return;
+    }
+    // A BlockNoteEditor is normally note-bound and keyed, but flush the old
+    // note defensively before resetting refs if a caller reuses the instance.
+    flushNow();
+    conflictLoadVersionRef.current += 1;
+    clearTimer();
+    latestPayloadRef.current = null;
+    dirtyRef.current = false;
+    noteIdRef.current = noteId;
+    revisionRef.current = undefined;
+    workspaceIdRef.current = undefined;
+    setConflict(null);
+    setConflictDraftReady(true);
+    setStatus('idle');
+  }, [clearTimer, flushNow, noteId, setConflict, setStatus]);
+
   const saveDebounced = useCallback(
     (payload: BlockNoteSavePayload) => {
       latestPayloadRef.current = payload;
@@ -273,6 +394,10 @@ export function useBlockNoteSaver({
       dirtyRef.current = true;
       changeVersionRef.current += 1;
       clearTimer();
+      if (conflictRef.current) {
+        setConflictDraftReady(true);
+        return;
+      }
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
         const latest = latestPayloadRef.current;
@@ -292,6 +417,9 @@ export function useBlockNoteSaver({
     latestPayloadRef.current = null;
     dirtyRef.current = true;
     changeVersionRef.current += 1;
+    if (conflictRef.current) {
+      setConflictDraftReady(false);
+    }
   }, []);
   const canApplyExternal = useCallback(
     (
@@ -314,13 +442,70 @@ export function useBlockNoteSaver({
   );
 
   const setInitialRevision = useCallback(
-    (revision: number | undefined, metadata?: Record<string, unknown>) => {
+    (
+      revision: number | undefined,
+      metadata?: Record<string, unknown>,
+      workspaceId?: string
+    ) => {
       revisionRef.current = revision;
+      if (workspaceId !== undefined) {
+        workspaceIdRef.current = workspaceId;
+      }
       if (metadata) {
         frontmatterRef.current = { ...frontmatterRef.current, ...metadata };
       }
     },
     []
+  );
+
+  const retryConflictLoad = useCallback(() => {
+    const current = conflictRef.current;
+    const currentNoteId = noteIdRef.current;
+    if (!(current && currentNoteId)) {
+      return;
+    }
+    const revision =
+      current.status === 'ready' ? current.snapshot.revision : current.revision;
+    loadConflictSnapshot(currentNoteId, revision).catch((error) => {
+      console.error('[blocknote] Failed to retry conflict load:', error);
+    });
+  }, [loadConflictSnapshot]);
+
+  const keepLocalVersion = useCallback(async () => {
+    const current = conflictRef.current;
+    if (current?.status !== 'ready' || !latestPayloadRef.current) {
+      return;
+    }
+    conflictLoadVersionRef.current += 1;
+    revisionRef.current = current.snapshot.revision;
+    setConflict(null);
+    setConflictDraftReady(true);
+    await saveNow();
+  }, [saveNow, setConflict]);
+
+  const acceptSavedVersion = useCallback(
+    (apply: (snapshot: BlockNoteConflictSnapshot) => void) => {
+      const current = conflictRef.current;
+      if (current?.status !== 'ready') {
+        return;
+      }
+      apply(current.snapshot);
+      conflictLoadVersionRef.current += 1;
+      clearTimer();
+      changeVersionRef.current += 1;
+      dirtyRef.current = false;
+      latestPayloadRef.current = null;
+      revisionRef.current = current.snapshot.revision;
+      frontmatterRef.current = {
+        ...frontmatterRef.current,
+        title: current.snapshot.title,
+        color: current.snapshot.color,
+      };
+      setConflict(null);
+      setConflictDraftReady(true);
+      setStatus('idle');
+    },
+    [clearTimer, setConflict, setStatus]
   );
 
   useEffect(() => {
@@ -342,15 +527,21 @@ export function useBlockNoteSaver({
 
   useEffect(
     () => () => {
+      conflictLoadVersionRef.current += 1;
       flushNow();
     },
     [flushNow]
   );
 
   return {
+    acceptSavedVersion,
     flushNow,
     markDirty,
     canApplyExternal,
+    conflict,
+    conflictDraftReady,
+    keepLocalVersion,
+    retryConflictLoad,
     saveDebounced,
     setInitialRevision,
     status: statusRef.current,

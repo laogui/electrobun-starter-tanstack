@@ -31,7 +31,10 @@ import TextareaAutosize from 'react-textarea-autosize';
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { registerNoteBodyEditor } from '@/lib/noteBodySync';
-import { applyNoteMetadataChanges } from '@/lib/noteMetadataProjection';
+import {
+  applyCanonicalNoteSnapshot,
+  applyNoteMetadataChanges,
+} from '@/lib/noteMetadataProjection';
 import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
@@ -41,8 +44,10 @@ import {
   resolveBlockNoteFileUrl,
   uploadBlockNoteFile,
 } from './blocknoteAttachments';
+import { NoteConflictBanner } from './NoteConflictBanner';
 import { NoteEditorLoading } from './NoteEditorLoading';
 import {
+  type BlockNoteSaveConflict,
   type BlockNoteSaveStatus,
   useBlockNoteSaver,
 } from './useBlockNoteSaver';
@@ -177,11 +182,16 @@ export default function BlockNoteEditor({
   const debounceMs = getBlockNoteDebounceMs(autoSaveInterval);
 
   const {
+    acceptSavedVersion,
+    canApplyExternal,
+    conflict,
+    conflictDraftReady,
     flushNow,
+    keepLocalVersion,
+    markDirty,
+    retryConflictLoad,
     saveDebounced,
     setInitialRevision,
-    markDirty,
-    canApplyExternal,
   } = useBlockNoteSaver({
     debounceMs,
     enabled: typeof noteId === 'string',
@@ -224,7 +234,11 @@ export default function BlockNoteEditor({
                 : undefined,
             recoveredFromMarkdown: Boolean(response.recoveredFromMarkdown),
           });
-          setInitialRevision(response.revision, response.frontmatter);
+          setInitialRevision(
+            response.revision,
+            response.frontmatter,
+            response.workspaceId
+          );
           const metadata = response.frontmatter;
           if (
             metadata &&
@@ -312,8 +326,11 @@ export default function BlockNoteEditor({
 
   return (
     <BlockNoteSurface
+      acceptSavedVersion={acceptSavedVersion}
       canApplyExternal={canApplyExternal}
       color={colorValue}
+      conflict={conflict}
+      conflictDraftReady={conflictDraftReady}
       flushNow={flushNow}
       initial={initial}
       initialMarkdown={initialMarkdown}
@@ -326,7 +343,13 @@ export default function BlockNoteEditor({
       markDirty={markDirty}
       noteId={typeof noteId === 'string' ? noteId : undefined}
       onExternalTitle={setTitleValue}
+      onKeepLocal={() => {
+        keepLocalVersion().catch((error) => {
+          console.error('[blocknote] Failed to keep local version:', error);
+        });
+      }}
       onMarkdownChange={onMarkdownChange}
+      onRetryConflictLoad={retryConflictLoad}
       onTitleBlur={() => {
         // flush latest payload — handled inside BlockNoteSurface after
         // computing markdown/blocks.
@@ -345,8 +368,13 @@ export default function BlockNoteEditor({
 export type { BlockNoteSaveStatus };
 
 interface BlockNoteSurfaceProps {
+  acceptSavedVersion: ReturnType<
+    typeof useBlockNoteSaver
+  >['acceptSavedVersion'];
   canApplyExternal: ReturnType<typeof useBlockNoteSaver>['canApplyExternal'];
   color: string;
+  conflict: BlockNoteSaveConflict | null;
+  conflictDraftReady: boolean;
   flushNow: () => void;
   initial: InitialContent;
   initialMarkdown: string;
@@ -358,25 +386,26 @@ interface BlockNoteSurfaceProps {
   markDirty: () => void;
   noteId: string | undefined;
   onExternalTitle: (title: string) => void;
+  onKeepLocal: () => void;
   onMarkdownChange: (markdown: string) => void;
+  onRetryConflictLoad: () => void;
   onTitleBlur: () => void;
   onTitleChange: (next: string) => void;
   saveDebounced: (payload: { blocks: unknown[]; markdown: string }) => void;
   setInitialRevision: (
     revision: number | undefined,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    workspaceId?: string
   ) => void;
   title: string;
 }
 
 function BlockNoteSurface({
-  noteId,
-  markDirty,
+  acceptSavedVersion,
   canApplyExternal,
-  setInitialRevision,
-  onExternalTitle,
-  localHttpEndpoint,
   color,
+  conflict,
+  conflictDraftReady,
   flushNow,
   initial,
   initialMarkdown,
@@ -384,10 +413,17 @@ function BlockNoteSurface({
   latestBlocksRef,
   latestMarkdownRef,
   loadFailed,
+  localHttpEndpoint,
+  markDirty,
+  noteId,
+  onExternalTitle,
+  onKeepLocal,
   onMarkdownChange,
+  onRetryConflictLoad,
   onTitleBlur,
   onTitleChange,
   saveDebounced,
+  setInitialRevision,
   title,
 }: BlockNoteSurfaceProps) {
   // Prefer the markdown body the RPC returned (from the .md file) over the
@@ -582,6 +618,49 @@ function BlockNoteSurface({
     [markDirty, onTitleChange]
   );
 
+  const handleUseSavedVersion = useCallback(() => {
+    try {
+      acceptSavedVersion((snapshot) => {
+        applyingExternalRef.current = true;
+        serializationRef.current += 1;
+        try {
+          editor.replaceBlocks(
+            editor.document,
+            snapshot.blocks as PartialBlock[]
+          );
+          externalDocumentRef.current = JSON.stringify(editor.document);
+          latestBlocksRef.current = snapshot.blocks as PartialBlock[];
+          latestMarkdownRef.current = snapshot.text;
+          titleDirtyRef.current = false;
+          onExternalTitle(snapshot.title);
+          useCanvasStore.setState((state) =>
+            applyCanonicalNoteSnapshot(state, snapshot.noteId, {
+              blocknoteRevision: snapshot.revision,
+              color: snapshot.color,
+              content: snapshot.text,
+              editor: 'blocknote',
+              previewBlocks: snapshot.preview.blocks,
+              previewExcerpt: snapshot.preview.excerpt,
+              previewHtml: snapshot.preview.html,
+              previewVersion: snapshot.preview.version,
+              title: snapshot.title,
+            })
+          );
+        } finally {
+          applyingExternalRef.current = false;
+        }
+      });
+    } catch (error) {
+      console.error('[blocknote] Failed to use saved version:', error);
+    }
+  }, [
+    editor,
+    latestBlocksRef,
+    latestMarkdownRef,
+    onExternalTitle,
+    acceptSavedVersion,
+  ]);
+
   const handleBlur = useCallback(() => {
     onTitleBlur();
     if (!titleDirtyRef.current) {
@@ -665,6 +744,18 @@ function BlockNoteSurface({
           Failed to load the saved editor state. Showing the Markdown copy —
           your next save will rebuild the JSON sidecar.
         </div>
+      ) : null}
+      {conflict ? (
+        <NoteConflictBanner
+          canKeepLocal={conflictDraftReady}
+          conflict={conflict}
+          isDark={isDark}
+          localText={latestMarkdownRef.current}
+          localTitle={title}
+          onKeepLocal={onKeepLocal}
+          onRetryLoad={onRetryConflictLoad}
+          onUseSaved={handleUseSavedVersion}
+        />
       ) : null}
       <OverlayScrollbarsComponent
         className="min-h-0 flex-1"

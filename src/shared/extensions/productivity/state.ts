@@ -218,13 +218,21 @@ export function completeExpiredPomodoro(data: PomodoroState): PomodoroState {
   };
 }
 
+/** When the reminder should next notify: the snooze target wins over `dueAt`. */
+export function reminderFireAt(data: ReminderState): string {
+  return data.status === 'snoozed' && data.snoozedUntil
+    ? data.snoozedUntil
+    : data.dueAt;
+}
+
 export function reminderDueAtMs(data: ReminderState): number {
-  const dueAt =
-    data.status === 'snoozed' && data.snoozedUntil
-      ? data.snoozedUntil
-      : data.dueAt;
-  const parsed = Date.parse(dueAt);
+  const parsed = Date.parse(reminderFireAt(data));
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+/** True when the reminder is in a state that should have a live host task. */
+export function reminderWantsTask(data: ReminderState): boolean {
+  return data.status === 'scheduled' || data.status === 'snoozed';
 }
 
 export function isDueReminder(

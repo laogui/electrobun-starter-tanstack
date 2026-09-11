@@ -1,17 +1,19 @@
 import { Bell } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { ReminderWidgetBody } from '@/components/canvas/nodes/ReminderWidget';
 import { REMINDER_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildReminderPresentation,
   createReminderInitialState,
-  isDueReminder,
   isReminderState,
   markReminderMissed,
   normalizeReminderState,
   type ReminderState,
+  reminderFireAt,
+  reminderWantsTask,
 } from '../../../../shared/extensions/productivity/state';
+import type { GhostBoardHostAPI } from '../../../../shared/extensions/protocol';
 
 import type {
   BuiltinCanvasType,
@@ -19,67 +21,67 @@ import type {
   SurfaceProps,
 } from '../../types';
 
+/**
+ * One instance owns at most one live task, so a fixed id lets a reschedule
+ * replace the previous entry instead of orphaning it.
+ */
+const REMINDER_TASK_ID = 'reminder';
+
+function syncTask(
+  host: GhostBoardHostAPI,
+  state: ReminderState
+): Promise<void> {
+  if (!reminderWantsTask(state)) {
+    return host.scheduler.cancel(REMINDER_TASK_ID).catch(() => undefined);
+  }
+  return host.scheduler
+    .schedule({
+      id: REMINDER_TASK_ID,
+      fireAt: reminderFireAt(state),
+      repeat: state.repeat ?? 'none',
+    })
+    .catch(() => undefined);
+}
+
 function ReminderCanvasSurface({
   context,
   host,
   state,
 }: SurfaceProps<ReminderState>) {
   const normalized = normalizeReminderState(state);
+  const latest = useRef(normalized);
+  latest.current = normalized;
 
+  // Registers the task for instances that predate host-driven scheduling. The
+  // host owns firing from here, including anything already overdue.
   useEffect(() => {
-    if (context.readOnly || !isDueReminder(normalized)) {
+    if (context.readOnly) {
       return;
     }
+    syncTask(host, latest.current);
+  }, [context.readOnly, host]);
+
+  const commit = (next: ReminderState) => {
     host.instance
-      .updateState({
-        history: 'record',
-        state: markReminderMissed(normalized),
-      })
+      .updateState({ history: 'record', state: next })
       .catch(() => undefined);
-    host.notifications
-      .show({
-        title: normalized.title || 'Reminder',
-        body: normalized.note,
-      })
-      .catch(() => undefined);
-  }, [context.readOnly, host, normalized]);
-
-  useEffect(() => {
-    if (context.readOnly || normalized.status === 'done') {
-      return;
+    if (
+      reminderFireAt(next) !== reminderFireAt(normalized) ||
+      next.status !== normalized.status ||
+      next.repeat !== normalized.repeat
+    ) {
+      syncTask(host, next);
     }
-    const fireAt =
-      normalized.status === 'snoozed' && normalized.snoozedUntil
-        ? normalized.snoozedUntil
-        : normalized.dueAt;
-    host.scheduler
-      .schedule({
-        id: `reminder:${fireAt}`,
-        fireAt,
-        repeat: normalized.repeat ?? 'none',
-      })
-      .catch(() => undefined);
-  }, [context.readOnly, host, normalized]);
+  };
 
   return (
     <ReminderWidgetBody
       data={normalized}
       onChange={(updater) => {
-        const next = updater(normalized);
-        host.instance
-          .updateState({
-            history: 'record',
-            state: { ...normalized, ...next },
-          })
-          .catch(() => undefined);
+        commit({ ...normalized, ...updater(normalized) });
       }}
       onTitleChange={(nextTitle) => {
-        host.instance
-          .updateState({
-            history: 'record',
-            state: { ...normalized, title: nextTitle },
-          })
-          .catch(() => undefined);
+        commit({ ...normalized, title: nextTitle });
       }}
       readOnly={context.readOnly}
       title={normalized.title}
@@ -118,4 +120,21 @@ export const reminderCanvasType: BuiltinCanvasType<ReminderState> = {
   buildPresentation: buildReminderPresentation,
   CanvasSurface: ReminderCanvasSurface,
   PreviewSurface: ReminderPreviewSurface,
+  onTaskFired: async (event, { host, state }) => {
+    const normalized = normalizeReminderState(state);
+    // A repeating reminder stays scheduled — the host already advanced it to
+    // the next cycle, so only a one-shot becomes missed.
+    if ((event.task.repeat ?? 'none') === 'none') {
+      await host.instance
+        .updateState({
+          history: 'record',
+          state: markReminderMissed(normalized),
+        })
+        .catch(() => undefined);
+    }
+    await host.notifications.show({
+      title: normalized.title || 'Reminder',
+      body: normalized.note,
+    });
+  },
 };

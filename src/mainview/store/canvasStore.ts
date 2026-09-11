@@ -51,6 +51,7 @@ import {
   redo as redoSnapshot,
   undo as undoSnapshot,
 } from '@/lib/undoRedo';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import {
   shouldPersistViewport,
   suppressViewportPersist,
@@ -655,7 +656,7 @@ export interface CanvasState {
   pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
-  redo: () => void;
+  redo: () => boolean;
   /** Asset/image card id whose displayName is in inline-rename mode. */
   renamingNodeId: string | null;
   reset: () => void;
@@ -728,7 +729,7 @@ export interface CanvasState {
   /** Toggle a single tag in/out of the active filters (case-insensitive). */
   toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
-  undo: () => void;
+  undo: () => boolean;
 
   ungroupSelected: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
@@ -993,6 +994,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   reset: () => {
+    unifiedUndoHistory.clear();
     set({
       nodes: [],
       edges: [],
@@ -2374,10 +2376,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- undo / redo ----------------------------------------------------------
   saveSnapshot: () => {
-    const { nodes, edges, viewport, _undoRedo } = get();
+    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
     set({
       _undoRedo: pushSnapshot(_undoRedo, { nodes, edges, viewport }),
     });
+    unifiedUndoHistory.recordCanvas(activeViewId);
   },
 
   // Note: undo/redo intentionally leave `viewport` / sessionViewport untouched.
@@ -2385,27 +2388,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // stale snapshot value back would not move the camera — it would only corrupt
   // the session cache and cause a jump when re-entering the view.
   undo: () => {
-    const { nodes, edges, viewport, _undoRedo } = get();
+    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
     const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });
-    if (result) {
-      set({
-        nodes: result.snapshot.nodes,
-        edges: result.snapshot.edges,
-        _undoRedo: result.state,
-      });
+    if (!result) {
+      return false;
     }
+    set({
+      nodes: result.snapshot.nodes,
+      edges: result.snapshot.edges,
+      _undoRedo: result.state,
+    });
+    unifiedUndoHistory.observeCanvasTransition('undo', activeViewId);
+    return true;
   },
 
   redo: () => {
-    const { nodes, edges, viewport, _undoRedo } = get();
+    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
     const result = redoSnapshot(_undoRedo, { nodes, edges, viewport });
-    if (result) {
-      set({
-        nodes: result.snapshot.nodes,
-        edges: result.snapshot.edges,
-        _undoRedo: result.state,
-      });
+    if (!result) {
+      return false;
     }
+    set({
+      nodes: result.snapshot.nodes,
+      edges: result.snapshot.edges,
+      _undoRedo: result.state,
+    });
+    unifiedUndoHistory.observeCanvasTransition('redo', activeViewId);
+    return true;
   },
 
   canUndo: () => get()._undoRedo.past.length > 0,

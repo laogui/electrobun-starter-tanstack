@@ -135,6 +135,13 @@ describe('public note content transactions', () => {
     ).toBe(ids[0]);
     expect((await call(input)).result).toEqual(created.result);
     expect(events).toHaveLength(1);
+    expect(events[0].hostHistory).toEqual({
+      action: 'record',
+      batchId: 'create-batch',
+      label: 'Create notes',
+      operationId: 'create-batch',
+      pluginId: 'example.notes',
+    });
     expect(
       (await call({ ...input, notes: [{ title: 'Different' }] })).result.code
     ).toBe('operation-mismatch');
@@ -149,6 +156,11 @@ describe('public note content transactions', () => {
       removedIds: ids,
     });
     expect(events.at(-1)).toMatchObject({ operation: 'delete', ids });
+    expect(events.at(-1)?.hostHistory).toMatchObject({
+      action: 'undo',
+      batchId: 'create-batch',
+      operationId: 'undo-create',
+    });
     expect((await call({ action: 'getMany', ids })).result.items).toEqual([
       null,
       null,
@@ -156,6 +168,11 @@ describe('public note content transactions', () => {
     expect((await call(input)).result).toEqual(created.result);
     expect((await call({ action: 'get', id: ids[0] })).result.item).toBeNull();
     const redo = await call({
+      action: 'redo',
+      batchId: 'create-batch',
+      operationId: 'redo-create',
+    });
+    expect(events.at(-1)?.hostHistory).toMatchObject({
       action: 'redo',
       batchId: 'create-batch',
       operationId: 'redo-create',
@@ -544,6 +561,15 @@ describe('public note content transactions', () => {
     expect(saved.preview).toEqual(original.preview);
     expect(saved.futureMetadata).toEqual({ keep: true });
     expect(changed).toHaveBeenCalledOnce();
+    expect(changed.mock.calls[0]?.[0]).toMatchObject({
+      hostHistory: {
+        action: 'record',
+        batchId: 'batch-1',
+        label: 'Update notes',
+        operationId: 'batch-1',
+        pluginId: 'example.notes',
+      },
+    });
     expect(changed.mock.calls[0]?.[0].noteChanges).toHaveLength(2);
     expect(
       changed.mock.calls[0]?.[0].noteChanges.every(
@@ -725,6 +751,15 @@ describe('public note content transactions', () => {
     expect((await call(input)).result.items).toHaveLength(2);
     expect(existsSync(join(workspace, NOTE_INTENT_PATH))).toBe(false);
     expect(changed).toHaveBeenCalledOnce();
+    expect(changed.mock.calls[0]?.[0]).toMatchObject({
+      hostHistory: {
+        action: 'record',
+        batchId: 'recover',
+        label: 'Update notes',
+        operationId: 'recover',
+        pluginId: 'example.notes',
+      },
+    });
     if (failure.startsWith('body-')) {
       expect((await call({ action: 'get', id: 'b' })).result.item.text).toBe(
         'Recovered body'

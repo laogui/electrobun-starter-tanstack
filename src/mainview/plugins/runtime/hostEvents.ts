@@ -9,22 +9,28 @@ import {
   registerNoteReferences,
 } from '@/lib/noteReferences';
 import { useCanvasStore } from '@/store/canvasStore';
-import type { ContentChangedEvent } from '../../../../packages/plugin-sdk';
+import {
+  type HostContentChangedEvent,
+  isPluginContentHistoryEvent,
+} from '../../../shared/plugins/contentHistory';
+import { unifiedUndoHistory } from '../../lib/unifiedUndoHistory';
 import { canvasSelection } from './canvasSelection';
 import type { PluginRuntime } from './PluginRuntime';
 import { EMPTY_PLACEMENTS } from './selection';
 
-function isContentChange(value: unknown): value is ContentChangedEvent {
+function isContentChange(value: unknown): value is HostContentChangedEvent {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const event = value as ContentChangedEvent;
+  const event = value as HostContentChangedEvent;
   return (
     typeof event.workspaceId === 'string' &&
     ['note', 'widget', 'extension'].includes(event.kind) &&
     ['upsert', 'delete'].includes(event.operation) &&
     Array.isArray(event.ids) &&
     event.ids.every((id) => typeof id === 'string') &&
+    (event.hostHistory === undefined ||
+      isPluginContentHistoryEvent(event.hostHistory)) &&
     (event.noteChanges === undefined ||
       (Array.isArray(event.noteChanges) &&
         event.noteChanges.every(isNoteMetadataChange)))
@@ -64,6 +70,10 @@ export function connectPluginHostEvents(
       revisions.clear();
       bodies.reset();
     }
+    unifiedUndoHistory.setContext(
+      current,
+      current ? useCanvasStore.getState().activeViewId : ''
+    );
   };
   const contentChanged = (event: Event) => {
     syncWorkspace();
@@ -99,7 +109,14 @@ export function connectPluginHostEvents(
         );
       }
     }
-    runtime.emitHostEvent('content.changed', payload);
+    if (payload.hostHistory) {
+      unifiedUndoHistory.observePluginTransition(
+        workspaceId,
+        payload.hostHistory
+      );
+    }
+    const { hostHistory: _hostHistory, ...publicPayload } = payload;
+    runtime.emitHostEvent('content.changed', publicPayload);
   };
   let lastSelection = '';
   const selectionChanged = () => {
@@ -146,5 +163,6 @@ export function connectPluginHostEvents(
     target.removeEventListener('plugin-content-changed', contentChanged);
     unsubscribeCanvas();
     unsubscribeRuntime();
+    unifiedUndoHistory.reset();
   };
 }

@@ -3,9 +3,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { routeUndoRedo } from '@/lib/routeUndoRedo';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
+
+const { pluginRedo, pluginUndo } = vi.hoisted(() => ({
+  pluginRedo: vi.fn(() => Promise.resolve()),
+  pluginUndo: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('@/plugins/runtime/content', () => ({
+  createPluginContent: () => ({ redo: pluginRedo, undo: pluginUndo }),
+}));
 
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
@@ -14,6 +24,7 @@ vi.mock('../../paraglide/messages.js', () => ({
 
 describe('routeUndoRedo', () => {
   beforeEach(() => {
+    unifiedUndoHistory.reset();
     useCanvasStore.getState().reset();
   });
 
@@ -30,6 +41,30 @@ describe('routeUndoRedo', () => {
     expect(routeUndoRedo('redo')).toBe(true);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes a committed plugin batch through native undo and redo', async () => {
+    unifiedUndoHistory.setContext('workspace-a', 'default');
+    unifiedUndoHistory.observePluginTransition('workspace-a', {
+      action: 'record',
+      batchId: 'batch-a',
+      label: 'Rename notes',
+      operationId: 'batch-a',
+      pluginId: 'example.notes',
+    });
+
+    expect(routeUndoRedo('undo')).toBe(true);
+    await vi.waitFor(() => expect(pluginUndo).toHaveBeenCalledOnce());
+    expect(pluginUndo).toHaveBeenCalledWith(
+      'batch-a',
+      expect.objectContaining({ operationId: expect.stringMatching(/^native_undo_/) })
+    );
+    expect(routeUndoRedo('redo')).toBe(true);
+    await vi.waitFor(() => expect(pluginRedo).toHaveBeenCalledOnce());
+    expect(pluginRedo).toHaveBeenCalledWith(
+      'batch-a',
+      expect.objectContaining({ operationId: expect.stringMatching(/^native_redo_/) })
+    );
   });
 
   it('routes to the focused widget', () => {

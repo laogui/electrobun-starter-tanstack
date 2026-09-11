@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir, readFile, unlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import {
+  isPluginContentHistoryEvent,
+  type PluginContentHistoryEvent,
+} from '../shared/plugins/contentHistory';
 import { atomicWrite } from './atomicWrite';
 import { notifyContentChanged } from './plugins/contentEvents';
 
@@ -31,6 +35,7 @@ interface Intent {
   changes: NoteFileChange[];
   historyAfter: string;
   historyBefore: string | null;
+  hostHistory?: PluginContentHistoryEvent;
   schema: 'ghostboard-note-intent/v1';
 }
 
@@ -70,6 +75,15 @@ function parseIntent(text: string): Intent {
     throw new NoteTransactionError(
       'recovery-required',
       'Invalid note transaction intent; original files retained'
+    );
+  }
+  if (
+    value.hostHistory !== undefined &&
+    !isPluginContentHistoryEvent(value.hostHistory)
+  ) {
+    throw new NoteTransactionError(
+      'recovery-required',
+      'Invalid note transaction host history metadata'
     );
   }
   const ids = new Set<string>();
@@ -210,6 +224,7 @@ async function recoverUnlocked(workspace: string): Promise<void> {
         ids: upserts,
         operation: 'upsert',
         noteChanges,
+        hostHistory: intent.hostHistory,
       });
     }
     if (removed.length) {
@@ -217,6 +232,7 @@ async function recoverUnlocked(workspace: string): Promise<void> {
         kind: 'note',
         ids: removed,
         operation: 'delete',
+        hostHistory: intent.hostHistory,
       });
     }
   }
@@ -258,7 +274,8 @@ export async function withNoteWorkspace<T>(
 export async function commitNoteFiles(
   workspace: string,
   changes: NoteFileChange[],
-  historyAfter: string
+  historyAfter: string,
+  hostHistory?: PluginContentHistoryEvent
 ): Promise<void> {
   if (
     !ownership.getStore()?.active ||
@@ -272,6 +289,7 @@ export async function commitNoteFiles(
   const text = JSON.stringify({
     schema: 'ghostboard-note-intent/v1',
     changes,
+    ...(hostHistory ? { hostHistory } : {}),
     historyBefore,
     historyAfter,
   });

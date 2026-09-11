@@ -7,6 +7,7 @@ import type {
   NoteContentUpdate,
   NoteMetadata,
 } from '../../../packages/plugin-sdk';
+import type { PluginContentHistoryEvent } from '../../shared/plugins/contentHistory';
 import { isPluginId } from '../../shared/plugins/ids';
 import { blocksToPlainText, buildBlockNotePreview } from '../blocknotePreview';
 import { buildNoteIndex, loadNoteRecord, type NoteRecord } from '../noteStore';
@@ -713,7 +714,16 @@ export class NoteContentService {
       history,
       files,
       { id, pluginId, fingerprint, result },
-      signal
+      signal,
+      files.length
+        ? {
+            action: action === 'update' ? 'record' : action,
+            batchId: batch.id,
+            label: batch.label,
+            operationId: id,
+            pluginId,
+          }
+        : undefined
     );
     return result;
   }
@@ -721,7 +731,8 @@ export class NoteContentService {
     history: History,
     files: NoteFileChange[],
     receipt: Receipt,
-    signal: AbortSignal
+    signal: AbortSignal,
+    hostHistory?: PluginContentHistoryEvent
   ): Promise<void> {
     const { id, pluginId, fingerprint, result } = receipt;
     history.operations.push({ id, pluginId, fingerprint, result });
@@ -734,7 +745,7 @@ export class NoteContentService {
     }
     signal.throwIfAborted();
     try {
-      await commitNoteFiles(this.workspace, files, historyText);
+      await commitNoteFiles(this.workspace, files, historyText, hostHistory);
     } catch (error) {
       if (
         (await readOptionalText(join(this.workspace, NOTE_INTENT_PATH))) !==
@@ -862,7 +873,14 @@ export class NoteContentService {
       history,
       files,
       { id, pluginId, fingerprint, result },
-      signal
+      signal,
+      {
+        action: notes ? 'record' : (action as 'redo' | 'undo'),
+        batchId: batch.id,
+        label: batch.label,
+        operationId: id,
+        pluginId,
+      }
     );
     return result;
   }

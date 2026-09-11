@@ -17,7 +17,6 @@ import type {
   UpdateCheckResult,
   WorkspaceInfo,
 } from '@/settingsClient';
-import type { ContentChangedEvent } from '../../../packages/plugin-sdk';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
 import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
@@ -25,6 +24,7 @@ import type {
   ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
+import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
@@ -84,7 +84,7 @@ async function initElectrobun() {
               })
             );
           },
-          pluginContentChanged: (event: ContentChangedEvent) => {
+          pluginContentChanged: (event: HostContentChangedEvent) => {
             globalThis.dispatchEvent(
               new CustomEvent('plugin-content-changed', { detail: event })
             );

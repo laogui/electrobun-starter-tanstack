@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { subscribeNoteMetadataChanges } from '@/lib/noteMetadataProjection';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import { connectPluginHostEvents } from './hostEvents';
 import type { PluginRuntime } from './PluginRuntime';
 
@@ -54,6 +55,46 @@ beforeEach(() => {
   ];
 });
 afterEach(() => listeners.clear());
+
+it('consumes private history metadata without exposing it to plugins', () => {
+  const emitHostEvent = vi.fn();
+  const runtime = {
+    getSnapshot: () => ({ workspaceId: 'workspace-a' }),
+    subscribe: () => () => {},
+    updateSelection: vi.fn(),
+    emitHostEvent,
+  } as unknown as PluginRuntime;
+  const disconnect = connectPluginHostEvents(runtime);
+  emitHostEvent.mockClear();
+  window.dispatchEvent(
+    new CustomEvent('plugin-content-changed', {
+      detail: {
+        workspaceId: 'workspace-a',
+        kind: 'note',
+        ids: ['note-a'],
+        operation: 'upsert',
+        hostHistory: {
+          action: 'record',
+          batchId: 'batch-a',
+          label: 'Rename notes',
+          operationId: 'batch-a',
+          pluginId: 'example.notes',
+        },
+      },
+    })
+  );
+
+  expect(unifiedUndoHistory.getSnapshot().past).toMatchObject([
+    { kind: 'plugin-note', batchId: 'batch-a' },
+  ]);
+  expect(emitHostEvent).toHaveBeenCalledWith('content.changed', {
+    workspaceId: 'workspace-a',
+    kind: 'note',
+    ids: ['note-a'],
+    operation: 'upsert',
+  });
+  disconnect();
+});
 
 it('forwards valid pushed content events, emits selection membership changes, and disconnects', () => {
   const emitHostEvent = vi.fn();
@@ -216,6 +257,17 @@ it('rejects malformed metadata rather than trusting a pushed DOM payload', () =>
         operation: 'upsert',
         ids: ['note-a'],
         noteChanges: [{ id: 'note-a', before: null }],
+      },
+    })
+  );
+  window.dispatchEvent(
+    new CustomEvent('plugin-content-changed', {
+      detail: {
+        workspaceId: 'a',
+        kind: 'note',
+        operation: 'upsert',
+        ids: ['note-a'],
+        hostHistory: { action: 'record', pluginId: 'example.notes' },
       },
     })
   );

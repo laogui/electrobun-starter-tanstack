@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import type { ContentChangedEvent } from '../../../packages/plugin-sdk';
+import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 
-const listeners = new Map<string, Set<(event: ContentChangedEvent) => void>>();
+const listeners = new Map<
+  string,
+  Set<(event: HostContentChangedEvent) => void>
+>();
 
 export function pluginWorkspaceId(workspacePath: string): string {
   return createHash('sha256').update(resolve(workspacePath)).digest('hex');
@@ -10,7 +13,7 @@ export function pluginWorkspaceId(workspacePath: string): string {
 
 export function subscribeContentChanges(
   workspacePath: string,
-  listener: (event: ContentChangedEvent) => void
+  listener: (event: HostContentChangedEvent) => void
 ): () => void {
   const workspaceId = pluginWorkspaceId(workspacePath);
   const subscribers = listeners.get(workspaceId) ?? new Set();
@@ -26,7 +29,7 @@ export function subscribeContentChanges(
 
 export function notifyContentChanged(
   workspacePath: string,
-  change: Omit<ContentChangedEvent, 'workspaceId'>
+  change: Omit<HostContentChangedEvent, 'workspaceId'>
 ): void {
   const workspaceId = pluginWorkspaceId(workspacePath);
   for (const listener of listeners.get(workspaceId) ?? []) {

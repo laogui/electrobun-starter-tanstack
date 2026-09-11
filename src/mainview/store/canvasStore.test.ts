@@ -16,6 +16,7 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasNodeRegistry';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import {
   resetViewportPersistSuppression,
   suppressViewportPersist,
@@ -161,6 +162,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetStore();
+  unifiedUndoHistory.reset();
   resetViewportPersistSuppression();
   vi.unstubAllGlobals();
   rpcDeleteNoteMock.mockClear();
@@ -889,6 +891,22 @@ describe('canvasStore — clipboard', () => {
 });
 
 describe('canvasStore — undo/redo', () => {
+  it('registers applied snapshots and reconciles direct source undo', () => {
+    unifiedUndoHistory.setContext('workspace-a', 'default');
+    useCanvasStore.setState({ nodes: [makeNode('a')], edges: [] });
+    useCanvasStore.getState().saveSnapshot();
+    useCanvasStore.getState().setNodes([makeNode('a'), makeNode('b')]);
+
+    expect(unifiedUndoHistory.getSnapshot().past).toMatchObject([
+      { kind: 'canvas', viewId: 'default' },
+    ]);
+    expect(useCanvasStore.getState().undo()).toBe(true);
+    expect(unifiedUndoHistory.getSnapshot()).toMatchObject({
+      past: [],
+      future: [{ kind: 'canvas' }],
+    });
+  });
+
   it('undo restores the previous state', () => {
     useCanvasStore.setState({ nodes: [makeNode('a')], edges: [] });
     useCanvasStore.getState().saveSnapshot();

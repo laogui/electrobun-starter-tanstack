@@ -166,6 +166,8 @@
   "toast_nodes_deleted": "{count} cards deleted",
   "toast_edge_deleted": "Connection deleted",
   "toast_undo": "Undo",
+  "toast_undo_failed": "Could not undo the latest change",
+  "toast_redo_failed": "Could not redo the latest change",
   "toast_markdown_exported": "Exported as Markdown",
   "toast_markdown_exported_count": "Exported {count} notes as Markdown",
   "toast_markdown_copied": "Copied as Markdown",

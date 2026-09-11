@@ -7,7 +7,6 @@ import {
   Updater,
   Utils,
 } from 'electrobun/bun';
-import type { ContentChangedEvent } from '../../packages/plugin-sdk';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../shared/ai/types';
 import type { ExtensionEnablementFile } from '../shared/extensions/enablement';
 import type {
@@ -16,6 +15,7 @@ import type {
 } from '../shared/extensions/instance';
 import type { ExtensionPresentation } from '../shared/extensions/presentation';
 import { collectExtensionInstanceIds } from '../shared/extensions/refs';
+import type { HostContentChangedEvent } from '../shared/plugins/contentHistory';
 import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
@@ -1259,7 +1259,7 @@ interface CanvasRPC {
     messages: {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
-      pluginContentChanged: ContentChangedEvent;
+      pluginContentChanged: HostContentChangedEvent;
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;

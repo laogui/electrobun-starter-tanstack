@@ -166,6 +166,8 @@
   "toast_nodes_deleted": "已删除 {count} 张卡片",
   "toast_edge_deleted": "连线已删除",
   "toast_undo": "撤销",
+  "toast_undo_failed": "无法撤销最近的更改",
+  "toast_redo_failed": "无法重做最近的更改",
   "toast_markdown_exported": "已导出为 Markdown",
   "toast_markdown_exported_count": "已导出 {count} 篇笔记为 Markdown",
   "toast_markdown_copied": "已复制为 Markdown",

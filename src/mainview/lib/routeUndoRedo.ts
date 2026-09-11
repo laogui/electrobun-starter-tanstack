@@ -1,6 +1,10 @@
+import { toast } from 'sonner';
+import { createPluginContent } from '@/plugins/runtime/content';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
+import * as m from '../../paraglide/messages.js';
+import { unifiedUndoHistory } from './unifiedUndoHistory';
 
 function isEditingElement(element: Element | null): boolean {
   if (typeof HTMLElement === 'undefined' || !element) {
@@ -28,6 +32,30 @@ function focusedExtensionInstanceId(
       ? focused.data.instanceId
       : null)
   );
+}
+
+function routeUnifiedHistory(kind: 'redo' | 'undo'): void {
+  unifiedUndoHistory
+    .perform(kind, {
+      canvas: (action) => useCanvasStore.getState()[action](),
+      plugin: async (entry, action, operationId) => {
+        const content = createPluginContent({
+          pluginId: entry.pluginId,
+          workspaceId: entry.workspaceId,
+          signal: new AbortController().signal,
+        });
+        await content[action](entry.batchId, { operationId });
+      },
+    })
+    .catch((error) => {
+      console.error(
+        `[history] ${kind === 'undo' ? 'Undo' : 'Redo'} failed:`,
+        error
+      );
+      toast.error(
+        kind === 'undo' ? m.toast_undo_failed() : m.toast_redo_failed()
+      );
+    });
 }
 
 /**
@@ -76,10 +104,6 @@ export function routeUndoRedo(
     return true;
   }
 
-  if (kind === 'redo') {
-    useCanvasStore.getState().redo();
-  } else {
-    useCanvasStore.getState().undo();
-  }
+  routeUnifiedHistory(kind);
   return true;
 }

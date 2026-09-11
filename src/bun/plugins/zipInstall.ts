@@ -36,8 +36,33 @@ export class PluginZipError extends Error {
 interface ZipEntry {
   compressed: Uint8Array;
   compression: number;
+  crc32: number;
   name: string;
   uncompressedSize: number;
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      // biome-ignore lint/suspicious/noBitwiseOperators: CRC-32 polynomial division.
+      value = (value & 1) === 1 ? 0xed_b8_83_20 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value;
+  }
+  return table;
+})();
+
+/** CRC-32/ISO-HDLC, the checksum zip stores in its headers. */
+export function crc32(bytes: Uint8Array): number {
+  let crc = 0xff_ff_ff_ff;
+  for (const byte of bytes) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: CRC-32 polynomial division.
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  }
+  // biome-ignore lint/suspicious/noBitwiseOperators: final XOR-out, coerced unsigned.
+  return (crc ^ 0xff_ff_ff_ff) >>> 0;
 }
 
 function readU16(bytes: Uint8Array, offset: number): number {
@@ -151,6 +176,7 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
     }
     const flags = readU16(bytes, cursor + 8);
     const compression = readU16(bytes, cursor + 10);
+    const declaredCrc = readU32(bytes, cursor + 16);
     const compressedSize = readU32(bytes, cursor + 20);
     const uncompressedSize = readU32(bytes, cursor + 24);
     const nameLength = readU16(bytes, cursor + 28);
@@ -191,6 +217,15 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
         `zip local header missing: ${rawName}`
       );
     }
+    if (
+      readU16(bytes, localOffset + 8) !== compression ||
+      readU32(bytes, localOffset + 18) !== compressedSize
+    ) {
+      throw new PluginZipError(
+        'invalid-zip',
+        `zip local and central headers disagree: ${rawName}`
+      );
+    }
     const localNameLength = readU16(bytes, localOffset + 26);
     const localExtraLength = readU16(bytes, localOffset + 28);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
@@ -204,6 +239,7 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
     entries.push({
       name: rawName,
       compression,
+      crc32: declaredCrc,
       uncompressedSize,
       compressed: bytes.subarray(dataStart, dataEnd),
     });
@@ -211,11 +247,23 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
   return entries;
 }
 
-function inflateEntry(entry: ZipEntry): Uint8Array {
-  if (entry.uncompressedSize > PLUGIN_ZIP_MAX_UNCOMPRESSED) {
+function isOutputTooLarge(error: unknown): boolean {
+  return (
+    error instanceof RangeError ||
+    (error as { code?: string } | null)?.code === 'ERR_BUFFER_TOO_LARGE'
+  );
+}
+
+/**
+ * `remainingBudget` is the number of bytes this entry may still produce across
+ * the whole archive. It bounds the decompressor itself, so a header that
+ * under-declares its output cannot make us materialize an unbounded buffer.
+ */
+function inflateEntry(entry: ZipEntry, remainingBudget: number): Uint8Array {
+  if (remainingBudget <= 0 || entry.uncompressedSize > remainingBudget) {
     throw new PluginZipError(
       'resource-limit',
-      `zip entry exceeds ${PLUGIN_ZIP_MAX_UNCOMPRESSED} bytes: ${entry.name}`
+      `zip uncompressed size exceeds ${PLUGIN_ZIP_MAX_UNCOMPRESSED} bytes`
     );
   }
   if (
@@ -236,22 +284,42 @@ function inflateEntry(entry: ZipEntry): Uint8Array {
     }
     return entry.compressed;
   }
+  let inflated: Uint8Array;
   try {
-    const inflated = Uint8Array.from(inflateRawSync(entry.compressed));
-    if (inflated.length !== entry.uncompressedSize) {
-      throw new PluginZipError(
-        'invalid-zip',
-        `deflate size mismatch: ${entry.name}`
-      );
-    }
-    return inflated;
+    inflated = Uint8Array.from(
+      inflateRawSync(entry.compressed, {
+        maxOutputLength: Math.max(
+          1,
+          Math.min(remainingBudget, entry.uncompressedSize)
+        ),
+      })
+    );
   } catch (error) {
-    if (error instanceof PluginZipError) {
-      throw error;
+    if (isOutputTooLarge(error)) {
+      throw new PluginZipError(
+        'resource-limit',
+        `zip entry inflates beyond its remaining budget: ${entry.name}`
+      );
     }
     throw new PluginZipError(
       'invalid-zip',
       `zip entry could not be inflated: ${entry.name}`
+    );
+  }
+  if (inflated.length !== entry.uncompressedSize) {
+    throw new PluginZipError(
+      'invalid-zip',
+      `deflate size mismatch: ${entry.name}`
+    );
+  }
+  return inflated;
+}
+
+function assertEntryChecksum(entry: ZipEntry, data: Uint8Array): void {
+  if (crc32(data) !== entry.crc32) {
+    throw new PluginZipError(
+      'invalid-zip',
+      `zip entry checksum mismatch: ${entry.name}`
     );
   }
 }
@@ -282,14 +350,18 @@ export async function unpackPluginZip(
   const written: string[] = [];
   for (const entry of entries) {
     const relative = assertSafeZipPath(entry.name);
-    uncompressedTotal += entry.uncompressedSize;
-    if (uncompressedTotal > PLUGIN_ZIP_MAX_UNCOMPRESSED) {
+    if (written.includes(relative)) {
       throw new PluginZipError(
-        'resource-limit',
-        `zip uncompressed size exceeds ${PLUGIN_ZIP_MAX_UNCOMPRESSED} bytes`
+        'invalid-zip',
+        `zip contains duplicate entry path: ${relative}`
       );
     }
-    const data = inflateEntry(entry);
+    const data = inflateEntry(
+      entry,
+      PLUGIN_ZIP_MAX_UNCOMPRESSED - uncompressedTotal
+    );
+    assertEntryChecksum(entry, data);
+    uncompressedTotal += data.length;
     await writeExtractedFile(destDir, relative, data);
     written.push(relative);
   }

@@ -4,7 +4,7 @@
 >
 > 创建日期：2026-08-19
 >
-> 修订日期：2026-09-07
+> 修订日期：2026-09-11
 >
 > 目标版本：当前开发分支 `feat/canvas-extension-platform`
 >
@@ -28,6 +28,16 @@ v2 相对 v1 草案的主要变化：
 10. **Scheduler 事件投递语义定义**（§12.3）：持久化、重启恢复、过期任务合并触发。
 11. **性能预算加入冷启动基准**；工作量估算单列测试迁移成本。
 12. **Canvas Export v2 的 `requiredExtensions` 简化为 ID 列表**，删除无处解析的 `versionRange`。
+
+2026-09-11 修订（同步 [插件系统整改计划](./plugin-system-hardening.md) H1/H4/H5 的落地结果）：
+
+1. **Scheduler 投递模型改写**（§12.3）：投递由宿主驱动、不等 Surface 挂载；通知改由 Canvas Type 在 `onTaskFired` 里发出，宿主不代发；新增 ack 结算机制作为 at-least-once 的实现基础。原文"触发时由宿主显示系统通知；Surface 在下次挂载时收到事件"的描述作废。
+2. **`BuiltinCanvasType` 新增 `onTaskFired`**（§6）：调度回调挂在类型上而非 Surface 上。
+3. **RPC 清单补齐**（§17.4）：`extensionScheduler.cancel` 带 `instanceId`，新增 `extensionScheduler.ack`，并单列宿主 → renderer 的 `extensionTaskFired` 消息。
+4. **禁用语义澄清**（§8.3）：禁用类型的已排期任务是"抑制并结算"而非"暂停"。原文措辞含糊，且实现一度完全没有检查 enablement（H1 引入的回归，已随本次修订修复）。
+5. **`extension-tasks.json` 进入文件布局与损坏策略**（§7.3）：损坏时先另存 `.corrupt-*` 备份再重建，备份没落盘就不覆盖原文件。
+6. **`expectedRevision` 由约定变成强制**（§7.4、§13.3）：renderer 侧 compare-and-set，冲突抛 `ExtensionRevisionConflictError` 并附带当前快照。
+7. **Phase 4 验收更正**（§21）：§12.3 语义当初被记为已交付，实际到 2026-09-11 才落地，原因与教训记在该处。
 
 2026-09-07 gap-closure 收尾修订：
 
@@ -228,6 +238,15 @@ interface BuiltinCanvasType<TState> {
   PreviewSurface: ComponentType<PreviewProps<TState>>;
 
   /**
+   * 该实例的调度任务到期时由宿主调用（§12.3）。声明在类型上而不是 Surface 上，
+   * 这样没有任何组件挂载时任务也能触发——否则持久化调度就没有意义。
+   */
+  onTaskFired?(
+    event: ScheduledTaskFiredEvent,
+    context: { host: GhostBoardHostAPI; state: TState }
+  ): Promise<void> | void;
+
+  /**
    * 声明该类型使用的宿主能力，仅用于审计和 RFC-2 前向兼容，
    * 本阶段不做运行时授权。
    */
@@ -314,19 +333,22 @@ interface ExtensionPresentation {
 ```text
 .ghostboard/
   extensions.json            # 工作区级 per-type 启用状态
+  extension-tasks.json       # 宿主调度任务（§12.3）
   extension-instances/
     extinst_abc123.json
 ```
 
 - 现有通用附件继续保存在 `attachments/`；实例只保存宿主生成的 asset handle，不保存绝对路径。
 - `extensions.json` 结构：`{ "disabledCanvasTypes": ["ghostboard.media/recording"] }`，默认全部启用。
+- `extension-tasks.json` 的任务按 `(instanceId, id)` 唯一；文件不存在视为"还没排过任务"，JSON 或 schema 损坏则另行处理（见下）。
+- **损坏处理**：以上任一 JSON 损坏时，宿主不静默当作空文件——原始字节先另存为同目录的 `<name>.corrupt-<timestamp>` 兄弟文件，之后才允许重建，且备份没落盘就绝不覆盖原文件。这条 fail-closed 策略对 `extension-tasks.json` 同样适用，避免一次解析失败就把用户所有提醒清空。
 - 迁移第一轮保持现有附件路径不变，只迁移节点引用和 metadata 所属。
 
 ### 7.4 并发与写入
 
 - 每个实例维护单调递增 `revision`。
-- 更新使用 expected revision 或宿主内的串行写链，避免覆盖较新的状态。
-- 文件写入必须原子化（复用现有 atomic write）。
+- 更新使用 expected revision **和**宿主内的串行写链，避免覆盖较新的状态。`ExtensionStateUpdate.expectedRevision` 在 renderer 侧就地校验（§13.3）：与当前 `revision` 不符时整笔写入被丢弃并抛 `ExtensionRevisionConflictError`，错误对象带上当前快照，调用方可以据此重试或放弃。省略 `expectedRevision` 表示"无条件写入"，仍然只有串行写链兜底。
+- 文件写入必须原子化（复用现有 atomic write），并按路径串行——同一文件的并发读改写排队执行，避免后写覆盖先写。
 - 高频临时更新使用 `history: 'ephemeral'`，例如计时器每秒刷新，只更新内存，不写盘、不进 Undo 栈、不重算 presentation。
 - 业务状态只在语义变化时写盘；运行中的计时显示由 `startedAt` / `durationMs` 时间戳计算。
 - 单个实例 JSON 默认限制 1 MiB，大数据必须使用 Asset API。
@@ -371,7 +393,7 @@ type ExtensionAvailability =
 按 Canvas Type 禁用（不是按 Pack）：
 
 - 从创建菜单中隐藏。
-- 停止该类型新的网络、通知和调度请求；暂停其宿主调度任务。
+- 停止该类型新的网络、通知和调度请求。已排期的宿主任务到期时被抑制而非暂停：不通知、不写 state，但照常 ack 结算（理由与代价见 §12.3）。
 - 已有节点原地保留，显示 PreviewSurface（只读）或 Presentation Card fallback。
 - 节点仍可移动、缩放、复制、删除和导出。
 - presentation 和原始 state 保留。
@@ -552,10 +574,12 @@ interface GhostBoardHostAPI {
 
 Reminder 等类型不能依赖 React 组件中的长时间 `setTimeout`。Scheduler 由 Bun 宿主维护，语义定义如下：
 
-- 任务持久化在工作区（随实例所属工作区走），应用重启后恢复。
+- 任务持久化在工作区 `.ghostboard/extension-tasks.json`（随实例所属工作区走），应用重启后恢复。
 - 支持指定时间触发和重复规则，payload 大小受限。
 - **投递语义：at-least-once**。应用关闭期间到期的任务，在下次启动时立即触发；同一任务的多次错过合并为一次触发（例如错过 3 次的重复提醒只通知一次，并注明最近到期时间）。
-- 触发时由宿主显示系统通知；对应实例的 Surface 在下次挂载时收到合并后的最新事件，不重放历史队列。
+- **投递由宿主驱动，不等 Surface 挂载。** 宿主定时 tick 出到期任务，通过 `extensionTaskFired` 消息把一批 `ExtensionTaskDelivery` 推给 renderer；renderer 的 task dispatcher 按需加载实例记录（Surface 没挂载就走 `loadMany` 补齐），然后调用该 Canvas Type 的 `onTaskFired`。**通知由 Canvas Type 在 handler 里通过 `host.notifications.show()` 发出，宿主不代发**——宿主不理解业务语义，无法决定通知文案。
+- **ack 后才结算。** 任务在投递后仍留在盘上，renderer 处理完回 `extensionScheduler.ack(deliveryId)`，宿主才把一次性任务删除、把重复任务推进到下一周期。handler 抛错或 Canvas Type 未注册时同样 ack（否则会永久重投）；未 ack 的任务随后续每次 tick 重发，这正是 at-least-once 的实现方式。
+- **禁用类型的任务被抑制但照常结算**：dispatcher 在调用 `onTaskFired` 前检查工作区 enablement，禁用时不通知、不写 state，但仍然 ack。因此一次性任务在禁用期间被消费掉，重复任务静默推进到下一周期，不会在盘上堆积或触发重投风暴。
 - 任务数量按 Canvas Type 和工作区设上限。
 - 不允许任意常驻后台 JavaScript。
 
@@ -598,7 +622,7 @@ interface ExtensionStateUpdate {
 }
 ```
 
-`ephemeral` 用于运行时间显示等不应占据 Undo 栈、不应触发写盘的更新。
+`ephemeral` 用于运行时间显示等不应占据 Undo 栈、不应触发写盘的更新。`expectedRevision` 的 compare-and-set 语义见 §7.4；后台 `onTaskFired` handler 与用户正在编辑的 Surface 可能并发写同一实例，这是它真正开始起作用的场景。
 
 ### 13.4 删除与垃圾回收
 
@@ -790,9 +814,18 @@ extensionInstance.clone
 extensionInstance.exportRaw
 
 extensionScheduler.schedule
-extensionScheduler.cancel
+extensionScheduler.cancel      // (instanceId, taskId) —— 任务按 (instanceId, id) 唯一
 extensionScheduler.list
+extensionScheduler.ack         // (deliveryId) —— 见 §12.3 的 at-least-once 结算
 ```
+
+宿主 → renderer 的单向消息（不是请求-响应，因此不在上面的 RPC 列表里）：
+
+```ts
+extensionTaskFired  // payload: ExtensionTaskDelivery，见 src/shared/extensions/scheduling.ts
+```
+
+注意 `extensionScheduler.cancel` 的 RPC 签名带 `instanceId`，而 §12.1 里 Canvas Type 面向的 `host.scheduler.cancel(taskId)` 不带——owner 由 Host API 按绑定的实例注入，扩展无法取消别人的任务。
 
 旧 `createWidget/saveWidget/cloneWidget/deleteWidget` 在迁移窗口内通过 adapter 调用新服务。
 
@@ -997,6 +1030,8 @@ extensionScheduler.list
 - Widget v1 adapter 和迁移器。
 - Scheduler/Notifications 宿主能力（含 §12.3 语义）。
 - 删除渲染端固定 `WidgetKind` 分支。
+
+> **验收更正（2026-09-11）**：Phase 4 当初按"§12.3 语义已交付"通过验收，但插件系统整改复核发现并非如此——`tickExtensionTasks()` 只在 `loadCanvas` 时调用一次且返回值被丢弃，到期任务从不投递；Reminder 实际靠 mounted Surface 的 render effect 触发，应用没开着或节点不在当前画布上就不响。§12.3 的投递语义在 2026-09-11 的 H1 整改中才真正落地（宿主驱动 tick + `extensionTaskFired` + ack 结算 + `onTaskFired`）。教训是"宿主能力已接入"不等于"语义已生效"，此类交付物的退出条件应当要求一条端到端的重启恢复测试，而不是接口存在即算通过。
 
 退出条件：
 

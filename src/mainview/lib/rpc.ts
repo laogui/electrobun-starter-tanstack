@@ -362,6 +362,7 @@ export async function rpcLoadExtensionInstances(
 }
 
 export async function rpcUpdateExtensionInstance(input: {
+  dataVersion?: number;
   expectedRevision?: number;
   instanceId: string;
   presentation: ExtensionPresentation;

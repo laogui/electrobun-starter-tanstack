@@ -282,7 +282,7 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4, note metadata transactions, note selection and the selection React hooks above. Rich-document editing, non-note content snapshots, custom cards, unified undo history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 now includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, and the custom canvas types described below. Rich-document authoring APIs, a merge/discard conflict UI, one ordered native/plugin history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
@@ -339,3 +339,55 @@ The original creation batch can be passed to `undo`. A successful creation undo 
 Creation, its history update and recovery intent share the note workspace queue with editor and canvas saves. The first creation upgrades history to schema v3; older hosts reject it instead of interpreting creation as an ordinary update. Creation/upsert and creation-undo/delete notifications are emitted only after the transaction finishes or recovery completes. The normal 1 MiB request, 8 MiB history and 32 MiB intent limits still apply. History is not pruned automatically.
 
 The live-reference check is a reliability guard for the official SDK path. It does not provide a security boundary against high-trust plugin code, and it does not promise general backlink semantics. Rich-text creation, caller-specified IDs, attachments, canvas placement and a unified native/plugin undo timeline remain outside this slice.
+
+## T2 seventh slice: custom canvas types
+
+`app.canvas.registerType(definition)` contributes a React card type for the lifetime of one plugin activation. Authors provide a plugin-local kebab-case `id`; the host derives and persists the canonical `${pluginId}/${id}` value, so a plugin cannot claim another namespace. Registration is staged with the candidate activation: failed imports or setup keep the exact old card implementation, and a successful reload replaces all types from that plugin as one owner generation.
+
+```js
+import { definePlugin } from '@ghostboard/sdk';
+import { createElement } from 'react';
+
+function ScoreCard({ context, state, updateState }) {
+  return createElement(
+    'button',
+    {
+      disabled: context.readOnly,
+      onClick: () => updateState({ ...state, score: state.score + 1 }),
+    },
+    `${state.label}: ${state.score}`,
+  );
+}
+
+export default definePlugin({
+  setup(app) {
+    app.canvas.registerType({
+      id: 'score-card',
+      title: 'Score card',
+      dataVersion: 1,
+      createInitialState: () => ({ label: 'Release', score: 0 }),
+      validateState: (value) =>
+        value !== null && typeof value === 'object' &&
+        typeof value.label === 'string' && typeof value.score === 'number',
+      summarize: (state) => ({
+        title: `${state.label}: ${state.score}`,
+        plainText: `${state.label} score ${state.score}`,
+      }),
+      component: ScoreCard,
+      surface: {
+        defaultSize: { width: 280, height: 220 },
+        minSize: { width: 200, height: 160 },
+        openBehavior: 'detail',
+      },
+    });
+  },
+});
+```
+
+State must be finite JSON data (no functions, dates, maps, cycles, `undefined` or prototype-bearing instances) and the persisted instance envelope is limited to 1 MiB. `createInitialState` is validated during candidate setup. `updateState(nextState, { history: 'record' })` is the default and participates in the focused-card undo/redo path; `ephemeral` updates the live state without recording or scheduling a durable write. Each recorded update rebuilds the plain-text `summarize` projection, increments the persisted revision and emits the existing `content.changed` extension event.
+
+The host sanitizes `title`, `subtitle`, `plainText`, `accessibilityLabel` and `accentColor` from `summarize`. This projection is the searchable, accessible and exportable fallback; it is not arbitrary HTML. Disabling or removing the plugin unregisters executable React code but retains the opaque state, last saved summary and canvas placement. Re-enabling a compatible plugin renders the same instance again.
+
+When `dataVersion` increases, provide synchronous `migrateState(oldState, fromVersion)`. Migration runs lazily when a referenced card is opened with the new type, validates the returned JSON state, rebuilds its summary and writes it with the old revision plus the new monotonic data version. A concurrent edit, invalid result, missing migration, newer on-disk version or failed write leaves the original state/summary intact and shows the compatible-migration fallback. Unvisited canvases are not eagerly migrated; they migrate when loaded. Plugin downgrade is never written over newer state.
+
+This slice supports immediate create-menu cards, shared React rendering, an optional preview component, bounded sizing/resizing and optional detail opening. It does not expose host UI components, arbitrary create flows, plugin menu contributions, rich editor internals, programmatic canvas placement, background migration of unopened canvases, or a single ordered history spanning note transactions and canvas layout.

@@ -180,6 +180,7 @@ export async function updateExtensionInstance(
   wsPath: string,
   input: {
     appVersion: string;
+    dataVersion?: number;
     expectedRevision?: number;
     instanceId: string;
     presentation: ExtensionPresentation;
@@ -196,11 +197,19 @@ export async function updateExtensionInstance(
   ) {
     throw new Error('revision-conflict');
   }
+  if (
+    input.dataVersion !== undefined &&
+    (!Number.isSafeInteger(input.dataVersion) ||
+      input.dataVersion < current.record.dataVersion)
+  ) {
+    throw new Error('invalid-data-version');
+  }
   const next: ParsedExtensionInstance = {
     extras: current.extras,
     record: {
       ...current.record,
       appVersion: input.appVersion,
+      dataVersion: input.dataVersion ?? current.record.dataVersion,
       revision: current.record.revision + 1,
       updatedAt: new Date().toISOString(),
       state: input.state,

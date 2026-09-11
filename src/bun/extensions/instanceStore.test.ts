@@ -136,6 +136,45 @@ describe('extension instance store', () => {
     });
   });
 
+  it('persists monotonic data-version migrations and rejects downgrades', async () => {
+    const created = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'example.cards/counter',
+      dataVersion: 1,
+      state: { count: 3 },
+      presentation: { title: 'Legacy counter' },
+    });
+    const migrated = await updateExtensionInstance(wsPath, {
+      appVersion: '1.1.0',
+      dataVersion: 2,
+      expectedRevision: 1,
+      instanceId: created.id,
+      state: { count: 3, label: 'Migrated' },
+      presentation: { title: 'Migrated', plainText: 'Count 3' },
+    });
+    expect(migrated).toMatchObject({
+      record: {
+        canvasTypeId: 'example.cards/counter',
+        dataVersion: 2,
+        revision: 2,
+        state: { count: 3, label: 'Migrated' },
+      },
+    });
+    await expect(
+      updateExtensionInstance(wsPath, {
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        expectedRevision: 2,
+        instanceId: created.id,
+        state: { count: 3 },
+        presentation: { title: 'Downgraded' },
+      })
+    ).rejects.toThrow('invalid-data-version');
+    expect(await loadExtensionInstance(wsPath, created.id)).toMatchObject({
+      record: { dataVersion: 2, revision: 2 },
+    });
+  });
+
   it('clones to a new id and reports missing files', async () => {
     const created = await createExtensionInstance(wsPath, {
       appVersion: '1.0.0',

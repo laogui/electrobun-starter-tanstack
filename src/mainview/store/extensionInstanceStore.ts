@@ -38,6 +38,7 @@ interface PendingSave {
 
 const pendingSaves = new Map<string, PendingSave>();
 const saveChains = new Map<string, Promise<void>>();
+const migrations = new Map<string, Promise<boolean>>();
 
 function scheduleSave(instanceId: string, save: () => Promise<void>): void {
   const existing = pendingSaves.get(instanceId);
@@ -74,6 +75,7 @@ export interface ExtensionInstanceStoreState {
     >,
     referencedIds?: Set<string>
   ) => void;
+  migrateInstance: (instanceId: string) => Promise<boolean>;
   records: Record<string, ExtensionInstanceRecord | ExtensionInstanceLoadError>;
   redoInstance: (instanceId: string) => void;
   saveNow: (instanceId: string) => Promise<void>;
@@ -138,6 +140,79 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         records: { ...s.records, [result.record.id]: result.record },
       }));
       return result.record;
+    },
+
+    migrateInstance: async (instanceId) => {
+      const existing = migrations.get(instanceId);
+      if (existing) {
+        return existing;
+      }
+      const migrate = async () => {
+        const current = get().records[instanceId];
+        if (!current || isExtensionInstanceLoadError(current)) {
+          return false;
+        }
+        const canvasType = canvasTypeRegistry.get(current.canvasTypeId);
+        if (!canvasType) {
+          return false;
+        }
+        if (
+          current.dataVersion === canvasType.dataVersion &&
+          canvasType.validateState(current.state)
+        ) {
+          return true;
+        }
+        if (current.dataVersion >= canvasType.dataVersion) {
+          return false;
+        }
+        try {
+          const state = canvasType.migrateState(current);
+          if (!canvasType.validateState(state)) {
+            throw new Error('Migrated extension state failed validation');
+          }
+          const presentation = canvasType.buildPresentation(state);
+          const result = await rpcUpdateExtensionInstance({
+            dataVersion: canvasType.dataVersion,
+            expectedRevision: current.revision,
+            instanceId,
+            presentation,
+            state,
+          });
+          if (!result.success) {
+            return false;
+          }
+          set((snapshot) => {
+            const latest = snapshot.records[instanceId];
+            if (
+              !latest ||
+              isExtensionInstanceLoadError(latest) ||
+              latest !== current
+            ) {
+              return snapshot;
+            }
+            return {
+              records: {
+                ...snapshot.records,
+                [instanceId]: result.record,
+              },
+            };
+          });
+          return true;
+        } catch (error) {
+          console.error(
+            `[extensionInstanceStore] Failed to migrate ${instanceId}:`,
+            error
+          );
+          return false;
+        }
+      };
+      const pending = migrate().finally(() => {
+        if (migrations.get(instanceId) === pending) {
+          migrations.delete(instanceId);
+        }
+      });
+      migrations.set(instanceId, pending);
+      return pending;
     },
 
     updateState: async (instanceId, request) => {

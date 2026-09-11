@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import {
   CHECKLIST_CANVAS_TYPE_ID,
@@ -11,6 +12,7 @@ import {
   type ExtensionInstanceLoadError,
   type ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
+import { counterCanvasType } from '../extensions/builtin/counter';
 
 const rpcMocks = vi.hoisted(() => ({
   clone: vi.fn(),
@@ -86,6 +88,7 @@ describe('extensionInstanceStore lifecycle', () => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     useExtensionInstanceStore.setState({ records: {}, history: {} });
+    canvasTypeRegistry.clearOwner('example.cards', 1);
   });
 
   it('keeps per-instance state history isolated from the canvas-facing records', async () => {
@@ -241,6 +244,104 @@ describe('extensionInstanceStore lifecycle', () => {
     });
     expect(clone.state).toEqual(source.state);
     expect(clone.state).not.toBe(source.state);
+  });
+
+  it('persists a plugin state migration with the old revision and new data version', async () => {
+    const canvasType = {
+      ...counterCanvasType,
+      id: 'example.cards/counter',
+      dataVersion: 2,
+      validateState: (
+        state: unknown
+      ): state is { count: number; label: string } =>
+        !!state &&
+        typeof state === 'object' &&
+        typeof (state as { count?: unknown }).count === 'number' &&
+        typeof (state as { label?: unknown }).label === 'string',
+      migrateState: (record: ExtensionInstanceRecord) => ({
+        count: Number((record.state as { count?: unknown }).count ?? 0),
+        label: 'Migrated',
+      }),
+      buildPresentation: (state: { count: number; label: string }) => ({
+        title: state.label,
+        plainText: `Count ${state.count}`,
+      }),
+    };
+    canvasTypeRegistry.replaceOwner('example.cards', 1, [canvasType]);
+    const initial = makeRecord('extinst_migrate', {
+      canvasTypeId: canvasType.id,
+      dataVersion: 1,
+      state: { count: 4 },
+      presentation: { title: 'Legacy counter' },
+    });
+    const migrated: ExtensionInstanceRecord = {
+      ...initial,
+      dataVersion: 2,
+      revision: 2,
+      state: { count: 4, label: 'Migrated' },
+      presentation: { title: 'Migrated', plainText: 'Count 4' },
+    };
+    rpcMocks.update.mockResolvedValue({ success: true, record: migrated });
+    useExtensionInstanceStore.getState().hydrate({ [initial.id]: initial });
+
+    await expect(
+      useExtensionInstanceStore.getState().migrateInstance(initial.id)
+    ).resolves.toBe(true);
+    expect(rpcMocks.update).toHaveBeenCalledWith({
+      dataVersion: 2,
+      expectedRevision: 1,
+      instanceId: initial.id,
+      state: migrated.state,
+      presentation: migrated.presentation,
+    });
+    expect(useExtensionInstanceStore.getState().records[initial.id]).toEqual(
+      migrated
+    );
+  });
+
+  it('does not replace a newer local record when a migration response arrives late', async () => {
+    const canvasType = {
+      ...counterCanvasType,
+      id: 'example.cards/counter',
+      dataVersion: 2,
+      migrateState: () => ({ count: 1 }),
+    };
+    canvasTypeRegistry.replaceOwner('example.cards', 1, [canvasType]);
+    const initial = makeRecord('extinst_late_migrate', {
+      canvasTypeId: canvasType.id,
+      dataVersion: 1,
+      state: { count: 0 },
+    });
+    let resolveMigration!: (value: unknown) => void;
+    rpcMocks.update.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveMigration = resolve;
+        })
+    );
+    useExtensionInstanceStore.getState().hydrate({ [initial.id]: initial });
+    const pending = useExtensionInstanceStore
+      .getState()
+      .migrateInstance(initial.id);
+    await vi.waitFor(() => expect(rpcMocks.update).toHaveBeenCalledOnce());
+    const local = { ...initial, state: { count: 9 } };
+    useExtensionInstanceStore.setState((state) => ({
+      records: { ...state.records, [initial.id]: local },
+    }));
+    resolveMigration({
+      success: true,
+      record: {
+        ...initial,
+        dataVersion: 2,
+        revision: 2,
+        state: { count: 1 },
+      },
+    });
+
+    await expect(pending).resolves.toBe(true);
+    expect(useExtensionInstanceStore.getState().records[initial.id]).toBe(
+      local
+    );
   });
 
   it('passes expectedRevision on save and toasts when the write fails', async () => {

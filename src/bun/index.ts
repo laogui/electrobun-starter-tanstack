@@ -907,6 +907,7 @@ interface CanvasRPC {
       };
       extensionInstanceUpdate: {
         params: {
+          dataVersion?: number;
           expectedRevision?: number;
           instanceId: string;
           presentation: ExtensionPresentation;
@@ -1745,17 +1746,24 @@ async function main() {
               pluginWorkspaceId(wsPath),
               process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+          : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
             ? new T2ContentHostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                'selection'
+                process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                'canvas'
               )
-            : new PluginHostController(
-                pluginManagement,
-                pluginWorkspaceId(wsPath)
-              ),
+            : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+              ? new T2ContentHostController(
+                  pluginManagement,
+                  pluginWorkspaceId(wsPath),
+                  process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                  'selection'
+                )
+              : new PluginHostController(
+                  pluginManagement,
+                  pluginWorkspaceId(wsPath)
+                ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);
@@ -2537,6 +2545,7 @@ async function main() {
         }),
 
         extensionInstanceUpdate: async ({
+          dataVersion,
           expectedRevision,
           instanceId,
           presentation,
@@ -2546,6 +2555,7 @@ async function main() {
             const appVersion = (await getAppInfoData()).version;
             const updated = await updateExtensionInstance(wsPath, {
               appVersion,
+              ...(dataVersion !== undefined ? { dataVersion } : {}),
               expectedRevision,
               instanceId,
               presentation,

@@ -1,5 +1,5 @@
 import type { Node, NodeProps } from '@xyflow/react';
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
@@ -9,7 +9,7 @@ import type { ExtensionNodeData } from '../../shared/extensions/protocol';
 import { ExtensionFallback } from './ExtensionFallback';
 import { ExtensionHostShell } from './ExtensionHostShell';
 import { createExtensionHostApi } from './hostApi';
-import { canvasTypeRegistry } from './registry';
+import { canvasTypeRegistry, useCanvasTypeRegistryRevision } from './registry';
 
 type ExtensionFlowNode = Node<ExtensionNodeData, 'extension'>;
 
@@ -22,6 +22,7 @@ function ExtensionNodeComponent({
   id,
   selected,
 }: NodeProps<ExtensionFlowNode>) {
+  useCanvasTypeRegistryRevision();
   const canvasTypeId = data.canvasTypeId;
   const instanceId = data.instanceId;
   const record = useExtensionInstanceStore((s) => s.records[instanceId]);
@@ -48,10 +49,39 @@ function ExtensionNodeComponent({
   const minWidth = canvasType?.surface.minSize?.width ?? 160;
   const minHeight = canvasType?.surface.minSize?.height ?? 120;
   const corrupted = !record || isExtensionInstanceLoadError(record);
+  const compatible = Boolean(
+    !corrupted &&
+      canvasType &&
+      record.dataVersion === canvasType.dataVersion &&
+      canvasType.validateState(record.state)
+  );
+  const needsMigration = Boolean(
+    !corrupted &&
+      canvasType &&
+      availability === 'available' &&
+      record.dataVersion < canvasType.dataVersion
+  );
+
+  useEffect(() => {
+    if (needsMigration) {
+      useExtensionInstanceStore
+        .getState()
+        .migrateInstance(instanceId)
+        .catch(() => undefined);
+    }
+  }, [instanceId, needsMigration]);
 
   return (
     <ExtensionHostShell
-      availability={corrupted ? 'corrupted' : availability}
+      availability={
+        corrupted
+          ? 'corrupted'
+          : availability !== 'available'
+            ? availability
+            : canvasType && !compatible
+              ? 'incompatible'
+              : availability
+      }
       canvasTypeId={canvasTypeId}
       instanceId={instanceId}
       maxHeight={canvasType?.surface.maxSize?.height}
@@ -74,7 +104,7 @@ function ExtensionNodeComponent({
           message="This instance could not be loaded. The original file is kept."
           presentation={presentation}
         />
-      ) : canvasType && availability === 'available' ? (
+      ) : canvasType && compatible && availability === 'available' ? (
         <canvasType.CanvasSurface
           context={{
             width: 0,
@@ -87,11 +117,7 @@ function ExtensionNodeComponent({
           }}
           host={host}
           presentation={record.presentation}
-          state={
-            canvasType.validateState(record.state)
-              ? record.state
-              : canvasType.createInitialState()
-          }
+          state={record.state}
         />
       ) : null}
     </ExtensionHostShell>
@@ -101,6 +127,7 @@ function ExtensionNodeComponent({
 export default memo(ExtensionNodeComponent);
 
 export function ExtensionNodeReadOnly({ data }: { data: ExtensionNodeData }) {
+  useCanvasTypeRegistryRevision();
   const record = useExtensionInstanceStore((s) => s.records[data.instanceId]);
   const canvasType = canvasTypeRegistry.get(data.canvasTypeId);
   const locale = useAppSettingsStore((s) => s.locale);
@@ -109,6 +136,7 @@ export function ExtensionNodeReadOnly({ data }: { data: ExtensionNodeData }) {
     !record ||
     isExtensionInstanceLoadError(record) ||
     !canvasType ||
+    record.dataVersion !== canvasType.dataVersion ||
     !canvasType.validateState(record.state)
   ) {
     return (

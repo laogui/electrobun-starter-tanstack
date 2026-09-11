@@ -9,7 +9,11 @@ export function ExtensionFallback({
   onEnable,
   presentation,
 }: {
-  availability: ExtensionAvailability | 'crashed' | 'corrupted';
+  availability:
+    | ExtensionAvailability
+    | 'crashed'
+    | 'corrupted'
+    | 'incompatible';
   canvasTypeId: string;
   message: string;
   onEnable?: () => void;

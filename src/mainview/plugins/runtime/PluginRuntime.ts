@@ -1,4 +1,5 @@
 import type {
+  CanvasTypeDefinition,
   CommandDefinition,
   Disposer,
   PanelDefinition,
@@ -11,9 +12,12 @@ import type {
   PluginRuntimeDescriptor,
   PluginRuntimeSnapshot,
 } from '../../../shared/plugins/runtime';
+import { canvasTypeRegistry } from '../../extensions/registry';
+import type { AnyBuiltinCanvasType } from '../../extensions/types';
 import { ActivationServices } from './activationServices';
 import { createPluginContent } from './content';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
+import { adaptPluginCanvasType } from './pluginCanvasTypes';
 import {
   EMPTY_PLACEMENTS,
   PluginSelectionStore,
@@ -37,6 +41,7 @@ export interface RuntimeDiagnostic {
 }
 
 export interface RuntimeViewSnapshot {
+  canvasTypes: { id: string; pluginId: string; title: string }[];
   commands: {
     pluginId: string;
     id: string;
@@ -78,6 +83,7 @@ interface Activation {
   active: boolean;
   cancel: () => void;
   cancelled: Promise<void>;
+  canvasTypes: Map<string, AnyBuiltinCanvasType>;
   cleanups: Set<Disposer>;
   commands: Map<string, CommandRegistration>;
   controller: AbortController;
@@ -138,6 +144,7 @@ export class PluginRuntime {
   private snapshot: RuntimeViewSnapshot = {
     workspaceId: '',
     plugins: [],
+    canvasTypes: [],
     commands: [],
     panels: [],
     diagnostics: [],
@@ -195,6 +202,13 @@ export class PluginRuntime {
         development: descriptor.development,
         status,
       })),
+      canvasTypes: instances.flatMap((instance) =>
+        [...instance.canvasTypes.values()].map((definition) => ({
+          pluginId: instance.descriptor.pluginId,
+          id: definition.id,
+          title: definition.titleKey,
+        }))
+      ),
       commands: instances.flatMap((instance) =>
         [...instance.commands.values()].map(({ definition }) => ({
           pluginId: instance.descriptor.pluginId,
@@ -328,6 +342,7 @@ export class PluginRuntime {
       status: 'loading',
       generation,
       controller: new AbortController(),
+      canvasTypes: new Map(),
       commands: new Map(),
       panels: new Map(),
       openPanels: new Set(),
@@ -385,6 +400,9 @@ export class PluginRuntime {
       }
       const id = instance.descriptor.pluginId;
       const old = this.activations.get(id);
+      canvasTypeRegistry.replaceOwner(id, instance.generation, [
+        ...instance.canvasTypes.values(),
+      ]);
       if (old) {
         this.activations.delete(id);
         await this.retire(old);
@@ -514,6 +532,10 @@ export class PluginRuntime {
     instance.controller.abort();
     instance.commands.clear();
     instance.openPanels.clear();
+    canvasTypeRegistry.clearOwner(
+      instance.descriptor.pluginId,
+      instance.generation
+    );
     this.publish();
     for (const cleanup of [...instance.cleanups].reverse()) {
       await cleanup();
@@ -550,6 +572,29 @@ export class PluginRuntime {
     });
     instance.selection = selection;
     return Object.freeze({
+      canvas: {
+        registerType: <TState>(definition: CanvasTypeDefinition<TState>) => {
+          this.assertActive(instance);
+          const adapted = adaptPluginCanvasType(pluginId, definition);
+          if (instance.canvasTypes.has(adapted.id)) {
+            throw new Error(`Duplicate canvas type id: ${adapted.id}`);
+          }
+          instance.canvasTypes.set(adapted.id, adapted);
+          this.publish();
+          return this.track(instance, () => {
+            if (instance.canvasTypes.get(adapted.id) !== adapted) {
+              return;
+            }
+            instance.canvasTypes.delete(adapted.id);
+            if (this.activations.get(pluginId) === instance) {
+              canvasTypeRegistry.replaceOwner(pluginId, instance.generation, [
+                ...instance.canvasTypes.values(),
+              ]);
+            }
+            this.publish();
+          });
+        },
+      },
       content,
       selection,
       storage: {

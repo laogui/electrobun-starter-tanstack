@@ -4,9 +4,9 @@ export const EXTENSION_NODE_TYPE = 'extension' as const;
 
 export const INSTANCE_ID_PREFIX = 'extinst_';
 
-/** `ghostboard.<pack>/<typeId>` — pack and typeId are kebab-case. */
+/** `<pluginId>/<typeId>` — pluginId is dotted kebab-case; typeId is kebab-case. */
 export const CANVAS_TYPE_ID_RE =
-  /^(ghostboard\.[a-z][a-z0-9-]{0,31})\/([a-z][a-z0-9-]{0,63})$/;
+  /^([a-z][a-z0-9-]{0,31}(?:\.[a-z][a-z0-9-]{0,31})+)\/([a-z][a-z0-9-]{0,63})$/;
 
 export const INSTANCE_ID_RE = /^extinst_[A-Za-z0-9_-]+$/;
 

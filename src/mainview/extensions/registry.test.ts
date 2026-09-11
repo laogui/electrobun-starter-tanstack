@@ -34,6 +34,47 @@ describe('CanvasTypeRegistry', () => {
     expect(() => registry.register(counterCanvasType)).toThrow(DUPLICATE_ID_RE);
   });
 
+  it('replaces one plugin owner atomically and ignores stale-generation cleanup', () => {
+    const registry = createCanvasTypeRegistry();
+    const first = {
+      ...counterCanvasType,
+      id: 'example.cards/counter',
+      titleKey: 'First counter',
+    };
+    const second = {
+      ...first,
+      titleKey: 'Second counter',
+    };
+    const revisions: number[] = [];
+    const unsubscribe = registry.subscribe(() => {
+      revisions.push(registry.getRevision());
+    });
+
+    registry.replaceOwner('example.cards', 1, [first]);
+    expect(registry.get(first.id)).toBe(first);
+    registry.replaceOwner('example.cards', 2, [second]);
+    expect(registry.get(first.id)).toBe(second);
+    registry.clearOwner('example.cards', 1);
+    expect(registry.get(first.id)).toBe(second);
+    registry.clearOwner('example.cards', 2);
+    expect(registry.get(first.id)).toBeUndefined();
+    expect(revisions).toEqual([1, 2, 3]);
+    unsubscribe();
+  });
+
+  it('rejects plugin ownership collisions without disturbing published types', () => {
+    const registry = createCanvasTypeRegistry();
+    const first = { ...counterCanvasType, id: 'example.cards/counter' };
+    registry.replaceOwner('example.cards', 1, [first]);
+
+    expect(() =>
+      registry.replaceOwner('another.plugin', 1, [
+        { ...counterCanvasType, id: first.id },
+      ])
+    ).toThrow(DUPLICATE_ID_RE);
+    expect(registry.get(first.id)).toBe(first);
+  });
+
   it('does not mention checklist or image in its public surface', () => {
     const registry = createCanvasTypeRegistry();
     registry.register(counterCanvasType);

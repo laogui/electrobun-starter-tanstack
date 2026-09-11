@@ -28,6 +28,72 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+export interface CanvasTypePresentation {
+  accentColor?: string;
+  accessibilityLabel?: string;
+  plainText?: string;
+  subtitle?: string;
+  title: string;
+}
+
+export interface CanvasTypeRenderContext {
+  height: number;
+  locale: string;
+  readOnly: boolean;
+  selected: boolean;
+  surface: 'canvas' | 'detail';
+  theme: 'light' | 'dark';
+  width: number;
+}
+
+export interface CanvasTypeStateSnapshot<TState = JsonValue> {
+  presentation: CanvasTypePresentation;
+  revision: number;
+  state: TState;
+}
+
+export interface CanvasTypeComponentProps<TState = JsonValue> {
+  context: CanvasTypeRenderContext;
+  presentation: CanvasTypePresentation;
+  state: TState;
+  updateState(
+    state: TState,
+    options?: { history?: 'record' | 'ephemeral' }
+  ): Promise<CanvasTypeStateSnapshot<TState>>;
+}
+
+export interface CanvasTypePreviewProps<TState = JsonValue> {
+  context: Pick<
+    CanvasTypeRenderContext,
+    'height' | 'locale' | 'theme' | 'width'
+  >;
+  presentation: CanvasTypePresentation;
+  state: TState;
+}
+
+export interface CanvasTypeDefinition<TState = JsonValue> {
+  component: ComponentType<CanvasTypeComponentProps<TState>>;
+  createInitialState(): TState;
+  dataVersion: number;
+  description?: string;
+  /** Plugin-local kebab-case ID. The host persists `${pluginId}/${id}`. */
+  id: string;
+  /** Required when persisted dataVersion is older than this definition. */
+  migrateState?(state: JsonValue, fromVersion: number): TState;
+  previewComponent?: ComponentType<CanvasTypePreviewProps<TState>>;
+  /** Plain-text projection used by search, exports, accessibility and fallback. */
+  summarize(state: TState): CanvasTypePresentation;
+  surface?: {
+    defaultSize?: { height: number; width: number };
+    maxSize?: { height: number; width: number };
+    minSize?: { height: number; width: number };
+    openBehavior?: 'none' | 'detail';
+    resizable?: boolean;
+  };
+  title: string;
+  validateState(state: unknown): state is TState;
+}
+
 export interface OperationOptions {
   /** Combined with app.signal; either signal cancels the operation. */
   signal?: AbortSignal;
@@ -188,6 +254,10 @@ export interface PluginContent {
 }
 
 export interface PluginContext {
+  readonly canvas: {
+    /** Staged with this activation and published only after setup succeeds. */
+    registerType<TState>(definition: CanvasTypeDefinition<TState>): Disposer;
+  };
   readonly commands: {
     register(command: CommandDefinition): Disposer;
   };

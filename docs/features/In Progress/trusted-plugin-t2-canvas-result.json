@@ -1,0 +1,55 @@
+{
+  "archive": "build/plugin-t2-canvas-artifacts/canary-macos-arm64-GhostBoard-canary.app.tar.zst",
+  "archiveSha256": "5a0d1844b259887a905f062dce59521f4e024b20a766b18753d4a90bdc346176",
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "results": [
+    {
+      "stage": "T2/custom canvas types",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "pluginOwnedCanonicalId": true,
+        "createPersistentInstance": true,
+        "createPlacement": true,
+        "persistPlacement": true,
+        "editPersistsSummary": true,
+        "searchUsesHostSummary": true,
+        "disablePlugin": true,
+        "missingPluginKeepsOpaqueState": true,
+        "reenablePlugin": true
+      },
+      "startedAt": "2026-09-10T14:19:25.165Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "finishedAt": "2026-09-10T14:19:25.792Z",
+      "phase": "initial",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    },
+    {
+      "stage": "T2/custom canvas types",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "pluginOwnedCanonicalId": true,
+        "restartRestoresPlacement": true,
+        "migrationPersists": true,
+        "migratedSummarySearchable": true
+      },
+      "startedAt": "2026-09-10T14:19:27.103Z",
+      "page": "views://mainview/index.html",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "finishedAt": "2026-09-10T14:19:27.406Z",
+      "phase": "restart",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "bun": "1.3.13"
+      }
+    }
+  ]
+}

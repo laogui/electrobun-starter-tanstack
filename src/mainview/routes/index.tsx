@@ -54,7 +54,10 @@ import {
 } from '@/data/initialNodes';
 import { resolveExtensionMessage } from '@/extensions/messages';
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
-import { canvasTypeRegistry } from '@/extensions/registry';
+import {
+  canvasTypeRegistry,
+  useCanvasTypeRegistryRevision,
+} from '@/extensions/registry';
 import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasPersistence } from '@/hooks/useCanvasPersistence';
@@ -403,6 +406,7 @@ function canvasUiReducer(
 // The canvas route wires React Flow, drag/drop, keyboard shortcuts, and modals.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 function CanvasComponent() {
+  useCanvasTypeRegistryRevision();
   const connectionStartRef = useRef<ConnectionStartState>({
     handleId: null,
     nodeId: null,

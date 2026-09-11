@@ -19,7 +19,10 @@ import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver'
 import { ExtensionFallback } from '@/extensions/ExtensionFallback';
 import { ExtensionHostShell } from '@/extensions/ExtensionHostShell';
 import { createExtensionHostApi } from '@/extensions/hostApi';
-import { canvasTypeRegistry } from '@/extensions/registry';
+import {
+  canvasTypeRegistry,
+  useCanvasTypeRegistryRevision,
+} from '@/extensions/registry';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
@@ -199,6 +202,7 @@ function normalizeChecklistWidgetItems(
 // This orchestrates focus navigation and delegates the per-kind editing UI below.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
+  useCanvasTypeRegistryRevision();
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateFolderChildData = useCanvasStore((s) => s.updateFolderChildData);
@@ -422,6 +426,28 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
         disabledCanvasTypes
       )
     : 'unknown';
+  const extensionCompatible = Boolean(
+    extensionType &&
+      extensionRecord &&
+      !isExtensionInstanceLoadError(extensionRecord) &&
+      extensionRecord.dataVersion === extensionType.dataVersion &&
+      extensionType.validateState(extensionRecord.state)
+  );
+  const extensionNeedsMigration = Boolean(
+    extensionType &&
+      extensionRecord &&
+      !isExtensionInstanceLoadError(extensionRecord) &&
+      extensionAvailability === 'available' &&
+      extensionRecord.dataVersion < extensionType.dataVersion
+  );
+  useEffect(() => {
+    if (extensionNeedsMigration && extensionInstanceId) {
+      useExtensionInstanceStore
+        .getState()
+        .migrateInstance(extensionInstanceId)
+        .catch(() => undefined);
+    }
+  }, [extensionInstanceId, extensionNeedsMigration]);
   const extensionHost = useMemo(
     () =>
       extensionCanvasTypeId && extensionInstanceId
@@ -661,7 +687,11 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                   !extensionRecord ||
                   isExtensionInstanceLoadError(extensionRecord)
                     ? 'unknown'
-                    : extensionAvailability
+                    : extensionAvailability !== 'available'
+                      ? extensionAvailability
+                      : extensionType && !extensionCompatible
+                        ? 'incompatible'
+                        : extensionAvailability
                 }
                 canvasTypeId={extensionCanvasTypeId}
                 instanceId={extensionInstanceId}
@@ -679,7 +709,9 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                     ? extensionRecord.presentation
                     : undefined
                 }
-                readOnly={extensionAvailability !== 'available'}
+                readOnly={
+                  extensionAvailability !== 'available' || !extensionCompatible
+                }
                 resizable={false}
                 selected
                 surface="detail"
@@ -688,6 +720,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                 extensionHost &&
                 extensionRecord &&
                 !isExtensionInstanceLoadError(extensionRecord) &&
+                extensionCompatible &&
                 extensionAvailability === 'available' ? (
                   <extensionType.DetailSurface
                     context={{
@@ -703,11 +736,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                     }}
                     host={extensionHost}
                     presentation={extensionRecord.presentation}
-                    state={
-                      extensionType.validateState(extensionRecord.state)
-                        ? extensionRecord.state
-                        : extensionType.createInitialState()
-                    }
+                    state={extensionRecord.state}
                   />
                 ) : (
                   <ExtensionFallback
@@ -715,7 +744,11 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                       !extensionRecord ||
                       isExtensionInstanceLoadError(extensionRecord)
                         ? 'corrupted'
-                        : extensionAvailability
+                        : extensionAvailability !== 'available'
+                          ? extensionAvailability
+                          : extensionType && !extensionCompatible
+                            ? 'incompatible'
+                            : extensionAvailability
                     }
                     canvasTypeId={extensionCanvasTypeId}
                     message={
@@ -724,7 +757,9 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                         ? 'This instance could not be loaded. The original file is kept.'
                         : extensionAvailability === 'disabled'
                           ? 'This canvas type is disabled in the current workspace.'
-                          : 'This canvas type is from a newer app version. Data is kept.'
+                          : extensionType && !extensionCompatible
+                            ? 'This card needs a compatible plugin migration. The original data is kept.'
+                            : 'This canvas type is unavailable. Data is kept.'
                     }
                     onEnable={() => {
                       setExtensionEnabled(extensionCanvasTypeId, true).catch(

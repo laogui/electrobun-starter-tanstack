@@ -6,12 +6,12 @@ import type { PluginManagementService } from './management';
 export class T2ContentHostController extends PluginHostController {
   private readonly management: PluginManagementService;
   private readonly directory: string;
-  private readonly scenario: 'content' | 'selection';
+  private readonly scenario: 'canvas' | 'content' | 'selection';
   constructor(
     management: PluginManagementService,
     workspaceId: string,
     directory: string,
-    scenario: 'content' | 'selection' = 'content'
+    scenario: 'canvas' | 'content' | 'selection' = 'content'
   ) {
     super(management, workspaceId);
     this.management = management;

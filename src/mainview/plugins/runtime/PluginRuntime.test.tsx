@@ -3,12 +3,14 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
+  CanvasTypeDefinition,
   Disposer,
   PluginContext,
   PluginDefinition,
 } from '../../../../packages/plugin-sdk';
 import { definePlugin } from '../../../../packages/plugin-sdk/index.js';
 import type { PluginRuntimeSnapshot } from '../../../shared/plugins/runtime';
+import { canvasTypeRegistry } from '../../extensions/registry';
 import { PluginRuntime, redactPluginError } from './PluginRuntime';
 import { PluginWorkbench } from './PluginWorkbench';
 
@@ -62,6 +64,27 @@ function runtimeFor(setup: PluginDefinition['setup']) {
   return runtime;
 }
 
+function canvasDefinition(title: string): CanvasTypeDefinition<{
+  count: number;
+}> {
+  return {
+    id: 'counter',
+    title,
+    dataVersion: 1,
+    createInitialState: () => ({ count: 0 }),
+    validateState: (state): state is { count: number } =>
+      !!state &&
+      !Array.isArray(state) &&
+      typeof state === 'object' &&
+      typeof (state as { count?: unknown }).count === 'number',
+    summarize: (state) => ({
+      title,
+      plainText: `Count ${state.count}`,
+    }),
+    component: ({ state }) => <div>{state.count}</div>,
+  };
+}
+
 afterEach(async () => {
   await act(async () => {
     await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
@@ -105,6 +128,61 @@ describe('trusted plugin runtime', () => {
     expect(cleanup).toHaveBeenCalledOnce();
     expect(terminate).toHaveBeenCalledOnce();
     expect(runtime.getSnapshot().commands).toEqual([]);
+  });
+
+  it('publishes plugin canvas types after setup and removes code but keeps data ownership on disable', async () => {
+    const runtime = runtimeFor((app) => {
+      app.canvas.registerType(canvasDefinition('Runtime counter'));
+    });
+    await runtime.sync(snapshot());
+
+    expect(canvasTypeRegistry.get('example.test/counter')?.titleKey).toBe(
+      'Runtime counter'
+    );
+    expect(runtime.getSnapshot().canvasTypes).toEqual([
+      {
+        id: 'example.test/counter',
+        pluginId: 'example.test',
+        title: 'Runtime counter',
+      },
+    ]);
+
+    await runtime.sync({ ...snapshot(), plugins: [] });
+    expect(canvasTypeRegistry.get('example.test/counter')).toBeUndefined();
+    expect(runtime.getSnapshot().canvasTypes).toEqual([]);
+  });
+
+  it('keeps the exact published canvas type when a reload candidate fails', async () => {
+    const importer = vi
+      .fn<(url: string) => Promise<unknown>>()
+      .mockResolvedValueOnce({
+        default: definePlugin({
+          setup(app) {
+            app.canvas.registerType(canvasDefinition('Original counter'));
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        default: definePlugin({
+          setup(app) {
+            app.canvas.registerType(canvasDefinition('Candidate counter'));
+            throw new Error('candidate canvas setup failed');
+          },
+        }),
+      });
+    const runtime = new PluginRuntime({ importer });
+    runtimes.push(runtime);
+    await runtime.sync(snapshot('1'));
+    const original = canvasTypeRegistry.get('example.test/counter');
+    await runtime.sync(snapshot('2'));
+
+    expect(canvasTypeRegistry.get('example.test/counter')).toBe(original);
+    expect(canvasTypeRegistry.get('example.test/counter')?.titleKey).toBe(
+      'Original counter'
+    );
+    expect(runtime.getSnapshot().diagnostics.at(-1)?.message).toContain(
+      'candidate canvas setup failed'
+    );
   });
 
   it('closes a DOM panel without unregistering commands and remounts a clean view', async () => {

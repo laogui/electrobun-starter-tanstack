@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 import { isCanvasTypeEnabled } from '../../shared/extensions/enablement';
 import { isCanvasTypeId } from '../../shared/extensions/ids';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
@@ -28,22 +30,89 @@ function assertComplete(type: AnyBuiltinCanvasType): void {
 }
 
 export class CanvasTypeRegistry {
-  private readonly types = new Map<string, AnyBuiltinCanvasType>();
+  private readonly listeners = new Set<() => void>();
+  private readonly types = new Map<
+    string,
+    { generation?: number; owner?: string; type: AnyBuiltinCanvasType }
+  >();
+  private revision = 0;
+
+  private publish(): void {
+    this.revision += 1;
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+
+  getRevision = (): number => this.revision;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
 
   register<TState>(type: BuiltinCanvasType<TState>): void {
     assertComplete(type as AnyBuiltinCanvasType);
     if (this.types.has(type.id)) {
       throw new Error(`Duplicate canvas type id: ${type.id}`);
     }
-    this.types.set(type.id, type as AnyBuiltinCanvasType);
+    this.types.set(type.id, { type: type as AnyBuiltinCanvasType });
+    this.publish();
+  }
+
+  replaceOwner<TState>(
+    owner: string,
+    generation: number,
+    types: readonly BuiltinCanvasType<TState>[]
+  ): void {
+    if (!(owner && Number.isSafeInteger(generation) && generation > 0)) {
+      throw new Error('Canvas type owner and generation are required');
+    }
+    const normalizedTypes = types as unknown as AnyBuiltinCanvasType[];
+    const nextIds = new Set<string>();
+    for (const type of normalizedTypes) {
+      assertComplete(type);
+      if (nextIds.has(type.id)) {
+        throw new Error(`Duplicate canvas type id: ${type.id}`);
+      }
+      nextIds.add(type.id);
+      const current = this.types.get(type.id);
+      if (current && current.owner !== owner) {
+        throw new Error(`Duplicate canvas type id: ${type.id}`);
+      }
+    }
+    for (const [id, entry] of this.types) {
+      if (entry.owner === owner) {
+        this.types.delete(id);
+      }
+    }
+    for (const type of normalizedTypes) {
+      this.types.set(type.id, { generation, owner, type });
+    }
+    this.publish();
+  }
+
+  clearOwner(owner: string, generation: number): void {
+    let changed = false;
+    for (const [id, entry] of this.types) {
+      if (entry.owner === owner && entry.generation === generation) {
+        this.types.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.publish();
+    }
   }
 
   get(id: string): AnyBuiltinCanvasType | undefined {
-    return this.types.get(id);
+    return this.types.get(id)?.type;
   }
 
   list(): AnyBuiltinCanvasType[] {
-    return [...this.types.values()];
+    return [...this.types.values()].map((entry) => entry.type);
   }
 
   listEnabled(disabledCanvasTypes: readonly string[]): AnyBuiltinCanvasType[] {
@@ -70,3 +139,11 @@ export function createCanvasTypeRegistry(): CanvasTypeRegistry {
 }
 
 export const canvasTypeRegistry = createCanvasTypeRegistry();
+
+export function useCanvasTypeRegistryRevision(): number {
+  return useSyncExternalStore(
+    canvasTypeRegistry.subscribe,
+    canvasTypeRegistry.getRevision,
+    canvasTypeRegistry.getRevision
+  );
+}

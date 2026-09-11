@@ -8,7 +8,12 @@ import type {
   SurfaceRenderContext,
 } from '../../shared/extensions/protocol';
 
-export type CanvasTypeCategory = 'media' | 'productivity' | 'web' | 'demo';
+export type CanvasTypeCategory =
+  | 'media'
+  | 'productivity'
+  | 'web'
+  | 'demo'
+  | 'plugin';
 
 export type CanvasTypeCreateFlow =
   | 'immediate'

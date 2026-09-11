@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { counterCanvasType } from '@/extensions/builtin/counter';
 import ExtensionNode from '@/extensions/ExtensionNode';
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
@@ -60,6 +61,7 @@ function renderExtensionNode(canvasTypeId: string, instanceId: string) {
 
 describe('ExtensionNode damaged-data fallback', () => {
   beforeEach(() => {
+    canvasTypeRegistry.clearOwner('example.cards', 1);
     useCanvasStore.getState().reset();
     useExtensionInstanceStore.setState({ records: {}, history: {} });
     useExtensionEnablementStore.setState({ disabledCanvasTypes: [] });
@@ -88,9 +90,7 @@ describe('ExtensionNode damaged-data fallback', () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(
-        'This canvas type is from a newer app version. Data is kept.'
-      )
+      screen.queryByText('This canvas type is unavailable. Data is kept.')
     ).toBeNull();
   });
 
@@ -114,9 +114,78 @@ describe('ExtensionNode damaged-data fallback', () => {
 
     expect(screen.getByText('Future card')).toBeInTheDocument();
     expect(
-      screen.getByText(
-        'This canvas type is from a newer app version. Data is kept.'
-      )
+      screen.getByText('This canvas type is unavailable. Data is kept.')
     ).toBeInTheDocument();
+  });
+
+  it('reacts to late plugin publication and returns to the saved-summary fallback on disable', () => {
+    const canvasTypeId = 'example.cards/counter';
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_public: {
+        id: 'extinst_public',
+        canvasTypeId,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-09-10T00:00:00.000Z',
+        updatedAt: '2026-09-10T00:00:00.000Z',
+        schema: 'ghostboard-extension-instance/v1',
+        state: { count: 5 },
+        presentation: { title: 'Saved public counter', plainText: 'Count 5' },
+      },
+    });
+    renderExtensionNode(canvasTypeId, 'extinst_public');
+    expect(screen.getByText('Saved public counter')).toBeInTheDocument();
+
+    act(() => {
+      canvasTypeRegistry.replaceOwner('example.cards', 1, [
+        { ...counterCanvasType, id: canvasTypeId },
+      ]);
+    });
+    expect(screen.getByText('5')).toBeInTheDocument();
+
+    act(() => {
+      canvasTypeRegistry.clearOwner('example.cards', 1);
+    });
+    expect(screen.getByText('Saved public counter')).toBeInTheDocument();
+    expect(
+      screen.getByText('This canvas type is unavailable. Data is kept.')
+    ).toBeInTheDocument();
+  });
+
+  it('does not execute a migration while the canvas type is disabled', async () => {
+    const canvasTypeId = 'example.cards/counter';
+    canvasTypeRegistry.replaceOwner('example.cards', 1, [
+      {
+        ...counterCanvasType,
+        id: canvasTypeId,
+        dataVersion: 2,
+        migrateState: () => ({ count: 2 }),
+      },
+    ]);
+    useExtensionEnablementStore.setState({
+      disabledCanvasTypes: [canvasTypeId],
+    });
+    useExtensionInstanceStore.getState().hydrate({
+      extinst_disabled_old: {
+        id: 'extinst_disabled_old',
+        canvasTypeId,
+        appVersion: '1.0.0',
+        dataVersion: 1,
+        revision: 1,
+        createdAt: '2026-09-10T00:00:00.000Z',
+        updatedAt: '2026-09-10T00:00:00.000Z',
+        schema: 'ghostboard-extension-instance/v1',
+        state: { count: 1 },
+        presentation: { title: 'Disabled counter', plainText: 'Count 1' },
+      },
+    });
+
+    renderExtensionNode(canvasTypeId, 'extinst_disabled_old');
+
+    expect(
+      screen.getByText('This canvas type is disabled in the current workspace.')
+    ).toBeInTheDocument();
+    await waitFor(() => expect(rpcMocks.update).not.toHaveBeenCalled());
   });
 });

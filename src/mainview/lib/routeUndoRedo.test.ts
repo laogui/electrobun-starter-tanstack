@@ -22,6 +22,19 @@ vi.mock('../../paraglide/messages.js', () => ({
   default_new_group_label: () => 'New Group',
 }));
 
+const NATIVE_UNDO_ID = /^native_undo_/;
+const NATIVE_REDO_ID = /^native_redo_/;
+
+/**
+ * `routeUndoRedo` hands the plugin call to `perform()` without awaiting it, so
+ * the mock is invoked synchronously while the history is still `pending`. A
+ * second `routeUndoRedo` in that window is rejected outright, so wait for the
+ * operation to settle rather than for the mock to have been called.
+ */
+function settleHistory(): Promise<boolean> {
+  return vi.waitUntil(() => !unifiedUndoHistory.getSnapshot().pending);
+}
+
 describe('routeUndoRedo', () => {
   beforeEach(() => {
     unifiedUndoHistory.reset();
@@ -54,16 +67,22 @@ describe('routeUndoRedo', () => {
     });
 
     expect(routeUndoRedo('undo')).toBe(true);
-    await vi.waitFor(() => expect(pluginUndo).toHaveBeenCalledOnce());
+    await settleHistory();
+    expect(pluginUndo).toHaveBeenCalledOnce();
     expect(pluginUndo).toHaveBeenCalledWith(
       'batch-a',
-      expect.objectContaining({ operationId: expect.stringMatching(/^native_undo_/) })
+      expect.objectContaining({
+        operationId: expect.stringMatching(NATIVE_UNDO_ID),
+      })
     );
     expect(routeUndoRedo('redo')).toBe(true);
-    await vi.waitFor(() => expect(pluginRedo).toHaveBeenCalledOnce());
+    await settleHistory();
+    expect(pluginRedo).toHaveBeenCalledOnce();
     expect(pluginRedo).toHaveBeenCalledWith(
       'batch-a',
-      expect.objectContaining({ operationId: expect.stringMatching(/^native_redo_/) })
+      expect.objectContaining({
+        operationId: expect.stringMatching(NATIVE_REDO_ID),
+      })
     );
   });
 

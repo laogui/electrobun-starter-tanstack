@@ -14,6 +14,7 @@ import {
   PLUGIN_INSTALL_ID_RE,
 } from '../../shared/plugins/ids';
 import type { PluginManifest } from '../../shared/plugins/manifest';
+import { readJsonOrEmpty } from '../persistence/corruptFile';
 import { loadPluginDirectory, PluginDirectoryError } from './loadDirectory';
 import { downloadPluginZip, PluginDownloadError } from './urlInstall';
 import { PluginZipError, unpackPluginZip } from './zipInstall';
@@ -54,10 +55,12 @@ export type PluginInstallErrorCode =
   | 'already-installed'
   | 'digest-conflict'
   | 'download-failed'
+  | 'enablement-corrupt'
   | 'invalid-package'
   | 'invalid-state'
   | 'not-found'
   | 'pending-transaction'
+  | 'registry-corrupt'
   | 'replaced';
 
 export class PluginInstallError extends Error {
@@ -242,6 +245,21 @@ function parseJournal(value: unknown): PluginInstallJournal | undefined {
   return journal;
 }
 
+/**
+ * Structural check before entry-level parsing: a file that is not a registry
+ * at all is corruption, not "no plugins installed".
+ */
+function requireRegistry(value: unknown): PluginRegistryFile {
+  if (
+    !isRecord(value) ||
+    value.schema !== PLUGIN_INSTALL_SCHEMA ||
+    !Array.isArray(value.packages)
+  ) {
+    throw new Error('registry.json does not match the registry schema');
+  }
+  return parseRegistry(value);
+}
+
 function parseRegistry(value: unknown): PluginRegistryFile {
   if (!isRecord(value) || value.schema !== PLUGIN_INSTALL_SCHEMA) {
     return { schema: PLUGIN_INSTALL_SCHEMA, packages: [] };
@@ -289,16 +307,41 @@ function redactUrl(raw: string): PluginInstallSource {
   }
 }
 
+export interface PluginRegistryDiagnostic {
+  backupPath: string;
+  message: string;
+}
+
 export class PluginInstallStore {
   private readonly rootDir: string;
   private tail: Promise<unknown> = Promise.resolve();
+  private registryDiagnostic: PluginRegistryDiagnostic | undefined;
 
   constructor(rootDir: string) {
     this.rootDir = resolve(rootDir);
   }
 
+  /** Set while the last registry read hit damage, cleared by a clean read. */
+  diagnostic(): PluginRegistryDiagnostic | undefined {
+    return this.registryDiagnostic;
+  }
+
   listInstalled(): Promise<InstalledPluginPackage[]> {
-    return this.enqueue(async () => (await this.readRegistry()).packages);
+    return this.enqueue(async () => {
+      try {
+        return (await this.readRegistry()).packages;
+      } catch (error) {
+        if (
+          error instanceof PluginInstallError &&
+          error.code === 'registry-corrupt'
+        ) {
+          // Listing stays available so the UI can show the diagnostic; every
+          // mutating path still throws.
+          return [];
+        }
+        throw error;
+      }
+    });
   }
 
   getJournal(transactionId: string): Promise<PluginInstallJournal | undefined> {
@@ -372,15 +415,78 @@ export class PluginInstallStore {
   }
 
   private async readRegistry(): Promise<PluginRegistryFile> {
-    const path = this.registryPath();
-    if (!existsSync(path)) {
+    const read = await readJsonOrEmpty(this.registryPath(), requireRegistry);
+    if (read.kind === 'empty') {
+      this.registryDiagnostic = undefined;
       return { schema: PLUGIN_INSTALL_SCHEMA, packages: [] };
     }
+    if (read.kind === 'ok') {
+      this.registryDiagnostic = undefined;
+      return read.value;
+    }
+    // The damaged file is already preserved. `packages/` is the ground truth
+    // for what is actually on disk; journals only supply the metadata the
+    // directory layout does not carry.
+    let rebuilt: PluginRegistryFile;
     try {
-      return parseRegistry(await readJson(path));
-    } catch {
+      rebuilt = await this.rebuildRegistryFromDisk();
+    } catch (error) {
+      this.registryDiagnostic = {
+        backupPath: read.backupPath,
+        message: `registry.json is unreadable and could not be rebuilt: ${(error as Error).message}`,
+      };
+      throw new PluginInstallError(
+        'registry-corrupt',
+        this.registryDiagnostic.message
+      );
+    }
+    this.registryDiagnostic = {
+      backupPath: read.backupPath,
+      message: `registry.json was unreadable and was rebuilt from installed packages; the original is at ${read.backupPath}`,
+    };
+    await this.writeRegistry(rebuilt);
+    return rebuilt;
+  }
+
+  /** Reconstructs registry entries from `packages/<id>/<version>/<digest>/`. */
+  private async rebuildRegistryFromDisk(): Promise<PluginRegistryFile> {
+    const journals = await this.listJournals();
+    const packagesRoot = join(this.rootDir, PACKAGES_DIR);
+    if (!existsSync(packagesRoot)) {
       return { schema: PLUGIN_INSTALL_SCHEMA, packages: [] };
     }
+    const packages: InstalledPluginPackage[] = [];
+    for (const pluginId of await readdir(packagesRoot)) {
+      const versionsRoot = join(packagesRoot, pluginId);
+      for (const version of await readdir(versionsRoot).catch(() => [])) {
+        const digestsRoot = join(versionsRoot, version);
+        for (const digest of await readdir(digestsRoot).catch(() => [])) {
+          if (!PLUGIN_PACKAGE_DIGEST_RE.test(digest)) {
+            continue;
+          }
+          const directory = join(digestsRoot, digest);
+          if (!existsSync(join(directory, 'manifest.json'))) {
+            continue;
+          }
+          const journal = journals.find(
+            (entry) =>
+              entry.pluginId === pluginId &&
+              entry.version === version &&
+              entry.digest === digest
+          );
+          packages.push({
+            pluginId,
+            version,
+            digest,
+            directory,
+            name: journal?.name ?? pluginId,
+            source: journal?.source ?? { kind: 'zip' },
+            installedAt: journal?.updatedAt ?? nowIso(),
+          });
+        }
+      }
+    }
+    return { schema: PLUGIN_INSTALL_SCHEMA, packages };
   }
 
   private async writeRegistry(registry: PluginRegistryFile): Promise<void> {

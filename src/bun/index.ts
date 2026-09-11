@@ -65,6 +65,7 @@ import {
 import {
   cancelExtensionTask,
   cancelExtensionTasksByInstance,
+  ExtensionTaskFileError,
   listExtensionTasks,
   scheduleExtensionTask,
 } from './extensions/scheduler';
@@ -951,6 +952,7 @@ interface CanvasRPC {
       extensionSchedulerList: {
         params: { instanceId?: string };
         response: {
+          diagnostic?: string;
           tasks: Array<{
             canvasTypeId: string;
             fireAt: string;
@@ -2646,9 +2648,18 @@ async function main() {
           }
         },
 
-        extensionSchedulerList: async ({ instanceId }) => ({
-          tasks: await listExtensionTasks(wsPath, instanceId),
-        }),
+        extensionSchedulerList: async ({ instanceId }) => {
+          try {
+            return { tasks: await listExtensionTasks(wsPath, instanceId) };
+          } catch (error) {
+            if (error instanceof ExtensionTaskFileError) {
+              // Listing degrades to empty, but scheduling still fails loudly
+              // so nobody overwrites the preserved file.
+              return { diagnostic: error.message, tasks: [] };
+            }
+            throw error;
+          }
+        },
 
         saveNote: async ({ noteId, frontmatter, body }) => {
           // Legacy markdown save path (checklist / plain-text cards). JSON

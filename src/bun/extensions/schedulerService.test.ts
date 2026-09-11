@@ -35,6 +35,7 @@ import {
 import { createExtensionSchedulerService } from './schedulerService';
 
 const T0 = Date.parse('2026-06-01T12:00:00.000Z');
+const realSetTimeout = globalThis.setTimeout;
 
 function task(
   id: string,
@@ -76,10 +77,18 @@ describe('extension scheduler service', () => {
     });
   }
 
-  /** Advances both the fake clock and the service's injected clock. */
+  /**
+   * Advances both the fake clock and the service's injected clock, then lets
+   * the real event loop run: a timer-driven tick reads the task file with real
+   * fs promises, which fake timers do not drive.
+   */
   async function advance(ms: number): Promise<void> {
     nowMs += ms;
     await vi.advanceTimersByTimeAsync(ms);
+    for (let round = 0; round < 8; round += 1) {
+      await new Promise((done) => realSetTimeout(done, 0));
+      await vi.advanceTimersByTimeAsync(0);
+    }
   }
 
   it('delivers a task once its fire time arrives', async () => {
@@ -206,6 +215,9 @@ describe('extension scheduler service', () => {
     await advance(60_000);
     expect(delivered).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
+    expect(
+      readFileSync(join(wsPath, '.ghostboard', 'extension-tasks.json'), 'utf8')
+    ).toBe('{"tasks": [');
     service.dispose();
   });
 });

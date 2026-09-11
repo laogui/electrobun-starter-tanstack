@@ -5,6 +5,7 @@ import {
   readdir,
   readFile,
   rename,
+  rm,
   writeFile,
 } from 'node:fs/promises';
 import {
@@ -319,5 +320,66 @@ describe('plugin install journal', () => {
       store.prepareFromZip({ zipBytes: createStoredZip(files) })
     ).rejects.toMatchObject({ code: 'invalid-package' });
     expect(await store.listInstalled()).toEqual([]);
+  });
+});
+
+describe('registry corruption recovery', () => {
+  async function installOne() {
+    const root = await mkdtemp(join(tmpdir(), 'plugin-install-corrupt-'));
+    const store = new PluginInstallStore(root);
+    const prepared = await store.prepareFromZip({
+      zipBytes: createStoredZip(pluginFiles()),
+    });
+    const installed = await store.commit(prepared.transactionId);
+    return { installed, root, store };
+  }
+
+  async function corruptBackup(root: string): Promise<string> {
+    const name = (await readdir(root)).find((entry) =>
+      entry.startsWith('registry.json.corrupt-')
+    );
+    if (!name) {
+      throw new Error(
+        `no preserved registry in ${(await readdir(root)).join(', ')}`
+      );
+    }
+    return join(root, name);
+  }
+
+  it('rebuilds the registry from journals and the packages tree', async () => {
+    const { installed, root } = await installOne();
+    await writeFile(join(root, 'registry.json'), '{"schema":1,"packa');
+
+    const reopened = new PluginInstallStore(root);
+    // installedAt comes from the journal, so it may differ by milliseconds
+    // from the timestamp the lost registry recorded.
+    const { installedAt, ...identity } = installed;
+    expect(await reopened.listInstalled()).toMatchObject([identity]);
+    expect(installedAt).toBeTruthy();
+    expect(await readFile(await corruptBackup(root), 'utf8')).toBe(
+      '{"schema":1,"packa'
+    );
+    expect(reopened.diagnostic()?.message).toContain('rebuilt');
+  });
+
+  it('drops registry entries whose package directory is gone', async () => {
+    const { installed, root } = await installOne();
+    await rm(join(root, 'packages'), { force: true, recursive: true });
+    await writeFile(join(root, 'registry.json'), 'not json at all');
+
+    const reopened = new PluginInstallStore(root);
+    expect(await reopened.listInstalled()).toEqual([]);
+    expect(installed.pluginId).toBeTruthy();
+  });
+
+  it('clears the diagnostic once the rebuilt registry reads cleanly', async () => {
+    const { root } = await installOne();
+    await writeFile(join(root, 'registry.json'), '<html>');
+
+    const reopened = new PluginInstallStore(root);
+    await reopened.listInstalled();
+    expect(reopened.diagnostic()).toBeDefined();
+    await reopened.listInstalled();
+    expect(reopened.diagnostic()).toBeUndefined();
   });
 });

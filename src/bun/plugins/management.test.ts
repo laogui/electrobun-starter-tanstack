@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LEGACY_PLUGIN_MESSAGE } from '../../shared/plugins/manifest';
 import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
@@ -289,5 +290,52 @@ describe('PluginManagementService', () => {
         appDataRoot,
       }).list()
     ).toEqual([]);
+  });
+});
+
+describe('damaged enablement state', () => {
+  function enablementPath(appDataRoot: string, workspace: string): string {
+    const key = createHash('sha256').update(resolve(workspace)).digest('hex');
+    return join(pluginInstallRoot(appDataRoot), 'workspaces', `${key}.json`);
+  }
+
+  async function installEnabled() {
+    const context = await setup();
+    const preview = await context.service.prepareFromFile(context.file);
+    const installed = await context.service.commit(preview.transactionId);
+    await context.service.enable(installed);
+    return { ...context, installed };
+  }
+
+  it('treats every plugin as disabled and refuses to overwrite the file', async () => {
+    const { appDataRoot, installed, service, workspace } =
+      await installEnabled();
+    const path = enablementPath(appDataRoot, workspace);
+    await writeFile(path, '{"schema":2,"enab');
+
+    const listed = await service.list();
+    expect(
+      listed.find((row) => row.pluginId === installed.pluginId)
+    ).toMatchObject({ enabled: false });
+    await expect(service.disable(installed)).rejects.toMatchObject({
+      code: 'enablement-corrupt',
+    });
+    expect(await readFile(path, 'utf8')).toBe('{"schema":2,"enab');
+    expect(listed.at(-1)).toMatchObject({
+      status: 'invalid',
+      validationError: expect.stringContaining('treated as disabled'),
+    });
+  });
+
+  it('recovers once the damaged file is removed', async () => {
+    const { appDataRoot, installed, service, workspace } =
+      await installEnabled();
+    const path = enablementPath(appDataRoot, workspace);
+    await writeFile(path, 'garbage');
+    await expect(service.enable(installed)).rejects.toMatchObject({
+      code: 'enablement-corrupt',
+    });
+    await rm(path);
+    expect(await service.enable(installed)).toMatchObject({ enabled: true });
   });
 });

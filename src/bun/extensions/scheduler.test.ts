@@ -210,17 +210,23 @@ describe('extension task store', () => {
     expect(remaining.map((entry) => entry.id)).toEqual(['future']);
   });
 
-  it('fails closed when the task file is corrupt', async () => {
-    await writeFile(
-      join(wsPath, '.ghostboard', 'extension-tasks.json'),
-      '{"tasks": ['
-    );
+  it('fails closed when the task file is corrupt and keeps the original', async () => {
+    const path = join(wsPath, '.ghostboard', 'extension-tasks.json');
+    await writeFile(path, '{"tasks": [');
     await expect(listExtensionTasks(wsPath)).rejects.toBeInstanceOf(
       ExtensionTaskFileError
     );
     await expect(
       scheduleExtensionTask(wsPath, task('inst_a', 'reminder'))
     ).rejects.toBeInstanceOf(ExtensionTaskFileError);
+    expect(readFileSync(path, 'utf8')).toBe('{"tasks": [');
+
+    const error = await listExtensionTasks(wsPath).catch(
+      (thrown: ExtensionTaskFileError) => thrown
+    );
+    expect(
+      readFileSync((error as ExtensionTaskFileError).backupPath, 'utf8')
+    ).toBe('{"tasks": [');
   });
 
   it('treats a missing file as no tasks', async () => {

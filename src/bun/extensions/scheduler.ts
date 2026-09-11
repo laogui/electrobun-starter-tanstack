@@ -6,6 +6,7 @@ import type {
   PersistedScheduledTask,
 } from '../../shared/extensions/scheduling';
 import { atomicWrite } from '../atomicWrite';
+import { readJsonOrEmpty } from '../persistence/corruptFile';
 import { withFileQueue } from '../persistence/fileQueue';
 
 export const EXTENSION_TASKS_SCHEMA = 'ghostboard-extension-tasks/v1' as const;
@@ -85,33 +86,39 @@ export function parseExtensionTaskFile(input: unknown): ExtensionTaskFile {
  * silently drop every reminder the user scheduled.
  */
 export class ExtensionTaskFileError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  backupPath: string;
+
+  constructor(message: string, backupPath: string) {
+    super(message);
     this.name = 'ExtensionTaskFileError';
+    this.backupPath = backupPath;
   }
+}
+
+function requireTaskFileShape(value: unknown): ExtensionTaskFile {
+  if (!(isRecord(value) && Array.isArray(value.tasks))) {
+    throw new Error('extension-tasks.json does not match the task file schema');
+  }
+  return parseExtensionTaskFile(value);
 }
 
 export async function loadExtensionTasks(
   wsPath: string
 ): Promise<ExtensionTaskFile> {
-  const file = Bun.file(extensionTasksPath(wsPath));
-  if (!(await file.exists())) {
+  const read = await readJsonOrEmpty(
+    extensionTasksPath(wsPath),
+    requireTaskFileShape
+  );
+  if (read.kind === 'empty') {
     return { schema: EXTENSION_TASKS_SCHEMA, tasks: [] };
   }
-  let contents: unknown;
-  try {
-    contents = await file.json();
-  } catch (error) {
-    throw new ExtensionTaskFileError('extension-tasks.json is not valid JSON', {
-      cause: error,
-    });
-  }
-  if (!(isRecord(contents) && Array.isArray(contents.tasks))) {
+  if (read.kind === 'corrupt') {
     throw new ExtensionTaskFileError(
-      'extension-tasks.json does not match the task file schema'
+      `extension-tasks.json is unreadable (${read.error.message}); a copy was kept at ${read.backupPath}`,
+      read.backupPath
     );
   }
-  return parseExtensionTaskFile(contents);
+  return read.value;
 }
 
 export async function saveExtensionTasks(

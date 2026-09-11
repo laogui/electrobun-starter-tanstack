@@ -13,6 +13,7 @@ import {
   type PluginManifest,
 } from '../../shared/plugins/manifest';
 import { getAppDataRoot } from '../appPaths';
+import { readJsonOrEmpty } from '../persistence/corruptFile';
 import {
   DevelopmentDirectories,
   type DevelopmentDirectoryRecord,
@@ -33,6 +34,28 @@ import {
 const PACKAGE_EXTENSIONS = new Set(['.zip', '.ghostboard-plugin']);
 const stores = new Map<string, PluginInstallStore>();
 const enablementWrites = new Map<string, Promise<unknown>>();
+/** Enablement path → where its damaged contents were preserved. */
+const enablementDamage = new Map<string, string>();
+
+function parseEnablement(value: unknown): Record<string, string> {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('schema' in value) ||
+    value.schema !== 2 ||
+    !('enabled' in value) ||
+    !value.enabled ||
+    typeof value.enabled !== 'object' ||
+    Array.isArray(value.enabled)
+  ) {
+    throw new Error('plugin enablement file does not match the schema');
+  }
+  return Object.fromEntries(
+    Object.entries(value.enabled).filter(
+      ([, digest]) => typeof digest === 'string'
+    )
+  ) as Record<string, string>;
+}
 
 export function pluginInstallRoot(appDataRoot = getAppDataRoot()): string {
   return join(appDataRoot, 'plugins');
@@ -78,6 +101,23 @@ function previewFromPrepared(input: {
     plugin: packageSummary(input.manifest),
     source: sourceSummary(input.source),
     transactionId: input.transactionId,
+  };
+}
+
+function diagnosticSummary(
+  name: string,
+  validationError: string
+): InstalledPluginSummary {
+  return {
+    digest: '',
+    enabled: false,
+    installedAt: new Date(0).toISOString(),
+    name,
+    pluginId: `ghostboard.diagnostic/${name}`,
+    source: { kind: 'file', label: name },
+    status: 'invalid',
+    validationError,
+    version: '',
   };
 }
 
@@ -147,7 +187,25 @@ export class PluginManagementService {
         status: 'legacy' as const,
         validationError: LEGACY_PLUGIN_MESSAGE,
       })),
+      ...(await this.corruptionDiagnostics()),
     ];
+  }
+
+  /**
+   * Damaged state files surface as `invalid` rows so the settings panel shows
+   * the problem instead of silently listing nothing.
+   */
+  private async corruptionDiagnostics(): Promise<InstalledPluginSummary[]> {
+    const rows: InstalledPluginSummary[] = [];
+    const registry = this.store.diagnostic();
+    if (registry) {
+      rows.push(diagnosticSummary('registry.json', registry.message));
+    }
+    const enablement = await this.enablementDiagnostic();
+    if (enablement) {
+      rows.push(diagnosticSummary('plugin enablement', enablement));
+    }
+    return rows;
   }
 
   async prepareFromFile(filePath: string): Promise<PluginInstallPreview> {
@@ -413,36 +471,24 @@ export class PluginManagementService {
   }
 
   private async readEnablement(): Promise<Record<string, string>> {
-    try {
-      const value: unknown = JSON.parse(
-        await readFile(this.enablementPath, 'utf8')
-      );
-      if (
-        !value ||
-        typeof value !== 'object' ||
-        !('schema' in value) ||
-        value.schema !== 2 ||
-        !('enabled' in value) ||
-        !value.enabled ||
-        typeof value.enabled !== 'object' ||
-        Array.isArray(value.enabled)
-      ) {
-        return {};
-      }
-      return Object.fromEntries(
-        Object.entries(value.enabled).filter(
-          ([, digest]) => typeof digest === 'string'
-        )
-      );
-    } catch (error) {
-      if (
-        (error as NodeJS.ErrnoException).code === 'ENOENT' ||
-        error instanceof SyntaxError
-      ) {
-        return {};
-      }
-      throw error;
+    const read = await readJsonOrEmpty(this.enablementPath, parseEnablement);
+    if (read.kind === 'corrupt') {
+      // Fail closed: treat every plugin as disabled rather than guessing, and
+      // block writes so we never overwrite a recoverable file.
+      enablementDamage.set(this.enablementPath, read.backupPath);
+      return {};
     }
+    enablementDamage.delete(this.enablementPath);
+    return read.kind === 'empty' ? {} : read.value;
+  }
+
+  /** Non-null while the enablement file is damaged; blocks enable/disable. */
+  async enablementDiagnostic(): Promise<string | undefined> {
+    await this.readEnablement();
+    const backupPath = enablementDamage.get(this.enablementPath);
+    return backupPath
+      ? `Plugin enablement is unreadable, so every plugin is treated as disabled. The original is at ${backupPath}.`
+      : undefined;
   }
 
   private async writeEnablement(
@@ -455,6 +501,13 @@ export class PluginManagementService {
       .catch(() => undefined)
       .then(async () => {
         const enabled = await this.readEnablement();
+        const backupPath = enablementDamage.get(this.enablementPath);
+        if (backupPath) {
+          throw new PluginInstallError(
+            'enablement-corrupt',
+            `Plugin enablement is unreadable; the original is at ${backupPath}. Restore or delete it before changing plugins.`
+          );
+        }
         if (digest) {
           enabled[pluginId] = digest;
         } else {

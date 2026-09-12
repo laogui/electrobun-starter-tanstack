@@ -26,6 +26,10 @@
 - Implemented the runtime-owned importer session controller with one stable operation ID per session and selecting/parsing/preview/failed snapshots. Selection and parser execution are bound to a dedicated session abort signal plus activation-scoped file handles; cancel, reload, disable, workspace switch and importer disposal clear the session and ignore late parser results.
 - Added host-side parse-result validation before confirmation: exactly 1–100 notes, required nonblank bounded titles, bounded color/body fields with CRLF normalization, bounded warnings, immutable preview data and rejection of extra fields. Verified native-picker cancellation is silent and preview work never reaches the content transport.
 - Updated the SDK boundary documentation and advanced the next action to visible Workbench preview plus stable-operation confirmation/retry.
+- Added runtime confirmation with one stable import operation ID, an explicit committing state, close-on-receipt behavior and retained immutable preview data after failed or uncertain content requests. User cancellation and replacement import starts are blocked while confirmation is in flight; lifecycle retirement can still abort stale work.
+- Integrated importer entries and the host-owned session into Plugin Workbench. The UI now exposes file selection, selecting/parsing status, file metadata, bounded warnings, note previews, explicit confirm/retry/cancel actions and visible failure diagnostics without introducing a second renderer store.
+- Added runtime and Workbench regressions for stable request identity, double-start/cancel protection, successful close, failure retry, zero-write cancellation and visible in-flight state. Closed the host-owned select / preview / confirm / cancel Phase 3 subtask.
+- Added host-owned confirmation to importer sessions. Confirmation uses the immutable preview and session operation ID in one `content.createMany` request, disables cancellation and replacement while the request is in flight, closes only after a matching receipt, and retains the same preview/operation ID after failure for retry.
 
 ### Test Results
 | Test | Expected | Actual | Status |
@@ -45,6 +49,11 @@
 | Importer session type-check | Controller, validation and tests remain type-safe | Passed after one corrective pass; only 29 ignored Electrobun dependency diagnostics were reported | pass |
 | Importer session scoped Ultracite | No diagnostics in the six affected SDK/runtime/test files | Checked 6 files; no fixes applied after one corrective pass | pass |
 | Importer session diff check | No whitespace errors in the combined T3 working tree | `git diff --check` passed | pass |
+| Importer confirmation focused suite | Stable commit identity, in-flight locking, close-on-receipt and failure retry remain green with prior session coverage | 1 file / 14 tests passed | pass |
+| Workbench host-flow focused suite | Runtime confirmation plus visible select/preview/cancel/confirm flow remain green | 2 files / 38 tests passed | pass |
+| Workbench host-flow type-check | Runtime, UI and test additions remain type-safe | Passed; only the script's 29 ignored Electrobun dependency diagnostics were reported | pass |
+| Workbench host-flow scoped Ultracite | No diagnostics in the five affected source/test files | Checked 5 files; no fixes applied after one corrective pass | pass |
+| Workbench host-flow diff check | No whitespace errors in the current T3 working tree | `git diff --check` passed | pass |
 
 ### Errors
 | Error | Resolution |
@@ -60,3 +69,12 @@
 | The first resumed-turn tool wrapper referenced an undefined `Exception` value | Replaced it with a valid tool call; the failure happened before any command or mutation. |
 | First importer-session type-check rejected widened transport mocks, a fetch cast and the warnings-array narrowing | Annotated the two RPC result unions, used a typed fetch mock and retained the validated warnings string type. |
 | First importer-session Ultracite pass found safe ordering/layout fixes and one test-local regex | Applied the formatter-equivalent changes manually and promoted the regex to a top-level constant. |
+| The first confirmation-focused test command stopped before collection because Vitest does not support `--runInBand` | Switched to the repository's established `--fileParallelism=false --maxWorkers=1` flags; no test or source failure was inferred from this CLI error. |
+| The first collected confirmation test run had two failures because `setupRuntime` mocked `fetch` but not the local content endpoint lookup | Added an explicit endpoint fixture to the test transport; this isolates commit semantics without changing the production endpoint requirement. |
+| First Workbench type-check found only widened success booleans and the inline `typeof fetch` mock shape in the new UI test | Kept the transport result discriminants literal and switched to a separately configured typed fetch mock. |
+| The parallel Workbench Ultracite command pointed at a mistyped non-existent working directory and did not launch | Rerun from the repository root; no formatter result was inferred from the failed process creation. |
+| The first wrapper prepared for those fixes contained malformed JavaScript and failed before calling `apply_patch` | Reissued a clean patch; no repository file changed in the malformed attempt. |
+| The first real Workbench Ultracite pass reported only safe layout changes and one test-local operation-ID regex | Moved the regex to module scope and queued the three affected files for the formatter's safe fix. |
+| The first Workbench integration run had one timing-only failure because the commit response resolved before React could expose the `committing` state | Changed the test to gate the response, verify the visible in-flight state, then release the receipt; production timing was left unchanged. |
+| Two command wrappers prepared for the A5/template inventory failed before execution: one was incomplete JavaScript and one omitted `exec_command.cmd` | Reissued the inventory as one validated command; neither failed wrapper invoked a repository tool or changed files. |
+| The template inventory requested a non-existent React `src/plugin.tsx`; the actual entry is `src/app.tsx` | Use the discovered template tree as the source of truth and inspect `src/app.tsx` in the next targeted read. |

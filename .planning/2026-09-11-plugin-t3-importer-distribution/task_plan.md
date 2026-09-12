@@ -4,7 +4,7 @@
 Define and deliver the smallest honest T3 slice that lets an independently packaged high-trust plugin register a file importer, preview and commit imported notes without duplicate or hidden writes, and reach the same runnable package through final-user ZIP / HTTPS installation in the packaged macOS arm64 app.
 
 ## Next Step
-Wire importer sessions into Plugin Workbench and implement explicit confirmation with one stable-operation `content.createMany` transaction, preserving the preview for retry after uncertain or failed outcomes and closing it on cancel or successful receipt.
+Add the independent combined importer package and the minimum `@ghostboard/sdk/testing` fake host needed to test its CSV parser without launching GhostBoard, then prove the package build is directly installable.
 
 ## Current Phase
 Phase 3
@@ -29,7 +29,7 @@ Phase 3
 ### Phase 3: Minimal Implementation
 - [ ] Implement the minimum retained-installer adaptation for manifest v2 application packages
 - [x] Implement SDK files and importer registration/runtime plumbing
-- [ ] Implement host-owned select / preview / confirm / cancel flow
+- [x] Implement host-owned select / preview / confirm / cancel flow
 - [ ] Provide an independent combined plugin package and SDK testing support required by this slice
 - **Status:** in_progress
 
@@ -71,3 +71,11 @@ Phase 3
 | The first resumed-turn tool wrapper evaluated an undefined `Exception` identifier before calling any tool | Reissued a valid wrapper; no repository command ran and no files changed in the failed attempt. |
 | First importer-session type-check found widened success booleans in transport mocks, an unsafe fetch mock cast and an insufficiently narrowed warnings array | Added explicit transport result unions, typed the fetch mock directly and preserved the validated string-array type in the frozen preview. |
 | First importer-session Ultracite pass reported only safe ordering/layout issues and one test-local operation-ID regex | Applied the mechanical member/import/layout changes and moved the regex to module scope. |
+| First confirmation-focused test command used Vitest's unsupported `--runInBand` option | Use the repository's supported serial flags: `--fileParallelism=false --maxWorkers=1`. |
+| First confirmation test run reached the real endpoint lookup because the session test supplied only a fetch mock | Add the same explicit local endpoint fixture used by content transport tests; keep production code unchanged. |
+| First Workbench type-check widened success booleans in file mocks and rejected an inline `typeof fetch` implementation | Preserve literal success types and configure a separately declared `vi.fn<typeof fetch>()`, matching established test patterns. |
+| First Workbench Ultracite command used a mistyped working directory and did not start | Rerun the unchanged check from the repository root. |
+| First real Workbench Ultracite pass found only formatter output plus one test-local operation-ID regex | Promote the regex to module scope and apply the reported safe formatting to the three affected files. |
+| Two A5/template inventory wrappers were malformed before tool execution | Reissue one validated `exec_command` call and avoid composing wrappers incrementally. |
+| Template inspection targeted `src/plugin.tsx`, but the React template entry is `src/app.tsx` | Follow the enumerated template tree and use `src/app.tsx`; no missing source file needs creation. |
+| First Workbench test missed the transient `committing` label because its fetch mock resolved synchronously | Hold the mocked response behind a deferred promise, assert the visible in-flight state, then resolve it and assert close-on-receipt. |

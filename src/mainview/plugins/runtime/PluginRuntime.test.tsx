@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -11,8 +17,11 @@ import type {
 import { definePlugin } from '../../../../packages/plugin-sdk/index.js';
 import type { PluginRuntimeSnapshot } from '../../../shared/plugins/runtime';
 import { canvasTypeRegistry } from '../../extensions/registry';
+import type { PluginFilesTransport } from './files';
 import { PluginRuntime, redactPluginError } from './PluginRuntime';
 import { PluginWorkbench } from './PluginWorkbench';
+
+const IMPORT_OPERATION_ID_RE = /^plgimport_[a-f0-9]{32}$/;
 
 it('keeps the message when WKWebView provides only frames in Error.stack', () => {
   const error = new Error('the plugin failed');
@@ -471,6 +480,98 @@ describe('trusted plugin runtime', () => {
       runtime.openPanel('example.test', 'counter');
     });
     expect(screen.getByText('Count 0')).toBeInTheDocument();
+  });
+
+  it('drives importer preview, cancellation and confirmation from the workbench', async () => {
+    const file = {
+      id: '33333333-3333-4333-8333-333333333333',
+      lastModified: 123,
+      mimeType: 'text/csv',
+      name: 'notes.csv',
+      size: 48,
+    };
+    const filesTransport: PluginFilesTransport = {
+      pick: vi.fn(async () => ({ files: [file], success: true as const })),
+      readText: vi.fn(async () => ({ success: true as const, text: '' })),
+      release: vi.fn(async () => ({ success: true })),
+    };
+    const commitResponse = deferred<Response>();
+    const contentFetch = vi.fn<typeof fetch>();
+    contentFetch.mockReturnValue(commitResponse.promise);
+    const runtime = new PluginRuntime({
+      contentTransport: {
+        fetch: contentFetch,
+        getEndpoint: async () => ({
+          aiEnabled: false,
+          baseUrl: 'http://127.0.0.1:1234',
+          token: 'secret',
+        }),
+      },
+      filesTransport,
+      importer: async () => ({
+        default: definePlugin({
+          setup(app) {
+            app.importers.register({
+              accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+              id: 'notes-csv',
+              parse: async () => ({
+                notes: [
+                  { color: 'blue', text: 'Preview body', title: 'First note' },
+                ],
+                warnings: ['Skipped an empty row'],
+              }),
+              title: 'Import notes',
+            });
+          },
+        }),
+      }),
+    });
+    runtimes.push(runtime);
+    await runtime.sync(snapshot());
+    render(<PluginWorkbench runtime={runtime} />);
+
+    fireEvent.click(screen.getByText('Import notes · Import'));
+    expect(
+      await screen.findByText('1 notes ready to import')
+    ).toBeInTheDocument();
+    expect(screen.getByText('First note')).toBeInTheDocument();
+    expect(screen.getByText('Preview body')).toBeInTheDocument();
+    expect(screen.getByText('Skipped an empty row')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cancel'));
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Import preview')).not.toBeInTheDocument()
+    );
+    expect(contentFetch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Import notes · Import'));
+    expect(
+      await screen.findByText('1 notes ready to import')
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Confirm import'));
+    expect(await screen.findByText('Importing 1 notes…')).toBeInTheDocument();
+    const request = JSON.parse(
+      contentFetch.mock.calls[0]![1]!.body as string
+    ) as { operationId: string };
+    commitResponse.resolve(
+      Response.json({
+        changed: true,
+        items: [
+          { color: 'blue', id: 'note-1', revision: 1, title: 'First note' },
+        ],
+        operationId: request.operationId,
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Import preview')).not.toBeInTheDocument()
+    );
+    expect(contentFetch).toHaveBeenCalledOnce();
+    expect(
+      JSON.parse(contentFetch.mock.calls[0]![1]!.body as string)
+    ).toMatchObject({
+      action: 'create',
+      notes: [{ color: 'blue', text: 'Preview body', title: 'First note' }],
+      operationId: expect.stringMatching(IMPORT_OPERATION_ID_RE),
+    });
   });
 
   it('redacts launch tokens while retaining source locations', () => {

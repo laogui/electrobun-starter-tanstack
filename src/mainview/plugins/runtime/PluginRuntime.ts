@@ -26,6 +26,7 @@ import {
 } from './files';
 import {
   type ImporterSessionSnapshot,
+  notesForCommit,
   raceImporterAbort,
   validateImporterParseResult,
 } from './importers';
@@ -837,8 +838,59 @@ export class PluginRuntime {
   }
 
   cancelImporterSession(operationId: string): void {
-    if (this.importSession?.snapshot.operationId === operationId) {
+    if (
+      this.importSession?.snapshot.operationId === operationId &&
+      this.importSession.snapshot.canCancel
+    ) {
       this.cancelImporterSessionFor();
+    }
+  }
+
+  async confirmImporterSession(operationId: string): Promise<void> {
+    const session = this.importSession;
+    if (
+      !session ||
+      session.snapshot.operationId !== operationId ||
+      !session.snapshot.canConfirm ||
+      !session.activation.content ||
+      !this.isCurrentImporterSession(session)
+    ) {
+      throw new Error('Importer preview is not available');
+    }
+    const notes = notesForCommit(session.snapshot.notes);
+    session.snapshot = Object.freeze({
+      ...session.snapshot,
+      canCancel: false,
+      canConfirm: false,
+      error: null,
+      status: 'committing',
+    });
+    this.publish();
+    try {
+      const result = await session.activation.content.createMany(notes, {
+        label: `Import ${notes.length} notes with ${session.snapshot.importerTitle}`,
+        operationId,
+        signal: session.controller.signal,
+      });
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      if (result.operationId !== operationId) {
+        throw new Error('Importer commit operation identity mismatch');
+      }
+      this.cancelImporterSessionFor(session.activation, session.registration);
+    } catch (error) {
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canCancel: true,
+        canConfirm: true,
+        error: redactPluginError(error),
+        status: 'failed',
+      });
+      this.report(session.snapshot.pluginId, 'importer-commit', error);
     }
   }
 
@@ -850,6 +902,9 @@ export class PluginRuntime {
     const registration = activation?.importers.get(importerId);
     if (!(activation?.active && registration && activation.files)) {
       throw new Error('Importer is not available');
+    }
+    if (this.importSession?.snapshot.status === 'committing') {
+      throw new Error('Import confirmation is in progress');
     }
     this.cancelImporterSessionFor();
     const controller = new AbortController();

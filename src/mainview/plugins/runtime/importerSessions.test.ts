@@ -23,6 +23,11 @@ const handle: PluginFileHandleData = {
   size: 48,
 };
 const IMPORT_OPERATION_ID_RE = /^plgimport_[a-f0-9]{32}$/;
+const endpoint = {
+  aiEnabled: false,
+  baseUrl: 'http://127.0.0.1:1234',
+  token: 'secret',
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -78,7 +83,10 @@ function setupRuntime(
   };
   let disposeImporter!: Disposer;
   const runtime = new PluginRuntime({
-    contentTransport: { fetch: contentFetch },
+    contentTransport: {
+      fetch: contentFetch,
+      getEndpoint: async () => endpoint,
+    },
     filesTransport: transport,
     importer: async () => ({
       default: {
@@ -160,6 +168,121 @@ describe('host-owned importer sessions', () => {
       expect.arrayContaining(['selecting', 'parsing', 'preview'])
     );
     expect(contentFetch).not.toHaveBeenCalled();
+  });
+
+  it('commits the preview once with its stable operation identity', async () => {
+    const { contentFetch, runtime } = setupRuntime(async () => ({
+      notes: [
+        { color: 'blue', text: 'First body', title: 'First' },
+        { title: 'Second' },
+      ],
+      warnings: ['One warning'],
+    }));
+    const response = deferred<Response>();
+    contentFetch.mockReturnValueOnce(response.promise);
+    await runtime.sync(snapshot());
+    await runtime.startImporterSession('example.csv', 'notes-csv');
+    const preview = runtime.getSnapshot().importSession!;
+
+    const confirming = runtime.confirmImporterSession(preview.operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canCancel: false,
+      canConfirm: false,
+      notes: preview.notes,
+      operationId: preview.operationId,
+      status: 'committing',
+    });
+    runtime.cancelImporterSession(preview.operationId);
+    expect(runtime.getSnapshot().importSession?.status).toBe('committing');
+    await expect(
+      runtime.startImporterSession('example.csv', 'notes-csv')
+    ).rejects.toThrow('Import confirmation is in progress');
+    const body = JSON.parse(
+      contentFetch.mock.calls[0]![1]!.body as string
+    ) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      action: 'create',
+      label: 'Import 2 notes with Import notes',
+      notes: [
+        { color: 'blue', text: 'First body', title: 'First' },
+        { color: '', text: '', title: 'Second' },
+      ],
+      operationId: preview.operationId,
+      pluginId: 'example.csv',
+      workspaceId: 'workspace-a',
+    });
+    response.resolve(
+      Response.json({
+        changed: true,
+        items: [
+          { color: 'blue', id: 'note-1', revision: 1, title: 'First' },
+          { color: '', id: 'note-2', revision: 1, title: 'Second' },
+        ],
+        operationId: preview.operationId,
+      })
+    );
+    await confirming;
+
+    expect(runtime.getSnapshot().importSession).toBeNull();
+  });
+
+  it('keeps the preview and operation identity for a failed commit retry', async () => {
+    const { contentFetch, runtime } = setupRuntime(async () => ({
+      notes: [{ text: 'Body', title: 'Retry me' }],
+      warnings: ['Retained warning'],
+    }));
+    await runtime.sync(snapshot());
+    await runtime.startImporterSession('example.csv', 'notes-csv');
+    const preview = runtime.getSnapshot().importSession!;
+    contentFetch
+      .mockResolvedValueOnce(
+        Response.json(
+          { code: 'transport-error', error: 'Response was uncertain' },
+          { status: 503 }
+        )
+      )
+      .mockImplementationOnce(async (_url, options) => {
+        const body = JSON.parse(options!.body as string) as {
+          operationId: string;
+        };
+        return Response.json({
+          changed: true,
+          items: [{ color: '', id: 'note-1', revision: 1, title: 'Retry me' }],
+          operationId: body.operationId,
+        });
+      });
+
+    await runtime.confirmImporterSession(preview.operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canCancel: true,
+      canConfirm: true,
+      error: expect.stringContaining('Response was uncertain'),
+      notes: preview.notes,
+      operationId: preview.operationId,
+      status: 'failed',
+      warnings: preview.warnings,
+    });
+    expect(runtime.getSnapshot().diagnostics.at(-1)?.phase).toBe(
+      'importer-commit'
+    );
+
+    await runtime.confirmImporterSession(preview.operationId);
+
+    expect(runtime.getSnapshot().importSession).toBeNull();
+    const requests = contentFetch.mock.calls.map((call) =>
+      JSON.parse(call[1]!.body as string)
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toMatchObject({
+      notes: preview.notes,
+      operationId: preview.operationId,
+    });
+    expect(requests[1]).toMatchObject({
+      notes: preview.notes,
+      operationId: preview.operationId,
+    });
   });
 
   it('cancels parsing promptly and ignores a late plugin result', async () => {

@@ -27,7 +27,12 @@ export interface ImporterSessionSnapshot {
   readonly notes: readonly ImporterPreviewNote[];
   readonly operationId: string;
   readonly pluginId: string;
-  readonly status: 'selecting' | 'parsing' | 'preview' | 'failed';
+  readonly status:
+    | 'selecting'
+    | 'parsing'
+    | 'preview'
+    | 'committing'
+    | 'failed';
   readonly warnings: readonly string[];
   readonly workspaceId: string;
 }

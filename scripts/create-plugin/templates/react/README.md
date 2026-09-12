@@ -4,6 +4,7 @@ Author setup:
 
 ```sh
 bun install
+bun test
 bun run type-check
 bun run build
 # Keep compiled output current while editing:
@@ -39,4 +40,4 @@ Import `useSelection`, `useSelectionState` or `useSelectedPlacements` from `@gho
 
 For a React root you create yourself, or standalone author tests, wrap the component in the public `SelectionProvider` with `selection={app.selection}` (or a fake implementing that interface). Both template build modes externalize the hooks; the shim uses `runtime.sdkReact` rather than bundling another provider.
 
-Content creation, rich body writes, custom cards, complete file services and signed updates are not provided by this slice. Native backends and permission sandboxes are not part of this model.
+The template test uses `@ghostboard/sdk/testing` to run setup and command behavior without GhostBoard. The fake host does not reproduce GhostBoard layout or CSS, persistence, real RPC, multi-plugin arbitration, or platform behavior. Use a packaged GhostBoard build for those checks. Native backends, permission sandboxes and signed updates are not part of this slice.

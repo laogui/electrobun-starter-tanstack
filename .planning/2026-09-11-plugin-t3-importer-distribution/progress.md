@@ -3,7 +3,7 @@
 ## Session: 2026-09-11
 
 ### Current Status
-- **Phase:** 3 - Minimal Implementation
+- **Phase:** 4 - Testing & Verification
 - **Started:** 2026-09-11
 
 ### Actions Taken
@@ -29,6 +29,13 @@
 - Added runtime confirmation with one stable import operation ID, an explicit committing state, close-on-receipt behavior and retained immutable preview data after failed or uncertain content requests. User cancellation and replacement import starts are blocked while confirmation is in flight; lifecycle retirement can still abort stale work.
 - Integrated importer entries and the host-owned session into Plugin Workbench. The UI now exposes file selection, selecting/parsing status, file metadata, bounded warnings, note previews, explicit confirm/retry/cancel actions and visible failure diagnostics without introducing a second renderer store.
 - Added runtime and Workbench regressions for stable request identity, double-start/cancel protection, successful close, failure retry, zero-write cancellation and visible in-flight state. Closed the host-owned select / preview / confirm / cancel Phase 3 subtask.
+- Added standalone `@ghostboard/sdk/testing` and `@ghostboard/sdk/testing/react` exports. The fake host provides registration inspection, command/event/task behavior, activation-scoped in-memory files/storage/content/selection, stable fake content receipts, signal advancement and isolated-candidate atomic reload; the React helper renders component panels inside `SelectionProvider`.
+- Added no-application tests to both generated author templates. A clean generated JavaScript template passes its Bun test; a clean generated React template passes its Bun test, TypeScript check and Vite build using only its copied SDK and declared author dependencies.
+- Added an independent `t3.combined` fixture that registers a command, React panel, canvas type and strict bounded CSV importer. Its author test uses the fake host to prove all four registrations and preview-only parsing.
+- Added `test:plugin-t3-fixture`, which copies the package and SDK into an isolated temporary author root, installs with lifecycle scripts disabled, runs the tests, and creates a final-user `.ghostboard-plugin` ZIP containing exactly `app.js`, `csv.js` and `manifest.json`. The first clean verification produced a 2,224-byte archive.
+- Added a real `PluginManagementService` regression for the independent combined package: preview exposes `files` and unverified signature status without executing code; commit remains disabled; explicit enablement is workspace-local; runtime resolution succeeds; the installed tree retains exactly the three runtime files.
+- Added `test:plugin-templates`, a repeatable isolated generator acceptance for both author templates. It installs with lifecycle scripts disabled, runs both no-app tests, type-checks and builds the React template, and asserts the externalized runtime output includes `app.js` plus `manifest.json`.
+- Closed Phase 3 after type checking, 14-file Ultracite verification, 5 focused files / 58 tests, repeatable combined-package creation and repeatable template generation all passed. Advanced to packaged T3 acceptance.
 - Added host-owned confirmation to importer sessions. Confirmation uses the immutable preview and session operation ID in one `content.createMany` request, disables cancellation and replacement while the request is in flight, closes only after a matching receipt, and retains the same preview/operation ID after failure for retry.
 
 ### Test Results
@@ -54,6 +61,18 @@
 | Workbench host-flow type-check | Runtime, UI and test additions remain type-safe | Passed; only the script's 29 ignored Electrobun dependency diagnostics were reported | pass |
 | Workbench host-flow scoped Ultracite | No diagnostics in the five affected source/test files | Checked 5 files; no fixes applied after one corrective pass | pass |
 | Workbench host-flow diff check | No whitespace errors in the current T3 working tree | `git diff --check` passed | pass |
+| SDK testing focused suite | Fake registrations/behavior/reload/files/content and React panel provider work without GhostBoard | 2 files / 4 tests passed | pass |
+| Generated JavaScript template | Fresh generator output installs its copied SDK and passes its no-app test | 1 Bun test passed | pass |
+| Generated React template | Fresh generator output passes no-app test, TypeScript and externalized Vite build | 1 Bun test passed; `tsc --noEmit` and Vite build passed | pass |
+| Combined package fixture | Isolated author test passes and final archive contains runtime files only | `app.js`, `csv.js`, `manifest.json`; 2,224-byte archive | pass |
+| T3 author-tool focused regression | Host importer flow plus SDK testing behavior remain green together | 4 files / 42 tests passed | pass |
+| SDK package dry run | Published file list includes root, React, testing and testing/react runtime/declaration entries | 10 entries; 24,664-byte tarball estimate | pass |
+| T3 author-tool type-check | Root code and imported SDK testing declarations remain type-safe, including async no-cleanup reload factories | Passed; only 29 ignored Electrobun dependency diagnostics were reported | pass |
+| Combined fixture repeatability | The checked-in verifier reproduces author tests and the minimal runtime-only archive | Second clean archive matched 3 entries and 2,224 bytes | pass |
+| Retained installer T3 integration | Combined package preview/commit/enable/runtime resolution remains non-executing and workspace-scoped | `management.test.ts`: 16 tests passed | pass |
+| Generated-template verifier | Both fresh templates run no-app tests; React also type-checks/builds | Passed; React dist contains `app.js`, source map and `manifest.json` | pass |
+| Phase 3 closing focused suite | Installer, host importer flow and SDK testing regressions pass together | 5 files / 58 tests passed | pass |
+| Phase 3 closing Ultracite | No diagnostics across 14 affected source/test/script files | Checked 14 files; no fixes applied after one formatting pass | pass |
 
 ### Errors
 | Error | Resolution |
@@ -78,3 +97,17 @@
 | The first Workbench integration run had one timing-only failure because the commit response resolved before React could expose the `committing` state | Changed the test to gate the response, verify the visible in-flight state, then release the receipt; production timing was left unchanged. |
 | Two command wrappers prepared for the A5/template inventory failed before execution: one was incomplete JavaScript and one omitted `exec_command.cmd` | Reissued the inventory as one validated command; neither failed wrapper invoked a repository tool or changed files. |
 | The template inventory requested a non-existent React `src/plugin.tsx`; the actual entry is `src/app.tsx` | Use the discovered template tree as the source of truth and inspect `src/app.tsx` in the next targeted read. |
+| A Vitest config search used an unmatched shell glob, producing a zsh `no matches found` diagnostic before the direct config read | Read `vitest.config.ts` by its exact path and confirmed the source-only include patterns. |
+| The SDK export patch reported stale context after the export/file-list and React declaration were already present on disk | Inspected the resulting files directly, confirmed the intended entries exist, and continued from the filesystem state instead of reapplying the stale hunk. |
+| First A5 Ultracite pass reported only formatter output, array shorthand, optional-parameter ordering and the deliberate setup `void` union | Moved defaults into function bodies, used shorthand arrays, annotated the supported setup union narrowly and queued safe formatting. |
+| The first A5 safe-fix rerun applied three mechanical files but reported the declaration suppression as unused because it targeted the method rather than the callback parameter | Moved the suppression to the exact `factory` parameter line and reran without changing the public type. |
+| The parameter-level suppression still did not attach to the nested union, so the chained verification stopped before tests | Extracted a named `FakeHostFactory` alias with a direct narrow suppression; tests were not claimed from the stopped command. |
+| The alias-level suppression remained unused on the third attempt because the diagnostic belongs to the nested Promise type | Switched to the suggested `Promise<undefined | Disposer>` declaration and scheduled a generated-template type check to prove ordinary async setup callbacks remain ergonomic. |
+| After changing the Promise branch, Ultracite separately exposed the outer `void` union | Replaced the no-cleanup sentinel consistently with `undefined`; no source/runtime behavior changed. |
+| First real generated-template acceptance passed JavaScript and React tests, then stopped because React `tsc` lacked `bun:test` declarations | Added template-local `@types/bun`; the generated runtime output remains dependency-free for final users. |
+| The regenerated React template still failed `tsc` because Bundler resolution did not auto-include the installed Bun declarations | Confirmed `tsc --types bun` succeeds and added `types: ["bun"]` to the template compiler options. |
+| First combined-package Ultracite pass reported only mechanical layout plus `delete` on the test-only global probe | Replaced deletion with an `undefined` assignment and queued safe formatting across the affected template/fixture files. |
+| First retained-installer integration run passed prepare/preview/commit/enable/runtime resolution but expected every installed file in the entry-only `sources` map | Kept the entry-source assertion and moved the three-file completeness check to the installed package directory. |
+| The first repeatable template-verifier command pointed at a mistyped non-existent working directory and did not start | Reissued the unchanged script from the repository root. |
+| The first error-log patch for that command contained a mistyped context line and was rejected atomically | Read the exact table tail and appended cleanly; the rejected patch changed nothing. |
+| Phase 3 closing Ultracite pass reported only two mechanical line-wrap changes | Queued the safe formatter for the template verifier and T3 installer integration test. |

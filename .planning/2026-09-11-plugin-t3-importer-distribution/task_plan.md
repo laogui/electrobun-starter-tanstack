@@ -4,10 +4,10 @@
 Define and deliver the smallest honest T3 slice that lets an independently packaged high-trust plugin register a file importer, preview and commit imported notes without duplicate or hidden writes, and reach the same runnable package through final-user ZIP / HTTPS installation in the packaged macOS arm64 app.
 
 ## Next Step
-Add the independent combined importer package and the minimum `@ghostboard/sdk/testing` fake host needed to test its CSV parser without launching GhostBoard, then prove the package build is directly installable.
+Build and run the packaged macOS arm64 T3 acceptance probe through local ZIP and loopback-download installation, covering preview/cancel/confirm/retry, workspace/disable cancellation, persistence and undo/redo.
 
 ## Current Phase
-Phase 3
+Phase 4
 
 ## Phases
 
@@ -27,18 +27,18 @@ Phase 3
 - **Status:** complete
 
 ### Phase 3: Minimal Implementation
-- [ ] Implement the minimum retained-installer adaptation for manifest v2 application packages
+- [x] Implement the minimum retained-installer adaptation for manifest v2 application packages
 - [x] Implement SDK files and importer registration/runtime plumbing
 - [x] Implement host-owned select / preview / confirm / cancel flow
-- [ ] Provide an independent combined plugin package and SDK testing support required by this slice
-- **Status:** in_progress
+- [x] Provide an independent combined plugin package and SDK testing support required by this slice
+- **Status:** complete
 
 ### Phase 4: Testing & Verification
-- [ ] Add unit and integration regressions for installer and importer contracts
-- [ ] Run type checking, style checks and focused tests
+- [x] Add unit and integration regressions for installer and importer contracts
+- [x] Run type checking, style checks and focused tests
 - [ ] Build and run packaged ZIP / HTTPS / importer acceptance probes
 - [ ] Run the full serial regression suite
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase 5: Delivery
 - [ ] Update SDK, platform and development documentation with exact supported boundaries
@@ -78,4 +78,18 @@ Phase 3
 | First real Workbench Ultracite pass found only formatter output plus one test-local operation-ID regex | Promote the regex to module scope and apply the reported safe formatting to the three affected files. |
 | Two A5/template inventory wrappers were malformed before tool execution | Reissue one validated `exec_command` call and avoid composing wrappers incrementally. |
 | Template inspection targeted `src/plugin.tsx`, but the React template entry is `src/app.tsx` | Follow the enumerated template tree and use `src/app.tsx`; no missing source file needs creation. |
+| Vitest config search passed a shell glob that zsh rejected when no `.js` variant existed | Use the known exact `vitest.config.ts` path; avoid unmatched shell globs. |
+| The SDK export patch hit stale context after its intended package/export files were already present | Verify each target on disk and do not repeat the patch; proceed with tests against the resulting state. |
+| First A5 Ultracite pass found only layout, array shorthand, two default-parameter-order diagnostics and the intentional async setup `void` union | Preserve optional API semantics with internal defaults, add the same narrow declaration ignore used by `PluginDefinition`, and apply safe formatting. |
+| The first A5 safe-fix pass showed the `void` suppression was attached to `reload` instead of its `factory` parameter | Move the narrow suppression directly above `factory`, the node that owns the union diagnostic. |
+| Parameter-level suppression still did not bind to the nested async setup union | Name the callback as `FakeHostFactory` and suppress the exported alias directly, matching the SDK's named `PluginDefinition` pattern. |
+| Alias-level suppression also did not bind because the diagnostic is specifically on `Promise<void | Disposer>` | After three placement attempts, adopt Ultracite's `Promise<undefined | Disposer>` form and verify real no-return async callbacks through template type-checking. |
+| Ultracite then flagged the remaining top-level `void` in the callback return union | Use `undefined` for both no-cleanup branches; TypeScript 5.1+ supports fallthrough callbacks contextually returning `undefined`, and the generated template will verify it. |
+| First generated-template run passed both Bun tests but React `tsc` could not resolve `bun:test` declarations | Add `@types/bun` to the React template's dev dependencies, then regenerate rather than patching the temporary copy. |
+| Installing `@types/bun` alone did not expose `bun:test` under the template's Bundler module resolution | Add `types: ["bun"]`; an explicit `tsc --types bun` probe against the generated project passed. |
+| First combined-package Ultracite pass found four formatter-only files and one test cleanup `delete` | Assign the optional global probe to `undefined`, then apply the safe formatter output. |
+| First retained-installer integration assertion expected `LoadedPluginDirectory.sources` to contain every package file | Assert the complete installed filesystem tree separately; `sources` intentionally exposes only the entry source while relative modules remain served from the installed directory. |
+| First repeatable template-verifier command used a mistyped non-existent working directory and did not launch | Reissue the unchanged script from the repository root. |
+| The first attempt to log that command error used a mistyped progress-table context and the patch was rejected | Append against the exact current table tail; no repository content changed in the rejected attempt. |
+| Phase 3 closing Ultracite pass found formatter-only layout in the template verifier and installer test | Apply the safe formatter to those two files, then rerun the same scoped check. |
 | First Workbench test missed the transient `committing` label because its fetch mock resolved synchronously | Hold the mocked response behind a deferred promise, assert the visible in-flight state, then resolve it and assert close-on-receipt. |

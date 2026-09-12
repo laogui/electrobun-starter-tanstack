@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +21,7 @@ vi.mock('../appPaths', () => ({
 }));
 
 const TREE_DIGEST = /^[a-f0-9]{64}$/;
+const T3_COMBINED_FILES = ['app.js', 'csv.js', 'manifest.json'] as const;
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -30,6 +38,18 @@ async function setup() {
   await writeFile(file, createStoredZip(pluginFiles()));
   const service = new PluginManagementService(workspace, { appDataRoot });
   return { root, workspace, appDataRoot, file, service };
+}
+
+async function t3CombinedPluginFiles(): Promise<Record<string, string>> {
+  const fixture = resolve(process.cwd(), 'scripts/trusted-plugin-t3/fixture');
+  return Object.fromEntries(
+    await Promise.all(
+      T3_COMBINED_FILES.map(async (name) => [
+        name,
+        await readFile(join(fixture, name), 'utf8'),
+      ])
+    )
+  );
 }
 
 describe('PluginManagementService', () => {
@@ -196,6 +216,48 @@ describe('PluginManagementService', () => {
         appDataRoot,
       }).list()
     ).toEqual([installed]);
+  });
+
+  it('installs the independent T3 combined package without executing it', async () => {
+    const { appDataRoot, file, service, workspace } = await setup();
+    await writeFile(file, createStoredZip(await t3CombinedPluginFiles()));
+    const probe = globalThis as { __ghostboardT3Combined?: unknown };
+    probe.__ghostboardT3Combined = undefined;
+
+    const preview = await service.prepareFromFile(file);
+
+    expect(preview.plugin).toMatchObject({
+      capabilities: ['files'],
+      id: 't3.combined',
+      name: 'T3 combined importer probe',
+      signatureStatus: 'unverified',
+    });
+    expect(probe.__ghostboardT3Combined).toBeUndefined();
+    const installed = await service.commit(preview.transactionId);
+    expect(installed).toMatchObject({ enabled: false, status: 'stored' });
+    expect(probe.__ghostboardT3Combined).toBeUndefined();
+    expect(
+      (
+        await new PluginManagementService(`${workspace}-other`, {
+          appDataRoot,
+        }).list()
+      )[0]
+    ).toMatchObject({ enabled: false, pluginId: 't3.combined' });
+
+    const enabled = await service.enable(installed);
+    expect(enabled.enabled).toBe(true);
+    const runtime = await service.resolveRuntimePackage(enabled);
+    expect(runtime.manifest.id).toBe('t3.combined');
+    expect(Object.keys(runtime.sources)).toEqual(['app.js']);
+    const packageDirectory = join(
+      pluginInstallRoot(appDataRoot),
+      'packages',
+      installed.pluginId,
+      installed.version,
+      installed.digest
+    );
+    expect((await readdir(packageDirectory)).sort()).toEqual(T3_COMBINED_FILES);
+    expect(probe.__ghostboardT3Combined).toBeUndefined();
   });
 
   it('saves opt-in workspace enablement, never importing old grants', async () => {

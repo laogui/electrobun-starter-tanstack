@@ -284,7 +284,7 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 has started with the bounded read-only file API and activation-owned importer registration below; the host preview/confirm flow, binary streams, writes and directories remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 now includes the bounded read-only file API, activation-owned importer registration, host-owned preview/confirm/cancel flow and the author testing exports documented below. Binary streams, writes, directories, larger segmented imports and packaged ZIP/HTTPS acceptance remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
@@ -324,7 +324,37 @@ app.importers.register({
 });
 ```
 
-`parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime now owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes 1–100 preview notes, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`. The visible Plugin Workbench preview and explicit-confirm transaction are the next T3 slice; until they land, this controller is not yet a complete user-triggerable import path.
+`parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes 1–100 preview notes, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`.
+
+Plugin Workbench shows the file, warnings, titles, body summaries and colors before any write. Explicit confirmation submits one atomic `content.createMany` request with a stable operation ID. Confirmation cannot be cancelled or replaced while the request is in flight. A failed or uncertain response retains the same immutable preview and operation ID for retry; a successful receipt or explicit pre-commit cancellation closes the session. The imported Notes remain ordinary workspace content after the plugin is disabled.
+
+## Author testing without GhostBoard (A5)
+
+`@ghostboard/sdk/testing` exports `createFakeHost({ pluginId, workspaceId })`. It returns `{ app, harness }`: pass `app` to plugin `setup`, then use the harness to inspect registrations and trigger behavior.
+
+```js
+import { createFakeHost } from '@ghostboard/sdk/testing';
+import plugin from './app.js';
+
+const fake = createFakeHost({
+  pluginId: 'example.csv',
+  workspaceId: 'test-workspace',
+});
+await plugin.setup(fake.app);
+
+const file = fake.harness.files.addText(
+  'notes.csv',
+  'title,text\nOne,Body',
+  { mimeType: 'text/csv' },
+);
+const preview = await fake.harness.behavior.parseImporter('notes-csv', file);
+```
+
+`harness.inspection` exposes the active commands, panels, canvas types, importers, tasks, open panel IDs, cleanup count, generation and signal. `harness.behavior` can run commands/tasks/importers, emit typed host events, replace the selection snapshot and abort the current activation. `harness.lifecycle.reload(factory)` prepares registrations against an isolated candidate: a rejected factory cleans the candidate and retains the old activation; a successful factory swaps generations, aborts/cleans the old activation and returns the new `PluginContext`. `harness.files.addText/queuePick` provide activation-local in-memory handles. Fake content operations use in-memory Notes and stable operation receipts so identical retries deduplicate.
+
+`@ghostboard/sdk/testing/react` exports `renderPanel(definition, { context })` for React component panels. It uses Testing Library and wraps the component with the SDK `SelectionProvider`; install `@testing-library/react` in the author test project when using this subpath. DOM `mount` panels can be tested directly against a jsdom element and are intentionally not accepted by `renderPanel`.
+
+The fake host is a unit-test aid, not an embedded GhostBoard. It does **not** reproduce host layout or CSS, disk persistence or interruption recovery, real RPC/native dialogs, multi-plugin arbitration, package installation, or platform/WebView differences. Use real packaged-app probes for those behaviors. Its fake `undo`/`redo` responses are no-op placeholders; transaction conflict and recovery claims come only from the real host tests.
 
 ## T2 fourth slice: explicit plain-text body replacement
 

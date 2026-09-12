@@ -13,15 +13,28 @@
     "./react": {
       "types": "./react.d.ts",
       "import": "./react.js"
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "import": "./testing.js"
+    },
+    "./testing/react": {
+      "types": "./testing/react.d.ts",
+      "import": "./testing/react.js"
     }
   },
   "files": [
     "index.js",
     "index.d.ts",
     "react.js",
-    "react.d.ts"
+    "react.d.ts",
+    "testing.js",
+    "testing.d.ts",
+    "testing/react.js",
+    "testing/react.d.ts"
   ],
   "peerDependencies": {
+    "@testing-library/react": "^16.0.0",
     "react": "19.2.x",
     "react-dom": "19.2.x"
   },
@@ -30,6 +43,9 @@
       "optional": true
     },
     "react-dom": {
+      "optional": true
+    },
+    "@testing-library/react": {
       "optional": true
     }
   },

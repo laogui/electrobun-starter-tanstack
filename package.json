@@ -17,6 +17,8 @@
     "test:plugin-t2-selection": "bun scripts/trusted-plugin-t2-selection/run.ts",
     "test:plugin-t2-canvas": "bun scripts/trusted-plugin-t2-canvas/run.ts",
     "test:plugin-t2-history": "bun scripts/trusted-plugin-t2-history/run.ts",
+    "test:plugin-t3-fixture": "bun scripts/trusted-plugin-t3/verify-fixture.ts",
+    "test:plugin-templates": "bun scripts/create-plugin/verify-templates.ts",
     "plugin:create": "bun scripts/create-plugin.ts",
     "upload:r2": "bun scripts/upload-r2.ts",
     "release:canary": "bun run build:canary && bun scripts/upload-r2.ts --env=canary",

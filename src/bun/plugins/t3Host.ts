@@ -6,6 +6,16 @@ import type { PluginManagementService } from './management';
 
 type T3Phase = 'download' | 'local' | 'restart';
 
+const PACKAGE_ARCHIVES = {
+  canvas: 't3-exit-canvas.ghostboard-plugin',
+  combined: 't3-combined.ghostboard-plugin',
+  command: 't3-exit-command.ghostboard-plugin',
+  importer: 't3-exit-importer.ghostboard-plugin',
+  panel: 't3-exit-panel.ghostboard-plugin',
+} as const;
+
+type T3PackageName = keyof typeof PACKAGE_ARCHIVES;
+
 function testPhase(): T3Phase | null {
   const phase = process.env.GHOSTBOARD_PLUGIN_T3_PHASE;
   return phase === 'download' || phase === 'local' || phase === 'restart'
@@ -26,6 +36,17 @@ function segmentedCsv(): string {
     { length: 205 },
     (_, index) => `Segmented ${index + 1},Body ${index + 1}`
   ).join('\n')}\n`;
+}
+
+async function requestedPackage(request: Request): Promise<T3PackageName> {
+  const body = (await request.json().catch(() => ({}))) as {
+    package?: unknown;
+  };
+  const name = body.package ?? 'combined';
+  if (typeof name !== 'string' || !(name in PACKAGE_ARCHIVES)) {
+    throw new Error('Unknown T3 package');
+  }
+  return name as T3PackageName;
 }
 
 export class T3HostController extends PluginHostController {
@@ -75,15 +96,25 @@ export class T3HostController extends PluginHostController {
         return new Response('Method not allowed', { status: 405, headers });
       }
       if (url.pathname.endsWith('/prepare-file')) {
+        const packageName = await requestedPackage(request);
         return Response.json(
           await this.management.prepareFromFile(
-            join(this.directory, 't3-combined.ghostboard-plugin')
+            join(this.directory, PACKAGE_ARCHIVES[packageName])
           ),
           { headers }
         );
       }
       if (url.pathname.endsWith('/prepare-url')) {
-        const packageUrl = process.env.GHOSTBOARD_PLUGIN_T3_URL;
+        const packageName = await requestedPackage(request);
+        const packageUrl =
+          packageName === 'combined'
+            ? process.env.GHOSTBOARD_PLUGIN_T3_URL
+            : process.env.GHOSTBOARD_PLUGIN_T3_URL_BASE
+              ? new URL(
+                  PACKAGE_ARCHIVES[packageName],
+                  process.env.GHOSTBOARD_PLUGIN_T3_URL_BASE
+                ).href
+              : undefined;
         if (!packageUrl) {
           throw new Error('Missing T3 package URL');
         }
@@ -107,6 +138,12 @@ export class T3HostController extends PluginHostController {
             break;
           case 'invalid-utf8':
             await writeFile(path, Uint8Array.from([0xc3, 0x28]));
+            break;
+          case 'exit-valid':
+            await writeFile(
+              path,
+              'title,text\nIndependent package,Final-user package proof\n'
+            );
             break;
           case 'missing-title':
             await writeFile(path, 'text,color\nBody,blue\n');

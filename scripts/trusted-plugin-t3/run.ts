@@ -1,7 +1,9 @@
 import { closeSync, existsSync, openSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+
+import { loadPluginFromZip } from '../../src/bun/plugins/zipInstall';
 
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   throw new Error('Packaged T3 acceptance currently requires macOS arm64.');
@@ -9,7 +11,6 @@ if (process.platform !== 'darwin' || process.arch !== 'arm64') {
 
 const project = resolve(import.meta.dir, '../..');
 const directory = await mkdtemp(join(tmpdir(), 'ghostboard-plugin-t3-'));
-const packageDirectory = join(directory, 'package');
 const pluginArchive = join(directory, 't3-combined.ghostboard-plugin');
 const artifactFolder = 'build/plugin-t3-artifacts';
 const buildEnv = {
@@ -21,6 +22,15 @@ const buildEnv = {
   VITE_PLUGIN_T0: '0',
   GHOSTBOARD_BUILD_ARTIFACT_DIR: artifactFolder,
 };
+
+interface PackageReport {
+  archive: string;
+  bytes: number;
+  entries: string[];
+  id: string;
+  name: string;
+  sha256: string;
+}
 
 console.log(`T3 evidence directory: ${directory}`);
 
@@ -47,42 +57,91 @@ async function run(
   }
 }
 
-await mkdir(packageDirectory);
-for (const name of ['app.js', 'csv.js', 'manifest.json']) {
-  await cp(
-    join(import.meta.dir, 'fixture', name),
-    join(packageDirectory, name)
+const packageSpecs = [
+  {
+    entries: ['app.js', 'csv.js', 'manifest.json'],
+    id: 't3.combined',
+    name: 'combined',
+    source: join(import.meta.dir, 'fixture'),
+  },
+  ...(['command', 'panel', 'canvas', 'importer'] as const).map((name) => ({
+    entries:
+      name === 'importer'
+        ? ['app.js', 'csv.js', 'manifest.json']
+        : ['app.js', 'manifest.json'],
+    id: `t3.exit.${name}`,
+    name,
+    source: join(import.meta.dir, 'exit-fixtures', name),
+  })),
+];
+const packageReports: PackageReport[] = [];
+for (const spec of packageSpecs) {
+  const archive =
+    spec.name === 'combined'
+      ? pluginArchive
+      : join(directory, `t3-exit-${spec.name}.ghostboard-plugin`);
+  await run(
+    [
+      process.execPath,
+      join(project, 'packages/plugin-sdk/package-plugin.js'),
+      spec.source,
+      '--output',
+      archive,
+      ...spec.entries.flatMap((entry) => ['--include', entry]),
+    ],
+    `plugin-package-${spec.name}.log`,
+    spec.source
   );
+  const bytes = new Uint8Array(await readFile(archive));
+  const loaded = await loadPluginFromZip(
+    bytes,
+    join(directory, `plugin-unpacked-${spec.name}`)
+  );
+  const entries = (await readdir(loaded.directory)).sort();
+  if (
+    loaded.manifest.id !== spec.id ||
+    entries.join(',') !== spec.entries.sort().join(',')
+  ) {
+    throw new Error(
+      `Unexpected ${spec.name} package: ${loaded.manifest.id}; ${entries.join(', ')}`
+    );
+  }
+  packageReports.push({
+    archive,
+    bytes: bytes.length,
+    entries,
+    id: spec.id,
+    name: spec.name,
+    sha256: new Bun.CryptoHasher('sha256').update(bytes).digest('hex'),
+  });
 }
-await run(
-  ['zip', '-X', '-q', pluginArchive, 'app.js', 'csv.js', 'manifest.json'],
-  'plugin-package.log',
-  packageDirectory
+const combinedReport = packageReports.find(
+  (report) => report.name === 'combined'
+)!;
+const pluginEntries = combinedReport.entries;
+const pluginSha256 = combinedReport.sha256;
+const downloads = new Map(
+  packageReports.map((report) => [
+    `/${report.archive.split('/').at(-1)}`,
+    report,
+  ])
 );
-const pluginEntries = (await Bun.$`unzip -Z1 ${pluginArchive}`.text())
-  .trim()
-  .split('\n')
-  .sort();
-if (pluginEntries.join(',') !== 'app.js,csv.js,manifest.json') {
-  throw new Error(`Unexpected plugin package: ${pluginEntries.join(', ')}`);
-}
-const pluginSha256 = new Bun.CryptoHasher('sha256')
-  .update(await Bun.file(pluginArchive).arrayBuffer())
-  .digest('hex');
 
 const downloadServer = Bun.serve({
   hostname: '127.0.0.1',
   port: 0,
   fetch(request) {
-    if (new URL(request.url).pathname !== '/t3-combined.ghostboard-plugin') {
+    const report = downloads.get(new URL(request.url).pathname);
+    if (!report) {
       return new Response('Not found', { status: 404 });
     }
-    return new Response(Bun.file(pluginArchive), {
+    return new Response(Bun.file(report.archive), {
       headers: { 'Content-Type': 'application/zip' },
     });
   },
 });
-const pluginUrl = `http://127.0.0.1:${downloadServer.port}/t3-combined.ghostboard-plugin`;
+const pluginUrlBase = `http://127.0.0.1:${downloadServer.port}/`;
+const pluginUrl = `${pluginUrlBase}t3-combined.ghostboard-plugin`;
 
 try {
   await run([process.execPath, 'x', 'vite', 'build'], 'vite.log');
@@ -116,6 +175,7 @@ try {
         GHOSTBOARD_PLUGIN_T3_DIR: directory,
         GHOSTBOARD_PLUGIN_T3_PHASE: phase,
         GHOSTBOARD_PLUGIN_T3_URL: pluginUrl,
+        GHOSTBOARD_PLUGIN_T3_URL_BASE: pluginUrlBase,
         GHOSTBOARD_DATA_DIR: join(
           directory,
           phase === 'download' ? 'download-app-data' : 'local-app-data'
@@ -157,6 +217,9 @@ try {
         pluginArchive,
         pluginEntries,
         pluginSha256,
+        independentPackages: packageReports.filter(
+          (report) => report.name !== 'combined'
+        ),
         results,
         signingRequested: Boolean(process.env.ELECTROBUN_DEVELOPER_ID),
         notarizationRequested: Boolean(process.env.ELECTROBUN_APPLEID),

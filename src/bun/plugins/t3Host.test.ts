@@ -37,6 +37,7 @@ beforeEach(async () => {
     'GHOSTBOARD_PLUGIN_T3_URL',
     'http://127.0.0.1:3210/t3-combined.ghostboard-plugin'
   );
+  vi.stubEnv('GHOSTBOARD_PLUGIN_T3_URL_BASE', 'http://127.0.0.1:3210/');
   vi.stubGlobal('Bun', {
     file: (path: string) => ({
       exists: async () => {
@@ -105,6 +106,18 @@ describe('T3HostController', () => {
       'http://127.0.0.1:3210/t3-combined.ghostboard-plugin',
       { allowLoopback: true }
     );
+    await request(host, 'prepare-file', { package: 'command' });
+    expect(management.prepareFromFile).toHaveBeenCalledWith(
+      join(directory, 't3-exit-command.ghostboard-plugin')
+    );
+    await request(host, 'prepare-url', { package: 'importer' });
+    expect(management.prepareFromUrl).toHaveBeenCalledWith(
+      'http://127.0.0.1:3210/t3-exit-importer.ghostboard-plugin',
+      { allowLoopback: true }
+    );
+    expect(
+      (await request(host, 'prepare-file', { package: '../escape' }))?.status
+    ).toBe(400);
     host.dispose();
   });
 
@@ -114,6 +127,10 @@ describe('T3HostController', () => {
     await request(host, 'select', { scenario: 'valid' });
     expect(await readFile(join(directory, 'selected.csv'), 'utf8')).toContain(
       'First, quoted'
+    );
+    await request(host, 'select', { scenario: 'exit-valid' });
+    expect(await readFile(join(directory, 'selected.csv'), 'utf8')).toContain(
+      'Independent package'
     );
     await request(host, 'select', { scenario: 'segmented' });
     expect(

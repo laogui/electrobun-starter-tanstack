@@ -11,6 +11,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 import type { PluginContext } from '../../../../packages/plugin-sdk';
 import type { PluginInstallPreview } from '../../../shared/plugins/management';
 import { pluginRuntime } from '../runtime';
+import { verifyT3ExitPackages } from './exitPackages';
 
 interface OperationRecord {
   ids: string[];
@@ -157,6 +158,12 @@ export async function runT3Probe(): Promise<void> {
       () => Boolean(pluginRuntime.getSnapshot().workspaceId),
       'host snapshot'
     );
+    await verifyT3ExitPackages({
+      check,
+      phase: config.phase,
+      request,
+      waitFor,
+    });
     if (config.phase === 'restart') {
       check(
         'operationPersisted',

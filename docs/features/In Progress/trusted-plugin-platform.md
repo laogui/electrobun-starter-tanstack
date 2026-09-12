@@ -1,7 +1,7 @@
 # GhostBoard 高信任插件系统改造方案
 
 日期：2026-09-09（同日修订：去掉首版 Bun 后端入口、补充装载机制、能力声明与签名更新；同日采纳）  
-状态：**已采纳；T0、T1（含追加 A1–A3）与现行 T2 范围均已通过 macOS arm64 发行包验证，旧运行时清理完成；T3 的受限 CSV、完整 files、分段导入、通用配置和作者工具链五批已通过相应门禁，退出验收仍待完成**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
+状态：**已采纳；T0、T1（含追加 A1–A3）、现行 T2 与 T3 均已通过 macOS arm64 发行包验证，旧运行时清理完成；下一阶段为 T4 故障、安全模式、签名与更新**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。T3 已覆盖受限 CSV、完整 files、分段导入、通用配置、作者工具链与四类独立最终用户包；公共外网 HTTPS、人工原生 picker 和 Windows / Linux 仍是明确未运行边界。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
 
 范围：公开插件的开发、运行、安装、生命周期、数据接口和交付验收。
 
@@ -395,7 +395,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
 | T2：内容与画布类型（macOS arm64 已通过） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务；统一 session 原生历史 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过；画布快照与插件笔记批次按提交顺序撤销且冲突不移动游标 |
-| T3：导入器与分发（五批已通过相应门禁，退出验收待完成） | [受限 CSV](trusted-plugin-t3-evidence.md)、[完整 files](trusted-plugin-t3-files-evidence.md)、[分段导入](trusted-plugin-t3-segmented-evidence.md)、[通用配置](trusted-plugin-t3-configuration-evidence.md)与[作者工具链](trusted-plugin-t3-toolchain-evidence.md)已完成；继续四类独立包最终用户 / 公共 HTTPS 边界证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
+| T3：导入器与分发（macOS arm64 已通过） | [受限 CSV](trusted-plugin-t3-evidence.md)、[完整 files](trusted-plugin-t3-files-evidence.md)、[分段导入](trusted-plugin-t3-segmented-evidence.md)、[通用配置](trusted-plugin-t3-configuration-evidence.md)、[作者工具链](trusted-plugin-t3-toolchain-evidence.md)与[四类独立包退出验收](trusted-plugin-t3-exit-evidence.md) | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
 | T6+（需求驱动）：后端入口 | 每插件一个 Bun Worker；仅在真实插件需要 Bun 原生能力时启动 | 有具名插件需求；Worker 生命周期、停用回收与发行包验证通过 |
@@ -431,6 +431,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-12 T3 第四批结果：[通用 importer 配置证据](trusted-plugin-t3-configuration-evidence.md)。Workbench 对重叠过滤器要求显式选择 importer；可选 `inspectFields` 提供宿主拥有的 `title` / `text` / `color` 映射。单批预览可选择 detached 或已打开画布的四列网格 / 纵向放置；内容提交与 canvas 保存诚实保持两个事务，失败时保留 detached Notes 并以稳定节点 ID 重试放置。session 源文件 capability 在取消、完成、reload、disable、workspace switch 与 dispose 时释放。macOS arm64 三阶段发行包通过；分段导入仍保持 detached。**T3 阶段仍在实施**：当批未完成作者 packer、公共 HTTPS、人工 picker 或 Windows / Linux。
 
 2026-09-12 T3 第五批结果：[作者打包与模板工具链证据](trusted-plugin-t3-toolchain-evidence.md)。`@ghostboard/sdk` 随包提供零外部依赖、排序 stored-ZIP 的确定性 packer；根仓与生成项目分别提供 `plugin:pack` / `bun run package`。`plugin:create` 在兼容默认 JavaScript 与 `--react` 的同时新增独立 `--importer` 和四贡献 `--combined` 模板；四种模板均有无应用测试、`AGENTS.md` 与自包含 `sdk/AI_REFERENCE.md`。模板连续两次打包 hash 一致，并全部由生产 ZIP loader 解析出精确 runtime-only 文件；既有 T3 fixture 也已移除系统 `zip` 依赖。**T3 仍未退出**：下一步用公开工具链做四类独立安装包最终用户验证并记录公共 HTTPS / 平台边界；T4 签名与 T5 真人作者试用不提前宣称完成。
+
+2026-09-12 T3 退出结果：[四类独立最终用户包证据](trusted-plugin-t3-exit-evidence.md)。公开 packer 分别生成 command、DOM panel、canvas type 与 CSV importer 四个 runtime-only 包；真实 macOS arm64 canary 从本地包或下载事务完成 preview、commit 后禁用、显式 enable、实际操作与逐包 disable 隔离，同 workspace 重启后四包恢复。三次应用启动共 90 项检查通过，组合 importer 的分段、丢响应重试、冲突安全回滚及持久 undo / redo 同时回归。**T3 现行退出条件已满足，下一阶段进入 T4。** 公共外网 HTTPS、人工原生 picker、Windows / Linux 与外部真人作者试用仍按退出证据中的明确边界留给支持平台 / T5 验收；签名、TOFU 更新、安全模式和回退属于 T4。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

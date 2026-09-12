@@ -65,5 +65,5 @@ bun run plugin:create ../combined-plugin --combined
 3. 模板测试 fake host 不提供真实 RPC、磁盘事务、原生 picker、WebView 或多插件仲裁；这些仍由发行包证据负责。
 4. 当前 T3 本机证据是 macOS arm64；Windows / Linux 尚未运行。模板 packer 不依赖系统 zip，但这不等于两个平台已验收。
 5. 公共外网 HTTPS 生产来源尚未验证。既有回环 HTTP 只由探针显式允许，正常产品路径仍要求公共 HTTPS。
-6. T3 退出仍需用公开工具链完成命令、面板、CSV importer、canvas type 的独立安装包最终用户验证，并记录剩余公共 HTTPS / 平台边界；之后才能把主方案改为 T3 已通过。
+6. 后续 [T3 退出验收](trusted-plugin-t3-exit-evidence.md) 已使用本公开工具链完成命令、面板、CSV importer、canvas type 四个独立安装包的最终用户验证；公共 HTTPS / picker / 平台边界保持显式，不回写成本批当时已经覆盖。
 7. `AI_REFERENCE.md` 已可作为文档站的单文件来源，但本仓当前未包含文档站发布流水线；镜像发布状态继续由 T5 验收记录确认。

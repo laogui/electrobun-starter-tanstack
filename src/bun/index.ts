@@ -18,6 +18,7 @@ import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import type { ExtensionTaskDelivery } from '../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../shared/plugins/contentHistory';
 import type {
+  PluginDirectoryListResult,
   PluginFilePickResult,
   PluginFileReadResult,
 } from '../shared/plugins/files';
@@ -883,6 +884,8 @@ interface CanvasRPC {
         params: {
           activationId: string;
           extensions: string[];
+          kind?: 'directory' | 'file';
+          multiple?: boolean;
           pluginId: string;
           workspaceId: string;
         };
@@ -896,6 +899,17 @@ interface CanvasRPC {
           workspaceId: string;
         };
         response: PluginFileReadResult;
+      };
+      pluginFilesListDirectory: {
+        params: {
+          activationId: string;
+          cursor?: string;
+          handleId: string;
+          limit?: number;
+          pluginId: string;
+          workspaceId: string;
+        };
+        response: PluginDirectoryListResult;
       };
       pluginFilesRelease: {
         params: {
@@ -1766,6 +1780,7 @@ async function main() {
     getAIConfig: () => buildAIConfig(),
     getWorkspacePath: () => wsPath,
     pluginContent: new NoteContentService(wsPath, pluginWorkspaceId(wsPath)),
+    pluginFiles,
     pluginStorage: new PluginStorageHost({
       appDataRoot: getAppDataRoot(),
       workspacePath: wsPath,
@@ -2561,24 +2576,35 @@ async function main() {
         pluginFilesPick: async (request) => {
           try {
             pluginFiles.validateContext(request);
-            const selected = process.env.GHOSTBOARD_PLUGIN_T3_DIR
-              ? [
-                  join(process.env.GHOSTBOARD_PLUGIN_T3_DIR, 'selected.csv'),
-                ].filter(existsSync)
-              : await Utils.openFileDialog({
-                  allowedFileTypes: pluginPickerFileTypes(request.extensions),
-                  allowsMultipleSelection: false,
-                  canChooseDirectory: false,
-                  canChooseFiles: true,
-                  startingFolder: '~/Documents',
-                });
-            const path = selected.find(Boolean);
-            if (!path) {
+            const kind = request.kind ?? 'file';
+            if (kind === 'directory' && request.multiple) {
+              throw new Error(
+                'Directory selection does not support multiple items.'
+              );
+            }
+            const selected =
+              process.env.GHOSTBOARD_PLUGIN_T3_DIR && kind === 'file'
+                ? [
+                    join(process.env.GHOSTBOARD_PLUGIN_T3_DIR, 'selected.csv'),
+                  ].filter(existsSync)
+                : await Utils.openFileDialog({
+                    allowedFileTypes:
+                      kind === 'file'
+                        ? pluginPickerFileTypes(request.extensions)
+                        : '*',
+                    allowsMultipleSelection:
+                      kind === 'file' && request.multiple === true,
+                    canChooseDirectory: kind === 'directory',
+                    canChooseFiles: kind === 'file',
+                    startingFolder: '~/Documents',
+                  });
+            const paths = selected.filter(Boolean);
+            if (paths.length === 0) {
               return { success: false, cancelled: true };
             }
             return {
               success: true,
-              files: await pluginFiles.registerSelection(request, [path]),
+              files: await pluginFiles.registerSelection(request, paths, kind),
             };
           } catch (error) {
             return {
@@ -2594,6 +2620,17 @@ async function main() {
               success: true,
               text: await pluginFiles.readText(request, request.handleId),
             };
+          } catch (error) {
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+
+        pluginFilesListDirectory: async (request) => {
+          try {
+            return await pluginFiles.listDirectory(request);
           } catch (error) {
             return {
               success: false,

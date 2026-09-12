@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
+  PluginDirectoryHandleData,
+  PluginDirectoryListResult,
   PluginFileHandleData,
   PluginFilePickResult,
   PluginFileReadResult,
@@ -8,10 +10,17 @@ import { createPluginFiles, type PluginFilesTransport } from './files';
 
 const handle: PluginFileHandleData = {
   id: '33333333-3333-4333-8333-333333333333',
+  kind: 'file',
   lastModified: 123,
   mimeType: 'text/csv',
   name: 'notes.csv',
   size: 12,
+};
+
+const directory: PluginDirectoryHandleData = {
+  id: '44444444-4444-4444-8444-444444444444',
+  kind: 'directory',
+  name: 'Imports',
 };
 
 function setup() {
@@ -30,6 +39,13 @@ function setup() {
       })
     ),
     release: vi.fn(async () => ({ success: true })),
+    list: vi.fn(
+      async (): Promise<PluginDirectoryListResult> => ({
+        entries: [{ handle, kind: 'file', name: handle.name }],
+        nextCursor: null,
+        success: true,
+      })
+    ),
   };
   const files = createPluginFiles(
     {
@@ -87,6 +103,28 @@ describe('createPluginFiles', () => {
     ).resolves.toEqual([]);
   });
 
+  it('selects a directory, lists frozen child handles and releases them explicitly', async () => {
+    const { files, transport } = setup();
+    vi.mocked(transport.pick).mockResolvedValueOnce({
+      files: [directory],
+      success: true,
+    });
+    const selected = await files.pickDirectory();
+    expect(selected).toEqual(directory);
+    expect(transport.pick).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'directory', multiple: false })
+    );
+    const page = await files.list(selected!, { limit: 10 });
+    expect(Object.isFrozen(page)).toBe(true);
+    expect(Object.isFrozen(page.entries[0]?.handle)).toBe(true);
+    const child = page.entries[0]?.handle;
+    expect(child?.kind).toBe('file');
+    files.release(selected!, child!);
+    expect(transport.release).toHaveBeenLastCalledWith(
+      expect.objectContaining({ handleIds: [directory.id, handle.id] })
+    );
+  });
+
   it('invalidates and releases handles when the activation aborts', async () => {
     const { controller, files, transport } = setup();
     const [selected] = await files.pick({
@@ -128,6 +166,31 @@ describe('createPluginFiles', () => {
     await Promise.resolve();
     expect(transport.release).toHaveBeenCalledWith(
       expect.objectContaining({ handleIds: [handle.id] })
+    );
+  });
+
+  it('rejects a directory picker promptly and releases its late result', async () => {
+    let resolve!: (value: {
+      success: true;
+      files: PluginDirectoryHandleData[];
+    }) => void;
+    const pending = new Promise<{
+      success: true;
+      files: PluginDirectoryHandleData[];
+    }>((done) => {
+      resolve = done;
+    });
+    const { files, transport } = setup();
+    vi.mocked(transport.pick).mockReturnValueOnce(pending);
+    const controller = new AbortController();
+    const selecting = files.pickDirectory({ signal: controller.signal });
+    controller.abort();
+    await expect(selecting).rejects.toMatchObject({ name: 'AbortError' });
+    resolve({ success: true, files: [directory] });
+    await pending;
+    await Promise.resolve();
+    expect(transport.release).toHaveBeenCalledWith(
+      expect.objectContaining({ handleIds: [directory.id] })
     );
   });
 });

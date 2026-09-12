@@ -20,6 +20,34 @@ afterEach(async () => {
 });
 
 describe('@ghostboard/sdk/testing', () => {
+  it('models binary files, directory listing, writes and explicit release', async () => {
+    const { app, harness } = host();
+    const input = harness.files.addBytes(
+      'input.bin',
+      Uint8Array.from([1, 2, 3])
+    );
+    const directory = harness.files.addDirectory('Exports');
+    harness.files.queuePick(input);
+    harness.files.queueDirectory(directory);
+
+    await expect(
+      app.files.pick({
+        accept: [{ description: 'Binary', extensions: ['.bin'] }],
+      })
+    ).resolves.toEqual([input]);
+    await expect(app.files.readBytes(input)).resolves.toEqual(
+      Uint8Array.from([1, 2, 3])
+    );
+    await expect(app.files.pickDirectory()).resolves.toBe(directory);
+    const output = await app.files.write(directory, 'result.txt', 'hello');
+    const page = await app.files.list(directory);
+    expect(page.entries).toEqual([
+      { handle: output, kind: 'file', name: 'result.txt' },
+    ]);
+    app.files.release(input, output, directory);
+    await expect(app.files.readBytes(input)).rejects.toThrow('unavailable');
+  });
+
   it('inspects registrations and drives commands, events and activation abort', async () => {
     const { app, harness } = host();
     const run = vi.fn();

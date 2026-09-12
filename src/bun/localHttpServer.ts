@@ -7,6 +7,7 @@ import {
 } from './attachments';
 import { unfurlLink } from './linkPreview';
 import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
+import type { PluginFileStore } from './plugins/files';
 import type { PluginHostController } from './plugins/hostController';
 import type { NoteContentService } from './plugins/noteContent';
 import type { PluginStorageHost } from './plugins/storage';
@@ -24,6 +25,7 @@ export interface LocalHttpServerOptions {
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
   pluginContent?: NoteContentService;
+  pluginFiles?: PluginFileStore;
   pluginRuntime?: PluginHostController;
   pluginStorage?: PluginStorageHost;
 }
@@ -35,7 +37,7 @@ export interface LocalHttpServerOptions {
 // request before it ever reaches the local route handler.
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'DELETE, GET, HEAD, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Range',
   'Access-Control-Expose-Headers':
     'Content-Length, Content-Range, Accept-Ranges',
@@ -183,6 +185,21 @@ export function startLocalHttpServer(
       const url = new URL(req.url);
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+      // `/plugins/<launch-token>/<plugin>/...` is also the static module
+      // namespace. Dispatch this reserved authenticated service prefix first
+      // so the asset router cannot mistake `files` for a launch token.
+      if (url.pathname.startsWith('/plugins/files/')) {
+        if (!readRequestToken(req, url, token)) {
+          return new Response('Unauthorized', {
+            status: 401,
+            headers: CORS_HEADERS,
+          });
+        }
+        return (
+          (await options.pluginFiles?.handle(req, CORS_HEADERS)) ??
+          new Response('Not found', { status: 404, headers: CORS_HEADERS })
+        );
       }
       const pluginAsset = await servePluginAsset(
         req,

@@ -107,23 +107,95 @@ export interface PluginFileFilter {
 
 export interface PluginFileHandle {
   readonly id: string;
+  readonly kind: 'file';
   readonly lastModified: number;
   readonly mimeType: string;
   readonly name: string;
   readonly size: number;
 }
 
+export interface PluginDirectoryHandle {
+  readonly id: string;
+  readonly kind: 'directory';
+  readonly name: string;
+}
+
+export type PluginFileSystemHandle = PluginDirectoryHandle | PluginFileHandle;
+
+export interface PluginFileProgress {
+  loaded: number;
+  total: number;
+}
+
+export interface PluginDirectoryEntry {
+  readonly handle?: PluginFileSystemHandle;
+  readonly kind: 'directory' | 'file' | 'symlink';
+  readonly name: string;
+}
+
+export interface PluginDirectoryPage {
+  readonly entries: readonly PluginDirectoryEntry[];
+  readonly nextCursor: string | null;
+}
+
+export interface PluginFileReadOptions extends OperationOptions {
+  /** Defaults to the handle size and may not exceed 256 MiB per stream. */
+  length?: number;
+  onProgress?: (progress: PluginFileProgress) => void;
+  /** Zero-based byte offset. */
+  start?: number;
+}
+
+export type PluginFileWriteData =
+  | string
+  | Blob
+  | ArrayBuffer
+  | ArrayBufferView
+  | ReadableStream<Uint8Array>;
+
 export interface PluginFiles {
-  /** First T3 slice: selects at most one file; cancelling returns an empty array. */
+  /** Lists a sorted direct-child page. Symlinks are reported without a handle. */
+  list(
+    directory: PluginDirectoryHandle,
+    options?: OperationOptions & { cursor?: string; limit?: number }
+  ): Promise<PluginDirectoryPage>;
+  /** Selects up to 16 files; cancelling returns an empty array. */
   pick(options: {
     accept: readonly PluginFileFilter[];
+    multiple?: boolean;
     signal?: AbortSignal;
   }): Promise<readonly PluginFileHandle[]>;
-  /** Reads strict UTF-8 text. The first T3 slice is limited to 1 MiB. */
+  /** Selects one directory. Handles cannot be restored after activation/restart. */
+  pickDirectory(
+    options?: OperationOptions
+  ): Promise<PluginDirectoryHandle | null>;
+  /** Collects binary data in memory; defaults to a 16 MiB maximum. */
+  readBytes(
+    handle: PluginFileHandle,
+    options?: PluginFileReadOptions & { maxBytes?: number }
+  ): Promise<Uint8Array>;
+  /** Reads strict UTF-8; defaults to 1 MiB and permits at most 16 MiB. */
   readText(
     handle: PluginFileHandle,
-    options?: OperationOptions
+    options?: PluginFileReadOptions & { maxBytes?: number }
   ): Promise<string>;
+  /** Invalidates handles early. Activation retirement also releases all handles. */
+  release(...handles: readonly PluginFileSystemHandle[]): void;
+  /** Reads bounded ranges as sequential 1 MiB localhost requests. */
+  stream(
+    handle: PluginFileHandle,
+    options?: PluginFileReadOptions
+  ): ReadableStream<Uint8Array>;
+  /** Atomically writes at most 256 MiB below a user-selected directory. */
+  write(
+    directory: PluginDirectoryHandle,
+    relativePath: string,
+    data: PluginFileWriteData,
+    options?: OperationOptions & {
+      onProgress?: (progress: PluginFileProgress) => void;
+      overwrite?: boolean;
+    }
+  ): Promise<PluginFileHandle>;
 }
 
 export interface ImporterParseResult {

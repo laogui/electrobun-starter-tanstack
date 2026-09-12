@@ -485,6 +485,7 @@ describe('trusted plugin runtime', () => {
   it('drives importer preview, cancellation and confirmation from the workbench', async () => {
     const file = {
       id: '33333333-3333-4333-8333-333333333333',
+      kind: 'file' as const,
       lastModified: 123,
       mimeType: 'text/csv',
       name: 'notes.csv',

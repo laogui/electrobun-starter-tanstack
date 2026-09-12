@@ -1,3 +1,5 @@
+const PATH_SEGMENT_RE = /[\\/]/;
+
 function abortError(message = 'Fake host activation is inactive') {
   return new DOMException(message, 'AbortError');
 }
@@ -234,6 +236,22 @@ function contentStore(activation, shared) {
 }
 
 function filesStore(activation) {
+  const fileFor = (handle) => {
+    const file = activation.files.get(handle.id);
+    if (!file || file.handle !== handle) {
+      throw new Error('Fake file handle is unavailable in this activation');
+    }
+    return file;
+  };
+  const directoryFor = (handle) => {
+    const directory = activation.directories.get(handle.id);
+    if (!directory || directory.handle !== handle) {
+      throw new Error(
+        'Fake directory handle is unavailable in this activation'
+      );
+    }
+    return directory;
+  };
   return Object.freeze({
     async pick(options) {
       assertActive(activation);
@@ -241,18 +259,122 @@ function filesStore(activation) {
         throw abortError('File pick aborted');
       }
       const picked = activation.queuedFiles.splice(0);
-      return picked.map(({ handle }) => handle);
+      const count = options.multiple ? 16 : 1;
+      return picked.slice(0, count).map(({ handle }) => handle);
+    },
+    async pickDirectory(options = {}) {
+      assertActive(activation);
+      if (options.signal?.aborted) {
+        throw abortError('Directory pick aborted');
+      }
+      return activation.queuedDirectories.shift()?.handle ?? null;
+    },
+    async list(handle, options = {}) {
+      assertActive(activation);
+      if (options.signal?.aborted) {
+        throw abortError('Directory list aborted');
+      }
+      const directory = directoryFor(handle);
+      const entries = [...directory.children.values()].sort((left, right) =>
+        left.name.localeCompare(right.name)
+      );
+      const offset = Number(options.cursor ?? 0);
+      const limit = options.limit ?? 100;
+      return Object.freeze({
+        entries: Object.freeze(entries.slice(offset, offset + limit)),
+        nextCursor:
+          offset + limit < entries.length ? String(offset + limit) : null,
+      });
+    },
+    async readBytes(handle, options = {}) {
+      assertActive(activation);
+      if (options.signal?.aborted) {
+        throw abortError('File read aborted');
+      }
+      const file = fileFor(handle);
+      const start = options.start ?? 0;
+      const length = options.length ?? file.bytes.byteLength - start;
+      const bytes = file.bytes.slice(start, start + length);
+      if (bytes.byteLength > (options.maxBytes ?? 16 * 1024 * 1024)) {
+        throw new Error('Fake file read exceeds maxBytes');
+      }
+      options.onProgress?.({
+        loaded: bytes.byteLength,
+        total: bytes.byteLength,
+      });
+      return bytes;
+    },
+    stream(handle, options = {}) {
+      const files = this;
+      return new ReadableStream({
+        async start(controller) {
+          try {
+            controller.enqueue(await files.readBytes(handle, options));
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+      });
     },
     async readText(handle, options) {
       assertActive(activation);
       if (options?.signal?.aborted) {
         throw abortError('File read aborted');
       }
-      const file = activation.files.get(handle.id);
-      if (!file) {
-        throw new Error('Fake file handle is unavailable in this activation');
+      const file = fileFor(handle);
+      return new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
+    },
+    async write(directoryHandle, relativePath, data, options = {}) {
+      assertActive(activation);
+      if (options.signal?.aborted) {
+        throw abortError('File write aborted');
       }
-      return file.text;
+      if (
+        !relativePath ||
+        relativePath
+          .split(PATH_SEGMENT_RE)
+          .some((part) => !part || part === '..')
+      ) {
+        throw new Error('Fake file output path must be relative');
+      }
+      const directory = directoryFor(directoryHandle);
+      if (directory.children.has(relativePath) && !options.overwrite) {
+        throw new Error('Fake output file already exists');
+      }
+      const bytes =
+        typeof data === 'string'
+          ? new TextEncoder().encode(data)
+          : data instanceof Uint8Array
+            ? Uint8Array.from(data)
+            : data instanceof ArrayBuffer
+              ? new Uint8Array(data.slice(0))
+              : new Uint8Array(await new Response(data).arrayBuffer());
+      const handle = Object.freeze({
+        id: crypto.randomUUID(),
+        kind: 'file',
+        lastModified: Date.now(),
+        mimeType: 'application/octet-stream',
+        name: relativePath.split(PATH_SEGMENT_RE).at(-1),
+        size: bytes.byteLength,
+      });
+      const file = { bytes, handle };
+      activation.files.set(handle.id, file);
+      directory.children.set(
+        relativePath,
+        Object.freeze({ handle, kind: 'file', name: relativePath })
+      );
+      options.onProgress?.({
+        loaded: bytes.byteLength,
+        total: bytes.byteLength,
+      });
+      return handle;
+    },
+    release(...handles) {
+      for (const handle of handles) {
+        activation.files.delete(handle.id);
+        activation.directories.delete(handle.id);
+      }
     },
   });
 }
@@ -265,12 +387,14 @@ function makeActivation(options, shared, generation) {
     commands: new Map(),
     controller: new AbortController(),
     eventListeners: new Map(),
+    directories: new Map(),
     files: new Map(),
     generation,
     importers: new Map(),
     openPanels: new Set(),
     panels: new Map(),
     queuedFiles: [],
+    queuedDirectories: [],
     selectionListeners: new Set(),
     tasks: new Map(),
   };
@@ -473,18 +597,38 @@ export function createFakeHost(options) {
       },
     },
     files: {
-      addText(name, text, fileOptions = {}) {
+      addBytes(name, bytes, fileOptions = {}) {
+        assertActive(current);
+        const stable = Uint8Array.from(bytes);
+        const handle = Object.freeze({
+          id: crypto.randomUUID(),
+          kind: 'file',
+          lastModified: fileOptions.lastModified ?? Date.now(),
+          mimeType: fileOptions.mimeType ?? 'application/octet-stream',
+          name,
+          size: stable.byteLength,
+        });
+        current.files.set(handle.id, { bytes: stable, handle });
+        return handle;
+      },
+      addDirectory(name) {
         assertActive(current);
         const handle = Object.freeze({
           id: crypto.randomUUID(),
-          lastModified: fileOptions.lastModified ?? Date.now(),
-          mimeType: fileOptions.mimeType ?? 'text/plain',
+          kind: 'directory',
           name,
-          size: new TextEncoder().encode(text).byteLength,
         });
-        const file = { handle, text };
-        current.files.set(handle.id, file);
+        current.directories.set(handle.id, {
+          children: new Map(),
+          handle,
+        });
         return handle;
+      },
+      addText(name, text, fileOptions = {}) {
+        return this.addBytes(name, new TextEncoder().encode(text), {
+          ...fileOptions,
+          mimeType: fileOptions.mimeType ?? 'text/plain',
+        });
       },
       queuePick(...handles) {
         assertActive(current);
@@ -495,6 +639,14 @@ export function createFakeHost(options) {
           }
           return file;
         });
+      },
+      queueDirectory(handle) {
+        assertActive(current);
+        const directory = current.directories.get(handle.id);
+        if (!directory || directory.handle !== handle) {
+          throw new Error('Cannot queue a directory from another activation');
+        }
+        current.queuedDirectories = [directory];
       },
     },
     inspection,

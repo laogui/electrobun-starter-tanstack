@@ -5,6 +5,7 @@ import { startPluginRuntime } from './startPluginRuntime';
 
 vi.mock('@/lib/rpc', () => ({
   rpcGetLocalHttpEndpoint: vi.fn(),
+  rpcListPluginDirectory: vi.fn(),
   rpcPickPluginFiles: vi.fn(),
   rpcReadPluginFileText: vi.fn(),
   rpcReleasePluginFiles: vi.fn(),

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startLocalHttpServer } from './localHttpServer';
+import type { PluginFileStore } from './plugins/files';
 import type { PluginHostController } from './plugins/hostController';
 import type { PluginStorageHost } from './plugins/storage';
 
@@ -36,6 +37,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('local HTTP plugin host integration', () => {
+  it('authenticates file data requests before dispatch', async () => {
+    const handle = vi.fn(async () => new Response('bytes', { status: 206 }));
+    const server = startLocalHttpServer({
+      getAIConfig: () => null,
+      getWorkspacePath: () => '/workspace',
+      pluginFiles: { handle } as unknown as PluginFileStore,
+    });
+    const url = `${server.baseUrl}/plugins/files/read`;
+    expect((await fetchRequest(new Request(url))).status).toBe(401);
+    expect(handle).not.toHaveBeenCalled();
+    const response = await fetchRequest(
+      new Request(url, {
+        headers: { Authorization: `Bearer ${server.token}` },
+      })
+    );
+    expect(response.status).toBe(206);
+    expect(handle).toHaveBeenCalledOnce();
+    server.stop();
+  });
+
   it('authenticates persistent storage requests before dispatch', async () => {
     const handle = vi.fn(async () => Response.json({ success: true }));
     const server = startLocalHttpServer({

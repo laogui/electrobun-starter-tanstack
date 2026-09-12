@@ -53,12 +53,19 @@ export interface FakeHostHarness {
     setSelection(snapshot: SelectionSnapshot): void;
   };
   readonly files: {
+    addBytes(
+      name: string,
+      bytes: Uint8Array,
+      options?: { lastModified?: number; mimeType?: string }
+    ): PluginFileHandle;
+    addDirectory(name: string): import('./index.js').PluginDirectoryHandle;
     addText(
       name: string,
       text: string,
       options?: { lastModified?: number; mimeType?: string }
     ): PluginFileHandle;
     queuePick(...handles: PluginFileHandle[]): void;
+    queueDirectory(handle: import('./index.js').PluginDirectoryHandle): void;
   };
   readonly inspection: FakeHostInspection;
   readonly lifecycle: {

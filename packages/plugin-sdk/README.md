@@ -284,13 +284,13 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. The accepted first T3 slice includes the bounded read-only file API, activation-owned importer registration, host-owned preview/confirm/cancel flow, author testing exports, and packaged local-ZIP/loopback-download evidence for one combined plugin. Binary streams, writes, directories, larger segmented imports, a general packaging command and public-HTTPS production evidence remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 now includes the accepted bounded importer/distribution slice plus the complete host-mediated file service described below. Larger segmented imports, generic importer mapping/target configuration, a general packaging command and public-HTTPS production evidence remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
-## T3 first slice: activation-scoped text files
+## T3 files: activation-scoped files and directories
 
-`app.files.pick({ accept, signal? })` opens the host's native file picker and returns at most one opaque handle. Cancelling the dialog resolves to an empty array. Filters contain a user-facing description and 1–16 simple extensions with a leading dot; extensions are normalized to lowercase. Wildcards, paths and empty filters are rejected before the picker opens.
+`app.files.pick({ accept, multiple?, signal? })` opens the host's native file picker and returns one file by default or up to 16 when `multiple: true`. Cancelling resolves to an empty array. Filters contain a user-facing description and 1–16 simple extensions with a leading dot; extensions are normalized to lowercase. Wildcards, paths and empty filters are rejected before the picker opens.
 
 ```js
 const [file] = await app.files.pick({
@@ -303,9 +303,48 @@ if (file) {
 }
 ```
 
-Handles expose `id`, `name`, `size`, `mimeType` and `lastModified`, never the local absolute path. A handle belongs to one plugin activation, workspace and application process. It cannot be reused by another plugin, after a successful/failed reload, after a workspace switch or after restart. Activation and caller abort signals reject operations with `AbortError`; a native dialog already open cannot be programmatically closed by the current Electrobun API, so a late result is ignored and released.
+Handles expose a `kind` plus display metadata, never the local absolute path. A handle belongs to one plugin activation, workspace and application process. It cannot be reused by another plugin, after reload, after a workspace switch or after restart; there is intentionally no persistent-handle recovery without platform security-bookmark support. Activation and caller abort signals reject operations with `AbortError`; a native dialog already open cannot be programmatically closed by the current Electrobun API, so a late result is ignored and released. `app.files.release(...handles)` invalidates handles early.
 
-`readText` performs fatal UTF-8 decoding and rechecks the current file size at read time. The first slice is limited to 1 MiB and intentionally has no binary read, streaming, writes, directory access or persistent handles. Those operations require a later T3 transport with explicit progress and resource semantics. The manifest `files` capability remains display metadata, not an enforcement boundary for high-trust code.
+`readText` performs fatal UTF-8 decoding and defaults to a 1 MiB collection limit; an explicit `maxBytes` may raise the limit to 16 MiB. `readBytes` collects at most 16 MiB. `stream` reads a selected byte range as sequential authenticated localhost requests of at most 1 MiB each; one stream may cover at most 256 MiB. All three accept `start`, `length`, `signal` and `onProgress`. Select another range for larger files instead of buffering the entire file.
+
+```js
+const [file] = await app.files.pick({
+  accept: [{ description: 'Binary data', extensions: ['.bin'] }],
+});
+
+if (file) {
+  const header = await app.files.readBytes(file, { start: 0, length: 64 });
+  for await (const chunk of app.files.stream(file, {
+    start: 64,
+    length: Math.min(file.size - 64, 8 * 1024 * 1024),
+    onProgress: ({ loaded, total }) => console.log(loaded, total),
+  })) {
+    consume(chunk);
+  }
+}
+```
+
+`pickDirectory()` returns one opaque directory handle or `null`. `list(directory, { cursor?, limit? })` returns a name-sorted direct-child page of at most 100 entries; it never recursively walks a directory. Regular files and directories include new activation-owned handles. Symbolic links are visible as `{ kind: 'symlink' }` but deliberately have no handle and cannot be followed.
+
+`write(directory, relativePath, data, options?)` accepts text, Blob/ArrayBuffer/view data or a `ReadableStream<Uint8Array>`. The renderer sends sequential 1 MiB chunks to a temporary file below the user-selected directory and the Bun host renames it into place only after the final acknowledgement. One write is limited to 256 MiB; at most eight writes may be active. `overwrite` defaults to false. Relative paths may create ordinary subdirectories but cannot be absolute, contain `.`/`..`, escape the selected root or traverse symbolic links. `onProgress` reports host-acknowledged bytes; `total` is `0` for a source stream whose size is unknown until completion.
+
+```js
+const output = await app.files.pickDirectory();
+if (output) {
+  const written = await app.files.write(
+    output,
+    'exports/notes.json',
+    JSON.stringify(notes),
+    {
+      overwrite: false,
+      onProgress: ({ loaded, total }) => console.log(loaded, total),
+    }
+  );
+  console.log(written.name, written.size);
+}
+```
+
+The native picker stays on Electrobun RPC; directory listing and release are bounded control-plane messages. Binary ranges and chunked writes use the existing per-launch bearer-authenticated localhost data plane. The manifest `files` capability remains display metadata, not an enforcement boundary for high-trust code.
 
 Importers follow the same staged activation lifecycle as commands, panels and canvas types. Registration made by a candidate activation is published only after `setup` completes. A failed reload keeps the old importer; successful reload, disable, workspace switch and the returned disposer remove it and abort the activation signal.
 

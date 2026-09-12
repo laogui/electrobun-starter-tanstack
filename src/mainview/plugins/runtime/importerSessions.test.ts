@@ -17,6 +17,7 @@ import { PluginRuntime } from './PluginRuntime';
 
 const handle: PluginFileHandleData = {
   id: '33333333-3333-4333-8333-333333333333',
+  kind: 'file',
   lastModified: 123,
   mimeType: 'text/csv',
   name: 'notes.csv',

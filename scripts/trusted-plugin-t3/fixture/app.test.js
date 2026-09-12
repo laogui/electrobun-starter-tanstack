@@ -56,4 +56,19 @@ test('registers four contribution types and previews without writing', async () 
   const preview = await fake.harness.behavior.parseImporter('notes-csv', file);
   expect(preview.notes).toHaveLength(2);
   expect((await fake.app.content.query()).items).toEqual([]);
+
+  const directory = fake.harness.files.addDirectory('Exports');
+  fake.harness.files.queueDirectory(directory);
+  expect(await fake.app.files.pickDirectory()).toBe(directory);
+  const written = await fake.app.files.write(
+    directory,
+    'preview.json',
+    JSON.stringify(preview)
+  );
+  expect(await fake.app.files.readBytes(written)).toEqual(
+    new TextEncoder().encode(JSON.stringify(preview))
+  );
+  expect((await fake.app.files.list(directory)).entries).toEqual([
+    { handle: written, kind: 'file', name: 'preview.json' },
+  ]);
 });

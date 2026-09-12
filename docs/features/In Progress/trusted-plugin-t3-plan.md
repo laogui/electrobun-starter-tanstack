@@ -66,13 +66,13 @@
 
 第一批结果与机器证据见 [T3 第一批验收记录](trusted-plugin-t3-evidence.md)。第一批通过不等于整个 T3 完成。后续至少包括：
 
-1. **完整 files 服务**：二进制 / 流式读取、宿主写入、目录选择与列举、句柄恢复边界、进度和资源上限。
+1. **完整 files 服务（已实现并通过自动化门禁）**：二进制 / 分段流式读取、目录选择与分页列举、宿主临时文件 + 最终 rename 写入、显式 release、进度 / 取消 / 资源上限与不可跨 activation / workspace / process 恢复边界。接口与证据见 [T3 files 服务验收记录](trusted-plugin-t3-files-evidence.md)。
 2. **分段导入**：超过 100 条的显式批次、已完成范围、逐批 retry 去重、失败继续，以及不覆盖后续用户编辑的冲突回滚。
 3. **通用 importer 配置**：多个匹配 importer 的显式选择、字段映射、目标画布 / 放置策略与临时资产生命周期。
 4. **作者工具链**：可安装包构建命令、独立 importer 模板、组合模板与单文件 AI 参考。
 5. **T3 退出**：命令、面板、CSV importer、canvas type 四类独立样例均从安装包运行；再更新主方案状态为 T3 已通过。
 
-已从后续清单移除的完成项：A5 `@ghostboard/sdk/testing`、React testing 子路径、JavaScript / React 模板无应用测试，以及组合插件作者测试已在第一批落地。fake host 不替代真实 RPC、磁盘持久化、安装器或平台验收。
+已从后续清单移除的完成项：A5 `@ghostboard/sdk/testing`、React testing 子路径、JavaScript / React 模板无应用测试，以及组合插件作者测试已在第一批落地；完整 files 服务在第二批落地。fake host 不替代真实 RPC、磁盘持久化、安装器或平台验收。
 
 ## 5. 明确排除
 

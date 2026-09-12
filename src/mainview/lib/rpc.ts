@@ -27,6 +27,8 @@ import type { ExtensionPresentation } from '../../shared/extensions/presentation
 import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 import type {
+  PluginDirectoryListRequest,
+  PluginDirectoryListResult,
   PluginFilePickRequest,
   PluginFilePickResult,
   PluginFileReadRequest,
@@ -323,6 +325,16 @@ export async function rpcReadPluginFileText(
     return { success: false, error: 'Plugin file service is unavailable.' };
   }
   return eb.rpc.request.pluginFilesReadText(request);
+}
+
+export async function rpcListPluginDirectory(
+  request: PluginDirectoryListRequest
+): Promise<PluginDirectoryListResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin file service is unavailable.' };
+  }
+  return eb.rpc.request.pluginFilesListDirectory(request);
 }
 
 export async function rpcReleasePluginFiles(

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createFakeHost } from '@ghostboard/sdk/testing';
 import plugin from './app.js';
-import { parseNotesCsv } from './csv.js';
+import { inspectCsvFields, parseNotesCsv } from './csv.js';
 
 let fake;
 
@@ -18,8 +18,23 @@ test('parses the bounded CSV contract', () => {
     notes: [{ color: 'blue', text: 'Line 1\nLine 2', title: 'One, quoted' }],
     warnings: [],
   });
+  expect(inspectCsvFields('Heading,Copy,Tint\nOne,Body,blue')).toEqual([
+    'Heading',
+    'Copy',
+    'Tint',
+  ]);
+  expect(
+    parseNotesCsv('Heading,Copy,Tint\nOne,Body,blue', {
+      color: 'Tint',
+      text: 'Copy',
+      title: 'Heading',
+    })
+  ).toEqual({
+    notes: [{ color: 'blue', text: 'Body', title: 'One' }],
+    warnings: [],
+  });
   expect(() => parseNotesCsv('text\nMissing title')).toThrow(
-    'requires a title column'
+    'requires a mapped title column'
   );
   const segmented = parseNotesCsv(
     `title\n${Array.from({ length: 205 }, (_, index) => `Note ${index}`).join('\n')}`
@@ -59,7 +74,17 @@ test('registers four contribution types and previews without writing', async () 
     'title,text,color\nFirst,Body,blue\nSecond,,\n',
     { mimeType: 'text/csv' }
   );
-  const preview = await fake.harness.behavior.parseImporter('notes-csv', file);
+  const inspection = await fake.harness.behavior.inspectImporterFields(
+    'notes-csv',
+    file
+  );
+  expect(inspection).toMatchObject({
+    fields: ['title', 'text', 'color'],
+    suggestedMapping: { color: 'color', text: 'text', title: 'title' },
+  });
+  const preview = await fake.harness.behavior.parseImporter('notes-csv', file, {
+    mapping: inspection.suggestedMapping,
+  });
   expect(preview.notes).toHaveLength(2);
   expect((await fake.app.content.query()).items).toEqual([]);
 

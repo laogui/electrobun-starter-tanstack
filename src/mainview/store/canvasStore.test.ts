@@ -21,6 +21,7 @@ import {
   resetViewportPersistSuppression,
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
+import { canvasImporterPlacementHost } from '@/plugins/runtime/importPlacement';
 import { useCanvasStore } from '@/store/canvasStore';
 import {
   LINK_CANVAS_TYPE_ID,
@@ -157,6 +158,94 @@ beforeEach(() => {
   vi.stubGlobal('window', {
     innerWidth: 1280,
     innerHeight: 720,
+  });
+});
+
+describe('canvas importer placement', () => {
+  beforeEach(() => {
+    resetStore();
+    rpcSaveManifestMock.mockClear();
+    rpcSaveManifestMock.mockResolvedValue({ success: true });
+    useCanvasStore.setState({
+      _hydrated: true,
+      activeViewId: 'research',
+      views: [{ id: 'research', name: 'Research' }],
+    });
+  });
+
+  afterEach(() => {
+    resetStore();
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      views: [{ id: 'default', name: 'Default Canvas' }],
+    });
+    unifiedUndoHistory.reset();
+  });
+
+  it('places deterministic grid cards and safely reuses them on retry', async () => {
+    const request = {
+      items: Array.from({ length: 5 }, (_, index) => ({
+        color: index === 0 ? 'blue' : '',
+        id: `note-${index + 1}`,
+        revision: 1,
+        title: `Note ${index + 1}`,
+      })),
+      operationId: 'plgimport_1234',
+      strategy: 'grid' as const,
+      viewId: 'research',
+    };
+
+    const first = await canvasImporterPlacementHost.place(request);
+    const nodes = useCanvasStore.getState().nodes;
+    expect(first.nodeIds).toEqual([
+      'node-plgimport_1234-1',
+      'node-plgimport_1234-2',
+      'node-plgimport_1234-3',
+      'node-plgimport_1234-4',
+      'node-plgimport_1234-5',
+    ]);
+    expect(nodes).toHaveLength(5);
+    expect(nodes[0]).toMatchObject({
+      data: {
+        blocknoteRevision: 1,
+        color: 'blue',
+        noteId: 'note-1',
+        title: 'Note 1',
+      },
+      position: { x: 0, y: 0 },
+      type: 'card',
+    });
+    expect(nodes[1]?.data.color).toBe('');
+    expect(nodes[4]?.position).toEqual({ x: 0, y: CARD_H + 40 });
+
+    await canvasImporterPlacementHost.place(request);
+    expect(useCanvasStore.getState().nodes).toHaveLength(5);
+    expect(rpcSaveManifestMock).toHaveBeenCalledTimes(2);
+
+    useCanvasStore.setState((state) => ({
+      nodes: state.nodes.map((node, index) =>
+        index === 0
+          ? { ...node, data: { ...node.data, noteId: 'different-note' } }
+          : node
+      ),
+    }));
+    await expect(canvasImporterPlacementHost.place(request)).rejects.toThrow(
+      'no longer matches'
+    );
+    expect(rpcSaveManifestMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses placement before the exact target canvas is hydrated', async () => {
+    useCanvasStore.setState({ _hydrated: false });
+    await expect(
+      canvasImporterPlacementHost.place({
+        items: [{ color: '', id: 'note-1', revision: 1, title: 'One' }],
+        operationId: 'plgimport_1234',
+        strategy: 'vertical',
+        viewId: 'research',
+      })
+    ).rejects.toThrow('wait for it to load');
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
   });
 });
 

@@ -3,6 +3,8 @@ import type {
   CommandDefinition,
   Disposer,
   ImporterDefinition,
+  ImporterFieldMapping,
+  ImporterNoteField,
   PanelDefinition,
   PlacementSelectionSnapshot,
   PluginContent,
@@ -28,8 +30,15 @@ import {
   type ImporterSessionSnapshot,
   notesForCommit,
   raceImporterAbort,
+  validateImporterFieldInspection,
+  validateImporterFieldMapping,
   validateImporterParseResult,
 } from './importers';
+import {
+  canvasImporterPlacementHost,
+  type ImporterPlacementHost,
+  MAX_CANVAS_IMPORT_NOTES,
+} from './importPlacement';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
 import { adaptPluginCanvasType } from './pluginCanvasTypes';
 import {
@@ -91,6 +100,7 @@ export interface PluginRuntimeOptions {
   importer?: (url: string) => Promise<unknown>;
   mountPanel?: MountPanel;
   onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
+  placementHost?: ImporterPlacementHost;
   storageTransport?: PluginStorageTransportOptions;
 }
 
@@ -110,6 +120,13 @@ interface ImporterRegistration {
 
 interface ImporterSession {
   activation: Activation;
+  committedItems: Array<{
+    color: string;
+    id: string;
+    revision: number;
+    title: string;
+  }>;
+  configurable: boolean;
   controller: AbortController;
   registration: ImporterRegistration;
   segmented: boolean;
@@ -686,7 +703,11 @@ export class PluginRuntime {
         register: (definition: ImporterDefinition) => {
           this.assertActive(instance);
           validateRegistration(definition);
-          if (typeof definition.parse !== 'function') {
+          if (
+            typeof definition.parse !== 'function' ||
+            (definition.inspectFields !== undefined &&
+              typeof definition.inspectFields !== 'function')
+          ) {
             throw new Error('Importer requires a parse() function');
           }
           if (instance.importers.has(definition.id)) {
@@ -834,6 +855,9 @@ export class PluginRuntime {
       return;
     }
     this.importSession = undefined;
+    if (session.snapshot.file) {
+      session.activation.files?.release(session.snapshot.file);
+    }
     session.controller.abort();
     this.publish();
   }
@@ -845,6 +869,127 @@ export class PluginRuntime {
     ) {
       this.cancelImporterSessionFor();
     }
+  }
+
+  updateImporterMapping(
+    operationId: string,
+    target: ImporterNoteField,
+    source: string | null
+  ): void {
+    const session = this.importSession;
+    if (
+      !session ||
+      session.snapshot.operationId !== operationId ||
+      !session.configurable ||
+      !['configuring', 'failed'].includes(session.snapshot.status) ||
+      !['title', 'text', 'color'].includes(target) ||
+      !(source === null || session.snapshot.sourceFields.includes(source)) ||
+      !session.snapshot.mapping
+    ) {
+      throw new Error('Importer field mapping is not available');
+    }
+    const mapping = { ...session.snapshot.mapping, [target]: source };
+    if (source !== null) {
+      for (const other of ['title', 'text', 'color'] as const) {
+        if (other !== target && mapping[other] === source) {
+          mapping[other] = null;
+        }
+      }
+    }
+    session.snapshot = Object.freeze({
+      ...session.snapshot,
+      canPrepare: mapping.title !== null,
+      error: null,
+      mapping: Object.freeze(mapping),
+      status: 'configuring',
+    });
+    this.publish();
+  }
+
+  updateImporterPlacement(
+    operationId: string,
+    placement: {
+      mode: 'canvas' | 'detached';
+      strategy?: 'grid' | 'vertical';
+      viewId?: string | null;
+    }
+  ): void {
+    const session = this.importSession;
+    if (
+      !session ||
+      session.snapshot.operationId !== operationId ||
+      session.snapshot.status !== 'preview' ||
+      session.snapshot.completedNotes !== 0
+    ) {
+      throw new Error('Importer placement is not configurable');
+    }
+    if (placement.mode === 'detached') {
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        placement: Object.freeze({
+          mode: 'detached' as const,
+          strategy: 'grid' as const,
+          viewId: null,
+        }),
+      });
+      this.publish();
+      return;
+    }
+    if (session.snapshot.totalNotes > MAX_CANVAS_IMPORT_NOTES) {
+      throw new Error(
+        `Canvas placement is limited to ${MAX_CANVAS_IMPORT_NOTES} notes`
+      );
+    }
+    const viewId = placement.viewId ?? '';
+    if (
+      !session.snapshot.placementTargets.some((target) => target.id === viewId)
+    ) {
+      throw new Error('Importer canvas target is not available');
+    }
+    const strategy = placement.strategy ?? 'grid';
+    if (!['grid', 'vertical'].includes(strategy)) {
+      throw new Error('Importer placement strategy is invalid');
+    }
+    session.snapshot = Object.freeze({
+      ...session.snapshot,
+      placement: Object.freeze({
+        mode: 'canvas' as const,
+        strategy,
+        viewId,
+      }),
+    });
+    this.publish();
+  }
+
+  async prepareImporterSession(operationId: string): Promise<void> {
+    const session = this.importSession;
+    if (
+      !session ||
+      session.snapshot.operationId !== operationId ||
+      !session.snapshot.canPrepare ||
+      !session.snapshot.file ||
+      !session.snapshot.mapping ||
+      !this.isCurrentImporterSession(session)
+    ) {
+      throw new Error('Importer field mapping is not ready');
+    }
+    const mapping = validateImporterFieldMapping(
+      session.snapshot.mapping,
+      session.snapshot.sourceFields
+    );
+    session.snapshot = Object.freeze({
+      ...session.snapshot,
+      canPrepare: false,
+      error: null,
+      mapping,
+      notes: Object.freeze([]),
+      segments: Object.freeze([]),
+      status: 'parsing',
+      totalNotes: 0,
+      warnings: Object.freeze([]),
+    });
+    this.publish();
+    await this.parseImporterSession(session, mapping);
   }
 
   async confirmImporterSession(operationId: string): Promise<void> {
@@ -863,12 +1008,58 @@ export class PluginRuntime {
         ['failed', 'pending'].includes(segment.status)
       );
       if (index < 0) {
+        if (session.snapshot.placement.mode === 'canvas') {
+          const placementHost =
+            this.options.placementHost ?? canvasImporterPlacementHost;
+          const viewId = session.snapshot.placement.viewId;
+          if (!viewId) {
+            throw new Error('Importer canvas target is not available');
+          }
+          session.snapshot = Object.freeze({
+            ...session.snapshot,
+            canCancel: false,
+            canConfirm: false,
+            canRollback: false,
+            error: null,
+            status: 'placing',
+          });
+          this.publish();
+          try {
+            await placementHost.place({
+              items: session.committedItems,
+              operationId,
+              strategy: session.snapshot.placement.strategy,
+              viewId,
+            });
+          } catch (error) {
+            if (!this.isCurrentImporterSession(session)) {
+              return;
+            }
+            session.snapshot = Object.freeze({
+              ...session.snapshot,
+              canCancel: true,
+              canConfirm: true,
+              canRollback: true,
+              error: redactPluginError(error),
+              status: 'placement-failed',
+            });
+            this.report(session.snapshot.pluginId, 'importer-placement', error);
+            this.publish();
+            return;
+          }
+          if (!this.isCurrentImporterSession(session)) {
+            return;
+          }
+        }
         if (!session.segmented) {
           this.cancelImporterSessionFor(
             session.activation,
             session.registration
           );
           return;
+        }
+        if (session.snapshot.file) {
+          session.activation.files?.release(session.snapshot.file);
         }
         session.snapshot = Object.freeze({
           ...session.snapshot,
@@ -919,6 +1110,7 @@ export class PluginRuntime {
         if (result.operationId !== segment.operationId) {
           throw new Error('Importer segment operation identity mismatch');
         }
+        session.committedItems.push(...result.items);
         session.snapshot = Object.freeze({
           ...session.snapshot,
           completedNotes: session.snapshot.completedNotes + notes.length,
@@ -1118,6 +1310,82 @@ export class PluginRuntime {
     this.publish();
   }
 
+  private async parseImporterSession(
+    session: ImporterSession,
+    mapping?: ImporterFieldMapping
+  ): Promise<void> {
+    const file = session.snapshot.file;
+    if (!file) {
+      throw new Error('Importer file is not available');
+    }
+    const empty = Object.freeze([]);
+    try {
+      const result = await raceImporterAbort(
+        Promise.resolve().then(() =>
+          session.registration.definition.parse(file, {
+            ...(mapping ? { mapping } : {}),
+            signal: session.controller.signal,
+          })
+        ),
+        session.controller.signal
+      );
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      const preview = validateImporterParseResult(result);
+      session.segmented = preview.segmented;
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canConfirm: true,
+        canPrepare: false,
+        notes: preview.notes,
+        segments: Object.freeze(
+          preview.segments.map((segment, index) =>
+            Object.freeze({
+              end: segment.end,
+              error: null,
+              index,
+              operationId: preview.segmented
+                ? `${session.snapshot.operationId}_segment_${index + 1}`
+                : session.snapshot.operationId,
+              start: segment.start,
+              status: 'pending' as const,
+            })
+          )
+        ),
+        status: 'preview',
+        totalNotes: preview.notes.length,
+        warnings: preview.warnings,
+      });
+      this.publish();
+    } catch (error) {
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      if (
+        session.controller.signal.aborted ||
+        (error && typeof error === 'object' && 'name' in error
+          ? error.name === 'AbortError'
+          : false)
+      ) {
+        this.cancelImporterSessionFor(session.activation, session.registration);
+        return;
+      }
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canConfirm: false,
+        canPrepare: session.configurable,
+        error: redactPluginError(error),
+        notes: empty,
+        segments: empty,
+        status: 'failed',
+        totalNotes: 0,
+        warnings: empty,
+      });
+      this.report(session.snapshot.pluginId, 'importer-parse', error);
+    }
+  }
+
   async startImporterSession(
     pluginId: string,
     importerId: string
@@ -1127,8 +1395,12 @@ export class PluginRuntime {
     if (!(activation?.active && registration && activation.files)) {
       throw new Error('Importer is not available');
     }
-    if (this.importSession?.snapshot.status === 'committing') {
+    const activeStatus = this.importSession?.snapshot.status;
+    if (activeStatus === 'committing') {
       throw new Error('Import confirmation is in progress');
+    }
+    if (activeStatus === 'placing' || activeStatus === 'rolling-back') {
+      throw new Error('Import placement or rollback is in progress');
     }
     this.cancelImporterSessionFor();
     const controller = new AbortController();
@@ -1136,22 +1408,37 @@ export class PluginRuntime {
     const operationId = `plgimport_${crypto.randomUUID().replaceAll('-', '')}`;
     const session: ImporterSession = {
       activation,
+      committedItems: [],
+      configurable: typeof registration.definition.inspectFields === 'function',
       controller,
       registration,
       segmented: false,
       snapshot: Object.freeze({
         canCancel: true,
         canConfirm: false,
+        canPrepare: false,
         canRollback: false,
         completedNotes: 0,
         error: null,
         file: null,
         importerId,
         importerTitle: registration.definition.title,
+        mapping: null,
         notes: empty,
         operationId,
         pluginId,
+        placement: Object.freeze({
+          mode: 'detached' as const,
+          strategy: 'grid' as const,
+          viewId: null,
+        }),
+        placementTargets: Object.freeze(
+          (this.options.placementHost ?? canvasImporterPlacementHost)
+            .getTargets()
+            .map((target) => Object.freeze({ ...target }))
+        ),
         segments: empty,
+        sourceFields: empty,
         status: 'selecting',
         totalNotes: 0,
         warnings: empty,
@@ -1182,40 +1469,30 @@ export class PluginRuntime {
         status: 'parsing',
       });
       this.publish();
-      const result = await raceImporterAbort(
-        Promise.resolve().then(() =>
-          registration.definition.parse(file, { signal: controller.signal })
-        ),
-        controller.signal
-      );
-      if (!this.isCurrentImporterSession(session)) {
+      if (registration.definition.inspectFields) {
+        const inspected = await raceImporterAbort(
+          Promise.resolve().then(() =>
+            registration.definition.inspectFields!(file, {
+              signal: controller.signal,
+            })
+          ),
+          controller.signal
+        );
+        if (!this.isCurrentImporterSession(session)) {
+          return;
+        }
+        const configuration = validateImporterFieldInspection(inspected);
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          canPrepare: configuration.mapping.title !== null,
+          mapping: configuration.mapping,
+          sourceFields: configuration.fields,
+          status: 'configuring',
+        });
+        this.publish();
         return;
       }
-      const preview = validateImporterParseResult(result);
-      session.segmented = preview.segmented;
-      session.snapshot = Object.freeze({
-        ...session.snapshot,
-        canConfirm: true,
-        notes: preview.notes,
-        segments: Object.freeze(
-          preview.segments.map((segment, index) =>
-            Object.freeze({
-              end: segment.end,
-              error: null,
-              index,
-              operationId: preview.segmented
-                ? `${operationId}_segment_${index + 1}`
-                : operationId,
-              start: segment.start,
-              status: 'pending' as const,
-            })
-          )
-        ),
-        status: 'preview',
-        totalNotes: preview.notes.length,
-        warnings: preview.warnings,
-      });
-      this.publish();
+      await this.parseImporterSession(session);
     } catch (error) {
       if (!this.isCurrentImporterSession(session)) {
         return;
@@ -1232,6 +1509,7 @@ export class PluginRuntime {
       session.snapshot = Object.freeze({
         ...session.snapshot,
         canConfirm: false,
+        canPrepare: false,
         error: redactPluginError(error),
         notes: empty,
         status: 'failed',

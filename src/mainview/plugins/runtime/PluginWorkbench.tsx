@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCanvasStore } from '@/store/canvasStore';
 import type { ImporterSessionSnapshot } from './importers';
 import { type PluginRuntime, pluginRuntime } from './PluginRuntime';
 import { pluginText } from './panels';
@@ -11,6 +12,9 @@ function ImportSessionView({
   runtime: PluginRuntime;
   session: ImporterSessionSnapshot;
 }) {
+  const activeViewId = useCanvasStore((state) => state.activeViewId);
+  const canvasHydrated = useCanvasStore((state) => state._hydrated);
+  const switchView = useCanvasStore((state) => state.switchView);
   const hasPreview = session.notes.length > 0;
   const segmented = session.segments.length > 1;
   const visibleNotes = session.notes.slice(0, 100);
@@ -28,6 +32,10 @@ function ImportSessionView({
     session.file?.name ?? pluginText('Selected file', '已选文件');
   const status = {
     selecting: pluginText('Choose a file…', '请选择文件…'),
+    configuring: pluginText(
+      `Map fields from ${fileName}`,
+      `映射 ${fileName} 的字段`
+    ),
     parsing: pluginText(`Reading ${fileName}…`, `正在读取 ${fileName}…`),
     preview: pluginText(
       `${session.notes.length} notes ready to import`,
@@ -40,6 +48,14 @@ function ImportSessionView({
       segmented
         ? `已导入 ${session.completedNotes}/${session.totalNotes} 条笔记…`
         : `正在导入 ${session.notes.length} 条笔记…`
+    ),
+    placing: pluginText(
+      'Saving imported notes to the target canvas…',
+      '正在将导入笔记保存到目标画布…'
+    ),
+    'placement-failed': pluginText(
+      'The notes were imported as detached content, but canvas placement failed. Open the target canvas and retry placement.',
+      '笔记已作为未放置内容导入，但画布放置失败。请打开目标画布后重试放置。'
     ),
     failed: hasPreview
       ? pluginText(
@@ -95,6 +111,47 @@ function ImportSessionView({
           {session.error}
         </p>
       )}
+      {session.mapping && session.sourceFields.length > 0 && (
+        <fieldset
+          disabled={!['configuring', 'failed'].includes(session.status)}
+          style={{ display: 'grid', gap: 6 }}
+        >
+          <legend>{pluginText('Field mapping', '字段映射')}</legend>
+          {(
+            [
+              ['title', pluginText('Title (required)', '标题（必填）')],
+              ['text', pluginText('Body', '正文')],
+              ['color', pluginText('Color', '颜色')],
+            ] as const
+          ).map(([target, label]) => (
+            <label key={target}>
+              {label}{' '}
+              <select
+                aria-label={label}
+                onChange={(event) =>
+                  runtime.updateImporterMapping(
+                    session.operationId,
+                    target,
+                    event.currentTarget.value || null
+                  )
+                }
+                value={session.mapping?.[target] ?? ''}
+              >
+                <option value="">
+                  {target === 'title'
+                    ? pluginText('Select a field', '选择字段')
+                    : pluginText('Do not import', '不导入')}
+                </option>
+                {session.sourceFields.map((field) => (
+                  <option key={field} value={field}>
+                    {field}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </fieldset>
+      )}
       {session.warnings.length > 0 && (
         <div>
           <strong>{pluginText('Warnings', '警告')}</strong>
@@ -119,6 +176,101 @@ function ImportSessionView({
           ))}
         </ol>
       )}
+      {hasPreview &&
+        (session.completedNotes === 0 ||
+          session.status === 'placement-failed') && (
+          <fieldset style={{ display: 'grid', gap: 6 }}>
+            <legend>{pluginText('Import destination', '导入目标')}</legend>
+            <label>
+              {pluginText('Target', '目标')}{' '}
+              <select
+                aria-label={pluginText('Import target', '导入目标')}
+                disabled={session.completedNotes > 0}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  runtime.updateImporterPlacement(
+                    session.operationId,
+                    value === 'detached'
+                      ? { mode: 'detached' }
+                      : {
+                          mode: 'canvas',
+                          strategy: session.placement.strategy,
+                          viewId: value,
+                        }
+                  );
+                }}
+                value={
+                  session.placement.mode === 'detached'
+                    ? 'detached'
+                    : (session.placement.viewId ?? 'detached')
+                }
+              >
+                <option value="detached">
+                  {pluginText('Library only (detached)', '仅资料库（不放置）')}
+                </option>
+                {session.placementTargets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {target.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {session.placement.mode === 'canvas' && (
+              <>
+                <label>
+                  {pluginText('Placement', '放置方式')}{' '}
+                  <select
+                    aria-label={pluginText('Placement strategy', '放置策略')}
+                    disabled={session.completedNotes > 0}
+                    onChange={(event) =>
+                      runtime.updateImporterPlacement(session.operationId, {
+                        mode: 'canvas',
+                        strategy: event.currentTarget.value as
+                          | 'grid'
+                          | 'vertical',
+                        viewId: session.placement.viewId,
+                      })
+                    }
+                    value={session.placement.strategy}
+                  >
+                    <option value="grid">{pluginText('Grid', '网格')}</option>
+                    <option value="vertical">
+                      {pluginText('Vertical list', '纵向列表')}
+                    </option>
+                  </select>
+                </label>
+                {(activeViewId !== session.placement.viewId ||
+                  !canvasHydrated) && (
+                  <button
+                    disabled={
+                      !session.placement.viewId ||
+                      activeViewId === session.placement.viewId
+                    }
+                    onClick={() => {
+                      if (session.placement.viewId) {
+                        switchView(session.placement.viewId).catch((error) =>
+                          runtime.report(
+                            session.pluginId,
+                            'importer-target',
+                            error
+                          )
+                        );
+                      }
+                    }}
+                    type="button"
+                  >
+                    {activeViewId === session.placement.viewId
+                      ? pluginText(
+                          'Loading target canvas…',
+                          '正在加载目标画布…'
+                        )
+                      : pluginText('Open target canvas', '打开目标画布')}
+                  </button>
+                )}
+              </>
+            )}
+          </fieldset>
+        )}
       {hasPreview && (
         <ol
           aria-label={pluginText('Notes to import', '待导入笔记')}
@@ -161,8 +313,26 @@ function ImportSessionView({
         </ol>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {session.canPrepare && (
+          <button
+            onClick={() => {
+              runtime
+                .prepareImporterSession(session.operationId)
+                .catch((error) =>
+                  runtime.report(session.pluginId, 'importer-prepare', error)
+                );
+            }}
+            type="button"
+          >
+            {pluginText('Prepare preview', '生成预览')}
+          </button>
+        )}
         {session.canConfirm && (
           <button
+            disabled={
+              session.placement.mode === 'canvas' &&
+              (activeViewId !== session.placement.viewId || !canvasHydrated)
+            }
             onClick={() => {
               runtime
                 .confirmImporterSession(session.operationId)
@@ -172,14 +342,16 @@ function ImportSessionView({
             }}
             type="button"
           >
-            {session.status === 'failed'
-              ? pluginText(
-                  session.completedNotes > 0
-                    ? 'Retry and continue'
-                    : 'Retry import',
-                  session.completedNotes > 0 ? '重试并继续' : '重试导入'
-                )
-              : pluginText('Confirm import', '确认导入')}
+            {session.status === 'placement-failed'
+              ? pluginText('Retry placement', '重试放置')
+              : session.status === 'failed'
+                ? pluginText(
+                    session.completedNotes > 0
+                      ? 'Retry and continue'
+                      : 'Retry import',
+                    session.completedNotes > 0 ? '重试并继续' : '重试导入'
+                  )
+                : pluginText('Confirm import', '确认导入')}
           </button>
         )}
         {session.canRollback && (
@@ -225,6 +397,18 @@ export function PluginWorkbench({
     runtime.getSnapshot,
     runtime.getSnapshot
   );
+  const [selectedImporter, setSelectedImporter] = useState('');
+  useEffect(() => {
+    const available = new Set(
+      snapshot.importers.map((item) => `${item.pluginId}:${item.id}`)
+    );
+    if (selectedImporter && !available.has(selectedImporter)) {
+      setSelectedImporter('');
+    }
+  }, [selectedImporter, snapshot.importers]);
+  const selected = snapshot.importers.find(
+    (item) => `${item.pluginId}:${item.id}` === selectedImporter
+  );
   return (
     <aside
       aria-label={pluginText('Plugin workbench', '插件工作台')}
@@ -258,6 +442,65 @@ export function PluginWorkbench({
             gap: 8,
           }}
         >
+          {snapshot.importers.length > 0 && (
+            <section
+              aria-label={pluginText('Import file', '导入文件')}
+              style={{ display: 'grid', gap: 6 }}
+            >
+              <strong>{pluginText('Import file', '导入文件')}</strong>
+              <label>
+                {pluginText('Importer', '导入器')}{' '}
+                <select
+                  aria-label={pluginText('Importer', '导入器')}
+                  onChange={(event) =>
+                    setSelectedImporter(event.currentTarget.value)
+                  }
+                  value={selectedImporter}
+                >
+                  <option value="">
+                    {pluginText('Choose an importer', '选择导入器')}
+                  </option>
+                  {snapshot.importers.map((importer) => {
+                    const plugin = snapshot.plugins.find(
+                      (item) => item.pluginId === importer.pluginId
+                    );
+                    return (
+                      <option
+                        key={`${importer.pluginId}:${importer.id}`}
+                        value={`${importer.pluginId}:${importer.id}`}
+                      >
+                        {importer.title} · {plugin?.name ?? importer.pluginId}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <button
+                disabled={
+                  !selected ||
+                  Boolean(
+                    snapshot.importSession &&
+                      ['committing', 'placing', 'rolling-back'].includes(
+                        snapshot.importSession.status
+                      )
+                  )
+                }
+                onClick={() => {
+                  if (!selected) {
+                    return;
+                  }
+                  runtime
+                    .startImporterSession(selected.pluginId, selected.id)
+                    .catch((error) =>
+                      runtime.report(selected.pluginId, 'importer-start', error)
+                    );
+                }}
+                type="button"
+              >
+                {pluginText('Choose file…', '选择文件…')}
+              </button>
+            </section>
+          )}
           {snapshot.plugins.length === 0 && (
             <p>
               {pluginText(
@@ -319,34 +562,6 @@ export function PluginWorkbench({
                         {panel.open
                           ? pluginText('Close', '关闭')
                           : pluginText('Open', '打开')}
-                      </button>
-                    </li>
-                  ))}
-                {snapshot.importers
-                  .filter((importer) => importer.pluginId === plugin.pluginId)
-                  .map((importer) => (
-                    <li key={`importer:${importer.id}`}>
-                      <button
-                        disabled={
-                          snapshot.importSession?.status === 'committing'
-                        }
-                        onClick={() => {
-                          runtime
-                            .startImporterSession(
-                              importer.pluginId,
-                              importer.id
-                            )
-                            .catch((error) =>
-                              runtime.report(
-                                importer.pluginId,
-                                'importer-start',
-                                error
-                              )
-                            );
-                        }}
-                        type="button"
-                      >
-                        {importer.title} · {pluginText('Import', '导入')}
                       </button>
                     </li>
                   ))}

@@ -284,7 +284,7 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 now includes the accepted bounded importer/distribution slice plus the complete host-mediated file service described below. Larger segmented imports, generic importer mapping/target configuration, a general packaging command and public-HTTPS production evidence remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 now includes the accepted bounded importer/distribution slice, the complete host-mediated file service, explicit segmented imports, and the generic importer configuration described below. A general packaging command and public-HTTPS production evidence remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
 
@@ -362,6 +362,36 @@ app.importers.register({
   },
 });
 ```
+
+When several importers accept the same extension, the Workbench never chooses by registration order: the user first selects the named importer, then opens its picker. Existing importers keep the direct `parse(file, { signal })` flow. A tabular importer can opt into the host-owned field-mapping step with `inspectFields`; the host validates at most 100 unique source fields and maps them to the complete bounded Note surface (`title`, optional `text`, optional `color`). `title` is required and one source field cannot feed two targets.
+
+```js
+app.importers.register({
+  id: 'mapped-csv',
+  title: 'Import mapped CSV',
+  accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+  async inspectFields(file, { signal }) {
+    const csv = await app.files.readText(file, { signal });
+    const fields = readHeader(csv);
+    return {
+      fields,
+      suggestedMapping: {
+        title: fields.find((field) => field.toLowerCase() === 'title') ?? null,
+        text: fields.find((field) => field.toLowerCase() === 'text') ?? null,
+        color: fields.find((field) => field.toLowerCase() === 'color') ?? null,
+      },
+    };
+  },
+  async parse(file, { mapping, signal }) {
+    const csv = await app.files.readText(file, { signal });
+    return parseMappedCsv(csv, mapping);
+  },
+});
+```
+
+After preview, the user chooses either library-only detached Notes or a named canvas with grid/vertical placement. Canvas placement is deliberately limited to one atomic batch (at most 100 Notes), uses stable node identities for safe retry, and requires the target canvas to be open and hydrated so the host never overwrites a background manifest without revision protection. Content creation and canvas persistence are separate operations: if canvas saving fails, the Notes remain detached and the same session retries placement without recreating them. Explicit segmented imports remain detached so their existing per-segment retry and conflict-safe rollback semantics do not acquire a false cross-store transaction guarantee.
+
+The selected source handle is an ephemeral import-session asset. It stays valid through inspection, mapping, preview, commit retry, and placement retry, then is explicitly released on cancellation, successful completion, importer disposal, reload, disable, workspace switch, or runtime disposal. This lifecycle does not claim attachment import or durable file handles: importers that directly create workspace side effects outside the SDK remain outside the host transaction.
 
 `parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes the preview, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`.
 

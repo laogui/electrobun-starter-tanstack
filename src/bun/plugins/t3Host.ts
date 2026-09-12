@@ -124,7 +124,7 @@ export class T3HostController extends PluginHostController {
             await writeFile(path, validCsv());
             break;
           case 'wait':
-            await writeFile(path, '__WAIT__\ntitle\nPending\n');
+            await writeFile(path, 'title,text\nPending,__WAIT__\n');
             break;
           default:
             throw new Error('Unknown T3 selection scenario');

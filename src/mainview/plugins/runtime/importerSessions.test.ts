@@ -12,8 +12,12 @@ import type {
 } from '../../../shared/plugins/files';
 import type { PluginRuntimeSnapshot } from '../../../shared/plugins/runtime';
 import type { PluginFilesTransport } from './files';
-import { validateImporterParseResult } from './importers';
-import { PluginRuntime } from './PluginRuntime';
+import {
+  validateImporterFieldInspection,
+  validateImporterParseResult,
+} from './importers';
+import type { ImporterPlacementHost } from './importPlacement';
+import { PluginRuntime, type PluginRuntimeOptions } from './PluginRuntime';
 
 const handle: PluginFileHandleData = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -71,7 +75,8 @@ function setupRuntime(
   parse: (
     file: PluginFileHandleData,
     options: { signal?: AbortSignal }
-  ) => Promise<ImporterParseResult>
+  ) => Promise<ImporterParseResult>,
+  options: Pick<PluginRuntimeOptions, 'placementHost'> = {}
 ) {
   const contentFetch = vi.fn<typeof fetch>();
   const transport: PluginFilesTransport = {
@@ -91,6 +96,7 @@ function setupRuntime(
   };
   let disposeImporter!: Disposer;
   const runtime = new PluginRuntime({
+    ...options,
     contentTransport: {
       fetch: contentFetch,
       getEndpoint: async () => endpoint,
@@ -123,6 +129,128 @@ afterEach(async () => {
 });
 
 describe('host-owned importer sessions', () => {
+  it('requires explicit host-owned field mapping before parsing', async () => {
+    const parse = vi.fn(
+      async (
+        _file: PluginFileHandleData,
+        options: {
+          mapping?: {
+            color: string | null;
+            text: string | null;
+            title: string | null;
+          };
+        }
+      ): Promise<ImporterParseResult> => ({
+        notes: [{ title: `Mapped ${options.mapping?.title}` }],
+        warnings: [],
+      })
+    );
+    const transport: PluginFilesTransport = {
+      pick: vi.fn(async () => ({ files: [handle], success: true as const })),
+      readText: vi.fn(async () => ({ success: true as const, text: '' })),
+      release: vi.fn(async () => ({ success: true })),
+    };
+    const runtime = new PluginRuntime({
+      filesTransport: transport,
+      importer: async () => ({
+        default: {
+          setup(app: PluginContext) {
+            app.importers.register({
+              accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+              id: 'mapped-csv',
+              inspectFields: async () => ({
+                fields: ['Heading', 'Body', 'Tint'],
+                suggestedMapping: { text: 'Body', title: 'Heading' },
+              }),
+              parse,
+              title: 'Mapped CSV',
+            });
+          },
+        },
+      }),
+    });
+    runtimes.push(runtime);
+    await runtime.sync(snapshot());
+
+    await runtime.startImporterSession('example.csv', 'mapped-csv');
+    const configuring = runtime.getSnapshot().importSession!;
+    expect(configuring).toMatchObject({
+      canConfirm: false,
+      canPrepare: true,
+      mapping: { color: null, text: 'Body', title: 'Heading' },
+      sourceFields: ['Heading', 'Body', 'Tint'],
+      status: 'configuring',
+    });
+    expect(parse).not.toHaveBeenCalled();
+
+    runtime.updateImporterMapping(configuring.operationId, 'color', 'Tint');
+    await runtime.prepareImporterSession(configuring.operationId);
+
+    expect(parse).toHaveBeenCalledWith(handle, {
+      mapping: { color: 'Tint', text: 'Body', title: 'Heading' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      notes: [{ title: 'Mapped Heading' }],
+      status: 'preview',
+    });
+  });
+
+  it('retries canvas placement without recreating committed notes', async () => {
+    const placementHost: ImporterPlacementHost = {
+      getTargets: () => [{ id: 'research', name: 'Research' }],
+      place: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Target canvas is still loading'))
+        .mockResolvedValueOnce({
+          nodeIds: ['node-import-1'],
+          viewId: 'research',
+        }),
+    };
+    const { contentFetch, runtime, transport } = setupRuntime(
+      async () => ({ notes: [{ title: 'Placed note' }], warnings: [] }),
+      { placementHost }
+    );
+    contentFetch.mockImplementation(async (_url, request) => {
+      const body = JSON.parse(request!.body as string) as {
+        operationId: string;
+      };
+      return Response.json({
+        changed: true,
+        items: [{ color: '', id: 'note-1', revision: 1, title: 'Placed note' }],
+        operationId: body.operationId,
+      });
+    });
+    await runtime.sync(snapshot());
+    await runtime.startImporterSession('example.csv', 'notes-csv');
+    const preview = runtime.getSnapshot().importSession!;
+    runtime.updateImporterPlacement(preview.operationId, {
+      mode: 'canvas',
+      strategy: 'vertical',
+      viewId: 'research',
+    });
+
+    await runtime.confirmImporterSession(preview.operationId);
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canConfirm: true,
+      completedNotes: 1,
+      status: 'placement-failed',
+    });
+    expect(contentFetch).toHaveBeenCalledOnce();
+
+    await runtime.confirmImporterSession(preview.operationId);
+    expect(contentFetch).toHaveBeenCalledOnce();
+    expect(placementHost.place).toHaveBeenCalledTimes(2);
+    expect(placementHost.place).toHaveBeenLastCalledWith({
+      items: [{ color: '', id: 'note-1', revision: 1, title: 'Placed note' }],
+      operationId: preview.operationId,
+      strategy: 'vertical',
+      viewId: 'research',
+    });
+    expect(runtime.getSnapshot().importSession).toBeNull();
+    await vi.waitFor(() => expect(transport.release).toHaveBeenCalled());
+  });
+
   it('selects, parses and exposes a validated preview without writing', async () => {
     const gate = deferred<ImporterParseResult>();
     const parse = vi.fn(() => gate.promise);
@@ -294,7 +422,7 @@ describe('host-owned importer sessions', () => {
   });
 
   it('commits explicit segments in order and resumes the failed range with the same identity', async () => {
-    const { contentFetch, runtime } = setupRuntime(async () => ({
+    const { contentFetch, runtime, transport } = setupRuntime(async () => ({
       segments: [{ notes: notes(100, 'First') }, { notes: notes(2, 'Second') }],
       warnings: ['Large import'],
     }));
@@ -377,6 +505,7 @@ describe('host-owned importer sessions', () => {
         >
       ).operationId
     ).toBe(`${preview.operationId}_segment_2`);
+    await vi.waitFor(() => expect(transport.release).toHaveBeenCalledTimes(1));
   });
 
   it('rolls back clean ranges in reverse while preserving and retrying a conflict', async () => {
@@ -540,7 +669,7 @@ describe('host-owned importer sessions', () => {
   ] as const)('aborts and clears a parsing session on %s', async (action) => {
     const gate = deferred<ImporterParseResult>();
     let parseSignal: AbortSignal | undefined;
-    const { disposeImporter, runtime } = setupRuntime(
+    const { disposeImporter, runtime, transport } = setupRuntime(
       async (_file, options) => {
         parseSignal = options.signal;
         return gate.promise;
@@ -567,11 +696,31 @@ describe('host-owned importer sessions', () => {
 
     expect(parseSignal?.aborted).toBe(true);
     expect(runtime.getSnapshot().importSession).toBeNull();
+    await vi.waitFor(() =>
+      expect(transport.release).toHaveBeenCalledWith(
+        expect.objectContaining({ handleIds: [handle.id] })
+      )
+    );
     gate.resolve({ notes: [{ title: 'Late' }], warnings: [] });
   });
 });
 
 describe('validateImporterParseResult', () => {
+  it('normalizes bounded field inspection and rejects duplicate fields', () => {
+    expect(
+      validateImporterFieldInspection({
+        fields: [' title ', 'Body'],
+        suggestedMapping: { text: 'Body' },
+      })
+    ).toEqual({
+      fields: ['title', 'Body'],
+      mapping: { color: null, text: 'Body', title: 'title' },
+    });
+    expect(() =>
+      validateImporterFieldInspection({ fields: ['title', 'title'] })
+    ).toThrow('duplicate');
+  });
+
   it('accepts explicit bounded segments and reports one-based ranges', () => {
     const result = validateImporterParseResult({
       segments: [{ notes: notes(100, 'First') }, { notes: notes(1, 'Second') }],

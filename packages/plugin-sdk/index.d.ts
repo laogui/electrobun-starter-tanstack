@@ -220,14 +220,40 @@ export type ImporterParseResult =
   | ImporterSingleBatchParseResult
   | ImporterSegmentedParseResult;
 
+export type ImporterNoteField = 'color' | 'text' | 'title';
+
+export type ImporterFieldMapping = Readonly<
+  Record<ImporterNoteField, string | null>
+>;
+
+export interface ImporterFieldInspection {
+  /** Stable source-field identifiers, in source order. Limited to 100 entries. */
+  fields: readonly string[];
+  /** Optional initial mapping. The host still presents it for explicit review. */
+  suggestedMapping?: Partial<ImporterFieldMapping>;
+}
+
+export interface ImporterParseOptions extends OperationOptions {
+  /** Present only for importers that register `inspectFields`. */
+  mapping?: ImporterFieldMapping;
+}
+
 export interface ImporterDefinition {
   accept: readonly PluginFileFilter[];
   /** Plugin-local identifier. */
   id: string;
+  /**
+   * Opts into host-owned mapping from bounded source fields to Note fields.
+   * The host requires an explicit mapping review before it calls `parse`.
+   */
+  inspectFields?(
+    file: PluginFileHandle,
+    options: OperationOptions
+  ): Promise<ImporterFieldInspection>;
   /** Parse returns preview data only; committing it remains host-owned. */
   parse(
     file: PluginFileHandle,
-    options: OperationOptions
+    options: ImporterParseOptions
   ): Promise<ImporterParseResult>;
   title: string;
 }

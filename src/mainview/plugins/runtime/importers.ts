@@ -1,4 +1,7 @@
 import type {
+  ImporterFieldInspection,
+  ImporterFieldMapping,
+  ImporterNoteField,
   NoteContentCreate,
   PluginFileHandle,
 } from '../../../../packages/plugin-sdk';
@@ -12,6 +15,21 @@ const MAX_NOTE_COLOR_LENGTH = 64;
 const MAX_NOTE_TITLE_LENGTH = 256;
 const MAX_WARNINGS = 100;
 const MAX_WARNING_LENGTH = 1024;
+const MAX_SOURCE_FIELDS = 100;
+const MAX_SOURCE_FIELD_LENGTH = 128;
+
+export type ImporterPlacementStrategy = 'grid' | 'vertical';
+
+export interface ImporterPlacementConfiguration {
+  readonly mode: 'canvas' | 'detached';
+  readonly strategy: ImporterPlacementStrategy;
+  readonly viewId: string | null;
+}
+
+export interface ImporterPlacementTarget {
+  readonly id: string;
+  readonly name: string;
+}
 
 export interface ImporterPreviewNote {
   readonly color: string;
@@ -45,21 +63,29 @@ export interface ImporterSessionSegmentSnapshot {
 export interface ImporterSessionSnapshot {
   readonly canCancel: boolean;
   readonly canConfirm: boolean;
+  readonly canPrepare: boolean;
   readonly canRollback: boolean;
   readonly completedNotes: number;
   readonly error: string | null;
   readonly file: PluginFileHandle | null;
   readonly importerId: string;
   readonly importerTitle: string;
+  readonly mapping: ImporterFieldMapping | null;
   readonly notes: readonly ImporterPreviewNote[];
   readonly operationId: string;
+  readonly placement: ImporterPlacementConfiguration;
+  readonly placementTargets: readonly ImporterPlacementTarget[];
   readonly pluginId: string;
   readonly segments: readonly ImporterSessionSegmentSnapshot[];
+  readonly sourceFields: readonly string[];
   readonly status:
     | 'selecting'
+    | 'configuring'
     | 'parsing'
     | 'preview'
     | 'committing'
+    | 'placing'
+    | 'placement-failed'
     | 'failed'
     | 'completed'
     | 'rolling-back'
@@ -71,11 +97,100 @@ export interface ImporterSessionSnapshot {
   readonly workspaceId: string;
 }
 
+const NOTE_FIELDS: readonly ImporterNoteField[] = ['title', 'text', 'color'];
+
 function record(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+export function validateImporterFieldInspection(value: unknown): {
+  readonly fields: readonly string[];
+  readonly mapping: ImporterFieldMapping;
+} {
+  const inspection = record(value) as
+    | (Record<string, unknown> & Partial<ImporterFieldInspection>)
+    | null;
+  if (
+    !inspection ||
+    Object.keys(inspection).some(
+      (key) => !['fields', 'suggestedMapping'].includes(key)
+    ) ||
+    !Array.isArray(inspection.fields) ||
+    inspection.fields.length < 1 ||
+    inspection.fields.length > MAX_SOURCE_FIELDS ||
+    inspection.fields.some(
+      (field) =>
+        typeof field !== 'string' ||
+        !field.trim() ||
+        field.length > MAX_SOURCE_FIELD_LENGTH
+    )
+  ) {
+    throw new Error('Importer field inspection must return 1–100 fields');
+  }
+  const fields = Object.freeze(inspection.fields.map((field) => field.trim()));
+  if (new Set(fields).size !== fields.length) {
+    throw new Error('Importer field inspection returned duplicate fields');
+  }
+  const suggested = inspection.suggestedMapping;
+  if (
+    suggested !== undefined &&
+    (!record(suggested) ||
+      Object.keys(suggested).some(
+        (key) => !NOTE_FIELDS.includes(key as ImporterNoteField)
+      ))
+  ) {
+    throw new Error('Importer returned an invalid suggested field mapping');
+  }
+  const defaultFor = (target: ImporterNoteField): string | null => {
+    const value = suggested?.[target];
+    if (value !== undefined) {
+      if (
+        !(
+          value === null ||
+          (typeof value === 'string' && fields.includes(value))
+        )
+      ) {
+        throw new Error('Importer suggested an unavailable source field');
+      }
+      return value;
+    }
+    return fields.includes(target) ? target : null;
+  };
+  return Object.freeze({
+    fields,
+    mapping: Object.freeze({
+      color: defaultFor('color'),
+      text: defaultFor('text'),
+      title: defaultFor('title'),
+    }),
+  });
+}
+
+export function validateImporterFieldMapping(
+  value: ImporterFieldMapping,
+  fields: readonly string[]
+): ImporterFieldMapping {
+  if (
+    !value ||
+    Object.keys(value).length !== NOTE_FIELDS.length ||
+    NOTE_FIELDS.some((target) => {
+      const source = value[target];
+      return !(source === null || fields.includes(source));
+    }) ||
+    value.title === null
+  ) {
+    throw new Error('Title must map to one available source field');
+  }
+  const selected = NOTE_FIELDS.flatMap((target) =>
+    value[target] === null ? [] : [value[target]]
+  );
+  if (new Set(selected).size !== selected.length) {
+    throw new Error('Each source field can map to at most one Note field');
+  }
+  return Object.freeze({ ...value });
 }
 
 function validateNote(value: unknown, index: number): ImporterPreviewNote {

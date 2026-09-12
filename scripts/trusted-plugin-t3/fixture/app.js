@@ -1,6 +1,6 @@
 import { definePlugin } from '@ghostboard/sdk';
 import { createElement } from 'react';
-import { parseNotesCsv } from './csv.js';
+import { inspectCsvFields, parseNotesCsv } from './csv.js';
 
 function ImportPanel() {
   return createElement(
@@ -61,9 +61,24 @@ export default definePlugin({
     app.importers.register({
       accept: [{ description: 'CSV files', extensions: ['.csv'] }],
       id: 'notes-csv',
-      async parse(file, { signal }) {
+      async inspectFields(file, { signal }) {
         const text = await app.files.readText(file, { signal });
-        if (text.startsWith('__WAIT__')) {
+        const fields = inspectCsvFields(text);
+        const byLowercase = new Map(
+          fields.map((field) => [field.toLowerCase(), field])
+        );
+        return {
+          fields,
+          suggestedMapping: {
+            color: byLowercase.get('color') ?? null,
+            text: byLowercase.get('text') ?? null,
+            title: byLowercase.get('title') ?? null,
+          },
+        };
+      },
+      async parse(file, { mapping, signal }) {
+        const text = await app.files.readText(file, { signal });
+        if (text.includes('__WAIT__')) {
           await new Promise((resolve, reject) => {
             const abort = () =>
               reject(new DOMException('Probe parse aborted', 'AbortError'));
@@ -71,7 +86,7 @@ export default definePlugin({
             setTimeout(resolve, 60_000);
           });
         }
-        return parseNotesCsv(text);
+        return parseNotesCsv(text, mapping);
       },
       title: 'Import notes from CSV',
     });

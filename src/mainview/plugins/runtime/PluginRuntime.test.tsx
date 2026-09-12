@@ -515,6 +515,10 @@ describe('trusted plugin runtime', () => {
             app.importers.register({
               accept: [{ description: 'CSV files', extensions: ['.csv'] }],
               id: 'notes-csv',
+              inspectFields: async () => ({
+                fields: ['Heading', 'Body', 'Tint'],
+                suggestedMapping: { text: 'Body', title: 'Heading' },
+              }),
               parse: async () => ({
                 notes: [
                   { color: 'blue', text: 'Preview body', title: 'First note' },
@@ -522,6 +526,15 @@ describe('trusted plugin runtime', () => {
                 warnings: ['Skipped an empty row'],
               }),
               title: 'Import notes',
+            });
+            app.importers.register({
+              accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+              id: 'alternative-csv',
+              parse: async () => ({
+                notes: [{ title: 'Wrong importer' }],
+                warnings: [],
+              }),
+              title: 'Alternative CSV importer',
             });
           },
         }),
@@ -531,7 +544,25 @@ describe('trusted plugin runtime', () => {
     await runtime.sync(snapshot());
     render(<PluginWorkbench runtime={runtime} />);
 
-    fireEvent.click(screen.getByText('Import notes · Import'));
+    expect(filesTransport.pick).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Importer')).toHaveTextContent(
+      'Import notes · Test plugin'
+    );
+    expect(screen.getByLabelText('Importer')).toHaveTextContent(
+      'Alternative CSV importer · Test plugin'
+    );
+    fireEvent.change(screen.getByLabelText('Importer'), {
+      target: { value: 'example.test:notes-csv' },
+    });
+    fireEvent.click(screen.getByText('Choose file…'));
+    expect(
+      await screen.findByText('Map fields from notes.csv')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Title (required)')).toHaveValue('Heading');
+    fireEvent.change(screen.getByLabelText('Color'), {
+      target: { value: 'Tint' },
+    });
+    fireEvent.click(screen.getByText('Prepare preview'));
     expect(
       await screen.findByText('1 notes ready to import')
     ).toBeInTheDocument();
@@ -543,8 +574,15 @@ describe('trusted plugin runtime', () => {
       expect(screen.queryByLabelText('Import preview')).not.toBeInTheDocument()
     );
     expect(contentFetch).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(filesTransport.release).toHaveBeenCalledWith(
+        expect.objectContaining({ handleIds: [file.id] })
+      )
+    );
 
-    fireEvent.click(screen.getByText('Import notes · Import'));
+    fireEvent.click(screen.getByText('Choose file…'));
+    await screen.findByText('Map fields from notes.csv');
+    fireEvent.click(screen.getByText('Prepare preview'));
     expect(
       await screen.findByText('1 notes ready to import')
     ).toBeInTheDocument();
@@ -566,6 +604,9 @@ describe('trusted plugin runtime', () => {
       expect(screen.queryByLabelText('Import preview')).not.toBeInTheDocument()
     );
     expect(contentFetch).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(filesTransport.release).toHaveBeenCalledTimes(2)
+    );
     expect(
       JSON.parse(contentFetch.mock.calls[0]![1]!.body as string)
     ).toMatchObject({
@@ -656,7 +697,10 @@ describe('trusted plugin runtime', () => {
     await runtime.sync(snapshot());
     render(<PluginWorkbench runtime={runtime} />);
 
-    fireEvent.click(screen.getByText('Import large CSV · Import'));
+    fireEvent.change(screen.getByLabelText('Importer'), {
+      target: { value: 'example.test:large-csv' },
+    });
+    fireEvent.click(screen.getByText('Choose file…'));
     expect(
       await screen.findByText('101 notes ready to import')
     ).toBeInTheDocument();

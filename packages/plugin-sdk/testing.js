@@ -435,7 +435,11 @@ function makeActivation(options, shared, generation) {
     generation,
     importers: {
       register: (definition) => {
-        if (typeof definition?.parse !== 'function') {
+        if (
+          typeof definition?.parse !== 'function' ||
+          (definition.inspectFields !== undefined &&
+            typeof definition.inspectFields !== 'function')
+        ) {
           throw new Error('Importer requires parse()');
         }
         return register(
@@ -561,13 +565,26 @@ export function createFakeHost(options) {
           await listener(clone(payload));
         }
       },
-      async parseImporter(id, file) {
+      async parseImporter(id, file, options = {}) {
         assertActive(current);
         const importer = current.importers.get(id);
         if (!importer) {
           throw new Error(`Unknown importer id: ${id}`);
         }
-        return importer.parse(file, { signal: current.controller.signal });
+        return importer.parse(file, {
+          ...options,
+          signal: current.controller.signal,
+        });
+      },
+      async inspectImporterFields(id, file) {
+        assertActive(current);
+        const importer = current.importers.get(id);
+        if (!importer?.inspectFields) {
+          throw new Error(`Importer does not inspect fields: ${id}`);
+        }
+        return importer.inspectFields(file, {
+          signal: current.controller.signal,
+        });
       },
       async runCommand(id) {
         assertActive(current);

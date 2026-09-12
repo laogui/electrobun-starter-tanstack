@@ -4,8 +4,10 @@ import {
   rpcEnablePlugin,
   rpcGetLocalHttpEndpoint,
   rpcListPluginPackages,
+  rpcSaveManifest,
   rpcScanUnlinkedNotes,
 } from '@/lib/rpc';
+import { useCanvasStore } from '@/store/canvasStore';
 import type { PluginContext } from '../../../../packages/plugin-sdk';
 import type { PluginInstallPreview } from '../../../shared/plugins/management';
 import { pluginRuntime } from '../runtime';
@@ -40,7 +42,7 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
 
 function importedItems(app: PluginContext) {
   return app.content
-    .query({ limit: 100 })
+    .query({ text: 'First, quoted', limit: 100 })
     .then(({ items }) =>
       items.filter((item) => item.title === 'First, quoted')
     );
@@ -82,6 +84,14 @@ export async function runT3Probe(): Promise<void> {
   };
   const select = (scenario: string) =>
     request<{ selected: string }>('select', { scenario });
+  const startImporter = async () => {
+    await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+    const session = pluginRuntime.getSnapshot().importSession;
+    if (session?.status === 'configuring' && session.canPrepare) {
+      await pluginRuntime.prepareImporterSession(session.operationId);
+    }
+    return pluginRuntime.getSnapshot().importSession;
+  };
   const waitForCombined = async () => {
     await waitFor(
       () =>
@@ -199,7 +209,7 @@ export async function runT3Probe(): Promise<void> {
         document.body.textContent?.includes('Import notes from CSV') === true
       );
       await select('cancel');
-      await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+      await startImporter();
       check(
         'pickerCancelClearsSession',
         !pluginRuntime.getSnapshot().importSession
@@ -208,12 +218,11 @@ export async function runT3Probe(): Promise<void> {
       if (config.phase === 'local') {
         for (const [scenario, message] of [
           ['invalid-utf8', 'valid UTF-8'],
-          ['missing-title', 'requires a title column'],
           ['oversized', 'limited to'],
           ['too-many', 'more than 5,000 notes'],
         ] as const) {
           await select(scenario);
-          await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+          await startImporter();
           const failed = pluginRuntime.getSnapshot().importSession;
           check(
             `reject-${scenario}`,
@@ -224,9 +233,19 @@ export async function runT3Probe(): Promise<void> {
           pluginRuntime.cancelImporterSession(failed!.operationId);
         }
 
-        await select('segmented');
+        await select('missing-title');
         await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
-        const segmented = pluginRuntime.getSnapshot().importSession!;
+        const unmapped = pluginRuntime.getSnapshot().importSession!;
+        check(
+          'reject-missing-title',
+          unmapped.status === 'configuring' &&
+            !unmapped.canPrepare &&
+            unmapped.mapping?.title === null
+        );
+        pluginRuntime.cancelImporterSession(unmapped.operationId);
+
+        await select('segmented');
+        const segmented = (await startImporter())!;
         check(
           'segmentedPreview',
           segmented.status === 'preview' &&
@@ -327,8 +346,7 @@ export async function runT3Probe(): Promise<void> {
         pluginRuntime.cancelImporterSession(segmented.operationId);
 
         await select('valid');
-        await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
-        const cancellable = pluginRuntime.getSnapshot().importSession!;
+        const cancellable = (await startImporter())!;
         check(
           'hostPreview',
           cancellable.status === 'preview' &&
@@ -349,10 +367,66 @@ export async function runT3Probe(): Promise<void> {
           (await importedItems(app)).length === 0
         );
 
+        await select('valid');
+        const placeable = (await startImporter())!;
+        const canvas = useCanvasStore.getState();
+        check('targetCanvasHydrated', canvas._hydrated);
+        pluginRuntime.updateImporterPlacement(placeable.operationId, {
+          mode: 'canvas',
+          strategy: 'grid',
+          viewId: canvas.activeViewId,
+        });
+        await pluginRuntime.confirmImporterSession(placeable.operationId);
+        const placedNotes = (
+          await app.content.query({ limit: 500 })
+        ).items.filter((item) =>
+          ['First, quoted', 'Second'].includes(item.title)
+        );
+        const placedNoteIds = new Set(placedNotes.map((item) => item.id));
+        const placedNodeIds = useCanvasStore
+          .getState()
+          .nodes.filter((node) =>
+            placedNoteIds.has(
+              String((node.data as Record<string, unknown>).noteId ?? '')
+            )
+          )
+          .map((node) => node.id);
+        check(
+          'canvasPlacement',
+          !pluginRuntime.getSnapshot().importSession &&
+            placedNotes.length === 2 &&
+            placedNodeIds.length === 2 &&
+            placedNodeIds.every((id) =>
+              id.startsWith(`node-${placeable.operationId}-`)
+            )
+        );
+        useCanvasStore.getState().deleteNodes(placedNodeIds);
+        const placementCleanup = useCanvasStore.getState();
+        check(
+          'persistCanvasPlacementCleanup',
+          (
+            await rpcSaveManifest(
+              placementCleanup.activeViewId,
+              placementCleanup.nodes,
+              placementCleanup.edges
+            )
+          ).success
+        );
+        const removedPlacementBatch = await app.content.undo(
+          placeable.operationId,
+          { operationId: 't3-canvas-placement-cleanup' }
+        );
+        check(
+          'canvasPlacementCleanup',
+          removedPlacementBatch.removedIds?.length === 2 &&
+            (await importedItems(app)).length === 0
+        );
+
         await select('wait');
-        const parsing = pluginRuntime.startImporterSession(
-          't3.combined',
-          'notes-csv'
+        await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+        const configurable = pluginRuntime.getSnapshot().importSession!;
+        const parsing = pluginRuntime.prepareImporterSession(
+          configurable.operationId
         );
         await waitFor(
           () => pluginRuntime.getSnapshot().importSession?.status === 'parsing',
@@ -390,7 +464,7 @@ export async function runT3Probe(): Promise<void> {
       }
 
       await select('valid');
-      await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+      await startImporter();
       const operationId =
         pluginRuntime.getSnapshot().importSession?.operationId ?? '';
       check('stableOperationCreated', operationId.startsWith('plgimport_'));
@@ -442,7 +516,7 @@ export async function runT3Probe(): Promise<void> {
           pluginRuntime.getSnapshot().importSession === null &&
             (await importedItems(app)).length === 1
         );
-        const created = (await app.content.query({ limit: 100 })).items.filter(
+        const created = (await app.content.query({ limit: 500 })).items.filter(
           (item) => ['First, quoted', 'Second'].includes(item.title)
         );
         check('twoNotesCreated', created.length === 2);

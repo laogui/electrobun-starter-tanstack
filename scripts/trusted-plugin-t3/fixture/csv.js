@@ -60,24 +60,48 @@ function csvRows(text) {
   return rows;
 }
 
-export function parseNotesCsv(text) {
+export function inspectCsvFields(text) {
+  const rows = csvRows(text);
+  if (rows.length < 1) {
+    throw new Error('CSV requires a header');
+  }
+  const fields = rows[0].map((header) => header.trim());
+  if (fields.some((field) => !field)) {
+    throw new Error('CSV headers must not be empty');
+  }
+  const normalized = fields.map((field) => field.toLowerCase());
+  if (new Set(normalized).size !== normalized.length) {
+    throw new Error('CSV headers must not repeat');
+  }
+  return fields;
+}
+
+export function parseNotesCsv(text, mapping) {
   const rows = csvRows(text);
   if (rows.length < 2) {
     throw new Error('CSV requires a header and at least one note');
   }
-  const headers = rows[0].map((header) => header.trim().toLowerCase());
-  if (headers.some((header) => !['title', 'text', 'color'].includes(header))) {
-    throw new Error('CSV supports only title, text and color columns');
+  const fields = inspectCsvFields(text);
+  const byLowercase = new Map(
+    fields.map((field) => [field.toLowerCase(), field])
+  );
+  const selected = mapping ?? {
+    color: byLowercase.get('color') ?? null,
+    text: byLowercase.get('text') ?? null,
+    title: byLowercase.get('title') ?? null,
+  };
+  if (!(selected.title && fields.includes(selected.title))) {
+    throw new Error('CSV requires a mapped title column');
   }
-  if (new Set(headers).size !== headers.length) {
-    throw new Error('CSV headers must not repeat');
+  for (const field of [selected.text, selected.color]) {
+    if (field !== null && !fields.includes(field)) {
+      throw new Error('CSV mapping references an unavailable column');
+    }
   }
-  const titleIndex = headers.indexOf('title');
-  if (titleIndex < 0) {
-    throw new Error('CSV requires a title column');
-  }
-  const textIndex = headers.indexOf('text');
-  const colorIndex = headers.indexOf('color');
+  const titleIndex = fields.indexOf(selected.title);
+  const textIndex = selected.text === null ? -1 : fields.indexOf(selected.text);
+  const colorIndex =
+    selected.color === null ? -1 : fields.indexOf(selected.color);
   const notes = [];
   let skipped = 0;
   for (const [rowOffset, row] of rows.slice(1).entries()) {
@@ -85,7 +109,7 @@ export function parseNotesCsv(text) {
       skipped += 1;
       continue;
     }
-    if (row.length > headers.length) {
+    if (row.length > fields.length) {
       throw new Error(`CSV row ${rowOffset + 2} has too many fields`);
     }
     const title = row[titleIndex]?.trim() ?? '';

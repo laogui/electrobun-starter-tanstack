@@ -44,9 +44,14 @@ export interface FakeHostHarness {
       event: K,
       payload: PluginEventMap[K]
     ): Promise<void>;
-    parseImporter(
+    inspectImporterFields(
       id: string,
       file: PluginFileHandle
+    ): ReturnType<NonNullable<ImporterDefinition['inspectFields']>>;
+    parseImporter(
+      id: string,
+      file: PluginFileHandle,
+      options?: { mapping?: import('./index.js').ImporterFieldMapping }
     ): ReturnType<ImporterDefinition['parse']>;
     runCommand(id: string): Promise<void>;
     runTask(id: string): Promise<void>;

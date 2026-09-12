@@ -18,6 +18,10 @@ import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import type { ExtensionTaskDelivery } from '../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../shared/plugins/contentHistory';
 import type {
+  PluginFilePickResult,
+  PluginFileReadResult,
+} from '../shared/plugins/files';
+import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
   PluginInstallPreparationResult,
@@ -124,6 +128,7 @@ import {
   pluginWorkspaceId,
   subscribeContentChanges,
 } from './plugins/contentEvents';
+import { PluginFileStore, pluginPickerFileTypes } from './plugins/files';
 import { PluginHostController } from './plugins/hostController';
 import {
   PluginManagementService,
@@ -872,6 +877,33 @@ interface CanvasRPC {
       pluginDisable: {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
+      };
+      pluginFilesPick: {
+        params: {
+          activationId: string;
+          extensions: string[];
+          pluginId: string;
+          workspaceId: string;
+        };
+        response: PluginFilePickResult;
+      };
+      pluginFilesReadText: {
+        params: {
+          activationId: string;
+          handleId: string;
+          pluginId: string;
+          workspaceId: string;
+        };
+        response: PluginFileReadResult;
+      };
+      pluginFilesRelease: {
+        params: {
+          activationId: string;
+          handleIds: string[];
+          pluginId: string;
+          workspaceId: string;
+        };
+        response: { success: boolean };
       };
       extensionEnablementList: {
         params: Record<string, unknown>;
@@ -1712,6 +1744,7 @@ async function main() {
   const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
   const pluginManagement = new PluginManagementService(wsPath);
+  const pluginFiles = new PluginFileStore(pluginWorkspaceId(wsPath));
   pluginManagement.recover().catch((error) => {
     console.warn('[plugins] Failed to recover package transactions:', error);
   });
@@ -2515,6 +2548,55 @@ async function main() {
             return { success: true, plugin };
           } catch (error) {
             return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginFilesPick: async (request) => {
+          try {
+            pluginFiles.validateContext(request);
+            const selected = await Utils.openFileDialog({
+              allowedFileTypes: pluginPickerFileTypes(request.extensions),
+              allowsMultipleSelection: false,
+              canChooseDirectory: false,
+              canChooseFiles: true,
+              startingFolder: '~/Documents',
+            });
+            const path = selected.find(Boolean);
+            if (!path) {
+              return { success: false, cancelled: true };
+            }
+            return {
+              success: true,
+              files: await pluginFiles.registerSelection(request, [path]),
+            };
+          } catch (error) {
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+
+        pluginFilesReadText: async (request) => {
+          try {
+            return {
+              success: true,
+              text: await pluginFiles.readText(request, request.handleId),
+            };
+          } catch (error) {
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+
+        pluginFilesRelease: async (request) => {
+          try {
+            pluginFiles.release(request, request.handleIds);
+            return { success: true };
+          } catch {
+            return { success: false };
           }
         },
 

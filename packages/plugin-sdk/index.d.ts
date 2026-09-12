@@ -99,6 +99,50 @@ export interface OperationOptions {
   signal?: AbortSignal;
 }
 
+export interface PluginFileFilter {
+  description: string;
+  /** Lowercase extensions with a leading dot, for example `.csv`. */
+  extensions: readonly string[];
+}
+
+export interface PluginFileHandle {
+  readonly id: string;
+  readonly lastModified: number;
+  readonly mimeType: string;
+  readonly name: string;
+  readonly size: number;
+}
+
+export interface PluginFiles {
+  /** First T3 slice: selects at most one file; cancelling returns an empty array. */
+  pick(options: {
+    accept: readonly PluginFileFilter[];
+    signal?: AbortSignal;
+  }): Promise<readonly PluginFileHandle[]>;
+  /** Reads strict UTF-8 text. The first T3 slice is limited to 1 MiB. */
+  readText(
+    handle: PluginFileHandle,
+    options?: OperationOptions
+  ): Promise<string>;
+}
+
+export interface ImporterParseResult {
+  notes: readonly NoteContentCreate[];
+  warnings: readonly string[];
+}
+
+export interface ImporterDefinition {
+  accept: readonly PluginFileFilter[];
+  /** Plugin-local identifier. */
+  id: string;
+  /** Parse returns preview data only; committing it remains host-owned. */
+  parse(
+    file: PluginFileHandle,
+    options: OperationOptions
+  ): Promise<ImporterParseResult>;
+  title: string;
+}
+
 export interface PluginStorage {
   delete(key: string, options?: OperationOptions): Promise<void>;
   get(key: string, options?: OperationOptions): Promise<JsonValue | undefined>;
@@ -269,8 +313,13 @@ export interface PluginContext {
       options?: OperationOptions
     ): Disposer;
   };
+  readonly files: PluginFiles;
   /** Increases for each activation attempt; failed reloads do not reset it. */
   readonly generation: number;
+  readonly importers: {
+    /** Staged with this activation and published only after setup succeeds. */
+    register(importer: ImporterDefinition): Disposer;
+  };
   /** Registers a cleanup; the returned disposer also runs it early, once. */
   onCleanup(disposer: Disposer): Disposer;
   readonly panels: {

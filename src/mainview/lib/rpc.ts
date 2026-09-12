@@ -27,6 +27,13 @@ import type { ExtensionPresentation } from '../../shared/extensions/presentation
 import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
 import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 import type {
+  PluginFilePickRequest,
+  PluginFilePickResult,
+  PluginFileReadRequest,
+  PluginFileReadResult,
+  PluginFileReleaseRequest,
+} from '../../shared/plugins/files';
+import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
   PluginInstallPreparationResult,
@@ -296,6 +303,36 @@ export async function rpcDisablePlugin(input: {
     globalThis.dispatchEvent(new Event('plugins-changed'));
   }
   return result;
+}
+
+export async function rpcPickPluginFiles(
+  request: PluginFilePickRequest
+): Promise<PluginFilePickResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin file service is unavailable.' };
+  }
+  return eb.rpc.request.pluginFilesPick(request);
+}
+
+export async function rpcReadPluginFileText(
+  request: PluginFileReadRequest
+): Promise<PluginFileReadResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin file service is unavailable.' };
+  }
+  return eb.rpc.request.pluginFilesReadText(request);
+}
+
+export async function rpcReleasePluginFiles(
+  request: PluginFileReleaseRequest
+): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginFilesRelease(request);
 }
 
 export async function rpcListExtensionEnablement(): Promise<{

@@ -13,7 +13,12 @@ import { PluginRuntime } from './PluginRuntime';
 import { initializeSharedPluginRuntime } from './sharedRuntime';
 import { startPluginRuntime } from './startPluginRuntime';
 
-vi.mock('@/lib/rpc', () => ({ rpcGetLocalHttpEndpoint: vi.fn() }));
+vi.mock('@/lib/rpc', () => ({
+  rpcGetLocalHttpEndpoint: vi.fn(),
+  rpcPickPluginFiles: vi.fn(),
+  rpcReadPluginFileText: vi.fn(),
+  rpcReleasePluginFiles: vi.fn(),
+}));
 
 const original = globalThis.__ghostboardPluginRuntime;
 afterEach(() => {

@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -370,6 +371,9 @@ interface CanvasHandlers {
   openAttachment: AnyHandler;
   openWorkspaceFolder: AnyHandler;
   pluginEnable: AnyHandler;
+  pluginFilesPick: AnyHandler;
+  pluginFilesReadText: AnyHandler;
+  pluginFilesRelease: AnyHandler;
   pluginPrepareDevelopmentDirectory: AnyHandler;
   purgeTrash: AnyHandler;
   renameView: AnyHandler;
@@ -634,6 +638,69 @@ describe('src/bun/index helpers', () => {
     expect(
       pluginManagementMocks.prepareDevelopmentDirectory
     ).toHaveBeenCalledWith('/outside/hello');
+  });
+
+  it('selects, reads and releases activation-scoped plugin text handles', async () => {
+    await loadIndexModule();
+    const { pluginWorkspaceId } = await import('./plugins/contentEvents');
+    const handlers = getCanvasHandlers();
+    const selectedPath = fileURLToPath(
+      new URL('./plugins/files.test.ts', import.meta.url)
+    );
+    openFileDialogMock.mockResolvedValueOnce([selectedPath]);
+    const context = {
+      activationId: '11111111-1111-4111-8111-111111111111',
+      pluginId: 'example.csv-importer',
+      workspaceId: pluginWorkspaceId('/tmp/workspace'),
+    };
+
+    const picked = (await handlers.pluginFilesPick({
+      ...context,
+      extensions: ['.csv'],
+    })) as {
+      files: Array<{ id: string; name: string }>;
+      success: boolean;
+    };
+    expect(picked.success).toBe(true);
+    expect(picked.files[0]?.name).toBe('files.test.ts');
+    expect(openFileDialogMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        allowedFileTypes: 'csv',
+        allowsMultipleSelection: false,
+        canChooseDirectory: false,
+      })
+    );
+
+    const handleId = picked.files[0]!.id;
+    await expect(
+      handlers.pluginFilesReadText({ ...context, handleId })
+    ).resolves.toMatchObject({
+      success: true,
+      text: expect.stringContaining('PluginFileStore'),
+    });
+    await expect(
+      handlers.pluginFilesReadText({
+        ...context,
+        activationId: '22222222-2222-4222-8222-222222222222',
+        handleId,
+      })
+    ).resolves.toMatchObject({ success: false });
+    await expect(
+      handlers.pluginFilesRelease({ ...context, handleIds: [handleId] })
+    ).resolves.toEqual({ success: true });
+    await expect(
+      handlers.pluginFilesReadText({ ...context, handleId })
+    ).resolves.toMatchObject({ success: false });
+
+    const pickerCalls = openFileDialogMock.mock.calls.length;
+    await expect(
+      handlers.pluginFilesPick({
+        ...context,
+        workspaceId: 'wrong-workspace',
+        extensions: ['.csv'],
+      })
+    ).resolves.toMatchObject({ success: false });
+    expect(openFileDialogMock).toHaveBeenCalledTimes(pickerCalls);
   });
 
   it('listViews returns workspace config from canvas RPC handlers', async () => {

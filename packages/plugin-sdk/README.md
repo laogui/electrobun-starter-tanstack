@@ -284,9 +284,47 @@ function SelectionPanel() {
 
 ## Stage boundaries
 
-T1 covers the command/panel lifecycle. T2 now includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, and the focused-editor conflict recovery described below. Rich-document authoring APIs, one ordered native/plugin history and further business hooks remain T2 work. Complete file workflows are T3. The earlier T0 `files`/`net` experiment is not a public API here. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
+T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 has started with the bounded read-only file API and activation-owned importer registration below; the host preview/confirm flow, binary streams, writes and directories remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
 The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
+
+## T3 first slice: activation-scoped text files
+
+`app.files.pick({ accept, signal? })` opens the host's native file picker and returns at most one opaque handle. Cancelling the dialog resolves to an empty array. Filters contain a user-facing description and 1–16 simple extensions with a leading dot; extensions are normalized to lowercase. Wildcards, paths and empty filters are rejected before the picker opens.
+
+```js
+const [file] = await app.files.pick({
+  accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+});
+
+if (file) {
+  const csv = await app.files.readText(file);
+  console.log(file.name, file.size, csv.length);
+}
+```
+
+Handles expose `id`, `name`, `size`, `mimeType` and `lastModified`, never the local absolute path. A handle belongs to one plugin activation, workspace and application process. It cannot be reused by another plugin, after a successful/failed reload, after a workspace switch or after restart. Activation and caller abort signals reject operations with `AbortError`; a native dialog already open cannot be programmatically closed by the current Electrobun API, so a late result is ignored and released.
+
+`readText` performs fatal UTF-8 decoding and rechecks the current file size at read time. The first slice is limited to 1 MiB and intentionally has no binary read, streaming, writes, directory access or persistent handles. Those operations require a later T3 transport with explicit progress and resource semantics. The manifest `files` capability remains display metadata, not an enforcement boundary for high-trust code.
+
+Importers follow the same staged activation lifecycle as commands, panels and canvas types. Registration made by a candidate activation is published only after `setup` completes. A failed reload keeps the old importer; successful reload, disable, workspace switch and the returned disposer remove it and abort the activation signal.
+
+```js
+app.importers.register({
+  id: 'notes-csv',
+  title: 'Import notes from CSV',
+  accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+  async parse(file, { signal }) {
+    const csv = await app.files.readText(file, { signal });
+    return {
+      notes: parseCsvIntoNotes(csv),
+      warnings: [],
+    };
+  },
+});
+```
+
+`parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime now owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes 1–100 preview notes, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`. The visible Plugin Workbench preview and explicit-confirm transaction are the next T3 slice; until they land, this controller is not yet a complete user-triggerable import path.
 
 ## T2 fourth slice: explicit plain-text body replacement
 

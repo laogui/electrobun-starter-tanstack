@@ -3,7 +3,12 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { PluginRuntime } from './PluginRuntime';
 import { startPluginRuntime } from './startPluginRuntime';
 
-vi.mock('@/lib/rpc', () => ({ rpcGetLocalHttpEndpoint: vi.fn() }));
+vi.mock('@/lib/rpc', () => ({
+  rpcGetLocalHttpEndpoint: vi.fn(),
+  rpcPickPluginFiles: vi.fn(),
+  rpcReadPluginFileText: vi.fn(),
+  rpcReleasePluginFiles: vi.fn(),
+}));
 
 const endpoint = {
   baseUrl: 'http://127.0.0.1:12345',

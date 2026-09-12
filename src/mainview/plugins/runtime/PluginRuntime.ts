@@ -2,11 +2,14 @@ import type {
   CanvasTypeDefinition,
   CommandDefinition,
   Disposer,
+  ImporterDefinition,
   PanelDefinition,
   PlacementSelectionSnapshot,
+  PluginContent,
   PluginContext,
   PluginDefinition,
   PluginEventMap,
+  PluginFiles,
 } from '../../../../packages/plugin-sdk';
 import type {
   PluginRuntimeDescriptor,
@@ -16,6 +19,16 @@ import { canvasTypeRegistry } from '../../extensions/registry';
 import type { AnyBuiltinCanvasType } from '../../extensions/types';
 import { ActivationServices } from './activationServices';
 import { createPluginContent } from './content';
+import {
+  createPluginFiles,
+  normalizePluginFileFilters,
+  type PluginFilesTransport,
+} from './files';
+import {
+  type ImporterSessionSnapshot,
+  raceImporterAbort,
+  validateImporterParseResult,
+} from './importers';
 import { type MountPanel, mountFloatingPanel, renderPanel } from './panels';
 import { adaptPluginCanvasType } from './pluginCanvasTypes';
 import {
@@ -49,6 +62,16 @@ export interface RuntimeViewSnapshot {
     shortcut?: string;
   }[];
   diagnostics: RuntimeDiagnostic[];
+  importers: {
+    accept: readonly {
+      description: string;
+      extensions: readonly string[];
+    }[];
+    id: string;
+    pluginId: string;
+    title: string;
+  }[];
+  importSession: ImporterSessionSnapshot | null;
   panels: { pluginId: string; id: string; title: string; open: boolean }[];
   plugins: {
     pluginId: string;
@@ -63,6 +86,7 @@ export interface RuntimeViewSnapshot {
 export interface PluginRuntimeOptions {
   cleanupTimeoutMs?: number;
   contentTransport?: PluginStorageTransportOptions;
+  filesTransport?: PluginFilesTransport;
   importer?: (url: string) => Promise<unknown>;
   mountPanel?: MountPanel;
   onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
@@ -79,16 +103,31 @@ interface PanelRegistration {
   definition: PanelDefinition;
 }
 
+interface ImporterRegistration {
+  definition: ImporterDefinition;
+}
+
+interface ImporterSession {
+  activation: Activation;
+  controller: AbortController;
+  registration: ImporterRegistration;
+  snapshot: ImporterSessionSnapshot;
+}
+
 interface Activation {
+  activationId: string;
   active: boolean;
   cancel: () => void;
   cancelled: Promise<void>;
   canvasTypes: Map<string, AnyBuiltinCanvasType>;
   cleanups: Set<Disposer>;
   commands: Map<string, CommandRegistration>;
+  content?: PluginContent;
   controller: AbortController;
   descriptor: PluginRuntimeDescriptor;
+  files?: PluginFiles;
   generation: number;
+  importers: Map<string, ImporterRegistration>;
   openPanels: Set<string>;
   panels: Map<string, PanelRegistration>;
   pendingCleanups: Set<Promise<void>>;
@@ -139,6 +178,7 @@ export class PluginRuntime {
   private readonly shortcutDisposers = new Set<() => void>();
   private readonly diagnostics: RuntimeDiagnostic[] = [];
   private hostDiagnostics: RuntimeDiagnostic[] = [];
+  private importSession?: ImporterSession;
   private workspaceId = '';
   private revision = 0;
   private snapshot: RuntimeViewSnapshot = {
@@ -146,6 +186,8 @@ export class PluginRuntime {
     plugins: [],
     canvasTypes: [],
     commands: [],
+    importers: [],
+    importSession: null,
     panels: [],
     diagnostics: [],
   };
@@ -217,6 +259,15 @@ export class PluginRuntime {
           shortcut: definition.shortcut,
         }))
       ),
+      importers: instances.flatMap((instance) =>
+        [...instance.importers.values()].map(({ definition }) => ({
+          accept: definition.accept,
+          id: definition.id,
+          pluginId: instance.descriptor.pluginId,
+          title: definition.title,
+        }))
+      ),
+      importSession: this.importSession?.snapshot ?? null,
       panels: instances.flatMap((instance) =>
         [...instance.panels.values()].map(({ definition, close }) => ({
           pluginId: instance.descriptor.pluginId,
@@ -339,11 +390,13 @@ export class PluginRuntime {
       descriptor: { ...descriptor },
       workspaceId: this.workspaceId,
       active: true,
+      activationId: crypto.randomUUID(),
       status: 'loading',
       generation,
       controller: new AbortController(),
       canvasTypes: new Map(),
       commands: new Map(),
+      importers: new Map(),
       panels: new Map(),
       openPanels: new Set(),
       cleanups: new Set(),
@@ -529,8 +582,10 @@ export class PluginRuntime {
   private async deactivate(instance: Activation): Promise<void> {
     instance.active = false;
     instance.cancel();
+    this.cancelImporterSessionFor(instance);
     instance.controller.abort();
     instance.commands.clear();
+    instance.importers.clear();
     instance.openPanels.clear();
     canvasTypeRegistry.clearOwner(
       instance.descriptor.pluginId,
@@ -564,6 +619,17 @@ export class PluginRuntime {
       storageContext,
       this.options.contentTransport
     );
+    instance.content = content;
+    const files = createPluginFiles(
+      {
+        activationId: instance.activationId,
+        pluginId,
+        workspaceId: instance.workspaceId,
+        signal: instance.controller.signal,
+      },
+      this.options.filesTransport
+    );
+    instance.files = files;
     const selection = new PluginSelectionStore({
       source: this.selectionSource,
       content,
@@ -596,6 +662,7 @@ export class PluginRuntime {
         },
       },
       content,
+      files,
       selection,
       storage: {
         app: createPluginStorage(
@@ -613,6 +680,36 @@ export class PluginRuntime {
       tasks: services.scheduledTasks,
       pluginId,
       generation: instance.generation,
+      importers: {
+        register: (definition: ImporterDefinition) => {
+          this.assertActive(instance);
+          validateRegistration(definition);
+          if (typeof definition.parse !== 'function') {
+            throw new Error('Importer requires a parse() function');
+          }
+          if (instance.importers.has(definition.id)) {
+            throw new Error(`Duplicate importer id: ${definition.id}`);
+          }
+          const registration: ImporterRegistration = {
+            definition: {
+              ...definition,
+              accept: normalizePluginFileFilters(definition.accept),
+            },
+          };
+          instance.importers.set(definition.id, registration);
+          this.publish();
+          return this.track(instance, () => {
+            if (
+              instance.importers.get(registration.definition.id) ===
+              registration
+            ) {
+              this.cancelImporterSessionFor(instance, registration);
+              instance.importers.delete(registration.definition.id);
+              this.publish();
+            }
+          });
+        },
+      },
       signal: instance.controller.signal,
       workspaceId: instance.workspaceId,
       commands: {
@@ -709,6 +806,139 @@ export class PluginRuntime {
           this.track(instance, () => worker.terminate()),
       },
     });
+  }
+
+  private isCurrentImporterSession(session: ImporterSession): boolean {
+    const pluginId = session.activation.descriptor.pluginId;
+    return (
+      this.importSession === session &&
+      session.activation.active &&
+      this.activations.get(pluginId) === session.activation &&
+      session.activation.importers.get(session.registration.definition.id) ===
+        session.registration
+    );
+  }
+
+  private cancelImporterSessionFor(
+    activation?: Activation,
+    registration?: ImporterRegistration
+  ): void {
+    const session = this.importSession;
+    if (
+      !session ||
+      (activation && session.activation !== activation) ||
+      (registration && session.registration !== registration)
+    ) {
+      return;
+    }
+    this.importSession = undefined;
+    session.controller.abort();
+    this.publish();
+  }
+
+  cancelImporterSession(operationId: string): void {
+    if (this.importSession?.snapshot.operationId === operationId) {
+      this.cancelImporterSessionFor();
+    }
+  }
+
+  async startImporterSession(
+    pluginId: string,
+    importerId: string
+  ): Promise<void> {
+    const activation = this.activations.get(pluginId);
+    const registration = activation?.importers.get(importerId);
+    if (!(activation?.active && registration && activation.files)) {
+      throw new Error('Importer is not available');
+    }
+    this.cancelImporterSessionFor();
+    const controller = new AbortController();
+    const empty = Object.freeze([]);
+    const operationId = `plgimport_${crypto.randomUUID().replaceAll('-', '')}`;
+    const session: ImporterSession = {
+      activation,
+      controller,
+      registration,
+      snapshot: Object.freeze({
+        canCancel: true,
+        canConfirm: false,
+        error: null,
+        file: null,
+        importerId,
+        importerTitle: registration.definition.title,
+        notes: empty,
+        operationId,
+        pluginId,
+        status: 'selecting',
+        warnings: empty,
+        workspaceId: activation.workspaceId,
+      }),
+    };
+    this.importSession = session;
+    this.publish();
+    try {
+      const files = await activation.files.pick({
+        accept: registration.definition.accept,
+        signal: controller.signal,
+      });
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      if (files.length === 0) {
+        this.cancelImporterSessionFor(activation, registration);
+        return;
+      }
+      if (files.length !== 1) {
+        throw new Error('Importer file picker returned more than one file');
+      }
+      const file = files[0]!;
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        file,
+        status: 'parsing',
+      });
+      this.publish();
+      const result = await raceImporterAbort(
+        Promise.resolve().then(() =>
+          registration.definition.parse(file, { signal: controller.signal })
+        ),
+        controller.signal
+      );
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      const preview = validateImporterParseResult(result);
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canConfirm: true,
+        notes: preview.notes,
+        status: 'preview',
+        warnings: preview.warnings,
+      });
+      this.publish();
+    } catch (error) {
+      if (!this.isCurrentImporterSession(session)) {
+        return;
+      }
+      if (
+        controller.signal.aborted ||
+        (error && typeof error === 'object' && 'name' in error
+          ? error.name === 'AbortError'
+          : false)
+      ) {
+        this.cancelImporterSessionFor(activation, registration);
+        return;
+      }
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canConfirm: false,
+        error: redactPluginError(error),
+        notes: empty,
+        status: 'failed',
+        warnings: empty,
+      });
+      this.report(pluginId, 'importer-parse', error);
+    }
   }
 
   isCommandEnabled(pluginId: string, id: string): boolean {

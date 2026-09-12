@@ -1,10 +1,13 @@
 {
   "name": "@ghostboard/sdk",
   "version": "0.1.0",
-  "description": "GhostBoard trusted plugin SDK with note transactions and selection hooks",
+  "description": "GhostBoard trusted plugin SDK, author reference, tests and deterministic packer",
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
+  "bin": {
+    "ghostboard-plugin": "./package-plugin.js"
+  },
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -31,7 +34,9 @@
     "testing.js",
     "testing.d.ts",
     "testing/react.js",
-    "testing/react.d.ts"
+    "testing/react.d.ts",
+    "AI_REFERENCE.md",
+    "package-plugin.js"
   ],
   "peerDependencies": {
     "@testing-library/react": "^16.0.0",

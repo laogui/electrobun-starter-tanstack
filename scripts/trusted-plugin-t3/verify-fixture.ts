@@ -1,14 +1,16 @@
+import { createHash } from 'node:crypto';
 import { closeSync, openSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+
+import { loadPluginFromZip } from '../../src/bun/plugins/zipInstall';
 
 const project = resolve(import.meta.dir, '../..');
 const directory = await mkdtemp(
   join(tmpdir(), 'ghostboard-plugin-t3-package-')
 );
 const source = join(directory, 'source');
-const packageDirectory = join(directory, 'package');
 const archive = join(directory, 't3-combined.ghostboard-plugin');
 
 await cp(join(import.meta.dir, 'fixture'), source, { recursive: true });
@@ -43,26 +45,38 @@ await run(
   source
 );
 await run([process.execPath, 'test'], 'test.log', source);
-await mkdir(packageDirectory);
-for (const name of ['app.js', 'csv.js', 'manifest.json']) {
-  await cp(join(source, name), join(packageDirectory, name));
-}
 await run(
-  ['zip', '-X', '-q', archive, 'app.js', 'csv.js', 'manifest.json'],
-  'zip.log',
-  packageDirectory
+  [
+    process.execPath,
+    join(source, 'sdk', 'package-plugin.js'),
+    source,
+    '--output',
+    archive,
+    '--include',
+    'app.js',
+    '--include',
+    'csv.js',
+    '--include',
+    'manifest.json',
+  ],
+  'package.log',
+  source
 );
-const listing = await Bun.$`unzip -Z1 ${archive}`.text();
-const entries = listing.trim().split('\n').sort();
+const archiveBytes = new Uint8Array(await readFile(archive));
+const loaded = await loadPluginFromZip(
+  archiveBytes,
+  join(directory, 'unpacked')
+);
+const entries = (await readdir(loaded.directory)).sort();
 if (entries.join(',') !== 'app.js,csv.js,manifest.json') {
   throw new Error(
     `Unexpected final-user package entries: ${entries.join(', ')}`
   );
 }
-const manifest = JSON.parse(
-  await readFile(join(packageDirectory, 'manifest.json'), 'utf8')
-) as { id?: unknown; manifestVersion?: unknown };
-if (manifest.manifestVersion !== 2 || manifest.id !== 't3.combined') {
+if (
+  loaded.manifest.manifestVersion !== 2 ||
+  loaded.manifest.id !== 't3.combined'
+) {
   throw new Error('Combined package manifest identity is invalid');
 }
 
@@ -71,7 +85,8 @@ console.log(
     {
       archive,
       entries,
-      packageBytes: (await Bun.file(archive).arrayBuffer()).byteLength,
+      packageBytes: archiveBytes.length,
+      sha256: createHash('sha256').update(archiveBytes).digest('hex'),
       sourceTest: join(directory, 'test.log'),
     },
     null,

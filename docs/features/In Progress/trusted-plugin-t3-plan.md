@@ -2,7 +2,7 @@
 
 日期：2026-09-11（Asia/Singapore）。
 
-状态：**受限 CSV、完整 files 与分段导入三批均已通过相应门禁，T3 后续批次仍在实施。** T0–T2 的已验收行为不在本计划中重做；T4 的安全模式、签名、TOFU 更新、代码回退和数据迁移恢复不提前并入 T3。
+状态：**受限 CSV、完整 files、分段导入、通用配置和作者工具链五批均已通过相应门禁，T3 退出验收仍待完成。** T0–T2 的已验收行为不在本计划中重做；T4 的安全模式、签名、TOFU 更新、代码回退和数据迁移恢复不提前并入 T3。
 
 ## 1. 已有基线
 
@@ -69,10 +69,10 @@
 1. **完整 files 服务（已实现并通过自动化门禁）**：二进制 / 分段流式读取、目录选择与分页列举、宿主临时文件 + 最终 rename 写入、显式 release、进度 / 取消 / 资源上限与不可跨 activation / workspace / process 恢复边界。接口与证据见 [T3 files 服务验收记录](trusted-plugin-t3-files-evidence.md)。
 2. **分段导入（已实现并通过 macOS arm64 发行包门禁）**：超过 100 条使用 1–100 条的显式批次；Workbench 展示已完成范围，逐批 receipt / retry 去重并从失败段继续；逆序回滚保留后来编辑或被引用的冲突段且继续清理其他范围。接口与证据见 [T3 分段导入验收记录](trusted-plugin-t3-segmented-evidence.md)。
 3. **通用 importer 配置（已实现并通过 macOS arm64 发行包门禁）**：多个匹配 importer 的显式选择、宿主字段映射、目标画布 / 放置策略，以及 importer session 源文件 capability 生命周期。这里的临时源资产不是 workspace attachment；接口、边界与证据见 [T3 通用 importer 配置验收记录](trusted-plugin-t3-configuration-evidence.md)。
-4. **作者工具链**：可安装包构建命令、独立 importer 模板、组合模板与单文件 AI 参考。
+4. **作者工具链（已实现并通过自动化门禁）**：SDK 自带无外部 zip 依赖的确定性可安装包命令；`plugin:create` 提供默认 JavaScript、React、独立 importer 与四贡献 combined 模板；每个模板都有 `bun run package`、无应用测试、`AGENTS.md` 和单文件 AI 参考。接口、包 hash 与边界见 [T3 作者工具链验收记录](trusted-plugin-t3-toolchain-evidence.md)。
 5. **T3 退出**：命令、面板、CSV importer、canvas type 四类独立样例均从安装包运行；再更新主方案状态为 T3 已通过。
 
-已从后续清单移除的完成项：A5 `@ghostboard/sdk/testing`、React testing 子路径、JavaScript / React 模板无应用测试，以及组合插件作者测试已在第一批落地；完整 files 服务在第二批落地；分段导入在第三批落地；通用 importer 配置在第四批落地。fake host 不替代真实 RPC、磁盘持久化、安装器或平台验收。
+已从后续清单移除的完成项：A5 `@ghostboard/sdk/testing`、React testing 子路径、JavaScript / React 模板无应用测试，以及组合插件作者测试已在第一批落地；完整 files 服务在第二批落地；分段导入在第三批落地；通用 importer 配置在第四批落地；确定性 packer、独立 importer / combined 模板和 A6 单文件参考在第五批落地。fake host 不替代真实 RPC、磁盘持久化、安装器或平台验收，A6 外部真人作者试用仍归 T5。
 
 ## 5. 明确排除
 

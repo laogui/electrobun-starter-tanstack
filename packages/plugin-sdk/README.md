@@ -8,6 +8,35 @@ A plugin imports `@ghostboard/sdk` normally. GhostBoard's initial HTML import ma
 
 React panels use the host's **React / ReactDOM 19.2.x**. A bundler must externalize `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@ghostboard/sdk`, and `@ghostboard/sdk/react`; other dependencies belong in the plugin's build. The package has optional React peers so a DOM-only JavaScript author does not have to use React.
 
+`AI_REFERENCE.md` is the self-contained SDK reference for coding agents. It is organized by extension point, includes signatures, examples, lifecycle and limit semantics, and has no external reading dependency. Generated templates include an `AGENTS.md` that routes tools to this file and explains which files are runtime versus author-only inputs.
+
+## Create and package an external plugin
+
+From the GhostBoard source checkout, create one of four independent author projects:
+
+```sh
+bun run plugin:create ../hello-plugin
+bun run plugin:create ../react-plugin --react
+bun run plugin:create ../csv-importer --importer
+bun run plugin:create ../combined-plugin --combined
+```
+
+The default JavaScript and React templates demonstrate command + panel contributions. The importer template is a no-build mapped and segmented CSV importer. The combined no-build template registers command, panel, canvas type, and importer contributions together. Every template copies this SDK for local types/tests and exposes `bun run package`.
+
+The dependency-free `package-plugin.js` command accepts a complete runtime directory, or repeated `--include` values when author files share that directory:
+
+```sh
+bun sdk/package-plugin.js dist \
+  --output release/example.notes-0.1.0.ghostboard-plugin
+
+bun sdk/package-plugin.js . \
+  --output dist/example.notes-0.1.0.ghostboard-plugin \
+  --include manifest.json \
+  --include app.js
+```
+
+It writes a deterministic stored ZIP in sorted path order, refuses symlinks and unsafe paths, enforces the installer's current 256-file / 8 MiB uncompressed limits, and validates manifest v2 plus the packaged app entry without executing plugin code. Identical runtime bytes produce an identical archive hash. Output may use `.ghostboard-plugin` or `.zip`; it is unsigned until T4 signing support. Final users need only the archive, not Bun, `node_modules`, source tests, or the copied SDK.
+
 ## Minimal plugin
 
 `manifest.json`:

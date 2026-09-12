@@ -100,6 +100,8 @@ bb 的 SDK 自带 `testing`（fake host）与 `testing/app`（jsdom 渲染 slot�
 
 bb 在应用内提供 Plugin Guide：按 surface 编号的线框图，每张卡标注 SDK 符号，并有“Copy for agent”把描述贴给 agent。我们首版不做应用内 Guide，但要求：
 
+实现状态（2026-09-12）：单文件 `packages/plugin-sdk/AI_REFERENCE.md` 已随 T3 作者工具链加入 SDK 发布文件，并复制到默认 JavaScript、React、独立 importer 与四贡献 combined 模板；四种模板的 `AGENTS.md` 均指向该参考并区分 runtime / author-only 目录。自动化已验证文件存在和路由。文档站镜像发布，以及外部真人作者仅凭参考完成首个插件的效果与耗时仍归 T5 验收；应用内 Guide 仍不在首版。
+
 - SDK 参考以**单文件 Markdown**发布（随 `@ghostboard/sdk` 包和文档站各一份），按扩展点组织，每节给出类型签名与最小示例，无外链依赖即可读完。
 - 插件模板包含一份 `AGENTS.md`，指向该参考并说明目录约定，作者可直接用 AI 工具续写插件。
 - 应用内 Guide 作为 T5 之后的候选，不进入首版验收。

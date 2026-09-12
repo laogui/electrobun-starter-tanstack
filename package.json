@@ -21,6 +21,7 @@
     "test:plugin-t3": "bun scripts/trusted-plugin-t3/run.ts",
     "test:plugin-templates": "bun scripts/create-plugin/verify-templates.ts",
     "plugin:create": "bun scripts/create-plugin.ts",
+    "plugin:pack": "bun packages/plugin-sdk/package-plugin.js",
     "upload:r2": "bun scripts/upload-r2.ts",
     "release:canary": "bun run build:canary && bun scripts/upload-r2.ts --env=canary",
     "release:stable": "bun run build:stable && bun scripts/upload-r2.ts --env=stable",

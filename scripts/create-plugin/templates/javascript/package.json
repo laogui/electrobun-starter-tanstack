@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "package": "bun sdk/package-plugin.js . --output dist/example.hello-0.1.0.ghostboard-plugin --include manifest.json --include app.js --include ui.js",
     "test": "bun test"
   },
   "devDependencies": {

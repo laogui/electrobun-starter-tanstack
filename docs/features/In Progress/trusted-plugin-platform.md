@@ -1,7 +1,7 @@
 # GhostBoard 高信任插件系统改造方案
 
 日期：2026-09-09（同日修订：去掉首版 Bun 后端入口、补充装载机制、能力声明与签名更新；同日采纳）  
-状态：**已采纳；T0、T1（含追加 A1–A3）与现行 T2 范围均已通过 macOS arm64 发行包验证，旧运行时清理完成；下一阶段为 T3 导入器与分发**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
+状态：**已采纳；T0、T1（含追加 A1–A3）与现行 T2 范围均已通过 macOS arm64 发行包验证，旧运行时清理完成；T3 的受限 CSV、完整 files、分段导入、通用配置和作者工具链五批已通过相应门禁，退出验收仍待完成**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
 
 范围：公开插件的开发、运行、安装、生命周期、数据接口和交付验收。
 
@@ -395,7 +395,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
 | T2：内容与画布类型（macOS arm64 已通过） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务；统一 session 原生历史 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过；画布快照与插件笔记批次按提交顺序撤销且冲突不移动游标 |
-| T3：导入器与分发（前三批已通过相应门禁，阶段实施中） | [受限 CSV 第一批](trusted-plugin-t3-evidence.md)、[完整 files 第二批](trusted-plugin-t3-files-evidence.md)及 [分段导入第三批](trusted-plugin-t3-segmented-evidence.md)已完成；继续通用配置 / 作者构建与公共 HTTPS 证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
+| T3：导入器与分发（五批已通过相应门禁，退出验收待完成） | [受限 CSV](trusted-plugin-t3-evidence.md)、[完整 files](trusted-plugin-t3-files-evidence.md)、[分段导入](trusted-plugin-t3-segmented-evidence.md)、[通用配置](trusted-plugin-t3-configuration-evidence.md)与[作者工具链](trusted-plugin-t3-toolchain-evidence.md)已完成；继续四类独立包最终用户 / 公共 HTTPS 边界证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
 | T6+（需求驱动）：后端入口 | 每插件一个 Bun Worker；仅在真实插件需要 Bun 原生能力时启动 | 有具名插件需求；Worker 生命周期、停用回收与发行包验证通过 |
@@ -427,6 +427,10 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-12 T3 第二批结果：[完整 files 服务自动化证据](trusted-plugin-t3-files-evidence.md)。正式 SDK 增加 file / directory 判别句柄、最多 16 文件选择、目录选择与最多 100 条的直接子项分页、二进制收集 / 1 MiB 分块 range stream、用户所选目录内的 1 MiB 分块临时写入与最终 rename、显式 release，以及 16 MiB 收集 / 256 MiB 流与写入 / 八并发写入上限。数据面复用每次启动随机 bearer 的 localhost host；控制面保留原生 RPC，绝对路径不进入 renderer。句柄仍不可跨 activation / workspace / process 恢复，symlink 只列出不授予 handle。fake host 与组合包作者测试同步覆盖新接口。**T3 阶段仍在实施**：超过 100 条的分段导入、通用字段 / 目标配置、一般作者打包命令、公共 HTTPS 生产证据、人工原生目录框和 Windows / Linux 尚未完成；签名 / 更新 / safe mode 仍属于 T4。
 
 2026-09-12 T3 第三批结果：[分段导入发行包证据](trusted-plugin-t3-segmented-evidence.md)。正式 SDK 为超过 100 条的 importer 增加显式 `segments` 结果；每段仍使用既有 1–100 条原子内容事务。Workbench 展示一基范围并按序提交；每段稳定 operation ID 支持丢失响应后的 receipt 去重和从失败段继续。完成或部分完成后可逆序回滚，后来编辑 / 引用导致整个冲突段保留，其他干净段继续撤销。真实 macOS arm64 canary 在 205 条 `100 / 100 / 5` 场景中通过第二段丢失响应、继续第三段，以及编辑第 101 条后仅保留中间 100 条的验证。**T3 阶段仍在实施**：通用字段 / 目标配置、一般作者打包命令、公共 HTTPS 生产证据、人工原生目录框和 Windows / Linux 尚未完成；签名 / 更新 / safe mode 仍属于 T4。
+
+2026-09-12 T3 第四批结果：[通用 importer 配置证据](trusted-plugin-t3-configuration-evidence.md)。Workbench 对重叠过滤器要求显式选择 importer；可选 `inspectFields` 提供宿主拥有的 `title` / `text` / `color` 映射。单批预览可选择 detached 或已打开画布的四列网格 / 纵向放置；内容提交与 canvas 保存诚实保持两个事务，失败时保留 detached Notes 并以稳定节点 ID 重试放置。session 源文件 capability 在取消、完成、reload、disable、workspace switch 与 dispose 时释放。macOS arm64 三阶段发行包通过；分段导入仍保持 detached。**T3 阶段仍在实施**：当批未完成作者 packer、公共 HTTPS、人工 picker 或 Windows / Linux。
+
+2026-09-12 T3 第五批结果：[作者打包与模板工具链证据](trusted-plugin-t3-toolchain-evidence.md)。`@ghostboard/sdk` 随包提供零外部依赖、排序 stored-ZIP 的确定性 packer；根仓与生成项目分别提供 `plugin:pack` / `bun run package`。`plugin:create` 在兼容默认 JavaScript 与 `--react` 的同时新增独立 `--importer` 和四贡献 `--combined` 模板；四种模板均有无应用测试、`AGENTS.md` 与自包含 `sdk/AI_REFERENCE.md`。模板连续两次打包 hash 一致，并全部由生产 ZIP loader 解析出精确 runtime-only 文件；既有 T3 fixture 也已移除系统 `zip` 依赖。**T3 仍未退出**：下一步用公开工具链做四类独立安装包最终用户验证并记录公共 HTTPS / 平台边界；T4 签名与 T5 真人作者试用不提前宣称完成。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

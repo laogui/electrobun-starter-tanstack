@@ -21,11 +21,17 @@ test('parses the bounded CSV contract', () => {
   expect(() => parseNotesCsv('text\nMissing title')).toThrow(
     'requires a title column'
   );
+  const segmented = parseNotesCsv(
+    `title\n${Array.from({ length: 205 }, (_, index) => `Note ${index}`).join('\n')}`
+  );
+  expect(segmented.segments.map((segment) => segment.notes.length)).toEqual([
+    100, 100, 5,
+  ]);
   expect(() =>
     parseNotesCsv(
-      `title\n${Array.from({ length: 101 }, (_, index) => `Note ${index}`).join('\n')}`
+      `title\n${Array.from({ length: 5001 }, (_, index) => `Note ${index}`).join('\n')}`
     )
-  ).toThrow('more than 100 notes');
+  ).toThrow('more than 5,000 notes');
 });
 
 test('registers four contribution types and previews without writing', async () => {

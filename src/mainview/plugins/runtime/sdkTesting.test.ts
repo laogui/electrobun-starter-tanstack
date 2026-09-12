@@ -145,6 +145,9 @@ describe('@ghostboard/sdk/testing', () => {
       notes: [{ text: 'Body', title: 'One' }],
       warnings: [],
     });
+    if (!preview.notes) {
+      throw new Error('Expected a single-batch importer preview');
+    }
     const first = await app.content.createMany([...preview.notes], {
       label: 'Import',
       operationId: 'stable-import',

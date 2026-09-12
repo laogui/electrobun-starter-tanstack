@@ -112,6 +112,7 @@ interface ImporterSession {
   activation: Activation;
   controller: AbortController;
   registration: ImporterRegistration;
+  segmented: boolean;
   snapshot: ImporterSessionSnapshot;
 }
 
@@ -857,41 +858,264 @@ export class PluginRuntime {
     ) {
       throw new Error('Importer preview is not available');
     }
-    const notes = notesForCommit(session.snapshot.notes);
+    while (this.isCurrentImporterSession(session)) {
+      const index = session.snapshot.segments.findIndex((segment) =>
+        ['failed', 'pending'].includes(segment.status)
+      );
+      if (index < 0) {
+        if (!session.segmented) {
+          this.cancelImporterSessionFor(
+            session.activation,
+            session.registration
+          );
+          return;
+        }
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          canCancel: true,
+          canConfirm: false,
+          canRollback: true,
+          error: null,
+          status: 'completed',
+        });
+        this.publish();
+        return;
+      }
+      const segment = session.snapshot.segments[index]!;
+      const notes = notesForCommit(
+        session.snapshot.notes.slice(segment.start - 1, segment.end)
+      );
+      session.snapshot = Object.freeze({
+        ...session.snapshot,
+        canCancel: false,
+        canConfirm: false,
+        canRollback: false,
+        error: null,
+        segments: Object.freeze(
+          session.snapshot.segments.map((item, itemIndex) =>
+            itemIndex === index
+              ? Object.freeze({
+                  ...item,
+                  error: null,
+                  status: 'committing' as const,
+                })
+              : item
+          )
+        ),
+        status: 'committing',
+      });
+      this.publish();
+      try {
+        const result = await session.activation.content.createMany(notes, {
+          label: session.segmented
+            ? `Import notes ${segment.start}–${segment.end} with ${session.snapshot.importerTitle}`
+            : `Import ${notes.length} notes with ${session.snapshot.importerTitle}`,
+          operationId: segment.operationId,
+          signal: session.controller.signal,
+        });
+        if (!this.isCurrentImporterSession(session)) {
+          return;
+        }
+        if (result.operationId !== segment.operationId) {
+          throw new Error('Importer segment operation identity mismatch');
+        }
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          completedNotes: session.snapshot.completedNotes + notes.length,
+          segments: Object.freeze(
+            session.snapshot.segments.map((item, itemIndex) =>
+              itemIndex === index
+                ? Object.freeze({ ...item, status: 'completed' as const })
+                : item
+            )
+          ),
+        });
+        this.publish();
+      } catch (error) {
+        if (!this.isCurrentImporterSession(session)) {
+          return;
+        }
+        const message = redactPluginError(error);
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          canCancel: true,
+          canConfirm: true,
+          canRollback: session.snapshot.completedNotes > 0,
+          error: message,
+          segments: Object.freeze(
+            session.snapshot.segments.map((item, itemIndex) =>
+              itemIndex === index
+                ? Object.freeze({
+                    ...item,
+                    error: message,
+                    status: 'failed' as const,
+                  })
+                : item
+            )
+          ),
+          status: 'failed',
+        });
+        this.report(session.snapshot.pluginId, 'importer-commit', error);
+        return;
+      }
+    }
+  }
+
+  async rollbackImporterSession(operationId: string): Promise<void> {
+    const session = this.importSession;
+    if (
+      !session ||
+      session.snapshot.operationId !== operationId ||
+      !session.snapshot.canRollback ||
+      !session.activation.content ||
+      !this.isCurrentImporterSession(session)
+    ) {
+      throw new Error('Importer rollback is not available');
+    }
     session.snapshot = Object.freeze({
       ...session.snapshot,
       canCancel: false,
       canConfirm: false,
+      canRollback: false,
       error: null,
-      status: 'committing',
+      status: 'rolling-back',
     });
     this.publish();
-    try {
-      const result = await session.activation.content.createMany(notes, {
-        label: `Import ${notes.length} notes with ${session.snapshot.importerTitle}`,
-        operationId,
-        signal: session.controller.signal,
-      });
+    let conflicts = 0;
+    for (
+      let index = session.snapshot.segments.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
       if (!this.isCurrentImporterSession(session)) {
         return;
       }
-      if (result.operationId !== operationId) {
-        throw new Error('Importer commit operation identity mismatch');
-      }
-      this.cancelImporterSessionFor(session.activation, session.registration);
-    } catch (error) {
-      if (!this.isCurrentImporterSession(session)) {
-        return;
+      const segment = session.snapshot.segments[index]!;
+      if (
+        !['completed', 'rollback-conflict', 'rollback-failed'].includes(
+          segment.status
+        )
+      ) {
+        continue;
       }
       session.snapshot = Object.freeze({
         ...session.snapshot,
-        canCancel: true,
-        canConfirm: true,
-        error: redactPluginError(error),
-        status: 'failed',
+        segments: Object.freeze(
+          session.snapshot.segments.map((item, itemIndex) =>
+            itemIndex === index
+              ? Object.freeze({
+                  ...item,
+                  error: null,
+                  status: 'rolling-back' as const,
+                })
+              : item
+          )
+        ),
       });
-      this.report(session.snapshot.pluginId, 'importer-commit', error);
+      this.publish();
+      const rollbackOperationId = `${operationId}_rollback_${index + 1}`;
+      try {
+        const result = await session.activation.content.undo(
+          segment.operationId,
+          {
+            operationId: rollbackOperationId,
+            signal: session.controller.signal,
+          }
+        );
+        if (!this.isCurrentImporterSession(session)) {
+          return;
+        }
+        if (
+          result.operationId !== rollbackOperationId ||
+          result.removedIds?.length !== segment.end - segment.start + 1
+        ) {
+          throw new Error('Importer rollback receipt is incomplete');
+        }
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          completedNotes:
+            session.snapshot.completedNotes - (segment.end - segment.start + 1),
+          segments: Object.freeze(
+            session.snapshot.segments.map((item, itemIndex) =>
+              itemIndex === index
+                ? Object.freeze({
+                    ...item,
+                    error: null,
+                    status: 'rolled-back' as const,
+                  })
+                : item
+            )
+          ),
+        });
+        this.publish();
+      } catch (error) {
+        if (!this.isCurrentImporterSession(session)) {
+          return;
+        }
+        const code =
+          error && typeof error === 'object' && 'code' in error
+            ? String(error.code)
+            : '';
+        const message = redactPluginError(error);
+        const conflict = [
+          'content-referenced',
+          'corrupt-content',
+          'reference-check-failed',
+          'revision-conflict',
+          'unsupported-content',
+        ].includes(code);
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          segments: Object.freeze(
+            session.snapshot.segments.map((item, itemIndex) =>
+              itemIndex === index
+                ? Object.freeze({
+                    ...item,
+                    error: message,
+                    status: conflict
+                      ? ('rollback-conflict' as const)
+                      : ('rollback-failed' as const),
+                  })
+                : item
+            )
+          ),
+        });
+        if (conflict) {
+          conflicts += 1;
+          this.report(
+            session.snapshot.pluginId,
+            'importer-rollback-conflict',
+            error
+          );
+          continue;
+        }
+        session.snapshot = Object.freeze({
+          ...session.snapshot,
+          canCancel: true,
+          canRollback: true,
+          error: message,
+          status: 'rollback-failed',
+        });
+        this.report(session.snapshot.pluginId, 'importer-rollback', error);
+        this.publish();
+        return;
+      }
     }
+    const hasConflicts =
+      conflicts > 0 ||
+      session.snapshot.segments.some(
+        (segment) => segment.status === 'rollback-conflict'
+      );
+    session.snapshot = Object.freeze({
+      ...session.snapshot,
+      canCancel: true,
+      canRollback: hasConflicts,
+      error: hasConflicts
+        ? 'Some imported ranges were preserved because their notes changed or are referenced.'
+        : null,
+      status: hasConflicts ? 'rollback-conflict' : 'rolled-back',
+    });
+    this.publish();
   }
 
   async startImporterSession(
@@ -914,9 +1138,12 @@ export class PluginRuntime {
       activation,
       controller,
       registration,
+      segmented: false,
       snapshot: Object.freeze({
         canCancel: true,
         canConfirm: false,
+        canRollback: false,
+        completedNotes: 0,
         error: null,
         file: null,
         importerId,
@@ -924,7 +1151,9 @@ export class PluginRuntime {
         notes: empty,
         operationId,
         pluginId,
+        segments: empty,
         status: 'selecting',
+        totalNotes: 0,
         warnings: empty,
         workspaceId: activation.workspaceId,
       }),
@@ -963,11 +1192,27 @@ export class PluginRuntime {
         return;
       }
       const preview = validateImporterParseResult(result);
+      session.segmented = preview.segmented;
       session.snapshot = Object.freeze({
         ...session.snapshot,
         canConfirm: true,
         notes: preview.notes,
+        segments: Object.freeze(
+          preview.segments.map((segment, index) =>
+            Object.freeze({
+              end: segment.end,
+              error: null,
+              index,
+              operationId: preview.segmented
+                ? `${operationId}_segment_${index + 1}`
+                : operationId,
+              start: segment.start,
+              status: 'pending' as const,
+            })
+          )
+        ),
         status: 'preview',
+        totalNotes: preview.notes.length,
         warnings: preview.warnings,
       });
       this.publish();

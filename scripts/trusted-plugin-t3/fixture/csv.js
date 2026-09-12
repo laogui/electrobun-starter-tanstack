@@ -97,15 +97,22 @@ export function parseNotesCsv(text) {
       ...(textIndex >= 0 ? { text: row[textIndex] ?? '' } : {}),
       ...(colorIndex >= 0 ? { color: row[colorIndex]?.trim() ?? '' } : {}),
     });
-    if (notes.length > 100) {
-      throw new Error('CSV contains more than 100 notes');
+    if (notes.length > 5000) {
+      throw new Error('CSV contains more than 5,000 notes');
     }
   }
   if (notes.length === 0) {
     throw new Error('CSV contains no notes');
   }
+  const warnings = skipped > 0 ? [`Skipped ${skipped} empty row(s)`] : [];
+  if (notes.length <= 100) {
+    return { notes, warnings };
+  }
   return {
-    notes,
-    warnings: skipped > 0 ? [`Skipped ${skipped} empty row(s)`] : [],
+    segments: Array.from(
+      { length: Math.ceil(notes.length / 100) },
+      (_, index) => ({ notes: notes.slice(index * 100, (index + 1) * 100) })
+    ),
+    warnings,
   };
 }

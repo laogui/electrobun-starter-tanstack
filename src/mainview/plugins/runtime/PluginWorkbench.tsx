@@ -12,6 +12,18 @@ function ImportSessionView({
   session: ImporterSessionSnapshot;
 }) {
   const hasPreview = session.notes.length > 0;
+  const segmented = session.segments.length > 1;
+  const visibleNotes = session.notes.slice(0, 100);
+  const segmentStatus = {
+    pending: pluginText('pending', '等待'),
+    committing: pluginText('importing', '导入中'),
+    completed: pluginText('completed', '已完成'),
+    failed: pluginText('failed', '失败'),
+    'rolling-back': pluginText('rolling back', '回滚中'),
+    'rolled-back': pluginText('rolled back', '已回滚'),
+    'rollback-conflict': pluginText('rollback conflict', '回滚冲突'),
+    'rollback-failed': pluginText('rollback failed', '回滚失败'),
+  };
   const fileName =
     session.file?.name ?? pluginText('Selected file', '已选文件');
   const status = {
@@ -22,15 +34,43 @@ function ImportSessionView({
       `${session.notes.length} 条笔记等待导入`
     ),
     committing: pluginText(
-      `Importing ${session.notes.length} notes…`,
-      `正在导入 ${session.notes.length} 条笔记…`
+      segmented
+        ? `Imported ${session.completedNotes} of ${session.totalNotes} notes…`
+        : `Importing ${session.notes.length} notes…`,
+      segmented
+        ? `已导入 ${session.completedNotes}/${session.totalNotes} 条笔记…`
+        : `正在导入 ${session.notes.length} 条笔记…`
     ),
     failed: hasPreview
       ? pluginText(
-          'Import failed. The preview is retained for retry.',
-          '导入失败，预览已保留，可安全重试。'
+          session.completedNotes > 0
+            ? `Import paused after ${session.completedNotes} notes. Retry continues from the failed range.`
+            : 'Import failed. The preview is retained for retry.',
+          session.completedNotes > 0
+            ? `导入在完成 ${session.completedNotes} 条后暂停；重试将从失败区间继续。`
+            : '导入失败，预览已保留，可安全重试。'
         )
       : pluginText('Could not prepare the preview.', '无法生成导入预览。'),
+    completed: pluginText(
+      `Imported all ${session.totalNotes} notes.`,
+      `已导入全部 ${session.totalNotes} 条笔记。`
+    ),
+    'rolling-back': pluginText(
+      `Rolling back imported ranges; ${session.completedNotes} notes remain…`,
+      `正在回滚已导入区间，剩余 ${session.completedNotes} 条…`
+    ),
+    'rollback-failed': pluginText(
+      'Rollback paused. Retry uses the same operation identity.',
+      '回滚已暂停；重试将复用同一操作标识。'
+    ),
+    'rollback-conflict': pluginText(
+      `${session.completedNotes} imported notes were preserved because their ranges conflict.`,
+      `${session.completedNotes} 条导入笔记因区间冲突而保留。`
+    ),
+    'rolled-back': pluginText(
+      'All imported ranges were rolled back.',
+      '所有已导入区间均已回滚。'
+    ),
   }[session.status];
   return (
     <section
@@ -65,6 +105,20 @@ function ImportSessionView({
           </ul>
         </div>
       )}
+      {segmented && (
+        <ol
+          aria-label={pluginText('Import ranges', '导入区间')}
+          style={{ display: 'grid', gap: 4, margin: 0, paddingLeft: 24 }}
+        >
+          {session.segments.map((segment) => (
+            <li key={segment.operationId}>
+              {pluginText('Notes', '笔记')} {segment.start}–{segment.end} ·{' '}
+              {segmentStatus[segment.status]}
+              {segment.error && <small> · {segment.error}</small>}
+            </li>
+          ))}
+        </ol>
+      )}
       {hasPreview && (
         <ol
           aria-label={pluginText('Notes to import', '待导入笔记')}
@@ -77,7 +131,7 @@ function ImportSessionView({
             paddingLeft: 24,
           }}
         >
-          {session.notes.map((note, index) => (
+          {visibleNotes.map((note, index) => (
             <li key={`${index}:${note.title}`}>
               <strong>{note.title}</strong>
               {note.color && <small> · {note.color}</small>}
@@ -96,6 +150,14 @@ function ImportSessionView({
               )}
             </li>
           ))}
+          {session.notes.length > visibleNotes.length && (
+            <li>
+              {pluginText(
+                `${session.notes.length - visibleNotes.length} more notes…`,
+                `另有 ${session.notes.length - visibleNotes.length} 条笔记…`
+              )}
+            </li>
+          )}
         </ol>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -111,8 +173,30 @@ function ImportSessionView({
             type="button"
           >
             {session.status === 'failed'
-              ? pluginText('Retry import', '重试导入')
+              ? pluginText(
+                  session.completedNotes > 0
+                    ? 'Retry and continue'
+                    : 'Retry import',
+                  session.completedNotes > 0 ? '重试并继续' : '重试导入'
+                )
               : pluginText('Confirm import', '确认导入')}
+          </button>
+        )}
+        {session.canRollback && (
+          <button
+            onClick={() => {
+              runtime
+                .rollbackImporterSession(session.operationId)
+                .catch((error) =>
+                  runtime.report(session.pluginId, 'importer-rollback', error)
+                );
+            }}
+            type="button"
+          >
+            {session.status === 'rollback-conflict' ||
+            session.status === 'rollback-failed'
+              ? pluginText('Retry rollback', '重试回滚')
+              : pluginText('Roll back imported notes', '回滚已导入笔记')}
           </button>
         )}
         {session.canCancel && (
@@ -120,7 +204,10 @@ function ImportSessionView({
             onClick={() => runtime.cancelImporterSession(session.operationId)}
             type="button"
           >
-            {pluginText('Cancel', '取消')}
+            {session.completedNotes > 0 ||
+            ['rolled-back', 'rollback-conflict'].includes(session.status)
+              ? pluginText('Close', '关闭')
+              : pluginText('Cancel', '取消')}
           </button>
         )}
       </div>

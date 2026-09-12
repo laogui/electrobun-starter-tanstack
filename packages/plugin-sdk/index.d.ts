@@ -198,10 +198,27 @@ export interface PluginFiles {
   ): Promise<PluginFileHandle>;
 }
 
-export interface ImporterParseResult {
+export interface ImporterSingleBatchParseResult {
   notes: readonly NoteContentCreate[];
+  segments?: never;
   warnings: readonly string[];
 }
+
+export interface ImporterSegment {
+  /** One atomic, idempotent host transaction containing 1–100 notes. */
+  notes: readonly NoteContentCreate[];
+}
+
+export interface ImporterSegmentedParseResult {
+  notes?: never;
+  /** 2–50 explicit segments, 101–5,000 notes total and 16 MiB preview text. */
+  segments: readonly ImporterSegment[];
+  warnings: readonly string[];
+}
+
+export type ImporterParseResult =
+  | ImporterSingleBatchParseResult
+  | ImporterSegmentedParseResult;
 
 export interface ImporterDefinition {
   accept: readonly PluginFileFilter[];

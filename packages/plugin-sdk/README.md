@@ -363,9 +363,26 @@ app.importers.register({
 });
 ```
 
-`parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes 1–100 preview notes, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`.
+`parse` returns preview data only. Registration or activation never invokes it, and importer code does not own the eventual workspace commit. The host runtime owns a single ephemeral import session: it selects one file, runs `parse` with a session abort signal, validates and freezes the preview, and cancels the session on reload, disable, workspace switch or importer disposal. Selection and preview do not call `content.createMany`.
 
 Plugin Workbench shows the file, warnings, titles, body summaries and colors before any write. Explicit confirmation submits one atomic `content.createMany` request with a stable operation ID. Confirmation cannot be cancelled or replaced while the request is in flight. A failed or uncertain response retains the same immutable preview and operation ID for retry; a successful receipt or explicit pre-commit cancellation closes the session. The imported Notes remain ordinary workspace content after the plugin is disabled.
+
+For more than 100 notes, the importer must opt into explicit segments. Each segment is one atomic `content.createMany` transaction with 1–100 notes. A result may contain 2–50 segments and 101–5,000 notes total; normalized title, color and body text across the preview is limited to 16 MiB. The host does not silently split the single-batch `notes` form.
+
+```js
+const notes = parseLargeCsv(csv);
+return {
+  segments: Array.from(
+    { length: Math.ceil(notes.length / 100) },
+    (_, index) => ({ notes: notes.slice(index * 100, (index + 1) * 100) })
+  ),
+  warnings: [],
+};
+```
+
+Segment confirmation runs in order and exposes one-based completed ranges in the Workbench. Every range has a deterministic child operation ID. An uncertain response pauses on that range; retry reuses its ID, accepts the persistent receipt if it already committed, then continues with later ranges. This is deliberately not whole-import atomicity: a later failure leaves earlier ranges committed and visible.
+
+After all ranges complete—or after a partial failure—the user can keep the committed notes or request rollback. Rollback visits completed ranges in reverse order and gives each undo its own stable retry ID. A modified, referenced, missing or corrupt note causes that entire range to remain unchanged and visibly conflicted; clean ranges continue rolling back. An uncertain rollback transport error pauses before earlier ranges and can be retried with the same ID. This conflict-safe behavior never restores old imported bytes over later user edits, but its granularity is one explicit segment, not one note. The segmented session and its progress are renderer-session state; normal Note content and per-range history receipts remain durable after the session closes.
 
 ## Author testing without GhostBoard (A5)
 

@@ -115,6 +115,18 @@ describe('T3HostController', () => {
     expect(await readFile(join(directory, 'selected.csv'), 'utf8')).toContain(
       'First, quoted'
     );
+    await request(host, 'select', { scenario: 'segmented' });
+    expect(
+      (await readFile(join(directory, 'selected.csv'), 'utf8'))
+        .trim()
+        .split('\n')
+    ).toHaveLength(206);
+    await request(host, 'select', { scenario: 'too-many' });
+    expect(
+      (await readFile(join(directory, 'selected.csv'), 'utf8'))
+        .trim()
+        .split('\n')
+    ).toHaveLength(5002);
     await request(host, 'record-operation', {
       ids: ['one', 'two'],
       operationId: 'plgimport_test',

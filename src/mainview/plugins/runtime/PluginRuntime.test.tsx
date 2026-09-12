@@ -575,6 +575,108 @@ describe('trusted plugin runtime', () => {
     });
   });
 
+  it('renders segmented progress and rollback controls in the workbench', async () => {
+    const file = {
+      id: '44444444-4444-4444-8444-444444444444',
+      kind: 'file' as const,
+      lastModified: 123,
+      mimeType: 'text/csv',
+      name: 'large.csv',
+      size: 4096,
+    };
+    const filesTransport: PluginFilesTransport = {
+      pick: vi.fn(async () => ({ files: [file], success: true as const })),
+      readText: vi.fn(async () => ({ success: true as const, text: '' })),
+      release: vi.fn(async () => ({ success: true })),
+    };
+    const contentFetch = vi.fn<typeof fetch>();
+    contentFetch.mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options!.body as string) as Record<
+        string,
+        unknown
+      >;
+      if (body.action === 'undo') {
+        const count = String(body.batchId).endsWith('_segment_1') ? 100 : 1;
+        return Response.json({
+          changed: true,
+          items: [],
+          operationId: body.operationId,
+          removedIds: Array.from(
+            { length: count },
+            (_, index) => `id-${index}`
+          ),
+        });
+      }
+      const notes = body.notes as Array<{ title: string }>;
+      return Response.json({
+        changed: true,
+        items: notes.map((note, index) => ({
+          color: '',
+          id: `${body.operationId}-${index}`,
+          revision: 1,
+          title: note.title,
+        })),
+        operationId: body.operationId,
+      });
+    });
+    const runtime = new PluginRuntime({
+      contentTransport: {
+        fetch: contentFetch,
+        getEndpoint: async () => ({
+          aiEnabled: false,
+          baseUrl: 'http://127.0.0.1:1234',
+          token: 'secret',
+        }),
+      },
+      filesTransport,
+      importer: async () => ({
+        default: definePlugin({
+          setup(app) {
+            app.importers.register({
+              accept: [{ description: 'CSV files', extensions: ['.csv'] }],
+              id: 'large-csv',
+              parse: async () => ({
+                segments: [
+                  {
+                    notes: Array.from({ length: 100 }, (_, index) => ({
+                      title: `Note ${index + 1}`,
+                    })),
+                  },
+                  { notes: [{ title: 'Note 101' }] },
+                ],
+                warnings: [],
+              }),
+              title: 'Import large CSV',
+            });
+          },
+        }),
+      }),
+    });
+    runtimes.push(runtime);
+    await runtime.sync(snapshot());
+    render(<PluginWorkbench runtime={runtime} />);
+
+    fireEvent.click(screen.getByText('Import large CSV · Import'));
+    expect(
+      await screen.findByText('101 notes ready to import')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Import ranges')).toHaveTextContent(
+      'Notes 1–100 · pending'
+    );
+    expect(screen.getByText('1 more notes…')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Confirm import'));
+    expect(
+      await screen.findByText('Imported all 101 notes.')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Import ranges')).toHaveTextContent(
+      'Notes 1–100 · completed'
+    );
+    fireEvent.click(screen.getByText('Roll back imported notes'));
+    expect(
+      await screen.findByText('All imported ranges were rolled back.')
+    ).toBeInTheDocument();
+  });
+
   it('redacts launch tokens while retaining source locations', () => {
     expect(
       redactPluginError(

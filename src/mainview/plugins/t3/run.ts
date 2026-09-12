@@ -210,7 +210,7 @@ export async function runT3Probe(): Promise<void> {
           ['invalid-utf8', 'valid UTF-8'],
           ['missing-title', 'requires a title column'],
           ['oversized', 'limited to'],
-          ['too-many', 'more than 100 notes'],
+          ['too-many', 'more than 5,000 notes'],
         ] as const) {
           await select(scenario);
           await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
@@ -223,6 +223,108 @@ export async function runT3Probe(): Promise<void> {
           );
           pluginRuntime.cancelImporterSession(failed!.operationId);
         }
+
+        await select('segmented');
+        await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');
+        const segmented = pluginRuntime.getSnapshot().importSession!;
+        check(
+          'segmentedPreview',
+          segmented.status === 'preview' &&
+            segmented.totalNotes === 205 &&
+            segmented.segments.length === 3 &&
+            segmented.segments
+              .map((segment) => segment.end - segment.start + 1)
+              .join(',') === '100,100,5'
+        );
+        const originalFetch = globalThis.fetch;
+        let loseSecondSegmentResponse = true;
+        const interceptingSegmentFetch = async (
+          input: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ) => {
+          const url = input instanceof Request ? input.url : String(input);
+          const body =
+            typeof init?.body === 'string'
+              ? (JSON.parse(init.body) as {
+                  action?: string;
+                  operationId?: string;
+                })
+              : {};
+          if (
+            loseSecondSegmentResponse &&
+            new URL(url).pathname === '/plugins/content' &&
+            body.action === 'create' &&
+            body.operationId?.endsWith('_segment_2')
+          ) {
+            loseSecondSegmentResponse = false;
+            await originalFetch(input, init);
+            return Response.json(
+              { code: 'transport-error', error: 'Synthetic segment loss' },
+              { status: 503 }
+            );
+          }
+          return originalFetch(input, init);
+        };
+        globalThis.fetch = Object.assign(interceptingSegmentFetch, {
+          preconnect: originalFetch.preconnect,
+        });
+        try {
+          await pluginRuntime.confirmImporterSession(segmented.operationId);
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+        const paused = pluginRuntime.getSnapshot().importSession!;
+        check(
+          'segmentedFailureRange',
+          paused.status === 'failed' &&
+            paused.completedNotes === 100 &&
+            paused.canConfirm &&
+            paused.canRollback &&
+            paused.segments[0]?.status === 'completed' &&
+            paused.segments[1]?.status === 'failed' &&
+            (await app.content.query({ text: 'Segmented', limit: 500 })).items
+              .length === 200
+        );
+        await pluginRuntime.confirmImporterSession(segmented.operationId);
+        const completed = pluginRuntime.getSnapshot().importSession!;
+        const importedSegments = (
+          await app.content.query({ text: 'Segmented', limit: 500 })
+        ).items;
+        check(
+          'segmentedRetryContinues',
+          completed.status === 'completed' &&
+            completed.completedNotes === 205 &&
+            importedSegments.length === 205
+        );
+        const edited = importedSegments.find(
+          (item) => item.title === 'Segmented 101'
+        )!;
+        await app.content.updateMany(
+          [
+            {
+              changes: { title: 'Segmented 101 user edit' },
+              expectedRevision: edited.revision!,
+              id: edited.id,
+            },
+          ],
+          { label: 'Simulate later user edit', operationId: 't3-user-edit' }
+        );
+        await pluginRuntime.rollbackImporterSession(segmented.operationId);
+        const rolledBack = pluginRuntime.getSnapshot().importSession!;
+        const preserved = (
+          await app.content.query({ text: 'Segmented', limit: 500 })
+        ).items;
+        check(
+          'conflictSafeSegmentRollback',
+          rolledBack.status === 'rollback-conflict' &&
+            rolledBack.completedNotes === 100 &&
+            rolledBack.segments[0]?.status === 'rolled-back' &&
+            rolledBack.segments[1]?.status === 'rollback-conflict' &&
+            rolledBack.segments[2]?.status === 'rolled-back' &&
+            preserved.length === 100 &&
+            preserved.some((item) => item.title === 'Segmented 101 user edit')
+        );
+        pluginRuntime.cancelImporterSession(segmented.operationId);
 
         await select('valid');
         await pluginRuntime.startImporterSession('t3.combined', 'notes-csv');

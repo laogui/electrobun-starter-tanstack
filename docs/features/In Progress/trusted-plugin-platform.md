@@ -395,7 +395,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
 | T2：内容与画布类型（macOS arm64 已通过） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务；统一 session 原生历史 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过；画布快照与插件笔记批次按提交顺序撤销且冲突不移动游标 |
-| T3：导入器与分发（第一批 macOS arm64 已通过，第二批 files 自动化通过，阶段实施中） | [受限 CSV 第一批](trusted-plugin-t3-evidence.md)及 [完整 files 第二批](trusted-plugin-t3-files-evidence.md)已完成；继续分段导入、通用配置 / 作者构建与公共 HTTPS 证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
+| T3：导入器与分发（前三批已通过相应门禁，阶段实施中） | [受限 CSV 第一批](trusted-plugin-t3-evidence.md)、[完整 files 第二批](trusted-plugin-t3-files-evidence.md)及 [分段导入第三批](trusted-plugin-t3-segmented-evidence.md)已完成；继续通用配置 / 作者构建与公共 HTTPS 证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
 | T6+（需求驱动）：后端入口 | 每插件一个 Bun Worker；仅在真实插件需要 Bun 原生能力时启动 | 有具名插件需求；Worker 生命周期、停用回收与发行包验证通过 |
@@ -425,6 +425,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-12 T3 第一批结果：[受限 CSV 导入器与最终用户包证据](trusted-plugin-t3-evidence.md)。正式 SDK 增加 activation/workspace/process 绑定的 opaque 只读文件句柄、1 MiB 严格 UTF-8 `readText`、动态 importer 注册，以及宿主拥有的选择 / preview / cancel / confirm / retry session。独立三文件组合包同时注册 command、panel、canvas type 和 CSV importer；真实 macOS arm64 canary 从本地包安装、同 app-data root 重启，并在独立 root 从回环 HTTP 下载相同字节，三轮 34 项检查全部通过。丢失首次响应后以同 operation ID 重试没有重复 Note，重启后显式 undo / redo 保持原 ID。A5 fake host、React testing 入口及模板测试也已实现。第一批当时未完成的二进制 / 流、写入 / 目录由下述第二批覆盖；其余边界继续保留。
 
 2026-09-12 T3 第二批结果：[完整 files 服务自动化证据](trusted-plugin-t3-files-evidence.md)。正式 SDK 增加 file / directory 判别句柄、最多 16 文件选择、目录选择与最多 100 条的直接子项分页、二进制收集 / 1 MiB 分块 range stream、用户所选目录内的 1 MiB 分块临时写入与最终 rename、显式 release，以及 16 MiB 收集 / 256 MiB 流与写入 / 八并发写入上限。数据面复用每次启动随机 bearer 的 localhost host；控制面保留原生 RPC，绝对路径不进入 renderer。句柄仍不可跨 activation / workspace / process 恢复，symlink 只列出不授予 handle。fake host 与组合包作者测试同步覆盖新接口。**T3 阶段仍在实施**：超过 100 条的分段导入、通用字段 / 目标配置、一般作者打包命令、公共 HTTPS 生产证据、人工原生目录框和 Windows / Linux 尚未完成；签名 / 更新 / safe mode 仍属于 T4。
+
+2026-09-12 T3 第三批结果：[分段导入发行包证据](trusted-plugin-t3-segmented-evidence.md)。正式 SDK 为超过 100 条的 importer 增加显式 `segments` 结果；每段仍使用既有 1–100 条原子内容事务。Workbench 展示一基范围并按序提交；每段稳定 operation ID 支持丢失响应后的 receipt 去重和从失败段继续。完成或部分完成后可逆序回滚，后来编辑 / 引用导致整个冲突段保留，其他干净段继续撤销。真实 macOS arm64 canary 在 205 条 `100 / 100 / 5` 场景中通过第二段丢失响应、继续第三段，以及编辑第 101 条后仅保留中间 100 条的验证。**T3 阶段仍在实施**：通用字段 / 目标配置、一般作者打包命令、公共 HTTPS 生产证据、人工原生目录框和 Windows / Linux 尚未完成；签名 / 更新 / safe mode 仍属于 T4。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

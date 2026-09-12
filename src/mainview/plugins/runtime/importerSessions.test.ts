@@ -24,6 +24,7 @@ const handle: PluginFileHandleData = {
   size: 48,
 };
 const IMPORT_OPERATION_ID_RE = /^plgimport_[a-f0-9]{32}$/;
+const SEGMENT_OPERATION_ID_RE = /_segment_(\d+)$/;
 const endpoint = {
   aiEnabled: false,
   baseUrl: 'http://127.0.0.1:1234',
@@ -36,6 +37,12 @@ function deferred<T>() {
     resolve = done;
   });
   return { promise, resolve };
+}
+
+function notes(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => ({
+    title: `${prefix} ${index + 1}`,
+  }));
 }
 
 function snapshot(
@@ -286,6 +293,179 @@ describe('host-owned importer sessions', () => {
     });
   });
 
+  it('commits explicit segments in order and resumes the failed range with the same identity', async () => {
+    const { contentFetch, runtime } = setupRuntime(async () => ({
+      segments: [{ notes: notes(100, 'First') }, { notes: notes(2, 'Second') }],
+      warnings: ['Large import'],
+    }));
+    contentFetch.mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options!.body as string) as {
+        notes: Array<{ title: string }>;
+        operationId: string;
+      };
+      const secondAttempts = contentFetch.mock.calls.filter((call) =>
+        String(
+          (JSON.parse(call[1]!.body as string) as Record<string, unknown>)
+            .operationId
+        ).endsWith('_segment_2')
+      ).length;
+      if (body.operationId.endsWith('_segment_2') && secondAttempts === 1) {
+        return Response.json(
+          { code: 'transport-error', error: 'Uncertain segment response' },
+          { status: 503 }
+        );
+      }
+      return Response.json({
+        changed: true,
+        items: body.notes.map((note, index) => ({
+          color: '',
+          id: `${body.operationId}-${index}`,
+          revision: 1,
+          title: note.title,
+        })),
+        operationId: body.operationId,
+      });
+    });
+    await runtime.sync(snapshot());
+    await runtime.startImporterSession('example.csv', 'notes-csv');
+    const preview = runtime.getSnapshot().importSession!;
+
+    expect(preview).toMatchObject({
+      completedNotes: 0,
+      status: 'preview',
+      totalNotes: 102,
+    });
+    expect(preview.segments).toMatchObject([
+      { end: 100, start: 1, status: 'pending' },
+      { end: 102, start: 101, status: 'pending' },
+    ]);
+
+    await runtime.confirmImporterSession(preview.operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canConfirm: true,
+      canRollback: true,
+      completedNotes: 100,
+      status: 'failed',
+      totalNotes: 102,
+    });
+    expect(runtime.getSnapshot().importSession?.segments).toMatchObject([
+      { status: 'completed' },
+      { error: expect.stringContaining('Uncertain'), status: 'failed' },
+    ]);
+    const firstOperationIds = contentFetch.mock.calls.map(
+      (call) =>
+        (JSON.parse(call[1]!.body as string) as Record<string, unknown>)
+          .operationId
+    );
+    expect(firstOperationIds[0]).toBe(`${preview.operationId}_segment_1`);
+    expect(firstOperationIds[1]).toBe(`${preview.operationId}_segment_2`);
+
+    await runtime.confirmImporterSession(preview.operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canConfirm: false,
+      canRollback: true,
+      completedNotes: 102,
+      status: 'completed',
+    });
+    expect(
+      (
+        JSON.parse(contentFetch.mock.calls[2]![1]!.body as string) as Record<
+          string,
+          unknown
+        >
+      ).operationId
+    ).toBe(`${preview.operationId}_segment_2`);
+  });
+
+  it('rolls back clean ranges in reverse while preserving and retrying a conflict', async () => {
+    const { contentFetch, runtime } = setupRuntime(async () => ({
+      segments: [{ notes: notes(100, 'First') }, { notes: notes(2, 'Second') }],
+      warnings: [],
+    }));
+    let conflict = true;
+    contentFetch.mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options!.body as string) as {
+        action: string;
+        batchId?: string;
+        notes?: Array<{ title: string }>;
+        operationId: string;
+      };
+      if (body.action === 'undo') {
+        const segment = Number(
+          body.batchId?.match(SEGMENT_OPERATION_ID_RE)?.[1]
+        );
+        if (segment === 2 && conflict) {
+          return Response.json(
+            { code: 'revision-conflict', error: 'A note was edited' },
+            { status: 409 }
+          );
+        }
+        const count = segment === 1 ? 100 : 2;
+        return Response.json({
+          changed: true,
+          items: [],
+          operationId: body.operationId,
+          removedIds: notes(count, 'removed').map((note) => note.title),
+        });
+      }
+      return Response.json({
+        changed: true,
+        items: (body.notes ?? []).map((note, index) => ({
+          color: '',
+          id: `${body.operationId}-${index}`,
+          revision: 1,
+          title: note.title,
+        })),
+        operationId: body.operationId,
+      });
+    });
+    await runtime.sync(snapshot());
+    await runtime.startImporterSession('example.csv', 'notes-csv');
+    const operationId = runtime.getSnapshot().importSession!.operationId;
+    await runtime.confirmImporterSession(operationId);
+
+    await runtime.rollbackImporterSession(operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canRollback: true,
+      completedNotes: 2,
+      status: 'rollback-conflict',
+    });
+    expect(runtime.getSnapshot().importSession?.segments).toMatchObject([
+      { status: 'rolled-back' },
+      { error: expect.stringContaining('edited'), status: 'rollback-conflict' },
+    ]);
+    const firstRollback = contentFetch.mock.calls
+      .map(
+        (call) => JSON.parse(call[1]!.body as string) as Record<string, unknown>
+      )
+      .filter((body) => body.action === 'undo');
+    expect(firstRollback.map((body) => body.batchId)).toEqual([
+      `${operationId}_segment_2`,
+      `${operationId}_segment_1`,
+    ]);
+
+    conflict = false;
+    await runtime.rollbackImporterSession(operationId);
+
+    expect(runtime.getSnapshot().importSession).toMatchObject({
+      canRollback: false,
+      completedNotes: 0,
+      status: 'rolled-back',
+    });
+    const rollbackRequests = contentFetch.mock.calls
+      .map(
+        (call) => JSON.parse(call[1]!.body as string) as Record<string, unknown>
+      )
+      .filter((body) => body.action === 'undo');
+    expect(rollbackRequests.at(-1)).toMatchObject({
+      batchId: `${operationId}_segment_2`,
+      operationId: `${operationId}_rollback_2`,
+    });
+  });
+
   it('cancels parsing promptly and ignores a late plugin result', async () => {
     const gate = deferred<ImporterParseResult>();
     let parseSignal: AbortSignal | undefined;
@@ -392,12 +572,61 @@ describe('host-owned importer sessions', () => {
 });
 
 describe('validateImporterParseResult', () => {
+  it('accepts explicit bounded segments and reports one-based ranges', () => {
+    const result = validateImporterParseResult({
+      segments: [{ notes: notes(100, 'First') }, { notes: notes(1, 'Second') }],
+      warnings: [],
+    });
+    expect(result.notes).toHaveLength(101);
+    expect(result).toMatchObject({
+      segmented: true,
+      segments: [
+        { end: 100, start: 1 },
+        { end: 101, start: 101 },
+      ],
+    });
+  });
+
   it.each([
     {
       label: 'more than 100 notes',
       value: {
         notes: Array.from({ length: 101 }, (_, index) => ({
           title: `Note ${index}`,
+        })),
+        warnings: [],
+      },
+    },
+    {
+      label: 'both notes and segments',
+      value: {
+        notes: [{ title: 'One' }],
+        segments: [{ notes: notes(101, 'Segmented') }],
+        warnings: [],
+      },
+    },
+    {
+      label: 'an empty segment',
+      value: {
+        segments: [{ notes: notes(101, 'First') }, { notes: [] }],
+        warnings: [],
+      },
+    },
+    {
+      label: 'a segmented result with at most 100 notes',
+      value: {
+        segments: [
+          { notes: notes(50, 'First') },
+          { notes: notes(50, 'Second') },
+        ],
+        warnings: [],
+      },
+    },
+    {
+      label: 'more than 50 segments',
+      value: {
+        segments: Array.from({ length: 51 }, (_, index) => ({
+          notes: notes(100, `Segment ${index}`),
         })),
         warnings: [],
       },

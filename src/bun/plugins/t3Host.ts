@@ -18,7 +18,14 @@ function validCsv(): string {
 }
 
 function tooManyCsv(): string {
-  return `title\n${Array.from({ length: 101 }, (_, index) => `Note ${index + 1}`).join('\n')}\n`;
+  return `title\n${Array.from({ length: 5001 }, (_, index) => `Note ${index + 1}`).join('\n')}\n`;
+}
+
+function segmentedCsv(): string {
+  return `title,text\n${Array.from(
+    { length: 205 },
+    (_, index) => `Segmented ${index + 1},Body ${index + 1}`
+  ).join('\n')}\n`;
 }
 
 export class T3HostController extends PluginHostController {
@@ -106,6 +113,9 @@ export class T3HostController extends PluginHostController {
             break;
           case 'oversized':
             await writeFile(path, new Uint8Array(1024 * 1024 + 1).fill(65));
+            break;
+          case 'segmented':
+            await writeFile(path, segmentedCsv());
             break;
           case 'too-many':
             await writeFile(path, tooManyCsv());

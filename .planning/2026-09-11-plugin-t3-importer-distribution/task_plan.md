@@ -4,10 +4,10 @@
 Define and deliver the smallest honest T3 slice that lets an independently packaged high-trust plugin register a file importer, preview and commit imported notes without duplicate or hidden writes, and reach the same runnable package through final-user ZIP / HTTPS installation in the packaged macOS arm64 app.
 
 ## Next Step
-Build and run the packaged macOS arm64 T3 acceptance probe through local ZIP and loopback-download installation, covering preview/cancel/confirm/retry, workspace/disable cancellation, persistence and undo/redo.
+Freeze and implement the next T3 batch: complete file-service primitives, segmented import recovery, generic mapping/target configuration and a general author packaging command.
 
 ## Current Phase
-Phase 4
+Complete (T3 first slice)
 
 ## Phases
 
@@ -36,15 +36,15 @@ Phase 4
 ### Phase 4: Testing & Verification
 - [x] Add unit and integration regressions for installer and importer contracts
 - [x] Run type checking, style checks and focused tests
-- [ ] Build and run packaged ZIP / HTTPS / importer acceptance probes
-- [ ] Run the full serial regression suite
-- **Status:** in_progress
+- [x] Build and run packaged ZIP / HTTPS / importer acceptance probes
+- [x] Run the full serial regression suite
+- **Status:** complete
 
 ### Phase 5: Delivery
-- [ ] Update SDK, platform and development documentation with exact supported boundaries
-- [ ] Review the final diff and working-tree state
-- [ ] Record remaining T3 work or advance the platform phase honestly
-- **Status:** pending
+- [x] Update SDK, platform and development documentation with exact supported boundaries
+- [x] Review the final diff and working-tree state
+- [x] Record remaining T3 work or advance the platform phase honestly
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
@@ -93,3 +93,7 @@ Phase 4
 | The first attempt to log that command error used a mistyped progress-table context and the patch was rejected | Append against the exact current table tail; no repository content changed in the rejected attempt. |
 | Phase 3 closing Ultracite pass found formatter-only layout in the template verifier and installer test | Apply the safe formatter to those two files, then rerun the same scoped check. |
 | First Workbench test missed the transient `committing` label because its fetch mock resolved synchronously | Hold the mocked response behind a deferred promise, assert the visible in-flight state, then resolve it and assert close-on-receipt. |
+| First T3 host-controller regression imported the real application-path module and attempted to start Electrobun RPC under Vitest | Add the same hoisted app-path mock used by the existing host/management tests and supply the atomic-write Bun stub. |
+| First packaged restart probe required redo results to preserve the separately queried Library array order | Treat the content contract correctly: verify the same ID set and revision values; the durable history showed both original IDs restored in a different valid order. |
+| One evidence-inspection wrapper contained an invalid JavaScript object property and two scratch shell commands contained mistyped globs | Reissue the read-only inspection with a valid wrapper and exact quoted path; none of the malformed calls changed repository state. |
+| Two final-run wrappers omitted `exec_command.cmd`, and a later inspection wrapper referenced an undefined output-budget identifier | Reissue literal, validated tool arguments; all three failures occurred before shell execution. |

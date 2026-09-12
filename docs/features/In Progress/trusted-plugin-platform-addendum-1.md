@@ -89,6 +89,8 @@ bb 的 SDK 自带 `testing`（fake host）与 `testing/app`（jsdom 渲染 slot�
 
 **要求（T3 实现，T5 验收）：**
 
+实现状态（2026-09-12）：`@ghostboard/sdk/testing` 与 `@ghostboard/sdk/testing/react` 已随 T3 第一批实现，JavaScript / React 模板的无应用测试及组合插件作者测试均通过。真实 RPC、持久化、安装与平台差异继续由发行包探针验证；外部作者试用仍属于 T5。
+
 - `@ghostboard/sdk/testing` 导出 `createFakeHost({ pluginId, workspaceId })`，返回 `{ app, harness }`：`app` 是可传给 `setup` 的 `PluginContext` 实现；`harness.inspection` 暴露已注册的命令、面板、cleanup 数量；`harness.behavior` 可触发命令、发事件、推进 `signal`；`harness.lifecycle.reload(factory)` 复现 A2 的原子重载语义。
 - `@ghostboard/sdk/testing/react` 提供 `renderPanel(definition, { context })`，基于 Testing Library 渲染面板组件并注入 SDK hooks 的假实现。
 - 文档写明**不**复现的部分：宿主布局与 CSS、持久化、真实 RPC、多插件仲裁、平台差异；这些仍需真实应用验收。

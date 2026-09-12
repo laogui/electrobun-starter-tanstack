@@ -73,6 +73,14 @@
 | Generated-template verifier | Both fresh templates run no-app tests; React also type-checks/builds | Passed; React dist contains `app.js`, source map and `manifest.json` | pass |
 | Phase 3 closing focused suite | Installer, host importer flow and SDK testing regressions pass together | 5 files / 58 tests passed | pass |
 | Phase 3 closing Ultracite | No diagnostics across 14 affected source/test/script files | Checked 14 files; no fixes applied after one formatting pass | pass |
+| T3 host-controller regression | Evidence-only local file/URL preparation, selection fixtures, operation persistence and report redaction work in isolation | 1 file / 2 tests passed; combined focused run was 3 files / 32 tests | pass |
+| Packaged T3 local ZIP | Real canary installs the runtime-only archive, activates four contributions and proves preview/cancel/bounds/disable/retry/library behavior | 19/19 checks passed | pass |
+| Packaged T3 restart | Same app-data root retains enablement, imported notes and batch history across process restart | 7/7 checks passed, including durable undo/redo | pass |
+| Packaged T3 loopback download | Separate app-data root downloads and installs the identical archive through the explicitly gated test route | 8/8 checks passed | pass |
+| Packaged artifact identity | Final-user plugin remains three runtime files; canary and plugin hashes captured in final package evidence | app `4509e688…2345`; plugin `fa7baddf…7d51` | pass |
+| Full serial regression | All repository tests pass after the packaged probe changes | 219 files / 1,986 tests passed in 134.39s | pass |
+| T3 delivery documentation | SDK boundary, platform phase, development plan, first-batch plan and machine evidence distinguish accepted behavior from remaining T3/T4/T5 work | Added T3 evidence/result files and updated retained sources of truth | pass |
+| Final packaged label audit | Evidence names no longer imply automated native-dialog interaction; the exact same three launch phases remain green | local 19/19, restart 7/7, download 8/8 | pass |
 
 ### Errors
 | Error | Resolution |
@@ -111,3 +119,7 @@
 | The first repeatable template-verifier command pointed at a mistyped non-existent working directory and did not start | Reissued the unchanged script from the repository root. |
 | The first error-log patch for that command contained a mistyped context line and was rejected atomically | Read the exact table tail and appended cleanly; the rejected patch changed nothing. |
 | Phase 3 closing Ultracite pass reported only two mechanical line-wrap changes | Queued the safe formatter for the template verifier and T3 installer integration test. |
+| First T3 host-controller test imported the real application-path module and attempted to start Electrobun RPC under Vitest | Added the same hoisted app-path isolation used by existing host/management tests and a minimal Bun file/write stub; the rerun passed. |
+| Two exploratory evidence-directory commands contained accidental shell glob text and stopped in zsh before reading anything | Used the exact reported evidence directory path for the subsequent read; no repository or evidence file was changed. |
+| First packaged restart probe required redo results to preserve the operation-record array order | The history proved the same IDs and revision 3 were restored in a different valid order; changed the probe to the actual unordered identity-set contract and reran all three launches. |
+| Two malformed final-run wrappers omitted `exec_command.cmd`, and one later inspection wrapper used an undefined output-budget identifier | Reissued each command with a literal validated argument object; the failures occurred before any shell command ran. |

@@ -75,6 +75,11 @@ if (import.meta.env.VITE_PLUGIN_T2_A4 === '1') {
     .then(({ runT2A4Probe }) => runT2A4Probe())
     .catch(console.error);
 }
+if (import.meta.env.VITE_PLUGIN_T3 === '1') {
+  import('./plugins/t3/run')
+    .then(({ runT3Probe }) => runT3Probe())
+    .catch(console.error);
+}
 if (import.meta.env.VITE_PLUGIN_T1 === '1') {
   import('./plugins/t1/run')
     .then(({ runT1Probe }) => runT1Probe())

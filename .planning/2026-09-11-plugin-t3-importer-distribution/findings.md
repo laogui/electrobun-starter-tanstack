@@ -60,6 +60,12 @@
 - The combined CSV parser enforces the first-slice contract itself (fixed/unique headers, quoted CSV fields, required nonblank titles, at most 100 nonempty notes) while the runtime preview validator and Bun content transaction remain independent defense-in-depth boundaries.
 - Root Vitest intentionally excludes `scripts/**`, so template/generator acceptance should either live under an included `src/**` test seam or run as an explicit package script. The generated templates themselves can use Bun's built-in test runner and the copied local SDK without adding Vitest to the no-build JavaScript template.
 - The no-build JavaScript template needs a local `file:./sdk` development dependency only when the author runs tests; GhostBoard still resolves its runtime bare import through the host import map, so end users do not install dependencies. The README must keep these two paths distinct.
+- The packaged T3 probe passed all three launches: local ZIP 19/19, same-root restart 7/7 and separate-root loopback download 8/8. The final accepted run's runtime-only plugin SHA-256 is `fa7baddfc2cbd691bfe6e54ad9618a4d1e4d812f7f9482ba8595b924bdfa7d51`; the canary SHA-256 is `4509e6882dddbdfe6c24015d19e9dfb2f315374c6db3d3a6a8ea3cad4da42345`.
+- Content redo guarantees restored identities but not the ordering of a later independent Library/query result. Packaged evidence must compare the ID set and revisions, not impose an order that the SDK contract does not promise.
+- T3 is not complete after the first slice: binary/stream/write/directory files, segmented imports, generic mapping/target UI, a general author packaging command, public-HTTPS production evidence, manual native picker, Windows/Linux and external author validation remain explicit work.
+- The packaged canary now proves the complete first T3 slice in three launches: local runtime-only ZIP installation and importer boundaries, a same-root restart with durable undo/redo, and a separate-root loopback download of the identical archive. All 34 recorded checks passed.
+- Creation redo restores the batch's note identity set and fresh revisions, but response ordering is not an API guarantee. Acceptance must compare IDs as a set rather than reuse incidental Library/query order.
+- The superseded pre-label-cleanup evidence run used canary `9991d3b8…1eb9` and plugin `c9d3348b…eb00`; the final evidence file records the later accepted hashes above.
 
 ## Technical Decisions
 | Decision | Rationale |

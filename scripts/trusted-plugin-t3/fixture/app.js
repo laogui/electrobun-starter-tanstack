@@ -62,7 +62,16 @@ export default definePlugin({
       accept: [{ description: 'CSV files', extensions: ['.csv'] }],
       id: 'notes-csv',
       async parse(file, { signal }) {
-        return parseNotesCsv(await app.files.readText(file, { signal }));
+        const text = await app.files.readText(file, { signal });
+        if (text.startsWith('__WAIT__')) {
+          await new Promise((resolve, reject) => {
+            const abort = () =>
+              reject(new DOMException('Probe parse aborted', 'AbortError'));
+            signal.addEventListener('abort', abort, { once: true });
+            setTimeout(resolve, 60_000);
+          });
+        }
+        return parseNotesCsv(text);
       },
       title: 'Import notes from CSV',
     });

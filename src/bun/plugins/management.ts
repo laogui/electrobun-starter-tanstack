@@ -236,8 +236,14 @@ export class PluginManagementService {
     });
   }
 
-  async prepareFromUrl(url: string): Promise<PluginInstallPreview> {
-    const prepared = await this.store.prepareFromUrl({ url });
+  async prepareFromUrl(
+    url: string,
+    options?: { allowLoopback?: boolean }
+  ): Promise<PluginInstallPreview> {
+    const prepared = await this.store.prepareFromUrl({
+      url,
+      allowLoopback: options?.allowLoopback,
+    });
     try {
       await this.assertNoDirectorySource(prepared.pluginId);
     } catch (error) {

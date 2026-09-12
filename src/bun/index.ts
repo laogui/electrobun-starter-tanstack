@@ -139,6 +139,7 @@ import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
 import { T2A4HostController } from './plugins/t2A4Host';
 import { T2ContentHostController } from './plugins/t2ContentHost';
+import { T3HostController } from './plugins/t3Host';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -1770,49 +1771,55 @@ async function main() {
       workspacePath: wsPath,
       workspaceId: pluginWorkspaceId(wsPath),
     }),
-    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T1_DIR
-      ? new T1HostController(
+    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T3_DIR
+      ? new T3HostController(
           pluginManagement,
           pluginWorkspaceId(wsPath),
-          process.env.GHOSTBOARD_PLUGIN_T1_DIR
+          process.env.GHOSTBOARD_PLUGIN_T3_DIR
         )
-      : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
-        ? new T2A4HostController(
+      : process.env.GHOSTBOARD_PLUGIN_T1_DIR
+        ? new T1HostController(
             pluginManagement,
             pluginWorkspaceId(wsPath),
-            process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+            process.env.GHOSTBOARD_PLUGIN_T1_DIR
           )
-        : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
-          ? new T2ContentHostController(
+        : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+          ? new T2A4HostController(
               pluginManagement,
               pluginWorkspaceId(wsPath),
-              process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
+              process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
+          : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
             ? new T2ContentHostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
-                'history'
+                process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
               )
-            : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
+            : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
               ? new T2ContentHostController(
                   pluginManagement,
                   pluginWorkspaceId(wsPath),
-                  process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-                  'canvas'
+                  process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+                  'history'
                 )
-              : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+              : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
                 ? new T2ContentHostController(
                     pluginManagement,
                     pluginWorkspaceId(wsPath),
-                    process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                    'selection'
+                    process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                    'canvas'
                   )
-                : new PluginHostController(
-                    pluginManagement,
-                    pluginWorkspaceId(wsPath)
-                  ),
+                : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                  ? new T2ContentHostController(
+                      pluginManagement,
+                      pluginWorkspaceId(wsPath),
+                      process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                      'selection'
+                    )
+                  : new PluginHostController(
+                      pluginManagement,
+                      pluginWorkspaceId(wsPath)
+                    ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);
@@ -2554,13 +2561,17 @@ async function main() {
         pluginFilesPick: async (request) => {
           try {
             pluginFiles.validateContext(request);
-            const selected = await Utils.openFileDialog({
-              allowedFileTypes: pluginPickerFileTypes(request.extensions),
-              allowsMultipleSelection: false,
-              canChooseDirectory: false,
-              canChooseFiles: true,
-              startingFolder: '~/Documents',
-            });
+            const selected = process.env.GHOSTBOARD_PLUGIN_T3_DIR
+              ? [
+                  join(process.env.GHOSTBOARD_PLUGIN_T3_DIR, 'selected.csv'),
+                ].filter(existsSync)
+              : await Utils.openFileDialog({
+                  allowedFileTypes: pluginPickerFileTypes(request.extensions),
+                  allowsMultipleSelection: false,
+                  canChooseDirectory: false,
+                  canChooseFiles: true,
+                  startingFolder: '~/Documents',
+                });
             const path = selected.find(Boolean);
             if (!path) {
               return { success: false, cancelled: true };

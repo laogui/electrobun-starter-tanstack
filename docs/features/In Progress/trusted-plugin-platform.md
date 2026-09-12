@@ -395,7 +395,7 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 | T0：决策与装载验证（macOS arm64 已通过） | 同步信任模型；在打包后的真实应用中验证：本地 HTTP 挂载插件目录并 `import()`、import map 解析共享 React / SDK、Vite 输出稳定 chunk、独立 `createRoot` 挂载与卸载、`net.fetch` 代理与 `files` 读写 | 无构建 JS 命令、使用宿主 React 的面板、一次代理 `fetch`、一次文件读取均在 macOS 发行包运行；React 单实例得到验证（`useState` 在插件组件内正常）；记录 Linux / Windows 差异 |
 | T1：命令与面板闭环（macOS arm64 已通过） | manifest v2、目录加载、注册清理、SDK、模板、自动重载、诊断；追加 A1–A3 | 仓库外作者无需修改宿主，即可开发、重载、停用命令与面板；旧 v1 包被拒绝并有提示；失败重载保留原实例/视图状态，signal/generation 与候选注册交接通过，主题变量和冻结全局 shim 通过 |
 | T2：内容与画布类型（macOS arm64 已通过） | 查询、批次、事件、实例状态、摘要、视图上下文、自定义卡片；追加 A4 持久 KV / 任务；统一 session 原生历史 | 内容修改可撤销；自定义卡片编辑、重启、搜索及缺失插件展示通过；画布快照与插件笔记批次按提交顺序撤销且冲突不移动游标 |
-| T3：导入器与分发（[实施计划](trusted-plugin-t3-plan.md) 已冻结） | SDK `files` 完整流程、导入器、可安装构建、ZIP / HTTPS 安装、组合插件 | 四类样例均从独立包安装，最终用户无开发工具也能使用 |
+| T3：导入器与分发（第一批 macOS arm64 已通过，阶段实施中） | [受限 CSV 第一批](trusted-plugin-t3-evidence.md)已完成；继续 SDK `files` 完整流程、分段导入、通用作者构建与公共 HTTPS 证据 | 四类样例均从独立包安装，最终用户无开发工具也能使用；完整 files / 大批量恢复边界公开且有证据 |
 | T4：故障、签名与更新 | 安全模式、作者密钥签名与 TOFU 校验、更新事务、代码回退与迁移恢复 | 坏插件、坏包、失败更新、密钥变更的更新均不会使用户失去插件管理和数据恢复入口 |
 | T5：公开开发验收 | 文档、兼容策略、外部作者试用、支持平台回归 | 四类完整流程及开发体验目标有记录，限制与支持范围公开明确 |
 | T6+（需求驱动）：后端入口 | 每插件一个 Bun Worker；仅在真实插件需要 Bun 原生能力时启动 | 有具名插件需求；Worker 生命周期、停用回收与发行包验证通过 |
@@ -421,6 +421,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-11 T2 第八批结果：[冲突恢复 UI 证据](trusted-plugin-t2-conflict-evidence.md)。已打开的 BlockNote 编辑器在本地草稿与插件正文事务发生 revision 冲突时，不再只显示泛化保存失败：宿主按编辑器绑定的 workspace 读取最新 canonical blocks / 摘要，暂停自动重试并展示可展开的本地草稿与已保存版本比较。用户可显式采用已保存版本（不写盘，强制刷新所有当前投影），或保留本地版本（以最新 revision 再做 compare-and-swap）；若第二次竞争失败则刷新冲突而不覆盖。读失败保留草稿并允许重试，未解决时关闭需要单独确认丢弃。发行包用独立冲突笔记通过两个选择，并回归原正文事务重启 / undo / redo。**T2 仍在实施**：本批没有自动合并富文本，也没有统一原生 / 画布 / 插件历史；下一批先冻结统一 undo 的顺序、作用域、持久化和冲突语义。
 
 2026-09-11 T2 第九批结果：[统一原生 / 画布 / 插件笔记历史证据](trusted-plugin-t2-history-evidence.md)。宿主在 active workspace + view 的 renderer session 内，将画布快照与已提交插件笔记批次按观察到的 commit 顺序放入同一线性时间线；原生菜单与画布级快捷键撤销 / 重做该时间线，编辑器、输入框及聚焦 widget / extension 仍保留本地历史所有权。插件 revision conflict、引用保护和传输失败不移动混合游标；显式 SDK undo / redo 继续跨视图和重启持久可用。发行包通过 A→B→C 顺序、redo 分支废弃、冲突可见失败、视图边界和重启边界。**现行 T2 退出条件已满足并进入 T3**。混合游标不跨 view / workspace / restart，富文档创建、附件写入、插件菜单贡献和持久画布事务不借此扩入 T2。
+
+2026-09-12 T3 第一批结果：[受限 CSV 导入器与最终用户包证据](trusted-plugin-t3-evidence.md)。正式 SDK 增加 activation/workspace/process 绑定的 opaque 只读文件句柄、1 MiB 严格 UTF-8 `readText`、动态 importer 注册，以及宿主拥有的选择 / preview / cancel / confirm / retry session。独立三文件组合包同时注册 command、panel、canvas type 和 CSV importer；真实 macOS arm64 canary 从本地包安装、同 app-data root 重启，并在独立 root 从回环 HTTP 下载相同字节，三轮 34 项检查全部通过。丢失首次响应后以同 operation ID 重试没有重复 Note，重启后显式 undo / redo 保持原 ID。A5 fake host、React testing 入口及模板测试也已实现。**T3 阶段仍在实施**：二进制 / 流、写入 / 目录、超过 100 条的分段导入、通用字段 / 目标配置、一般作者打包命令、公共 HTTPS 生产证据、人工原生文件框和 Windows / Linux 尚未完成；签名 / 更新 / safe mode 仍属于 T4。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

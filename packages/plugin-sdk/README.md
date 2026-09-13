@@ -333,7 +333,11 @@ function SelectionPanel() {
 
 T1 covers the command/panel lifecycle. T2 includes A4, note metadata/body transactions, detached note creation, note selection and React hooks, live clean-editor reconciliation, custom canvas types, focused-editor conflict recovery, and session-level ordered native canvas/plugin note history. T3 now includes the accepted bounded importer/distribution slice, the complete host-mediated file service, explicit segmented imports, and the generic importer configuration described below. A general packaging command and public-HTTPS production evidence remain T3 work. The earlier T0 `files`/`net` experiment is not a public API. Signed updates and startup safe mode remain T4. There is no Bun backend entry, per-capability approval, or dual v1 runtime.
 
-The source package can be copied, packed, and installed locally without the GhostBoard repository. No npm publication is implied by its presence in the repository.
+The package is published to npm as `@ghostboard/sdk` by the `publish-sdk` workflow together with `create-ghostboard-plugin`; it can also be packed and installed from a checkout.
+
+## Compatibility
+
+`@ghostboard/sdk` `0.1.0` targets GhostBoard hosts matching `>=1.0.0 <2.0.0`, the range that `create-ghostboard-plugin` `0.1.0` writes into new manifests. `engines.ghostboard` must be exactly `>=a.b.c <x.y.z`; an incompatible host reports `incompatible-host-api`, runs no plugin code, and keeps installed files and data. Within one host major the public API is additive-only; breaking changes ship only with a new host, SDK, and scaffold major. The host import map provides the runtime; this package provides types, the fake host, `AI_REFERENCE.md`, and the packer. Supported platform is macOS arm64 with packaged evidence; macOS x64 is pending verification and Windows / Linux are not supported for plugins. The full policy, including data migration and signed-update rules, is the “Compatibility” section of `AI_REFERENCE.md` and the GhostBoard compatibility policy document.
 
 ## T3 files: activation-scoped files and directories
 

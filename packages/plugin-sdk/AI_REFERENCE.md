@@ -675,6 +675,35 @@ The archive may use `.ghostboard-plugin` or `.zip`. Final-user installation
 needs only this runtime archive; it must not require Bun, Node, `node_modules`,
 the `@ghostboard/sdk` package, source tests, or the host repository.
 
+## Compatibility
+
+Reference version: `@ghostboard/sdk` `0.1.0` for GhostBoard hosts matching
+`>=1.0.0 <2.0.0`. `create-ghostboard-plugin` `0.1.0` generates that range.
+
+- `engines.ghostboard` must be exactly `>=a.b.c <x.y.z`. A host outside the
+  range reports `incompatible-host-api`, runs no plugin code, and keeps the
+  installed files, enablement preference, KV, canvas instances, and imported
+  notes.
+- Within one host major, every API in this document is additive-only.
+  Breaking changes ship only with a new host major together with a new SDK and
+  scaffold major and a “since host x.y” migration note here. Deprecated APIs
+  are marked at least one host minor before removal.
+- The host provides the runtime for `@ghostboard/sdk`, `@ghostboard/sdk/react`,
+  and React / ReactDOM 19.2.x through its import map. The npm package supplies
+  types, the fake host, this reference, and the packer only. Raise the lower
+  bound of `engines.ghostboard` when you use an API introduced by a newer host.
+- `manifestVersion: 1` packages are rejected with a notice; their data is kept.
+- Custom canvas types migrate lazily on `dataVersion` increase with a preimage
+  backup; downgrades never overwrite data. Persistent KV has no migration API,
+  so version your own values.
+- Unsigned packages cannot be updated in place. Signed updates must advance
+  semver and keep the pinned public key and update URL; the release document
+  schema is `ghostboard-plugin-release/v2` with a per-release `ghostboard`
+  range and SHA-256.
+- Supported platform: macOS arm64 (packaged evidence). macOS x64 is pending
+  verification; Windows and Linux are not supported for plugins. URL installs
+  accept public HTTPS only.
+
 ## Completion checklist
 
 - Keep `manifest.json` v2 and its app entry inside the packaged runtime files.

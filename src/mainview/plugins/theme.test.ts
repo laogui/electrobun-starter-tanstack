@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it } from 'vitest';
-import docs from '../../../packages/plugin-sdk/README.md?raw';
 import {
   createButton,
   createInput,
   createSurface,
 } from '../../../packages/create-plugin/templates/javascript/ui.js';
+import docs from '../../../packages/plugin-sdk/README.md?raw';
 
 const css = readFileSync('src/mainview/plugins/theme.css', 'utf8');
 

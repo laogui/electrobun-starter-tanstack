@@ -91,7 +91,7 @@ bb 的 SDK 自带 `testing`（fake host）与 `testing/app`（jsdom 渲染 slot�
 
 实现状态（2026-09-12）：`@ghostboard/sdk/testing` 与 `@ghostboard/sdk/testing/react` 已随 T3 第一批实现，JavaScript / React 模板的无应用测试及组合插件作者测试均通过。真实 RPC、持久化、安装与平台差异继续由发行包探针验证；外部作者试用仍属于 T5。
 
-T5 状态（2026-09-13）：`testing` 子包随 `@ghostboard/sdk` 的 npm `files` 发布，`create-ghostboard-plugin` 四模板从 npm 依赖 SDK 并各带一个使用该子包的测试，`verify-templates` 以 tarball 安装方式验证；文档站 Distribution → "Testing without the app" 页写明 fidelity 边界。**A5 验收待外部作者试用**：作者在无应用环境跑通模板测试的记录归 [作者试用证据](trusted-plugin-t5-author-trial-evidence.md)，试用未进行前不标为已验收。
+T5 状态（2026-09-13）：`testing` 子包随 `@ghostboard/sdk` 的 npm `files` 发布，`create-ghostboard-plugin` 四模板从 npm 依赖 SDK 并各带一个使用该子包的测试，`verify-templates` 以 tarball 安装方式验证；文档站 Distribution → "Testing without GhostBoard" 页写明 fidelity 边界。**A5 验收待外部作者试用**：作者在无应用环境跑通模板测试的记录归 [作者试用证据](trusted-plugin-t5-author-trial-evidence.md)，试用未进行前不标为已验收。
 
 - `@ghostboard/sdk/testing` 导出 `createFakeHost({ pluginId, workspaceId })`，返回 `{ app, harness }`：`app` 是可传给 `setup` 的 `PluginContext` 实现；`harness.inspection` 暴露已注册的命令、面板、cleanup 数量；`harness.behavior` 可触发命令、发事件、推进 `signal`；`harness.lifecycle.reload(factory)` 复现 A2 的原子重载语义。
 - `@ghostboard/sdk/testing/react` 提供 `renderPanel(definition, { context })`，基于 Testing Library 渲染面板组件并注入 SDK hooks 的假实现。

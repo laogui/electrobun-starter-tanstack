@@ -14,7 +14,7 @@ The same four templates that `create-ghostboard-plugin` generates are also publi
 | CSV Importer | Mapped and segmented importer | `https://dl.ghostboard.app/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin` |
 | Combined | Command, panel, canvas type and importer | `https://dl.ghostboard.app/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin` |
 
-Each example's release document is at `https://dl.ghostboard.app/plugins/examples/<id>/releases.json`, and the manifest `update.url` points there. Digests are listed in `https://dl.ghostboard.app/plugins/examples/index.json` and match the archives you get from running `bun run package` on an unmodified template of the same SDK version.
+Each example's release document is at `https://dl.ghostboard.app/plugins/examples/<id>/releases.json`, and the manifest `update.url` points there. `example.hello` publishes both `0.1.0` and `0.1.1` so that installing the first URL and checking for updates exercises a real signed update. Digests are listed in `https://dl.ghostboard.app/plugins/examples/index.json` and match the archives you get from running `bun run package` on an unmodified template of the same SDK version.
 
 ## Try the update flow
 

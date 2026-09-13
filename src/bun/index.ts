@@ -140,6 +140,7 @@ import {
   pluginInstallErrorMessage,
 } from './plugins/management';
 import { NoteContentService } from './plugins/noteContent';
+import { scriptedProbeSelection } from './plugins/probeSelection';
 import { PluginStartupGuard } from './plugins/safeMode';
 import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
@@ -147,6 +148,7 @@ import { T2A4HostController } from './plugins/t2A4Host';
 import { T2ContentHostController } from './plugins/t2ContentHost';
 import { T3HostController } from './plugins/t3Host';
 import { T4HostController } from './plugins/t4Host';
+import { T5HostController } from './plugins/t5Host';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -1827,73 +1829,84 @@ async function main() {
       workspacePath: wsPath,
       workspaceId: pluginWorkspaceId(wsPath),
     }),
-    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T4_DIR
-      ? new T4HostController(
+    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T5_DIR
+      ? new T5HostController(
           pluginManagement,
           pluginWorkspaceId(wsPath),
-          process.env.GHOSTBOARD_PLUGIN_T4_DIR,
-          wsPath,
+          process.env.GHOSTBOARD_PLUGIN_T5_DIR,
           {
             safeMode: pluginStartupGuard?.getState(),
             markStartupReady: () =>
               pluginStartupGuard?.markReady() ?? Promise.resolve(),
           }
         )
-      : process.env.GHOSTBOARD_PLUGIN_T3_DIR
-        ? new T3HostController(
+      : process.env.GHOSTBOARD_PLUGIN_T4_DIR
+        ? new T4HostController(
             pluginManagement,
             pluginWorkspaceId(wsPath),
-            process.env.GHOSTBOARD_PLUGIN_T3_DIR
+            process.env.GHOSTBOARD_PLUGIN_T4_DIR,
+            wsPath,
+            {
+              safeMode: pluginStartupGuard?.getState(),
+              markStartupReady: () =>
+                pluginStartupGuard?.markReady() ?? Promise.resolve(),
+            }
           )
-        : process.env.GHOSTBOARD_PLUGIN_T1_DIR
-          ? new T1HostController(
+        : process.env.GHOSTBOARD_PLUGIN_T3_DIR
+          ? new T3HostController(
               pluginManagement,
               pluginWorkspaceId(wsPath),
-              process.env.GHOSTBOARD_PLUGIN_T1_DIR
+              process.env.GHOSTBOARD_PLUGIN_T3_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
-            ? new T2A4HostController(
+          : process.env.GHOSTBOARD_PLUGIN_T1_DIR
+            ? new T1HostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+                process.env.GHOSTBOARD_PLUGIN_T1_DIR
               )
-            : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
-              ? new T2ContentHostController(
+            : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+              ? new T2A4HostController(
                   pluginManagement,
                   pluginWorkspaceId(wsPath),
-                  process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
+                  process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
                 )
-              : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
+              : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
                 ? new T2ContentHostController(
                     pluginManagement,
                     pluginWorkspaceId(wsPath),
-                    process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
-                    'history'
+                    process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
                   )
-                : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
+                : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
                   ? new T2ContentHostController(
                       pluginManagement,
                       pluginWorkspaceId(wsPath),
-                      process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-                      'canvas'
+                      process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+                      'history'
                     )
-                  : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                  : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
                     ? new T2ContentHostController(
                         pluginManagement,
                         pluginWorkspaceId(wsPath),
-                        process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                        'selection'
+                        process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                        'canvas'
                       )
-                    : new PluginHostController(
-                        pluginManagement,
-                        pluginWorkspaceId(wsPath),
-                        {
-                          safeMode: pluginStartupGuard?.getState(),
-                          markStartupReady: () =>
-                            pluginStartupGuard?.markReady() ??
-                            Promise.resolve(),
-                        }
-                      ),
+                    : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                      ? new T2ContentHostController(
+                          pluginManagement,
+                          pluginWorkspaceId(wsPath),
+                          process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                          'selection'
+                        )
+                      : new PluginHostController(
+                          pluginManagement,
+                          pluginWorkspaceId(wsPath),
+                          {
+                            safeMode: pluginStartupGuard?.getState(),
+                            markStartupReady: () =>
+                              pluginStartupGuard?.markReady() ??
+                              Promise.resolve(),
+                          }
+                        ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);
@@ -2705,21 +2718,18 @@ async function main() {
               );
             }
             const selected =
-              process.env.GHOSTBOARD_PLUGIN_T3_DIR && kind === 'file'
-                ? [
-                    join(process.env.GHOSTBOARD_PLUGIN_T3_DIR, 'selected.csv'),
-                  ].filter(existsSync)
-                : await Utils.openFileDialog({
-                    allowedFileTypes:
-                      kind === 'file'
-                        ? pluginPickerFileTypes(request.extensions)
-                        : '*',
-                    allowsMultipleSelection:
-                      kind === 'file' && request.multiple === true,
-                    canChooseDirectory: kind === 'directory',
-                    canChooseFiles: kind === 'file',
-                    startingFolder: '~/Documents',
-                  });
+              scriptedProbeSelection(process.env, kind) ??
+              (await Utils.openFileDialog({
+                allowedFileTypes:
+                  kind === 'file'
+                    ? pluginPickerFileTypes(request.extensions)
+                    : '*',
+                allowsMultipleSelection:
+                  kind === 'file' && request.multiple === true,
+                canChooseDirectory: kind === 'directory',
+                canChooseFiles: kind === 'file',
+                startingFolder: '~/Documents',
+              }));
             const paths = selected.filter(Boolean);
             if (paths.length === 0) {
               return { success: false, cancelled: true };

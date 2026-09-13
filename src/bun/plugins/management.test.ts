@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -8,10 +9,19 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { dirname, join, resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildPluginPackage,
+  generateSigningKey,
+} from '../../../packages/plugin-sdk/package-plugin.js';
 import { LEGACY_PLUGIN_MESSAGE } from '../../shared/plugins/manifest';
 import { createStoredZip, pluginFiles } from '../../test/pluginPackage';
+import {
+  createExtensionInstance,
+  loadExtensionInstance,
+  updateExtensionInstance,
+} from '../extensions/instanceStore';
 import { PluginManagementService, pluginInstallRoot } from './management';
 
 vi.mock('../appPaths', () => ({
@@ -23,6 +33,25 @@ vi.mock('../appPaths', () => ({
 const TREE_DIGEST = /^[a-f0-9]{64}$/;
 const T3_COMBINED_FILES = ['app.js', 'csv.js', 'manifest.json'] as const;
 const roots: string[] = [];
+beforeEach(() => {
+  vi.mocked(Bun.file).mockImplementation(
+    (filePath) =>
+      ({
+        exists: async () => existsSync(String(filePath)),
+        json: async () =>
+          JSON.parse(await readFile(String(filePath), 'utf8')) as unknown,
+      }) as never
+  );
+  vi.mocked(Bun.write).mockImplementation(async (filePath, data) => {
+    const bytes =
+      typeof data === 'string'
+        ? new TextEncoder().encode(data)
+        : Uint8Array.from(data as unknown as Uint8Array);
+    await mkdir(dirname(String(filePath)), { recursive: true });
+    await writeFile(String(filePath), bytes);
+    return bytes.byteLength;
+  });
+});
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))
@@ -49,6 +78,34 @@ async function t3CombinedPluginFiles(): Promise<Record<string, string>> {
         await readFile(join(fixture, name), 'utf8'),
       ])
     )
+  );
+}
+
+async function writeSignedRuntime(input: {
+  directory: string;
+  publicKey: string;
+  updateUrl?: string;
+  version: string;
+}) {
+  await writeFile(
+    join(input.directory, 'manifest.json'),
+    JSON.stringify({
+      manifestVersion: 2,
+      id: 'community.example.signed-management',
+      name: 'Signed management',
+      version: input.version,
+      engines: { ghostboard: '>=1.0.0 <2.0.0' },
+      entrypoints: { app: 'main.js' },
+      capabilities: [],
+      publicKey: input.publicKey,
+      update: {
+        url: input.updateUrl ?? 'https://example.com/releases.json',
+      },
+    })
+  );
+  await writeFile(
+    join(input.directory, 'main.js'),
+    `export const version = '${input.version}';`
   );
 }
 
@@ -205,7 +262,7 @@ describe('PluginManagementService', () => {
     expect(preview.plugin).toMatchObject({
       id: 'community.example.app',
       capabilities: ['files'],
-      signatureStatus: 'unverified',
+      signatureStatus: 'unsigned',
     });
     expect(await service.list()).toEqual([]);
     const installed = await service.commit(preview.transactionId);
@@ -230,7 +287,7 @@ describe('PluginManagementService', () => {
       capabilities: ['files'],
       id: 't3.combined',
       name: 'T3 combined importer probe',
-      signatureStatus: 'unverified',
+      signatureStatus: 'unsigned',
     });
     expect(probe.__ghostboardT3Combined).toBeUndefined();
     const installed = await service.commit(preview.transactionId);
@@ -258,6 +315,173 @@ describe('PluginManagementService', () => {
     );
     expect((await readdir(packageDirectory)).sort()).toEqual(T3_COMBINED_FILES);
     expect(probe.__ghostboardT3Combined).toBeUndefined();
+  });
+
+  it('reviews a verified update and disables the workspace before new code runs', async () => {
+    const { appDataRoot, root, service } = await setup();
+    const runtime = join(root, 'signed-runtime');
+    await mkdir(runtime);
+    const privateKey = join(root, 'author.pem');
+    const { publicKey } = await generateSigningKey(privateKey);
+    await writeSignedRuntime({
+      directory: runtime,
+      publicKey,
+      version: '1.0.0',
+    });
+    const firstArchive = join(root, 'signed-1.0.0.ghostboard-plugin');
+    await buildPluginPackage({
+      source: runtime,
+      output: firstArchive,
+      privateKey,
+    });
+    const firstPreview = await service.prepareFromFile(firstArchive);
+    expect(firstPreview.plugin.signatureStatus).toBe('verified');
+    const first = await service.commit(firstPreview.transactionId);
+    expect((await service.enable(first)).enabled).toBe(true);
+
+    await writeSignedRuntime({
+      directory: runtime,
+      publicKey,
+      version: '1.1.0',
+    });
+    const secondArchive = join(root, 'signed-1.1.0.ghostboard-plugin');
+    await buildPluginPackage({
+      source: runtime,
+      output: secondArchive,
+      privateKey,
+    });
+    const secondPreview = await service.prepareFromFile(secondArchive);
+    expect(secondPreview.plugin.signatureStatus).toBe('verified');
+    const second = await service.commit(secondPreview.transactionId);
+    expect(second).toMatchObject({
+      enabled: false,
+      previousVersion: '1.0.0',
+      version: '1.1.0',
+    });
+    expect(await service.list()).toMatchObject([
+      {
+        enabled: false,
+        previousVersion: '1.0.0',
+        plugin: { signatureStatus: 'verified', version: '1.1.0' },
+      },
+    ]);
+    expect(
+      await new PluginManagementService(join(root, 'other-workspace'), {
+        appDataRoot,
+      }).list()
+    ).toHaveLength(1);
+
+    const restored = await service.rollback(second);
+    expect(restored).toMatchObject({
+      enabled: false,
+      version: '1.0.0',
+    });
+    expect(restored.previousVersion).toBeUndefined();
+    await service.recover();
+    expect(await service.list()).toMatchObject([
+      { enabled: false, version: '1.0.0' },
+    ]);
+  });
+
+  it('checks the fixed release source and binds its version and digest to the signed package', async () => {
+    const { root, service } = await setup();
+    const runtime = join(root, 'release-runtime');
+    await mkdir(runtime);
+    const privateKey = join(root, 'release-author.pem');
+    const { publicKey } = await generateSigningKey(privateKey);
+    const updateUrl = 'https://127.0.0.1/releases.json';
+    await writeSignedRuntime({
+      directory: runtime,
+      publicKey,
+      updateUrl,
+      version: '1.0.0',
+    });
+    const firstArchive = join(root, 'release-1.0.0.ghostboard-plugin');
+    await buildPluginPackage({
+      source: runtime,
+      output: firstArchive,
+      privateKey,
+    });
+    const firstPreview = await service.prepareFromFile(firstArchive);
+    const first = await service.commit(firstPreview.transactionId);
+
+    await writeSignedRuntime({
+      directory: runtime,
+      publicKey,
+      updateUrl,
+      version: '1.1.0',
+    });
+    const updateArchive = join(root, 'release-1.1.0.ghostboard-plugin');
+    await buildPluginPackage({
+      source: runtime,
+      output: updateArchive,
+      privateKey,
+    });
+    const updateBytes = Uint8Array.from(await readFile(updateArchive));
+    const digest = createHash('sha256').update(updateBytes).digest('hex');
+    const releaseUrl = 'https://127.0.0.1/release-1.1.0.zip';
+    let releaseDigest = '0'.repeat(64);
+    const releaseDocument = () =>
+      JSON.stringify({
+        schema: 'ghostboard-plugin-release/v2',
+        pluginId: first.pluginId,
+        channel: 'stable',
+        releases: [
+          {
+            version: '1.1.0',
+            ghostboard: '>=1.0.0 <2.0.0',
+            url: releaseUrl,
+            sha256: releaseDigest,
+            notes: 'Verified update path.',
+          },
+        ],
+      });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((url) => {
+        const value = url.toString();
+        if (value === updateUrl) {
+          return Promise.resolve(
+            new Response(releaseDocument(), {
+              headers: { 'content-type': 'application/json' },
+            })
+          );
+        }
+        if (value === releaseUrl) {
+          return Promise.resolve(
+            new Response(updateBytes, {
+              headers: { 'content-type': 'application/zip' },
+            })
+          );
+        }
+        return Promise.resolve(new Response('', { status: 404 }));
+      });
+    try {
+      await expect(
+        service.prepareUpdate(first, { allowLoopback: true })
+      ).rejects.toMatchObject({ code: 'invalid-package' });
+      expect(await service.list()).toMatchObject([
+        { digest: first.digest, version: '1.0.0' },
+      ]);
+
+      releaseDigest = digest;
+      const preview = await service.prepareUpdate(first, {
+        allowLoopback: true,
+      });
+      expect(preview).toMatchObject({
+        currentVersion: '1.0.0',
+        digest,
+        notes: 'Verified update path.',
+        plugin: { version: '1.1.0', signatureStatus: 'verified' },
+      });
+      const current = await service.commit(preview.transactionId);
+      expect(current).toMatchObject({
+        previousVersion: '1.0.0',
+        version: '1.1.0',
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('saves opt-in workspace enablement, never importing old grants', async () => {
@@ -294,6 +518,41 @@ describe('PluginManagementService', () => {
       code: 'invalid-state',
     });
     expect(await service.list()).toEqual([]);
+  });
+
+  it('surfaces and explicitly restores pre-migration instance backups while disabling the plugin', async () => {
+    const { service, workspace, file } = await setup();
+    const preview = await service.prepareFromFile(file);
+    const installed = await service.commit(preview.transactionId);
+    await service.enable(installed);
+    const created = await createExtensionInstance(workspace, {
+      appVersion: '1.0.0',
+      canvasTypeId: `${installed.pluginId}/counter`,
+      dataVersion: 1,
+      state: { count: 1 },
+      presentation: { title: 'Before migration' },
+    });
+    await updateExtensionInstance(workspace, {
+      appVersion: '1.1.0',
+      dataVersion: 2,
+      expectedRevision: 1,
+      instanceId: created.id,
+      state: { count: 2 },
+      presentation: { title: 'After migration' },
+    });
+
+    expect(await service.list()).toMatchObject([
+      { enabled: true, migrationBackupCount: 1 },
+    ]);
+    await expect(
+      service.restoreMigrationBackup(installed.pluginId)
+    ).resolves.toEqual({ restored: 1, skipped: 0 });
+    const restoredList = await service.list();
+    expect(restoredList).toMatchObject([{ enabled: false }]);
+    expect(restoredList[0]?.migrationBackupCount).toBeUndefined();
+    expect(await loadExtensionInstance(workspace, created.id)).toMatchObject({
+      record: { dataVersion: 1, revision: 3, state: { count: 1 } },
+    });
   });
 
   it('shows legacy workspace packages without changing their files or user data', async () => {

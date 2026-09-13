@@ -14,6 +14,8 @@ const manifest = {
   engines: { ghostboard: '>=1.0.0 <2.0.0' },
   entrypoints: { app: 'app.js' },
 };
+const publicKey =
+  'ed25519-spki:MCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 describe('manifest v2', () => {
   it('accepts a minimal app without static contributions or permissions', () => {
@@ -27,11 +29,21 @@ describe('manifest v2', () => {
     const input = {
       ...manifest,
       capabilities: ['network', 'files', 'clipboard'],
-      publicKey: 'author-claim',
+      publicKey,
       update: { url: 'https://example.com/latest.json' },
       author: 'Example',
     };
     expect(parsePluginManifest(input)).toEqual(input);
+  });
+
+  it.each([
+    'author-claim',
+    'ed25519-spki:not-base64',
+    'rsa-spki:MCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  ])('rejects a non-canonical author public key %s', (invalidPublicKey) => {
+    expect(
+      parsePluginManifest({ ...manifest, publicKey: invalidPublicKey })
+    ).toMatchObject({ code: 'invalid-manifest' });
   });
 
   it('rejects v1 rather than silently granting high trust', () => {

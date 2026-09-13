@@ -53,8 +53,61 @@ export function startPluginRuntime(
   let refreshQueued = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
+  let startupReadyController: AbortController | undefined;
+  let startupReady = false;
+  let startupReadyInFlight = false;
   let stopping: Promise<void> | undefined;
   const detachShortcuts = runtime.attachShortcuts(target);
+
+  const acknowledgeStartup = async (endpoint: {
+    baseUrl: string;
+    token: string;
+  }) => {
+    if (
+      stopped ||
+      startupReady ||
+      startupReadyInFlight ||
+      runtime
+        .getSnapshot()
+        .plugins.some((plugin) => plugin.status === 'loading')
+    ) {
+      return;
+    }
+    startupReadyInFlight = true;
+    const request = new AbortController();
+    startupReadyController = request;
+    const timeout = setTimeout(
+      () => request.abort(),
+      options.requestTimeoutMs ?? 5000
+    );
+    try {
+      const response = await fetcher(
+        new URL('/plugins/startup-ready', endpoint.baseUrl),
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${endpoint.token}` },
+          signal: request.signal,
+          cache: 'no-store',
+        }
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Plugin startup acknowledgement failed (${response.status})`
+        );
+      }
+      startupReady = true;
+    } catch (error) {
+      if (!stopped) {
+        runtime.report('host', 'startup-ready', error);
+      }
+    } finally {
+      clearTimeout(timeout);
+      startupReadyInFlight = false;
+      if (startupReadyController === request) {
+        startupReadyController = undefined;
+      }
+    }
+  };
 
   const refresh = async () => {
     if (stopped) {
@@ -102,9 +155,9 @@ export function startPluginRuntime(
       }
       if (!(stopped || request.signal.aborted)) {
         // Imports/setup may never settle; polling must still observe a later disable.
-        runtime
-          .sync(snapshot)
-          .catch((error) => runtime.report('host', 'sync', error));
+        const syncing = runtime.sync(snapshot);
+        syncing.catch((error) => runtime.report('host', 'sync', error));
+        syncing.then(() => acknowledgeStartup(endpoint)).catch(() => undefined);
         await Promise.all(
           runtime.getReleasedGenerations().map(async (descriptor) => {
             try {
@@ -166,6 +219,7 @@ export function startPluginRuntime(
     stopped = true;
     clearTimeout(timer);
     controller?.abort();
+    startupReadyController?.abort();
     detachShortcuts();
     target.removeEventListener('plugins-changed', changed);
     target.removeEventListener('pagehide', onPageHide);

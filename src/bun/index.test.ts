@@ -316,6 +316,27 @@ vi.mock('./plugins/management', () => ({
     error instanceof Error ? error.message : 'Plugin installation failed.',
 }));
 
+const pluginStartupGuardMocks = {
+  getState: vi.fn(() => ({ active: false, nextStart: 'normal' as const })),
+  markReady: vi.fn(async () => ({
+    active: false,
+    nextStart: 'normal' as const,
+  })),
+  prepareNormalStart: vi.fn(async () => ({
+    active: true,
+    nextStart: 'normal' as const,
+    reason: 'previous-startup-incomplete' as const,
+  })),
+  start: vi.fn(),
+};
+pluginStartupGuardMocks.start.mockResolvedValue(pluginStartupGuardMocks);
+
+vi.mock('./plugins/safeMode', () => ({
+  PluginStartupGuard: {
+    start: (...args: unknown[]) => pluginStartupGuardMocks.start(...args),
+  },
+}));
+
 const bunFileMock = vi.fn();
 const bunWriteMock = vi.fn();
 const bunServeMock = vi.fn(() => ({
@@ -374,7 +395,9 @@ interface CanvasHandlers {
   pluginFilesPick: AnyHandler;
   pluginFilesReadText: AnyHandler;
   pluginFilesRelease: AnyHandler;
+  pluginInstallList: AnyHandler;
   pluginPrepareDevelopmentDirectory: AnyHandler;
+  pluginSafeModePrepareNormalStart: AnyHandler;
   purgeTrash: AnyHandler;
   renameView: AnyHandler;
   restoreTrash: AnyHandler;
@@ -614,6 +637,26 @@ describe('src/bun/index helpers', () => {
       pluginId: 'example.app',
       digest: 'a'.repeat(64),
     });
+  });
+
+  it('exposes plugin safe mode state and prepares the next normal start', async () => {
+    await loadIndexModule();
+    const handlers = getCanvasHandlers();
+    await expect(handlers.pluginInstallList({})).resolves.toEqual({
+      plugins: [],
+      safeMode: { active: false, nextStart: 'normal' },
+    });
+    await expect(
+      handlers.pluginSafeModePrepareNormalStart({})
+    ).resolves.toEqual({
+      success: true,
+      safeMode: {
+        active: true,
+        nextStart: 'normal',
+        reason: 'previous-startup-incomplete',
+      },
+    });
+    expect(pluginStartupGuardMocks.prepareNormalStart).toHaveBeenCalledOnce();
   });
 
   it('reviews a selected development directory without enabling it', async () => {

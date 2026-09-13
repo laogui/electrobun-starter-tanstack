@@ -169,6 +169,34 @@ describe('trusted plugin host', () => {
     expect((await asset(host, second.entryUrl))?.status).toBe(404);
   });
 
+  it('publishes no third-party code in safe mode while keeping startup recovery reachable', async () => {
+    const { manager, installed } = await connected();
+    await manager.enable(installed);
+    const markStartupReady = vi.fn(async () => undefined);
+    const list = vi.spyOn(manager, 'list');
+    const host = new PluginHostController(manager, 'workspace', {
+      safeMode: {
+        active: true,
+        nextStart: 'safe-mode',
+        reason: 'previous-startup-incomplete',
+      },
+      markStartupReady,
+    });
+    hosts.push(host);
+
+    expect(await snapshot(host)).toEqual({
+      workspaceId: 'workspace',
+      plugins: [],
+      diagnostics: [],
+    });
+    expect(list).not.toHaveBeenCalled();
+    expect(host.getMounts()).toEqual([]);
+    const ready = await post(host, 'startup-ready', {});
+    expect(ready?.status).toBe(200);
+    expect(await ready?.json()).toEqual({ success: true });
+    expect(markStartupReady).toHaveBeenCalledOnce();
+  });
+
   it('keeps the previous descriptor and graph on invalid manifest, identity change, v1 and missing entry, then recovers', async () => {
     const { manager, installed, path, host } = await connected();
     await manager.enable(installed);

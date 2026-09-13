@@ -8,6 +8,8 @@ import {
 export const PLUGIN_MANIFEST_VERSION = 2;
 export const LEGACY_PLUGIN_MESSAGE = '旧契约，需重新安装 v2 版本';
 export const PLUGIN_CAPABILITIES = ['network', 'files', 'clipboard'] as const;
+export const PLUGIN_PUBLIC_KEY_PREFIX = 'ed25519-spki:';
+const ED25519_SPKI_BASE64_RE = /^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$/;
 export type PluginCapability = (typeof PLUGIN_CAPABILITIES)[number];
 
 export interface PluginManifest {
@@ -140,6 +142,13 @@ export function isSafePackagePath(value: string): boolean {
   );
 }
 
+export function isPluginPublicKey(value: string): boolean {
+  return (
+    value.startsWith(PLUGIN_PUBLIC_KEY_PREFIX) &&
+    ED25519_SPKI_BASE64_RE.test(value.slice(PLUGIN_PUBLIC_KEY_PREFIX.length))
+  );
+}
+
 export function parsePluginManifest(
   input: unknown,
   options?: { allowBuiltin?: boolean }
@@ -240,6 +249,14 @@ export function parsePluginManifest(
     ) {
       return invalid(`${key} must be a non-empty string`);
     }
+  }
+  if (
+    typeof value.publicKey === 'string' &&
+    !isPluginPublicKey(value.publicKey)
+  ) {
+    return invalid(
+      `publicKey must use ${PLUGIN_PUBLIC_KEY_PREFIX}<base64 SPKI DER>`
+    );
   }
   let update: { url: string } | undefined;
   if (value.update !== undefined) {

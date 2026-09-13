@@ -127,7 +127,7 @@ export async function runT3Probe(): Promise<void> {
     check(
       'packagePreview',
       preview.plugin.id === 't3.combined' &&
-        preview.plugin.signatureStatus === 'unverified' &&
+        preview.plugin.signatureStatus === 'unsigned' &&
         preview.plugin.capabilities.includes('files') &&
         preview.source.kind === (route === 'prepare-file' ? 'file' : 'url')
     );

@@ -39,6 +39,10 @@ import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
   PluginInstallPreparationResult,
+  PluginMigrationRestoreResult,
+  PluginSafeModePreparationResult,
+  PluginSafeModeState,
+  PluginUpdatePreparationResult,
 } from '../../shared/plugins/management';
 
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
@@ -219,12 +223,25 @@ export async function rpcDeleteWidget(widgetId: string) {
 export async function rpcListPluginPackages(): Promise<{
   available: boolean;
   plugins: InstalledPluginSummary[];
+  safeMode: PluginSafeModeState;
 }> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
-    return { available: false, plugins: [] };
+    return {
+      available: false,
+      plugins: [],
+      safeMode: { active: false, nextStart: 'normal' },
+    };
   }
   return { available: true, ...(await eb.rpc.request.pluginInstallList({})) };
+}
+
+export async function rpcPrepareNormalPluginStart(): Promise<PluginSafeModePreparationResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginSafeModePrepareNormalStart({});
 }
 
 export async function rpcPreparePluginInstallFromFile(): Promise<PluginInstallPreparationResult> {
@@ -251,6 +268,17 @@ export async function rpcPreparePluginInstallFromUrl(
     return { success: false, error: 'Plugin management is unavailable.' };
   }
   return eb.rpc.request.pluginPrepareInstallFromUrl({ url });
+}
+
+export async function rpcPreparePluginUpdate(input: {
+  digest: string;
+  pluginId: string;
+}): Promise<PluginUpdatePreparationResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  return eb.rpc.request.pluginPrepareUpdate(input);
 }
 
 export async function rpcCommitPluginInstall(
@@ -301,6 +329,37 @@ export async function rpcDisablePlugin(input: {
     return { success: false, error: 'Plugin management is unavailable.' };
   }
   const result = await eb.rpc.request.pluginDisable(input);
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
+}
+
+export async function rpcRollbackPlugin(input: {
+  digest: string;
+  pluginId: string;
+}): Promise<PluginInstallCommitResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  const result = await eb.rpc.request.pluginRollback(input);
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
+}
+
+export async function rpcRestorePluginMigrationBackup(
+  pluginId: string
+): Promise<PluginMigrationRestoreResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  const result = await eb.rpc.request.pluginRestoreMigrationBackup({
+    pluginId,
+  });
   if (result?.success) {
     globalThis.dispatchEvent(new Event('plugins-changed'));
   }

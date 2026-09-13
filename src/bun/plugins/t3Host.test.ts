@@ -23,7 +23,7 @@ const preview: PluginInstallPreview = {
     ghostboard: '>=0.1.0',
     id: 't3.combined',
     name: 'T3 Combined',
-    signatureStatus: 'unverified',
+    signatureStatus: 'unsigned',
     version: '1.0.0',
   },
   source: { kind: 'file', label: 't3-combined.ghostboard-plugin' },

@@ -2,13 +2,14 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-interface DirectoryContents {
+export interface DirectoryContents {
   digest: string;
   files: Map<string, Uint8Array>;
 }
 
 export async function readPluginContents(
-  directory: string
+  directory: string,
+  options?: { excludePaths?: ReadonlySet<string> }
 ): Promise<DirectoryContents> {
   const files = new Map<string, Uint8Array>();
   const hash = createHash('sha256');
@@ -26,6 +27,9 @@ export async function readPluginContents(
       if (entry.isDirectory()) {
         await visit(path);
       } else if (entry.isFile()) {
+        if (options?.excludePaths?.has(path)) {
+          continue;
+        }
         const content = Uint8Array.from(await readFile(join(directory, path)));
         bytes += content.byteLength;
         if (files.size >= 20_000 || bytes > 64 * 1024 * 1024) {

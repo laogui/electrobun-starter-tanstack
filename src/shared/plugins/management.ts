@@ -1,5 +1,20 @@
 import type { PluginCapability } from './manifest';
 
+export type PluginSafeModeReason =
+  | 'explicit'
+  | 'previous-startup-incomplete'
+  | 'startup-state-damaged';
+
+export interface PluginSafeModeState {
+  active: boolean;
+  nextStart: 'normal' | 'safe-mode';
+  reason?: PluginSafeModeReason;
+}
+
+export type PluginSafeModePreparationResult =
+  | { error: string; success: false }
+  | { safeMode: PluginSafeModeState; success: true };
+
 export interface PluginSourceSummary {
   kind: 'directory' | 'file' | 'url' | 'zip';
   label: string;
@@ -12,7 +27,7 @@ export interface PluginPackageSummary {
   ghostboard: string;
   id: string;
   name: string;
-  signatureStatus: 'unverified';
+  signatureStatus: 'unsigned' | 'verified';
   updateUrl?: string;
   version: string;
 }
@@ -29,15 +44,24 @@ export interface InstalledPluginSummary {
   digest: string;
   enabled: boolean;
   installedAt: string;
+  /** Restorable instance preimages created before dataVersion migrations. */
+  migrationBackupCount?: number;
   name: string;
   plugin?: PluginPackageSummary;
   pluginId: string;
+  /** The one retained, verified code version available for explicit rollback. */
+  previousVersion?: string;
   source: PluginSourceSummary;
   status: 'invalid' | 'legacy' | 'stored';
   /** Canonical digest of the installed tree; absent for development sources. */
   treeDigest?: string;
   validationError?: string;
   version: string;
+}
+
+export interface PluginUpdatePreview extends PluginInstallPreview {
+  currentVersion: string;
+  notes?: string;
 }
 
 export type PluginInstallPreparationResult =
@@ -48,3 +72,11 @@ export type PluginInstallPreparationResult =
 export type PluginInstallCommitResult =
   | { error: string; success: false }
   | { plugin: InstalledPluginSummary; success: true };
+
+export type PluginUpdatePreparationResult =
+  | { error: string; success: false }
+  | { preview: PluginUpdatePreview; success: true };
+
+export type PluginMigrationRestoreResult =
+  | { error: string; success: false }
+  | { restored: number; skipped: number; success: true };

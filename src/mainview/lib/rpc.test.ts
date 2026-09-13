@@ -32,13 +32,17 @@ const request = {
   deleteView: vi.fn(),
   deleteWidget: vi.fn(),
   pluginInstallList: vi.fn(),
+  pluginSafeModePrepareNormalStart: vi.fn(),
   pluginPrepareInstallFromFile: vi.fn(),
   pluginPrepareDevelopmentDirectory: vi.fn(),
   pluginPrepareInstallFromUrl: vi.fn(),
+  pluginPrepareUpdate: vi.fn(),
   pluginCommitInstall: vi.fn(),
   pluginCancelInstall: vi.fn(),
   pluginEnable: vi.fn(),
   pluginDisable: vi.fn(),
+  pluginRollback: vi.fn(),
+  pluginRestoreMigrationBackup: vi.fn(),
   renameView: vi.fn(),
   cloneWidget: vi.fn(),
   saveWidget: vi.fn(),
@@ -197,6 +201,11 @@ describe('rpc', () => {
     await expect(rpc.rpcListPluginPackages()).resolves.toEqual({
       available: false,
       plugins: [],
+      safeMode: { active: false, nextStart: 'normal' },
+    });
+    await expect(rpc.rpcPrepareNormalPluginStart()).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
     });
     await expect(rpc.rpcPreparePluginInstallFromFile()).resolves.toEqual({
       error: 'Plugin management is unavailable.',
@@ -204,6 +213,12 @@ describe('rpc', () => {
     });
     await expect(
       rpc.rpcPreparePluginInstallFromUrl('https://example.com/plugin.zip')
+    ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(
+      rpc.rpcPreparePluginUpdate({ digest: 'a'.repeat(64), pluginId: 'x' })
     ).resolves.toEqual({
       error: 'Plugin management is unavailable.',
       success: false,
@@ -224,6 +239,16 @@ describe('rpc', () => {
     await expect(
       rpc.rpcDisablePlugin({ digest: 'a'.repeat(64), pluginId: 'x' })
     ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(
+      rpc.rpcRollbackPlugin({ digest: 'a'.repeat(64), pluginId: 'x' })
+    ).resolves.toEqual({
+      error: 'Plugin management is unavailable.',
+      success: false,
+    });
+    await expect(rpc.rpcRestorePluginMigrationBackup('x')).resolves.toEqual({
       error: 'Plugin management is unavailable.',
       success: false,
     });
@@ -294,6 +319,10 @@ describe('rpc', () => {
     const rpc = await loadModule();
     request.scanUnlinkedNotes.mockResolvedValue({ entries: [] });
     request.pluginInstallList.mockResolvedValue({ plugins: [] });
+    request.pluginSafeModePrepareNormalStart.mockResolvedValue({
+      success: true,
+      safeMode: { active: true, nextStart: 'normal', reason: 'explicit' },
+    });
 
     await rpc.loadCanvas('focus');
     await rpc.rpcSaveManifest('focus', [{ id: 'n1' }], [{ id: 'e1' }]);
@@ -358,8 +387,13 @@ describe('rpc', () => {
     await rpc.rpcSaveWidget(widgetRecord);
     await rpc.rpcDeleteWidget('widget_1');
     await rpc.rpcListPluginPackages();
+    await rpc.rpcPrepareNormalPluginStart();
     await rpc.rpcPreparePluginInstallFromFile();
     await rpc.rpcPreparePluginInstallFromUrl('https://example.com/plugin.zip');
+    await rpc.rpcPreparePluginUpdate({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
     await rpc.rpcCommitPluginInstall('plginst_1');
     await rpc.rpcCancelPluginInstall('plginst_1');
     await rpc.rpcEnablePlugin({
@@ -370,6 +404,11 @@ describe('rpc', () => {
       digest: 'a'.repeat(64),
       pluginId: 'community.example.title-tools',
     });
+    await rpc.rpcRollbackPlugin({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    await rpc.rpcRestorePluginMigrationBackup('community.example.title-tools');
 
     expect(request.loadCanvas).toHaveBeenCalledWith({ viewId: 'focus' });
     expect(request.saveManifest).toHaveBeenCalledWith({
@@ -467,9 +506,14 @@ describe('rpc', () => {
       widgetId: 'widget_1',
     });
     expect(request.pluginInstallList).toHaveBeenCalledWith({});
+    expect(request.pluginSafeModePrepareNormalStart).toHaveBeenCalledWith({});
     expect(request.pluginPrepareInstallFromFile).toHaveBeenCalledWith({});
     expect(request.pluginPrepareInstallFromUrl).toHaveBeenCalledWith({
       url: 'https://example.com/plugin.zip',
+    });
+    expect(request.pluginPrepareUpdate).toHaveBeenCalledWith({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
     });
     expect(request.pluginCommitInstall).toHaveBeenCalledWith({
       transactionId: 'plginst_1',
@@ -483,6 +527,13 @@ describe('rpc', () => {
     });
     expect(request.pluginDisable).toHaveBeenCalledWith({
       digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    expect(request.pluginRollback).toHaveBeenCalledWith({
+      digest: 'a'.repeat(64),
+      pluginId: 'community.example.title-tools',
+    });
+    expect(request.pluginRestoreMigrationBackup).toHaveBeenCalledWith({
       pluginId: 'community.example.title-tools',
     });
   });

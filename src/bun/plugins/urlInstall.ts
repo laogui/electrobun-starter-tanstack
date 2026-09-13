@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-
+import { PLUGIN_RELEASE_MAX_BYTES } from '../../shared/plugins/release';
 import { isIpLiteral, isPublicAddress } from '../net/outboundPolicy';
 import type { LoadedPluginDirectory } from './loadDirectory';
 import { loadPluginFromZip, PLUGIN_ZIP_MAX_UNCOMPRESSED } from './zipInstall';
@@ -146,7 +146,10 @@ function isJsonContentType(value: string | null): boolean {
  * budget, so a server that omits or lies about `Content-Length` cannot make us
  * buffer an unbounded response.
  */
-async function readBodyWithinBudget(response: Response): Promise<Uint8Array> {
+async function readBodyWithinBudget(
+  response: Response,
+  maxBytes: number
+): Promise<Uint8Array> {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new PluginDownloadError(
@@ -161,11 +164,11 @@ async function readBodyWithinBudget(response: Response): Promise<Uint8Array> {
     const chunk = result.value;
     if (chunk) {
       total += chunk.length;
-      if (total > PLUGIN_DOWNLOAD_MAX_BYTES) {
+      if (total > maxBytes) {
         await reader.cancel().catch(() => undefined);
         throw new PluginDownloadError(
           'resource-limit',
-          `plugin download exceeds ${PLUGIN_DOWNLOAD_MAX_BYTES} bytes`
+          `plugin download exceeds ${maxBytes} bytes`
         );
       }
       chunks.push(chunk);
@@ -181,11 +184,18 @@ async function readBodyWithinBudget(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-export async function downloadPluginZip(
+interface PluginResourceDownloadOptions {
+  accept: string;
+  allowLoopback?: boolean;
+  maxBytes: number;
+  validateContentType: (value: string | null) => void;
+}
+
+async function downloadPluginResource(
   rawUrl: string,
-  options?: { allowLoopback?: boolean }
+  options: PluginResourceDownloadOptions
 ): Promise<Uint8Array> {
-  const allowLoopback = options?.allowLoopback === true;
+  const allowLoopback = options.allowLoopback === true;
   let current = parsePluginDownloadUrl(rawUrl, options);
   for (let hop = 0; hop <= PLUGIN_DOWNLOAD_MAX_REDIRECTS; hop += 1) {
     await assertPublicTarget(current, allowLoopback);
@@ -194,9 +204,7 @@ export async function downloadPluginZip(
       response = await fetch(current, {
         redirect: 'manual',
         signal: AbortSignal.timeout(PLUGIN_DOWNLOAD_TIMEOUT_MS),
-        headers: {
-          accept: 'application/zip, application/octet-stream',
-        },
+        headers: { accept: options.accept },
       });
     } catch (error) {
       if (error instanceof PluginDownloadError) {
@@ -234,35 +242,66 @@ export async function downloadPluginZip(
         `plugin download failed with status ${response.status}`
       );
     }
-    const contentType = response.headers.get('content-type');
-    if (isHtmlContentType(contentType) || isJsonContentType(contentType)) {
-      throw new PluginDownloadError(
-        'unsupported-source',
-        'plugin download must be a zip archive, not an html or json page'
-      );
-    }
-    // A declared length only buys us an early rejection; the real limit is
-    // enforced while streaming.
+    options.validateContentType(response.headers.get('content-type'));
     const declared = Number(response.headers.get('content-length'));
-    if (Number.isFinite(declared) && declared > PLUGIN_DOWNLOAD_MAX_BYTES) {
+    if (Number.isFinite(declared) && declared > options.maxBytes) {
       throw new PluginDownloadError(
         'resource-limit',
-        `plugin download exceeds ${PLUGIN_DOWNLOAD_MAX_BYTES} bytes`
+        `plugin download exceeds ${options.maxBytes} bytes`
       );
     }
-    const bytes = await readBodyWithinBudget(response);
-    if (!looksLikeZip(bytes)) {
-      throw new PluginDownloadError(
-        'unsupported-source',
-        'plugin download is not a zip archive'
-      );
-    }
-    return bytes;
+    return await readBodyWithinBudget(response, options.maxBytes);
   }
   throw new PluginDownloadError(
     'resource-limit',
     `plugin download exceeded ${PLUGIN_DOWNLOAD_MAX_REDIRECTS} redirects`
   );
+}
+
+export async function downloadPluginZip(
+  rawUrl: string,
+  options?: { allowLoopback?: boolean }
+): Promise<Uint8Array> {
+  const bytes = await downloadPluginResource(rawUrl, {
+    accept: 'application/zip, application/octet-stream',
+    allowLoopback: options?.allowLoopback,
+    maxBytes: PLUGIN_DOWNLOAD_MAX_BYTES,
+    validateContentType: (contentType) => {
+      if (isHtmlContentType(contentType) || isJsonContentType(contentType)) {
+        throw new PluginDownloadError(
+          'unsupported-source',
+          'plugin download must be a zip archive, not an html or json page'
+        );
+      }
+    },
+  });
+  if (!looksLikeZip(bytes)) {
+    throw new PluginDownloadError(
+      'unsupported-source',
+      'plugin download is not a zip archive'
+    );
+  }
+  return bytes;
+}
+
+export async function downloadPluginReleaseDocument(
+  rawUrl: string,
+  options?: { allowLoopback?: boolean }
+): Promise<string> {
+  const bytes = await downloadPluginResource(rawUrl, {
+    accept: 'application/json',
+    allowLoopback: options?.allowLoopback,
+    maxBytes: PLUGIN_RELEASE_MAX_BYTES,
+    validateContentType: (contentType) => {
+      if (isHtmlContentType(contentType)) {
+        throw new PluginDownloadError(
+          'unsupported-source',
+          'plugin release document must be json, not html'
+        );
+      }
+    },
+  });
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
 export async function loadPluginFromZipUrl(input: {

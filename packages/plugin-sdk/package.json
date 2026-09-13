@@ -36,7 +36,8 @@
     "testing/react.js",
     "testing/react.d.ts",
     "AI_REFERENCE.md",
-    "package-plugin.js"
+    "package-plugin.js",
+    "package-plugin.d.ts"
   ],
   "peerDependencies": {
     "@testing-library/react": "^16.0.0",

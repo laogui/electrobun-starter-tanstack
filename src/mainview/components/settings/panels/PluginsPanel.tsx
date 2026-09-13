@@ -1,10 +1,13 @@
 import {
   Check,
+  DatabaseBackup,
   FileArchive,
   FolderOpen,
   Link,
   LoaderCircle,
+  RefreshCw,
   ShieldAlert,
+  Undo2,
   X,
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
@@ -14,14 +17,19 @@ import {
   rpcDisablePlugin,
   rpcEnablePlugin,
   rpcListPluginPackages,
+  rpcPrepareNormalPluginStart,
   rpcPreparePluginDevelopmentDirectory,
   rpcPreparePluginInstallFromFile,
   rpcPreparePluginInstallFromUrl,
+  rpcPreparePluginUpdate,
+  rpcRestorePluginMigrationBackup,
+  rpcRollbackPlugin,
 } from '@/lib/rpc';
 import type {
   InstalledPluginSummary,
   PluginInstallPreview,
   PluginPackageSummary,
+  PluginSafeModeState,
 } from '../../../../shared/plugins/management';
 
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
@@ -46,18 +54,29 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     | 'disable'
     | 'enable'
     | 'file'
+    | 'rollback'
+    | 'restore'
+    | 'safe-mode'
+    | 'update'
     | 'url'
     | null
   >(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [plugins, setPlugins] = useState<InstalledPluginSummary[]>([]);
   const [preview, setPreview] = useState<PluginInstallPreview | null>(null);
+  const [restoreCandidate, setRestoreCandidate] =
+    useState<InstalledPluginSummary | null>(null);
+  const [safeMode, setSafeMode] = useState<PluginSafeModeState>({
+    active: false,
+    nextStart: 'normal',
+  });
   const [url, setUrl] = useState('');
 
   const refresh = useCallback(async () => {
     const result = await rpcListPluginPackages();
     setAvailable(result.available);
     setPlugins(result.plugins);
+    setSafeMode(result.safeMode ?? { active: false, nextStart: 'normal' });
   }, []);
 
   useEffect(() => {
@@ -224,6 +243,100 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     }
   };
 
+  const inspectUpdate = async (plugin: InstalledPluginSummary) => {
+    setBusy('update');
+    setFeedback(null);
+    try {
+      const result = await rpcPreparePluginUpdate({
+        digest: plugin.digest,
+        pluginId: plugin.pluginId,
+      });
+      if (!result.success) {
+        setFeedback({ kind: 'error', message: result.error });
+        return;
+      }
+      setPreview(result.preview);
+      setFeedback({
+        kind: 'success',
+        message: strings.pluginsUpdateFound(result.preview.plugin.version),
+      });
+    } catch {
+      setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rollbackPlugin = async (plugin: InstalledPluginSummary) => {
+    setBusy('rollback');
+    setFeedback(null);
+    try {
+      const result = await rpcRollbackPlugin({
+        digest: plugin.digest,
+        pluginId: plugin.pluginId,
+      });
+      if (!result.success) {
+        setFeedback({ kind: 'error', message: result.error });
+        return;
+      }
+      setActivationCandidate(null);
+      setFeedback({
+        kind: 'success',
+        message: strings.pluginsRollbackSuccess(result.plugin.version),
+      });
+      await refresh();
+    } catch {
+      setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restoreMigrationBackup = async () => {
+    if (!restoreCandidate) {
+      return;
+    }
+    setBusy('restore');
+    setFeedback(null);
+    try {
+      const result = await rpcRestorePluginMigrationBackup(
+        restoreCandidate.pluginId
+      );
+      if (!result.success) {
+        setFeedback({ kind: 'error', message: result.error });
+        return;
+      }
+      setActivationCandidate(null);
+      setRestoreCandidate(null);
+      setFeedback({
+        kind: 'success',
+        message: strings.pluginsMigrationRestoreSuccess(result.restored),
+      });
+      await refresh();
+    } catch {
+      setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const prepareNormalStart = async () => {
+    setBusy('safe-mode');
+    setFeedback(null);
+    try {
+      const result = await rpcPrepareNormalPluginStart();
+      if (!result.success) {
+        setFeedback({ kind: 'error', message: result.error });
+        return;
+      }
+      setSafeMode(result.safeMode);
+    } catch {
+      setFeedback({ kind: 'error', message: strings.pluginsUnknownError });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -237,6 +350,41 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
           {strings.pluginsRuntimeNotice}
         </p>
       </header>
+
+      {safeMode.active ? (
+        <section className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <div className="flex items-center gap-2">
+            <ShieldAlert aria-hidden="true" size={16} />
+            <h3 className="font-semibold text-[13px]">
+              {strings.pluginsSafeModeTitle}
+            </h3>
+          </div>
+          <p className="text-[12px]">{strings.pluginsSafeModeDescription}</p>
+          <p className="text-[12px]">
+            {safeMode.reason === 'previous-startup-incomplete'
+              ? strings.pluginsSafeModePreviousStartup
+              : safeMode.reason === 'startup-state-damaged'
+                ? strings.pluginsSafeModeDamagedState
+                : strings.pluginsSafeModeExplicit}
+          </p>
+          {safeMode.nextStart === 'safe-mode' ? (
+            <button
+              className="rounded-md border border-amber-400 bg-white px-2.5 py-1 font-medium text-[12px] text-amber-950 shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+              disabled={busy !== null}
+              onClick={prepareNormalStart}
+              type="button"
+            >
+              {busy === 'safe-mode'
+                ? strings.pluginsSafeModePreparing
+                : strings.pluginsSafeModeTryNextLaunch}
+            </button>
+          ) : (
+            <p className="font-medium text-[12px]">
+              {strings.pluginsSafeModeNextLaunchReady}
+            </p>
+          )}
+        </section>
+      ) : null}
 
       {available ? (
         <>
@@ -405,19 +553,98 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                       </p>
                     ) : null}
                     {plugin.status === 'stored' ? (
-                      <PluginEnablementControls
-                        activationCandidate={activationCandidate}
-                        busy={busy}
-                        onCancelEnable={() => setActivationCandidate(null)}
-                        onConfirmEnable={enablePlugin}
-                        onDisable={() => disablePlugin(plugin)}
-                        onRequestEnable={() => {
-                          setFeedback(null);
-                          setActivationCandidate(plugin);
-                        }}
-                        plugin={plugin}
-                        strings={strings}
-                      />
+                      <>
+                        {!plugin.development &&
+                        plugin.plugin?.signatureStatus === 'verified' &&
+                        plugin.plugin.updateUrl ? (
+                          <button
+                            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 py-1 font-medium text-[12px] text-neutral-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                            disabled={busy !== null || preview !== null}
+                            onClick={() => inspectUpdate(plugin)}
+                            type="button"
+                          >
+                            <RefreshCw
+                              className={
+                                busy === 'update' ? 'animate-spin' : undefined
+                              }
+                              size={13}
+                            />
+                            {busy === 'update'
+                              ? strings.pluginsCheckingUpdate
+                              : strings.pluginsCheckUpdate}
+                          </button>
+                        ) : null}
+                        {plugin.previousVersion ? (
+                          <button
+                            className="ml-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 font-medium text-[12px] text-amber-950 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                            disabled={busy !== null || preview !== null}
+                            onClick={() => rollbackPlugin(plugin)}
+                            type="button"
+                          >
+                            <Undo2 size={13} />
+                            {busy === 'rollback'
+                              ? strings.pluginsRollingBack
+                              : strings.pluginsRollback(plugin.previousVersion)}
+                          </button>
+                        ) : null}
+                        {plugin.migrationBackupCount ? (
+                          <button
+                            className="ml-2 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 font-medium text-[12px] text-red-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100"
+                            disabled={busy !== null || preview !== null}
+                            onClick={() => {
+                              setFeedback(null);
+                              setRestoreCandidate(plugin);
+                            }}
+                            type="button"
+                          >
+                            <DatabaseBackup size={13} />
+                            {strings.pluginsMigrationRestore(
+                              plugin.migrationBackupCount
+                            )}
+                          </button>
+                        ) : null}
+                        {restoreCandidate?.pluginId === plugin.pluginId ? (
+                          <div className="mt-2 space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-[12px] text-red-950 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+                            <p className="font-medium">
+                              {strings.pluginsMigrationRestoreTitle}
+                            </p>
+                            <p>{strings.pluginsMigrationRestoreWarning}</p>
+                            <div className="flex gap-2">
+                              <button
+                                className="rounded-md bg-red-700 px-2.5 py-1 font-medium text-white disabled:opacity-60"
+                                disabled={busy !== null}
+                                onClick={restoreMigrationBackup}
+                                type="button"
+                              >
+                                {busy === 'restore'
+                                  ? strings.pluginsMigrationRestoring
+                                  : strings.pluginsMigrationRestoreConfirm}
+                              </button>
+                              <button
+                                className="rounded-md px-2.5 py-1 font-medium"
+                                disabled={busy !== null}
+                                onClick={() => setRestoreCandidate(null)}
+                                type="button"
+                              >
+                                {strings.pluginsCancelEnable}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        <PluginEnablementControls
+                          activationCandidate={activationCandidate}
+                          busy={busy}
+                          onCancelEnable={() => setActivationCandidate(null)}
+                          onConfirmEnable={enablePlugin}
+                          onDisable={() => disablePlugin(plugin)}
+                          onRequestEnable={() => {
+                            setFeedback(null);
+                            setActivationCandidate(plugin);
+                          }}
+                          plugin={plugin}
+                          strings={strings}
+                        />
+                      </>
                     ) : (
                       <div className="space-y-2">
                         <p
@@ -477,6 +704,10 @@ function PluginEnablementControls({
     | 'disable'
     | 'enable'
     | 'file'
+    | 'rollback'
+    | 'restore'
+    | 'safe-mode'
+    | 'update'
     | 'url'
     | null;
   onCancelEnable: () => void;
@@ -595,7 +826,11 @@ function PluginDetails({
       ) : (
         <p>{strings.pluginsNoCapabilities}</p>
       )}
-      <p>{strings.pluginsSignatureUnverified}</p>
+      <p>
+        {plugin.signatureStatus === 'verified'
+          ? strings.pluginsSignatureVerified
+          : strings.pluginsSignatureUnsigned}
+      </p>
       <p>
         {strings.pluginsUpdateSource(
           plugin.updateUrl ?? strings.pluginsNoUpdateSource

@@ -26,6 +26,10 @@ import type {
   InstalledPluginSummary,
   PluginInstallCommitResult,
   PluginInstallPreparationResult,
+  PluginMigrationRestoreResult,
+  PluginSafeModePreparationResult,
+  PluginSafeModeState,
+  PluginUpdatePreparationResult,
 } from '../shared/plugins/management';
 import type { AIServerConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
@@ -136,11 +140,13 @@ import {
   pluginInstallErrorMessage,
 } from './plugins/management';
 import { NoteContentService } from './plugins/noteContent';
+import { PluginStartupGuard } from './plugins/safeMode';
 import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
 import { T2A4HostController } from './plugins/t2A4Host';
 import { T2ContentHostController } from './plugins/t2ContentHost';
 import { T3HostController } from './plugins/t3Host';
+import { T4HostController } from './plugins/t4Host';
 import {
   buildNotePreviewFromBlocks,
   type PreviewArtifacts,
@@ -850,7 +856,10 @@ interface CanvasRPC {
       };
       pluginInstallList: {
         params: Record<string, unknown>;
-        response: { plugins: InstalledPluginSummary[] };
+        response: {
+          plugins: InstalledPluginSummary[];
+          safeMode: PluginSafeModeState;
+        };
       };
       pluginPrepareInstallFromFile: {
         params: Record<string, unknown>;
@@ -863,6 +872,10 @@ interface CanvasRPC {
       pluginPrepareInstallFromUrl: {
         params: { url: string };
         response: PluginInstallPreparationResult;
+      };
+      pluginPrepareUpdate: {
+        params: { digest: string; pluginId: string };
+        response: PluginUpdatePreparationResult;
       };
       pluginCommitInstall: {
         params: { transactionId: string };
@@ -879,6 +892,18 @@ interface CanvasRPC {
       pluginDisable: {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
+      };
+      pluginRollback: {
+        params: { digest: string; pluginId: string };
+        response: PluginInstallCommitResult;
+      };
+      pluginRestoreMigrationBackup: {
+        params: { pluginId: string };
+        response: PluginMigrationRestoreResult;
+      };
+      pluginSafeModePrepareNormalStart: {
+        params: Record<string, unknown>;
+        response: PluginSafeModePreparationResult;
       };
       pluginFilesPick: {
         params: {
@@ -1760,6 +1785,22 @@ async function main() {
   await seedFirstRunIfNeeded(wsPath);
   const pluginManagement = new PluginManagementService(wsPath);
   const pluginFiles = new PluginFileStore(pluginWorkspaceId(wsPath));
+  const pluginProbeActive = [
+    process.env.GHOSTBOARD_PLUGIN_T1_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+    process.env.GHOSTBOARD_PLUGIN_T3_DIR,
+  ].some(Boolean);
+  const pluginStartupGuard = pluginProbeActive
+    ? undefined
+    : await PluginStartupGuard.start({
+        appDataRoot: getAppDataRoot(),
+        argv: process.argv,
+        env: process.env,
+      });
   pluginManagement.recover().catch((error) => {
     console.warn('[plugins] Failed to recover package transactions:', error);
   });
@@ -1786,55 +1827,73 @@ async function main() {
       workspacePath: wsPath,
       workspaceId: pluginWorkspaceId(wsPath),
     }),
-    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T3_DIR
-      ? new T3HostController(
+    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T4_DIR
+      ? new T4HostController(
           pluginManagement,
           pluginWorkspaceId(wsPath),
-          process.env.GHOSTBOARD_PLUGIN_T3_DIR
+          process.env.GHOSTBOARD_PLUGIN_T4_DIR,
+          wsPath,
+          {
+            safeMode: pluginStartupGuard?.getState(),
+            markStartupReady: () =>
+              pluginStartupGuard?.markReady() ?? Promise.resolve(),
+          }
         )
-      : process.env.GHOSTBOARD_PLUGIN_T1_DIR
-        ? new T1HostController(
+      : process.env.GHOSTBOARD_PLUGIN_T3_DIR
+        ? new T3HostController(
             pluginManagement,
             pluginWorkspaceId(wsPath),
-            process.env.GHOSTBOARD_PLUGIN_T1_DIR
+            process.env.GHOSTBOARD_PLUGIN_T3_DIR
           )
-        : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
-          ? new T2A4HostController(
+        : process.env.GHOSTBOARD_PLUGIN_T1_DIR
+          ? new T1HostController(
               pluginManagement,
               pluginWorkspaceId(wsPath),
-              process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+              process.env.GHOSTBOARD_PLUGIN_T1_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
-            ? new T2ContentHostController(
+          : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+            ? new T2A4HostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
+                process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
               )
-            : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
+            : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
               ? new T2ContentHostController(
                   pluginManagement,
                   pluginWorkspaceId(wsPath),
-                  process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
-                  'history'
+                  process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
                 )
-              : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
+              : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
                 ? new T2ContentHostController(
                     pluginManagement,
                     pluginWorkspaceId(wsPath),
-                    process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-                    'canvas'
+                    process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+                    'history'
                   )
-                : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
                   ? new T2ContentHostController(
                       pluginManagement,
                       pluginWorkspaceId(wsPath),
-                      process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                      'selection'
+                      process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                      'canvas'
                     )
-                  : new PluginHostController(
-                      pluginManagement,
-                      pluginWorkspaceId(wsPath)
-                    ),
+                  : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                    ? new T2ContentHostController(
+                        pluginManagement,
+                        pluginWorkspaceId(wsPath),
+                        process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                        'selection'
+                      )
+                    : new PluginHostController(
+                        pluginManagement,
+                        pluginWorkspaceId(wsPath),
+                        {
+                          safeMode: pluginStartupGuard?.getState(),
+                          markStartupReady: () =>
+                            pluginStartupGuard?.markReady() ??
+                            Promise.resolve(),
+                        }
+                      ),
   });
   subscribeContentChanges(wsPath, (event) => {
     mainRpc?.send?.pluginContentChanged(event);
@@ -2470,6 +2529,10 @@ async function main() {
 
         pluginInstallList: async () => ({
           plugins: await pluginManagement.list(),
+          safeMode: pluginStartupGuard?.getState() ?? {
+            active: false,
+            nextStart: 'normal',
+          },
         }),
 
         pluginPrepareInstallFromFile: async () => {
@@ -2528,6 +2591,20 @@ async function main() {
           }
         },
 
+        pluginPrepareUpdate: async ({ digest, pluginId }) => {
+          try {
+            return {
+              success: true,
+              preview: await pluginManagement.prepareUpdate({
+                digest,
+                pluginId,
+              }),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
         pluginCommitInstall: async ({ transactionId }) => {
           try {
             return {
@@ -2570,6 +2647,51 @@ async function main() {
             return { success: true, plugin };
           } catch (error) {
             return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginRollback: async ({ digest, pluginId }) => {
+          try {
+            return {
+              success: true,
+              plugin: await pluginManagement.rollback({ digest, pluginId }),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginRestoreMigrationBackup: async ({ pluginId }) => {
+          try {
+            return {
+              success: true,
+              ...(await pluginManagement.restoreMigrationBackup(pluginId)),
+            };
+          } catch (error) {
+            return { success: false, error: pluginInstallErrorMessage(error) };
+          }
+        },
+
+        pluginSafeModePrepareNormalStart: async () => {
+          if (!pluginStartupGuard) {
+            return {
+              success: true,
+              safeMode: { active: false, nextStart: 'normal' },
+            };
+          }
+          try {
+            return {
+              success: true,
+              safeMode: await pluginStartupGuard.prepareNormalStart(),
+            };
+          } catch (error) {
+            return {
+              success: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Could not prepare a normal plugin start.',
+            };
           }
         },
 

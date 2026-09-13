@@ -13,10 +13,22 @@ import {
   generatePluginInstallId,
   PLUGIN_INSTALL_ID_RE,
 } from '../../shared/plugins/ids';
-import type { PluginManifest } from '../../shared/plugins/manifest';
+import {
+  compareSemver,
+  isPluginPublicKey,
+  type PluginManifest,
+} from '../../shared/plugins/manifest';
 import { readJsonOrEmpty } from '../persistence/corruptFile';
 import { readPluginContents } from './directoryContents';
-import { loadPluginDirectory, PluginDirectoryError } from './loadDirectory';
+import {
+  type LoadedPluginDirectory,
+  loadPluginDirectory,
+  PluginDirectoryError,
+} from './loadDirectory';
+import {
+  type VerifiedPluginSignature,
+  verifyPluginDirectorySignature,
+} from './pluginSignature';
 import { downloadPluginZip, PluginDownloadError } from './urlInstall';
 import { PluginZipError, unpackPluginZip } from './zipInstall';
 
@@ -54,6 +66,7 @@ export type PluginInstallSource =
 
 export type PluginInstallErrorCode =
   | 'already-installed'
+  | 'author-key-changed'
   | 'digest-conflict'
   | 'download-failed'
   | 'enablement-corrupt'
@@ -63,7 +76,10 @@ export type PluginInstallErrorCode =
   | 'not-found'
   | 'pending-transaction'
   | 'registry-corrupt'
-  | 'replaced';
+  | 'replaced'
+  | 'rollback-unavailable'
+  | 'signature-required'
+  | 'update-source-changed';
 
 export class PluginInstallError extends Error {
   code: PluginInstallErrorCode;
@@ -83,6 +99,7 @@ export interface PluginInstallJournal {
   pluginId?: string;
   pluginRoot?: string;
   schema: typeof PLUGIN_INSTALL_SCHEMA;
+  signature?: VerifiedPluginSignature;
   source: PluginInstallSource;
   stage: PluginInstallStage;
   transactionId: string;
@@ -90,12 +107,13 @@ export interface PluginInstallJournal {
   version?: string;
 }
 
-export interface InstalledPluginPackage {
+export interface StoredPluginPackageVersion {
   digest: string;
   directory: string;
   installedAt: string;
   name: string;
   pluginId: string;
+  signature?: VerifiedPluginSignature;
   source: PluginInstallSource;
   /**
    * Canonical digest of the installed file tree, recorded at commit. `digest`
@@ -106,12 +124,18 @@ export interface InstalledPluginPackage {
   version: string;
 }
 
+export interface InstalledPluginPackage extends StoredPluginPackageVersion {
+  /** One verified code generation retained for explicit rollback. */
+  previous?: StoredPluginPackageVersion;
+}
+
 export interface PreparedPluginInstall {
   digest: string;
   directory: string;
   journal: PluginInstallJournal;
   manifest: PluginManifest;
   pluginId: string;
+  signature?: VerifiedPluginSignature;
   transactionId: string;
   version: string;
 }
@@ -203,6 +227,45 @@ function parseSource(value: unknown): PluginInstallSource | undefined {
   return;
 }
 
+function parseVerifiedSignature(
+  value: unknown
+): VerifiedPluginSignature | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.publicKey !== 'string' ||
+    !isPluginPublicKey(value.publicKey) ||
+    typeof value.treeSha256 !== 'string' ||
+    !PLUGIN_PACKAGE_DIGEST_RE.test(value.treeSha256)
+  ) {
+    return;
+  }
+  if (value.updateUrl !== undefined && typeof value.updateUrl !== 'string') {
+    return;
+  }
+  let updateUrl: string | undefined;
+  if (typeof value.updateUrl === 'string') {
+    try {
+      const parsed = new URL(value.updateUrl);
+      if (
+        parsed.protocol !== 'https:' ||
+        parsed.username.length > 0 ||
+        parsed.password.length > 0 ||
+        parsed.toString() !== value.updateUrl
+      ) {
+        return;
+      }
+      updateUrl = value.updateUrl;
+    } catch {
+      return;
+    }
+  }
+  return {
+    publicKey: value.publicKey,
+    treeSha256: value.treeSha256,
+    ...(updateUrl ? { updateUrl } : {}),
+  };
+}
+
 function parseJournal(value: unknown): PluginInstallJournal | undefined {
   if (!isRecord(value) || value.schema !== PLUGIN_INSTALL_SCHEMA) {
     return;
@@ -244,6 +307,10 @@ function parseJournal(value: unknown): PluginInstallJournal | undefined {
   if (typeof value.pluginRoot === 'string') {
     journal.pluginRoot = value.pluginRoot;
   }
+  const signature = parseVerifiedSignature(value.signature);
+  if (signature) {
+    journal.signature = signature;
+  }
   if (isRecord(value.error)) {
     journal.error = {
       code: String(value.error.code ?? 'failed'),
@@ -268,6 +335,47 @@ function requireRegistry(value: unknown): PluginRegistryFile {
   return parseRegistry(value);
 }
 
+function parseStoredPackage(
+  value: unknown
+): StoredPluginPackageVersion | undefined {
+  if (!isRecord(value)) {
+    return;
+  }
+  const source = parseSource(value.source);
+  if (
+    !source ||
+    typeof value.pluginId !== 'string' ||
+    typeof value.version !== 'string' ||
+    typeof value.digest !== 'string' ||
+    !PLUGIN_PACKAGE_DIGEST_RE.test(value.digest) ||
+    typeof value.directory !== 'string' ||
+    typeof value.name !== 'string' ||
+    typeof value.installedAt !== 'string'
+  ) {
+    return;
+  }
+  const parsed: StoredPluginPackageVersion = {
+    pluginId: value.pluginId,
+    version: value.version,
+    digest: value.digest,
+    directory: value.directory,
+    name: value.name,
+    source,
+    installedAt: value.installedAt,
+  };
+  if (
+    typeof value.treeDigest === 'string' &&
+    PLUGIN_PACKAGE_DIGEST_RE.test(value.treeDigest)
+  ) {
+    parsed.treeDigest = value.treeDigest;
+  }
+  const signature = parseVerifiedSignature(value.signature);
+  if (signature) {
+    parsed.signature = signature;
+  }
+  return parsed;
+}
+
 function parseRegistry(value: unknown): PluginRegistryFile {
   if (!isRecord(value) || value.schema !== PLUGIN_INSTALL_SCHEMA) {
     return { schema: PLUGIN_INSTALL_SCHEMA, packages: [] };
@@ -277,38 +385,17 @@ function parseRegistry(value: unknown): PluginRegistryFile {
   }
   const packages: InstalledPluginPackage[] = [];
   for (const entry of value.packages) {
-    if (!isRecord(entry)) {
+    const parsed = parseStoredPackage(entry);
+    if (!parsed) {
       continue;
     }
-    const source = parseSource(entry.source);
-    if (
-      !source ||
-      typeof entry.pluginId !== 'string' ||
-      typeof entry.version !== 'string' ||
-      typeof entry.digest !== 'string' ||
-      !PLUGIN_PACKAGE_DIGEST_RE.test(entry.digest) ||
-      typeof entry.directory !== 'string' ||
-      typeof entry.name !== 'string' ||
-      typeof entry.installedAt !== 'string'
-    ) {
-      continue;
-    }
-    const parsed: InstalledPluginPackage = {
-      pluginId: entry.pluginId,
-      version: entry.version,
-      digest: entry.digest,
-      directory: entry.directory,
-      name: entry.name,
-      source,
-      installedAt: entry.installedAt,
-    };
-    if (
-      typeof entry.treeDigest === 'string' &&
-      PLUGIN_PACKAGE_DIGEST_RE.test(entry.treeDigest)
-    ) {
-      parsed.treeDigest = entry.treeDigest;
-    }
+    const previous = isRecord(entry)
+      ? parseStoredPackage(entry.previous)
+      : undefined;
     packages.push(parsed);
+    if (previous && previous.pluginId === parsed.pluginId) {
+      packages[packages.length - 1] = { ...parsed, previous };
+    }
   }
   return { schema: PLUGIN_INSTALL_SCHEMA, packages };
 }
@@ -320,6 +407,13 @@ function redactUrl(raw: string): PluginInstallSource {
   } catch {
     return { kind: 'url', origin: '', path: '' };
   }
+}
+
+function currentVersionOnly(
+  installed: InstalledPluginPackage
+): StoredPluginPackageVersion {
+  const { previous: _previous, ...current } = installed;
+  return current;
 }
 
 export interface PluginRegistryDiagnostic {
@@ -394,6 +488,13 @@ export class PluginInstallStore {
 
   cancel(transactionId: string): Promise<PluginInstallJournal> {
     return this.enqueue(async () => this.cancelLocked(transactionId));
+  }
+
+  rollback(input: {
+    digest: string;
+    pluginId: string;
+  }): Promise<InstalledPluginPackage> {
+    return this.enqueue(async () => this.rollbackLocked(input));
   }
 
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -477,7 +578,7 @@ export class PluginInstallStore {
     if (!existsSync(packagesRoot)) {
       return { schema: PLUGIN_INSTALL_SCHEMA, packages: [] };
     }
-    const packages: InstalledPluginPackage[] = [];
+    const versionsByPlugin = new Map<string, StoredPluginPackageVersion[]>();
     for (const pluginId of await readdir(packagesRoot)) {
       const versionsRoot = join(packagesRoot, pluginId);
       for (const version of await readdir(versionsRoot).catch(() => [])) {
@@ -490,25 +591,68 @@ export class PluginInstallStore {
           if (!existsSync(join(directory, 'manifest.json'))) {
             continue;
           }
-          const journal = journals.find(
-            (entry) =>
-              entry.pluginId === pluginId &&
-              entry.version === version &&
-              entry.digest === digest
-          );
-          packages.push({
-            pluginId,
-            version,
+          let loaded: LoadedPluginDirectory;
+          let signature: VerifiedPluginSignature | undefined;
+          try {
+            loaded = await loadPluginDirectory(directory);
+            if (
+              loaded.manifest.id !== pluginId ||
+              loaded.manifest.version !== version
+            ) {
+              continue;
+            }
+            signature = await verifyPluginDirectorySignature(
+              directory,
+              loaded.manifest
+            );
+          } catch {
+            continue;
+          }
+          const journal = journals
+            .filter(
+              (entry) =>
+                entry.pluginId === pluginId &&
+                entry.version === version &&
+                entry.digest === digest
+            )
+            .sort((left, right) =>
+              left.updatedAt.localeCompare(right.updatedAt)
+            )
+            .at(-1);
+          const candidate: StoredPluginPackageVersion = {
+            pluginId: loaded.manifest.id,
+            version: loaded.manifest.version,
             digest,
             directory,
-            name: journal?.name ?? pluginId,
+            name: journal?.name ?? loaded.manifest.name,
             source: journal?.source ?? { kind: 'zip' },
-            installedAt: journal?.updatedAt ?? nowIso(),
-          });
+            ...(signature ? { signature } : {}),
+            installedAt: journal?.updatedAt ?? new Date(0).toISOString(),
+          };
+          const candidates = versionsByPlugin.get(candidate.pluginId) ?? [];
+          candidates.push(candidate);
+          versionsByPlugin.set(candidate.pluginId, candidates);
         }
       }
     }
-    return { schema: PLUGIN_INSTALL_SCHEMA, packages };
+    return {
+      schema: PLUGIN_INSTALL_SCHEMA,
+      packages: [...versionsByPlugin.values()].map((candidates) => {
+        candidates.sort((left, right) => {
+          const installedOrder = right.installedAt.localeCompare(
+            left.installedAt
+          );
+          return installedOrder !== 0
+            ? installedOrder
+            : compareSemver(right.version, left.version);
+        });
+        const [current, previous] = candidates;
+        if (!current) {
+          throw new Error('installed package candidate disappeared');
+        }
+        return previous ? { ...current, previous } : current;
+      }),
+    };
   }
 
   private async writeRegistry(registry: PluginRegistryFile): Promise<void> {
@@ -588,6 +732,43 @@ export class PluginInstallStore {
     );
   }
 
+  private assertUpdateAllowed(
+    installed: InstalledPluginPackage,
+    manifest: PluginManifest,
+    signature: VerifiedPluginSignature | undefined
+  ): void {
+    if (!installed.signature) {
+      throw new PluginInstallError(
+        'signature-required',
+        `Unsigned plugin ${manifest.id} cannot be updated in place; publish signed releases under a new plugin ID.`
+      );
+    }
+    if (!signature) {
+      throw new PluginInstallError(
+        'signature-required',
+        `Plugin update ${manifest.id}@${manifest.version} must be signed by the trusted author key.`
+      );
+    }
+    if (signature.publicKey !== installed.signature.publicKey) {
+      throw new PluginInstallError(
+        'author-key-changed',
+        `Plugin update rejected because the author key changed for ${manifest.id}. Install it under a new plugin ID.`
+      );
+    }
+    if (signature.updateUrl !== installed.signature.updateUrl) {
+      throw new PluginInstallError(
+        'update-source-changed',
+        `Plugin update rejected because update.url changed for ${manifest.id}.`
+      );
+    }
+    if (compareSemver(manifest.version, installed.version) <= 0) {
+      throw new PluginInstallError(
+        'invalid-state',
+        `Plugin update must advance ${manifest.id} beyond ${installed.version}.`
+      );
+    }
+  }
+
   private async prepareFromZipLocked(
     zipBytes: Uint8Array,
     source: PluginInstallSource
@@ -618,6 +799,10 @@ export class PluginInstallStore {
       await this.writeJournal(journal);
       const unpackedRoot = await unpackPluginZip(zipBytes, unpacked);
       const loaded = await loadPluginDirectory(unpackedRoot.pluginRoot);
+      const signature = await verifyPluginDirectorySignature(
+        loaded.directory,
+        loaded.manifest
+      );
       const pluginRoot = toPosix(relative(staging, loaded.directory));
       if (
         pluginRoot.length === 0 ||
@@ -637,6 +822,7 @@ export class PluginInstallStore {
         name: loaded.manifest.name,
         pluginRoot,
         digest,
+        ...(signature ? { signature } : {}),
       };
       await this.writeJournal(journal);
       const registry = await this.readRegistry();
@@ -657,13 +843,11 @@ export class PluginInstallStore {
           `${loaded.manifest.id}@${loaded.manifest.version} is already installed with a different digest`
         );
       }
-      if (
-        registry.packages.some((entry) => entry.pluginId === loaded.manifest.id)
-      ) {
-        throw new PluginInstallError(
-          'invalid-state',
-          'Plugin updates are unavailable until T4 signed update verification is implemented.'
-        );
+      const installed = registry.packages.find(
+        (entry) => entry.pluginId === loaded.manifest.id
+      );
+      if (installed) {
+        this.assertUpdateAllowed(installed, loaded.manifest, signature);
       }
       const pending = this.findPending(
         await this.listJournals(),
@@ -698,6 +882,7 @@ export class PluginInstallStore {
                 digest,
                 directory: existing.directory,
                 manifest: existing.manifest,
+                ...(pending.signature ? { signature: pending.signature } : {}),
                 journal: pending,
               };
             } catch {
@@ -720,6 +905,7 @@ export class PluginInstallStore {
         digest,
         directory: loaded.directory,
         manifest: loaded.manifest,
+        ...(signature ? { signature } : {}),
         journal,
       };
     } catch (error) {
@@ -803,19 +989,6 @@ export class PluginInstallStore {
         throw error;
       }
     }
-    const existing = (await this.readRegistry()).packages.find(
-      (entry) =>
-        entry.pluginId === pluginId &&
-        (entry.version !== version || entry.digest !== digest)
-    );
-    if (existing) {
-      const error = new PluginInstallError(
-        'invalid-state',
-        'Plugin updates require T4 signed update verification.'
-      );
-      await this.failLocked(journal, error);
-      throw error;
-    }
     await this.writeJournal({ ...journal, stage: 'committing' });
     const dest = this.packageDir(pluginId, version, digest);
     const sourceDir = resolve(staging, ...pluginRoot.split('/'));
@@ -830,17 +1003,53 @@ export class PluginInstallStore {
         'staged plugin root is outside staging'
       );
     }
-    const loaded = await loadPluginDirectory(
-      existsSync(dest) ? dest : sourceDir
-    );
-    if (
-      loaded.manifest.id !== pluginId ||
-      loaded.manifest.version !== version
-    ) {
-      throw new PluginInstallError(
-        'invalid-package',
-        'staged manifest does not match the reviewed package'
+    let loaded: LoadedPluginDirectory;
+    let signature: VerifiedPluginSignature | undefined;
+    try {
+      loaded = await loadPluginDirectory(existsSync(dest) ? dest : sourceDir);
+      if (
+        loaded.manifest.id !== pluginId ||
+        loaded.manifest.version !== version
+      ) {
+        throw new PluginInstallError(
+          'replaced',
+          'staged manifest no longer matches the reviewed package'
+        );
+      }
+      signature = await verifyPluginDirectorySignature(
+        loaded.directory,
+        loaded.manifest
       );
+      if (JSON.stringify(signature) !== JSON.stringify(journal.signature)) {
+        throw new PluginInstallError(
+          'replaced',
+          'staged plugin signature identity changed before commit'
+        );
+      }
+    } catch (error) {
+      const wrapped =
+        error instanceof PluginInstallError
+          ? error
+          : new PluginInstallError(
+              'replaced',
+              error instanceof Error
+                ? `staged plugin changed before commit: ${error.message}`
+                : 'staged plugin changed before commit'
+            );
+      await this.failLocked(journal, wrapped);
+      throw wrapped;
+    }
+    const existing = (await this.readRegistry()).packages.find(
+      (entry) => entry.pluginId === pluginId && entry.digest !== digest
+    );
+    if (existing) {
+      try {
+        this.assertUpdateAllowed(existing, loaded.manifest, signature);
+      } catch (error) {
+        const wrapped = wrapInstallError(error);
+        await this.failLocked(journal, wrapped);
+        throw wrapped;
+      }
     }
     if (!existsSync(dest)) {
       if (!existsSync(sourceDir)) {
@@ -861,8 +1070,10 @@ export class PluginInstallStore {
       directory: dest,
       name: journal.name ?? pluginId,
       source: journal.source,
+      ...(signature ? { signature } : {}),
       installedAt: nowIso(),
       treeDigest: (await readPluginContents(dest)).digest,
+      ...(existing ? { previous: currentVersionOnly(existing) } : {}),
     };
     await this.upsertRegistry(installed);
     await this.writeJournal({ ...journal, stage: 'installed' });
@@ -904,16 +1115,91 @@ export class PluginInstallStore {
     installed: InstalledPluginPackage
   ): Promise<void> {
     const registry = await this.readRegistry();
-    const packages = registry.packages.filter(
-      (entry) =>
-        !(
-          entry.pluginId === installed.pluginId &&
-          entry.version === installed.version &&
-          entry.digest === installed.digest
-        )
+    const current = registry.packages.find(
+      (entry) => entry.pluginId === installed.pluginId
     );
-    packages.push(installed);
+    const next =
+      current && current.digest !== installed.digest
+        ? { ...installed, previous: currentVersionOnly(current) }
+        : current?.previous
+          ? { ...installed, previous: current.previous }
+          : installed;
+    const packages = registry.packages.filter(
+      (entry) => entry.pluginId !== installed.pluginId
+    );
+    packages.push(next);
     await this.writeRegistry({ schema: PLUGIN_INSTALL_SCHEMA, packages });
+  }
+
+  private async rollbackLocked(input: {
+    digest: string;
+    pluginId: string;
+  }): Promise<InstalledPluginPackage> {
+    const registry = await this.readRegistry();
+    const current = registry.packages.find(
+      (entry) =>
+        entry.pluginId === input.pluginId && entry.digest === input.digest
+    );
+    if (!current?.previous) {
+      throw new PluginInstallError(
+        'rollback-unavailable',
+        `No previous code version is available for ${input.pluginId}.`
+      );
+    }
+    const previous = current.previous;
+    if (
+      !(current.signature && previous.signature) ||
+      current.signature.publicKey !== previous.signature.publicKey ||
+      current.signature.updateUrl !== previous.signature.updateUrl
+    ) {
+      throw new PluginInstallError(
+        'rollback-unavailable',
+        `The retained version of ${input.pluginId} does not match the trusted author identity.`
+      );
+    }
+    let loaded: LoadedPluginDirectory;
+    let signature: VerifiedPluginSignature | undefined;
+    try {
+      loaded = await loadPluginDirectory(previous.directory);
+      signature = await verifyPluginDirectorySignature(
+        previous.directory,
+        loaded.manifest
+      );
+    } catch (error) {
+      throw new PluginInstallError(
+        'integrity',
+        `The retained version of ${input.pluginId} could not be verified: ${(error as Error).message}`
+      );
+    }
+    if (
+      loaded.manifest.id !== previous.pluginId ||
+      loaded.manifest.version !== previous.version ||
+      JSON.stringify(signature) !== JSON.stringify(previous.signature)
+    ) {
+      throw new PluginInstallError(
+        'integrity',
+        `The retained version of ${input.pluginId} no longer matches its recorded identity.`
+      );
+    }
+    const treeDigest = (await readPluginContents(previous.directory)).digest;
+    if (previous.treeDigest && previous.treeDigest !== treeDigest) {
+      throw new PluginInstallError(
+        'integrity',
+        `The retained version of ${input.pluginId} was changed after installation.`
+      );
+    }
+    const restored: InstalledPluginPackage = {
+      ...previous,
+      treeDigest,
+      installedAt: nowIso(),
+    };
+    await this.writeRegistry({
+      schema: PLUGIN_INSTALL_SCHEMA,
+      packages: registry.packages.map((entry) =>
+        entry.pluginId === input.pluginId ? restored : entry
+      ),
+    });
+    return restored;
   }
 
   private async cancelLocked(
@@ -946,10 +1232,13 @@ export class PluginInstallStore {
     await mkdir(this.journalsDir(), { recursive: true });
     await mkdir(join(this.rootDir, PACKAGES_DIR), { recursive: true });
     await mkdir(join(this.rootDir, STAGING_DIR), { recursive: true });
-    const journals = await this.listJournals();
+    const journals = (await this.listJournals()).sort((left, right) =>
+      left.updatedAt.localeCompare(right.updatedAt)
+    );
     for (const journal of journals) {
       if (journal.stage === 'installed') {
         await this.removeStaging(journal.transactionId);
+        const registry = await this.readRegistry();
         if (
           journal.pluginId &&
           journal.version &&
@@ -957,6 +1246,9 @@ export class PluginInstallStore {
           PLUGIN_PACKAGE_DIGEST_RE.test(journal.digest) &&
           existsSync(
             this.packageDir(journal.pluginId, journal.version, journal.digest)
+          ) &&
+          !registry.packages.some(
+            (entry) => entry.pluginId === journal.pluginId
           )
         ) {
           await this.upsertRegistry({
@@ -970,6 +1262,7 @@ export class PluginInstallStore {
             ),
             name: journal.name ?? journal.pluginId,
             source: journal.source,
+            ...(journal.signature ? { signature: journal.signature } : {}),
             installedAt: journal.updatedAt,
           });
         }

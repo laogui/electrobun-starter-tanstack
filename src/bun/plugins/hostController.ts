@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-
-import type { InstalledPluginSummary } from '../../shared/plugins/management';
+import type {
+  InstalledPluginSummary,
+  PluginSafeModeState,
+} from '../../shared/plugins/management';
 import type {
   PluginRuntimeDescriptor,
   PluginRuntimeSnapshot,
@@ -29,9 +31,15 @@ interface RuntimeGeneration {
   name: string;
 }
 
+export interface PluginHostControllerOptions {
+  markStartupReady?: () => Promise<unknown>;
+  safeMode?: PluginSafeModeState;
+}
+
 export class PluginHostController {
   private readonly service: PluginManagementService;
   private readonly workspaceId: string;
+  private readonly options: PluginHostControllerOptions;
   private readonly generations = new Map<string, RuntimeGeneration>();
   // Keep the latest descriptor/digest even after release, so unchanged failed
   // code is not issued a fresh identity (and retried) on every poll.
@@ -41,9 +49,14 @@ export class PluginHostController {
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
 
-  constructor(service: PluginManagementService, workspaceId: string) {
+  constructor(
+    service: PluginManagementService,
+    workspaceId: string,
+    options: PluginHostControllerOptions = {}
+  ) {
     this.service = service;
     this.workspaceId = workspaceId;
+    this.options = options;
   }
 
   getMounts(): readonly PluginDirectoryMount[] {
@@ -59,7 +72,8 @@ export class PluginHostController {
     if (
       url.pathname !== '/plugins/runtime' &&
       url.pathname !== '/plugins/reload' &&
-      url.pathname !== '/plugins/release'
+      url.pathname !== '/plugins/release' &&
+      url.pathname !== '/plugins/startup-ready'
     ) {
       return null;
     }
@@ -80,6 +94,10 @@ export class PluginHostController {
         }
         if (url.pathname === '/plugins/release') {
           return await this.release(request, headers);
+        }
+        if (url.pathname === '/plugins/startup-ready') {
+          await this.options.markStartupReady?.();
+          return Response.json({ success: true }, { headers });
         }
         if (method === 'POST') {
           return await this.reload(request, headers);
@@ -305,6 +323,9 @@ export class PluginHostController {
       plugins: [],
       diagnostics: [],
     };
+    if (this.options.safeMode?.active) {
+      return snapshot;
+    }
     const summaries = await this.service.list();
     const active = new Set(
       summaries.filter((entry) => entry.enabled).map((entry) => entry.pluginId)

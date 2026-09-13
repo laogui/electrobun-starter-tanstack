@@ -15,6 +15,7 @@ const lookupMock = vi.hoisted(() => vi.fn());
 vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
 
 import {
+  downloadPluginReleaseDocument,
   downloadPluginZip,
   loadPluginFromZipUrl,
   PLUGIN_DOWNLOAD_MAX_BYTES,
@@ -127,6 +128,53 @@ describe('plugin zip url download', () => {
       allowLoopback: true,
     });
     expect(loaded.manifest.id).toBe('community.example.app');
+  });
+
+  it('downloads a bounded json release document through the same network policy', async () => {
+    const release = JSON.stringify({ schema: 'ghostboard-plugin-release/v2' });
+    const server = await listen((req, res) => {
+      if (req.url === '/go') {
+        res.writeHead(302, { location: '/releases.json' });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(release);
+    });
+    closers.push(server.close);
+
+    await expect(
+      downloadPluginReleaseDocument(`${server.baseUrl}/go`, {
+        allowLoopback: true,
+      })
+    ).resolves.toBe(release);
+  });
+
+  it('rejects html and oversized release documents', async () => {
+    const server = await listen((req, res) => {
+      if (req.url === '/html') {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end('<html></html>');
+        return;
+      }
+      res.writeHead(200, {
+        'content-length': String(1024 * 1024 + 1),
+        'content-type': 'application/json',
+      });
+      res.end('{}');
+    });
+    closers.push(server.close);
+
+    await expect(
+      downloadPluginReleaseDocument(`${server.baseUrl}/html`, {
+        allowLoopback: true,
+      })
+    ).rejects.toMatchObject({ code: 'unsupported-source' });
+    await expect(
+      downloadPluginReleaseDocument(`${server.baseUrl}/large`, {
+        allowLoopback: true,
+      })
+    ).rejects.toMatchObject({ code: 'resource-limit' });
   });
 
   it('rejects an html page even when the path looks like a zip', async () => {

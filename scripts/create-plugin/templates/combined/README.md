@@ -19,7 +19,8 @@ bun run package
 Packaging writes `dist/example.combined-0.1.0.ghostboard-plugin`. Add another
 `--include` to the package script for each new runtime module or asset. The
 archive needs no Bun, `node_modules`, copied SDK, or source tests on the final
-user's machine and is unsigned until T4.
+user's machine and remains unsigned until you configure the author key and
+`--sign` flow in `sdk/README.md`.
 
 Read `AGENTS.md` and `sdk/AI_REFERENCE.md` before extending the example. The
 fake host checks registrations and pure behavior; it does not replace packaged

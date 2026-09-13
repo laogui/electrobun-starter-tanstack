@@ -35,7 +35,23 @@ bun sdk/package-plugin.js . \
   --include app.js
 ```
 
-It writes a deterministic stored ZIP in sorted path order, refuses symlinks and unsafe paths, enforces the installer's current 256-file / 8 MiB uncompressed limits, and validates manifest v2 plus the packaged app entry without executing plugin code. Identical runtime bytes produce an identical archive hash. Output may use `.ghostboard-plugin` or `.zip`; it is unsigned until T4 signing support. Final users need only the archive, not Bun, `node_modules`, source tests, or the copied SDK.
+It writes a deterministic stored ZIP in sorted path order, refuses symlinks and unsafe paths, enforces the installer's current 256-file / 8 MiB uncompressed limits, and validates manifest v2 plus the packaged app entry without executing plugin code. Identical runtime bytes produce an identical archive hash. Output may use `.ghostboard-plugin` or `.zip`. Final users need only the archive, not Bun, `node_modules`, source tests, or the copied SDK.
+
+For releases that can update the same plugin ID, create an author key outside the runtime directory and source control:
+
+```sh
+bun sdk/package-plugin.js --generate-key ../plugin-keys/example.notes.pem
+```
+
+The command refuses to overwrite an existing key, creates the private key with owner-only permissions, and prints an `ed25519-spki:...` value. Copy that exact value into manifest `publicKey`; declare the stable HTTPS `update.url` before the first signed release. Then sign while packaging:
+
+```sh
+bun sdk/package-plugin.js dist \
+  --sign ../plugin-keys/example.notes.pem \
+  --output release/example.notes-0.1.0.ghostboard-plugin
+```
+
+The packer refuses a key inside the runtime directory, a mismatched manifest key, a pre-supplied signature envelope, or `publicKey` without `--sign`. GhostBoard verifies the package before preview and pins the public key plus normalized update URL on first install. Every same-ID update must have a higher version and the same identity. Losing or intentionally changing the key requires a new plugin ID; there is no silent key rotation.
 
 ## Minimal plugin
 
@@ -574,6 +590,8 @@ State must be finite JSON data (no functions, dates, maps, cycles, `undefined` o
 The host sanitizes `title`, `subtitle`, `plainText`, `accessibilityLabel` and `accentColor` from `summarize`. This projection is the searchable, accessible and exportable fallback; it is not arbitrary HTML. Disabling or removing the plugin unregisters executable React code but retains the opaque state, last saved summary and canvas placement. Re-enabling a compatible plugin renders the same instance again.
 
 When `dataVersion` increases, provide synchronous `migrateState(oldState, fromVersion)`. Migration runs lazily when a referenced card is opened with the new type, validates the returned JSON state, rebuilds its summary and writes it with the old revision plus the new monotonic data version. A concurrent edit, invalid result, missing migration, newer on-disk version or failed write leaves the original state/summary intact and shows the compatible-migration fallback. Unvisited canvases are not eagerly migrated; they migrate when loaded. Plugin downgrade is never written over newer state.
+
+Before a successful `dataVersion` increase, GhostBoard persists the original instance as a host-owned migration preimage. If a release migration later proves wrong, the plugin settings page can restore the latest pre-migration data after a destructive-action warning. Code rollback and data restore remain separate: both leave the plugin disabled, restored records receive a new monotonic revision, and GhostBoard first retains a guard copy of the data being replaced. This host recovery path covers canvas instance state; plugin KV storage does not yet expose a versioned migration contract.
 
 This slice supports immediate create-menu cards, shared React rendering, an optional preview component, bounded sizing/resizing and optional detail opening. It does not expose host UI components, arbitrary create flows, plugin menu contributions, rich editor internals, programmatic canvas placement, background migration of unopened canvases, or a single ordered history spanning note transactions and canvas layout.
 

@@ -23,7 +23,8 @@ The install only links the copied `sdk/` for tests. Packaging writes
 `dist/example.csv-importer-0.1.0.ghostboard-plugin` with only `manifest.json`,
 `app.js`, and `csv.js`. Add `--include` entries to the package script for new
 runtime modules/assets. The final-user archive needs no Bun or `node_modules`
-and is unsigned until T4.
+and remains unsigned until you configure the author key and `--sign` flow in
+`sdk/README.md`.
 
 Read `AGENTS.md` and `sdk/AI_REFERENCE.md` before extending the template. The
 fake host validates author logic, not real dialogs, persistence, installation,

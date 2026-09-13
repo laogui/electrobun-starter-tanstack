@@ -18,6 +18,11 @@ const endpoint = {
 };
 const empty = { workspaceId: 'work', plugins: [], diagnostics: [] };
 const stops: (() => Promise<void>)[] = [];
+function runtimeCalls(fetcher: ReturnType<typeof vi.fn<typeof fetch>>) {
+  return fetcher.mock.calls.filter(([input]) =>
+    String(input).endsWith('/plugins/runtime')
+  );
+}
 afterEach(async () => {
   await Promise.all(stops.splice(0).map((stop) => stop()));
   vi.useRealTimers();
@@ -48,20 +53,25 @@ it('polls the bearer HTTP snapshot, coalesces change events and cleans on pagehi
   window.dispatchEvent(new Event('plugins-changed'));
   window.dispatchEvent(new Event('plugins-changed'));
   await vi.advanceTimersByTimeAsync(1100);
-  expect(fetcher).toHaveBeenCalledOnce();
-  expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+  expect(runtimeCalls(fetcher)).toHaveLength(1);
+  expect(String(runtimeCalls(fetcher)[0]?.[0])).toBe(
     'http://127.0.0.1:12345/plugins/runtime'
   );
-  expect(fetcher.mock.calls[0]?.[1]?.headers).toEqual({
+  expect(runtimeCalls(fetcher)[0]?.[1]?.headers).toEqual({
     Authorization: 'Bearer secret',
   });
   finish(Response.json(empty));
   await vi.advanceTimersByTimeAsync(0);
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(runtimeCalls(fetcher)).toHaveLength(2);
+  expect(
+    fetcher.mock.calls.some(([input]) =>
+      String(input).endsWith('/plugins/startup-ready')
+    )
+  ).toBe(true);
   expect(sync).toHaveBeenCalledWith(empty);
   window.dispatchEvent(new Event('pagehide'));
   await vi.advanceTimersByTimeAsync(2000);
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(runtimeCalls(fetcher)).toHaveLength(2);
   expect(dispose).toHaveBeenCalledOnce();
   await stop();
   expect(dispose).toHaveBeenCalledOnce();
@@ -98,7 +108,7 @@ it('continues polling while setup is pending, allowing disable to cancel it', as
   expect(runtime.getSnapshot().plugins[0]?.status).toBe('loading');
   await vi.advanceTimersByTimeAsync(1000);
   expect(runtime.getSnapshot().plugins).toEqual([]);
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(runtimeCalls(fetcher)).toHaveLength(2);
 });
 
 it('aborts on stop and ignores a late snapshot', async () => {
@@ -124,6 +134,61 @@ it('aborts on stop and ignores a late snapshot', async () => {
   await Promise.resolve();
   await Promise.resolve();
   expect(sync).not.toHaveBeenCalled();
+});
+
+it('acknowledges startup only after initial plugin setup settles', async () => {
+  vi.useFakeTimers();
+  let finishSetup!: () => void;
+  const setup = new Promise<void>((resolve) => {
+    finishSetup = resolve;
+  });
+  const runtime = new PluginRuntime({
+    importer: async () => ({ default: { setup: () => setup } }),
+  });
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    if (String(input).endsWith('/plugins/startup-ready')) {
+      return Response.json({ success: true });
+    }
+    return Response.json({
+      ...empty,
+      plugins: [
+        {
+          pluginId: 'example.test',
+          name: 'Test',
+          version: '1',
+          generation: '1',
+          development: true,
+          entryUrl: 'http://127.0.0.1/plugins/token/example.test/1/1/app.js',
+        },
+      ],
+    });
+  });
+  stops.push(
+    startPluginRuntime({
+      runtime,
+      getEndpoint: async () => endpoint,
+      fetch: fetcher,
+    })
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(
+    fetcher.mock.calls.some(([input]) =>
+      String(input).endsWith('/plugins/startup-ready')
+    )
+  ).toBe(false);
+  finishSetup();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(
+    fetcher.mock.calls.filter(([input]) =>
+      String(input).endsWith('/plugins/startup-ready')
+    )
+  ).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(
+    fetcher.mock.calls.filter(([input]) =>
+      String(input).endsWith('/plugins/startup-ready')
+    )
+  ).toHaveLength(1);
 });
 
 it('diagnoses invalid snapshots and retries transport failures', async () => {

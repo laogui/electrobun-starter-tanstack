@@ -93,7 +93,7 @@ async function installPackages(options: ExitProbeOptions) {
     options.check(
       `exit-${item.contribution}-preview`,
       preview.plugin.id === item.id &&
-        preview.plugin.signatureStatus === 'unverified' &&
+        preview.plugin.signatureStatus === 'unsigned' &&
         preview.plugin.capabilities.join(',') === item.capabilities.join(',') &&
         preview.source.kind === (options.phase === 'download' ? 'url' : 'file')
     );

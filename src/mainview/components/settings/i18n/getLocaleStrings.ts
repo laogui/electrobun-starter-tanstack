@@ -121,13 +121,49 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     pluginsTitle: t('settings_plugins_title'),
     pluginsCapabilities: t('settings_plugins_capabilities'),
     pluginsNoCapabilities: t('settings_plugins_no_capabilities'),
-    pluginsSignatureUnverified: t('settings_plugins_signature_unverified'),
+    pluginsSignatureUnsigned: t('settings_plugins_signature_unsigned'),
+    pluginsSignatureVerified: t('settings_plugins_signature_verified'),
     pluginsNoUpdateSource: t('settings_plugins_no_update_source'),
     pluginsUpdateSource: (source: string) =>
       f('settings_plugins_update_source', { source }),
+    pluginsCheckUpdate: t('settings_plugins_check_update'),
+    pluginsCheckingUpdate: t('settings_plugins_checking_update'),
+    pluginsUpdateFound: (version: string) =>
+      f('settings_plugins_update_found', { version }),
+    pluginsRollback: (version: string) =>
+      f('settings_plugins_rollback', { version }),
+    pluginsRollingBack: t('settings_plugins_rolling_back'),
+    pluginsRollbackSuccess: (version: string) =>
+      f('settings_plugins_rollback_success', { version }),
+    pluginsMigrationRestore: (count: number) =>
+      f('settings_plugins_migration_restore', { count }),
+    pluginsMigrationRestoreTitle: t('settings_plugins_migration_restore_title'),
+    pluginsMigrationRestoreWarning: t(
+      'settings_plugins_migration_restore_warning'
+    ),
+    pluginsMigrationRestoreConfirm: t(
+      'settings_plugins_migration_restore_confirm'
+    ),
+    pluginsMigrationRestoring: t('settings_plugins_migration_restoring'),
+    pluginsMigrationRestoreSuccess: (count: number) =>
+      f('settings_plugins_migration_restore_success', { count }),
     pluginsLegacy: t('settings_plugins_legacy'),
     pluginsDescription: t('settings_plugins_description'),
     pluginsRuntimeNotice: t('settings_plugins_runtime_notice'),
+    pluginsSafeModeTitle: t('settings_plugins_safe_mode_title'),
+    pluginsSafeModeDescription: t('settings_plugins_safe_mode_description'),
+    pluginsSafeModePreviousStartup: t(
+      'settings_plugins_safe_mode_previous_startup'
+    ),
+    pluginsSafeModeDamagedState: t('settings_plugins_safe_mode_damaged_state'),
+    pluginsSafeModeExplicit: t('settings_plugins_safe_mode_explicit'),
+    pluginsSafeModeTryNextLaunch: t(
+      'settings_plugins_safe_mode_try_next_launch'
+    ),
+    pluginsSafeModePreparing: t('settings_plugins_safe_mode_preparing'),
+    pluginsSafeModeNextLaunchReady: t(
+      'settings_plugins_safe_mode_next_launch_ready'
+    ),
     pluginsInstallTitle: t('settings_plugins_install_title'),
     pluginsChooseFile: t('settings_plugins_choose_file'),
     pluginsChooseDirectory: t('settings_plugins_choose_directory'),

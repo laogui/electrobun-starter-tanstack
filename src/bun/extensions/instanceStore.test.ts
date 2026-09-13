@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
 } from 'node:fs';
@@ -46,6 +47,8 @@ import {
   instanceRelativePath,
   loadExtensionInstance,
   loadExtensionInstances,
+  pluginMigrationBackupSummary,
+  restorePluginMigrationBackups,
   updateExtensionInstance,
 } from './instanceStore';
 import {
@@ -177,6 +180,89 @@ describe('extension instance store', () => {
     ).rejects.toThrow('invalid-data-version');
     expect(await loadExtensionInstance(wsPath, created.id)).toMatchObject({
       record: { dataVersion: 2, revision: 2 },
+    });
+  });
+
+  it('backs up pre-migration state and restores it explicitly with a new revision', async () => {
+    const created = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'community.example.cards/counter',
+      dataVersion: 1,
+      state: { count: 3 },
+      presentation: { title: 'Legacy counter' },
+    });
+    await updateExtensionInstance(wsPath, {
+      appVersion: '1.1.0',
+      dataVersion: 2,
+      expectedRevision: 1,
+      instanceId: created.id,
+      state: { count: 3, label: 'Migrated' },
+      presentation: { title: 'Migrated' },
+    });
+    await updateExtensionInstance(wsPath, {
+      appVersion: '1.1.0',
+      expectedRevision: 2,
+      instanceId: created.id,
+      state: { count: 8, label: 'Edited after migration' },
+      presentation: { title: 'Edited' },
+    });
+
+    expect(
+      await pluginMigrationBackupSummary(wsPath, 'community.example.cards')
+    ).toMatchObject({ count: 1 });
+    await expect(
+      restorePluginMigrationBackups(wsPath, 'community.example.cards')
+    ).resolves.toEqual({ restored: 1, skipped: 0 });
+    expect(await loadExtensionInstance(wsPath, created.id)).toMatchObject({
+      record: {
+        dataVersion: 1,
+        revision: 4,
+        state: { count: 3 },
+        presentation: { title: 'Legacy counter' },
+      },
+    });
+    expect(
+      await pluginMigrationBackupSummary(wsPath, 'community.example.cards')
+    ).toEqual({ count: 0 });
+    const backupNames = readdirSync(
+      join(
+        wsPath,
+        '.ghostboard',
+        'plugin-migrations',
+        encodeURIComponent('community.example.cards')
+      )
+    );
+    expect(
+      backupNames.some((name) => name.endsWith('restore-guard.json'))
+    ).toBe(true);
+  });
+
+  it('keeps live data unchanged when the migration backup cannot be written', async () => {
+    const created = await createExtensionInstance(wsPath, {
+      appVersion: '1.0.0',
+      canvasTypeId: 'community.example.cards/counter',
+      dataVersion: 1,
+      state: { count: 3 },
+      presentation: { title: 'Original' },
+    });
+    vi.mocked(Bun.write).mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      updateExtensionInstance(wsPath, {
+        appVersion: '1.1.0',
+        dataVersion: 2,
+        expectedRevision: 1,
+        instanceId: created.id,
+        state: { count: 4 },
+        presentation: { title: 'Migrated' },
+      })
+    ).rejects.toThrow('disk full');
+    expect(await loadExtensionInstance(wsPath, created.id)).toMatchObject({
+      record: {
+        dataVersion: 1,
+        revision: 1,
+        state: { count: 3 },
+      },
     });
   });
 

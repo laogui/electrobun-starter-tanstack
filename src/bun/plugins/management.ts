@@ -7,12 +7,24 @@ import type {
   PluginInstallPreview,
   PluginPackageSummary,
   PluginSourceSummary,
+  PluginUpdatePreview,
 } from '../../shared/plugins/management';
 import {
+  compareSemver,
   LEGACY_PLUGIN_MESSAGE,
   type PluginManifest,
 } from '../../shared/plugins/manifest';
+import {
+  isPluginReleaseError,
+  parsePluginReleaseDocument,
+  releaseMatchesManifest,
+  selectCompatibleRelease,
+} from '../../shared/plugins/release';
 import { getAppDataRoot } from '../appPaths';
+import {
+  pluginMigrationBackupSummary,
+  restorePluginMigrationBackups,
+} from '../extensions/instanceStore';
 import { readJsonOrEmpty } from '../persistence/corruptFile';
 import {
   DevelopmentDirectories,
@@ -31,6 +43,7 @@ import {
   type PluginInstallSource,
   PluginInstallStore,
 } from './pluginInstall';
+import { downloadPluginReleaseDocument } from './urlInstall';
 
 const PACKAGE_EXTENSIONS = new Set(['.zip', '.ghostboard-plugin']);
 const stores = new Map<string, PluginInstallStore>();
@@ -77,7 +90,10 @@ function sourceSummary(source: PluginInstallSource): PluginSourceSummary {
   }
 }
 
-function packageSummary(manifest: PluginManifest): PluginPackageSummary {
+function packageSummary(
+  manifest: PluginManifest,
+  signatureStatus: PluginPackageSummary['signatureStatus']
+): PluginPackageSummary {
   return {
     ...(manifest.author ? { author: manifest.author } : {}),
     ...(manifest.description ? { description: manifest.description } : {}),
@@ -85,7 +101,7 @@ function packageSummary(manifest: PluginManifest): PluginPackageSummary {
     ghostboard: manifest.engines.ghostboard,
     id: manifest.id,
     name: manifest.name,
-    signatureStatus: 'unverified',
+    signatureStatus,
     ...(manifest.update ? { updateUrl: manifest.update.url } : {}),
     version: manifest.version,
   };
@@ -94,12 +110,16 @@ function packageSummary(manifest: PluginManifest): PluginPackageSummary {
 function previewFromPrepared(input: {
   digest: string;
   manifest: PluginManifest;
+  signature?: InstalledPluginPackage['signature'];
   source: PluginInstallSource;
   transactionId: string;
 }): PluginInstallPreview {
   return {
     digest: input.digest,
-    plugin: packageSummary(input.manifest),
+    plugin: packageSummary(
+      input.manifest,
+      input.signature ? 'verified' : 'unsigned'
+    ),
     source: sourceSummary(input.source),
     transactionId: input.transactionId,
   };
@@ -129,6 +149,9 @@ function baseSummary(installed: InstalledPluginPackage) {
     installedAt: installed.installedAt,
     name: installed.name,
     pluginId: installed.pluginId,
+    ...(installed.previous
+      ? { previousVersion: installed.previous.version }
+      : {}),
     source: sourceSummary(installed.source),
     treeDigest: installed.treeDigest,
     version: installed.version,
@@ -137,6 +160,7 @@ function baseSummary(installed: InstalledPluginPackage) {
 
 export class PluginManagementService {
   private readonly root: string;
+  private readonly workspacePath: string;
   private readonly directories: DevelopmentDirectories;
   private readonly store: PluginInstallStore;
   private readonly legacyStore: PluginInstallStore;
@@ -145,6 +169,7 @@ export class PluginManagementService {
   private readonly verifiedTrees = new Map<string, string>();
 
   constructor(workspacePath: string, options?: { appDataRoot?: string }) {
+    this.workspacePath = resolve(workspacePath);
     const root = resolve(pluginInstallRoot(options?.appDataRoot));
     this.root = root;
     this.directories = new DevelopmentDirectories(root);
@@ -256,6 +281,79 @@ export class PluginManagementService {
     });
   }
 
+  async prepareUpdate(
+    input: { digest: string; pluginId: string },
+    options?: { allowLoopback?: boolean }
+  ): Promise<PluginUpdatePreview> {
+    const installed = (await this.store.listInstalled()).find(
+      (entry) =>
+        entry.pluginId === input.pluginId && entry.digest === input.digest
+    );
+    const updateUrl = installed?.signature?.updateUrl;
+    if (!(installed && updateUrl)) {
+      throw new PluginInstallError(
+        'invalid-state',
+        `Plugin ${input.pluginId} has no verified update source.`
+      );
+    }
+    await this.assertNoDirectorySource(input.pluginId);
+    const raw = await downloadPluginReleaseDocument(updateUrl, {
+      allowLoopback: options?.allowLoopback,
+    });
+    const document = parsePluginReleaseDocument(raw);
+    if (isPluginReleaseError(document)) {
+      throw new PluginInstallError('invalid-package', document.message);
+    }
+    if (document.pluginId !== installed.pluginId) {
+      throw new PluginInstallError(
+        'invalid-package',
+        `Release source identifies ${document.pluginId}, not ${installed.pluginId}.`
+      );
+    }
+    const release = selectCompatibleRelease(document);
+    if (isPluginReleaseError(release)) {
+      throw new PluginInstallError('invalid-package', release.message);
+    }
+    if (compareSemver(release.version, installed.version) <= 0) {
+      throw new PluginInstallError(
+        'invalid-state',
+        `${installed.name} is already up to date at ${installed.version}.`
+      );
+    }
+    const prepared = await this.store.prepareFromUrl({
+      url: release.url,
+      allowLoopback: options?.allowLoopback,
+    });
+    try {
+      if (prepared.version !== release.version) {
+        throw new PluginInstallError(
+          'invalid-package',
+          `Release ${release.version} delivered package ${prepared.version}.`
+        );
+      }
+      const mismatch = releaseMatchesManifest(
+        document,
+        prepared.manifest,
+        prepared.digest
+      );
+      if (mismatch) {
+        throw new PluginInstallError('invalid-package', mismatch.message);
+      }
+      await this.assertNoDirectorySource(prepared.pluginId);
+    } catch (error) {
+      await this.store.cancel(prepared.transactionId);
+      throw error;
+    }
+    return {
+      ...previewFromPrepared({
+        ...prepared,
+        source: prepared.journal.source,
+      }),
+      currentVersion: installed.version,
+      ...(release.notes ? { notes: release.notes } : {}),
+    };
+  }
+
   async prepareDevelopmentDirectory(
     directory: string
   ): Promise<PluginInstallPreview> {
@@ -266,7 +364,7 @@ export class PluginManagementService {
         await this.directories.prepare(directory);
       return {
         digest: pending.record.digest,
-        plugin: packageSummary(reviewed.manifest),
+        plugin: packageSummary(reviewed.manifest, 'unsigned'),
         source: { kind: 'directory', label: pending.record.directory },
         transactionId: pending.transactionId,
       };
@@ -285,12 +383,19 @@ export class PluginManagementService {
         );
       }
       const journal = await this.store.getJournal(transactionId);
+      const previous = journal?.pluginId
+        ? (await this.store.listInstalled()).find(
+            (entry) => entry.pluginId === journal.pluginId
+          )
+        : undefined;
       if (journal?.pluginId) {
         await this.assertNoDirectorySource(journal.pluginId);
       }
-      return await this.installedSummary(
-        await this.store.commit(transactionId)
-      );
+      const committed = await this.store.commit(transactionId);
+      if (previous && previous.digest !== committed.digest) {
+        await this.writeEnablement(committed.pluginId);
+      }
+      return await this.installedSummary(committed);
     });
   }
 
@@ -301,6 +406,39 @@ export class PluginManagementService {
       } else {
         await this.store.cancel(transactionId);
       }
+    });
+  }
+
+  async rollback(input: {
+    digest: string;
+    pluginId: string;
+  }): Promise<InstalledPluginSummary> {
+    return await withPluginSourceLock(this.root, async () => {
+      await this.assertNoDirectorySource(input.pluginId);
+      await this.writeEnablement(input.pluginId);
+      const restored = await this.store.rollback(input);
+      this.verifiedTrees.delete(restored.directory);
+      return await this.installedSummary(restored);
+    });
+  }
+
+  async restoreMigrationBackup(pluginId: string): Promise<{
+    restored: number;
+    skipped: number;
+  }> {
+    return await withPluginSourceLock(this.root, async () => {
+      await this.writeEnablement(pluginId);
+      const result = await restorePluginMigrationBackups(
+        this.workspacePath,
+        pluginId
+      );
+      if (result.restored === 0) {
+        throw new PluginInstallError(
+          'invalid-state',
+          `No compatible migration backup is available for ${pluginId}.`
+        );
+      }
+      return result;
     });
   }
 
@@ -416,11 +554,16 @@ export class PluginManagementService {
   private async directorySummary(
     record: DevelopmentDirectoryRecord
   ): Promise<InstalledPluginSummary> {
+    const migration = await pluginMigrationBackupSummary(
+      this.workspacePath,
+      record.pluginId
+    );
     const base: InstalledPluginSummary = {
       development: true,
       digest: record.digest,
       enabled: (await this.readEnablement())[record.pluginId] === record.digest,
       installedAt: record.installedAt,
+      ...(migration.count > 0 ? { migrationBackupCount: migration.count } : {}),
       name: record.name,
       pluginId: record.pluginId,
       source: { kind: 'directory', label: record.directory },
@@ -433,7 +576,7 @@ export class PluginManagementService {
         ...base,
         name: loaded.manifest.name,
         version: loaded.manifest.version,
-        plugin: packageSummary(loaded.manifest),
+        plugin: packageSummary(loaded.manifest, 'unsigned'),
       };
     } catch (error) {
       return {
@@ -451,7 +594,14 @@ export class PluginManagementService {
   private async installedSummary(
     installed: InstalledPluginPackage
   ): Promise<InstalledPluginSummary> {
-    const base = baseSummary(installed);
+    const migration = await pluginMigrationBackupSummary(
+      this.workspacePath,
+      installed.pluginId
+    );
+    const base = {
+      ...baseSummary(installed),
+      ...(migration.count > 0 ? { migrationBackupCount: migration.count } : {}),
+    };
     try {
       const { loaded } = await this.resolveStoredPackage({
         pluginId: installed.pluginId,
@@ -461,7 +611,10 @@ export class PluginManagementService {
         ...base,
         enabled: await this.isEnabled(installed),
         name: loaded.manifest.name,
-        plugin: packageSummary(loaded.manifest),
+        plugin: packageSummary(
+          loaded.manifest,
+          installed.signature ? 'verified' : 'unsigned'
+        ),
         status: 'stored',
       };
     } catch (error) {

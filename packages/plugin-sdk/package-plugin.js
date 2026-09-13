@@ -1,6 +1,12 @@
 #!/usr/bin/env bun
 
-import { createHash } from 'node:crypto';
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  sign,
+} from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -16,6 +22,10 @@ const MAX_ENTRIES = 256;
 const MAX_UNCOMPRESSED_BYTES = 8 * 1024 * 1024;
 const OUTPUT_EXTENSION_RE = /\.(ghostboard-plugin|zip)$/i;
 const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:/;
+const PUBLIC_KEY_PREFIX = 'ed25519-spki:';
+const SIGNATURE_FILE = 'ghostboard-signature.json';
+const SIGNATURE_SCHEMA = 'ghostboard-plugin-signature/v1';
+const SIGNATURE_PAYLOAD_SCHEMA = 'ghostboard-plugin-signature-payload/v1';
 
 function comparePaths(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -29,19 +39,32 @@ function usage() {
     '  --output <file>   Archive path. Defaults to <id>-<version>.ghostboard-plugin.',
     '  --include <path>  Include one file or directory relative to the runtime directory.',
     '                    Repeat this option to package a selected runtime file set.',
+    '  --sign <file>     Sign with an Ed25519 PKCS#8 PEM private key.',
+    '',
+    'Key generation:',
+    '  ghostboard-plugin --generate-key <private-key.pem>',
+    '  Creates a new private key without overwriting an existing file and prints',
+    '  the publicKey value to copy into manifest.json.',
   ].join('\n');
 }
 
 function parseArguments(args) {
   let source;
   let output;
+  let privateKey;
+  let generateKey;
   const includes = [];
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === '--help' || value === '-h') {
       return { help: true, includes };
     }
-    if (value === '--output' || value === '--include') {
+    if (
+      value === '--output' ||
+      value === '--include' ||
+      value === '--sign' ||
+      value === '--generate-key'
+    ) {
       const next = args[index + 1];
       if (!next || next.startsWith('--')) {
         throw new Error(`${value} requires a value`);
@@ -51,8 +74,18 @@ function parseArguments(args) {
           throw new Error('--output may only be provided once');
         }
         output = next;
-      } else {
+      } else if (value === '--include') {
         includes.push(next);
+      } else if (value === '--sign') {
+        if (privateKey) {
+          throw new Error('--sign may only be provided once');
+        }
+        privateKey = next;
+      } else {
+        if (generateKey) {
+          throw new Error('--generate-key may only be provided once');
+        }
+        generateKey = next;
       }
       index += 1;
       continue;
@@ -65,10 +98,18 @@ function parseArguments(args) {
     }
     source = value;
   }
+  if (generateKey) {
+    if (source || output || privateKey || includes.length > 0) {
+      throw new Error(
+        '--generate-key cannot be combined with packaging options'
+      );
+    }
+    return { generateKey, help: false, includes };
+  }
   if (!source) {
     throw new Error(usage());
   }
-  return { help: false, includes, output, source };
+  return { help: false, includes, output, privateKey, source };
 }
 
 function archivePath(root, absolute) {
@@ -166,6 +207,118 @@ function readManifest(files) {
     throw new Error(`Package is missing its app entry: ${String(entry)}`);
   }
   return manifest;
+}
+
+function normalizedUpdateUrl(manifest) {
+  if (manifest.update === undefined) {
+    return;
+  }
+  if (
+    !manifest.update ||
+    typeof manifest.update !== 'object' ||
+    Array.isArray(manifest.update) ||
+    typeof manifest.update.url !== 'string'
+  ) {
+    throw new Error('manifest.json update.url must be HTTPS');
+  }
+  let url;
+  try {
+    url = new URL(manifest.update.url);
+  } catch {
+    throw new Error('manifest.json update.url must be HTTPS');
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error(
+      'manifest.json update.url must be HTTPS without credentials'
+    );
+  }
+  return url.toString();
+}
+
+function authorPublicKey(key) {
+  const publicKey = key.type === 'public' ? key : createPublicKey(key);
+  if (publicKey.asymmetricKeyType !== 'ed25519') {
+    throw new Error('Signing key must be Ed25519');
+  }
+  return `${PUBLIC_KEY_PREFIX}${publicKey
+    .export({ format: 'der', type: 'spki' })
+    .toString('base64')}`;
+}
+
+function signingTreeDigest(files) {
+  const hash = createHash('sha256');
+  for (const [name, bytes] of files) {
+    if (name === SIGNATURE_FILE) {
+      continue;
+    }
+    hash.update(JSON.stringify([name, bytes.byteLength]));
+    hash.update(bytes);
+  }
+  return hash.digest('hex');
+}
+
+function signaturePayload(manifest, treeSha256) {
+  return Buffer.from(
+    `${JSON.stringify({
+      schema: SIGNATURE_PAYLOAD_SCHEMA,
+      pluginId: manifest.id,
+      version: manifest.version,
+      treeSha256,
+      updateUrl: normalizedUpdateUrl(manifest) ?? null,
+    })}\n`
+  );
+}
+
+async function signFiles(files, manifest, privateKeyPath) {
+  if (files.has(SIGNATURE_FILE)) {
+    throw new Error(`${SIGNATURE_FILE} is reserved and must not be supplied`);
+  }
+  let privateKey;
+  try {
+    privateKey = createPrivateKey(await readFile(resolve(privateKeyPath)));
+  } catch {
+    throw new Error('Cannot read an Ed25519 PKCS#8 PEM signing key');
+  }
+  if (privateKey.asymmetricKeyType !== 'ed25519') {
+    throw new Error('Signing key must be Ed25519');
+  }
+  const publicKey = authorPublicKey(privateKey);
+  if (manifest.publicKey !== publicKey) {
+    throw new Error(
+      'manifest.json publicKey does not match the selected signing key'
+    );
+  }
+  const treeSha256 = signingTreeDigest(files);
+  const signature = sign(
+    null,
+    signaturePayload(manifest, treeSha256),
+    privateKey
+  ).toString('base64');
+  files.set(
+    SIGNATURE_FILE,
+    new TextEncoder().encode(
+      `${JSON.stringify(
+        {
+          schema: SIGNATURE_SCHEMA,
+          algorithm: 'ed25519',
+          treeSha256,
+          signature,
+        },
+        null,
+        2
+      )}\n`
+    )
+  );
+  return { publicKey, treeSha256 };
+}
+
+export async function generateSigningKey(outputPath) {
+  const output = resolve(outputPath);
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const pem = privateKey.export({ format: 'pem', type: 'pkcs8' });
+  await mkdir(dirname(output), { recursive: true });
+  await writeFile(output, pem, { flag: 'wx', mode: 0o600 });
+  return { privateKey: output, publicKey: authorPublicKey(publicKey) };
 }
 
 function assertLimits(files) {
@@ -276,9 +429,38 @@ function createArchive(files) {
 }
 
 export async function buildPluginPackage(options) {
+  if (options.privateKey) {
+    const root = resolve(options.source);
+    const keyPath = resolve(options.privateKey);
+    const keyLocal = relative(root, keyPath);
+    if (
+      keyLocal === '' ||
+      (!isAbsolute(keyLocal) &&
+        keyLocal !== '..' &&
+        !keyLocal.startsWith(`..${sep}`))
+    ) {
+      throw new Error(
+        'Signing private key must be outside the runtime directory'
+      );
+    }
+  }
   const files = await collectFiles(options.source, options.includes ?? []);
-  assertLimits(files);
   const manifest = readManifest(files);
+  let signature;
+  if (options.privateKey) {
+    signature = await signFiles(files, manifest, options.privateKey);
+  } else {
+    if (files.has(SIGNATURE_FILE)) {
+      throw new Error(`${SIGNATURE_FILE} is reserved and must not be supplied`);
+    }
+    if (manifest.publicKey !== undefined) {
+      throw new Error('manifest.json publicKey requires --sign');
+    }
+  }
+  const orderedFiles = new Map(
+    [...files.entries()].sort(([left], [right]) => comparePaths(left, right))
+  );
+  assertLimits(orderedFiles);
   const output = resolve(
     options.output ?? `${manifest.id}-${manifest.version}.ghostboard-plugin`
   );
@@ -299,7 +481,7 @@ export async function buildPluginPackage(options) {
       );
     }
   }
-  const archive = createArchive(files);
+  const archive = createArchive(orderedFiles);
   await mkdir(dirname(output), { recursive: true });
   const temporary = `${output}.tmp-${process.pid}-${Date.now()}`;
   try {
@@ -311,10 +493,11 @@ export async function buildPluginPackage(options) {
   return {
     archive: output,
     bytes: archive.length,
-    entries: [...files.keys()],
+    entries: [...orderedFiles.keys()],
     pluginId: manifest.id,
     sha256: createHash('sha256').update(archive).digest('hex'),
-    signatureStatus: 'unsigned (T4 signing is not implemented)',
+    signatureStatus: signature ? 'signed' : 'unsigned',
+    ...(signature ? { signingTreeSha256: signature.treeSha256 } : {}),
     version: manifest.version,
   };
 }
@@ -324,12 +507,17 @@ if (import.meta.main) {
     const options = parseArguments(process.argv.slice(2));
     if (options.help) {
       console.log(usage());
+    } else if (options.generateKey) {
+      console.log(
+        JSON.stringify(await generateSigningKey(options.generateKey), null, 2)
+      );
     } else {
       console.log(
         JSON.stringify(
           await buildPluginPackage({
             includes: options.includes,
             output: options.output,
+            privateKey: options.privateKey,
             source: options.source,
           }),
           null,

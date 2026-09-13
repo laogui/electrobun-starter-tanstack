@@ -1,7 +1,7 @@
 # GhostBoard 高信任插件系统改造方案
 
 日期：2026-09-09（同日修订：去掉首版 Bun 后端入口、补充装载机制、能力声明与签名更新；同日采纳）  
-状态：**已采纳；T0、T1（含追加 A1–A3）、现行 T2 与 T3 均已通过 macOS arm64 发行包验证，旧运行时清理完成；下一阶段为 T4 故障、安全模式、签名与更新**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。T3 已覆盖受限 CSV、完整 files、分段导入、通用配置、作者工具链与四类独立最终用户包；公共外网 HTTPS、人工原生 picker 和 Windows / Linux 仍是明确未运行边界。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
+状态：**已采纳；T0、T1（含追加 A1–A3）、现行 T2、T3 与 T4 均已通过 macOS arm64 发行包验证；T4 的安全模式、Ed25519/TOFU、固定 release descriptor、current/previous 回退和画布实例迁移恢复已完成实现、自动门禁、canary 构建与专用 packaged 多次启动退出验收**。T2 已覆盖 A4、笔记事务 / 选区 / 正文同步、detached 创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记历史。T3 已覆盖受限 CSV、完整 files、分段导入、通用配置、作者工具链与四类独立最终用户包；公共外网 HTTPS、人工原生 picker 和 Windows / Linux 仍是明确未运行边界。本文是公开插件系统的现行实施设计，接替已归档的 [公开插件系统整改方案 v2](../Archive/public-plugin-platform-redesign.md)。仅 §10 中有验收记录的阶段视为已实现，其他章节仍是目标设计。
 
 范围：公开插件的开发、运行、安装、生命周期、数据接口和交付验收。
 
@@ -433,6 +433,14 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 2026-09-12 T3 第五批结果：[作者打包与模板工具链证据](trusted-plugin-t3-toolchain-evidence.md)。`@ghostboard/sdk` 随包提供零外部依赖、排序 stored-ZIP 的确定性 packer；根仓与生成项目分别提供 `plugin:pack` / `bun run package`。`plugin:create` 在兼容默认 JavaScript 与 `--react` 的同时新增独立 `--importer` 和四贡献 `--combined` 模板；四种模板均有无应用测试、`AGENTS.md` 与自包含 `sdk/AI_REFERENCE.md`。模板连续两次打包 hash 一致，并全部由生产 ZIP loader 解析出精确 runtime-only 文件；既有 T3 fixture 也已移除系统 `zip` 依赖。**T3 仍未退出**：下一步用公开工具链做四类独立安装包最终用户验证并记录公共 HTTPS / 平台边界；T4 签名与 T5 真人作者试用不提前宣称完成。
 
 2026-09-12 T3 退出结果：[四类独立最终用户包证据](trusted-plugin-t3-exit-evidence.md)。公开 packer 分别生成 command、DOM panel、canvas type 与 CSV importer 四个 runtime-only 包；真实 macOS arm64 canary 从本地包或下载事务完成 preview、commit 后禁用、显式 enable、实际操作与逐包 disable 隔离，同 workspace 重启后四包恢复。三次应用启动共 90 项检查通过，组合 importer 的分段、丢响应重试、冲突安全回滚及持久 undo / redo 同时回归。**T3 现行退出条件已满足，下一阶段进入 T4。** 公共外网 HTTPS、人工原生 picker、Windows / Linux 与外部真人作者试用仍按退出证据中的明确边界留给支持平台 / T5 验收；签名、TOFU 更新、安全模式和回退属于 T4。
+
+2026-09-12 T4 第一批结果：[启动安全模式自动化证据](trusted-plugin-t4-safe-mode-evidence.md)。应用级 startup marker 在第三方 descriptor 发布前写入，renderer 仅在首次 activation 全部 settled 后确认 ready；未完成启动、显式参数/环境变量或损坏 marker 会让 Bun host 在读取/复制/发布第三方代码之前返回空 runtime，同时保留设置管理、停用和下次正常启动入口。定向 105 项、全量串行 2020 项、静态检查、类型检查及 macOS arm64 canary 构建通过。**本批不是 T4 退出**：真实 canary 的多次启动恢复序列、作者签名/TOFU 更新、失败更新代码回退和数据迁移恢复仍待完成。
+
+2026-09-13 T4 第二批结果：[作者签名与 TOFU 手动更新证据](trusted-plugin-t4-signing-evidence.md)。公开 packer 可独占生成 Ed25519 key 并写入确定性包内 envelope；宿主在 preview 前验证 canonical identity/tree，首次安装固定 public key + `update.url`，后续同 ID 手动 ZIP/URL 更新要求版本前进且 key/source 相同。密钥变化、更新源变化、签后篡改、未签名原地升级及 prepare 后 staging 替换均 fail closed；commit 保留旧目录、切换单一活动 registry 并要求工作区重新确认启用。定向 84 项、全量串行 2037 项、静态/类型检查和 macOS arm64 canary 构建通过。**本批仍不是 T4 退出**：真实桌面更新、release descriptor、显式代码回退与数据迁移恢复尚未完成。
+
+2026-09-13 T4 第三批结果：[固定更新、代码回退与迁移恢复证据](trusted-plugin-t4-update-recovery-evidence.md)。固定 `update.url` descriptor 与 ZIP 共用 HTTPS/SSRF/redirect/流式大小限制，并把兼容 selected version、ZIP SHA-256、manifest 和 TOFU 签名四层绑定；registry 原子保存 current + 一个 previous，回退前重验旧代码且重启不会被旧 journal 反向覆盖。自定义画布实例在 `dataVersion` 上升前保存 preimage，备份失败阻止迁移；设置页经二次警告可另存 current restore guard 后以新 revision 恢复最近一层旧数据。代码回退和数据恢复均保持插件停用。综合定向 119 项、全量串行结果、静态/类型检查与 macOS arm64 canary 构建通过，机器结果见 [T4 result](trusted-plugin-t4-result.json)。
+
+2026-09-13 T4 packaged 退出结果：运行 [`bun run test:plugin-t4`](../../../package.json) 从 canary 解出的 arm64 launcher 连续启动 `safe-mode`、`safe-recovery`、`update`、`migration` 四次，共 34 项检查通过。覆盖显式安全模式与下一次正常恢复、同 key descriptor 更新、换 key 拒绝、错误 SHA 拒绝、current/previous 代码回退、revision-conflict 迁移失败时 live data 保持不变、迁移 preimage 可见与显式恢复；每次报告均来自 renderer 通过 bearer 保护的本地 host。机器摘要见 [`t4-evidence.json`](../../../build/plugin-t4-artifacts/t4-evidence.json) 与 [T4 result](trusted-plugin-t4-result.json)。KV storage 尚无版本迁移 API；公共外网 HTTPS、codesign/notarization、Windows/Linux 和真人外部作者验收仍是明确未运行边界。
 
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 

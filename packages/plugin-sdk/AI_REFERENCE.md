@@ -51,9 +51,9 @@ Minimal manifest:
 The schema is closed. Supported optional fields are `author`, `description`,
 `publicKey`, and `update: { url }`. IDs must be third-party IDs; `ghostboard.*`
 is reserved. App entries must be safe package-relative `.js` or `.mjs` paths.
-Current capability names are `network`, `files`, and `clipboard`. Signing,
-author keys, and trusted updates are not implemented in the T3 toolchain;
-packages it creates are unsigned.
+Current capability names are `network`, `files`, and `clipboard`. `publicKey`
+must be the exact `ed25519-spki:...` value emitted by the packer's key command.
+Unsigned local packages omit it.
 
 ## Definition and activation lifecycle
 
@@ -426,6 +426,13 @@ untrusted input; validate it and provide migrations when increasing
 `history: 'ephemeral'` only for transient interaction frames and finish with a
 recorded update.
 
+GhostBoard writes a host-owned preimage before a `dataVersion` increase. The
+plugin settings recovery action can restore the latest pre-migration instance
+with a new monotonic revision after retaining a guard copy of current data.
+Code rollback and data restore are separate and both leave the plugin disabled.
+This recovery contract applies to canvas instances; plugin KV storage does not
+yet have a versioned migration API.
+
 ## Files
 
 File and directory handles are opaque capabilities bound to the current plugin,
@@ -634,7 +641,31 @@ The packer sorts paths, writes deterministic stored ZIP entries, refuses
 symlinks and escaping/unsafe paths, enforces the host's 256-file and 8 MiB
 uncompressed limits, checks manifest v2 and its app entry, and replaces the
 exact output atomically. It never executes plugin code or dependency lifecycle
-scripts. The output is unsigned until T4.
+scripts.
+
+To establish an author identity for same-ID updates, generate a private key
+outside the runtime directory and source control:
+
+```sh
+bun sdk/package-plugin.js --generate-key ../plugin-keys/example.notes.pem
+```
+
+Copy the printed `ed25519-spki:...` value into manifest `publicKey`, declare a
+stable HTTPS `update.url`, then package with:
+
+```sh
+bun sdk/package-plugin.js <runtime-directory> \
+  --sign ../plugin-keys/example.notes.pem \
+  --output release/example.notes-0.1.0.ghostboard-plugin
+```
+
+The package contains strict `ghostboard-signature.json` schema v1. Its Ed25519
+payload binds the plugin ID, version, normalized update URL, and a sorted tree
+SHA-256 that excludes only the envelope itself. The host separately records a
+full installed-tree digest including the envelope. A same-ID update must
+advance semver and retain the first verified public key and update URL. Key
+loss or rotation requires a new plugin ID. Unsigned packages remain usable for
+local experiments but cannot be updated in place.
 
 The archive may use `.ghostboard-plugin` or `.zip`. Final-user installation
 needs only this runtime archive; it must not require Bun, Node, `node_modules`,
@@ -652,5 +683,6 @@ the copied `sdk/`, source tests, or the host repository.
 - Test setup and pure behavior with `@ghostboard/sdk/testing`.
 - Build React with shared React/SDK imports externalized.
 - Run `bun run package` and install the resulting archive in a packaged app.
+- Keep signing private keys outside runtime directories and source control.
 - Document capabilities honestly. Do not describe unsigned packages, the fake
   host, or high-trust code as a security boundary.

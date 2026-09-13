@@ -104,7 +104,7 @@ bb 在应用内提供 Plugin Guide：按 surface 编号的线框图，每张卡�
 
 实现状态（2026-09-12）：单文件 `packages/plugin-sdk/AI_REFERENCE.md` 已随 T3 作者工具链加入 SDK 发布文件，并复制到默认 JavaScript、React、独立 importer 与四贡献 combined 模板；四种模板的 `AGENTS.md` 均指向该参考并区分 runtime / author-only 目录。自动化已验证文件存在和路由。文档站镜像发布，以及外部真人作者仅凭参考完成首个插件的效果与耗时仍归 T5 验收；应用内 Guide 仍不在首版。
 
-T5 状态（2026-09-13）：模板不再复制 `sdk/`，`AGENTS.md` 改指向 `node_modules/@ghostboard/sdk/AI_REFERENCE.md` 与文档站 URL；`AI_REFERENCE.md` 增加 Compatibility 节并由 `verify-compat-docs` 与兼容策略保持一致；文档站 `sync-sdk-reference.ts` 在构建时从已安装的 `@ghostboard/sdk` 生成 Reference → SDK 页，`/docs/llms.txt` 与 `/docs/llms-full.txt` 把全部 en 页拼成单文件供 agent 消费。**A6 验收待文档站部署与外部作者试用**：镜像在 `packages/plugin-docs-site` drop-in 中，应用到 `react-starter-kit/apps/web` 并发布到真实域名后，作者试用记录决定是否标为已验收；应用内 Guide 仍不进首版。
+T5 状态（2026-09-13）：模板不再复制 `sdk/`，`AGENTS.md` 改指向 `node_modules/@ghostboard/sdk/AI_REFERENCE.md` 与文档站 URL；`AI_REFERENCE.md` 增加 Compatibility 节并由 `verify-compat-docs` 与兼容策略保持一致；文档站 `sync-sdk-reference.ts` 在构建时从已安装的 `@ghostboard/sdk` 生成 Reference → SDK 页，`/docs/llms.txt` 与 `/docs/llms-full.txt` 把全部 en 页拼成单文件供 agent 消费。**A6 验收待文档站部署与外部作者试用**：文档站已应用到 `react-starter-kit/apps/web`（分支 `feat/plugin-docs-site`，`astro check` / `build` / vitest 通过，`/docs/*` 与 `/zh/docs/*` 本地冒烟通过），发布到真实域名后，作者试用记录决定是否标为已验收；应用内 Guide 仍不进首版。
 
 - SDK 参考以**单文件 Markdown**发布（随 `@ghostboard/sdk` 包和文档站各一份），按扩展点组织，每节给出类型签名与最小示例，无外链依赖即可读完。
 - 插件模板包含一份 `AGENTS.md`，指向该参考并说明目录约定，作者可直接用 AI 工具续写插件。

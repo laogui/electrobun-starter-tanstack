@@ -14,15 +14,15 @@ bun run dev
 
 Use GhostBoard Settings → Plugins → Connect development directory to select **dist/**, then review and enable it with the high-trust confirmation. Open the command or panel from the plugin menu. Editing `src/app.tsx` while the watch build runs updates the external plugin, without changing the host repository.
 
-Vite externalizes React, ReactDOM, `@ghostboard/sdk` and `@ghostboard/sdk/react`. Do not bundle another React instance. The host supports React 19.2.x; the SDK's local copy provides author types, while the app's import map supplies the runtime implementation. `react/jsx-runtime` is also external. End users only need the built directory, not Bun, Node or npm dependencies.
+Vite externalizes React, ReactDOM, `@ghostboard/sdk` and `@ghostboard/sdk/react`. Do not bundle another React instance. The host supports React 19.2.x; the `@ghostboard/sdk` npm package provides author types, while the app's import map supplies the runtime implementation. `react/jsx-runtime` is also external. End users only need the built directory, not Bun, Node or npm dependencies.
 
-`bun run package` performs a fresh build and writes `release/example.react-hello-0.1.0.ghostboard-plugin`. The deterministic packer validates manifest v2 and packages the complete `dist/` runtime without executing plugin code. The template remains unsigned until you configure the author key and `--sign` flow documented in `sdk/README.md`; the final user does not need the author dependencies.
+`bun run package` performs a fresh build and writes `release/example.react-hello-0.1.0.ghostboard-plugin`. The deterministic packer validates manifest v2 and packages the complete `dist/` runtime without executing plugin code. The template remains unsigned until you configure the author key and `--sign` flow documented in the SDK reference; the final user does not need the author dependencies.
 
 The panel has its own React root. Closing it disposes that view, not the plugin command. Disabling or a **successful** reload removes old managed registrations and roots. A failed import or setup leaves the old activation, signal and open panel state intact; candidate registrations stay private until successful handoff. `app.generation` increases per attempt and `app.signal` aborts when its own activation retires or fails. Keep setup focused on registration, because direct DOM, file or network side effects are not rolled back. Keep DOM/CSS changes inside the provided mount point. Declare cleanup with `app.onCleanup()` and register owned workers with `app.workers.track()`.
 
 ## Theme and editable components (A1)
 
-`src/components/ui.tsx` is **your source**, not a host component API. Edit, copy or replace its Button, Input and Surface components. They use only React and public `--gb-*` theme variables, so they follow GhostBoard's light/dark theme without importing private host modules. Styles stay inline inside the panel, with no global stylesheet or separate CSS asset to load. The frozen variable names and roles are listed in `sdk/README.md`.
+`src/components/ui.tsx` is **your source**, not a host component API. Edit, copy or replace its Button, Input and Surface components. They use only React and public `--gb-*` theme variables, so they follow GhostBoard's light/dark theme without importing private host modules. Styles stay inline inside the panel, with no global stylesheet or separate CSS asset to load. The frozen variable names and roles are listed in the SDK reference.
 
 ## Optional global-runtime shim (A3)
 
@@ -39,10 +39,10 @@ bun run build:shim
 
 ## Note selection hooks (T2)
 
-Import `useSelection`, `useSelectionState` or `useSelectedPlacements` from `@ghostboard/sdk/react`. The host installs an SDK-owned selection provider inside each independent panel root, so your component does not need host contexts or private stores. Use `useSelectionState()` to distinguish loading/error from a genuinely empty selection; `useSelection()` returns an empty array during both loading and errors. See `sdk/README.md` for membership, revision, cancellation and legacy-note limits.
+Import `useSelection`, `useSelectionState` or `useSelectedPlacements` from `@ghostboard/sdk/react`. The host installs an SDK-owned selection provider inside each independent panel root, so your component does not need host contexts or private stores. Use `useSelectionState()` to distinguish loading/error from a genuinely empty selection; `useSelection()` returns an empty array during both loading and errors. See the SDK reference for membership, revision, cancellation and legacy-note limits.
 
 For a React root you create yourself, or standalone author tests, wrap the component in the public `SelectionProvider` with `selection={app.selection}` (or a fake implementing that interface). Both template build modes externalize the hooks; the shim uses `runtime.sdkReact` rather than bundling another provider.
 
 The template test uses `@ghostboard/sdk/testing` to run setup and command behavior without GhostBoard. The fake host does not reproduce GhostBoard layout or CSS, persistence, real RPC, multi-plugin arbitration, package-signature verification, or platform behavior. Use a packaged GhostBoard build for those checks. Native backends and permission sandboxes are not part of this slice.
 
-For coding agents, `AGENTS.md` points to the complete single-file `sdk/AI_REFERENCE.md`; no host-repository source or external link is required.
+For coding agents, `AGENTS.md` points to the complete single-file `node_modules/@ghostboard/sdk/AI_REFERENCE.md`; no host-repository source is required. The same file is published at https://ghostboard.app/docs/reference/sdk/.

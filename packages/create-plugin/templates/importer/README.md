@@ -19,13 +19,14 @@ bun test
 bun run package
 ```
 
-The install only links the copied `sdk/` for tests. Packaging writes
+`bun install` fetches `@ghostboard/sdk` from npm for tests and the packer. Packaging writes
 `dist/example.csv-importer-0.1.0.ghostboard-plugin` with only `manifest.json`,
 `app.js`, and `csv.js`. Add `--include` entries to the package script for new
 runtime modules/assets. The final-user archive needs no Bun or `node_modules`
 and remains unsigned until you configure the author key and `--sign` flow in
-`sdk/README.md`.
+the SDK reference.
 
-Read `AGENTS.md` and `sdk/AI_REFERENCE.md` before extending the template. The
+Read `AGENTS.md` and `node_modules/@ghostboard/sdk/AI_REFERENCE.md` before
+extending the template. The
 fake host validates author logic, not real dialogs, persistence, installation,
 layout, platform behavior, or crash recovery.

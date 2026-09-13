@@ -2,6 +2,21 @@
   "name": "@ghostboard/sdk",
   "version": "0.1.0",
   "description": "GhostBoard trusted plugin SDK, author reference, tests and deterministic packer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laogui/electrobun-starter-tanstack.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "homepage": "https://ghostboard.app/docs/reference/sdk/",
+  "keywords": [
+    "ghostboard",
+    "plugin",
+    "sdk"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
@@ -37,7 +52,8 @@
     "testing/react.d.ts",
     "AI_REFERENCE.md",
     "package-plugin.js",
-    "package-plugin.d.ts"
+    "package-plugin.d.ts",
+    "README.md"
   ],
   "peerDependencies": {
     "@testing-library/react": "^16.0.0",

@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "package": "bun sdk/package-plugin.js . --output dist/example.combined-0.1.0.ghostboard-plugin --include manifest.json --include app.js",
+    "package": "ghostboard-plugin . --output dist/example.combined-0.1.0.ghostboard-plugin --include manifest.json --include app.js",
     "test": "bun test"
   },
   "dependencies": {
     "react": "19.2.5"
   },
   "devDependencies": {
-    "@ghostboard/sdk": "file:./sdk"
+    "@ghostboard/sdk": "^0.1.0"
   }
 }

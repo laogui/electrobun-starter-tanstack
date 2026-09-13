@@ -7,7 +7,12 @@ import { join, relative, resolve } from 'node:path';
 import { loadPluginFromZip } from '../../src/bun/plugins/zipInstall';
 
 const project = resolve(import.meta.dir, '../..');
+const sdkPackage = join(project, 'packages', 'plugin-sdk');
+const createPackage = join(project, 'packages', 'create-plugin');
 const directory = await mkdtemp(join(tmpdir(), 'ghostboard-plugin-templates-'));
+const REFERENCE_PATH = 'node_modules/@ghostboard/sdk/AI_REFERENCE.md';
+const SCOPE_RE = /^@/;
+const TARBALL_PREFIX_RE = /^package\//;
 
 async function run(
   command: string[],
@@ -46,6 +51,85 @@ async function listFiles(
   return files.sort();
 }
 
+interface PackedPackage {
+  entries: string[];
+  name: string;
+  tarball: string;
+  version: string;
+}
+
+/**
+ * Packs a workspace package exactly as `npm publish` / `bun publish` would,
+ * so templates are verified against the publishable artifact rather than the
+ * source checkout.
+ */
+async function packPackage(packageDirectory: string): Promise<PackedPackage> {
+  const manifest = JSON.parse(
+    await readFile(join(packageDirectory, 'package.json'), 'utf8')
+  ) as { name: string; version: string };
+  const destination = join(directory, 'tarballs');
+  await run(
+    [process.execPath, 'pm', 'pack', '--destination', destination],
+    `pack-${manifest.name.replace(/[@/]/g, '_')}.log`,
+    packageDirectory
+  );
+  const tarball = join(
+    destination,
+    `${manifest.name.replace(SCOPE_RE, '').replace('/', '-')}-${manifest.version}.tgz`
+  );
+  const list = Bun.spawn(['tar', '-tzf', tarball], { stdout: 'pipe' });
+  const entries = (await new Response(list.stdout).text())
+    .split('\n')
+    .filter(Boolean)
+    .map((entry) => entry.replace(TARBALL_PREFIX_RE, ''))
+    .sort();
+  if ((await list.exited) !== 0) {
+    throw new Error(`Could not list ${tarball}`);
+  }
+  return { entries, name: manifest.name, tarball, version: manifest.version };
+}
+
+function requireEntries(pack: PackedPackage, required: string[]) {
+  const missing = required.filter((entry) => !pack.entries.includes(entry));
+  if (missing.length > 0) {
+    throw new Error(
+      `${pack.name} tarball is missing ${missing.join(', ')}; got ${pack.entries.join(', ')}`
+    );
+  }
+}
+
+const sdk = await packPackage(sdkPackage);
+requireEntries(sdk, [
+  'AI_REFERENCE.md',
+  'README.md',
+  'index.d.ts',
+  'index.js',
+  'package-plugin.js',
+  'package.json',
+  'react.d.ts',
+  'react.js',
+  'testing.d.ts',
+  'testing.js',
+  'testing/react.d.ts',
+  'testing/react.js',
+]);
+const create = await packPackage(createPackage);
+requireEntries(create, [
+  'README.md',
+  'index.js',
+  'package.json',
+  'templates/combined/manifest.json',
+  'templates/importer/manifest.json',
+  'templates/javascript/manifest.json',
+  'templates/react/manifest.json',
+  'templates/react/src/app.tsx',
+]);
+if (create.entries.some((entry) => entry.includes('node_modules/'))) {
+  throw new Error(
+    'create-ghostboard-plugin tarball must not include node_modules'
+  );
+}
+
 interface TemplateOptions {
   archive: string;
   expectedEntries: string[];
@@ -60,25 +144,36 @@ async function verifyTemplate(options: TemplateOptions) {
   await run(
     [
       process.execPath,
-      'run',
-      'plugin:create',
+      join(createPackage, 'index.js'),
       root,
       ...(options.flag ? [options.flag] : []),
+      '--sdk',
+      `file:${sdk.tarball}`,
     ],
     `create-${options.name}.log`
   );
   const agentInstructions = await readFile(join(root, 'AGENTS.md'), 'utf8');
-  if (!agentInstructions.includes('sdk/AI_REFERENCE.md')) {
+  if (!agentInstructions.includes(REFERENCE_PATH)) {
     throw new Error(
       `${options.name} template does not route agents to the SDK`
     );
   }
-  await readFile(join(root, 'sdk', 'AI_REFERENCE.md'), 'utf8');
+  const templateManifest = JSON.parse(
+    await readFile(join(root, 'package.json'), 'utf8')
+  ) as Record<string, Record<string, string> | undefined>;
+  const sdkSpec =
+    templateManifest.dependencies?.['@ghostboard/sdk'] ??
+    templateManifest.devDependencies?.['@ghostboard/sdk'];
+  if (sdkSpec !== `file:${sdk.tarball}`) {
+    throw new Error(`${options.name} template kept SDK spec ${sdkSpec}`);
+  }
   await run(
     [process.execPath, 'install', '--ignore-scripts'],
     `install-${options.name}.log`,
     root
   );
+  await readFile(join(root, REFERENCE_PATH), 'utf8');
+  await readFile(join(root, 'node_modules', '.bin', 'ghostboard-plugin'));
   await run([process.execPath, 'test'], `test-${options.name}.log`, root);
   if (options.react) {
     await run(
@@ -166,8 +261,21 @@ console.log(
       evidenceDirectory: directory,
       importer,
       javascript,
+      packages: {
+        createPlugin: {
+          entries: create.entries.length,
+          name: create.name,
+          version: create.version,
+        },
+        sdk: {
+          entries: sdk.entries.length,
+          name: sdk.name,
+          version: sdk.version,
+        },
+      },
       react,
-      result: 'all author tests and deterministic installer validation passed',
+      result:
+        'packed SDK and scaffold tarballs, author tests and deterministic installer validation passed',
     },
     null,
     2

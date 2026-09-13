@@ -21,7 +21,7 @@
     "test:plugin-t3-exit-fixtures": "bun scripts/trusted-plugin-t3/verify-exit-fixtures.ts",
     "test:plugin-t3": "bun scripts/trusted-plugin-t3/run.ts",
     "test:plugin-t4": "bun scripts/trusted-plugin-t4/run.ts",
-    "test:plugin-templates": "bun scripts/create-plugin/verify-templates.ts",
+    "test:plugin-templates": "bun packages/create-plugin/verify-templates.ts",
     "plugin:create": "bun scripts/create-plugin.ts",
     "plugin:pack": "bun packages/plugin-sdk/package-plugin.js",
     "upload:r2": "bun scripts/upload-r2.ts",

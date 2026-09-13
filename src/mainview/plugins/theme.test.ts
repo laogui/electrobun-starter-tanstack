@@ -6,7 +6,7 @@ import {
   createButton,
   createInput,
   createSurface,
-} from '../../../scripts/create-plugin/templates/javascript/ui.js';
+} from '../../../packages/create-plugin/templates/javascript/ui.js';
 
 const css = readFileSync('src/mainview/plugins/theme.css', 'utf8');
 

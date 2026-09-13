@@ -12,41 +12,43 @@ React panels use the host's **React / ReactDOM 19.2.x**. A bundler must external
 
 ## Create and package an external plugin
 
-From the GhostBoard source checkout, create one of four independent author projects:
+Outside the GhostBoard source tree, scaffold one of four independent author projects with the published `create-ghostboard-plugin` command:
 
 ```sh
-bun run plugin:create ../hello-plugin
-bun run plugin:create ../react-plugin --react
-bun run plugin:create ../csv-importer --importer
-bun run plugin:create ../combined-plugin --combined
+bunx create-ghostboard-plugin ../hello-plugin
+bunx create-ghostboard-plugin ../react-plugin --react
+bunx create-ghostboard-plugin ../csv-importer --importer
+bunx create-ghostboard-plugin ../combined-plugin --combined
 ```
 
-The default JavaScript and React templates demonstrate command + panel contributions. The importer template is a no-build mapped and segmented CSV importer. The combined no-build template registers command, panel, canvas type, and importer contributions together. Every template copies this SDK for local types/tests and exposes `bun run package`.
+From a GhostBoard source checkout, `bun run plugin:create <dir> [flag]` generates the same projects against the local SDK instead of the npm release.
 
-The dependency-free `package-plugin.js` command accepts a complete runtime directory, or repeated `--include` values when author files share that directory:
+The default JavaScript and React templates demonstrate command + panel contributions. The importer template is a no-build mapped and segmented CSV importer. The combined no-build template registers command, panel, canvas type, and importer contributions together. Every template depends on `@ghostboard/sdk` from npm for local types, the fake host, `AI_REFERENCE.md`, and the `ghostboard-plugin` packer, and exposes `bun run package`.
+
+The dependency-free `ghostboard-plugin` command (`package-plugin.js` in this package) accepts a complete runtime directory, or repeated `--include` values when author files share that directory:
 
 ```sh
-bun sdk/package-plugin.js dist \
+ghostboard-plugin dist \
   --output release/example.notes-0.1.0.ghostboard-plugin
 
-bun sdk/package-plugin.js . \
+ghostboard-plugin . \
   --output dist/example.notes-0.1.0.ghostboard-plugin \
   --include manifest.json \
   --include app.js
 ```
 
-It writes a deterministic stored ZIP in sorted path order, refuses symlinks and unsafe paths, enforces the installer's current 256-file / 8 MiB uncompressed limits, and validates manifest v2 plus the packaged app entry without executing plugin code. Identical runtime bytes produce an identical archive hash. Output may use `.ghostboard-plugin` or `.zip`. Final users need only the archive, not Bun, `node_modules`, source tests, or the copied SDK.
+It writes a deterministic stored ZIP in sorted path order, refuses symlinks and unsafe paths, enforces the installer's current 256-file / 8 MiB uncompressed limits, and validates manifest v2 plus the packaged app entry without executing plugin code. Identical runtime bytes produce an identical archive hash. Output may use `.ghostboard-plugin` or `.zip`. Final users need only the archive, not Bun, `node_modules`, source tests, or this package.
 
 For releases that can update the same plugin ID, create an author key outside the runtime directory and source control:
 
 ```sh
-bun sdk/package-plugin.js --generate-key ../plugin-keys/example.notes.pem
+ghostboard-plugin --generate-key ../plugin-keys/example.notes.pem
 ```
 
 The command refuses to overwrite an existing key, creates the private key with owner-only permissions, and prints an `ed25519-spki:...` value. Copy that exact value into manifest `publicKey`; declare the stable HTTPS `update.url` before the first signed release. Then sign while packaging:
 
 ```sh
-bun sdk/package-plugin.js dist \
+ghostboard-plugin dist \
   --sign ../plugin-keys/example.notes.pem \
   --output release/example.notes-0.1.0.ghostboard-plugin
 ```

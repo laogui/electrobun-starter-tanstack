@@ -618,10 +618,14 @@ differences. Validate those in a packaged GhostBoard app.
 
 ## Packaging
 
-The SDK includes a deterministic, dependency-free package command:
+The SDK includes a deterministic, dependency-free package command exposed as
+the `ghostboard-plugin` bin. Projects created with `create-ghostboard-plugin`
+call it from their `package` script; run it directly with
+`bunx ghostboard-plugin` (or `bun node_modules/@ghostboard/sdk/package-plugin.js`)
+after `bun install`:
 
 ```sh
-bun sdk/package-plugin.js <runtime-directory> \
+ghostboard-plugin <runtime-directory> \
   --output release/example.notes-0.1.0.ghostboard-plugin
 ```
 
@@ -630,7 +634,7 @@ output must be outside that directory. For a no-build project whose author files
 share the runtime root, provide repeated explicit includes:
 
 ```sh
-bun sdk/package-plugin.js . \
+ghostboard-plugin . \
   --output dist/example.notes-0.1.0.ghostboard-plugin \
   --include manifest.json \
   --include app.js \
@@ -647,14 +651,14 @@ To establish an author identity for same-ID updates, generate a private key
 outside the runtime directory and source control:
 
 ```sh
-bun sdk/package-plugin.js --generate-key ../plugin-keys/example.notes.pem
+ghostboard-plugin --generate-key ../plugin-keys/example.notes.pem
 ```
 
 Copy the printed `ed25519-spki:...` value into manifest `publicKey`, declare a
 stable HTTPS `update.url`, then package with:
 
 ```sh
-bun sdk/package-plugin.js <runtime-directory> \
+ghostboard-plugin <runtime-directory> \
   --sign ../plugin-keys/example.notes.pem \
   --output release/example.notes-0.1.0.ghostboard-plugin
 ```
@@ -669,7 +673,7 @@ local experiments but cannot be updated in place.
 
 The archive may use `.ghostboard-plugin` or `.zip`. Final-user installation
 needs only this runtime archive; it must not require Bun, Node, `node_modules`,
-the copied `sdk/`, source tests, or the host repository.
+the `@ghostboard/sdk` package, source tests, or the host repository.
 
 ## Completion checklist
 

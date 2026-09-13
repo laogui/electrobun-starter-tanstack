@@ -6,12 +6,12 @@
     "build": "vite build",
     "build:shim": "vite build --config vite.shim.config.ts",
     "dev": "vite build --watch",
-    "package": "bun run build && bun sdk/package-plugin.js dist --output release/example.react-hello-0.1.0.ghostboard-plugin",
+    "package": "bun run build && ghostboard-plugin dist --output release/example.react-hello-0.1.0.ghostboard-plugin",
     "test": "bun test",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ghostboard/sdk": "file:./sdk",
+    "@ghostboard/sdk": "^0.1.0",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },

@@ -1,0 +1,68 @@
+---
+title: "命令"
+description: "注册带可选快捷键的菜单项，把行为放在一个函数里，并尊重激活生命周期。"
+section: guides
+order: 10
+---
+
+命令是最小的插件：一个 `manifest.json` 加一个 JavaScript 文件。
+
+```js
+import { definePlugin } from '@ghostboard/sdk';
+
+export default definePlugin({
+  setup(app) {
+    app.commands.register({
+      id: 'tidy-titles',
+      title: 'Tidy selected titles',
+      shortcut: 'Mod+Shift+T',
+      enabled: () => !app.signal.aborted,
+      run: () => tidyTitles(app),
+    });
+  },
+});
+```
+
+## 经验法则
+
+- **ID 是插件本地的 kebab-case。** 宿主按插件 ID 加命名空间，两个插件都可以有 `open-summary`。
+- **宿主快捷键优先。** 文本编辑与内置快捷键优先于插件快捷键；把快捷键当作便利，而不是唯一入口。
+- **一个行为一个函数。** 把真正的工作放进函数，再从命令、面板按钮和测试里调用。
+- **注册是暂存的。** `setup` 里的所有注册只在 `setup` 成功后发布。重载失败时旧命令继续可用。
+- **清理自己的资源。** `app.commands.register` 返回 disposer，也可以用 `app.onCleanup` 添加任意清理。清理在插件重载、停用或工作区关闭时按逆序执行且只执行一次。
+- **尊重 `app.signal`。** 把它传给 `fetch`、存储与内容调用，让长操作在激活退役时停止。
+
+## 一条修改 Notes 的命令
+
+```js
+async function tidyTitles(app) {
+  const selected = await app.selection.get({ signal: app.signal });
+  const updates = selected
+    .filter((note) => note.revision !== null)
+    .map((note) => ({
+      id: note.id,
+      expectedRevision: note.revision,
+      changes: { title: note.title.trim().replace(/\s+/g, ' ') },
+    }));
+  if (updates.length === 0) return;
+  await app.content.updateMany(updates, {
+    label: 'Tidy titles',
+    operationId: `tidy-${Date.now()}`,
+    signal: app.signal,
+  });
+}
+```
+
+更新按 `expectedRevision` 做 compare-and-swap：如果用户在此期间编辑了某条 Note，该项会可见地失败而不是覆盖。批次记录在工作区历史里，用户在画布视图激活时可用普通撤销快捷键撤销，插件也可以之后调用 `app.content.undo(batchId)`。见[笔记、存储与事件](/zh/docs/guides/content-and-storage/)。
+
+## 测试
+
+```js
+import { createFakeHost } from '@ghostboard/sdk/testing';
+import plugin from './app.js';
+
+const fake = createFakeHost({ pluginId: 'yourname.tidy', workspaceId: 'w1' });
+await plugin.setup(fake.app);
+await fake.harness.behavior.runCommand('tidy-titles');
+await fake.harness.lifecycle.dispose();
+```

@@ -11,6 +11,8 @@
       "**",
       "!src/paraglide",
       "!src/mainview/routeTree.gen.ts",
+      // Drop-in for the react-starter-kit Astro site; formatted by that repo's Prettier.
+      "!packages/plugin-docs-site",
       "!!.delta",
       "!!.delta"
     ]

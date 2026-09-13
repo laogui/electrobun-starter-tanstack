@@ -1,0 +1,45 @@
+---
+import { getCollection, render } from "astro:content";
+
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import {
+  type DocsLocale,
+  isDocsLocale,
+  normalizeSlug,
+  resolvePage,
+  toPages,
+} from "../../lib/docs";
+import { getLocale } from "../../src/paraglide/runtime.js";
+
+// Paraglide's middleware strips the `/zh` prefix before routing, so this file
+// serves both `/docs/<slug>/` and `/zh/docs/<slug>/`; the locale comes from
+// the request context rather than the path.
+const requested = getLocale();
+const locale: DocsLocale = isDocsLocale(requested) ? requested : "en";
+const slug = normalizeSlug(Astro.params.slug);
+
+const entries = await getCollection("docs");
+const pages = toPages(entries);
+const resolved = resolvePage(pages, locale, slug);
+const entry = resolved
+  ? entries.find((candidate) => candidate.id === resolved.page.id)
+  : undefined;
+
+if (!(resolved && entry)) {
+  return new Response(null, { status: 404, statusText: "Not Found" });
+}
+
+const { Content, headings } = await render(entry);
+---
+
+<DocsLayout
+  locale={locale}
+  pages={pages}
+  page={resolved.page}
+  fallback={resolved.fallback}
+  headings={headings}
+  title={resolved.page.title}
+  description={resolved.page.description}
+>
+  <Content />
+</DocsLayout>

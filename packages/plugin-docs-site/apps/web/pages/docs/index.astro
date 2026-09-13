@@ -1,0 +1,59 @@
+---
+import { getCollection } from "astro:content";
+
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import {
+  buildSidebar,
+  type DocsLocale,
+  docsPath,
+  isDocsLocale,
+  toPages,
+} from "../../lib/docs";
+import { m } from "../../src/paraglide/messages.js";
+import { getLocale, localizeHref } from "../../src/paraglide/runtime.js";
+
+const requested = getLocale();
+const locale: DocsLocale = isDocsLocale(requested) ? requested : "en";
+const pages = toPages(await getCollection("docs"));
+const sections = buildSidebar(pages, locale);
+const firstPlugin =
+  pages.find(
+    (page) => page.locale === locale && page.slug === "start/first-plugin",
+  ) ?? pages.find((page) => page.slug === "start/first-plugin");
+---
+
+<DocsLayout
+  locale={locale}
+  pages={pages}
+  title={m.docs_title()}
+  description={m.docs_landing_description()}
+>
+  <p>{m.docs_landing_intro()}</p>
+  {
+    firstPlugin && (
+      <p>
+        <a href={localizeHref(docsPath(firstPlugin.slug))}>
+          {m.docs_landing_cta()}
+        </a>
+      </p>
+    )
+  }
+  {
+    sections.map((section) => (
+      <section>
+        <h2 id={section.id}>{section.title}</h2>
+        <ul>
+          {section.items.map((item) => (
+            <li>
+              <a href={localizeHref(docsPath(item.slug))}>{item.title}</a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+  <p class="text-sm text-muted-foreground">
+    <a href="/docs/llms.txt">llms.txt</a> ·{" "}
+    <a href="/docs/llms-full.txt">llms-full.txt</a>
+  </p>
+</DocsLayout>

@@ -12,6 +12,8 @@ export default defineConfig({
       'src/mainview/**/*.{test,spec}.{ts,tsx}',
       'src/bun/**/*.{test,spec}.{ts,tsx}',
       'src/shared/**/*.{test,spec}.{ts,tsx}',
+      // Pure routing helpers of the docs-site drop-in (packages/plugin-docs-site/README.md).
+      'packages/plugin-docs-site/apps/web/lib/**/*.{test,spec}.ts',
     ],
     coverage: {
       provider: 'v8',

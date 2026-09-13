@@ -1,0 +1,13 @@
+{
+  "web_nav_docs": "文档",
+  "docs_title": "插件文档",
+  "docs_landing_description": "构建、测试、打包、签名并分发高信任 GhostBoard 插件。",
+  "docs_landing_intro": "GhostBoard 插件是你显式安装并启用的普通 JavaScript。这些页面覆盖四类受支持的贡献（命令、面板、自定义画布类型和导入器）、@ghostboard/sdk 参考、打包与签名更新，以及兼容与支持策略。",
+  "docs_landing_cta": "15 分钟完成第一个插件 →",
+  "docs_fallback_badge": "仅英文",
+  "docs_fallback_notice": "本页尚未翻译，当前显示英文版本。",
+  "docs_source_version": "生成自 {version}",
+  "docs_on_this_page": "本页目录",
+  "docs_previous": "上一页",
+  "docs_next": "下一页"
+}

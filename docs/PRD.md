@@ -383,6 +383,8 @@ SDK 覆盖内容、画布、选区、设置、事件、文件选择与读写、�
 6. 一个组合插件可复用命令、菜单与面板；停用后无残留注册、订阅或任务。
 7. 更新、作者密钥变更、坏包、运行故障与迁移失败不会静默覆盖已有数据，恢复过程有桌面操作记录；旧 v1 包被拒绝且数据保留。
 
+证据状态（2026-09-13）：第 2–7 项已由 T1–T4 的 macOS arm64 发行包探针覆盖（[§10](./features/In%20Progress/trusted-plugin-platform.md#10-实施阶段与退出条件) 各批证据、[T3 退出](./features/In%20Progress/trusted-plugin-t3-exit-evidence.md)、[T4 更新与恢复](./features/In%20Progress/trusted-plugin-t4-update-recovery-evidence.md)）。第 1 项"在主仓库之外开发并在干净环境通过 URL 安装"的工程路径已由 T5 完成——npm 脚手架、公开签名样例与不走 loopback 的公共 HTTPS 探针、[兼容策略](./features/In%20Progress/trusted-plugin-compatibility-policy.md)与文档站——但其"有记录"部分（npm 发布、样例上传、macOS x64 实跑、外部作者试用）仍待在仓外运行并回填到 [T5 阶段汇总](./features/In%20Progress/trusted-plugin-t5-evidence.md)；回填前公开插件首版**不得**标记为已验收。
+
 详细装载机制、包格式、SDK、签名与阶段退出条件由 [高信任插件系统改造方案](./features/In%20Progress/trusted-plugin-platform.md) 维护，不以此处产品要求替代工程验证。
 
 ## 3. 关键动画与动效规范 (Motion Design Specs)

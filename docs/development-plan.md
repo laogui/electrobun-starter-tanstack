@@ -35,7 +35,7 @@ D0–D2 的历史验收记录保留。审查新发现的实例保存回归作为
 
 1. **T0 / T1 已完成**：装载机制、旧 QuickJS 运行时清理、manifest v2、命令 / 面板、重载与诊断均已有 macOS arm64 发行包证据；继续保留 Linux / Windows 平台差异及外部作者试用边界。
 2. **T2 已完成现行范围**：A4、笔记元数据与正文事务、选区 hooks、宿主正文同步、detached 笔记创建、自定义画布类型、冲突恢复 UI，以及 session 级统一原生 / 画布 / 插件笔记 undo 均有自动化和 macOS arm64 发行包证据。混合游标按 workspace + view 定界且不跨重启；显式 SDK 批次历史仍持久可用。
-3. **T3 已完成，T4 已完成，进入 T5**：前五批完成受限 CSV、完整 files、分段导入、通用配置、确定性 packer / 作者模板与 A6 单文件 AI 参考；退出批使用公开工具链生成 command、panel、canvas type、CSV importer 四个独立包，并在真实 macOS arm64 canary 完成本地安装、下载事务、逐包停用隔离、同 workspace 重启与四类最终用户操作。T4 又以同一 canary 完成四次 packaged 启动退出：显式/恢复安全模式、Ed25519/TOFU descriptor 更新、换 key 与坏摘要拒绝、current/previous 代码回退、迁移 preimage 恢复。公共外网 HTTPS、人工原生 picker、Windows / Linux 和外部真人作者试用继续作为明确未运行边界；下一步由 T5 完成文档站与支持平台、外部作者验收。旧模型的容器实验与命令闭环只保留在归档，不作为现行阶段证据。
+3. **T3 / T4 已完成，T5 工程实现完成、公开验收待运行**：前五批完成受限 CSV、完整 files、分段导入、通用配置、确定性 packer / 作者模板与 A6 单文件 AI 参考；退出批使用公开工具链生成 command、panel、canvas type、CSV importer 四个独立包，并在真实 macOS arm64 canary 完成本地安装、下载事务、逐包停用隔离、同 workspace 重启与四类最终用户操作。T4 又以同一 canary 完成四次 packaged 启动退出：显式/恢复安全模式、Ed25519/TOFU descriptor 更新、换 key 与坏摘要拒绝、current/previous 代码回退、迁移 preimage 恢复。T5 七批（[阶段汇总](./features/In%20Progress/trusted-plugin-t5-evidence.md)）已交付可发布的 `@ghostboard/sdk` / `create-ghostboard-plugin` 与发布流水线、兼容策略及防漂移门禁、en / zh 文档站 drop-in、签名样例包上传脚本与不传 `allowLoopback` 的公共 HTTPS 探针、macOS arm64 / x64 回归 workflow、外部作者试用协议，本仓门禁全部通过；Windows / Linux 公开标注为不支持插件系统。**T5 未退出**：npm 发布、文档站真实域名部署、样例上传 R2、x64 实跑与 ≥ 2 名外部作者试用需在本仓之外完成并回填证据表。旧模型的容器实验与命令闭环只保留在归档，不作为现行阶段证据。
 
 当前不增加小组件、设置或市场功能；没有新的基础项目体验阻断点就不启动 D3。
 

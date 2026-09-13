@@ -442,6 +442,8 @@ SDK 优先覆盖完整用户动作，而不是导出内部 store。`files` 与 `
 
 2026-09-13 T4 packaged 退出结果：运行 [`bun run test:plugin-t4`](../../../package.json) 从 canary 解出的 arm64 launcher 连续启动 `safe-mode`、`safe-recovery`、`update`、`migration` 四次，共 34 项检查通过。覆盖显式安全模式与下一次正常恢复、同 key descriptor 更新、换 key 拒绝、错误 SHA 拒绝、current/previous 代码回退、revision-conflict 迁移失败时 live data 保持不变、迁移 preimage 可见与显式恢复；每次报告均来自 renderer 通过 bearer 保护的本地 host。机器摘要见 [`t4-evidence.json`](../../../build/plugin-t4-artifacts/t4-evidence.json) 与 [T4 result](trusted-plugin-t4-result.json)。KV storage 尚无版本迁移 API；公共外网 HTTPS、codesign/notarization、Windows/Linux 和真人外部作者验收仍是明确未运行边界。
 
+2026-09-13 T5 工程实现结果：[T5 阶段汇总](trusted-plugin-t5-evidence.md)。SDK 与脚手架拆为可发布的 `@ghostboard/sdk` / `create-ghostboard-plugin`（模板依赖 npm 而非复制 `sdk/`，`verify-templates` 改为 tarball 安装门禁，`publish-sdk.yml` 带 provenance）；[兼容策略](trusted-plugin-compatibility-policy.md)成文并由 `verify-compat-docs` 防漂移；文档站以 `packages/plugin-docs-site` drop-in 形式交付 en / zh 各 17 页、SDK 参考同步与 `llms` 端点；`upload-plugin-examples.ts` 用公开 packer 签名四类样例包与 descriptor，T5 探针不传 `allowLoopback` 从公共 HTTPS 安装、经公共 descriptor TOFU 更新、四类操作回归并记录人工 picker；`plugin-platform-regression.yml` 在 `macos-14` / `macos-15-intel` 跑 T3 exit / T4 / T5，`release.yml` 从已退役的 `macos-13` 迁到 `macos-15-intel`；[作者试用协议](trusted-plugin-t5-author-trial.md)定稿。本仓门禁全部通过。**T5 尚未退出**：npm 发布、文档站真实域名部署、样例上传 R2、macOS x64 实跑与 ≥ 2 名外部作者试用都只能在本仓之外完成，各证据文件已留出运行步骤与空结果表；Windows / Linux 公开标注为不支持插件系统，应用内 Plugin Guide 与 codesign / notarization 之外的项不进首版。
+
 T0 是本方案最大的技术风险所在，其三项机制（import map 共享依赖、本地 HTTP 装载、宿主代理服务）任一不成立都会改变架构，必须先于 SDK 设计在真实发行包上实测。随后做开发者闭环，不先设计所有可能的扩展点。原生依赖、复杂任务调度和深度编辑器 API 等待真实插件需求驱动。
 
 ## 11. 验收清单

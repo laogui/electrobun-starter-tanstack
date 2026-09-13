@@ -50,7 +50,7 @@ SDK 的 patch / minor 只修正类型、fake host、参考文本或增加与宿�
 | 项目 | 状态 | 依据 |
 | --- | --- | --- |
 | macOS arm64 | 支持：T0–T4 发行包证据，T5 探针按 [T5 计划](trusted-plugin-t5-evidence.md) 运行 | §10 各批记录 |
-| macOS x64 | 待验证：由 `release.yml` `macos-13` 产出 canary 并运行 T3 exit / T4 / T5 探针后才宣称支持；Rosetta 与 Intel 真机分别记录 | [T5 平台证据](trusted-plugin-t5-platform-evidence.md) |
+| macOS x64 | 待验证：由 `plugin-platform-regression.yml` 在 `macos-15-intel`（GitHub 最后一代 Intel 真机 runner）构建 x64 canary 并运行 T3 exit / T4 / T5 探针后才宣称支持；Rosetta 与 Intel 真机分别记录 | [T5 平台证据](trusted-plugin-t5-platform-evidence.md) |
 | Windows x64 | 不支持插件系统：应用可构建，但装载、import map、宿主服务、安装与恢复未在 Windows 验证 | 本文 |
 | Linux | 不支持：无发行矩阵 | 本文 |
 | URL 安装来源 | 仅公共 HTTPS；拒绝 loopback、私网解析地址、非 ZIP 内容、超限响应与不安全重定向 | `urlInstall.ts` |

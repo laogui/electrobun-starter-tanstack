@@ -9,8 +9,13 @@ import {
   generateSigningKey,
 } from '../../packages/plugin-sdk/package-plugin.js';
 
-if (process.platform !== 'darwin' || process.arch !== 'arm64') {
-  throw new Error('Packaged T4 acceptance currently requires macOS arm64.');
+if (
+  process.platform !== 'darwin' ||
+  (process.arch !== 'arm64' && process.arch !== 'x64')
+) {
+  throw new Error(
+    'Packaged T4 acceptance requires macOS arm64 or x64; other platforms are not supported plugin hosts.'
+  );
 }
 
 const project = resolve(import.meta.dir, '../..');
@@ -240,7 +245,7 @@ await run(
 const archive = join(
   project,
   artifactFolder,
-  'canary-macos-arm64-GhostBoard-canary.app.tar.zst'
+  `canary-macos-${process.arch}-GhostBoard-canary.app.tar.zst`
 );
 const archiveSha256 = new Bun.CryptoHasher('sha256')
   .update(await Bun.file(archive).arrayBuffer())
@@ -300,6 +305,7 @@ for (const phase of phases) {
 }
 
 const evidence = {
+  arch: process.arch,
   archive,
   archiveSha256,
   packages,
@@ -313,8 +319,10 @@ await writeFile(
   `${JSON.stringify(evidence, null, 2)}\n`
 );
 await mkdir(join(project, artifactFolder), { recursive: true });
-await writeFile(
-  join(project, artifactFolder, 't4-evidence.json'),
-  `${JSON.stringify(evidence, null, 2)}\n`
-);
+for (const name of ['t4-evidence.json', `t4-evidence-${process.arch}.json`]) {
+  await writeFile(
+    join(project, artifactFolder, name),
+    `${JSON.stringify(evidence, null, 2)}\n`
+  );
+}
 downloadServer.close();

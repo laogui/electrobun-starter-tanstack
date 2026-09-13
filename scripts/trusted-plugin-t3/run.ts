@@ -5,8 +5,13 @@ import { dirname, join, resolve } from 'node:path';
 
 import { loadPluginFromZip } from '../../src/bun/plugins/zipInstall';
 
-if (process.platform !== 'darwin' || process.arch !== 'arm64') {
-  throw new Error('Packaged T3 acceptance currently requires macOS arm64.');
+if (
+  process.platform !== 'darwin' ||
+  (process.arch !== 'arm64' && process.arch !== 'x64')
+) {
+  throw new Error(
+    'Packaged T3 acceptance requires macOS arm64 or x64; other platforms are not supported plugin hosts.'
+  );
 }
 
 const project = resolve(import.meta.dir, '../..');
@@ -152,7 +157,7 @@ try {
   const archive = join(
     project,
     artifactFolder,
-    'canary-macos-arm64-GhostBoard-canary.app.tar.zst'
+    `canary-macos-${process.arch}-GhostBoard-canary.app.tar.zst`
   );
   const archiveSha256 = new Bun.CryptoHasher('sha256')
     .update(await Bun.file(archive).arrayBuffer())
@@ -208,25 +213,28 @@ try {
       closeSync(log);
     }
   }
+  const evidence = `${JSON.stringify(
+    {
+      arch: process.arch,
+      archive,
+      archiveSha256,
+      pluginArchive,
+      pluginEntries,
+      pluginSha256,
+      independentPackages: packageReports.filter(
+        (report) => report.name !== 'combined'
+      ),
+      results,
+      signingRequested: Boolean(process.env.ELECTROBUN_DEVELOPER_ID),
+      notarizationRequested: Boolean(process.env.ELECTROBUN_APPLEID),
+    },
+    null,
+    2
+  )}\n`;
+  await writeFile(join(directory, 'package-evidence.json'), evidence);
   await writeFile(
-    join(directory, 'package-evidence.json'),
-    `${JSON.stringify(
-      {
-        archive,
-        archiveSha256,
-        pluginArchive,
-        pluginEntries,
-        pluginSha256,
-        independentPackages: packageReports.filter(
-          (report) => report.name !== 'combined'
-        ),
-        results,
-        signingRequested: Boolean(process.env.ELECTROBUN_DEVELOPER_ID),
-        notarizationRequested: Boolean(process.env.ELECTROBUN_APPLEID),
-      },
-      null,
-      2
-    )}\n`
+    join(project, artifactFolder, `t3-evidence-${process.arch}.json`),
+    evidence
   );
 } finally {
   downloadServer.stop(true);

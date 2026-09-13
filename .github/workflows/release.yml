@@ -4,6 +4,11 @@ name: Release
 # then uploads the artifacts to Cloudflare R2. macOS builds are signed and
 # notarized; Windows is left unsigned. Triggered by pushing a v* tag, or run
 # manually to publish a chosen channel.
+#
+# Plugin-platform support: the trusted plugin system is verified on macOS
+# arm64 and x64 only (see plugin-platform-regression.yml). The Windows job
+# still ships the app, but plugins are documented as unverified / unsupported
+# on Windows and Linux, and no Linux job is added here on purpose.
 on:
   push:
     tags:
@@ -32,7 +37,9 @@ jobs:
         include:
           - os: macos-14
             label: macOS arm64
-          - os: macos-13
+          # macos-13 was retired in December 2025; macos-15-intel is the last
+          # GitHub-hosted x86_64 macOS image (available until August 2027).
+          - os: macos-15-intel
             label: macOS x64
           - os: windows-latest
             label: Windows x64

@@ -89,7 +89,7 @@ vi.mock('electrobun/bun', () => ({
   BrowserWindow: BrowserWindowMock,
   Updater: {
     checkForUpdate: updaterCheckForUpdateMock,
-    getLocallocalInfo: updaterGetLocalInfoMock,
+    getLocalInfo: updaterGetLocalInfoMock,
     localInfo: {
       channel: localInfoChannelMock,
       hash: vi.fn(async () => 'current-hash'),

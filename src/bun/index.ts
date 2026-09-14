@@ -1551,12 +1551,12 @@ function buildAIConfig(): AIServerConfig | null {
 
 async function getAppInfoData(): Promise<AppInfoResponse> {
   try {
-    // Updater.getLocallocalInfo returns the full version.json shape
+    // Updater.getLocalInfo returns the full version.json shape
     // (version + hash + channel + name + identifier) — Updater.localInfo
     // only exposes a subset, so we use the lower-level call here.
     const info = await (
       Updater as unknown as {
-        getLocallocalInfo: () => Promise<{
+        getLocalInfo: () => Promise<{
           channel: string;
           hash: string;
           identifier: string;
@@ -1564,7 +1564,7 @@ async function getAppInfoData(): Promise<AppInfoResponse> {
           version: string;
         }>;
       }
-    ).getLocallocalInfo();
+    ).getLocalInfo();
     return {
       version: info.version,
       hash: info.hash,

@@ -123,12 +123,15 @@ import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
-import { measureTopicSize } from '@/lib/topicMeasure';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
-import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+import {
+  type CreateNodeOptions,
+  previewTopicDraft,
+  useCanvasStore,
+} from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
@@ -147,7 +150,6 @@ import {
 } from '../../shared/extensions/media/state';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
 import { normalizeLinkState } from '../../shared/extensions/web/link';
-import { createTopicData } from '../../shared/topic';
 
 registerBuiltinCanvasTypes();
 
@@ -1759,28 +1761,13 @@ function CanvasComponent() {
   // The in-flight Topic draft is rendered like a node but lives outside the
   // store's `nodes`, so it never reaches persistence, history, selection, or
   // the node count. It joins the graph only when the first title is committed.
-  const topicDraftNode = useMemo((): Node | null => {
-    if (!topicDraft || topicDraft.viewId !== activeViewId) {
-      return null;
-    }
-    const size = measureTopicSize(topicDraft.text);
-    return {
-      data: { ...createTopicData(topicDraft.text), isDraft: true },
-      deletable: false,
-      draggable: false,
-      id: topicDraft.id,
-      position: topicDraft.anchor,
-      selectable: false,
-      style: { width: size.width, height: size.height },
-      type: 'topic',
-      ...(topicDraft.parentId
-        ? { extent: 'parent' as const, parentId: topicDraft.parentId }
-        : {}),
-    };
-  }, [activeViewId, topicDraft]);
+  const topicPreview = useMemo(
+    () => previewTopicDraft(nodes, edges, topicDraft, activeViewId),
+    [nodes, edges, topicDraft, activeViewId]
+  );
 
   const renderSourceNodes = useMemo(() => {
-    const baseNodes = topicDraftNode ? [...nodes, topicDraftNode] : nodes;
+    const baseNodes = topicPreview.nodes;
     if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
       return baseNodes;
     }
@@ -1796,8 +1783,7 @@ function CanvasComponent() {
     closingFolderId,
     focusedFolderId,
     folderExpansionNodes,
-    nodes,
-    topicDraftNode,
+    topicPreview.nodes,
   ]);
 
   // Decorate nodes with render-only flags while keeping object identity stable
@@ -2193,7 +2179,7 @@ function CanvasComponent() {
           defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
           defaultViewport={sessionViewport ?? undefined}
           disableKeyboardA11y
-          edges={edges}
+          edges={topicPreview.edges}
           edgeTypes={edgeTypes}
           elevateEdgesOnSelect
           fitView={!sessionViewport}

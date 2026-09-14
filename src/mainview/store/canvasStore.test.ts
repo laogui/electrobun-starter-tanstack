@@ -23,7 +23,7 @@ import {
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
 import { canvasImporterPlacementHost } from '@/plugins/runtime/importPlacement';
-import { useCanvasStore } from '@/store/canvasStore';
+import { previewTopicDraft, useCanvasStore } from '@/store/canvasStore';
 import {
   LINK_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
@@ -3305,6 +3305,105 @@ describe('canvasStore — Topic tree transactions', () => {
   afterEach(() => {
     resetStore();
     unifiedUndoHistory.reset();
+  });
+
+  it.each([
+    'child',
+    'sibling',
+  ] as const)('previews an empty %s in tree order with a connection without saving it', (kind) => {
+    seedTree();
+    const before = useCanvasStore.getState();
+    before.beginTopicRelativeDraft(kind, kind === 'child' ? 'root' : 'kid-a');
+    const state = useCanvasStore.getState();
+    const draft = state.topicDraft!;
+    const preview = previewTopicDraft(
+      state.nodes,
+      state.edges,
+      draft,
+      state.activeViewId
+    );
+    const created = preview.nodes.find((node) => node.id === draft.id)!;
+    const preceding = preview.nodes.find(
+      (node) => node.id === (kind === 'child' ? 'kid-b' : 'kid-a')
+    )!;
+    expect(created.position.y).toBeGreaterThanOrEqual(
+      preceding.position.y + 40
+    );
+    expect(preview.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'root',
+        target: draft.id,
+        selectable: false,
+        deletable: false,
+      })
+    );
+    expect(state.nodes).toBe(before.nodes);
+    expect(state.edges).toBe(before.edges);
+    state.cancelTopicDraft();
+    const cancelled = useCanvasStore.getState();
+    expect(
+      previewTopicDraft(
+        cancelled.nodes,
+        cancelled.edges,
+        cancelled.topicDraft,
+        cancelled.activeViewId
+      )
+    ).toEqual({ nodes: before.nodes, edges: before.edges });
+    expect(cancelled.undo()).toBe(false);
+  });
+
+  it('keeps the root anchored across repeated child previews, commits, and tidy', async () => {
+    seedTree();
+    const anchor = useCanvasStore
+      .getState()
+      .nodes.find((node) => node.id === 'root')!.position;
+    for (let i = 0; i < 3; i += 1) {
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root');
+      const state = useCanvasStore.getState();
+      const preview = previewTopicDraft(
+        state.nodes,
+        state.edges,
+        state.topicDraft,
+        state.activeViewId
+      );
+      expect(
+        preview.nodes.find((node) => node.id === 'root')!.position
+      ).toEqual(anchor);
+      expect(await state.commitTopicDraft(`Child ${i}`)).toBeDefined();
+      expect(
+        useCanvasStore.getState().nodes.find((node) => node.id === 'root')!
+          .position
+      ).toEqual(anchor);
+    }
+    const before = useCanvasStore.getState().nodes.map((node) => node.position);
+    useCanvasStore.getState().tidyTopicBranch('root');
+    expect(
+      useCanvasStore.getState().nodes.map((node) => node.position)
+    ).toEqual(before);
+  });
+
+  it('commits the positions already shown in the typed draft preview', async () => {
+    seedTree();
+    useCanvasStore.getState().beginTopicRelativeDraft('child', 'root');
+    useCanvasStore.getState().setTopicDraftText('Third');
+    const state = useCanvasStore.getState();
+    const preview = previewTopicDraft(
+      state.nodes,
+      state.edges,
+      state.topicDraft,
+      state.activeViewId
+    );
+    const draftNode = preview.nodes.find(
+      (node) => node.id === state.topicDraft!.id
+    )!;
+    const id = await state.commitTopicDraft('Third');
+    for (const node of useCanvasStore.getState().nodes) {
+      const expected =
+        node.id === id
+          ? draftNode
+          : preview.nodes.find((candidate) => candidate.id === node.id)!;
+      expect(node.position).toEqual(expected.position);
+    }
   });
 
   it('commits a child draft as one undo step carrying node, edge, and layout', async () => {

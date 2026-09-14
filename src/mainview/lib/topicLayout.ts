@@ -158,10 +158,17 @@ export function layoutTopicTree(
   let maxX = rootAnchor.x;
   let maxY = rootAnchor.y;
 
+  // rootAnchor is the root node's top-left, not the top of its subtree.
+  // Centre the subtree around that fixed node so repeated layout cannot
+  // accumulate a downward offset as children are inserted.
+  const rootHeight = sizeOf(sizes, rootId).height;
+  const rootBandTop =
+    rootAnchor.y - ((heights.get(rootId) ?? rootHeight) - rootHeight) / 2;
+
   // Each frame carries the top of the vertical band reserved for that subtree.
   const stack: Array<{ bandTop: number; id: string; x: number }> = [
     {
-      bandTop: rootAnchor.y,
+      bandTop: rootBandTop,
       id: rootId,
       x: rootAnchor.x,
     },

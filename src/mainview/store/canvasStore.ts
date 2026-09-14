@@ -450,7 +450,8 @@ function attachDraftToTree(
   nodes: Node[],
   edges: Edge[],
   newTopicId: string,
-  relation: { kind: 'child' | 'sibling'; topicId: string }
+  relation: { kind: 'child' | 'sibling'; topicId: string },
+  edgeId = `edge-${nanoid(8)}`
 ): { edges: Edge[]; rootId: string } | null {
   const anchor = nodes.find((node) => node.id === relation.topicId);
   const created = nodes.find((node) => node.id === newTopicId);
@@ -499,7 +500,7 @@ function attachDraftToTree(
     [
       ...edges,
       buildTopicChildEdge(
-        `edge-${nanoid(8)}`,
+        edgeId,
         parentId,
         newTopicId,
         ordered.indexOf(newTopicId)
@@ -509,6 +510,58 @@ function attachDraftToTree(
     ordered
   );
   return { edges: nextEdges, rootId: findTopicRoot(index, parentId) };
+}
+
+/** Preview the same insertion/layout as commit without mutating the saved graph. */
+export function previewTopicDraft(
+  nodes: Node[],
+  edges: Edge[],
+  draft: TopicDraft | null,
+  activeViewId: string
+): { edges: Edge[]; nodes: Node[] } {
+  if (!draft || draft.viewId !== activeViewId) {
+    return { edges, nodes };
+  }
+  const size = measureTopicSize(normalizeTopicTitle(draft.text));
+  const node: Node = {
+    data: { ...createTopicData(draft.text), isDraft: true },
+    deletable: false,
+    draggable: false,
+    // Render-only drafts do not receive the persisted graph's measurement
+    // updates. Supply dimensions so replacing the preview cannot hide it.
+    measured: size,
+    id: draft.id,
+    position: draft.anchor,
+    selectable: false,
+    style: { width: size.width, height: size.height },
+    type: TOPIC_NODE_TYPE,
+    ...(draft.parentId
+      ? { extent: 'parent' as const, parentId: draft.parentId }
+      : {}),
+  };
+  const nextNodes = sortNodesByParent([...nodes, node]);
+  if (!draft.relation) {
+    return { edges, nodes: nextNodes };
+  }
+  const attached = attachDraftToTree(
+    nextNodes,
+    edges,
+    draft.id,
+    draft.relation,
+    `${draft.id}-edge`
+  );
+  if (!attached) {
+    return { edges, nodes: nextNodes };
+  }
+  const layout = relayoutTopicTree(nextNodes, attached.edges, attached.rootId);
+  return {
+    edges: attached.edges.map((edge) =>
+      edge.id === `${draft.id}-edge`
+        ? { ...edge, selectable: false, deletable: false, focusable: false }
+        : edge
+    ),
+    nodes: layout.ok ? layout.nodes : nextNodes,
+  };
 }
 
 /**
@@ -1675,8 +1728,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return false;
     }
 
-    // Provisional anchor only: the real position comes from the layout pass in
-    // the commit, so an abandoned draft never shifts the tree.
+    // Fallback anchor for a draft whose tree cannot be laid out. The renderer
+    // previews the commit layout without changing persisted positions.
     const size = getNodeSize(anchor);
     const provisional =
       kind === 'child'

@@ -75,8 +75,8 @@ describe('layoutTopicTree', () => {
     });
     const a = result.positions.get('a');
     const b = result.positions.get('b');
-    expect(a?.y).toBe(0);
-    expect(b?.y).toBe(NODE_H + TOPIC_SIBLING_GAP);
+    expect(a?.y).toBe(-(NODE_H + TOPIC_SIBLING_GAP) / 2);
+    expect(b?.y).toBe((NODE_H + TOPIC_SIBLING_GAP) / 2);
     expect(a?.x).toBe(b?.x);
   });
 
@@ -90,7 +90,31 @@ describe('layoutTopicTree', () => {
       sizes: uniformSizes(['r', 'a', 'b']),
     });
     const childrenHeight = NODE_H * 2 + TOPIC_SIBLING_GAP;
-    expect(result.positions.get('r')?.y).toBe((childrenHeight - NODE_H) / 2);
+    expect(result.positions.get('r')).toEqual({ x: 0, y: 0 });
+    expect(result.positions.get('a')?.y).toBe(-(childrenHeight - NODE_H) / 2);
+    expect(result.bounds.y).toBe(-(childrenHeight - NODE_H) / 2);
+  });
+
+  it('does not drift when relayout uses the previous root position', () => {
+    const ids = ['r', 'a', 'b', 'a1', 'a2'];
+    const index = buildTopicIndex(ids.map(topic), [
+      treeEdge('r', 'a', 0),
+      treeEdge('r', 'b', 1),
+      treeEdge('a', 'a1', 0),
+      treeEdge('a', 'a2', 1),
+    ]);
+    const sizes = uniformSizes(ids);
+    const anchor = { x: 120, y: 300 };
+    const first = layoutTopicTree(index, 'r', { rootAnchor: anchor, sizes });
+    let previous = first;
+    for (let i = 0; i < 5; i += 1) {
+      previous = layoutTopicTree(index, 'r', {
+        rootAnchor: previous.positions.get('r')!,
+        sizes,
+      });
+      expect(previous.positions.get('r')).toEqual(anchor);
+      expect([...previous.positions]).toEqual([...first.positions]);
+    }
   });
 
   it('never overlaps nodes within one tree', () => {
@@ -346,7 +370,7 @@ describe('layoutTopicTreeAvoiding', () => {
         ['a', { x: 0, y: 0 }],
         ['b', { x: 0, y: 0 }],
       ]),
-      lockedIds: new Set(['r']),
+      lockedIds: new Set(['a']),
       rootAnchor: { x: 0, y: 0 },
       sizes,
     });

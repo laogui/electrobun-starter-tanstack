@@ -169,4 +169,82 @@ describe('manifest', () => {
       expect.stringContaining('[manifest] Failed to load')
     );
   });
+
+  it('copies the current manifest before the first Topic write', async () => {
+    const {
+      backupManifestBeforeFirstTopics,
+      loadManifest,
+      preTopicBackupViewFile,
+      saveManifest,
+    } = await import('./manifest');
+    const viewFile = 'views/view-1.canvas.json';
+    const original = {
+      schema: 'ghostboard-canvas/v1' as const,
+      viewId: 'view-1',
+      nodes: [
+        {
+          id: 'n1',
+          type: 'card',
+          position: { x: 10, y: 10 },
+          data: { keep: true },
+        },
+      ],
+      edges: [],
+    };
+    await saveManifest(workspaceRoot, viewFile, original);
+
+    const firstTopic = {
+      ...original,
+      nodes: [
+        ...original.nodes,
+        {
+          id: 't1',
+          type: 'topic',
+          position: { x: 0, y: 0 },
+          data: { title: 'Root', topicVersion: 1 },
+        },
+      ],
+    };
+    const result = await backupManifestBeforeFirstTopics(
+      workspaceRoot,
+      viewFile,
+      firstTopic.nodes
+    );
+    expect(result.created).toBe(true);
+    expect(result.backupFile).toBe(preTopicBackupViewFile(viewFile));
+
+    await expect(
+      loadManifest(workspaceRoot, result.backupFile!)
+    ).resolves.toEqual(original);
+
+    await saveManifest(workspaceRoot, viewFile, firstTopic);
+    const second = await backupManifestBeforeFirstTopics(
+      workspaceRoot,
+      viewFile,
+      firstTopic.nodes
+    );
+    expect(second.created).toBe(false);
+    await expect(
+      loadManifest(workspaceRoot, result.backupFile!)
+    ).resolves.toEqual(original);
+  });
+
+  it('does not create a pre-topic backup when the incoming graph has no Topics', async () => {
+    const { backupManifestBeforeFirstTopics, saveManifest } = await import(
+      './manifest'
+    );
+    const viewFile = 'views/view-1.canvas.json';
+    await saveManifest(workspaceRoot, viewFile, {
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'view-1',
+      nodes: [{ id: 'n1', type: 'card', position: { x: 0, y: 0 }, data: {} }],
+      edges: [],
+    });
+
+    await expect(
+      backupManifestBeforeFirstTopics(workspaceRoot, viewFile, [
+        { type: 'card' },
+      ])
+    ).resolves.toEqual({ created: false });
+  });
 });

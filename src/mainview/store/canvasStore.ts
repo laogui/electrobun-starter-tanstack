@@ -30,6 +30,11 @@ import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
+  COUNTED_NODE_TYPES,
+  countCountedNodes,
+  hasNodeQuota,
+} from '@/lib/nodeQuota';
+import {
   applyNoteTitlesToCanvasNodes,
   collectNoteIdsFromCanvasNodes,
 } from '@/lib/noteTitleProjection';
@@ -43,7 +48,6 @@ import {
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
-import { getCachedLicense, refreshLicense } from '@/lib/rpc-license';
 import {
   collectTopicLayoutObstacles,
   diffTopicPositions,
@@ -59,6 +63,7 @@ import {
   getStructurallyFrozenTopics,
   getTopicChildren,
   renumberSiblingEdges,
+  topicCanvasWritePaused,
 } from '@/lib/topicTree';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
@@ -222,21 +227,6 @@ interface FolderChildEntry {
 const GROUP_SELECTION_PADDING = 24;
 const DUPLICATE_OFFSET = 30;
 
-const FREE_NODE_LIMIT = 100;
-
-/** React Flow node types that count against the free-tier node limit. Topics
- *  use the same tally as notes and stickies rather than being implicitly
- *  exempt through a missing type check. */
-const COUNTED_NODE_TYPES = new Set<string>(['card', 'sticky', TOPIC_NODE_TYPE]);
-
-/**
- * Free-tier gate shared by every creation entry point (menu, keyboard, branch
- * operations, import) so they cannot drift apart.
- *
- * The cached license answers the common case synchronously; only an
- * unactivated cache falls through to a network refresh. Callers must re-read
- * store state after awaiting this — the graph can change while it runs.
- */
 /** Flow coordinates at the centre of the visible canvas, used as the default
  *  anchor for a node created from a menu rather than a cursor position. */
 function getViewportCenter(rfInstance: ReactFlowInstance<any, any> | null): {
@@ -546,28 +536,6 @@ function nextTopicCommandContext(
     return nextTopicId;
   }
   return currentContext === nextTopicId ? nextTopicId : null;
-}
-
-async function hasNodeQuota(nodes: Node[]): Promise<boolean> {
-  const counted = nodes.filter((n) => COUNTED_NODE_TYPES.has(n.type ?? ''));
-  if (counted.length < FREE_NODE_LIMIT) {
-    return true;
-  }
-  try {
-    const cached = getCachedLicense();
-    const license = cached?.activated ? cached : await refreshLicense();
-    if (license && !license.activated) {
-      toast.error(
-        'Free version limited to 100 cards. Please activate a license to continue.',
-        { duration: 4000 }
-      );
-      return false;
-    }
-  } catch (error) {
-    // Do not block offline users on a check that could not complete.
-    console.error('[License] Check failed:', error);
-  }
-  return true;
 }
 
 function cleanNodeForClipboard(node: Node): Node {
@@ -1030,6 +998,8 @@ export interface CanvasState {
 
   // Actions – clipboard
   copySelected: () => void;
+  /** Copy a Topic and its descendants (internal tree edges only). */
+  copyTopicBranch: (topicId: string) => void;
 
   // Actions – node CRUD
   createExtensionNode: (
@@ -1166,6 +1136,8 @@ export interface CanvasState {
 
   // Tag filter sidebar (workspace-wide tag list)
   tagSidebarOpen: boolean;
+  /** Re-run layout for the branch rooted at `topicId`. */
+  tidyTopicBranch: (topicId: string) => void;
   toggleLibrary: () => void;
   toggleNodeLocked: (nodeId: string) => void;
   /** Lock every node in `ids` unless all are already locked, then unlock. */
@@ -1182,6 +1154,12 @@ export interface CanvasState {
   topicCommandContextId: string | null;
   /** In-flight new Topic: rendered and editable, but not yet in the graph. */
   topicDraft: TopicDraft | null;
+  /**
+   * Whole-canvas write protection after a lossy or unconfirmable Topic
+   * decode. Distinct from structure freeze: other content may still be
+   * edited in memory, but auto-save must not overwrite the original file.
+   */
+  topicWritePaused: boolean;
   undo: () => boolean;
 
   ungroupSelected: () => void;
@@ -1224,6 +1202,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   editingTopicId: null,
   topicCommandContextId: null,
   topicDraft: null,
+  topicWritePaused: false,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
@@ -1440,13 +1419,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // (set by setActiveView / setViewport). Disk manifests are never consulted.
     const { activeViewId, _sessionViewports, sessionViewport } = get();
     const restored = sessionViewport ?? _sessionViewports[activeViewId] ?? null;
+    const nextNodes = sortNodesByParent(normalizeCanvasParenting(nodes));
+    const topicWritePaused = topicCanvasWritePaused(nextNodes, edges);
     set({
-      nodes: sortNodesByParent(normalizeCanvasParenting(nodes)),
+      nodes: nextNodes,
       edges,
       viewport: restored,
       sessionViewport: restored,
       _hydrated: true,
+      topicWritePaused,
     });
+    if (topicWritePaused) {
+      toast.error(m.toast_topic_write_paused());
+    }
   },
 
   reset: () => {
@@ -1469,6 +1454,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       editingTopicId: null,
       topicCommandContextId: null,
       topicDraft: null,
+      topicWritePaused: false,
     });
   },
 
@@ -1614,10 +1600,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- topic actions --------------------------------------------------------
   setEditingTopicId: (id) => {
-    set((s) => ({
+    set({
       editingTopicId: id,
       ...(id ? { topicCommandContextId: id } : {}),
-    }));
+    });
   },
 
   enterTopicCommandContext: (topicId) => {
@@ -1704,6 +1690,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           };
 
     set((s) => ({
+      topicCommandContextId: anchorTopicId,
       topicDraft: {
         anchor: provisional,
         id: `topic-draft-${nanoid(8)}`,
@@ -1819,8 +1806,29 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ edges: nextEdges, nodes: nextNodes });
   },
 
+  tidyTopicBranch: (topicId) => {
+    const { edges, nodes } = get();
+    const index = buildTopicIndex(nodes, edges);
+    if (!index.topicIds.has(topicId)) {
+      return;
+    }
+    const laidOut = relayoutTopicTree(nodes, edges, topicId);
+    if (!laidOut.ok) {
+      toastTopicHardFailure(laidOut.reason);
+      return;
+    }
+    if (laidOut.softOverlap) {
+      toastTopicSoftOverlap();
+    }
+    if (laidOut.nodes === nodes) {
+      return;
+    }
+    get().saveSnapshot();
+    set({ nodes: laidOut.nodes });
+  },
+
   cancelTopicDraft: () => {
-    set({ topicDraft: null });
+    set({ topicCommandContextId: null, topicDraft: null });
   },
 
   commitTopicDraft: async (title) => {
@@ -1908,7 +1916,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // land together as a single undo step. A separate "first title edit" record
     // would make undoing a brand-new Topic take two presses.
     state.saveSnapshot();
-    set({ edges: nextEdges, nodes: nextNodes, topicDraft: null });
+    set({
+      edges: nextEdges,
+      nodes: nextNodes,
+      topicCommandContextId: id,
+      topicDraft: null,
+    });
     return id;
   },
 
@@ -2469,6 +2482,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       editingTopicId: null,
       topicCommandContextId: null,
       topicDraft: null,
+      topicWritePaused: false,
     });
   },
 
@@ -2496,14 +2510,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
     }
 
-    const { edges, nodes, _hydrated } = get();
+    const { edges, nodes, _hydrated, topicWritePaused } = get();
     const rpcAvailable = await isRpcAvailable();
 
     // Flush the outgoing canvas first; abort the switch when the save fails so
     // clearing the store can never drop unsaved edits. Skip the flush when the
     // canvas was never hydrated — saving an empty store would wipe the manifest.
     // Viewport is session-only and is never written to the manifest.
-    if (_hydrated && rpcAvailable) {
+    // A write-paused canvas must not be flushed: leaving is allowed, but the
+    // original file stays untouched and this is never presented as a save.
+    if (topicWritePaused) {
+      toast.error(m.toast_topic_write_paused());
+    } else if (_hydrated && rpcAvailable) {
       const sanitized = sanitizeForPersistence(nodes, edges);
       const saved = await rpcSaveManifest(
         activeViewId,
@@ -2546,6 +2564,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    if (get().topicWritePaused || topicCanvasWritePaused(nodes, edges)) {
+      toast.error(m.toast_topic_write_paused());
+      return false;
+    }
     const targetManifest = await loadCanvas(targetViewId).catch((error) => {
       console.error('[canvasStore] Failed to load target canvas:', error);
       return null;
@@ -2556,6 +2578,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const targetEdges = Array.isArray(targetManifest?.edges)
       ? (targetManifest.edges as Edge[])
       : [];
+    if (topicCanvasWritePaused(targetNodes, targetEdges)) {
+      toast.error(m.toast_topic_write_paused());
+      return false;
+    }
 
     const absoluteRects = buildAbsoluteRects(nodes);
     const usedTargetNodeIds = new Set(targetNodes.map((node) => node.id));
@@ -2720,16 +2746,38 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  copyTopicBranch: (topicId) => {
+    const { edges, nodes } = get();
+    const index = buildTopicIndex(nodes, edges);
+    if (!index.topicIds.has(topicId)) {
+      return;
+    }
+    const branchSet = new Set(collectTopicBranch(index, topicId));
+    set({
+      clipboard: nodes
+        .filter((node) => branchSet.has(node.id))
+        .map(cleanNodeForClipboard),
+      clipboardEdges: getInternalEdgesForNodes(edges, branchSet),
+    });
+  },
+
   pasteClipboard: async (offset = 30) => {
-    const { clipboard, clipboardEdges, nodes: currentNodes } = get();
+    const { clipboard, nodes: currentNodes } = get();
     if (clipboard.length === 0) {
+      return;
+    }
+    if (!(await hasNodeQuota(currentNodes, countCountedNodes(clipboard)))) {
+      return;
+    }
+    const latest = get();
+    if (latest.clipboard.length === 0) {
       return;
     }
     get().saveSnapshot();
     const pasted = buildPastedClipboard(
-      clipboard,
-      clipboardEdges,
-      currentNodes,
+      latest.clipboard,
+      latest.clipboardEdges,
+      latest.nodes,
       offset
     );
     let pastedNodes = graphContainsWidgetReference(pasted.nodes)
@@ -2748,16 +2796,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   duplicateSelected: async (offset = DUPLICATE_OFFSET) => {
-    const { edges, nodes } = get();
+    const { nodes } = get();
     const selected = nodes.filter((node) => node.selected);
     if (selected.length === 0) {
       return;
     }
-    const selectedIds = new Set(selected.map((node) => node.id));
+    if (!(await hasNodeQuota(nodes, countCountedNodes(selected)))) {
+      return;
+    }
+    const latest = get();
+    const selectedLatest = latest.nodes.filter((node) => node.selected);
+    if (selectedLatest.length === 0) {
+      return;
+    }
+    const selectedIds = new Set(selectedLatest.map((node) => node.id));
     const pasted = buildPastedClipboard(
-      selected.map(cleanNodeForClipboard),
-      getInternalEdgesForNodes(edges, selectedIds),
-      nodes,
+      selectedLatest.map(cleanNodeForClipboard),
+      getInternalEdgesForNodes(latest.edges, selectedIds),
+      latest.nodes,
       offset
     );
     get().saveSnapshot();

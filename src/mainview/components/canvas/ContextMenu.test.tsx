@@ -41,7 +41,11 @@ const edgeStoreState = {
       data: { pathType: 'bezier' },
     },
   ],
-  nodes: [] as Array<{ id: string; data?: Record<string, unknown> }>,
+  nodes: [] as Array<{
+    data?: Record<string, unknown>;
+    id: string;
+    type?: string;
+  }>,
   views: [
     { id: 'default', name: 'Default Canvas' },
     { id: 'archive', name: 'Archive' },
@@ -103,6 +107,13 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_export_markdown: () => 'Export as Markdown',
   menu_export_canvas_markdown: () => 'Export Canvas as Markdown',
   menu_export_topic_outline: () => 'Export topic outline',
+  menu_topic_new_child: () => 'New subtopic',
+  menu_topic_new_sibling: () => 'New sibling topic',
+  menu_topic_select_branch: () => 'Select branch',
+  menu_topic_copy_branch: () => 'Copy branch',
+  menu_topic_tidy_branch: () => 'Tidy branch',
+  menu_topic_detach_branch: () => 'Detach branch',
+  menu_topic_delete_branch: () => 'Delete branch',
   menu_copy_as_markdown: () => 'Copy as Markdown',
   menu_lock: () => 'Lock',
   menu_unlock: () => 'Unlock',
@@ -694,5 +705,36 @@ describe('canvasContextMenu', () => {
 
     // reset
     edgeStoreState.clipboard = [];
+  });
+
+  it('offers copy and tidy branch on a Topic', () => {
+    edgeStoreState.nodes = [
+      {
+        data: { title: 'A', topicVersion: 1 },
+        id: 'topic-1',
+        type: 'topic',
+      },
+    ];
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 10, y: 10, nodeId: 'topic-1', target: 'topic' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Copy branch' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Tidy branch' })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy branch' }));
+    expect(onAction).toHaveBeenCalledWith('topic-copy-branch', 'topic-1');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

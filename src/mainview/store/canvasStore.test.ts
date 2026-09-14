@@ -96,6 +96,8 @@ vi.mock('../../paraglide/messages.js', () => ({
   toast_topic_layout_overlap: () => 'Layout overlap',
   toast_topic_relation_unavailable: () => 'Relation unavailable',
   toast_topic_tree_frozen: () => 'Tree frozen',
+  toast_topic_write_paused: () => 'Write paused',
+  toast_node_quota: () => 'Quota reached',
 }));
 
 function resetStore() {
@@ -1168,6 +1170,147 @@ describe('canvasStore — multi-view', () => {
     expect(state._hydrated).toBe(true);
   });
 
+  it('setActiveView clears topic draft, editing, and command context', () => {
+    useCanvasStore.setState({
+      activeViewId: 'default',
+      editingTopicId: 'topic-1',
+      topicCommandContextId: 'topic-1',
+      topicDraft: {
+        anchor: { x: 0, y: 0 },
+        id: 'topic-draft-1',
+        text: 'Orphan',
+        viewId: 'default',
+      },
+    });
+
+    useCanvasStore.getState().setActiveView('focus');
+    const state = useCanvasStore.getState();
+    expect(state.topicDraft).toBeNull();
+    expect(state.editingTopicId).toBeNull();
+    expect(state.topicCommandContextId).toBeNull();
+    expect(state.topicWritePaused).toBe(false);
+  });
+
+  it('switchView leaves a write-paused canvas without flushing the manifest', async () => {
+    useCanvasStore.setState({
+      _hydrated: true,
+      activeViewId: 'default',
+      edges: [],
+      nodes: [
+        {
+          data: { title: 'Future', topicVersion: 99 },
+          id: 'future',
+          position: { x: 0, y: 0 },
+          type: 'topic',
+        },
+      ],
+      topicWritePaused: true,
+    });
+
+    await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
+      true
+    );
+    expect(rpcSaveManifestMock).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().activeViewId).toBe('focus');
+  });
+
+  it('switchView commits a non-empty topic draft before flushing', async () => {
+    getCachedLicenseMock.mockReturnValue({ activated: true });
+    useCanvasStore.setState({
+      _hydrated: true,
+      activeViewId: 'default',
+      edges: [],
+      nodes: [],
+      topicDraft: {
+        anchor: { x: 10, y: 20 },
+        id: 'topic-draft-keep',
+        text: 'Keep me',
+        viewId: 'default',
+      },
+    });
+
+    await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
+      true
+    );
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+    expect(rpcSaveManifestMock).toHaveBeenCalledWith(
+      'default',
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({ title: 'Keep me' }),
+          type: 'topic',
+        }),
+      ]),
+      []
+    );
+    expect(useCanvasStore.getState().activeViewId).toBe('focus');
+  });
+
+  it('switchView discards an empty topic draft and still switches', async () => {
+    useCanvasStore.setState({
+      _hydrated: true,
+      activeViewId: 'default',
+      edges: [],
+      nodes: [makeNode('a')],
+      topicDraft: {
+        anchor: { x: 0, y: 0 },
+        id: 'topic-draft-empty',
+        text: '   ',
+        viewId: 'default',
+      },
+    });
+
+    await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
+      true
+    );
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+    expect(rpcSaveManifestMock).toHaveBeenCalledWith(
+      'default',
+      [expect.objectContaining({ id: 'a' })],
+      []
+    );
+  });
+
+  it('switchView aborts when a non-empty draft cannot be committed', async () => {
+    getCachedLicenseMock.mockReturnValue({ activated: true });
+    useCanvasStore.setState({
+      _hydrated: true,
+      activeViewId: 'default',
+      edges: [],
+      nodes: [
+        {
+          data: {},
+          id: 'g',
+          position: { x: 0, y: 0 },
+          style: { height: 80, width: 180 },
+          type: 'group',
+        },
+        {
+          data: { ...createTopicData('Root') },
+          extent: 'parent',
+          id: 'root',
+          parentId: 'g',
+          position: { x: 4, y: 4 },
+          style: { height: 40, width: 160 },
+          type: 'topic',
+        },
+      ],
+    });
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root')
+    ).toBe(true);
+    useCanvasStore.getState().setTopicDraftText('Too wide');
+
+    await expect(useCanvasStore.getState().switchView('focus')).resolves.toBe(
+      false
+    );
+    expect(useCanvasStore.getState().activeViewId).toBe('default');
+    expect(useCanvasStore.getState().topicDraft).not.toBeNull();
+    expect(
+      useCanvasStore.getState().nodes.filter((n) => n.type === 'topic')
+    ).toHaveLength(1);
+  });
+
   it('setActiveView resets view-specific UI state when switching', async () => {
     useCanvasStore.setState({
       activeViewId: 'default',
@@ -1318,6 +1461,23 @@ describe('canvasStore — hydration', () => {
     expect(state.edges).toEqual(edges);
     expect(state.viewport).toBeNull();
     expect(state.sessionViewport).toBeNull();
+    expect(state.topicWritePaused).toBe(false);
+  });
+
+  it('pauses persistence writes when hydrated Topic records cannot be confirmed lossless', () => {
+    useCanvasStore.getState().hydrate(
+      [
+        {
+          data: { title: 'Future', topicVersion: 99 },
+          id: 'future',
+          position: { x: 0, y: 0 },
+          type: 'topic',
+        },
+      ],
+      []
+    );
+
+    expect(useCanvasStore.getState().topicWritePaused).toBe(true);
   });
 
   it('hydrate restores the session viewport for the active view', () => {
@@ -1651,6 +1811,36 @@ describe('canvasStore — createNode', () => {
     expect(result).toMatch(NODE_ID_REGEX);
     expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
     expect(useCanvasStore.getState().nodes).toHaveLength(101);
+  });
+
+  it('blocks an unlicensed paste that would exceed the free card limit', async () => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockResolvedValue({ activated: false });
+    useCanvasStore.setState({
+      clipboard: [makeNode('copied')],
+    });
+
+    await useCanvasStore.getState().pasteClipboard();
+
+    expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toHaveLength(100);
+  });
+
+  it('blocks an unlicensed duplicate that would exceed the free card limit', async () => {
+    fillFreeCardLimit();
+    rpcCheckLicenseMock.mockResolvedValue({ activated: false });
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((node, index) =>
+          index === 0 ? { ...node, selected: true } : node
+        ),
+    });
+
+    await useCanvasStore.getState().duplicateSelected();
+
+    expect(rpcCheckLicenseMock).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toHaveLength(100);
   });
 
   it('allows creation when the boundary license check fails', async () => {
@@ -3345,6 +3535,51 @@ describe('canvasStore — Topic tree transactions', () => {
     expect(useCanvasStore.getState().edges).toHaveLength(3);
   });
 
+  it('copyTopicBranch copies the subtree without the external parent edge', () => {
+    seedTree();
+    useCanvasStore.getState().copyTopicBranch('kid-b');
+    const { clipboard, clipboardEdges } = useCanvasStore.getState();
+    expect(clipboard.map((n) => n.id).sort()).toEqual(['grandkid', 'kid-b']);
+    expect(
+      clipboardEdges.filter(
+        (e) => (e.data as { kind?: string }).kind === 'topic-child'
+      )
+    ).toHaveLength(1);
+    expect(clipboardEdges.some((e) => e.source === 'root')).toBe(false);
+  });
+
+  it('tidyTopicBranch re-packs a dragged child without moving other trees', () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: [
+        ...useCanvasStore
+          .getState()
+          .nodes.map((n) =>
+            n.id === 'kid-a' ? { ...n, position: { x: 500, y: 400 } } : n
+          ),
+        {
+          data: {},
+          id: 'other-card',
+          position: { x: 800, y: 800 },
+          style: { height: 40, width: 40 },
+          type: 'card',
+        },
+      ],
+    });
+    const cardBefore = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'other-card')!.position;
+
+    useCanvasStore.getState().tidyTopicBranch('root');
+
+    const kidA = useCanvasStore.getState().nodes.find((n) => n.id === 'kid-a')!;
+    expect(kidA.position.x).toBeLessThan(500);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'other-card')!
+        .position
+    ).toEqual(cardBefore);
+  });
+
   it('copies a partial branch without chaining it back to the original', async () => {
     seedTree();
     useCanvasStore.setState({
@@ -3376,6 +3611,36 @@ describe('canvasStore — Topic tree transactions', () => {
       { order: 0, target: 'kid-a' },
       { order: 1, target: 'kid-b' },
     ]);
+  });
+
+  it('enters command context when selection moves onto a Topic', () => {
+    seedTree();
+    useCanvasStore
+      .getState()
+      .applyNodesChange([{ id: 'kid-a', selected: true, type: 'select' }]);
+    expect(useCanvasStore.getState().topicCommandContextId).toBe('kid-a');
+  });
+
+  it('does not restore command context from a leftover selection after Esc', () => {
+    seedTree();
+    useCanvasStore
+      .getState()
+      .applyNodesChange([{ id: 'kid-a', selected: true, type: 'select' }]);
+    useCanvasStore.getState().exitTopicCommandContext();
+    expect(useCanvasStore.getState().topicCommandContextId).toBeNull();
+
+    useCanvasStore.getState().applyNodesChange([
+      {
+        dragging: false,
+        id: 'kid-a',
+        position: { x: 221, y: -40 },
+        type: 'position',
+      },
+    ]);
+    expect(
+      useCanvasStore.getState().nodes.find((n) => n.id === 'kid-a')?.selected
+    ).toBe(true);
+    expect(useCanvasStore.getState().topicCommandContextId).toBeNull();
   });
 
   it('treats tree edges as host-owned against generic edge commands', () => {

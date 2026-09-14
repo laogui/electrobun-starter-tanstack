@@ -54,12 +54,7 @@ bun run server.js   # 默认端口 3001
 3. 未激活且数量 ≥ 100 时通过 `toast.error` 提示并 `return`。
 4. 校验失败时容错放行，避免离线阻塞。
 
-注意：当前仅在 `createNode` 一处拦截。如需更强防护，可在以下入口同步添加校验：
-
-- 粘贴 (`pasteClipboard`)
-- 复制选中 (`duplicateSelected`)
-- 模板应用
-- Markdown 导入
+`hasNodeQuota` 对 `card` / `sticky` / `topic` 使用同一计数，并在创建、主题提交、粘贴、复制选中与 JSON 画布导入入口拦截。Markdown 导入仍走 `createNode`。模板应用未改全局商业策略。
 
 ## 用户流程
 

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
@@ -114,6 +115,57 @@ export async function loadManifest(
   }
 }
 
+export function preTopicBackupViewFile(viewFile: string): string {
+  return `${viewFile}.pre-topic`;
+}
+
+function nodesIncludeTopics(
+  nodes: ReadonlyArray<{ type?: string | undefined }>
+): boolean {
+  return nodes.some((node) => node.type === 'topic');
+}
+
+/**
+ * Copy the on-disk manifest before the first Topic write so a downgrade can
+ * restore the pre-Topic file. Existing backups are left alone; restore is an
+ * explicit later action.
+ */
+export async function backupManifestBeforeFirstTopics(
+  wsPath: string,
+  viewFile: string,
+  incomingNodes: ReadonlyArray<{ type?: string | undefined }>
+): Promise<{ backupFile?: string; created: boolean }> {
+  if (!nodesIncludeTopics(incomingNodes)) {
+    return { created: false };
+  }
+
+  let sourcePath: string;
+  try {
+    sourcePath = resolveWorkspaceManifestPath(wsPath, viewFile);
+  } catch {
+    return { created: false };
+  }
+
+  const source = Bun.file(sourcePath);
+  if (!(await source.exists())) {
+    return { created: false };
+  }
+
+  const existing = await loadManifest(wsPath, viewFile);
+  if (existing && nodesIncludeTopics(existing.nodes)) {
+    return { created: false };
+  }
+
+  const backupFile = preTopicBackupViewFile(viewFile);
+  const destPath = resolveWorkspaceManifestPath(wsPath, backupFile);
+  if (await Bun.file(destPath).exists()) {
+    return { backupFile, created: false };
+  }
+
+  await atomicWrite(destPath, await readFile(sourcePath, 'utf8'));
+  return { backupFile, created: true };
+}
+
 /** Save a canvas manifest to disk (atomic write). */
 export async function saveManifest(
   wsPath: string,
@@ -121,5 +173,6 @@ export async function saveManifest(
   manifest: CanvasManifest
 ): Promise<void> {
   const filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
+  await backupManifestBeforeFirstTopics(wsPath, viewFile, manifest.nodes);
   await atomicWrite(filePath, JSON.stringify(manifest, null, 2));
 }

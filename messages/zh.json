@@ -643,5 +643,10 @@
   "settings_plugins_directory_fingerprint": "目录连接指纹（非包摘要）：{digest}",
   "settings_plugins_development_source": "开发目录：{source}",
   "menu_export_topic_outline": "导出主题大纲（Markdown）",
-  "toast_topic_outline_exported": "主题大纲已导出。"
+  "toast_topic_outline_exported": "主题大纲已导出。",
+  "toast_topic_outline_blocked": "无法导出主题大纲：画布上存在损坏的主题关系或不支持的主题版本。原始数据仍可通过无损备份导出。",
+  "menu_topic_copy_branch": "复制分支",
+  "menu_topic_tidy_branch": "整理分支",
+  "toast_topic_write_paused": "此画布存在无法安全保存的主题记录。编辑只留在内存中，不会覆盖原始文件。",
+  "toast_node_quota": "免费版最多 100 张卡片。请激活许可证后继续。"
 }

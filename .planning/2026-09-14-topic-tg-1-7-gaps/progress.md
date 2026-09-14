@@ -4,37 +4,45 @@
 
 ### Phase 1: Requirements & Discovery
 - **Status:** complete
-- Actions taken:
-  - Read development-plan §1.1 and topic-mindmap scheme §3–§6
-  - Explored layout, draft/keyboard, export/menu, persistence/quota via four explore agents
-- Files created/modified:
-  - `.planning/2026-09-14-topic-tg-1-7-gaps/task_plan.md`
-  - `.planning/2026-09-14-topic-tg-1-7-gaps/findings.md`
 
 ### Phase 2: TG-1 layout avoidance
 - **Status:** complete
-- Actions taken:
-  - Added `layoutTopicTreeAvoiding`, obstacle collection, down/out search
-  - Wired `relayoutTopicTree` + title commit; new toasts
-  - Gates: type-check, check, test 231/2189
-- Files created/modified:
-  - topicLayout.ts/.test.ts, collision.ts/.test.ts, canvasStore.ts/.test.ts, messages
+- Gates: type-check, check, test 231/2189
 
 ### Phase 3: TG-2 + TG-3
-- **Status:** in_progress
+- **Status:** complete
+- Gates: type-check, check, test 231/2199
+
+### Phase 4: TG-4 + TG-5
+- **Status:** complete
+- Outline export gated on `topicOutlineExportProblems`; copy/tidy branch on menu + store
+- Gates: type-check, check, test 231/2205
+
+### Phase 5: TG-6 + TG-7
+- **Status:** complete
+- Write-pause on unsupported/invalid Topic decode; `*.pre-topic` backup before first Topic write
+- Shared `hasNodeQuota` on create, draft, paste, duplicate, JSON import, plugin CSV place
+- Gates: type-check, check, test 232/2217
+
+### Phase 6: Delivery
+- **Status:** complete
+- All seven TG rows marked 已修复; no P0–P3 stage marked 已验收
+- Templates and paraglide runtime left as required
 
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
-|      |       |          |        |        |
+| type-check | TG-4/5 then TG-6/7 | pass | pass | pass |
+| check | TG-4/5 then TG-6/7 | pass | pass | pass |
+| test | after TG-6/7 | all green | 232 files / 2217 tests | pass |
 
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 2 TG-1 |
-| Where am I going? | TG-1 then TG-2/3, TG-4/5, TG-6/7 |
+| Where am I? | Phase 6 complete |
+| Where am I going? | Done; desktop walkthrough still required before stage acceptance |
 | What's the goal? | Close TG-1–TG-7 without marking stages accepted |
 | What have I learned? | See findings.md |
-| What have I done? | Discovery complete |
+| What have I done? | All seven gaps implemented and gated |

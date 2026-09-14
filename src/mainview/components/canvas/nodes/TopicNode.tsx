@@ -199,6 +199,12 @@ const TopicNode = ({
   const beginTopicRelativeDraft = useCanvasStore(
     (s) => s.beginTopicRelativeDraft
   );
+  const enterTopicCommandContext = useCanvasStore(
+    (s) => s.enterTopicCommandContext
+  );
+  const exitTopicCommandContext = useCanvasStore(
+    (s) => s.exitTopicCommandContext
+  );
   const editRequested = useCanvasStore((s) => s.editingTopicId === id);
   const setEditingTopicId = useCanvasStore((s) => s.setEditingTopicId);
   // A root has no sibling slot, so Enter there commits instead of chaining.
@@ -296,7 +302,8 @@ const TopicNode = ({
       return;
     }
     leaveEditing();
-  }, [cancelTopicDraft, isDraft, leaveEditing]);
+    exitTopicCommandContext();
+  }, [cancelTopicDraft, exitTopicCommandContext, isDraft, leaveEditing]);
 
   // Single click opens the Topic, mirroring the canvas' click-to-open rule for
   // every other node. Modifier clicks are reserved for selection, and a drag
@@ -319,9 +326,10 @@ const TopicNode = ({
         return;
       }
       e.stopPropagation();
+      enterTopicCommandContext(id);
       setEditing(true);
     },
-    [editing, locked, parsed.status]
+    [editing, enterTopicCommandContext, id, locked, parsed.status]
   );
 
   return (

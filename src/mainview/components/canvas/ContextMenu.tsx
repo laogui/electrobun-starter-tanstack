@@ -263,6 +263,16 @@ const getTopicItems = (locked: boolean, hasParent: boolean): MenuItem[] => [
     label: m.menu_topic_select_branch(),
     icon: Layers,
   },
+  {
+    id: 'topic-copy-branch',
+    label: m.menu_topic_copy_branch(),
+    icon: Copy,
+  },
+  {
+    id: 'topic-tidy-branch',
+    label: m.menu_topic_tidy_branch(),
+    icon: Sparkles,
+  },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   lockItem(locked),
   ...(hasParent

@@ -110,6 +110,7 @@ import {
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
+import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
 import {
@@ -663,15 +664,21 @@ function CanvasComponent() {
         toast.error('Canvas JSON did not contain importable nodes.');
         return;
       }
+      if (
+        !(await hasNodeQuota(state.nodes, countCountedNodes(imported.nodes)))
+      ) {
+        return;
+      }
 
-      state.saveSnapshot();
-      state.setNodes((prev) =>
+      const latest = useCanvasStore.getState();
+      latest.saveSnapshot();
+      latest.setNodes((prev) =>
         sortNodesByParent([
           ...prev.map((node) => ({ ...node, selected: false })),
           ...imported.nodes,
         ])
       );
-      state.setEdges((prev) => [...prev, ...imported.edges]);
+      latest.setEdges((prev) => [...prev, ...imported.edges]);
       if (skippedWidgetCount > 0) {
         toast.warning(
           `Skipped ${skippedWidgetCount} widget(s) that could not be imported.`
@@ -1753,7 +1760,7 @@ function CanvasComponent() {
   // store's `nodes`, so it never reaches persistence, history, selection, or
   // the node count. It joins the graph only when the first title is committed.
   const topicDraftNode = useMemo((): Node | null => {
-    if (!topicDraft) {
+    if (!topicDraft || topicDraft.viewId !== activeViewId) {
       return null;
     }
     const size = measureTopicSize(topicDraft.text);
@@ -1770,7 +1777,7 @@ function CanvasComponent() {
         ? { extent: 'parent' as const, parentId: topicDraft.parentId }
         : {}),
     };
-  }, [topicDraft]);
+  }, [activeViewId, topicDraft]);
 
   const renderSourceNodes = useMemo(() => {
     const baseNodes = topicDraftNode ? [...nodes, topicDraftNode] : nodes;
@@ -2177,6 +2184,7 @@ function CanvasComponent() {
         )}
         ref={canvasContainerRef}
         role="application"
+        tabIndex={-1}
       >
         <ReactFlow
           connectionLineComponent={ConnectionPreviewLine}

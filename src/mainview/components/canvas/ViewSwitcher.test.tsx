@@ -123,6 +123,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   toast_view_restore_failed: () => 'Could not restore canvas',
   toast_view_switch_save_failed: () =>
     'Could not save the current canvas — switch canceled.',
+  toast_topic_write_paused: () => 'Write paused',
+  toast_node_quota: () => 'Quota reached',
   toast_undo: () => 'Undo',
   view_node_count_one: () => '1 node',
   view_node_count_other: ({ count }: { count: number }) => `${count} nodes`,

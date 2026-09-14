@@ -643,5 +643,10 @@
   "settings_plugins_directory_fingerprint": "Directory identity (not an archive digest): {digest}",
   "settings_plugins_development_source": "Development directory: {source}",
   "menu_export_topic_outline": "Export topic outline (Markdown)",
-  "toast_topic_outline_exported": "Topic outline exported."
+  "toast_topic_outline_exported": "Topic outline exported.",
+  "toast_topic_outline_blocked": "Cannot export the topic outline because this canvas has broken topic relations or an unsupported topic version. Use a lossless backup if you need the original data.",
+  "menu_topic_copy_branch": "Copy branch",
+  "menu_topic_tidy_branch": "Tidy branch",
+  "toast_topic_write_paused": "This canvas has topic records that cannot be saved safely. Edits stay in memory and the original file is not overwritten.",
+  "toast_node_quota": "Free version limited to 100 cards. Please activate a license to continue."
 }

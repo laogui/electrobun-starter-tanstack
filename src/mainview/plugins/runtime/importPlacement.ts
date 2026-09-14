@@ -1,6 +1,7 @@
 import type { Node } from '@xyflow/react';
 import { buildNewNodeSpec, CARD_H, CARD_W } from '@/lib/canvasNodeRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+import { hasNodeQuota } from '@/lib/nodeQuota';
 import { rpcSaveManifest } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 import type { NoteMetadata } from '../../../../packages/plugin-sdk';
@@ -60,7 +61,24 @@ export const canvasImporterPlacementHost: ImporterPlacementHost = {
     if (state.activeViewId !== request.viewId || !state._hydrated) {
       throw new Error('Open the target canvas and wait for it to load first');
     }
-    const known = new Map(state.nodes.map((node) => [node.id, node]));
+    if (state.topicWritePaused) {
+      throw new Error(
+        'This canvas cannot be saved until topic records are repaired'
+      );
+    }
+    if (!(await hasNodeQuota(state.nodes, request.items.length))) {
+      throw new Error('Free version limited to 100 cards');
+    }
+    const latestState = useCanvasStore.getState();
+    if (latestState.activeViewId !== request.viewId || !latestState._hydrated) {
+      throw new Error('Open the target canvas and wait for it to load first');
+    }
+    if (latestState.topicWritePaused) {
+      throw new Error(
+        'This canvas cannot be saved until topic records are repaired'
+      );
+    }
+    const known = new Map(latestState.nodes.map((node) => [node.id, node]));
     const expectedIds = request.items.map((_item, index) =>
       nodeId(request.operationId, index)
     );
@@ -82,7 +100,7 @@ export const canvasImporterPlacementHost: ImporterPlacementHost = {
       throw new Error('Canvas import placement no longer matches its notes');
     }
     if (existing.length === 0) {
-      const topLevel = state.nodes.filter((node) => !node.parentId);
+      const topLevel = latestState.nodes.filter((node) => !node.parentId);
       const extents = topLevel.map(nodeExtent);
       const originX = extents.length
         ? Math.max(...extents.map((extent) => extent.right)) + 80
@@ -112,7 +130,7 @@ export const canvasImporterPlacementHost: ImporterPlacementHost = {
         })
       );
 
-      state.saveSnapshot();
+      latestState.saveSnapshot();
       useCanvasStore.setState((current) => ({
         nodes: [...current.nodes, ...imported],
       }));
@@ -120,6 +138,11 @@ export const canvasImporterPlacementHost: ImporterPlacementHost = {
     const latest = useCanvasStore.getState();
     if (latest.activeViewId !== request.viewId) {
       throw new Error('Target canvas changed while placing imported notes');
+    }
+    if (latest.topicWritePaused) {
+      throw new Error(
+        'This canvas cannot be saved until topic records are repaired'
+      );
     }
     const sanitized = sanitizeForPersistence(latest.nodes, latest.edges);
     const saved = await rpcSaveManifest(

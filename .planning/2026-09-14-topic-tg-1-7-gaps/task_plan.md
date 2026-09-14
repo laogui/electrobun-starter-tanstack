@@ -6,18 +6,18 @@ Implement the seven Topic mindmap scheme clauses (TG-1–TG-7) that 2026-09-14 r
 
 ## Next Step
 
-Implement draft flush on view leave (TG-2) and explicit Topic command context with Esc (TG-3).
+Confirm all seven TG rows are updated and no P0–P3 stage is marked accepted.
 
 ## Current Phase
 
-Phase 3
+Phase 6
 
 ## Phases
 
 ### Phase 1: Requirements & Discovery
-- [ ] Read topicLayout, topicTree, canvasStore Topic paths, keyboard, export, menu, persistence, quota
-- [ ] Document entry points and constraints in findings.md
-- **Status:** in_progress
+- [x] Read topicLayout, topicTree, canvasStore Topic paths, keyboard, export, menu, persistence, quota
+- [x] Document entry points and constraints in findings.md
+- **Status:** complete
 
 ### Phase 2: TG-1 layout avoidance
 - [x] Add obstacle set, bounded search, Group hard bounds, soft-fail toast, hard-fail keep-draft
@@ -26,29 +26,29 @@ Phase 3
 - **Status:** complete
 
 ### Phase 3: TG-2 + TG-3 draft flush and command context
-- [ ] Flush non-empty draft on view leave; clear topicDraft/editingTopicId
-- [ ] Explicit Topic command context; Esc exits so Tab is not intercepted by selected-only
-- [ ] Messages + mocks; tests
-- [ ] type-check / check / test; update TG-2 and TG-3 rows
-- **Status:** in_progress
+- [x] Flush non-empty draft on view leave; clear topicDraft/editingTopicId
+- [x] Explicit Topic command context; Esc exits so Tab is not intercepted by selected-only
+- [x] Messages + mocks; tests
+- [x] type-check / check / test; update TG-2 and TG-3 rows
+- **Status:** complete
 
 ### Phase 4: TG-4 + TG-5 outline gate and branch actions
-- [ ] export-topic-outline rejects when index.problems or unsupported versions; no silent drop
-- [ ] Context menu: copy-branch and tidy-branch
-- [ ] Messages + mocks; tests
-- [ ] type-check / check / test; update TG-4 and TG-5 rows
-- **Status:** pending
+- [x] export-topic-outline rejects when index.problems or unsupported versions; no silent drop
+- [x] Context menu: copy-branch and tidy-branch
+- [x] Messages + mocks; tests
+- [x] type-check / check / test; update TG-4 and TG-5 rows
+- **Status:** complete
 
 ### Phase 5: TG-6 + TG-7 persistence protection and quota
-- [ ] Lossy-decode pause persistence writes; backup manifest before first Topic write
-- [ ] Quota on paste / duplicate / import consistently
-- [ ] Messages + mocks; tests
-- [ ] type-check / check / test; update TG-6 and TG-7 rows
-- **Status:** pending
+- [x] Lossy-decode pause persistence writes; backup manifest before first Topic write
+- [x] Quota on paste / duplicate / import consistently
+- [x] Messages + mocks; tests
+- [x] type-check / check / test; update TG-6 and TG-7 rows
+- **Status:** complete
 
 ### Phase 6: Delivery
-- [ ] Confirm all seven TG rows updated, no stage marked accepted, forbidden areas untouched
-- **Status:** pending
+- [x] Confirm all seven TG rows updated, no stage marked accepted, forbidden areas untouched
+- **Status:** complete
 
 ## Key Questions
 

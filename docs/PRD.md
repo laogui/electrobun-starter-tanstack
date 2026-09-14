@@ -46,11 +46,11 @@
 - 流畅动效负责维持空间上下文，不替代可用性与数据可靠性验收。不以下载量、付费率或发布完成度作为当前开发目标。
 - 公开插件另以“独立开发 → URL/ZIP 安装 → 实际使用 → 更新与恢复”的完整流程验收，四类插件均须可用；不能用新增卡片数量代替平台验收，也不能因基础流程验收而跳过插件要求。
 
-### 1.3.1 Topic 与轻量思维导图（2026-09-14 部分实现，未验收）
+### 1.3.1 Topic 与轻量思维导图（2026-09-14 实施完成，未验收）
 
 用户提出思维导图场景缺少轻量主题节点，现有 Sticky 虽可原地编辑和调整大小，仍需逐个创建、连线与排布。[Topic 实施方案](./features/In%20Progress/topic-mindmap-implementation-plan.md) 的主体已落地：核心「主题」类型、Tab/Enter 连续创建、以树边为唯一真源的层级、向右自动排布、分支选择/拆出/删除，以及主题大纲 Markdown 导出。
 
-**下文各节描述的是方案冻结的目标行为，不等于全部已实现。** 2026-09-14 的评审核实仍有七项方案条款缺失或只部分实现——布局避让层、离开画布前的草稿提交、Tab 命令上下文与 Esc 退出、大纲导出的非法关系门禁、复制/整理分支动作、有损解码时的写保护与 manifest 备份、复制/导入路径的额度一致性。逐条状态与影响见 [开发计划 §1.1](./development-plan.md#11-topic-与轻量思维导图2026-09-14) 的 TG-1–TG-7；桌面验收尚未开始。
+2026-09-14 的评审曾查出七项方案条款未实现（布局避让层、离开画布前的草稿提交、Tab 命令上下文与 Esc 退出、大纲导出的非法关系门禁、复制/整理分支动作、有损解码时的写保护与 manifest 备份、复制/导入路径的额度一致性），当日已全部补齐并各自带测试，逐条记录见 [开发计划 §1.1](./development-plan.md#11-topic-与轻量思维导图2026-09-14) 的 TG-1–TG-7。**桌面验收尚未开始**，本节按已实现的行为描述，但阶段状态不得据此升级为已验收。
 
 ### 1.4 当前不扩张的方向
 
@@ -183,7 +183,7 @@
 - **交互逻辑**：
   - **画布空白处右键**：提供新建（`note` / `checklist` / `pomodoro` / `reminder` / `sticky` / `topic` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown、导出主题大纲为 Markdown（画布上没有主题时置灰）等操作。
   - **卡片上右键**：提供聚焦打开、复制、Copy as Markdown（标题 + 正文写入剪贴板）、改颜色、编辑标签、锁定/解锁、移到笔记库、导出为 Markdown、删除等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
-  - **Topic 上右键**：提供编辑标题、新建子主题（`Tab`）、新建同级主题（`Enter`，根主题上不可用）、选择分支、拆出分支（根主题上不可用）、删除、删除分支、改颜色、锁定/解锁。拆支和删分支各是一次事务、一步撤销。
+  - **Topic 上右键**：提供编辑标题、新建子主题（`Tab`）、新建同级主题（`Enter`，根主题上不可用）、选择分支、复制分支、整理分支、拆出分支（根主题上不可用）、删除、删除分支、改颜色、锁定/解锁。复制分支只写入分支节点与内部树边，不含外部父边，粘贴出的是独立的树。整理分支对该分支重新排布——首版不承诺永久保留每个内部节点的手工偏移。拆支、删分支、整理分支各是一次事务、一步撤销；整理后位置未变则不记历史。
   - **Widget / Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。Widget 删除只移除画布引用。
   - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；含 widget 时会 clone 内容文件。Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。
   - **媒体节点右键**：Image 支持 Replace image、Copy image address、Reveal in Finder、Rename；Asset 支持 Reveal in Finder、Replace file、Rename；Link 支持 Open link、Copy URL、Refetch preview、Edit URL；Recording 支持 Reveal in Finder、Rename。
@@ -253,11 +253,11 @@
 | `Cmd++` / `Cmd+-` / `Cmd+0` | `Ctrl++` / `Ctrl+-` / `Ctrl+0` | 放大 / 缩小 / 重置缩放到 100%                                                   |
 | `Arrow` / `Shift+Arrow` | `Arrow` / `Shift+Arrow`   | 按方向选择邻近节点；`Shift` 扩展选择，目标不在视口时平滑居中                    |
 | `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式；选中 Topic 时创建同级主题（根主题上改为编辑标题）        |
-| `Tab`                   | `Tab`                     | 选中单个 Topic 且非编辑态时创建子主题；其他上下文仍是控件间移动焦点              |
+| `Tab`                   | `Tab`                     | 处于 Topic 命令上下文或标题编辑中时创建子主题；其他情况仍是控件间移动焦点        |
 | `F2`                    | `F2`                      | 编辑选中 Topic 的标题                                                           |
 | `Escape`                | `Escape`                  | 关闭聚焦/文件夹视图、退出搜索/菜单；编辑主题标题时取消本次编辑（草稿被丢弃）     |
 
-**Topic 键位优先级**：只有在「画布上恰好选中一个 Topic 且当前不在编辑态」时，`Tab` / `Enter` / `F2` 才走主题创建与编辑；焦点位于 `input` / `textarea` / `contenteditable`、搜索框、菜单或模态内时，按键交还给这些控件，`Tab` 仍执行常规的可聚焦控件移动，不会意外生成主题。主题标题编辑中：`Enter` 提交并创建下一个同级主题，`Tab` 提交并创建子主题，`Esc` 取消当前编辑；取消一个尚未提交的草稿不会留下空主题。
+**Topic 键位优先级**：`Tab` / `Enter` 只在**显式进入的 Topic 命令上下文**里拦截，不是只要选中 Topic 就拦截。显式选择某个 Topic、按 `F2`、单击进入编辑或创建相对草稿会进入该上下文；`Esc` 退出上下文并把焦点交回画布容器，此时视觉选中可以保留，但 `Tab` 已经恢复成常规的控件间移动——不能仅凭「还处于选中态」重新占用 `Tab`。焦点位于 `input` / `textarea` / `contenteditable`、搜索框、菜单或模态内时按键同样交还给这些控件。`Shift+Tab` 始终不被占用。主题标题编辑中：`Enter` 提交并创建下一个同级主题，`Tab` 提交并创建子主题，`Mod+Enter` 提交但不续接，`Esc` 取消当前编辑；取消一个尚未提交的草稿不会留下空主题。
 
 ### 2.11 交互状态机 (Interaction State Machine)
 
@@ -768,6 +768,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 - 业务自定义字段（`noteId`、`widgetId`、`file`、`label`、`color`、`children` 等）统一放在 `data` 对象内。
 - 节点 `type` 使用 `'card'` / `'widget'` / `'image'` / `'asset'` / `'link'` / `'recording'` / `'sticky'` / `'topic'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
 - **Topic 节点**：`data` 为 `{ title, color, topicVersion }`，标题是纯文本，内容直接内嵌在 manifest，没有 `noteId` / `widgetId` / 附件指针。层级**不写在节点上**，而完全由 `data.kind: 'topic-child'` 的边表达；加载时由 `nodes + 树边` 推导运行时索引，因此不存在节点与边互相矛盾的双写来源。写盘和读盘都保留未识别字段，旧版本不认识的新字段不会被抹掉。
+- **Topic 的数据保护**：读到不支持版本或非法的主题/关系记录时，对该画布**暂停持久化写入**并提示，自动保存与切换视图的 flush 都不再落盘，避免把无法无损重写的内容表现为已保存；纯结构损坏（例如成环）只冻结该棵树的结构操作，不升级为整画布写保护。首次向某个画布写入 Topic 前，先把原 manifest 复制为 `*.pre-topic` 备份，已有备份不覆盖；恢复备份会丢弃备份后的修改，需用户显式选择。
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
 - Edge 使用自定义 `labeledEdge`，曲线类型放在 `edge.data.pathType`（默认 `bezier`，可切换 `smoothstep`），label / color / animated 等显示属性也随 `data` 持久化。`data.kind: 'topic-child'` 的边是主题树边：它额外携带 `order` 和 `relationVersion`，`source` 为父主题、`target` 为子主题，视觉属性由宿主派生而非用户设置，通用的边编辑动作对它一律拒绝。
 - Folder 的 `data.children` 存放被收纳的内容条目；新收纳允许 `card` / `image` / `asset` / `link` / `recording`，以及声明 `canEnterFolder: true` 的 `extension`。`folder` / `group` / `sticky` / `topic` 与当前三个 Productivity 类型不进入 Folder；已存储的 legacy `widget` / `extension` child 仍作为兼容数据保留。
@@ -797,7 +798,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
     - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-23）。
   - **JSON**：导出当前画布的 self-contained JSON（当前导出 schema 为 `ghostboard-canvas-export/v2`，保留 v1 导入兼容），直接从内存中的可见 nodes / edges / viewport 生成，并清理运行时 URL、hidden / detached 节点和不可持久化字段。当前实现是导出能力，尚未提供 JSON 导入恢复；widget 完整 records 是否纳入 JSON 导出仍属后续增强（workspace ZIP 已含 `.ghostboard/widgets/`）。
   - **Workspace ZIP**：设置 → Workspace →「Export workspace as ZIP…」导出整个 workspace 的可恢复候选备份，包含 views、content/sidecar、extension instances、legacy widgets 与 attachments；D2-2 已在独立临时 workspace 中通过压缩完整性和成员清单检查，恢复导入流程仍需后续任务单独验证。
-  - **主题大纲 Markdown**：画布右键 →「导出主题大纲为 Markdown…」把当前画布的主题森林导出为嵌套无序列表。根主题按 id 排序、子主题按树边 `order` 排序；标题按纯文本转义，换行折叠为空格，因此不会把用户输入当作 Markdown 语法执行。画布上没有主题时入口置灰，导出空大纲会被拒绝。该导出只覆盖主题标题与层级，不包含 Note 正文或附件。
+  - **主题大纲 Markdown**：画布右键 →「导出主题大纲为 Markdown…」把当前画布的主题森林导出为嵌套无序列表。根主题按 id 排序、子主题按树边 `order` 排序；标题按纯文本转义，换行折叠为空格，因此不会把用户输入当作 Markdown 语法执行。画布上没有主题时入口置灰，导出空大纲会被拒绝。存在非法树关系或不支持的主题/关系版本时**整次导出被拒绝并说明原因**，不静默省略——原始数据仍可走无损备份/导出路径。该导出只覆盖主题标题与层级，不包含 Note 正文或附件。
   - **PNG**：导出当前画布的 2x screenshot-style PNG。导出时先临时 `fitView` 全部可见节点、等待浏览器 repaint、隐藏 minimap/controls/panel/attribution，再截图 `.react-flow` 容器，最后恢复导出前 viewport。当前没有 SVG 导出。
 - **导入**：
   - 支持通过底部创建菜单或画布右键显式选择多个 Markdown 文件，解析 frontmatter / 标题 / 正文后创建新的 Note 卡片。
@@ -988,7 +989,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | 25  | **富 Web Clips**         | Link MVP 已支持 URL 节点、基础 unfurl、favicon/image 元数据与富媒体卡片样式；后续补网页剪藏、离线快照、Magazine 风格预览                                                                                                                                 |
 | 26  | **全局快捷键快速输入**   | Quick Input from anywhere                                                                                                                                                                        |
 | 27  | **AI 辅助**              | ✅ 基础架构已实现 — 本地 HTTP 服务器支持 AI 流式传输，集成 Gemini 等 AI 能力进行内容总结、生成和关联推荐。后续需完善 UI 入口和用户体验。                                                                 |
-| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片（计数包含 `card`、`sticky` 与 `topic`，Topic 与前两者共用同一额度），激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
+| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片（计数包含 `card`、`sticky` 与 `topic`，共用同一额度）；该门禁在新建、主题提交、粘贴、复制选中、JSON 画布导入与插件投放各入口一致生效，不因某个入口漏判形成隐式豁免。激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
 | 29  | **双向链接 (Backlinks)** | 支持 `[[note]]` 语法在笔记正文中引用其他笔记，自动建立反向链接索引。与 Edge 系统互补——Edge 是画布上显式的视觉关系，Backlink 是内容层隐式的语义关系。侧边栏或聚焦模式底部展示"被哪些笔记引用"列表 |
 
 ---

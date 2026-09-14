@@ -15,6 +15,9 @@ import {
   getTopicDepth,
   isTopicInBranch,
   renumberSiblingEdges,
+  topicCanvasWritePaused,
+  topicOutlineExportProblems,
+  topicRecordsNeedWritePause,
 } from './topicTree';
 
 function topic(id: string, options?: { parentId?: string; title?: string }) {
@@ -204,6 +207,41 @@ describe('buildTopicIndex', () => {
     expect(frozen.has('c')).toBe(true);
     expect(frozen.has('ok')).toBe(false);
   });
+
+  it('pauses writes for unsupported or invalid records, not retainable structure damage', () => {
+    const cyclic = buildTopicIndex(
+      [topic('x'), topic('y')],
+      [treeEdge('x', 'y', 0), treeEdge('y', 'x', 0)]
+    );
+    expect(topicRecordsNeedWritePause(cyclic)).toBe(false);
+
+    const unsupported = buildTopicIndex(
+      [
+        {
+          data: { title: 'Future', topicVersion: 99 },
+          id: 'f',
+          position: { x: 0, y: 0 },
+          type: TOPIC_NODE_TYPE,
+        },
+      ],
+      []
+    );
+    expect(topicRecordsNeedWritePause(unsupported)).toBe(true);
+    expect(topicCanvasWritePaused([topic('ok')], [])).toBe(false);
+    expect(
+      topicCanvasWritePaused(
+        [
+          {
+            data: { title: 'Broken' },
+            id: 'bad',
+            position: { x: 0, y: 0 },
+            type: TOPIC_NODE_TYPE,
+          },
+        ],
+        []
+      )
+    ).toBe(true);
+  });
 });
 
 describe('traversal', () => {
@@ -305,6 +343,36 @@ describe('buildTopicOutline', () => {
     // A hand-drawn link is an association, not parentage.
     expect(outline).toHaveLength(2);
     expect(outline[0]?.children).toEqual([]);
+  });
+
+  it('blocks outline export when the index has problems', () => {
+    const cyclic = buildTopicIndex(
+      [topic('x'), topic('y')],
+      [treeEdge('x', 'y', 0), treeEdge('y', 'x', 0)]
+    );
+    expect(
+      topicOutlineExportProblems(cyclic).some((p) => p.kind === 'cycle')
+    ).toBe(true);
+
+    const unsupported = buildTopicIndex(
+      [
+        {
+          data: { title: 'Future', topicVersion: 99 },
+          id: 'r',
+          position: { x: 0, y: 0 },
+          type: TOPIC_NODE_TYPE,
+        },
+      ],
+      []
+    );
+    expect(
+      topicOutlineExportProblems(unsupported).some(
+        (p) => p.kind === 'unsupported-topic-version'
+      )
+    ).toBe(true);
+
+    const healthy = buildTopicIndex([topic('r')], []);
+    expect(topicOutlineExportProblems(healthy)).toEqual([]);
   });
 
   it('omits Topics stuck on a cycle', () => {

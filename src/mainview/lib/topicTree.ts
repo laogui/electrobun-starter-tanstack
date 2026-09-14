@@ -84,6 +84,28 @@ export function getStructurallyFrozenTopics(index: TopicIndex): Set<string> {
   return frozen;
 }
 
+/**
+ * Decode problems that mean a rewrite cannot be confirmed lossless: unknown
+ * versions or unreadable payloads. Cycles and extra parents keep their
+ * original records, so those stay a local structure freeze (§4.2).
+ */
+const WRITE_PAUSE_PROBLEM_KINDS = new Set<TopicProblemKind>([
+  'invalid-relation',
+  'invalid-topic-data',
+  'unsupported-relation-version',
+  'unsupported-topic-version',
+]);
+
+export function topicRecordsNeedWritePause(index: TopicIndex): boolean {
+  return index.problems.some((problem) =>
+    WRITE_PAUSE_PROBLEM_KINDS.has(problem.kind)
+  );
+}
+
+export function topicCanvasWritePaused(nodes: Node[], edges: Edge[]): boolean {
+  return topicRecordsNeedWritePause(buildTopicIndex(nodes, edges));
+}
+
 function relationSortKey(a: TopicRelation, b: TopicRelation): number {
   return a.order === b.order
     ? a.childId.localeCompare(b.childId)
@@ -390,12 +412,21 @@ export interface TopicOutlineNode {
 }
 
 /**
+ * Outline export must not silently drop Topics. Any index problem — cycles,
+ * unsupported versions, invalid records — blocks this path so the user can
+ * use a lossless backup instead.
+ */
+export function topicOutlineExportProblems(index: TopicIndex): TopicProblem[] {
+  return [...index.problems];
+}
+
+/**
  * Project the Topic forest into an ordered tree for outline export.
  *
  * Roots are ordered by id and children by their relation `order`, never by
  * screen position: an export must not change because someone nudged a node.
- * Topics on a cycle are skipped — they have no well-defined place in an
- * outline, and emitting them would either loop or invent a parent.
+ * Topics on a cycle are skipped here as a last-resort walk guard; callers that
+ * write a file must refuse when `topicOutlineExportProblems` is non-empty.
  */
 export function buildTopicOutline(
   index: TopicIndex,

@@ -20,27 +20,27 @@
 
 | 阶段 | 范围 | 状态 |
 | --- | --- | --- |
-| P0 契约与 schema | `ManifestEdge.data` 往返、`src/shared/topic.ts` 数据模型与运行期校验、树边权限守卫 | 主体实施完成；缺 §4.2/§4.3 的数据保护（见 TG-6） |
-| P1 核心节点 | `topic` 节点类型与注册、`TopicNode` 自动测量、创建菜单入口、草稿编辑与顺序提交（含额度与上下文守卫）、持久化/序列化/搜索/谓词接线 | 部分完成；缺草稿 flush 与 Tab 上下文（TG-2、TG-3） |
-| P2 树与排布 | `topicTree.ts`、Tab/Enter 子级与同级创建、分支选择/拆出/删除、右键菜单、单节点删除后的修复与重排 | 部分完成；`topicLayout.ts` 只有 tidy-tree，缺整个避让层（TG-1）与两个分支动作（TG-5） |
-| P3 集成与回归 | Group 整树进出与跨容器拒绝、分支拖拽与锁定拒绝、复制粘贴规则、主题大纲 Markdown 导出、AI 上下文、注册表与插件回归 | 部分完成；大纲导出缺门禁（TG-4）、额度入口不一致（TG-7） |
+| P0 契约与 schema | `ManifestEdge.data` 往返、`src/shared/topic.ts` 数据模型与运行期校验、树边权限守卫、§4.2/§4.3 数据保护 | 实施完成（含 TG-6）、待桌面验收 |
+| P1 核心节点 | `topic` 节点类型与注册、`TopicNode` 自动测量、创建菜单入口、草稿编辑与顺序提交（含额度与上下文守卫）、离开画布前草稿提交、Topic 命令上下文、持久化/序列化/搜索/谓词接线 | 实施完成（含 TG-2、TG-3）、待桌面验收 |
+| P2 树与排布 | `topicTree.ts` / `topicLayout.ts`（含避让层）、Tab/Enter 子级与同级创建、分支选择/复制/整理/拆出/删除、右键菜单、单节点删除后的修复与重排 | 实施完成（含 TG-1、TG-5）、待桌面验收 |
+| P3 集成与回归 | Group 整树进出与跨容器拒绝、分支拖拽与锁定拒绝、复制粘贴规则、主题大纲 Markdown 导出（含非法关系门禁）、各入口额度一致、AI 上下文、注册表与插件回归 | 实施完成（含 TG-4、TG-7）、待桌面验收 |
 | P4 文档同步 | PRD / tech-spec / development-plan / 行为矩阵 / 订阅 / SDK 文档 | 已完成。`src/bun/templates/brainstorm-mindmap/` 与 `packages/create-plugin/templates/` 按方案第 160 / 250 行分别延后到首版验收后与「描述实际受影响时」，不计为本阶段缺口 |
 
-**自动化证据（2026-09-14）**：`bun run type-check`、`bun run check` 通过；`bun run test` 全量 231 files / 2177 tests 通过。新增覆盖包括 `src/shared/topic.test.ts`、`src/shared/topicMarkdownExport.test.ts`、`src/mainview/lib/topicTree.test.ts`、`src/mainview/lib/topicLayout.test.ts`、`canvasStore.test.ts` 的 Topic 事务套件与 `useNodeDrag.test.tsx` 的分支拖拽套件。
+**自动化证据（2026-09-14，TG 收口后复核）**：`bun run type-check`、`bun run check` 通过；`bun run test` 全量 232 files / 2217 tests 通过（连续两次独立复跑一致，约 85–95 秒；另有一次 417 秒的高负载跑出现 43 项失败且无法复现，判定为资源争抢导致的假失败，不作为证据）。覆盖包括 `src/shared/topic.test.ts`、`src/shared/topicMarkdownExport.test.ts`、`src/mainview/lib/topicTree.test.ts`、`src/mainview/lib/topicLayout.test.ts`（避让层）、`src/bun/manifest.test.ts`（`*.pre-topic` 备份）、`src/mainview/hooks/useCanvasKeyboard.test.tsx`（命令上下文与 Esc 后 Tab 离开）、`useCanvasPersistence.test.tsx`（写入暂停）、`canvasStore.test.ts` 的 Topic 事务套件与 `useNodeDrag.test.tsx` 的分支拖拽套件。
 
-**测试全绿不等于阶段完成**：上述测试覆盖的是已实现的行为，覆盖不到「方案要求但尚未编写」的部分。2026-09-14 的代码评审逐条核对源码后发现下列缺口，先前把 P0–P3 记为「实施完成」是错误结论，已在上表更正。
+**测试全绿不等于阶段完成**：测试只覆盖已实现的行为，覆盖不到「方案要求但尚未编写」的部分。2026-09-14 首轮把 P0–P3 记为「实施完成」时，下表七项条款其实一行代码都没有，而当时测试同样全绿——这是本轮最该记住的教训：阶段状态必须对着方案条款逐条核源码，不能拿门禁结果代替。七项现已全部落地并各自带测试，但桌面验收仍未开始。
 
 | ID | 方案条款 | 缺口 | 影响 |
 | --- | --- | --- | --- |
 | TG-1 | §5（180–182 行） | **已修复**：`layoutTopicTreeAvoiding` 收集非本树障碍物、按向下/向外有界偏移搜索、校验直接 Group 硬边界与本树锁定节点；软避让无解仍提交并 `toast_topic_layout_overlap`；硬失败（分组空间不足 / 将移动锁定主题）拒绝且不写节点、边或历史。`relayoutTopicTree` 与标题提交已走该层。 | 主题会直接压在图片、其他树或 Group 边界外，方案的软/硬约束区分完全不存在 |
-| TG-2 | §3.1（66 行）、§4.4 | 「离开画布前提交非空草稿」未实现。`setActiveView` 清 nodes/edges/focus/undo 但不清 `topicDraft` / `editingTopicId`，而 `routes/index.tsx` 无条件把草稿节点拼进 nodes | 切换视图后草稿视觉上漂到新画布，用户以为可继续编辑；`commitTopicDraft` 的 viewId 守卫随后连文本一起丢弃 |
-| TG-3 | §3.2（87 行） | `useCanvasKeyboard.ts` 仅凭 `selected` 拦截 Tab，没有显式的 Topic 命令上下文，也没有 Esc 退出该上下文的规则 | 违反「不能仅凭 selected 状态重新拦截 Tab」；方案第 327 行的验收项「Esc 后 Tab 能离开」必然失败，属可访问性缺陷 |
-| TG-4 | §6 / P3-M（210 行） | `export-topic-outline` 从不检查 `index.problems`；`buildTopicOutline` 用 `parsed.data?.title ?? ''`，成环主题因不在 `rootIds` 中直接消失 | 直接违反「不能静默遗漏」：不支持版本导成空条目，非法关系的主题无声丢失 |
-| TG-5 | §3.3（103 行）、§3.4（104 行） | 右键菜单只有 new-child / new-sibling / select-branch / detach-branch / delete-branch，缺「复制分支」与「整理分支」 | 手工拖过的分支没有重新排布入口；整树复制只能靠先选分支再普通复制 |
-| TG-6 | §4.2（149 行）、§4.3（161 行） | 无「有损解码时对受影响画布暂停持久化写入」，也无「首次写入 Topic 前保留 manifest 备份」。当前只有结构冻结提示 | 无法保存的编辑可能被表现为已保存；旧版本降级恢复没有备份兜底 |
-| TG-7 | §6（202、217 行） | 配额只在 `createNode` 与 `commitTopicDraft` 两处检查，paste / duplicate / import 不计入 | 方案要求「创建/分支/复制/导入一致」未达成。注：paste/duplicate 对 `card`/`sticky` 本来也不查，这是方案要求收口的既有产品缺口，不是 Topic 引入的回归 |
+| TG-2 | §3.1（66 行）、§4.4 | **已修复**：`switchView` 先提交非空草稿再走原有 manifest flush，失败则中止切换并保留草稿；空草稿丢弃。`setActiveView` / `reset` 清除 `topicDraft`、`editingTopicId` 与命令上下文。渲染侧按 `topicDraft.viewId === activeViewId` 拼接草稿节点。 | 切换视图后草稿视觉上漂到新画布，用户以为可继续编辑；`commitTopicDraft` 的 viewId 守卫随后连文本一起丢弃 |
+| TG-3 | §3.2（87 行） | **已修复**：新增 `topicCommandContextId`。Tab/Enter 只在该上下文拦截；Esc 退出上下文并归还画布焦点，选中可保留。显式改选到另一主题、F2、相对草稿与单击编辑会进入上下文；仅凭仍 selected 的节点不会在 Esc 后重新拦截 Tab。 | 违反「不能仅凭 selected 状态重新拦截 Tab」；方案第 327 行的验收项「Esc 后 Tab 能离开」必然失败，属可访问性缺陷 |
+| TG-4 | §6 / P3-M（210 行） | **已修复**：`topicOutlineExportProblems` 在写文件前拦截 `index.problems`（成环、不支持版本、非法记录）；`export-topic-outline` 先 `toast_topic_outline_blocked` 且不调用 RPC。`buildTopicOutline` 仍作遍历守卫省略成环节点，但调用方必须先拒绝。 | 直接违反「不能静默遗漏」：不支持版本导成空条目，非法关系的主题无声丢失 |
+| TG-5 | §3.3（103 行）、§3.4（104 行） | **已修复**：右键增加「复制分支」与「整理分支」。`copyTopicBranch` 只把分支节点与内部边写入剪贴板（不含外部父边）。`tidyTopicBranch` 对受影响分支走 `relayoutTopicTree`（含避让），硬失败拒绝、软重叠提示，位置未变则不记历史。 | 手工拖过的分支没有重新排布入口；整树复制只能靠先选分支再普通复制 |
+| TG-6 | §4.2（149 行）、§4.3（161 行） | **已修复**：不支持/非法主题或关系记录在 hydrate 时置 `topicWritePaused`，自动保存与切视图 flush 不再写盘，也不把未保存表现为已保存；结构损坏（成环等）仍只冻结该树。`saveManifest` 在首次写入 Topic 前把当前 manifest 复制为 `*.pre-topic`，已有备份不覆盖。 | 无法保存的编辑可能被表现为已保存；旧版本降级恢复没有备份兜底 |
+| TG-7 | §6（202、217 行） | **已修复**：抽出 `hasNodeQuota(nodes, additionalCounted)`，`card`/`sticky`/`topic` 同一计数；`createNode`、主题提交、粘贴、复制选中、JSON 画布导入与插件 CSV 投放都走该门。额度提示改为 `toast_node_quota`。 | 方案要求「创建/分支/复制/导入一致」未达成。注：paste/duplicate 对 `card`/`sticky` 本来也不查，这是方案要求收口的既有产品缺口，不是 Topic 引入的回归 |
 
-**另有非方案条款的代码质量待办**（同一轮评审提出，不阻断阶段验收）：`canvasStore.ts` 已 3095 行且 `relayoutTopicTree` / `attachDraftToTree` / `settleTopicsAfterDelete` 是可外移的纯函数；`locked` 判断在 store 与 `useNodeDrag` 中重复 11 处，宜在 `canvasNodePredicates.ts` 提取 `isNodeLocked`；配额那段 docblock 错挂在 `getViewportCenter` 上且内容与 TG-7 矛盾；`TopicNode` 在 selector 内对每个节点调用 `buildTopicIndex`，每次 store 变化为 O(主题数 × 图规模)；`AINodeContext.topicOrder` / `topicParentId` 已填充但 `formatNodeForPrompt` 从不读取。
+**另有非方案条款的代码质量待办**（同一轮评审提出，不阻断阶段验收）：`canvasStore.ts` 已 3095 行且 `relayoutTopicTree` / `attachDraftToTree` / `settleTopicsAfterDelete` 是可外移的纯函数；`locked` 判断在 store 与 `useNodeDrag` 中重复 11 处，宜在 `canvasNodePredicates.ts` 提取 `isNodeLocked`；`TopicNode` 在 selector 内对每个节点调用 `buildTopicIndex`，每次 store 变化为 O(主题数 × 图规模)；`AINodeContext.topicOrder` / `topicParentId` 已填充但 `formatNodeForPrompt` 从不读取。
 
 **桌面验收仍未开始**：即使补齐上表，P0–P3 也还缺桌面走查记录（连续创建、撤销一步回滚、Group 进出、锁定拒绝、重启后层级保持、大纲导出落盘），按本文 §1 的口径不得标记为已验收。官网/双语文档同步仍在本仓之外跟踪。
 

@@ -19,6 +19,8 @@ vi.mock('@/lib/rpc', () => ({
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
+  toast_topic_write_paused: () => 'Write paused',
+  toast_node_quota: () => 'Quota reached',
 }));
 
 const TestComponent = () => {
@@ -234,6 +236,21 @@ describe('useCanvasPersistence', () => {
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
 
     // Pending timer should have been cancelled too
+    vi.advanceTimersByTime(3000);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a write-paused canvas', async () => {
+    useCanvasStore.setState({ topicWritePaused: true });
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 30, y: 30 }, data: {} },
+      ]);
+
     vi.advanceTimersByTime(3000);
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });

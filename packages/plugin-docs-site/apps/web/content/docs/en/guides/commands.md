@@ -26,7 +26,8 @@ export default definePlugin({
 ## Rules of thumb
 
 - **IDs are plugin-local kebab-case.** The host namespaces them by plugin ID, so two plugins can both have `open-summary`.
-- **Host shortcuts win.** Text editing and built-in shortcuts take priority over plugin shortcuts; treat shortcuts as a convenience, not the only entry point. IME composition, key repeat and keys the focused context already owns never reach your command. That includes canvas keys bound to a selected core node — `Tab`, `Enter` and `F2` act on a selected or in-edit Topic, for example — so prefer a `Mod`-based combination and always keep a menu entry.
+- **Host shortcuts win.** Text editing and built-in shortcuts take priority over plugin shortcuts. IME composition, key repeat and keys the focused context already owns never reach your command, including canvas keys bound to a selected core node — `Tab`, `Enter` and `F2` act on a selected or in-edit Topic, for example.
+- **Shortcuts are a convenience, not the entry point.** Prefer a `Mod`-based combination so you do not compete with the host, and always keep a menu entry for the same command.
 - **One function per behavior.** Put the real work in a function and call it from the command, a panel button and tests.
 - **Registration is staged.** Everything registered in `setup` is published only after `setup` succeeds. A failed reload leaves the old command working.
 - **Clean up owned resources.** `app.commands.register` returns a disposer, and you can add arbitrary cleanup with `app.onCleanup`. Cleanup runs in reverse order, once, when the plugin reloads, is disabled or the workspace closes.

@@ -36,6 +36,7 @@ import {
   buildTopicIndex,
   buildTopicOutline,
   collectTopicBranch,
+  topicOutlineExportProblems,
 } from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../paraglide/messages.js';
@@ -142,6 +143,8 @@ export function useContextMenu({
   );
   const detachTopicBranch = useCanvasStore((s) => s.detachTopicBranch);
   const deleteTopicBranch = useCanvasStore((s) => s.deleteTopicBranch);
+  const copyTopicBranch = useCanvasStore((s) => s.copyTopicBranch);
+  const tidyTopicBranch = useCanvasStore((s) => s.tidyTopicBranch);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -540,10 +543,15 @@ export function useContextMenu({
         case 'export-topic-outline': {
           const { activeViewId, edges, nodes, views } =
             useCanvasStore.getState();
+          const index = buildTopicIndex(nodes, edges);
+          if (topicOutlineExportProblems(index).length > 0) {
+            toast.error(m.toast_topic_outline_blocked());
+            break;
+          }
           const viewName =
             views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
           const markdown = buildTopicOutlineMarkdown(
-            buildTopicOutline(buildTopicIndex(nodes, edges), nodes),
+            buildTopicOutline(index, nodes),
             { heading: viewName }
           );
           rpcExportTopicOutline(markdown, `${viewName}-topics.md`)
@@ -723,6 +731,18 @@ export function useContextMenu({
         case 'topic-new-sibling': {
           if (nodeId) {
             beginTopicRelativeDraft('sibling', nodeId);
+          }
+          break;
+        }
+        case 'topic-copy-branch': {
+          if (nodeId) {
+            copyTopicBranch(nodeId);
+          }
+          break;
+        }
+        case 'topic-tidy-branch': {
+          if (nodeId) {
+            tidyTopicBranch(nodeId);
           }
           break;
         }
@@ -1032,8 +1052,10 @@ export function useContextMenu({
       onRequestCreateCanvasType,
       setEditingTopicId,
       beginTopicRelativeDraft,
+      copyTopicBranch,
       detachTopicBranch,
       deleteTopicBranch,
+      tidyTopicBranch,
     ]
   );
 

@@ -166,7 +166,8 @@ src/
       canvasBackground.ts                  # 画布背景 token（default/paper/cream/mono）→ CSS 变量
       canvasUtils.ts                       # sortNodesByParent, isDescendant 等工具函数
       topicTree.ts                         # Topic 树纯函数：由 nodes + `topic-child` 边推导索引、遍历分支、检测环/多父/跨容器、锁定阻断、导出大纲投影
-      topicLayout.ts                       # Topic 向右树布局纯函数：父节点在子树中垂直居中，只重算受影响子树
+      topicLayout.ts                       # Topic 向右树布局纯函数：父节点在子树中垂直居中，只重算受影响子树；`layoutTopicTreeAvoiding` 叠加避让层（收集非本树障碍物、有界偏移搜索、Group 硬边界与锁定校验，软避让无解仍提交并提示）
+      nodeQuota.ts                         # 免费额度共享门禁：`card`/`sticky`/`topic` 同一计数，支持批量预检 additionalCounted
       topicMeasure.ts                      # 按纯文本标题测量 Topic 尺寸（与渲染同一套字体度量）
       topicColors.ts                       # Topic 颜色 token → 节点样式与派生树边颜色
       colorUtils.ts                        # 颜色常量（hex）+ colorToStyle 转换

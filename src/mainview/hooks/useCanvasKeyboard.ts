@@ -151,6 +151,16 @@ export function useCanvasKeyboard({
           }
           return;
         }
+        const { exitTopicCommandContext, topicCommandContextId } =
+          useCanvasStore.getState();
+        if (topicCommandContextId) {
+          e.preventDefault();
+          exitTopicCommandContext();
+          const canvas = document.querySelector('[role="application"]');
+          if (canvas instanceof HTMLElement) {
+            canvas.focus();
+          }
+        }
         return;
       }
 
@@ -299,13 +309,16 @@ export function useCanvasKeyboard({
         return;
       }
 
-      // Tab creates a subtopic under the single selected Topic. Scoped to that
-      // case only — with anything else selected, Tab stays ordinary focus
-      // navigation. Shift+Tab is never claimed.
+      // Tab creates a subtopic only inside the explicit Topic command context
+      // (or the Topic editor, which is handled locally). A selected Topic
+      // after Esc must not reclaim Tab.
       if (e.key === 'Tab' && !e.shiftKey) {
-        const { beginTopicRelativeDraft, nodes } = useCanvasStore.getState();
-        const selected = nodes.filter((n) => n.selected);
-        const node = selected.length === 1 ? selected[0] : undefined;
+        const { beginTopicRelativeDraft, nodes, topicCommandContextId } =
+          useCanvasStore.getState();
+        if (!topicCommandContextId) {
+          return;
+        }
+        const node = nodes.find((n) => n.id === topicCommandContextId);
         if (node && isTopicNodeType(node.type)) {
           e.preventDefault();
           beginTopicRelativeDraft('child', node.id);
@@ -341,12 +354,14 @@ export function useCanvasKeyboard({
           setEditingStickyId(node.id);
           return;
         }
-        // For a Topic, Enter creates the next sibling and starts typing in it,
-        // which is what makes a keyboard run of ideas continuous. A root has no
-        // sibling slot, so there Enter opens the title for editing instead.
+        // Sibling/root-edit Enter is a Topic command, not a selected-only hook.
         if (isTopicNodeType(node.type)) {
+          const { beginTopicRelativeDraft, topicCommandContextId } =
+            useCanvasStore.getState();
+          if (topicCommandContextId !== node.id) {
+            return;
+          }
           e.preventDefault();
-          const { beginTopicRelativeDraft } = useCanvasStore.getState();
           if (!beginTopicRelativeDraft('sibling', node.id)) {
             setEditingTopicId(node.id);
           }

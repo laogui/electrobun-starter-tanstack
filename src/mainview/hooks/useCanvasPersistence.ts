@@ -11,7 +11,10 @@ import { useCanvasStore } from '@/store/canvasStore';
 const LAYOUT_DEBOUNCE_MS = 2500;
 
 async function saveManifestNow(viewId: string): Promise<boolean> {
-  const { nodes, edges } = useCanvasStore.getState();
+  const { edges, nodes, topicWritePaused } = useCanvasStore.getState();
+  if (topicWritePaused) {
+    return false;
+  }
   const sanitized = sanitizeForPersistence(nodes, edges);
   try {
     const result = await rpcSaveManifest(
@@ -101,7 +104,9 @@ export function useCanvasPersistence() {
 
       // Restore from backup if present (only after hydration)
       if (available && skipHydrate.current) {
-        const backup = readPendingFlushBackup(viewIdRef.current);
+        const backup = useCanvasStore.getState().topicWritePaused
+          ? null
+          : readPendingFlushBackup(viewIdRef.current);
         if (backup) {
           console.log(
             '[persistence] Restoring from pending flush backup:',

@@ -1,6 +1,7 @@
-import type { Node, OnNodeDrag } from '@xyflow/react';
+import type { Node, OnNodeDrag, XYPosition } from '@xyflow/react';
 import { useReactFlow } from '@xyflow/react';
 import { useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import {
   isCanvasContentNode,
   isGroupChildNode,
@@ -15,7 +16,14 @@ import {
   pushNodeAwayFromObstacle,
   REPULSION_GAP,
 } from '@/lib/repulsion';
+import {
+  buildTopicIndex,
+  collectTopicDescendants,
+  collectTopicsBlockedByLock,
+} from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../paraglide/messages.js';
+import { isTopicNodeType } from '../../shared/topic';
 
 /**
  * "Content" here means a node that can be placed inside a Group or absorbed
@@ -77,6 +85,86 @@ export function pushDraggedNodesOutOfFolder(
   });
 }
 
+/**
+ * Descendants that must travel with a dragged Topic, and where they started.
+ *
+ * A branch moves as one shape, so the followers are translated by the anchor's
+ * delta instead of being solved individually — that keeps their relative
+ * layout exactly as the tree layout left it. Nodes React Flow is already
+ * dragging (the rest of a multi-select) are excluded so they are not moved
+ * twice.
+ */
+interface TopicBranchFollow {
+  anchorStart: XYPosition;
+  /** A locked Topic in the branch pins the whole gesture: the anchor snaps
+   *  back every frame rather than the branch moving without it. */
+  blocked: boolean;
+  starts: Map<string, XYPosition>;
+}
+
+function captureTopicBranchFollow(
+  node: Node,
+  draggedNodes: Node[]
+): TopicBranchFollow | null {
+  if (!isTopicNodeType(node.type)) {
+    return null;
+  }
+  const { edges, nodes } = useCanvasStore.getState();
+  const index = buildTopicIndex(nodes, edges);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const blocked = collectTopicsBlockedByLock(index, (id) =>
+    Boolean((byId.get(id)?.data as { locked?: unknown } | undefined)?.locked)
+  ).has(node.id);
+
+  const alreadyDragged = new Set(draggedNodes.map((n) => n.id));
+  alreadyDragged.add(node.id);
+  const starts = new Map<string, XYPosition>();
+  for (const id of collectTopicDescendants(index, node.id)) {
+    const descendant = byId.get(id);
+    if (descendant && !alreadyDragged.has(id)) {
+      starts.set(id, descendant.position);
+    }
+  }
+  if (starts.size === 0 && !blocked) {
+    return null;
+  }
+  return { anchorStart: node.position, blocked, starts };
+}
+
+/** Translate the branch followers to match how far the anchor has moved. */
+function applyTopicBranchFollow(
+  nodes: Node[],
+  anchorId: string,
+  follow: TopicBranchFollow
+): Node[] {
+  const anchor = nodes.find((n) => n.id === anchorId);
+  if (!anchor) {
+    return nodes;
+  }
+  if (follow.blocked) {
+    return anchor.position.x === follow.anchorStart.x &&
+      anchor.position.y === follow.anchorStart.y
+      ? nodes
+      : nodes.map((n) =>
+          n.id === anchorId ? { ...n, position: follow.anchorStart } : n
+        );
+  }
+  const dx = anchor.position.x - follow.anchorStart.x;
+  const dy = anchor.position.y - follow.anchorStart.y;
+  return nodes.map((n) => {
+    const start = follow.starts.get(n.id);
+    if (!start) {
+      return n;
+    }
+    const x = start.x + dx;
+    const y = start.y + dy;
+    if (n.position.x === x && n.position.y === y) {
+      return n;
+    }
+    return { ...n, position: { x, y } };
+  });
+}
+
 function getDraggingNodeIds(node: Node, draggedNodes: Node[]): string[] {
   const ids = new Set<string>();
   for (const draggedNode of draggedNodes) {
@@ -102,6 +190,8 @@ export function useNodeDrag() {
    *  React Flow's `.dragging` class (the transition opt-out). */
   const [repelAnimationActive, setRepelAnimationActive] = useState(false);
   const rf = useReactFlow();
+  /** Subtopics following the grabbed Topic for the length of one gesture. */
+  const topicFollowRef = useRef<TopicBranchFollow | null>(null);
 
   /**
    * Top-level node positions captured on the first drag frame of a gesture.
@@ -185,8 +275,12 @@ export function useNodeDrag() {
     (_, node, draggedNodes = []) => {
       saveSnapshot();
       originsRef.current = null;
+      topicFollowRef.current = captureTopicBranchFollow(node, draggedNodes);
       setRejectedFolderId(null);
-      setDraggingNodeIds(getDraggingNodeIds(node, draggedNodes));
+      setDraggingNodeIds([
+        ...getDraggingNodeIds(node, draggedNodes),
+        ...(topicFollowRef.current?.starts.keys() ?? []),
+      ]);
       const draggingGroup =
         node.type === 'group' || draggedNodes.some((n) => n.type === 'group');
       setRepelAnimationActive(!draggingGroup && draggedNodes.length <= 1);
@@ -197,20 +291,34 @@ export function useNodeDrag() {
       const abs =
         rf.getInternalNode(node.id)?.internals.positionAbsolute ??
         node.position;
+      // Subtopics leave the group with their ancestor. Detaching the anchor
+      // alone would put the branch in two coordinate spaces at once, and a
+      // tree is not allowed to straddle containers.
+      const detachIds = new Set<string>([node.id]);
+      const follow = topicFollowRef.current;
+      if (follow && !follow.blocked) {
+        for (const id of follow.starts.keys()) {
+          detachIds.add(id);
+        }
+      }
+      const shift = { x: abs.x - node.position.x, y: abs.y - node.position.y };
       setNodes((nds) =>
         sortNodesByParent(
           nds.map((n) => {
             if (n.type === 'group') {
               return { ...n, data: { ...n.data, active: false } };
             }
-            if (n.id !== node.id) {
+            if (!detachIds.has(n.id)) {
               return n;
             }
             return {
               ...n,
               parentId: undefined,
               extent: undefined,
-              position: abs,
+              position:
+                n.id === node.id
+                  ? abs
+                  : { x: n.position.x + shift.x, y: n.position.y + shift.y },
             };
           })
         )
@@ -322,11 +430,23 @@ export function useNodeDrag() {
         }
         draggingIds.add(node.id);
 
+        // Subtopics ride along with their ancestor, and count as dragged so
+        // repulsion leaves the branch's internal spacing alone.
+        const follow = topicFollowRef.current;
+        const withBranch = follow
+          ? applyTopicBranchFollow(highlighted, node.id, follow)
+          : highlighted;
+        if (follow) {
+          for (const id of follow.starts.keys()) {
+            draggingIds.add(id);
+          }
+        }
+
         // Positions in the store are already live: React Flow dispatches the
         // position changes (including helper-line snapping) synchronously
         // before this callback runs.
         const repelled = applyDragRepulsion({
-          nodes: highlighted,
+          nodes: withBranch,
           activeIds: draggingIds,
           origins: originsRef.current,
           paused,
@@ -359,6 +479,19 @@ export function useNodeDrag() {
 
       const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
       draggingIds.add(node.id);
+      // React Flow's final snap moves the anchor one last time, so the branch
+      // has to be re-translated before the ref is dropped.
+      const topicFollow = topicFollowRef.current;
+      topicFollowRef.current = null;
+      if (topicFollow) {
+        for (const id of topicFollow.starts.keys()) {
+          draggingIds.add(id);
+        }
+        setNodes((nds) => applyTopicBranchFollow(nds, node.id, topicFollow));
+        if (topicFollow.blocked) {
+          toast.error(m.toast_topic_layout_locked());
+        }
+      }
 
       // At drag stop React Flow snaps the store back to the pointer position,
       // which may sit on top of a folder the node cannot enter. Re-derive the
@@ -423,32 +556,58 @@ export function useNodeDrag() {
             .find((n) => n.type === 'group');
 
           const base = targetGroup ? restorePushedNodes(nds, draggingIds) : nds;
+          const anchorAbs =
+            rf.getInternalNode(node.id)?.internals.positionAbsolute ??
+            node.position;
+          const groupAbs = targetGroup
+            ? (rf.getInternalNode(targetGroup.id)?.internals.positionAbsolute ??
+              targetGroup.position)
+            : { x: 0, y: 0 };
+          const anchorNext = {
+            x: anchorAbs.x - groupAbs.x,
+            y: anchorAbs.y - groupAbs.y,
+          };
+          // A tree lives in one container, so subtopics change container along
+          // with their ancestor. The branch is rigid: each follower shifts by
+          // the same amount the anchor's coordinates did, which leaves the
+          // layout identical on the other side of the move.
+          const anchorBefore =
+            base.find((n) => n.id === node.id)?.position ?? anchorNext;
+          const branchShift = {
+            x: anchorNext.x - anchorBefore.x,
+            y: anchorNext.y - anchorBefore.y,
+          };
+          const followerIds = new Set(
+            topicFollow?.blocked ? [] : (topicFollow?.starts.keys() ?? [])
+          );
+
           const updated = base.map((n) => {
-            if (n.id !== node.id) {
+            const isAnchor = n.id === node.id;
+            if (!(isAnchor || followerIds.has(n.id))) {
               if (n.type === 'group') {
                 return { ...n, data: { ...n.data, active: false } };
               }
               return n;
             }
-            const abs =
-              rf.getInternalNode(node.id)?.internals.positionAbsolute ??
-              node.position;
+            const position = isAnchor
+              ? anchorNext
+              : {
+                  x: n.position.x + branchShift.x,
+                  y: n.position.y + branchShift.y,
+                };
             if (targetGroup) {
-              const groupAbs =
-                rf.getInternalNode(targetGroup.id)?.internals
-                  .positionAbsolute ?? targetGroup.position;
               return {
                 ...n,
                 parentId: targetGroup.id,
                 extent: 'parent' as const,
-                position: { x: abs.x - groupAbs.x, y: abs.y - groupAbs.y },
+                position,
               };
             }
             return {
               ...n,
               parentId: undefined,
               extent: undefined,
-              position: abs,
+              position,
             };
           });
           return applyRejectPush(sortNodesByParent(updated));

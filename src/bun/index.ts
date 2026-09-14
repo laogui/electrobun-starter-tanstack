@@ -1155,6 +1155,12 @@ interface CanvasRPC {
         params: { noteId: string; includeFrontmatter?: boolean };
         response: { canceled?: boolean; filePath?: string; success: boolean };
       };
+      /** Topic outline export. The renderer projects the tree to Markdown —
+       *  it holds the live graph — and the main process only saves it. */
+      exportTopicOutline: {
+        params: { fileName: string; markdown: string };
+        response: { canceled?: boolean; filePath?: string; success: boolean };
+      };
       exportNotesMarkdown: {
         params: {
           scope: 'all' | 'selected' | 'view';
@@ -3303,6 +3309,24 @@ async function main() {
           const safeFileName = safeExportFileName(fileName, 'json');
           const outputPath = resolveExportPath(selectedFolder, safeFileName);
           await Bun.write(outputPath, json);
+
+          return { filePath: outputPath, success: true };
+        },
+
+        exportTopicOutline: async ({ fileName, markdown }) => {
+          // An empty outline means there was nothing to export; writing a
+          // blank file would look like a successful but broken export.
+          if (!markdown.trim()) {
+            return { success: false };
+          }
+          const selectedFolder = await pickExportFolder();
+          if (!selectedFolder) {
+            return { canceled: true, success: false };
+          }
+
+          const safeFileName = safeExportFileName(fileName, 'md');
+          const outputPath = resolveExportPath(selectedFolder, safeFileName);
+          await Bun.write(outputPath, markdown);
 
           return { filePath: outputPath, success: true };
         },

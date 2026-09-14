@@ -122,6 +122,7 @@ import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
+import { measureTopicSize } from '@/lib/topicMeasure';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
@@ -145,6 +146,7 @@ import {
 } from '../../shared/extensions/media/state';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
 import { normalizeLinkState } from '../../shared/extensions/web/link';
+import { createTopicData } from '../../shared/topic';
 
 registerBuiltinCanvasTypes();
 
@@ -427,6 +429,8 @@ function CanvasComponent() {
   const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
   const addConnection = useCanvasStore((s) => s.addConnection);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
+  const beginTopicDraft = useCanvasStore((s) => s.beginTopicDraft);
+  const topicDraft = useCanvasStore((s) => s.topicDraft);
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -996,6 +1000,16 @@ function CanvasComponent() {
   // menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
+      if (kind === 'topic') {
+        // A Topic starts as an editable draft, not a node: an abandoned one
+        // leaves no empty node and no undo entry behind.
+        beginTopicDraft(rfInstance.current, {
+          ...(request?.anchorCenter
+            ? { anchorCenter: request.anchorCenter }
+            : {}),
+        });
+        return;
+      }
       if (kind === 'link') {
         setLinkPrompt({
           anchorCenter: request?.anchorCenter,
@@ -1036,6 +1050,7 @@ function CanvasComponent() {
       );
     },
     [
+      beginTopicDraft,
       createWidgetRecord,
       onCreateNode,
       openAssetFilePicker,
@@ -1046,6 +1061,15 @@ function CanvasComponent() {
 
   const createFromBottomMenu = useCallback(
     async (kind: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
+      if (kind === 'topic') {
+        beginTopicDraft(rfInstance.current, {
+          ...(options?.anchor ? { anchor: options.anchor } : {}),
+          ...(options?.anchorCenter
+            ? { anchorCenter: options.anchorCenter }
+            : {}),
+        });
+        return;
+      }
       if (isWidgetCreateKind(kind)) {
         const widget = await createWidgetRecord(kind);
         if (!widget) {
@@ -1068,7 +1092,7 @@ function CanvasComponent() {
       }
       await onCreateNode(kind);
     },
-    [createWidgetRecord, onCreateNode]
+    [beginTopicDraft, createWidgetRecord, onCreateNode]
   );
 
   const createCanvasTypeWithState = useCallback(
@@ -1725,19 +1749,49 @@ function CanvasComponent() {
     [onNodesChange]
   );
 
-  const renderSourceNodes = useMemo(() => {
-    if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
-      return nodes;
+  // The in-flight Topic draft is rendered like a node but lives outside the
+  // store's `nodes`, so it never reaches persistence, history, selection, or
+  // the node count. It joins the graph only when the first title is committed.
+  const topicDraftNode = useMemo((): Node | null => {
+    if (!topicDraft) {
+      return null;
     }
-    const combined = [...nodes, ...folderExpansionNodes];
+    const size = measureTopicSize(topicDraft.text);
+    return {
+      data: { ...createTopicData(topicDraft.text), isDraft: true },
+      deletable: false,
+      draggable: false,
+      id: topicDraft.id,
+      position: topicDraft.anchor,
+      selectable: false,
+      style: { width: size.width, height: size.height },
+      type: 'topic',
+      ...(topicDraft.parentId
+        ? { extent: 'parent' as const, parentId: topicDraft.parentId }
+        : {}),
+    };
+  }, [topicDraft]);
+
+  const renderSourceNodes = useMemo(() => {
+    const baseNodes = topicDraftNode ? [...nodes, topicDraftNode] : nodes;
+    if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
+      return baseNodes;
+    }
+    const combined = [...baseNodes, ...folderExpansionNodes];
     return applyDragRepulsion({
       activeIds: new Set(folderExpansionNodes.map((node) => node.id)),
       gap: FOLDER_EXPANSION_GAP,
       nodes: combined,
-      origins: captureRepulsionOrigins(nodes),
+      origins: captureRepulsionOrigins(baseNodes),
       paused: closingFolderId === focusedFolderId,
     });
-  }, [closingFolderId, focusedFolderId, folderExpansionNodes, nodes]);
+  }, [
+    closingFolderId,
+    focusedFolderId,
+    folderExpansionNodes,
+    nodes,
+    topicDraftNode,
+  ]);
 
   // Decorate nodes with render-only flags while keeping object identity stable
   // for unchanged nodes. Without the cache, every store update (including each

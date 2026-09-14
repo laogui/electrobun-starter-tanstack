@@ -34,7 +34,11 @@ export async function runAISummarize(): Promise<void> {
 
   const requestId = ++nextRequestId;
   panel.openLoading('summarize_selection', requestId, sourceViewId);
-  const context = buildSelectionContext(nodes, extensionInstances);
+  const context = buildSelectionContext(
+    nodes,
+    extensionInstances,
+    canvas.edges
+  );
 
   let response: Awaited<ReturnType<typeof rpcRunAITask>>;
   try {

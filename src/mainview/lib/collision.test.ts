@@ -11,6 +11,7 @@ import {
   inflateRect,
   isPointInside,
   isPositionAvailable,
+  rectInside,
   rectsIntersect,
 } from './collision';
 
@@ -58,6 +59,16 @@ describe('collision — rect helpers', () => {
     const r = { left: 0, top: 0, right: 10, bottom: 10 };
     expect(isPointInside({ x: 5, y: 5 }, r)).toBe(true);
     expect(isPointInside({ x: 11, y: 5 }, r)).toBe(false);
+  });
+
+  it('rectInside includes the shared edge and rejects overflow', () => {
+    const outer = { left: 0, top: 0, right: 10, bottom: 10 };
+    expect(rectInside({ left: 0, top: 0, right: 10, bottom: 10 }, outer)).toBe(
+      true
+    );
+    expect(rectInside({ left: 1, top: 1, right: 11, bottom: 9 }, outer)).toBe(
+      false
+    );
   });
 });
 

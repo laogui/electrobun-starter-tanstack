@@ -59,6 +59,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_pomodoro: () => 'Pomodoro',
   menu_reminder: () => 'Reminder',
   menu_sticky: () => 'Sticky',
+  menu_topic: () => 'Topic',
   menu_image: () => 'Image',
   menu_link: () => 'Link',
   menu_folder: () => 'Folder',
@@ -70,6 +71,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_new_pomodoro: () => 'New pomodoro',
   menu_new_reminder: () => 'New reminder',
   menu_new_sticky: () => 'New sticky',
+  menu_new_topic: () => 'New topic',
   menu_new_image: () => 'New image',
   menu_new_link: () => 'New link',
   menu_new_folder: () => 'New folder',
@@ -100,6 +102,7 @@ vi.mock('../../../paraglide/messages.js', () => ({
   menu_move_to_library: () => 'Move to Library',
   menu_export_markdown: () => 'Export as Markdown',
   menu_export_canvas_markdown: () => 'Export Canvas as Markdown',
+  menu_export_topic_outline: () => 'Export topic outline',
   menu_copy_as_markdown: () => 'Copy as Markdown',
   menu_lock: () => 'Lock',
   menu_unlock: () => 'Unlock',
@@ -200,8 +203,9 @@ describe('canvasContextMenu', () => {
       />
     );
 
-    // Main menu has 5 items (New, Paste, Reset zoom, Import Markdown, Export Canvas Markdown)
-    expect(screen.getAllByRole('button')).toHaveLength(5);
+    // New, Paste, Reset zoom, Import Markdown, Export Canvas Markdown,
+    // Export topic outline
+    expect(screen.getAllByRole('button')).toHaveLength(6);
     expect(screen.getByRole('button', { name: NEW_RE })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Paste ⌘V' })

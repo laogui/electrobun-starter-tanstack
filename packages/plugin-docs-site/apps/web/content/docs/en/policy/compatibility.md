@@ -13,7 +13,7 @@ This is the public mirror of GhostBoard's compatibility policy. When the two dis
 | --- | --- | --- |
 | GhostBoard host | `1.0.0` | The value compared against `engines.ghostboard` |
 | Manifest version | `2` | The only manifest contract that loads |
-| `@ghostboard/sdk` | `0.1.0` | Author types, fake host, packer, single-file reference; also `runtime.version` |
+| `@ghostboard/sdk` | `0.1.1` | Author types, fake host, packer, single-file reference; also `runtime.version` |
 | `create-ghostboard-plugin` | `0.1.0` | Templates |
 | Template default `engines.ghostboard` | `>=1.0.0 <2.0.0` | Range new plugins declare |
 
@@ -34,6 +34,8 @@ This is the public mirror of GhostBoard's compatibility policy. When the two dis
 | `@ghostboard/sdk` | Hosts | `create-ghostboard-plugin` | Notes |
 | --- | --- | --- | --- |
 | `0.1.x` | `>=1.0.0 <2.0.0` | `0.1.x` | Complete T1–T4 API; no Bun backend entry |
+
+`0.1.1` is a documentation-only patch: it adds no API and records how the existing selection, command and canvas APIs behave next to host-owned core node types such as Topic. Templates pinning `^0.1.0` already accept it, so no manifest or `engines` change is needed.
 
 SDK patch/minor releases fix types, the fake host or the reference, or add APIs in step with the host. SDK majors move with host majors. This documentation's reference page is generated from the pinned SDK version shown at its top.
 

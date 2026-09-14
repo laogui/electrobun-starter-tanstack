@@ -1,4 +1,4 @@
-import { Folder, Group, NotebookPen, StickyNote } from 'lucide-react';
+import { Folder, Group, NotebookPen, StickyNote, Workflow } from 'lucide-react';
 import type { ElementType } from 'react';
 import * as m from '../../paraglide/messages.js';
 import type { CreatableCanvasNodeKind } from './contentTypes';
@@ -10,6 +10,7 @@ import type { CreatableCanvasNodeKind } from './contentTypes';
 const CREATABLE_KIND_BY_ACTION = {
   note: 'card',
   sticky: 'sticky',
+  topic: 'topic',
   folder: 'folder',
   group: 'group',
 } as const satisfies Record<string, CreatableCanvasNodeKind>;
@@ -42,6 +43,11 @@ const CREATABLE_MENU_DEFINITIONS: CreatableMenuDefinition[] = [
     id: 'sticky',
     icon: NotebookPen,
     labels: { short: () => m.menu_sticky(), new: () => m.menu_new_sticky() },
+  },
+  {
+    id: 'topic',
+    icon: Workflow,
+    labels: { short: () => m.menu_topic(), new: () => m.menu_new_topic() },
   },
   {
     id: 'folder',

@@ -44,6 +44,22 @@ import {
   rpcSetActiveView,
 } from '@/lib/rpc';
 import { getCachedLicense, refreshLicense } from '@/lib/rpc-license';
+import {
+  collectTopicLayoutObstacles,
+  diffTopicPositions,
+  layoutTopicTreeAvoiding,
+  type TopicLayoutHardReason,
+} from '@/lib/topicLayout';
+import { measureTopicSize } from '@/lib/topicMeasure';
+import {
+  buildTopicChildEdge,
+  buildTopicIndex,
+  collectTopicBranch,
+  findTopicRoot,
+  getStructurallyFrozenTopics,
+  getTopicChildren,
+  renumberSiblingEdges,
+} from '@/lib/topicTree';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -58,8 +74,22 @@ import {
 } from '@/lib/viewportPersist';
 import type { WidgetKind } from '@/lib/widgetTypes';
 import * as m from '../../paraglide/messages.js';
+import { buildLegacyEdgeCompatPatch } from '../../shared/canvasEdgeFields';
 import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
 import type { SearchResultTarget } from '../../shared/searchTypes';
+import {
+  createTopicData,
+  isTopicNodeType,
+  isTopicTitleWithinLimit,
+  isTopicTreeEdge,
+  normalizeTopicTitle,
+  parseTopicData,
+  TOPIC_LEVEL_GAP,
+  TOPIC_MIN_HEIGHT,
+  TOPIC_MIN_WIDTH,
+  TOPIC_NODE_TYPE,
+  TOPIC_SIBLING_GAP,
+} from '../../shared/topic';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,6 +178,39 @@ export interface AddConnectionOptions {
   reverseVisualDirection?: boolean;
 }
 
+/**
+ * A new Topic the user is typing but has not committed.
+ *
+ * A draft is deliberately *not* a graph node: it holds no id in `nodes`, writes
+ * no edge, produces no history entry, and is never persisted. The first
+ * non-empty commit turns the title, node, and layout into a single transaction,
+ * so creating a Topic costs exactly one undo step and abandoning one costs
+ * nothing.
+ */
+export interface TopicDraft {
+  /** Top-left in flow coordinates, relative to `parentId` when set. */
+  anchor: { x: number; y: number };
+  /** Render-only id for the temporary node. Never persisted. */
+  id: string;
+  /** Group container the committed Topic will join. */
+  parentId?: string;
+  /**
+   * Tree position this draft will take. Absent for a standalone root.
+   * Re-validated after the async quota check — the anchor Topic may have been
+   * deleted or locked while the check was in flight.
+   */
+  relation?: {
+    kind: 'child' | 'sibling';
+    /** Parent for `child`, preceding sibling for `sibling`. */
+    topicId: string;
+  };
+  /** Current editor text, mirrored here so the node can resize while typing. */
+  text: string;
+  /** View the draft belongs to. A commit that resolves after a view switch is
+   *  discarded rather than written into whatever canvas is now open. */
+  viewId: string;
+}
+
 interface FolderChildEntry {
   data: Record<string, unknown>;
   id: string;
@@ -158,6 +221,354 @@ interface FolderChildEntry {
 
 const GROUP_SELECTION_PADDING = 24;
 const DUPLICATE_OFFSET = 30;
+
+const FREE_NODE_LIMIT = 100;
+
+/** React Flow node types that count against the free-tier node limit. Topics
+ *  use the same tally as notes and stickies rather than being implicitly
+ *  exempt through a missing type check. */
+const COUNTED_NODE_TYPES = new Set<string>(['card', 'sticky', TOPIC_NODE_TYPE]);
+
+/**
+ * Free-tier gate shared by every creation entry point (menu, keyboard, branch
+ * operations, import) so they cannot drift apart.
+ *
+ * The cached license answers the common case synchronously; only an
+ * unactivated cache falls through to a network refresh. Callers must re-read
+ * store state after awaiting this — the graph can change while it runs.
+ */
+/** Flow coordinates at the centre of the visible canvas, used as the default
+ *  anchor for a node created from a menu rather than a cursor position. */
+function getViewportCenter(rfInstance: ReactFlowInstance<any, any> | null): {
+  x: number;
+  y: number;
+} {
+  // Prefer React Flow's own projection so this does not couple to window size.
+  if (rfInstance?.screenToFlowPosition) {
+    return rfInstance.screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+  }
+  const viewport = rfInstance?.getViewport();
+  const zoom = viewport?.zoom ?? 1;
+  return {
+    x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
+    y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
+  };
+}
+
+/** Rendered size of each Topic, preferring the persisted style and falling
+ *  back to a fresh measurement for nodes that have never been sized. */
+function collectTopicSizes(
+  nodes: Node[],
+  ids: Iterable<string>
+): Map<string, Size> {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const sizes = new Map<string, Size>();
+  for (const id of ids) {
+    const node = byId.get(id);
+    if (!node) {
+      continue;
+    }
+    const style = node.style as Record<string, unknown> | undefined;
+    const width = typeof style?.width === 'number' ? style.width : undefined;
+    const height = typeof style?.height === 'number' ? style.height : undefined;
+    sizes.set(
+      id,
+      width && height
+        ? { height, width }
+        : measureTopicSize(
+            typeof (node.data as { title?: unknown })?.title === 'string'
+              ? (node.data as { title: string }).title
+              : ''
+          )
+    );
+  }
+  return sizes;
+}
+
+type TopicRelayoutResult =
+  | { nodes: Node[]; ok: true; softOverlap: boolean }
+  | { ok: false; reason: TopicLayoutHardReason };
+
+function toastTopicHardFailure(reason: TopicLayoutHardReason): void {
+  toast.error(
+    reason === 'group-bounds'
+      ? m.toast_topic_layout_group_full()
+      : m.toast_topic_layout_locked()
+  );
+}
+
+function toastTopicSoftOverlap(): void {
+  toast(m.toast_topic_layout_overlap());
+}
+
+/**
+ * Re-run the rightward layout for the tree containing `rootId`, then the §5
+ * avoidance pass (soft obstacles, Group hard bounds, locked nodes).
+ *
+ * Hard failure refuses the whole operation. Soft overlap still returns a
+ * graph so the caller can commit and warn.
+ */
+function relayoutTopicTree(
+  nodes: Node[],
+  edges: Edge[],
+  rootId: string
+): TopicRelayoutResult {
+  const index = buildTopicIndex(nodes, edges);
+  const branch = collectTopicBranch(index, rootId);
+  const root = nodes.find((node) => node.id === rootId);
+  if (!root) {
+    return { nodes, ok: true, softOverlap: false };
+  }
+
+  const branchSet = new Set(branch);
+  const current = new Map<string, { x: number; y: number }>();
+  const lockedIds = new Set<string>();
+  for (const node of nodes) {
+    if (!branchSet.has(node.id)) {
+      continue;
+    }
+    current.set(node.id, node.position);
+    if ((node.data as { locked?: unknown } | undefined)?.locked) {
+      lockedIds.add(node.id);
+    }
+  }
+
+  const containerId = root.parentId;
+  const absolute = containerId ? buildAbsoluteRects(nodes) : undefined;
+  const origin = containerId
+    ? {
+        x: absolute?.get(containerId)?.left ?? 0,
+        y: absolute?.get(containerId)?.top ?? 0,
+      }
+    : { x: 0, y: 0 };
+  const excludeIds = new Set(branchSet);
+  if (containerId) {
+    excludeIds.add(containerId);
+  }
+
+  let hardBounds:
+    | { bottom: number; left: number; right: number; top: number }
+    | undefined;
+  if (containerId) {
+    const container = nodes.find((node) => node.id === containerId);
+    if (container) {
+      const size = getNodeSize(container);
+      hardBounds = {
+        bottom: size.height,
+        left: 0,
+        right: size.width,
+        top: 0,
+      };
+    }
+  }
+
+  const laidOut = layoutTopicTreeAvoiding(index, rootId, {
+    currentPositions: current,
+    hardBounds,
+    lockedIds,
+    obstacles: collectTopicLayoutObstacles(nodes, excludeIds, origin),
+    rootAnchor: root.position,
+    sizes: collectTopicSizes(nodes, branch),
+  });
+  if (laidOut.hardFailure) {
+    return { ok: false, reason: laidOut.hardFailure };
+  }
+
+  const moved = diffTopicPositions(current, laidOut.positions);
+  if (moved.size === 0) {
+    return { nodes, ok: true, softOverlap: laidOut.softOverlap };
+  }
+  return {
+    nodes: nodes.map((node) => {
+      const position = moved.get(node.id);
+      return position ? { ...node, position } : node;
+    }),
+    ok: true,
+    softOverlap: laidOut.softOverlap,
+  };
+}
+
+/**
+ * Repair the Topic trees left behind by a generic node delete.
+ *
+ * The generic path already drops every edge incident to a removed node, so the
+ * deleted Topic's children are detached and keep their positions as new roots —
+ * which is the documented behaviour for deleting a single Topic. What it cannot
+ * do is close the `order` gap left among the deleted Topic's siblings, or
+ * re-pack the parent's remaining subtree. Unlike the explicit branch commands,
+ * a lock that blocks relayout only skips the repositioning here: the delete
+ * itself was already asked for and must not be silently half-refused.
+ */
+function settleTopicsAfterDelete(
+  previousNodes: Node[],
+  previousEdges: Edge[],
+  nextNodes: Node[],
+  nextEdges: Edge[],
+  removedIds: ReadonlySet<string>
+): { edges: Edge[]; nodes: Node[] } {
+  const index = buildTopicIndex(previousNodes, previousEdges);
+  const survivingParents = new Set<string>();
+  for (const id of removedIds) {
+    const parentId = index.parentByChild.get(id)?.parentId;
+    if (parentId && !removedIds.has(parentId)) {
+      survivingParents.add(parentId);
+    }
+  }
+  if (survivingParents.size === 0) {
+    return { edges: nextEdges, nodes: nextNodes };
+  }
+
+  let edges = nextEdges;
+  let nodes = nextNodes;
+  for (const parentId of survivingParents) {
+    edges = renumberSiblingEdges(
+      edges,
+      parentId,
+      getTopicChildren(index, parentId)
+        .map((relation) => relation.childId)
+        .filter((childId) => !removedIds.has(childId))
+    );
+  }
+  const roots = new Set(
+    [...survivingParents].map((parentId) => findTopicRoot(index, parentId))
+  );
+  for (const rootId of roots) {
+    if (removedIds.has(rootId)) {
+      continue;
+    }
+    const relaid = relayoutTopicTree(nodes, edges, rootId);
+    if (relaid.ok) {
+      nodes = relaid.nodes;
+    }
+  }
+  return { edges, nodes };
+}
+
+/**
+ * Insert a freshly created Topic into the tree, returning the next edge set and
+ * the root whose layout must be recomputed.
+ *
+ * Returns `null` when the insertion must be refused: a missing or locked anchor,
+ * a container mismatch, or a tree whose relations are already damaged. Refusing
+ * here (before any snapshot is taken) is what keeps a rejected commit from
+ * leaving a half-built branch or a stray history entry behind.
+ */
+function attachDraftToTree(
+  nodes: Node[],
+  edges: Edge[],
+  newTopicId: string,
+  relation: { kind: 'child' | 'sibling'; topicId: string }
+): { edges: Edge[]; rootId: string } | null {
+  const anchor = nodes.find((node) => node.id === relation.topicId);
+  const created = nodes.find((node) => node.id === newTopicId);
+  if (!(anchor && created && isTopicNodeType(anchor.type))) {
+    return null;
+  }
+  if ((anchor.data as { locked?: unknown }).locked) {
+    return null;
+  }
+  // A tree edge may not cross a Group boundary.
+  if ((anchor.parentId ?? '') !== (created.parentId ?? '')) {
+    return null;
+  }
+
+  const index = buildTopicIndex(nodes, edges);
+  if (getStructurallyFrozenTopics(index).has(anchor.id)) {
+    return null;
+  }
+
+  const parentId =
+    relation.kind === 'child'
+      ? anchor.id
+      : index.parentByChild.get(anchor.id)?.parentId;
+  if (!parentId) {
+    // A root has no sibling slot to insert into; the caller should have offered
+    // "edit the root" instead.
+    return null;
+  }
+  const parent = nodes.find((node) => node.id === parentId);
+  if (!parent || (parent.data as { locked?: unknown }).locked) {
+    return null;
+  }
+
+  const siblings = getTopicChildren(index, parentId).map((r) => r.childId);
+  const insertAt =
+    relation.kind === 'child'
+      ? siblings.length
+      : siblings.indexOf(anchor.id) + 1;
+  const ordered = [
+    ...siblings.slice(0, insertAt),
+    newTopicId,
+    ...siblings.slice(insertAt),
+  ];
+
+  const nextEdges = renumberSiblingEdges(
+    [
+      ...edges,
+      buildTopicChildEdge(
+        `edge-${nanoid(8)}`,
+        parentId,
+        newTopicId,
+        ordered.indexOf(newTopicId)
+      ),
+    ],
+    parentId,
+    ordered
+  );
+  return { edges: nextEdges, rootId: findTopicRoot(index, parentId) };
+}
+
+/**
+ * Topic command context follows an *explicit* selection change onto a single
+ * Topic, not the mere fact that one is selected. After Esc the same node may
+ * stay highlighted; the next store update must not put Tab back in Topic mode.
+ */
+function nextTopicCommandContext(
+  previousNodes: Node[],
+  nextNodes: Node[],
+  currentContext: string | null
+): string | null {
+  const nextSelected = nextNodes.filter((node) => node.selected);
+  const nextTopicId =
+    nextSelected.length === 1 && isTopicNodeType(nextSelected[0]?.type)
+      ? nextSelected[0]!.id
+      : null;
+  if (!nextTopicId) {
+    return null;
+  }
+  const previousSelected = previousNodes.filter((node) => node.selected);
+  const previousId =
+    previousSelected.length === 1 ? previousSelected[0]?.id : undefined;
+  if (previousId !== nextTopicId) {
+    return nextTopicId;
+  }
+  return currentContext === nextTopicId ? nextTopicId : null;
+}
+
+async function hasNodeQuota(nodes: Node[]): Promise<boolean> {
+  const counted = nodes.filter((n) => COUNTED_NODE_TYPES.has(n.type ?? ''));
+  if (counted.length < FREE_NODE_LIMIT) {
+    return true;
+  }
+  try {
+    const cached = getCachedLicense();
+    const license = cached?.activated ? cached : await refreshLicense();
+    if (license && !license.activated) {
+      toast.error(
+        'Free version limited to 100 cards. Please activate a license to continue.',
+        { duration: 4000 }
+      );
+      return false;
+    }
+  } catch (error) {
+    // Do not block offline users on a check that could not complete.
+    console.error('[License] Check failed:', error);
+  }
+  return true;
+}
 
 function cleanNodeForClipboard(node: Node): Node {
   const { isHidden, isDropTarget, ...cleanData } = node.data as any;
@@ -576,8 +987,27 @@ export interface CanvasState {
     titles: Record<string, string>,
     options?: { snapshot?: boolean }
   ) => void;
+  /** Start a new Topic. It renders and accepts typing immediately but does not
+   *  enter the graph until the first non-empty commit. */
+  beginTopicDraft: (
+    rfInstance: ReactFlowInstance<any, any> | null,
+    options?: {
+      anchor?: { x: number; y: number };
+      anchorCenter?: { x: number; y: number };
+    }
+  ) => void;
+  /** Promote the draft into a real Topic node. Resolves to the new node id, or
+   *  `undefined` when the commit was rejected or superseded. */
+  /** Start a draft positioned as a child or next sibling of an existing Topic.
+   *  Returns false when the anchor cannot take one (missing, locked, frozen
+   *  tree, or a root asked for a sibling). */
+  beginTopicRelativeDraft: (
+    kind: 'child' | 'sibling',
+    anchorTopicId: string
+  ) => boolean;
   bringNodesForward: (ids: string[]) => void;
   bringNodesToFront: (ids: string[]) => void;
+  cancelTopicDraft: () => void;
   canRedo: () => boolean;
   canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
@@ -595,6 +1025,8 @@ export interface CanvasState {
   ) => void;
   /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
   commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
+  commitTopicDraft: (title: string) => Promise<string | undefined>;
+  commitTopicTitle: (nodeId: string, title: string) => void;
 
   // Actions – clipboard
   copySelected: () => void;
@@ -617,8 +1049,12 @@ export interface CanvasState {
   deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
   deleteNodes: (ids: string[]) => void;
+  /** Remove a Topic and every descendant as one transaction. */
+  deleteTopicBranch: (topicId: string) => void;
   deselectAll: () => void;
   detachNoteFromCanvas: (nodeId: string) => void;
+  /** Cut a Topic's parent relation, promoting its branch to a separate tree. */
+  detachTopicBranch: (topicId: string) => void;
   duplicateSelected: (offset?: number) => Promise<void>;
   edges: Edge[];
 
@@ -630,6 +1066,12 @@ export interface CanvasState {
   editingStickyId: string | null;
   /** Card id whose TagEditor should auto-open (driven by context-menu action). */
   editingTagNodeId: string | null;
+  /** Topic id that should enter inline title editing (F2 / keyboard entry). */
+  editingTopicId: string | null;
+  /** Enter the explicit Topic single-select command context (Tab/Enter). */
+  enterTopicCommandContext: (topicId: string) => void;
+  /** Leave Topic command context; selection may remain. */
+  exitTopicCommandContext: () => void;
   focusedFolder: FocusedItem | null;
 
   // UI state
@@ -691,6 +1133,7 @@ export interface CanvasState {
   setEditingFolderId: (id: string | null) => void;
   setEditingStickyId: (id: string | null) => void;
   setEditingTagNodeId: (id: string | null) => void;
+  setEditingTopicId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
   // Actions – UI
@@ -705,6 +1148,7 @@ export interface CanvasState {
   setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setSettingsOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setTopicDraftText: (text: string) => void;
 
   // In-window settings dialog
   settingsOpen: boolean;
@@ -729,6 +1173,15 @@ export interface CanvasState {
   /** Toggle a single tag in/out of the active filters (case-insensitive). */
   toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
+
+  // Actions – topic
+  /**
+   * Explicit Topic command context. Tab/Enter create child/sibling only while
+   * this is set; Esc clears it without requiring the node to be deselected.
+   */
+  topicCommandContextId: string | null;
+  /** In-flight new Topic: rendered and editable, but not yet in the graph. */
+  topicDraft: TopicDraft | null;
   undo: () => boolean;
 
   ungroupSelected: () => void;
@@ -768,6 +1221,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   editingFolderId: null,
   editingStickyId: null,
   editingTagNodeId: null,
+  editingTopicId: null,
+  topicCommandContextId: null,
+  topicDraft: null,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
   searchOpen: false,
@@ -1010,6 +1466,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       tagSidebarOpen: false,
       activeTagFilters: [],
       _undoRedo: createUndoRedoState(),
+      editingTopicId: null,
+      topicCommandContextId: null,
+      topicDraft: null,
     });
   },
 
@@ -1057,9 +1516,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- core actions ---------------------------------------------------------
   setNodes: (updater) => {
-    set((s) => ({
-      nodes: typeof updater === 'function' ? updater(s.nodes) : updater,
-    }));
+    set((s) => {
+      const nodes = typeof updater === 'function' ? updater(s.nodes) : updater;
+      return {
+        nodes,
+        topicCommandContextId: nextTopicCommandContext(
+          s.nodes,
+          nodes,
+          s.topicCommandContextId
+        ),
+      };
+    });
   },
 
   setEdges: (updater) => {
@@ -1069,7 +1536,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   applyNodesChange: (changes) => {
-    set((s) => ({ nodes: applyCanvasNodeChanges(changes, s.nodes) }));
+    set((s) => {
+      const nodes = applyCanvasNodeChanges(changes, s.nodes);
+      return {
+        nodes,
+        topicCommandContextId: nextTopicCommandContext(
+          s.nodes,
+          nodes,
+          s.topicCommandContextId
+        ),
+      };
+    });
   },
 
   collectSelectedNoteIds: () =>
@@ -1117,6 +1594,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // -- edge actions -----------------------------------------------------------
   setEditingEdgeId: (id) => {
+    if (id !== null) {
+      const edge = get().edges.find((e) => e.id === id);
+      if (edge && isTopicTreeEdge(edge)) {
+        // Tree relations carry no user-editable label.
+        return;
+      }
+    }
     set({ editingEdgeId: id });
   },
 
@@ -1128,6 +1612,352 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ editingStickyId: id });
   },
 
+  // -- topic actions --------------------------------------------------------
+  setEditingTopicId: (id) => {
+    set((s) => ({
+      editingTopicId: id,
+      ...(id ? { topicCommandContextId: id } : {}),
+    }));
+  },
+
+  enterTopicCommandContext: (topicId) => {
+    set({ topicCommandContextId: topicId });
+  },
+
+  exitTopicCommandContext: () => {
+    set({ topicCommandContextId: null });
+  },
+
+  beginTopicDraft: (rfInstance, options) => {
+    const size = { height: TOPIC_MIN_HEIGHT, width: TOPIC_MIN_WIDTH * 2 };
+    const center = options?.anchorCenter ?? getViewportCenter(rfInstance);
+    const anchor = options?.anchor ?? {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2,
+    };
+    const { nodes } = get();
+    const { canPlace, parentId, placement } = resolveNodePlacement({
+      anchor,
+      nodes,
+      newType: TOPIC_NODE_TYPE,
+      size,
+    });
+    if (!canPlace) {
+      toast.error(m.toast_no_placement_slot());
+      return;
+    }
+    let position = placement;
+    if (parentId) {
+      const parentRect = buildAbsoluteRects(nodes).get(parentId);
+      if (parentRect) {
+        position = {
+          x: placement.x - parentRect.left,
+          y: placement.y - parentRect.top,
+        };
+      }
+    }
+    // Replacing an untouched draft is silent by design: it never entered the
+    // graph, so there is nothing to discard or undo.
+    set((s) => ({
+      topicCommandContextId: null,
+      topicDraft: {
+        anchor: position,
+        id: `topic-draft-${nanoid(8)}`,
+        text: '',
+        viewId: s.activeViewId,
+        ...(parentId ? { parentId } : {}),
+      },
+    }));
+  },
+
+  beginTopicRelativeDraft: (kind, anchorTopicId) => {
+    const { edges, nodes } = get();
+    const anchor = nodes.find((n) => n.id === anchorTopicId);
+    if (!(anchor && isTopicNodeType(anchor.type))) {
+      return false;
+    }
+    if ((anchor.data as { locked?: unknown }).locked) {
+      return false;
+    }
+    const index = buildTopicIndex(nodes, edges);
+    if (getStructurallyFrozenTopics(index).has(anchorTopicId)) {
+      toast.error(m.toast_topic_tree_frozen());
+      return false;
+    }
+    if (kind === 'sibling' && !index.parentByChild.has(anchorTopicId)) {
+      // Roots have no siblings; Enter on a root means "edit the root".
+      return false;
+    }
+
+    // Provisional anchor only: the real position comes from the layout pass in
+    // the commit, so an abandoned draft never shifts the tree.
+    const size = getNodeSize(anchor);
+    const provisional =
+      kind === 'child'
+        ? {
+            x: anchor.position.x + size.width + TOPIC_LEVEL_GAP,
+            y: anchor.position.y,
+          }
+        : {
+            x: anchor.position.x,
+            y: anchor.position.y + size.height + TOPIC_SIBLING_GAP,
+          };
+
+    set((s) => ({
+      topicDraft: {
+        anchor: provisional,
+        id: `topic-draft-${nanoid(8)}`,
+        relation: { kind, topicId: anchorTopicId },
+        text: '',
+        viewId: s.activeViewId,
+        ...(anchor.parentId ? { parentId: anchor.parentId } : {}),
+      },
+    }));
+    return true;
+  },
+
+  setTopicDraftText: (text) => {
+    set((s) => (s.topicDraft ? { topicDraft: { ...s.topicDraft, text } } : {}));
+  },
+
+  detachTopicBranch: (topicId) => {
+    // The validated split that `deleteEdge` refuses to perform: cutting the
+    // parent relation promotes the branch to its own tree, keeping every
+    // position and internal relation intact.
+    const { edges, nodes } = get();
+    const index = buildTopicIndex(nodes, edges);
+    const relation = index.parentByChild.get(topicId);
+    if (!relation) {
+      return;
+    }
+    const affected = [
+      topicId,
+      relation.parentId,
+      ...collectTopicBranch(index, topicId),
+    ];
+    if (
+      affected.some((id) =>
+        Boolean(
+          (nodes.find((n) => n.id === id)?.data as { locked?: unknown })?.locked
+        )
+      )
+    ) {
+      toast.error(m.toast_topic_layout_locked());
+      return;
+    }
+
+    const remainingSiblings = getTopicChildren(index, relation.parentId)
+      .map((r) => r.childId)
+      .filter((id) => id !== topicId);
+    const nextEdges = renumberSiblingEdges(
+      edges.filter((e) => e.id !== relation.edgeId),
+      relation.parentId,
+      remainingSiblings
+    );
+    const oldRoot = findTopicRoot(index, relation.parentId);
+    const relaidOut = relayoutTopicTree(nodes, nextEdges, oldRoot);
+    if (!relaidOut.ok) {
+      toastTopicHardFailure(relaidOut.reason);
+      return;
+    }
+    if (relaidOut.softOverlap) {
+      toastTopicSoftOverlap();
+    }
+
+    get().saveSnapshot();
+    set({ edges: nextEdges, nodes: relaidOut.nodes });
+  },
+
+  deleteTopicBranch: (topicId) => {
+    const { edges, nodes } = get();
+    const index = buildTopicIndex(nodes, edges);
+    if (!index.topicIds.has(topicId)) {
+      return;
+    }
+    const branch = collectTopicBranch(index, topicId);
+    const branchSet = new Set(branch);
+    if (
+      nodes.some(
+        (n) => branchSet.has(n.id) && (n.data as { locked?: unknown }).locked
+      )
+    ) {
+      // Refuse the whole delete rather than removing the unlocked part and
+      // leaving a disconnected remnant.
+      toast.error(m.toast_topic_branch_locked());
+      return;
+    }
+
+    const parentRelation = index.parentByChild.get(topicId);
+    let nextEdges = edges.filter(
+      (e) => !(branchSet.has(e.source) || branchSet.has(e.target))
+    );
+    let nextNodes = nodes.filter((n) => !branchSet.has(n.id));
+    if (parentRelation) {
+      nextEdges = renumberSiblingEdges(
+        nextEdges,
+        parentRelation.parentId,
+        getTopicChildren(index, parentRelation.parentId)
+          .map((r) => r.childId)
+          .filter((id) => id !== topicId)
+      );
+      const relaidOut = relayoutTopicTree(
+        nextNodes,
+        nextEdges,
+        findTopicRoot(index, parentRelation.parentId)
+      );
+      if (!relaidOut.ok) {
+        toastTopicHardFailure(relaidOut.reason);
+        return;
+      }
+      if (relaidOut.softOverlap) {
+        toastTopicSoftOverlap();
+      }
+      nextNodes = relaidOut.nodes;
+    }
+
+    get().saveSnapshot();
+    set({ edges: nextEdges, nodes: nextNodes });
+  },
+
+  cancelTopicDraft: () => {
+    set({ topicDraft: null });
+  },
+
+  commitTopicDraft: async (title) => {
+    const draft = get().topicDraft;
+    const normalized = normalizeTopicTitle(title);
+    if (!(draft && normalized && isTopicTitleWithinLimit(normalized))) {
+      return;
+    }
+
+    if (!(await hasNodeQuota(get().nodes))) {
+      // The draft survives a rejected quota check so the user's typing is not
+      // thrown away behind an error toast.
+      return;
+    }
+
+    // Re-read after the await: the license check can span a view switch, a
+    // container deletion, or another commit. Everything below runs
+    // synchronously off this fresh state so the graph the transaction is built
+    // from is the graph it is written to.
+    const state = get();
+    if (state.topicDraft?.id !== draft.id) {
+      return;
+    }
+    if (state.activeViewId !== draft.viewId) {
+      // A late result must not land in whatever canvas is now open.
+      set((s) => (s.topicDraft?.id === draft.id ? { topicDraft: null } : {}));
+      return;
+    }
+    if (draft.parentId) {
+      const container = state.nodes.find((n) => n.id === draft.parentId);
+      if (!container) {
+        set({ topicDraft: null });
+        toast.error(m.toast_topic_container_gone());
+        return;
+      }
+      if ((container.data as { locked?: unknown }).locked) {
+        toast.error(m.toast_topic_container_locked());
+        return;
+      }
+    }
+
+    const id = state.nextNodeId();
+    const size = measureTopicSize(normalized);
+    const node: Node = {
+      data: { ...createTopicData(normalized) },
+      id,
+      position: draft.anchor,
+      style: { width: size.width, height: size.height },
+      type: TOPIC_NODE_TYPE,
+      ...(draft.parentId
+        ? { extent: 'parent' as const, parentId: draft.parentId }
+        : {}),
+    };
+
+    let nextNodes = sortNodesByParent([...state.nodes, node]);
+    let nextEdges = state.edges;
+
+    if (draft.relation) {
+      const attached = attachDraftToTree(
+        nextNodes,
+        nextEdges,
+        id,
+        draft.relation
+      );
+      if (!attached) {
+        // The anchor Topic changed under the in-flight check (deleted, locked,
+        // or its tree is structurally frozen). Keep the draft so the typed
+        // title is not lost.
+        toast.error(m.toast_topic_relation_unavailable());
+        return;
+      }
+      nextEdges = attached.edges;
+      const laidOut = relayoutTopicTree(nextNodes, nextEdges, attached.rootId);
+      if (!laidOut.ok) {
+        toastTopicHardFailure(laidOut.reason);
+        return;
+      }
+      if (laidOut.softOverlap) {
+        toastTopicSoftOverlap();
+      }
+      nextNodes = laidOut.nodes;
+    }
+
+    // One snapshot, then one graph update: title, node, tree edge, and layout
+    // land together as a single undo step. A separate "first title edit" record
+    // would make undoing a brand-new Topic take two presses.
+    state.saveSnapshot();
+    set({ edges: nextEdges, nodes: nextNodes, topicDraft: null });
+    return id;
+  },
+
+  commitTopicTitle: (nodeId, title) => {
+    const normalized = normalizeTopicTitle(title);
+    if (!(normalized && isTopicTitleWithinLimit(normalized))) {
+      return;
+    }
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!(node && isTopicNodeType(node.type))) {
+      return;
+    }
+    if ((node.data as { locked?: unknown }).locked) {
+      return;
+    }
+    if (parseTopicData(node.data).status !== 'valid') {
+      // Rewriting a record this build cannot interpret would destroy data
+      // written by a newer version.
+      return;
+    }
+
+    // Title, the size it implies, and the affected-tree relayout are one edit.
+    const size = measureTopicSize(normalized);
+    const { edges, nodes } = get();
+    const nextNodes = nodes.map((n) =>
+      n.id === nodeId
+        ? {
+            ...n,
+            data: { ...n.data, title: normalized },
+            style: { ...n.style, width: size.width, height: size.height },
+          }
+        : n
+    );
+    const laidOut = relayoutTopicTree(
+      nextNodes,
+      edges,
+      findTopicRoot(buildTopicIndex(nextNodes, edges), nodeId)
+    );
+    if (!laidOut.ok) {
+      toastTopicHardFailure(laidOut.reason);
+      return;
+    }
+    if (laidOut.softOverlap) {
+      toastTopicSoftOverlap();
+    }
+    get().saveSnapshot();
+    set({ nodes: laidOut.nodes });
+  },
+
   setEditingTagNodeId: (id) => {
     set({ editingTagNodeId: id });
   },
@@ -1137,14 +1967,38 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   updateEdgeData: (edgeId, updates) => {
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge) {
+      return;
+    }
+    // Tree relations are host-owned: no label, animation, path type, colour or
+    // visual reversal. Guarding here (not only in the menus) covers
+    // double-click label editing, context-menu toggles, AI actions, and any
+    // future caller in one place. Topic transactions rewrite tree edges through
+    // their own atomic graph commit, never through this generic path.
+    if (isTopicTreeEdge(edge)) {
+      return;
+    }
+    const legacyPatch = buildLegacyEdgeCompatPatch(
+      edge,
+      updates
+    ) as Partial<Edge> | null;
     set((s) => ({
       edges: s.edges.map((e) =>
-        e.id === edgeId ? { ...e, data: { ...e.data, ...updates } } : e
+        e.id === edgeId
+          ? { ...e, ...legacyPatch, data: { ...e.data, ...updates } }
+          : e
       ),
     }));
   },
 
   deleteEdge: (edgeId) => {
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge || isTopicTreeEdge(edge)) {
+      // Removing a tree relation re-parents a whole branch, so it runs as a
+      // validated split transaction rather than a bare edge delete.
+      return;
+    }
     get().saveSnapshot();
     set((s) => ({
       edges: s.edges.filter((e) => e.id !== edgeId),
@@ -1292,6 +2146,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: s.nodes.map((node) =>
         node.selected ? { ...node, selected: false } : node
       ),
+      topicCommandContextId: null,
     }));
   },
 
@@ -1389,15 +2244,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     );
 
     const target = candidates[0]?.node ?? current;
-    set((s) => ({
-      nodes: s.nodes.map((node) => ({
+    set((s) => {
+      const nodes = s.nodes.map((node) => ({
         ...node,
         selected:
           options?.extend === true
             ? Boolean(node.selected || node.id === target.id)
             : node.id === target.id,
-      })),
-    }));
+      }));
+      return {
+        nodes,
+        topicCommandContextId: nextTopicCommandContext(
+          s.nodes,
+          nodes,
+          s.topicCommandContextId
+        ),
+      };
+    });
     return target;
   },
 
@@ -1603,14 +2466,37 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
       _hydrated: false,
+      editingTopicId: null,
+      topicCommandContextId: null,
+      topicDraft: null,
     });
   },
 
   switchView: async (viewId) => {
-    const { activeViewId, edges, nodes, _hydrated } = get();
+    const { activeViewId, topicDraft } = get();
     if (viewId === activeViewId) {
       return true;
     }
+
+    // Leave-canvas contract: commit a non-empty draft into the outgoing graph
+    // so the subsequent manifest flush includes it. Empty drafts are discarded.
+    // A failed commit keeps the draft and aborts the switch.
+    if (topicDraft && topicDraft.viewId === activeViewId) {
+      const title = normalizeTopicTitle(topicDraft.text);
+      if (title && !isTopicTitleWithinLimit(title)) {
+        return false;
+      }
+      if (title) {
+        const committed = await get().commitTopicDraft(title);
+        if (!committed) {
+          return false;
+        }
+      } else {
+        get().cancelTopicDraft();
+      }
+    }
+
+    const { edges, nodes, _hydrated } = get();
     const rpcAvailable = await isRpcAvailable();
 
     // Flush the outgoing canvas first; abort the switch when the save fails so
@@ -1910,49 +2796,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   createNode: async (type, rfInstance, options) => {
     const spec = buildNewNodeSpec(type);
     const size = options?.size ?? spec.size;
-    const isLimitedNode =
-      spec.base.type === 'card' || spec.base.type === 'sticky';
-    const currentNodes = get().nodes;
-    const cardCount = currentNodes.filter(
-      (n) => n.type === 'card' || n.type === 'sticky'
-    ).length;
-
-    if (isLimitedNode && cardCount >= 100) {
-      try {
-        const cachedLicense = getCachedLicense();
-        const license = cachedLicense?.activated
-          ? cachedLicense
-          : await refreshLicense();
-        if (license && !license.activated) {
-          toast.error(
-            'Free version limited to 100 cards. Please activate a license to continue.',
-            {
-              duration: 4000,
-            }
-          );
-          return;
-        }
-      } catch (error) {
-        console.error('[License] Check failed:', error);
-        // Continue on error to avoid blocking offline users
-      }
+    if (
+      COUNTED_NODE_TYPES.has(spec.base.type ?? '') &&
+      !(await hasNodeQuota(get().nodes))
+    ) {
+      return;
     }
 
-    const viewport = rfInstance?.getViewport();
-    const zoom = viewport?.zoom ?? 1;
-
-    // Use React Flow's screenToFlowPosition API instead of manual calculation
-    // to avoid direct window dimension coupling
-    const viewportCenter = rfInstance?.screenToFlowPosition
-      ? rfInstance.screenToFlowPosition({
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2,
-        })
-      : {
-          x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
-          y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
-        };
-    const center = options?.anchorCenter ?? viewportCenter;
+    const center = options?.anchorCenter ?? getViewportCenter(rfInstance);
     const anchor = options?.anchor ?? {
       x: center.x - size.width / 2,
       y: center.y - size.height / 2,
@@ -2015,7 +2866,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rfInstance.setCenter(
         placement.x + size.width / 2,
         placement.y + size.height / 2,
-        { duration: 240, zoom }
+        { duration: 240, zoom: rfInstance.getViewport().zoom }
       );
     }
 
@@ -2130,11 +2981,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         );
       });
 
-      return {
-        edges: s.edges.filter(
-          (e) => !(idSet.has(e.source) || idSet.has(e.target))
-        ),
-        nodes: sortNodesByParent([
+      return settleTopicsAfterDelete(
+        s.nodes,
+        s.edges,
+        sortNodesByParent([
           ...s.nodes.flatMap((n) => {
             if (idSet.has(n.id)) {
               return [];
@@ -2147,7 +2997,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           }),
           ...detachedFolderChildren,
         ]),
-      };
+        s.edges.filter((e) => !(idSet.has(e.source) || idSet.has(e.target))),
+        idSet
+      );
     });
     // Fire-and-forget widget file cleanup for removed top-level widget nodes.
     for (const widgetId of widgetIdsToDelete) {

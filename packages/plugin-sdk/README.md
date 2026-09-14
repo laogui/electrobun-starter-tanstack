@@ -161,7 +161,7 @@ globalThis.__ghostboardPluginRuntime = Object.freeze({
   jsxRuntime,     // react/jsx-runtime
   sdk,            // @ghostboard/sdk
   sdkReact,       // @ghostboard/sdk/react; added in the T2 selection slice
-  version,        // shared SDK package version, currently "0.1.0"
+  version,        // shared SDK package version, currently "0.1.1"
 });
 ```
 
@@ -205,6 +205,8 @@ export default definePlugin({
 | `content.changed` | `{ workspaceId, kind: 'note' \| 'widget' \| 'extension', ids, operation: 'upsert' \| 'delete' }`. Bun pushes invalidations after successful persisted note, legacy-widget and extension-instance writes/deletions, including their save-based undo/redo paths. IDs identify content records, not canvas placements. |
 | `selection.changed` | `{ workspaceId, viewId, placementIds }`. Active canvas selection membership or view changed; `viewId` is null while the canvas is unhydrated. IDs are placement IDs, not deduplicated content IDs. |
 | `workspace.activated` | `{ workspaceId }`. Delivered once to subscriptions registered during setup when **this activation** is published, including a successful reload/re-enable. Late subscriptions do not replay it. |
+
+Topic nodes and the `topic-child` tree edges that carry topic hierarchy are host-owned: there is no SDK API to read, create, reparent or delete them, and no event reports topic structure changes. Plugins observe a selected topic only as a placement with `content: null`.
 
 These are live invalidations, not a durable event log or a transaction feed. Repeated saves may emit repeated invalidations; Markdown and sidecar changes may invalidate the same note separately. There is no replay on reconnect or external filesystem watcher. The note metadata slice below adds optional `noteChanges` with title/color/revision transitions, but events do not contain full content snapshots. Canvas layout, tags and attachments are not content-record events. Note queries and note-selection React hooks are available below.
 
@@ -275,9 +277,9 @@ Canvas snapshots and durable plugin batches retain different storage lifetimes e
 
 `app.selection.get({ signal }?)` captures the selected placement membership **at invocation**, deduplicates its note IDs, then reads persisted notes together through `content.getMany`. It returns a frozen array of detached, frozen `NoteContentSnapshot` values ordered by note ID. Selection changes while the read is pending do not retarget that call. The note data/revisions are captured at the host read, not at the earlier click. Use `expectedRevision` when submitting mutations, since later edits may conflict.
 
-The current scope is selected, visible, non-detached nodes in the hydrated active canvas. Selection of a folder or group does **not** recursively select its contents. Focused editors, embedded folder rows, text ranges and other canvases are not additional selection sources. Only persisted notes appear in `get()`: missing references are omitted, legacy Markdown notes remain read-only, and widget/extension snapshots are not yet supported. A corrupt note fails the whole read. More than 500 distinct selected note IDs rejects without truncation; `updateMany` still has a separate 100-note limit.
+The current scope is selected, visible, non-detached nodes in the hydrated active canvas. Selection of a folder or group does **not** recursively select its contents, and selecting a topic does **not** implicitly select its subtree — a selected topic contributes exactly one placement. Focused editors, embedded folder rows, text ranges and other canvases are not additional selection sources. Only persisted notes appear in `get()`: missing references are omitted, legacy Markdown notes remain read-only, and widget/extension snapshots are not yet supported. A corrupt note fails the whole read. More than 500 distinct selected note IDs rejects without truncation; `updateMany` still has a separate 100-note limit.
 
-`app.selection.getPlacements()` is synchronous and returns a frozen `{ viewId, items }`, ordered by placement ID. Each item is `{ id, content }`: the placement ID remains distinct even for duplicate note references. `content` is `{ kind: 'note' | 'widget' | 'extension', id }` where a supported backing identity exists, otherwise `null` (for example folders and images). This method does not read records or verify that the referenced content still exists. Before canvas hydration it returns `{ viewId: null, items: [] }`. In an in-process workspace transition, selection stays empty until the host observes a new hydration cycle rather than relabelling the previous workspace's nodes.
+`app.selection.getPlacements()` is synchronous and returns a frozen `{ viewId, items }`, ordered by placement ID. Each item is `{ id, content }`: the placement ID remains distinct even for duplicate note references. `content` is `{ kind: 'note' | 'widget' | 'extension', id }` where a supported backing identity exists, otherwise `null` (for example folders, images and topics). This method does not read records or verify that the referenced content still exists. Before canvas hydration it returns `{ viewId: null, items: [] }`. In an in-process workspace transition, selection stays empty until the host observes a new hydration cycle rather than relabelling the previous workspace's nodes.
 
 ```js
 const selected = await app.selection.get();
@@ -337,7 +339,7 @@ The package is published to npm as `@ghostboard/sdk` by the `publish-sdk` workfl
 
 ## Compatibility
 
-`@ghostboard/sdk` `0.1.0` targets GhostBoard hosts matching `>=1.0.0 <2.0.0`, the range that `create-ghostboard-plugin` `0.1.0` writes into new manifests. `engines.ghostboard` must be exactly `>=a.b.c <x.y.z`; an incompatible host reports `incompatible-host-api`, runs no plugin code, and keeps installed files and data. Within one host major the public API is additive-only; breaking changes ship only with a new host, SDK, and scaffold major. The host import map provides the runtime; this package provides types, the fake host, `AI_REFERENCE.md`, and the packer. Supported platform is macOS arm64 with packaged evidence; macOS x64 is pending verification and Windows / Linux are not supported for plugins. The full policy, including data migration and signed-update rules, is the “Compatibility” section of `AI_REFERENCE.md` and the GhostBoard compatibility policy document.
+`@ghostboard/sdk` `0.1.1` targets GhostBoard hosts matching `>=1.0.0 <2.0.0`, the range that `create-ghostboard-plugin` `0.1.0` writes into new manifests. `0.1.1` is a documentation-only patch: it adds no API and only records how the existing selection, command and canvas APIs behave alongside host-owned core node types such as Topic, so templates pinning `^0.1.0` keep working unchanged. `engines.ghostboard` must be exactly `>=a.b.c <x.y.z`; an incompatible host reports `incompatible-host-api`, runs no plugin code, and keeps installed files and data. Within one host major the public API is additive-only; breaking changes ship only with a new host, SDK, and scaffold major. The host import map provides the runtime; this package provides types, the fake host, `AI_REFERENCE.md`, and the packer. Supported platform is macOS arm64 with packaged evidence; macOS x64 is pending verification and Windows / Linux are not supported for plugins. The full policy, including data migration and signed-update rules, is the “Compatibility” section of `AI_REFERENCE.md` and the GhostBoard compatibility policy document.
 
 ## T3 files: activation-scoped files and directories
 
@@ -549,7 +551,7 @@ The live-reference check is a reliability guard for the official SDK path. It do
 
 ## T2 seventh slice: custom canvas types
 
-`app.canvas.registerType(definition)` contributes a React card type for the lifetime of one plugin activation. Authors provide a plugin-local kebab-case `id`; the host derives and persists the canonical `${pluginId}/${id}` value, so a plugin cannot claim another namespace. Registration is staged with the candidate activation: failed imports or setup keep the exact old card implementation, and a successful reload replaces all types from that plugin as one owner generation.
+`app.canvas.registerType(definition)` contributes a React card type for the lifetime of one plugin activation. Authors provide a plugin-local kebab-case `id`; the host derives and persists the canonical `${pluginId}/${id}` value, so a plugin cannot claim another namespace. Registered types are always `node.type: 'extension'` instances: a plugin cannot register, replace or impersonate a core host type such as `card`, `sticky`, `topic`, `folder` or `group`. Registration is staged with the candidate activation: failed imports or setup keep the exact old card implementation, and a successful reload replaces all types from that plugin as one owner generation.
 
 ```js
 import { definePlugin } from '@ghostboard/sdk';

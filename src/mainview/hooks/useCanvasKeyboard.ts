@@ -9,6 +9,7 @@ import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
+import { isTopicNodeType } from '../../shared/topic';
 
 type CanvasDirection = 'down' | 'left' | 'right' | 'up';
 
@@ -298,8 +299,37 @@ export function useCanvasKeyboard({
         return;
       }
 
+      // Tab creates a subtopic under the single selected Topic. Scoped to that
+      // case only — with anything else selected, Tab stays ordinary focus
+      // navigation. Shift+Tab is never claimed.
+      if (e.key === 'Tab' && !e.shiftKey) {
+        const { beginTopicRelativeDraft, nodes } = useCanvasStore.getState();
+        const selected = nodes.filter((n) => n.selected);
+        const node = selected.length === 1 ? selected[0] : undefined;
+        if (node && isTopicNodeType(node.type)) {
+          e.preventDefault();
+          beginTopicRelativeDraft('child', node.id);
+        }
+        return;
+      }
+
+      // F2 edits the selected Topic's title, matching the rename convention
+      // elsewhere in the app and giving keyboard users an entry point that
+      // does not depend on Enter's per-type meaning.
+      if (e.key === 'F2') {
+        const { nodes, setEditingTopicId } = useCanvasStore.getState();
+        const selected = nodes.filter((n) => n.selected);
+        const node = selected.length === 1 ? selected[0] : undefined;
+        if (node && isTopicNodeType(node.type)) {
+          e.preventDefault();
+          setEditingTopicId(node.id);
+        }
+        return;
+      }
+
       if (e.key === 'Enter') {
-        const { nodes, setEditingStickyId } = useCanvasStore.getState();
+        const { nodes, setEditingStickyId, setEditingTopicId } =
+          useCanvasStore.getState();
         const selected = nodes.filter((n) => n.selected);
         if (selected.length !== 1) {
           return;
@@ -309,6 +339,17 @@ export function useCanvasKeyboard({
         if (node.type === 'sticky') {
           e.preventDefault();
           setEditingStickyId(node.id);
+          return;
+        }
+        // For a Topic, Enter creates the next sibling and starts typing in it,
+        // which is what makes a keyboard run of ideas continuous. A root has no
+        // sibling slot, so there Enter opens the title for editing instead.
+        if (isTopicNodeType(node.type)) {
+          e.preventDefault();
+          const { beginTopicRelativeDraft } = useCanvasStore.getState();
+          if (!beginTopicRelativeDraft('sibling', node.id)) {
+            setEditingTopicId(node.id);
+          }
           return;
         }
         // Widgets (and other non-focusable content) stay on-canvas only.

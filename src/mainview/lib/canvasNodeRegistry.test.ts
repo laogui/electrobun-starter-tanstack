@@ -29,6 +29,7 @@ describe('CANVAS_NODE_SPECS', () => {
       'asset',
       'link',
       'recording',
+      'topic',
     ];
     for (const kind of expected) {
       expect(CANVAS_NODE_SPECS[kind]).toBeDefined();

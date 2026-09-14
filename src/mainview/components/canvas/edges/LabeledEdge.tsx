@@ -9,8 +9,11 @@ import {
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { getFloatingEdgeParams } from '@/lib/floatingEdge';
+import { topicEdgeStroke } from '@/lib/topicColors';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import { resolveEdgeFields } from '../../../../shared/canvasEdgeFields';
+import { isTopicTreeEdge } from '../../../../shared/topic';
 
 function LabeledEdgeComponent({
   id,
@@ -24,16 +27,39 @@ function LabeledEdgeComponent({
   targetPosition,
   markerStart,
   markerEnd,
+  animated: legacyAnimated,
+  label: legacyLabel,
   data,
   selected,
 }: EdgeProps) {
-  const label = (data?.label as string) ?? '';
-  const animated = (data?.animated as boolean) ?? false;
-  const pathType = (data?.pathType as 'smoothstep' | 'bezier') ?? 'bezier';
-  const reverseVisualDirection =
-    (data?.reverseVisualDirection as boolean) ?? false;
-  const customColor =
-    typeof data?.color === 'string' ? (data.color as string) : undefined;
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+
+  // A tree relation is host-owned: no label, animation, path switching, custom
+  // colour, or visual reversal. Reversal in particular must be ignored rather
+  // than merely hidden — it swaps the drawn endpoints without swapping
+  // source/target, which would draw the parent/child direction backwards.
+  const isTreeEdge = isTopicTreeEdge({ data });
+  const fields = resolveEdgeFields({
+    animated: legacyAnimated,
+    data,
+    label: legacyLabel,
+  });
+  const label = isTreeEdge ? '' : fields.label.value;
+  const animated = isTreeEdge ? false : fields.animated.value;
+  const pathType = isTreeEdge
+    ? 'bezier'
+    : ((data?.pathType as 'smoothstep' | 'bezier') ?? 'bezier');
+  const reverseVisualDirection = isTreeEdge
+    ? false
+    : ((data?.reverseVisualDirection as boolean) ?? false);
+  const customColor = isTreeEdge
+    ? // Derived from the parent Topic, so the branch reads as one unit and the
+      // edge has no colour of its own to edit.
+      topicEdgeStroke(sourceNode?.data?.color)
+    : typeof data?.color === 'string'
+      ? (data.color as string)
+      : undefined;
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const commitEdgeData = useCanvasStore((s) => s.commitEdgeData);
@@ -90,9 +116,6 @@ function LabeledEdgeComponent({
     },
     [id, setEditingEdgeId]
   );
-
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
 
   // Floating geometry: anchor each endpoint to the side facing the other card so
   // the edge always takes the shortest route instead of detouring from a fixed

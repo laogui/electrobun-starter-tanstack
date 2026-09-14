@@ -16,6 +16,7 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasNodeRegistry';
+import { buildTopicChildEdge } from '@/lib/topicTree';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import {
   resetViewportPersistSuppression,
@@ -27,6 +28,7 @@ import {
   LINK_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
 } from '../../shared/extensions/builtinIds';
+import { createTopicData } from '../../shared/topic';
 
 const PASTE_ID_RE = /^paste-/;
 const PASTE_EDGE_ID_RE = /^paste-edge-/;
@@ -86,6 +88,14 @@ vi.mock('@/store/widgetStore', () => ({
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
+  toast_topic_branch_locked: () => 'Branch locked',
+  toast_topic_container_gone: () => 'Container gone',
+  toast_topic_container_locked: () => 'Container locked',
+  toast_topic_layout_group_full: () => 'Group full',
+  toast_topic_layout_locked: () => 'Layout locked',
+  toast_topic_layout_overlap: () => 'Layout overlap',
+  toast_topic_relation_unavailable: () => 'Relation unavailable',
+  toast_topic_tree_frozen: () => 'Tree frozen',
 }));
 
 function resetStore() {
@@ -3039,5 +3049,346 @@ describe('canvasStore — detachNoteFromCanvas', () => {
       .nodes.find((n) => n.id === 'ext-rec')!;
     expect((node.data as any).detached).toBeUndefined();
     expect(node.position).toEqual({ x: 40, y: 40 });
+  });
+});
+
+describe('canvasStore — Topic tree transactions', () => {
+  function makeTopic(id: string, title: string, x: number, y: number): Node {
+    return {
+      data: { ...createTopicData(title) },
+      id,
+      position: { x, y },
+      style: { height: 40, width: 160 },
+      type: 'topic',
+    };
+  }
+
+  function makeTreeEdge(
+    parentId: string,
+    childId: string,
+    order: number
+  ): Edge {
+    return buildTopicChildEdge(
+      `topic-edge-${parentId}-${childId}`,
+      parentId,
+      childId,
+      order
+    );
+  }
+
+  /** Root with two children; the second child has one grandchild. */
+  function seedTree() {
+    useCanvasStore.setState({
+      _hydrated: true,
+      topicDraft: null,
+      edges: [
+        makeTreeEdge('root', 'kid-a', 0),
+        makeTreeEdge('root', 'kid-b', 1),
+        makeTreeEdge('kid-b', 'grandkid', 0),
+      ],
+      nodes: [
+        makeTopic('root', 'Root', 0, 0),
+        makeTopic('kid-a', 'A', 220, -40),
+        makeTopic('kid-b', 'B', 220, 40),
+        makeTopic('grandkid', 'B1', 440, 40),
+      ],
+    });
+  }
+
+  function treeEdgesOf(parentId: string) {
+    return useCanvasStore
+      .getState()
+      .edges.filter(
+        (e) => e.source === parentId && (e.data as any)?.kind === 'topic-child'
+      )
+      .map((e) => ({ order: (e.data as any).order, target: e.target }))
+      .sort((a, b) => a.order - b.order);
+  }
+
+  beforeEach(() => {
+    resetStore();
+    unifiedUndoHistory.reset();
+    unifiedUndoHistory.setContext('workspace-topic', 'default');
+    getCachedLicenseMock.mockReturnValue({ activated: true });
+  });
+
+  afterEach(() => {
+    resetStore();
+    unifiedUndoHistory.reset();
+  });
+
+  it('commits a child draft as one undo step carrying node, edge, and layout', async () => {
+    seedTree();
+    const edgesBefore = useCanvasStore.getState().edges.length;
+
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root')
+    ).toBe(true);
+    const id = await useCanvasStore.getState().commitTopicDraft('Third');
+    expect(id).toBeDefined();
+
+    const created = useCanvasStore.getState().nodes.find((n) => n.id === id)!;
+    expect(created.data.title).toBe('Third');
+    expect(useCanvasStore.getState().edges).toHaveLength(edgesBefore + 1);
+    expect(treeEdgesOf('root').map((e) => e.target)).toEqual([
+      'kid-a',
+      'kid-b',
+      id,
+    ]);
+    // The layout owns placement: the new child sits a level to the right of
+    // its parent rather than at the provisional draft anchor.
+    expect(created.position.x).toBeGreaterThan(0);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+
+    // One press of undo must take the whole thing back, not just the edge.
+    expect(useCanvasStore.getState().undo()).toBe(true);
+    expect(useCanvasStore.getState().nodes.some((n) => n.id === id)).toBe(
+      false
+    );
+    expect(useCanvasStore.getState().edges).toHaveLength(edgesBefore);
+  });
+
+  it('keeps order stable across a fast run of sibling commits', async () => {
+    seedTree();
+
+    const first = await (() => {
+      useCanvasStore.getState().beginTopicRelativeDraft('sibling', 'kid-a');
+      return useCanvasStore.getState().commitTopicDraft('One');
+    })();
+    useCanvasStore.getState().beginTopicRelativeDraft('sibling', first!);
+    const second = await useCanvasStore.getState().commitTopicDraft('Two');
+    useCanvasStore.getState().beginTopicRelativeDraft('sibling', second!);
+    const third = await useCanvasStore.getState().commitTopicDraft('Three');
+
+    // Each Enter lands immediately after its anchor, so the run reads in the
+    // order it was typed and the pre-existing sibling is pushed down.
+    expect(treeEdgesOf('root')).toEqual([
+      { order: 0, target: 'kid-a' },
+      { order: 1, target: first },
+      { order: 2, target: second },
+      { order: 3, target: third },
+      { order: 4, target: 'kid-b' },
+    ]);
+    // Contiguous orders, and no sibling shares a vertical slot.
+    const ys = ['kid-a', first, second, third, 'kid-b'].map(
+      (id) =>
+        useCanvasStore.getState().nodes.find((n) => n.id === id)!.position.y
+    );
+    expect([...ys].sort((a, b) => a - b)).toEqual(ys);
+    expect(new Set(ys).size).toBe(ys.length);
+  });
+
+  it('commits a child when a nearby card occupies the tidy slot', async () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: [
+        ...useCanvasStore.getState().nodes,
+        {
+          data: {},
+          id: 'photo',
+          position: { x: 224, y: 0 },
+          style: { height: 400, width: 400 },
+          type: 'card',
+        },
+      ],
+    });
+
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root')
+    ).toBe(true);
+    const id = await useCanvasStore.getState().commitTopicDraft('Beside photo');
+    expect(id).toBeDefined();
+    expect(useCanvasStore.getState().nodes.some((n) => n.id === id)).toBe(true);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+  });
+
+  it('keeps a child draft when the Group cannot hold the laid-out tree', async () => {
+    useCanvasStore.setState({
+      _hydrated: true,
+      edges: [],
+      nodes: [
+        {
+          data: {},
+          id: 'g',
+          position: { x: 0, y: 0 },
+          style: { height: 80, width: 180 },
+          type: 'group',
+        },
+        {
+          ...makeTopic('root', 'Root', 4, 4),
+          extent: 'parent',
+          parentId: 'g',
+        },
+      ],
+    });
+
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root')
+    ).toBe(true);
+    const id = await useCanvasStore.getState().commitTopicDraft('Too wide');
+    expect(id).toBeUndefined();
+    expect(useCanvasStore.getState().topicDraft).not.toBeNull();
+    expect(
+      useCanvasStore.getState().nodes.filter((n) => n.type === 'topic')
+    ).toHaveLength(1);
+  });
+
+  it('keeps a child draft when relayout would move a locked sibling', async () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((n) =>
+          n.id === 'kid-a' ? { ...n, data: { ...n.data, locked: true } } : n
+        ),
+    });
+
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'root')
+    ).toBe(true);
+    const id = await useCanvasStore.getState().commitTopicDraft('Blocked');
+    expect(id).toBeUndefined();
+    expect(useCanvasStore.getState().topicDraft).not.toBeNull();
+    expect(useCanvasStore.getState().nodes).toHaveLength(4);
+  });
+
+  it('refuses a sibling for a root and a child for a locked Topic', () => {
+    seedTree();
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('sibling', 'root')
+    ).toBe(false);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((n) =>
+          n.id === 'kid-b' ? { ...n, data: { ...n.data, locked: true } } : n
+        ),
+    });
+    expect(
+      useCanvasStore.getState().beginTopicRelativeDraft('child', 'kid-b')
+    ).toBe(false);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+  });
+
+  it('deleting one Topic keeps its children where they are as new roots', () => {
+    seedTree();
+    const grandkidBefore = useCanvasStore
+      .getState()
+      .nodes.find((n) => n.id === 'grandkid')!.position;
+
+    useCanvasStore.getState().deleteNodes(['kid-b']);
+
+    const state = useCanvasStore.getState();
+    expect(state.nodes.map((n) => n.id)).toEqual(['root', 'kid-a', 'grandkid']);
+    expect(state.nodes.find((n) => n.id === 'grandkid')!.position).toEqual(
+      grandkidBefore
+    );
+    // No dangling relation, and the surviving sibling's order closes the gap.
+    expect(
+      state.edges.some((e) => e.source === 'kid-b' || e.target === 'kid-b')
+    ).toBe(false);
+    expect(treeEdgesOf('root')).toEqual([{ order: 0, target: 'kid-a' }]);
+  });
+
+  it('deleteTopicBranch removes only the named subtree', () => {
+    seedTree();
+
+    useCanvasStore.getState().deleteTopicBranch('kid-b');
+
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual([
+      'root',
+      'kid-a',
+    ]);
+    expect(treeEdgesOf('root')).toEqual([{ order: 0, target: 'kid-a' }]);
+
+    expect(useCanvasStore.getState().undo()).toBe(true);
+    expect(useCanvasStore.getState().nodes).toHaveLength(4);
+    expect(useCanvasStore.getState().edges).toHaveLength(3);
+  });
+
+  it('detachTopicBranch cuts the parent relation but keeps the branch intact', () => {
+    seedTree();
+    const before = new Map(
+      useCanvasStore.getState().nodes.map((n) => [n.id, n.position])
+    );
+
+    useCanvasStore.getState().detachTopicBranch('kid-b');
+
+    const state = useCanvasStore.getState();
+    expect(state.nodes).toHaveLength(4);
+    expect(treeEdgesOf('root')).toEqual([{ order: 0, target: 'kid-a' }]);
+    // The branch keeps its own internal relation and its absolute position.
+    expect(treeEdgesOf('kid-b')).toEqual([{ order: 0, target: 'grandkid' }]);
+    for (const id of ['kid-b', 'grandkid']) {
+      expect(state.nodes.find((n) => n.id === id)!.position).toEqual(
+        before.get(id)
+      );
+    }
+  });
+
+  it('refuses a branch delete that would remove a locked Topic', () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((n) =>
+          n.id === 'grandkid' ? { ...n, data: { ...n.data, locked: true } } : n
+        ),
+    });
+
+    useCanvasStore.getState().deleteTopicBranch('kid-b');
+
+    // Whole refusal: no partial removal that would strand the locked Topic.
+    expect(useCanvasStore.getState().nodes).toHaveLength(4);
+    expect(useCanvasStore.getState().edges).toHaveLength(3);
+  });
+
+  it('copies a partial branch without chaining it back to the original', async () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: useCanvasStore.getState().nodes.map((n) => ({
+        ...n,
+        selected: n.id === 'kid-b' || n.id === 'grandkid',
+      })),
+    });
+
+    useCanvasStore.getState().copySelected();
+    await useCanvasStore.getState().pasteClipboard();
+
+    const state = useCanvasStore.getState();
+    const pasted = state.nodes.filter((n) => PASTE_ID_RE.test(n.id));
+    expect(pasted).toHaveLength(2);
+    const pastedIds = new Set(pasted.map((n) => n.id));
+    const pastedTreeEdges = state.edges.filter(
+      (e) =>
+        PASTE_EDGE_ID_RE.test(e.id) && (e.data as any)?.kind === 'topic-child'
+    );
+    // The copy keeps the relation that sits wholly inside the selection and
+    // drops the parent edge that reached outside it, so the copy is its own
+    // tree rather than a second branch of the original.
+    expect(pastedTreeEdges).toHaveLength(1);
+    const copied = pastedTreeEdges[0]!;
+    expect(pastedIds.has(copied.source)).toBe(true);
+    expect(pastedIds.has(copied.target)).toBe(true);
+    expect(treeEdgesOf('root')).toEqual([
+      { order: 0, target: 'kid-a' },
+      { order: 1, target: 'kid-b' },
+    ]);
+  });
+
+  it('treats tree edges as host-owned against generic edge commands', () => {
+    seedTree();
+    const edgeId = 'topic-edge-root-kid-a';
+
+    useCanvasStore.getState().updateEdgeData(edgeId, { label: 'mine' });
+    useCanvasStore.getState().setEditingEdgeId(edgeId);
+    useCanvasStore.getState().deleteEdge(edgeId);
+
+    const edge = useCanvasStore.getState().edges.find((e) => e.id === edgeId);
+    expect(edge).toBeDefined();
+    expect((edge?.data as any).label).toBeUndefined();
+    expect(useCanvasStore.getState().editingEdgeId).toBeNull();
   });
 });

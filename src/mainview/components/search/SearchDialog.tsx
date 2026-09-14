@@ -186,6 +186,8 @@ function contentNodeKind(
   switch (type) {
     case 'sticky':
       return 'sticky';
+    case 'topic':
+      return 'topic';
     case 'image':
       return 'image';
     case 'asset':

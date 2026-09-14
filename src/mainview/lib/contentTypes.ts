@@ -18,6 +18,7 @@ export type CanvasNodeKind =
   | 'pomodoro'
   | 'reminder'
   | 'sticky'
+  | 'topic'
   | 'folder'
   | 'group'
   | 'image'

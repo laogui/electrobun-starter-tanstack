@@ -12,8 +12,22 @@ export interface ManifestNode {
   type: string;
 }
 
+/**
+ * Persisted edge record.
+ *
+ * `data` is the canonical home for edge fields (`label`, `animated`,
+ * `pathType`, `color`, and `kind` for host-owned Topic tree relations). It is
+ * typed as an open record so unknown keys written by a newer build survive a
+ * load/save round-trip untouched.
+ *
+ * Top-level `label` / `animated` are historical compatibility fields still
+ * present in templates and older manifests. Readers must resolve both through
+ * `resolveEdgeFields` (src/shared/canvasEdgeFields.ts) so rendering, search and
+ * export agree on which value wins.
+ */
 export interface ManifestEdge {
   animated?: boolean;
+  data?: Record<string, unknown>;
   id: string;
   label?: string;
   source: string;

@@ -2393,6 +2393,69 @@ describe('src/bun/index helpers', () => {
     };
     expect(savedManifest.nodes[0]).toEqual(extensionNode);
   });
+
+  it('saveManifest round-trips topic nodes and tree edges without touching unknown fields', async () => {
+    await loadIndexModule();
+    const canvasHandlers = getCanvasHandlers();
+    const topicNodes = [
+      {
+        id: 'topic-root',
+        type: 'topic',
+        position: { x: 0, y: 0 },
+        style: { width: 120, height: 36 },
+        data: { topicVersion: 1, title: '中心主题', color: 'blue' },
+      },
+      {
+        id: 'topic-child',
+        type: 'topic',
+        position: { x: 184, y: 0 },
+        style: { width: 96, height: 36 },
+        data: {
+          topicVersion: 1,
+          title: '子主题',
+          color: 'neutral',
+          futureTopicField: 'keep-me',
+        },
+      },
+    ];
+    const edges = [
+      {
+        id: 'edge-tree-1',
+        source: 'topic-root',
+        target: 'topic-child',
+        type: 'labeledEdge',
+        data: {
+          kind: 'topic-child',
+          relationVersion: 1,
+          order: 0,
+          futureEdgeField: 'keep-me',
+        },
+      },
+      // A historical edge shape: top-level label/animated with no `data`.
+      {
+        id: 'edge-legacy-1',
+        source: 'topic-child',
+        target: 'topic-root',
+        label: 'relates to',
+        animated: true,
+      },
+    ];
+
+    await expect(
+      canvasHandlers.saveManifest({
+        viewId: 'default',
+        nodes: topicNodes,
+        edges,
+      })
+    ).resolves.toEqual({ success: true });
+
+    const savedManifest = manifestMocks.saveManifest.mock.calls.at(-1)?.[2] as {
+      edges: unknown[];
+      nodes: unknown[];
+    };
+    expect(savedManifest.nodes).toEqual(topicNodes);
+    expect(savedManifest.edges).toEqual(edges);
+  });
 });
 
 it('saveManifest persists transient image data urls before stripping runtime imageUrl', async () => {

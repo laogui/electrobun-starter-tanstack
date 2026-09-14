@@ -165,6 +165,8 @@ function nodeKindFor(
   switch (nodeType) {
     case 'sticky':
       return 'sticky';
+    case 'topic':
+      return 'topic';
     case 'folder':
       return 'folder';
     case 'group':
@@ -336,6 +338,12 @@ export function searchCurrentView(
         candidates.push({
           field: 'content',
           value: typeof data.content === 'string' ? data.content : '',
+        });
+        break;
+      case 'topic':
+        candidates.push({
+          field: 'title',
+          value: typeof data.title === 'string' ? data.title : '',
         });
         break;
       case 'folder':

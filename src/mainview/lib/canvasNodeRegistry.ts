@@ -1,5 +1,11 @@
 import type { Node } from '@xyflow/react';
 import * as m from '../../paraglide/messages.js';
+import {
+  createTopicData,
+  TOPIC_MIN_HEIGHT,
+  TOPIC_MIN_WIDTH,
+  TOPIC_NODE_TYPE,
+} from '../../shared/topic';
 import type { Size } from './collision';
 import { GROUP_COLORS, STICKY_COLORS } from './colorUtils';
 import type { CanvasNodeKind } from './contentTypes';
@@ -111,6 +117,18 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
       color: pickRandom(STICKY_COLORS),
     }),
     canEnterGroup: true,
+    canEnterFolder: false,
+  },
+  topic: {
+    kind: 'topic',
+    nodeType: TOPIC_NODE_TYPE,
+    // Starting size only: a Topic measures itself from its title on every
+    // commit, growing to `TOPIC_MAX_WIDTH` and then wrapping.
+    size: { width: TOPIC_MIN_WIDTH * 2, height: TOPIC_MIN_HEIGHT },
+    defaultData: () => ({ ...createTopicData('') }),
+    canEnterGroup: true,
+    // A Topic belongs to a tree, and tree edges may not cross a Folder
+    // boundary, so it can never be absorbed into one.
     canEnterFolder: false,
   },
   folder: {

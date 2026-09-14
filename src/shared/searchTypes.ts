@@ -55,6 +55,7 @@ export type SearchResultTarget =
 export type SearchResultKind =
   | 'note'
   | 'sticky'
+  | 'topic'
   | 'folder'
   | 'group'
   | 'image'

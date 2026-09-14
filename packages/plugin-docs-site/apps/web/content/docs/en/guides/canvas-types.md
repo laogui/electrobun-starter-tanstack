@@ -7,6 +7,12 @@ order: 30
 
 A custom canvas type is a card the user can place on the canvas. Your plugin owns the component and the state shape; GhostBoard owns persistence, revisions, search indexing, preview and the missing-plugin fallback.
 
+## Registered types and core node types
+
+`registerType` always creates an **extension** node. It is not a way to define, replace or impersonate a core node type that GhostBoard ships itself — cards, stickies, images, folders, groups and Topics are host-owned.
+
+The distinction matters most for **Topic**, GhostBoard's lightweight mind-map node. A Topic keeps its title inline in the canvas manifest, and its parent/child hierarchy lives entirely on host-managed tree edges that the host also lays out. There is no SDK call to read a Topic title, create a subtopic, reparent a branch or influence its layout, and no event that reports topic structure changes. Use `registerType` for your own versioned instance state; if you need hierarchy inside your card, model it in your own state, not on host trees.
+
 ## Minimal counter card
 
 ```js

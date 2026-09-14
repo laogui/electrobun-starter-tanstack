@@ -1,16 +1,19 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeDrag } from '@/hooks/useNodeDrag';
+import { buildTopicChildEdge } from '@/lib/topicTree';
+import { createTopicData } from '../../shared/topic';
 
 const applyDragRepulsionMock = vi.hoisted(() =>
   vi.fn(({ nodes }: { nodes: Node[] }) => nodes)
 );
 
-const state = {
+const state: { edges: Edge[]; nodes: Node[] } = {
+  edges: [],
   nodes: [
     {
       id: 'group-1',
@@ -134,6 +137,7 @@ vi.mock('@/store/canvasStore', () => {
     });
 
   useCanvasStore.getState = () => ({
+    edges: state.edges,
     nodes: state.nodes,
     setNodes: setNodesMock,
     saveSnapshot: saveSnapshotMock,
@@ -797,5 +801,157 @@ describe('useNodeDrag – group and folder interactions', () => {
     expect(state.nodes.find((node) => node.id === 'folder-1')).toMatchObject({
       data: { title: 'Folder', children: [] },
     });
+  });
+});
+
+describe('useNodeDrag — Topic branches', () => {
+  /** parent → child → grandchild, all top-level. */
+  function seedBranch(locked?: string) {
+    state.edges = [
+      buildTopicChildEdge('te-1', 'topic-parent', 'topic-child', 0),
+      buildTopicChildEdge('te-2', 'topic-child', 'topic-grand', 0),
+    ];
+    state.nodes = [
+      {
+        data: { ...createTopicData('Parent') },
+        id: 'topic-parent',
+        position: { x: 0, y: 0 },
+        style: { height: 40, width: 160 },
+        type: 'topic',
+      },
+      {
+        data: { ...createTopicData('Child'), locked: locked === 'topic-child' },
+        id: 'topic-child',
+        position: { x: 200, y: 0 },
+        style: { height: 40, width: 160 },
+        type: 'topic',
+      },
+      {
+        data: { ...createTopicData('Grand'), locked: locked === 'topic-grand' },
+        id: 'topic-grand',
+        position: { x: 400, y: 0 },
+        style: { height: 40, width: 160 },
+        type: 'topic',
+      },
+    ];
+  }
+
+  function positionOf(id: string) {
+    return state.nodes.find((n) => n.id === id)?.position;
+  }
+
+  /** Runs one gesture: grab `id`, move it to `to`, release. */
+  const BranchHarness = ({
+    id,
+    to,
+  }: {
+    id: string;
+    to: { x: number; y: number };
+  }) => {
+    const { onNodeDragStart, onNodeDrag, onNodeDragStop } = useNodeDrag();
+    const live = () => {
+      const node = state.nodes.find((n) => n.id === id) as Node;
+      return { ...node, position: { ...node.position } };
+    };
+    return (
+      <button
+        onClick={() => {
+          onNodeDragStart({} as never, live() as never, [] as never);
+          // React Flow writes the grabbed node's new position into the store
+          // before calling back, so the test does the same.
+          state.nodes = state.nodes.map((n) =>
+            n.id === id ? { ...n, position: to } : n
+          );
+          onNodeDrag({} as never, live() as never, [] as never);
+          onNodeDragStop({} as never, live() as never, [] as never);
+        }}
+        type="button"
+      >
+        drag-branch
+      </button>
+    );
+  };
+
+  beforeEach(() => {
+    rfMock.getIntersectingNodes.mockReturnValue([]);
+    applyDragRepulsionMock.mockImplementation(({ nodes }) => nodes);
+  });
+
+  it('carries descendants along when a Topic is dragged', () => {
+    seedBranch();
+    render(<BranchHarness id="topic-parent" to={{ x: 50, y: 80 }} />);
+
+    fireEvent.click(screen.getByText('drag-branch'));
+
+    // The whole branch shifts by the same delta, so its internal layout is
+    // untouched.
+    expect(positionOf('topic-parent')).toEqual({ x: 50, y: 80 });
+    expect(positionOf('topic-child')).toEqual({ x: 250, y: 80 });
+    expect(positionOf('topic-grand')).toEqual({ x: 450, y: 80 });
+  });
+
+  it('leaves ancestors and siblings behind when a subtopic is dragged', () => {
+    seedBranch();
+    render(<BranchHarness id="topic-child" to={{ x: 200, y: 300 }} />);
+
+    fireEvent.click(screen.getByText('drag-branch'));
+
+    expect(positionOf('topic-parent')).toEqual({ x: 0, y: 0 });
+    expect(positionOf('topic-child')).toEqual({ x: 200, y: 300 });
+    expect(positionOf('topic-grand')).toEqual({ x: 400, y: 300 });
+  });
+
+  it('refuses the whole gesture when the branch contains a locked Topic', () => {
+    seedBranch('topic-grand');
+    render(<BranchHarness id="topic-parent" to={{ x: 50, y: 80 }} />);
+
+    fireEvent.click(screen.getByText('drag-branch'));
+
+    // Nothing moves: moving the unlocked part alone would tear the branch.
+    expect(positionOf('topic-parent')).toEqual({ x: 0, y: 0 });
+    expect(positionOf('topic-child')).toEqual({ x: 200, y: 0 });
+    expect(positionOf('topic-grand')).toEqual({ x: 400, y: 0 });
+  });
+
+  it('moves the whole branch into a group when the ancestor is dropped in', () => {
+    seedBranch();
+    const group = {
+      data: { active: false },
+      id: 'group-topic',
+      position: { x: 100, y: 100 },
+      style: { height: 600, width: 900 },
+      type: 'group',
+    } as Node;
+    state.nodes = [group, ...state.nodes];
+    rfMock.getIntersectingNodes.mockReturnValue([group]);
+    rfMock.getInternalNode.mockImplementation((id: string) => {
+      if (id === 'group-topic') {
+        return {
+          internals: { positionAbsolute: { x: 100, y: 100 } },
+          measured: { height: 600, width: 900 },
+        };
+      }
+      const node = state.nodes.find((n) => n.id === id);
+      return node
+        ? {
+            internals: { positionAbsolute: node.position },
+            measured: { height: 40, width: 160 },
+          }
+        : null;
+    });
+
+    render(<BranchHarness id="topic-parent" to={{ x: 150, y: 150 }} />);
+    fireEvent.click(screen.getByText('drag-branch'));
+
+    // A tree lives in one container: every member is reparented, and the
+    // group-relative coordinates preserve the branch's shape.
+    for (const id of ['topic-parent', 'topic-child', 'topic-grand']) {
+      expect(state.nodes.find((n) => n.id === id)?.parentId).toBe(
+        'group-topic'
+      );
+    }
+    expect(positionOf('topic-parent')).toEqual({ x: 50, y: 50 });
+    expect(positionOf('topic-child')).toEqual({ x: 250, y: 50 });
+    expect(positionOf('topic-grand')).toEqual({ x: 450, y: 50 });
   });
 });

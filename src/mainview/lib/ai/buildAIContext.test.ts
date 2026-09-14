@@ -1,6 +1,6 @@
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
-
+import { buildTopicChildEdge } from '../topicTree';
 import {
   buildSelectionContext,
   hasSummarizableSelection,
@@ -241,5 +241,60 @@ describe('extension nodes', () => {
       hasSummarizableSelection([linkNode], { extinst_link1: linkRecord })
     ).toBe(true);
     expect(hasSummarizableSelection([linkNode], {})).toBe(false);
+  });
+});
+
+describe('Topic context', () => {
+  function topicNode(id: string, title: string): Node {
+    return makeNode({
+      id,
+      selected: true,
+      type: 'topic',
+      data: { color: 'neutral', title, topicVersion: 1 },
+    });
+  }
+
+  it('contributes the title and counts as summarizable', () => {
+    const node = topicNode('topic-1', 'Research');
+    expect(nodeToAIContext(node)?.title).toBe('Research');
+    expect(hasSummarizableSelection([node])).toBe(true);
+  });
+
+  it('skips a Topic with no title', () => {
+    expect(nodeToAIContext(topicNode('topic-1', ''))).toBeNull();
+  });
+
+  it('projects tree parentage separately from the Group container', () => {
+    // Both sit in the same Group: a tree may not straddle containers.
+    const nodes = [
+      { ...topicNode('root', 'Root'), parentId: 'group-1' } as Node,
+      { ...topicNode('kid', 'Kid'), parentId: 'group-1' } as Node,
+    ];
+    const edges = [buildTopicChildEdge('te-1', 'root', 'kid', 2)];
+
+    const context = buildSelectionContext(nodes, undefined, edges);
+
+    const kid = context.find((entry) => entry.id === 'kid');
+    // `parentId` stays the container; hierarchy travels in its own field so
+    // the model cannot mistake a Group for a parent Topic.
+    expect(kid?.parentId).toBe('group-1');
+    expect(kid?.topicParentId).toBe('root');
+    expect(kid?.topicOrder).toBe(2);
+    expect(context.find((entry) => entry.id === 'root')?.topicParentId).toBe(
+      undefined
+    );
+  });
+
+  it('does not turn an ordinary connection into parentage', () => {
+    const nodes = [topicNode('a', 'A'), topicNode('b', 'B')];
+    const edges = [
+      { id: 'plain', source: 'a', target: 'b', type: 'labeledEdge' } as Edge,
+    ];
+
+    const context = buildSelectionContext(nodes, undefined, edges);
+
+    expect(context.every((entry) => entry.topicParentId === undefined)).toBe(
+      true
+    );
   });
 });

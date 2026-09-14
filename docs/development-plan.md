@@ -14,9 +14,35 @@
 - 进入任务前检查工作区已有修改，复用当前实现；不要把别人的进行中变更重做或覆盖。
 - 以下代码入口用于定位，不是要求全部修改；以开始任务时的源码为准。工作量先按独立可评审的变更批次组织，D0 核查后再估工期，不把旧计划估时重复相加。
 
-## 1.1 新增需求规划：Topic（2026-09-13）
+## 1.1 Topic 与轻量思维导图（2026-09-14）
 
-用户在思维导图使用中提出轻量主题节点需求，已编写 [Topic 与轻量思维导图实施方案](./features/Backlog/topic-mindmap-implementation-plan.md)。状态为 **方案已编写、实施待开始**；按 P0–P4 单独跟踪核心节点、树关系、基础排布、完整生命周期、插件回归及官网 SDK/双语文档同步。此条只登记规划，不改变既有 D0–D2 或公开插件 T0–T5 的状态，不代表 Topic 已实现。
+用户在思维导图使用中提出轻量主题节点需求，方案见 [Topic 与轻量思维导图实施方案](./features/In%20Progress/topic-mindmap-implementation-plan.md)。按 P0–P4 跟踪，独立于 D0–D3 与公开插件 T0–T6。
+
+| 阶段 | 范围 | 状态 |
+| --- | --- | --- |
+| P0 契约与 schema | `ManifestEdge.data` 往返、`src/shared/topic.ts` 数据模型与运行期校验、树边权限守卫 | 主体实施完成；缺 §4.2/§4.3 的数据保护（见 TG-6） |
+| P1 核心节点 | `topic` 节点类型与注册、`TopicNode` 自动测量、创建菜单入口、草稿编辑与顺序提交（含额度与上下文守卫）、持久化/序列化/搜索/谓词接线 | 部分完成；缺草稿 flush 与 Tab 上下文（TG-2、TG-3） |
+| P2 树与排布 | `topicTree.ts`、Tab/Enter 子级与同级创建、分支选择/拆出/删除、右键菜单、单节点删除后的修复与重排 | 部分完成；`topicLayout.ts` 只有 tidy-tree，缺整个避让层（TG-1）与两个分支动作（TG-5） |
+| P3 集成与回归 | Group 整树进出与跨容器拒绝、分支拖拽与锁定拒绝、复制粘贴规则、主题大纲 Markdown 导出、AI 上下文、注册表与插件回归 | 部分完成；大纲导出缺门禁（TG-4）、额度入口不一致（TG-7） |
+| P4 文档同步 | PRD / tech-spec / development-plan / 行为矩阵 / 订阅 / SDK 文档 | 已完成。`src/bun/templates/brainstorm-mindmap/` 与 `packages/create-plugin/templates/` 按方案第 160 / 250 行分别延后到首版验收后与「描述实际受影响时」，不计为本阶段缺口 |
+
+**自动化证据（2026-09-14）**：`bun run type-check`、`bun run check` 通过；`bun run test` 全量 231 files / 2177 tests 通过。新增覆盖包括 `src/shared/topic.test.ts`、`src/shared/topicMarkdownExport.test.ts`、`src/mainview/lib/topicTree.test.ts`、`src/mainview/lib/topicLayout.test.ts`、`canvasStore.test.ts` 的 Topic 事务套件与 `useNodeDrag.test.tsx` 的分支拖拽套件。
+
+**测试全绿不等于阶段完成**：上述测试覆盖的是已实现的行为，覆盖不到「方案要求但尚未编写」的部分。2026-09-14 的代码评审逐条核对源码后发现下列缺口，先前把 P0–P3 记为「实施完成」是错误结论，已在上表更正。
+
+| ID | 方案条款 | 缺口 | 影响 |
+| --- | --- | --- | --- |
+| TG-1 | §5（180–182 行） | **已修复**：`layoutTopicTreeAvoiding` 收集非本树障碍物、按向下/向外有界偏移搜索、校验直接 Group 硬边界与本树锁定节点；软避让无解仍提交并 `toast_topic_layout_overlap`；硬失败（分组空间不足 / 将移动锁定主题）拒绝且不写节点、边或历史。`relayoutTopicTree` 与标题提交已走该层。 | 主题会直接压在图片、其他树或 Group 边界外，方案的软/硬约束区分完全不存在 |
+| TG-2 | §3.1（66 行）、§4.4 | 「离开画布前提交非空草稿」未实现。`setActiveView` 清 nodes/edges/focus/undo 但不清 `topicDraft` / `editingTopicId`，而 `routes/index.tsx` 无条件把草稿节点拼进 nodes | 切换视图后草稿视觉上漂到新画布，用户以为可继续编辑；`commitTopicDraft` 的 viewId 守卫随后连文本一起丢弃 |
+| TG-3 | §3.2（87 行） | `useCanvasKeyboard.ts` 仅凭 `selected` 拦截 Tab，没有显式的 Topic 命令上下文，也没有 Esc 退出该上下文的规则 | 违反「不能仅凭 selected 状态重新拦截 Tab」；方案第 327 行的验收项「Esc 后 Tab 能离开」必然失败，属可访问性缺陷 |
+| TG-4 | §6 / P3-M（210 行） | `export-topic-outline` 从不检查 `index.problems`；`buildTopicOutline` 用 `parsed.data?.title ?? ''`，成环主题因不在 `rootIds` 中直接消失 | 直接违反「不能静默遗漏」：不支持版本导成空条目，非法关系的主题无声丢失 |
+| TG-5 | §3.3（103 行）、§3.4（104 行） | 右键菜单只有 new-child / new-sibling / select-branch / detach-branch / delete-branch，缺「复制分支」与「整理分支」 | 手工拖过的分支没有重新排布入口；整树复制只能靠先选分支再普通复制 |
+| TG-6 | §4.2（149 行）、§4.3（161 行） | 无「有损解码时对受影响画布暂停持久化写入」，也无「首次写入 Topic 前保留 manifest 备份」。当前只有结构冻结提示 | 无法保存的编辑可能被表现为已保存；旧版本降级恢复没有备份兜底 |
+| TG-7 | §6（202、217 行） | 配额只在 `createNode` 与 `commitTopicDraft` 两处检查，paste / duplicate / import 不计入 | 方案要求「创建/分支/复制/导入一致」未达成。注：paste/duplicate 对 `card`/`sticky` 本来也不查，这是方案要求收口的既有产品缺口，不是 Topic 引入的回归 |
+
+**另有非方案条款的代码质量待办**（同一轮评审提出，不阻断阶段验收）：`canvasStore.ts` 已 3095 行且 `relayoutTopicTree` / `attachDraftToTree` / `settleTopicsAfterDelete` 是可外移的纯函数；`locked` 判断在 store 与 `useNodeDrag` 中重复 11 处，宜在 `canvasNodePredicates.ts` 提取 `isNodeLocked`；配额那段 docblock 错挂在 `getViewportCenter` 上且内容与 TG-7 矛盾；`TopicNode` 在 selector 内对每个节点调用 `buildTopicIndex`，每次 store 变化为 O(主题数 × 图规模)；`AINodeContext.topicOrder` / `topicParentId` 已填充但 `formatNodeForPrompt` 从不读取。
+
+**桌面验收仍未开始**：即使补齐上表，P0–P3 也还缺桌面走查记录（连续创建、撤销一步回滚、Group 进出、锁定拒绝、重启后层级保持、大纲导出落盘），按本文 §1 的口径不得标记为已验收。官网/双语文档同步仍在本仓之外跟踪。
 
 ## 2. 执行顺序
 
@@ -108,7 +134,7 @@ D0–D2 的历史验收记录保留。审查新发现的实例保存回归作为
 ### D1-4 可达性整体验收
 
 - **状态**：已验收（自动化矩阵 + 2026-09-07 桌面走查）；依赖：D1-2/3 与 D0 已验收。
-- `src/test/reachabilityMatrix.ts` 固定同一批合成资料，覆盖顶层、Group、Folder、detached、unlinked 及支持/不适用的类型组合；不适用项保留明确原因（例如 Sticky / Productivity 新节点不允许进入 Folder，Recording 不可 detached），不把历史兼容数据误算为新建能力。
+- `src/test/reachabilityMatrix.ts` 固定同一批合成资料，覆盖顶层、Group、Folder、detached、unlinked 及支持/不适用的类型组合；不适用项保留明确原因（例如 Sticky / Topic / Productivity 新节点不允许进入 Folder，Recording 不可 detached，Topic 没有 Note 记录因而不可 detached），不把历史兼容数据误算为新建能力。
 - 矩阵回归分别断言 Bun 后端搜索、当前画布 fallback、Note Library/Detached browse、Folder child 进入与打开，以及稳定 unlinked Markdown / BlockNote sidecar 的恢复；无 id Markdown 与 typed Widget / Extension 只浏览，不强制转换为 Card。无引用材料同时断言不进入全局画布搜索。
 - **自动化验收**：`src/bun/search.test.ts`、`src/mainview/hooks/useSearch.test.ts`、`src/mainview/components/library/useLibraryData.test.ts`、`src/mainview/components/canvas/DetachedNotesSidebar.test.tsx`、`src/mainview/routes/index.test.tsx` 与 `src/mainview/components/library/LibraryPopup.test.tsx` 均有矩阵用例；2026-09-07 桌面已完成“命中→进入/打开”“移出→文库→放回→重启”及真实附件/实例内容一致性走查。
 

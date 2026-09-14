@@ -113,6 +113,16 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
   );
 }
 
+/** True when `inner` sits entirely inside `outer`, edges included. */
+export function rectInside(inner: Rect, outer: Rect): boolean {
+  return (
+    inner.left >= outer.left &&
+    inner.top >= outer.top &&
+    inner.right <= outer.right &&
+    inner.bottom <= outer.bottom
+  );
+}
+
 export function isPointInside(point: Point, rect: Rect): boolean {
   return (
     point.x >= rect.left &&

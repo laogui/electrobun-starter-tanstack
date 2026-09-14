@@ -49,7 +49,7 @@ bun run server.js   # 默认端口 3001
 
 `src/mainview/store/canvasStore.ts` 的 `createNode`：
 
-1. 统计当前 `card` 和 `sticky` 类型节点数量。
+1. 统计当前 `card`、`sticky` 和 `topic` 类型节点数量（`COUNTED_NODE_TYPES`）。
 2. 调用 `rpcCheckLicense()` 获取激活状态。
 3. 未激活且数量 ≥ 100 时通过 `toast.error` 提示并 `return`。
 4. 校验失败时容错放行，避免离线阻塞。

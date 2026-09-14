@@ -1,6 +1,6 @@
 {
   "name": "@ghostboard/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "GhostBoard trusted plugin SDK, author reference, tests and deterministic packer",
   "license": "MIT",
   "repository": {

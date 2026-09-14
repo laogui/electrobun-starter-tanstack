@@ -929,6 +929,17 @@ export async function rpcExportJson(json: string, fileName: string) {
   return eb.rpc.request.exportJson({ json, fileName });
 }
 
+export async function rpcExportTopicOutline(
+  markdown: string,
+  fileName: string
+) {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return null;
+  }
+  return eb.rpc.request.exportTopicOutline({ fileName, markdown });
+}
+
 export async function rpcExportNoteMarkdown(
   noteId: string,
   options?: { includeFrontmatter?: boolean }

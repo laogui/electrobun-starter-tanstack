@@ -5,10 +5,12 @@ import * as creatableNodes from '@/lib/creatableNodes';
 vi.mock('../../paraglide/messages.js', () => ({
   menu_note: () => 'Note',
   menu_sticky: () => 'Sticky',
+  menu_topic: () => 'Topic',
   menu_folder: () => 'Folder',
   menu_group: () => 'Group',
   menu_new_note: () => 'New note',
   menu_new_sticky: () => 'New sticky',
+  menu_new_topic: () => 'New topic',
   menu_new_folder: () => 'New folder',
   menu_new_group: () => 'New group',
 }));
@@ -33,6 +35,7 @@ describe('getCreatableMenuItems', () => {
     expect(bottomItems.map((item) => item.id)).toEqual([
       'note',
       'sticky',
+      'topic',
       'folder',
       'group',
     ]);
@@ -42,12 +45,14 @@ describe('getCreatableMenuItems', () => {
     expect(bottomItems.map((item) => item.label)).toEqual([
       'Note',
       'Sticky',
+      'Topic',
       'Folder',
       'Group',
     ]);
     expect(contextItems.map((item) => item.label)).toEqual([
       'New note',
       'New sticky',
+      'New topic',
       'New folder',
       'New group',
     ]);

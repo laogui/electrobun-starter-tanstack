@@ -26,7 +26,7 @@ export default definePlugin({
 ## Rules of thumb
 
 - **IDs are plugin-local kebab-case.** The host namespaces them by plugin ID, so two plugins can both have `open-summary`.
-- **Host shortcuts win.** Text editing and built-in shortcuts take priority over plugin shortcuts; treat shortcuts as a convenience, not the only entry point.
+- **Host shortcuts win.** Text editing and built-in shortcuts take priority over plugin shortcuts; treat shortcuts as a convenience, not the only entry point. IME composition, key repeat and keys the focused context already owns never reach your command. That includes canvas keys bound to a selected core node — `Tab`, `Enter` and `F2` act on a selected or in-edit Topic, for example — so prefer a `Mod`-based combination and always keep a menu entry.
 - **One function per behavior.** Put the real work in a function and call it from the command, a panel button and tests.
 - **Registration is staged.** Everything registered in `setup` is published only after `setup` succeeds. A failed reload leaves the old command working.
 - **Clean up owned resources.** `app.commands.register` returns a disposer, and you can add arbitrary cleanup with `app.onCleanup`. Cleanup runs in reverse order, once, when the plugin reloads, is disabled or the workspace closes.
@@ -52,6 +52,8 @@ async function tidyTitles(app) {
   });
 }
 ```
+
+`app.selection.get()` returns only the Notes behind the selection, so a selection that also contains Topics, folders or images simply yields fewer items than the user selected. Use `getPlacements()` when you need to tell the user what was skipped.
 
 Updates are compare-and-swap on `expectedRevision`: if the user edited a Note in between, that item fails visibly instead of overwriting. The batch is recorded in the workspace history, so the user can undo it with the normal Undo shortcut while the canvas view is active, and your plugin can call `app.content.undo(batchId)` later. See [Notes, storage and events](/docs/guides/content-and-storage/).
 

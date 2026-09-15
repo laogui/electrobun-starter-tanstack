@@ -6,7 +6,8 @@
  * unit. Measuring inside the transformed pane would bake the current zoom into
  * the persisted size.
  *
- * The measuring element copies the Topic's real typography from a CSS class, so
+ * The measuring element copies the Topic's real typography (the
+ * `text-sm/snug` values used by `.topic-title` and the editor textarea), so
  * font, weight, line-height, and CJK/Latin line-breaking all behave the same as
  * the rendered node.
  */
@@ -20,7 +21,17 @@ import {
 } from '../../shared/topic';
 import type { Size } from './collision';
 
-const CONTENT_MAX_WIDTH = TOPIC_MAX_WIDTH - TOPIC_PADDING_X * 2;
+/**
+ * `.topic-body` draws a 1px border on every side (box-sizing: border-box), so
+ * the text area inside the node is narrower and shorter than the node box by
+ * two borders. Measurement must budget for it, or a title that just fits the
+ * measured width re-wraps inside the node and its last line clips.
+ */
+const TOPIC_BODY_BORDER = 1;
+
+const CHROME_X = TOPIC_PADDING_X * 2 + TOPIC_BODY_BORDER * 2;
+const CHROME_Y = TOPIC_PADDING_Y * 2 + TOPIC_BODY_BORDER * 2;
+const CONTENT_MAX_WIDTH = TOPIC_MAX_WIDTH - CHROME_X;
 
 let measureEl: HTMLDivElement | null = null;
 
@@ -43,6 +54,11 @@ function getMeasureElement(): HTMLDivElement | null {
   el.style.maxWidth = `${CONTENT_MAX_WIDTH}px`;
   el.style.whiteSpace = 'pre-wrap';
   el.style.overflowWrap = 'break-word';
+  // Mirror the `text-sm/snug` utilities on `.topic-title` and the editor
+  // textarea. The element would otherwise inherit the body font (16px), which
+  // wraps earlier than the rendered 14px title and overestimates the size.
+  el.style.fontSize = '0.875rem';
+  el.style.lineHeight = '1.375';
   document.body.append(el);
   measureEl = el;
   return el;
@@ -58,8 +74,8 @@ function estimateSize(title: string): Size {
   const contentWidth = Math.min(CONTENT_MAX_WIDTH, Math.ceil(advance));
   const lines = Math.max(1, Math.ceil(advance / CONTENT_MAX_WIDTH));
   return {
-    width: clampTopicWidth(contentWidth + TOPIC_PADDING_X * 2),
-    height: Math.max(TOPIC_MIN_HEIGHT, lines * 20 + TOPIC_PADDING_Y * 2),
+    width: clampTopicWidth(contentWidth + CHROME_X),
+    height: Math.max(TOPIC_MIN_HEIGHT, lines * 20 + CHROME_Y),
   };
 }
 
@@ -81,10 +97,10 @@ export function measureTopicSize(title: string): Size {
   }
   // A trailing space would otherwise collapse and under-measure the caret row.
   el.textContent = title.length > 0 ? title : ' ';
-  const width = clampTopicWidth(el.scrollWidth + TOPIC_PADDING_X * 2);
+  const width = clampTopicWidth(el.scrollWidth + CHROME_X);
   const height = Math.max(
     TOPIC_MIN_HEIGHT,
-    Math.ceil(el.scrollHeight + TOPIC_PADDING_Y * 2)
+    Math.ceil(el.scrollHeight + CHROME_Y)
   );
   return { width, height };
 }

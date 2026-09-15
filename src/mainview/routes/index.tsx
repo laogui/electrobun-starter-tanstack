@@ -130,6 +130,7 @@ import { useAppSettingsStore } from '@/store/appSettingsStore';
 import {
   type CreateNodeOptions,
   previewTopicDraft,
+  previewTopicEdits,
   useCanvasStore,
 } from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
@@ -434,6 +435,7 @@ function CanvasComponent() {
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const beginTopicDraft = useCanvasStore((s) => s.beginTopicDraft);
   const topicDraft = useCanvasStore((s) => s.topicDraft);
+  const topicEditPreviews = useCanvasStore((s) => s.topicEditPreviews);
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1761,10 +1763,13 @@ function CanvasComponent() {
   // The in-flight Topic draft is rendered like a node but lives outside the
   // store's `nodes`, so it never reaches persistence, history, selection, or
   // the node count. It joins the graph only when the first title is committed.
-  const topicPreview = useMemo(
-    () => previewTopicDraft(nodes, edges, topicDraft, activeViewId),
-    [nodes, edges, topicDraft, activeViewId]
-  );
+  const topicPreview = useMemo(() => {
+    const draft = previewTopicDraft(nodes, edges, topicDraft, activeViewId);
+    return {
+      ...draft,
+      nodes: previewTopicEdits(draft.nodes, topicEditPreviews),
+    };
+  }, [nodes, edges, topicDraft, activeViewId, topicEditPreviews]);
 
   const renderSourceNodes = useMemo(() => {
     const baseNodes = topicPreview.nodes;

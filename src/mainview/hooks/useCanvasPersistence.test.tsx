@@ -56,6 +56,51 @@ describe('useCanvasPersistence', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps title edit previews out of autosave, including dimension feedback', async () => {
+    const node = {
+      id: 'topic',
+      type: 'topic',
+      position: { x: 0, y: 0 },
+      data: { title: 'Original', topicVersion: 1 },
+      style: { width: 120, height: 40 },
+    };
+    useCanvasStore.setState({ nodes: [node] });
+    render(<TestComponent />);
+    await vi.runAllTicks();
+    useCanvasStore.getState().setTopicEditPreview('topic', 'Uncommitted title');
+    useCanvasStore.getState().applyNodesChange([
+      {
+        id: 'topic',
+        type: 'dimensions',
+        dimensions: { width: 300, height: 80 },
+      },
+    ]);
+    vi.advanceTimersByTime(2600);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+    // An unrelated edit can trigger a save while the title editor is open.
+    useCanvasStore
+      .getState()
+      .setNodes((nodes) =>
+        nodes.map((n) => ({ ...n, position: { x: 10, y: 0 } }))
+      );
+    vi.advanceTimersByTime(2600);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith(
+      'default',
+      [{ ...node, position: { x: 10, y: 0 } }],
+      []
+    );
+    useCanvasStore.getState().resetTopicEditPreview('topic');
+    // A late observer event after cancellation must also be ignored.
+    useCanvasStore.getState().applyNodesChange([
+      {
+        id: 'topic',
+        type: 'dimensions',
+        dimensions: { width: 300, height: 80 },
+      },
+    ]);
+    expect(useCanvasStore.getState().nodes[0]?.style).toEqual(node.style);
+  });
+
   it('skips changes while canvas is not hydrated', async () => {
     useCanvasStore.setState({ _hydrated: false });
     render(<TestComponent />);

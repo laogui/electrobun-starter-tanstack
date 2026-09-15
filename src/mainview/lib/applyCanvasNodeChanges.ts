@@ -1,6 +1,7 @@
 import type { Node, NodeChange, NodeDimensionChange } from '@xyflow/react';
 import { applyNodeChanges } from '@xyflow/react';
 import type { CSSProperties } from 'react';
+import { isTopicNodeType } from '../../shared/topic';
 
 function isDimensionChange(
   change: NodeChange
@@ -18,9 +19,21 @@ export function applyCanvasNodeChanges(
   changes: NodeChange[],
   nodes: Node[]
 ): Node[] {
-  const updatedNodes = applyNodeChanges(changes, nodes);
+  // Topic dimensions belong to title commits. React Flow also reports the
+  // render-only edit size (sometimes after the preview has been cleared), so
+  // accepting its dimension events would leak that size into the saved graph.
+  const topicIds = new Set(
+    nodes.filter((node) => isTopicNodeType(node.type)).map((node) => node.id)
+  );
+  const savedChanges = changes.filter(
+    (change) => change.type !== 'dimensions' || !topicIds.has(change.id)
+  );
+  if (savedChanges.length === 0) {
+    return nodes;
+  }
+  const updatedNodes = applyNodeChanges(savedChanges, nodes);
   const dimensionsById = new Map<string, { width: number; height: number }>();
-  for (const change of changes) {
+  for (const change of savedChanges) {
     if (isDimensionChange(change)) {
       dimensionsById.set(change.id, change.dimensions);
     }

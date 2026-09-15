@@ -16,6 +16,7 @@ import {
   STICKY_H,
   STICKY_W,
 } from '@/lib/canvasNodeRegistry';
+import { measureTopicSize } from '@/lib/topicMeasure';
 import { buildTopicChildEdge } from '@/lib/topicTree';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import {
@@ -23,7 +24,11 @@ import {
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
 import { canvasImporterPlacementHost } from '@/plugins/runtime/importPlacement';
-import { previewTopicDraft, useCanvasStore } from '@/store/canvasStore';
+import {
+  previewTopicDraft,
+  previewTopicEdits,
+  useCanvasStore,
+} from '@/store/canvasStore';
 import {
   LINK_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
@@ -3404,6 +3409,85 @@ describe('canvasStore — Topic tree transactions', () => {
           : preview.nodes.find((candidate) => candidate.id === node.id)!;
       expect(node.position).toEqual(expected.position);
     }
+  });
+
+  it('projects edit sizes without changing the saved graph or history', () => {
+    seedTree();
+    const before = useCanvasStore.getState();
+    const expected = measureTopicSize('A much longer title while typing');
+    before.setTopicEditPreview('kid-a', 'A much longer title while typing');
+    const after = useCanvasStore.getState();
+    const rendered = previewTopicEdits(after.nodes, after.topicEditPreviews);
+    expect(rendered.find((n) => n.id === 'kid-a')!.style).toEqual(expected);
+    expect(after.nodes).toBe(before.nodes);
+    expect(after.edges).toBe(before.edges);
+    expect(after.undo()).toBe(false);
+  });
+
+  it('skips unchanged preview sizes and discards overrides on cancel', () => {
+    seedTree();
+    const original = useCanvasStore.getState().nodes;
+    useCanvasStore.getState().setTopicEditPreview('kid-a', 'Longer text');
+    const previews = useCanvasStore.getState().topicEditPreviews;
+    useCanvasStore.getState().setTopicEditPreview('kid-a', 'Longer text');
+    expect(useCanvasStore.getState().topicEditPreviews).toBe(previews);
+    useCanvasStore.getState().resetTopicEditPreview('kid-a');
+    const state = useCanvasStore.getState();
+    expect(state.topicEditPreviews).toEqual({});
+    expect(previewTopicEdits(state.nodes, state.topicEditPreviews)).toBe(
+      original
+    );
+  });
+
+  it('undoes a previewed title commit to the exact original graph', () => {
+    seedTree();
+    const original = useCanvasStore.getState().nodes;
+    const title = 'A much longer title while typing';
+    useCanvasStore.getState().setTopicEditPreview('kid-a', title);
+    useCanvasStore.getState().commitTopicTitle('kid-a', title);
+    useCanvasStore.getState().resetTopicEditPreview('kid-a');
+    const committed = useCanvasStore.getState().nodes;
+    expect(committed.find((n) => n.id === 'kid-a')!.data.title).toBe(title);
+    expect(useCanvasStore.getState().undo()).toBe(true);
+    expect(useCanvasStore.getState().nodes).toEqual(original);
+    expect(useCanvasStore.getState().redo()).toBe(true);
+    expect(useCanvasStore.getState().nodes).toEqual(committed);
+  });
+
+  it('clears edit previews on reset and view switches', () => {
+    seedTree();
+    useCanvasStore.getState().setTopicEditPreview('kid-a', 'Longer text');
+    useCanvasStore.getState().setActiveView('another-view');
+    expect(useCanvasStore.getState().topicEditPreviews).toEqual({});
+    seedTree();
+    useCanvasStore.getState().setTopicEditPreview('kid-a', 'Longer text');
+    useCanvasStore.getState().reset();
+    expect(useCanvasStore.getState().topicEditPreviews).toEqual({});
+  });
+
+  it('ignores preview requests for locked or unreadable Topics', () => {
+    seedTree();
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((n) =>
+          n.id === 'kid-a' ? { ...n, data: { ...n.data, locked: true } } : n
+        ),
+    });
+    const beforeLocked = useCanvasStore.getState().nodes;
+    useCanvasStore.getState().setTopicEditPreview('kid-a', 'typing');
+    expect(useCanvasStore.getState().nodes).toBe(beforeLocked);
+
+    useCanvasStore.setState({
+      nodes: useCanvasStore
+        .getState()
+        .nodes.map((n) =>
+          n.id === 'kid-b' ? { ...n, data: { ...n.data, topicVersion: 99 } } : n
+        ),
+    });
+    const beforeUnreadable = useCanvasStore.getState().nodes;
+    useCanvasStore.getState().setTopicEditPreview('kid-b', 'typing');
+    expect(useCanvasStore.getState().nodes).toBe(beforeUnreadable);
   });
 
   it('commits a child draft as one undo step carrying node, edge, and layout', async () => {

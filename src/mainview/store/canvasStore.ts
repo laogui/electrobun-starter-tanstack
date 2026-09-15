@@ -512,6 +512,22 @@ function attachDraftToTree(
   return { edges: nextEdges, rootId: findTopicRoot(index, parentId) };
 }
 
+/** Overlay title edit sizes only on the graph passed to React Flow. */
+export function previewTopicEdits(
+  nodes: Node[],
+  previews: Record<string, Size>
+): Node[] {
+  if (Object.keys(previews).length === 0) {
+    return nodes;
+  }
+  return nodes.map((node) => {
+    const size = previews[node.id];
+    return size && isTopicNodeType(node.type)
+      ? { ...node, measured: size, style: { ...node.style, ...size } }
+      : node;
+  });
+}
+
 /** Preview the same insertion/layout as commit without mutating the saved graph. */
 export function previewTopicDraft(
   nodes: Node[],
@@ -522,7 +538,10 @@ export function previewTopicDraft(
   if (!draft || draft.viewId !== activeViewId) {
     return { edges, nodes };
   }
-  const size = measureTopicSize(normalizeTopicTitle(draft.text));
+  // Measure the raw text, not its normalized form: the textarea shows literal
+  // newlines while typing (Shift+Enter, paste), and the box must fit what is
+  // on screen. The commit collapses them and re-measures.
+  const size = measureTopicSize(draft.text);
   const node: Node = {
     data: { ...createTopicData(draft.text), isDraft: true },
     deletable: false,
@@ -1125,6 +1144,8 @@ export interface CanvasState {
   /** Asset/image card id whose displayName is in inline-rename mode. */
   renamingNodeId: string | null;
   reset: () => void;
+  /** Discard the render-only size override without changing the saved graph. */
+  resetTopicEditPreview: (nodeId: string) => void;
   saveSnapshot: () => void;
   searchOpen: boolean;
   selectNodeInDirection: (
@@ -1172,6 +1193,11 @@ export interface CanvasState {
   setSettingsOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTopicDraftText: (text: string) => void;
+  /** Live-resize an existing Topic to the title currently being typed, so the
+   *  box fits the text while editing. Ephemeral: no relayout and no history
+   *  snapshot — the commit writes the final size and layout;
+   *  `resetTopicEditPreview` restores the stored title's size. */
+  setTopicEditPreview: (nodeId: string, title: string) => void;
 
   // In-window settings dialog
   settingsOpen: boolean;
@@ -1207,6 +1233,8 @@ export interface CanvasState {
   topicCommandContextId: string | null;
   /** In-flight new Topic: rendered and editable, but not yet in the graph. */
   topicDraft: TopicDraft | null;
+  /** Render-only dimensions, excluded from persistence and undo snapshots. */
+  topicEditPreviews: Record<string, Size>;
   /**
    * Whole-canvas write protection after a lossy or unconfirmable Topic
    * decode. Distinct from structure freeze: other content may still be
@@ -1255,6 +1283,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   editingTopicId: null,
   topicCommandContextId: null,
   topicDraft: null,
+  topicEditPreviews: {},
   topicWritePaused: false,
   renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
@@ -1507,6 +1536,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       editingTopicId: null,
       topicCommandContextId: null,
       topicDraft: null,
+      topicEditPreviews: {},
       topicWritePaused: false,
     });
   },
@@ -1758,6 +1788,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setTopicDraftText: (text) => {
     set((s) => (s.topicDraft ? { topicDraft: { ...s.topicDraft, text } } : {}));
+  },
+
+  setTopicEditPreview: (nodeId, title) => {
+    const { nodes, topicEditPreviews } = get();
+    const node = nodes.find((n) => n.id === nodeId);
+    if (
+      !(node && isTopicNodeType(node.type)) ||
+      node.data.locked ||
+      parseTopicData(node.data).status !== 'valid'
+    ) {
+      return;
+    }
+    const size = measureTopicSize(title);
+    const previous = topicEditPreviews[nodeId];
+    if (previous?.width === size.width && previous?.height === size.height) {
+      return;
+    }
+    set({ topicEditPreviews: { ...topicEditPreviews, [nodeId]: size } });
+  },
+
+  resetTopicEditPreview: (nodeId) => {
+    const { topicEditPreviews } = get();
+    if (!topicEditPreviews[nodeId]) {
+      return;
+    }
+    const next = { ...topicEditPreviews };
+    delete next[nodeId];
+    set({ topicEditPreviews: next });
   },
 
   detachTopicBranch: (topicId) => {
@@ -2535,6 +2593,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       editingTopicId: null,
       topicCommandContextId: null,
       topicDraft: null,
+      topicEditPreviews: {},
       topicWritePaused: false,
     });
   },

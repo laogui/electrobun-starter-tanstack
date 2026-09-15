@@ -1,4 +1,11 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { getTopicPalette } from '@/lib/topicColors';
 import { buildTopicIndex } from '@/lib/topicTree';
@@ -72,9 +79,10 @@ interface TopicEditorProps {
 }
 
 /**
- * Single-line-feel plain text editor. A textarea (not contentEditable) keeps
- * paste, IME composition and caret handling simple and guarantees the value is
- * literal text — Topic titles never render HTML or Markdown.
+ * Plain text editor that grows to its content, matching the node box the
+ * store re-measures on every keystroke. A textarea (not contentEditable)
+ * keeps paste, IME composition and caret handling simple and guarantees the
+ * value is literal text — Topic titles never render HTML or Markdown.
  */
 const TopicEditor = ({
   autoFocus,
@@ -86,6 +94,43 @@ const TopicEditor = ({
 }: TopicEditorProps) => {
   const ref = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
+
+  // The node box is sized by the store's measurement, but the textarea must
+  // also report its own content height — otherwise `rows={1}` keeps it a
+  // single line and wrapped text is invisible while typing. Resetting to
+  // `auto` first makes `scrollHeight` measure the content, not the previously
+  // assigned height. Environments without layout (jsdom) report 0 and keep the
+  // `rows` height.
+  const resizeToFit = useCallback(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    el.style.height = 'auto';
+    const contentHeight = el.scrollHeight;
+    if (contentHeight > 0) {
+      el.style.height = `${contentHeight}px`;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    resizeToFit();
+    let lastWidth = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      // Height writes also trigger ResizeObserver; only width changes need
+      // another measurement after React commits the new node dimensions.
+      if (el.clientWidth !== lastWidth) {
+        lastWidth = el.clientWidth;
+        resizeToFit();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [resizeToFit]);
 
   useEffect(() => {
     if (!autoFocus) {
@@ -157,15 +202,24 @@ const TopicEditor = ({
     document.execCommand('insertText', false, text);
   }, []);
 
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      onDraftChange(e.currentTarget.value);
+      resizeToFit();
+    },
+    [onDraftChange, resizeToFit]
+  );
+
   return (
     <textarea
       aria-label={m.topic_title_label()}
       className="topic-title nodrag nopan w-full resize-none overflow-hidden whitespace-pre-wrap break-words border-none bg-transparent p-0 text-sm/snug outline-hidden"
       defaultValue={initialValue}
       onBlur={(e) => onCommit(e.currentTarget.value, 'none')}
-      onChange={(e) => onDraftChange(e.currentTarget.value)}
+      onChange={handleChange}
       onCompositionEnd={() => {
         composingRef.current = false;
+        resizeToFit();
       }}
       onCompositionStart={() => {
         composingRef.current = true;
@@ -196,6 +250,16 @@ const TopicNode = ({
   const commitTopicDraft = useCanvasStore((s) => s.commitTopicDraft);
   const cancelTopicDraft = useCanvasStore((s) => s.cancelTopicDraft);
   const setTopicDraftText = useCanvasStore((s) => s.setTopicDraftText);
+  const setTopicEditPreview = useCanvasStore((s) => s.setTopicEditPreview);
+  const resetTopicEditPreview = useCanvasStore((s) => s.resetTopicEditPreview);
+  useEffect(
+    () => () => {
+      if (!isDraft) {
+        resetTopicEditPreview(id);
+      }
+    },
+    [id, isDraft, resetTopicEditPreview]
+  );
   const beginTopicRelativeDraft = useCanvasStore(
     (s) => s.beginTopicRelativeDraft
   );
@@ -232,16 +296,23 @@ const TopicNode = ({
     setEditing(false);
     setError(null);
     setEditorKey((key) => key + 1);
-  }, []);
+    if (!isDraft) {
+      // Removing the render override reveals the committed graph, whether
+      // the title was committed, cancelled, or refused.
+      resetTopicEditPreview(id);
+    }
+  }, [id, isDraft, resetTopicEditPreview]);
 
   const handleDraftChange = useCallback(
     (value: string) => {
       setError(null);
       if (isDraft) {
         setTopicDraftText(value);
+        return;
       }
+      setTopicEditPreview(id, value);
     },
-    [isDraft, setTopicDraftText]
+    [id, isDraft, setTopicDraftText, setTopicEditPreview]
   );
 
   const handleCommit = useCallback(

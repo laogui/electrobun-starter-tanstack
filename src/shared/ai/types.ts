@@ -27,6 +27,11 @@ export interface AINodeContext {
   size?: { width?: number; height?: number };
   tags?: string[];
   title?: string;
+  /** Position among its siblings, so the model sees the outline's order. */
+  topicOrder?: number;
+  /** Parent Topic in the mind-map tree. Deliberately separate from
+   *  `parentId`, which is the Group container and carries no hierarchy. */
+  topicParentId?: string;
 }
 
 /** The "live context" slice the renderer sends with every task. */

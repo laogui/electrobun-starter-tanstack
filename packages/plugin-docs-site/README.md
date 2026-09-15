@@ -1,11 +1,18 @@
 # GhostBoard plugin docs site (drop-in for `react-starter-kit/apps/web`)
 
-This directory holds the T5 documentation site exactly as it must land in the
+This directory holds the T5 documentation site as it was authored for the
 `react-starter-kit` repository, which hosts the GhostBoard marketing site
-(Astro 5, `srcDir: "."`, Paraglide `en`/`zh`, Cloudflare Workers). It lives in
-this repository because the site repository is a separate private repo; the
-files are laid out with the same relative paths so they can be copied over
-verbatim. Nothing here is imported by the GhostBoard app.
+(Astro 5, `srcDir: "."`, Paraglide `en`/`zh`, Cloudflare Workers). The files
+are laid out with the same relative paths as that repository. Nothing here is
+imported by the GhostBoard app.
+
+**Status (2026-09-13): applied.** Everything below landed in `react-starter-kit`
+on branch `feat/plugin-docs-site` (commit `12fe8bc`), where `bun run check`,
+`bun run build`, `vitest --project @repo/web` and the pre-commit lint pass.
+From now on `react-starter-kit/apps/web` is the source of truth for the site
+code; this directory is kept as the authoring copy of the Markdown content and
+for the `lib/docs.test.ts` gate that runs in this repository's `bun run test`.
+Differences between the two copies are listed under "Applied deltas".
 
 ```text
 apps/web/
@@ -23,7 +30,18 @@ apps/web/
 packages/core/messages/docs.{en,zh}.json  # message keys to merge into the site's Paraglide catalogs
 ```
 
-## Apply to `react-starter-kit`
+## Applied deltas (what differs in `react-starter-kit`)
+
+- Imports use the site's `@/` alias (`@/lib/docs`, `@/layouts/DocsLayout.astro`, `@/src/paraglide/runtime.js`) and `import * as m from "@/src/paraglide/messages.js"`, matching `BaseLayout.astro` there.
+- `@ghostboard/sdk` is not on npm yet, so `apps/web/package.json` points the devDependency at `file:./vendor/ghostboard-sdk-0.1.0.tgz` (packed from `packages/plugin-sdk`). Swap to the registry version and delete `vendor/` after `sdk-v0.1.0` is published.
+- `content/docs/en/reference/sdk.md` **is committed** there (with `/apps/web/content/docs/en/reference/sdk.md` in `.prettierignore`); `bun run check` runs `sync-sdk-reference.ts --check` first so a stale copy fails CI, and `prebuild` regenerates it.
+- `tailwind.config.css` gained `@plugin "@tailwindcss/typography";` and a `@source` for `components/`; `DocsLayout.astro` disables typography's backtick pseudo-elements and styles inline code via a scoped `<style>`.
+- `tsconfig.json` includes `.astro/types.d.ts` so `getCollection("docs")` is typed; `@astrojs/check` was added so the pre-existing `check` script actually runs.
+- `pages/sitemap.xml.ts` lists `/docs/` plus every English docs slug per locale (the `llms*.txt` endpoints are intentionally not in the sitemap).
+- Root `vitest.config.ts` adds the `apps/web` project (`apps/web/vitest.config.ts`, `lib/**/*.test.ts`).
+- `BaseLayout.astro` locale switcher got `isLocale()` narrowing (two pre-existing `astro check` errors).
+
+## Original apply guide (kept for reference)
 
 1. Copy `apps/web/**` into `apps/web/` of the site repository. `content/docs/en/reference/sdk.md` is **generated**; do not commit it there either (add it to `apps/web/.gitignore`).
 2. Merge the keys from `packages/core/messages/docs.en.json` and `docs.zh.json` into `packages/core/messages/en.json` and `zh.json`. Keys: `web_nav_docs`, `docs_title`, `docs_landing_description`, `docs_landing_intro`, `docs_landing_cta`, `docs_fallback_badge`, `docs_fallback_notice`, `docs_source_version` (`{version}`), `docs_on_this_page`, `docs_previous`, `docs_next`.

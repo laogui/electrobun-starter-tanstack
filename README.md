@@ -7,7 +7,8 @@ Your content stays on your machine. Every text card is a plain Markdown file you
 ## Features
 
 - Infinite pan/zoom canvas powered by React Flow (`@xyflow/react`).
-- Multiple content node types: text cards, checklists, images, local file attachments, link cards with metadata unfurling, and sticky notes.
+- Multiple content node types: text cards, checklists, images, local file attachments, link cards with metadata unfurling, sticky notes, and topics.
+- Lightweight mind mapping with Topic nodes: `Tab` adds a subtopic, `Enter` adds a sibling, branches lay out to the right automatically, move and detach as a whole, and the outline exports to Markdown.
 - Two complementary grouping models: open Groups (children stay visible on the canvas) and stacked Folders (children collapse into a summary stack).
 - Immersive focused view with a BlockNote (Notion-style) block editor for long-form writing, plus image zoom/pan.
 - Node-to-node edges with labels, colors, and animated flow.

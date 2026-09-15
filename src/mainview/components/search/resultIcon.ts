@@ -10,6 +10,7 @@ import {
   ListChecks,
   Paperclip,
   StickyNote,
+  Workflow,
 } from 'lucide-react';
 
 import type { SearchResultKind } from '@/lib/searchTypes';
@@ -20,6 +21,8 @@ export function iconFor(kind: SearchResultKind, widgetKind?: WidgetKind) {
   switch (kind) {
     case 'sticky':
       return StickyNote;
+    case 'topic':
+      return Workflow;
     case 'folder':
       return Folder;
     case 'group':

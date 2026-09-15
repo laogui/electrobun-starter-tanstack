@@ -99,12 +99,12 @@ src/
       canvasStore.ts                       # Zustand store：nodes/edges/UI 状态/undo-redo/clipboard/CRUD/多画布/布局模式
       widgetStore.ts                       # 独立 widget 内容 store：records + per-widget undo 栈 + debounce 落盘
     hooks/
-      useCanvasKeyboard.ts                # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape（widget 焦点时路由到 widget undo）
+      useCanvasKeyboard.ts                # 全局快捷键：Delete/Cmd+C/V/A/N/Z/Enter/Escape/Tab/F2（widget 焦点时路由到 widget undo；Tab/F2 与 Enter 的 Topic 语义见 §3.1）
       useCanvasPersistence.ts             # 自动保存：subscribe store → debounce → RPC saveManifest（动态 viewId）
       useContextMenu.ts                   # 右键菜单状态管理 + action 分发（含 Folder child / widget）
       useHelperLines.ts                   # 辅助对齐线（拖拽时的 snap-to 提示）
       useNodeCreation.ts                  # 节点创建入口（ViewSwitcher + ContextMenu 共用；widget 走 createWidget RPC）
-      useNodeDrag.ts                      # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）
+      useNodeDrag.ts                      # 三阶段拖拽：解除 parent → 检测交叉 → 确认 drop（Group/Folder）；拖动 Topic 时整条分支随行
       useNodeMetadata.ts                  # 节点标签元数据查询 + 乐观更新 mutation
       useNoteSaver.ts                     # legacy Markdown note debounce 保存
       useSearch.ts                        # SearchDialog 数据源：后端搜索 + 当前画布内存结果合并
@@ -114,7 +114,7 @@ src/
       canvas/
         CanvasToolbar.tsx                 # 左上角浮动工具栏：Library / Tag Sidebar / Settings
         CanvasViewportChrome.tsx          # 右下角 minimap + zoom controls 合一 frosted 面板
-        ContextMenu.tsx                   # 右键菜单 UI（canvas/card/widget/folder/group/sticky/image/asset/link/recording）
+        ContextMenu.tsx                   # 右键菜单 UI（canvas/card/widget/folder/group/sticky/topic/image/asset/link/recording）
         FocusedView.tsx                   # 聚焦模式：从源卡片 morph 展开 + overlay
         FolderView.tsx                    # Folder drill-down 辅助层（返回动画等）
         HelperLines.tsx                   # 对齐辅助线渲染
@@ -131,9 +131,10 @@ src/
           LinkNode.tsx                    # URL 链接节点
           RecordingNode.tsx               # 录音节点（音频附件 + waveform + 播放控件）
           StickyNode.tsx                  # 便签节点
+          TopicNode.tsx                   # 主题节点：纯文本标题原地编辑 + 按标题自适应尺寸
           readOnlyNodes.tsx               # 模板预览等只读节点变体
         edges/
-          LabeledEdge.tsx                 # 支持 label / pathType / floating endpoints 的自定义边
+          LabeledEdge.tsx                 # 支持 label / pathType / floating endpoints 的自定义边；`data.kind: 'topic-child'` 的树边由宿主约束渲染与交互
       card/
         NodeTagChips.tsx                  # 节点标签展示组件（主标签 + 次要标签 chips）
         TagEditor.tsx                     # 标签编辑 Popover（输入/颜色/自动补全）
@@ -164,6 +165,11 @@ src/
       folderExpansion.ts                   # Folder 封面缩略图布局 + bottom-up waterfall 展开坐标
       canvasBackground.ts                  # 画布背景 token（default/paper/cream/mono）→ CSS 变量
       canvasUtils.ts                       # sortNodesByParent, isDescendant 等工具函数
+      topicTree.ts                         # Topic 树纯函数：由 nodes + `topic-child` 边推导索引、遍历分支、检测环/多父/跨容器、锁定阻断、导出大纲投影
+      topicLayout.ts                       # Topic 向右树布局纯函数：父节点在子树中垂直居中，只重算受影响子树；`layoutTopicTreeAvoiding` 叠加避让层（收集非本树障碍物、有界偏移搜索、Group 硬边界与锁定校验，软避让无解仍提交并提示）
+      nodeQuota.ts                         # 免费额度共享门禁：`card`/`sticky`/`topic` 同一计数，支持批量预检 additionalCounted
+      topicMeasure.ts                      # 按纯文本标题测量 Topic 尺寸（与渲染同一套字体度量）
+      topicColors.ts                       # Topic 颜色 token → 节点样式与派生树边颜色
       colorUtils.ts                        # 颜色常量（hex）+ colorToStyle 转换
       assetFiles.ts                        # 前端文件导入：streaming upload、生成缩略图/waveform
       canvasExport.ts                      # 当前画布 JSON 与 2x PNG screenshot export
@@ -176,6 +182,14 @@ src/
       utils.ts                             # cn() 工具
     data/
       initialNodes.ts                      # 种子数据（纯前端 fallback / 测试；checklist 走 widget）
+  shared/                                  # 主进程与渲染端共用的纯模块
+    canvasEdgeFields.ts                    # 边的 effective-field 投影：宿主派生值优先于持久化 data（树边用）
+    topic.ts                               # Topic 节点/树边数据模型、颜色 token、运行期校验与 buildTopicChildEdge
+    topicMarkdownExport.ts                 # 主题大纲 → 嵌套 Markdown 列表（纯文本转义、迭代遍历）
+    searchTypes.ts                         # 搜索结果 kind / target 契约
+    ai/                                    # AI 上下文与 provider 共享类型
+    markdown/                              # Markdown 解析/渲染共享 helper
+    extensions/ · plugins/                 # Canvas Type 与插件运行时共享契约
 ```
 
 ---
@@ -199,6 +213,7 @@ src/
 | `folder`    | `FolderNode`    | manifest `data.children` 引用子节点/子笔记                    | ✅ drill-down | ✅ (250~600 × 250~600)       |
 | `group`     | `GroupNode`     | manifest `data.label` + `data.color`                          | ❌            | ✅ NodeResizer (min 300×200) |
 | `sticky`    | `StickyNode`    | manifest `data.content` + `data.color` 内嵌                   | ❌ 原地编辑   | ✅ (120~500 × 120~500)       |
+| `topic`     | `TopicNode`     | manifest `data.title` + `data.color` + `data.topicVersion` 内嵌；层级只在 `topic-child` 边上 | ❌ 原地编辑标题 | ❌ 按标题自动测量尺寸 |
 
 > 上表的 `widget` 路径描述 legacy 兼容模型。当前三个内置 Productivity 类型通过 Canvas Type 注册为 `extension` 节点：Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可新进入 Folder。已存在于 Folder 中的 legacy `widget` 或迁移后 `extension` 子项仍须可读取并无损 Extract。
 
@@ -225,7 +240,8 @@ type CanvasNodeKind =
   | 'image'
   | 'asset'
   | 'link'
-  | 'recording';
+  | 'recording'
+  | 'topic';
 
 type AssetKind = 'video' | 'audio' | 'file';
 
@@ -389,6 +405,11 @@ interface CanvasNodeDataShapes {
     content: string;
     color?: string;
   };
+  topic: {
+    title: string; // 纯文本，不解析 Markdown / HTML，上限 2000 码点
+    color: TopicColorToken; // token，不存具体色值；树边颜色由父主题派生
+    topicVersion: number;
+  };
 }
 
 interface AssetNodeData {
@@ -444,9 +465,24 @@ type CanvasNode =
   | Node<CanvasNodeDataShapes['recording'], 'recording'>
   | Node<CanvasNodeDataShapes['folder'], 'folder'>
   | Node<CanvasNodeDataShapes['group'], 'group'>
-  | Node<CanvasNodeDataShapes['sticky'], 'sticky'>;
+  | Node<CanvasNodeDataShapes['sticky'], 'sticky'>
+  | Node<CanvasNodeDataShapes['topic'], 'topic'>;
 
 type CanvasEdge = Edge<Record<string, unknown>, 'labeledEdge'>;
+
+// 同一个 `labeledEdge` 承载两种语义，由 `data.kind` 区分。
+//
+// 关联边（无 kind）：用户可编辑 label / 动画 / pathType / 颜色 / 视觉反向。
+// 树边（kind: 'topic-child'）：主题层级的**唯一**真源——node 上不存
+// topicParentId / children / rootId，运行时索引由 nodes + edges 推导。树边归
+// 宿主所有，以上通用编辑一律禁用，也不能直接删除；删除只经过带校验的拆支 /
+// 删分支事务。`order` 为同级连续非负整数，插入与删除在同一事务内重排，不从
+// 屏幕 y 坐标反推顺序。
+interface TopicChildEdgeDataV1 {
+  kind: 'topic-child';
+  order: number;
+  relationVersion: number;
+}
 
 interface CanvasViewManifest {
   schema: 'ghostboard-canvas/v1';
@@ -560,6 +596,8 @@ CanvasState
 ├── 多画布 actions: setActiveView, setViews, setActiveViewId, setPendingSearchTarget
 ├── 剪贴板: copySelected, pasteClipboard（widget 节点会 cloneWidget 并重映射 widgetId）
 ├── 节点 CRUD: createNode, deleteNodes, changeNodeColor, addFolderChild, deleteFolderChild, updateFolderChildData
+├── Topic 树: beginTopicDraft, beginTopicRelativeDraft, commitTopicDraft, commitTopicTitle,
+│            detachTopicBranch, deleteTopicBranch（每个动作一次事务、一条画布历史）
 ├── 笔记池: detachNoteFromCanvas, pinNoteToCanvas
 ├── Hydration: hydrate(nodes, edges), reset(), _hydrated
 └── Undo/Redo: saveSnapshot, undo, redo, canUndo, canRedo (_undoRedo: UndoRedoState)
@@ -587,6 +625,7 @@ WidgetStore
 
 - **画布**：`undoRedo.ts` 导出 `pushSnapshot` / `undo` / `redo` 纯函数，不依赖 Zustand middleware。
 - **快照策略**：在破坏性操作前调用 `saveSnapshot()`（`createNode`、`deleteNodes`、`addConnection`、`pasteClipboard`、`changeNodeColor`、`addFolderChild`、`onNodeDragStart`）。
+- **Topic 事务边界**：「首次标题 + 建节点 + 建树边 + 排布」「改标题 + 改尺寸 + 排布」「删 / 拆 / 移分支」各只记一条画布历史——先算出并校验完整的下一份图，再记一次快照，并在一次图更新中同时写 nodes 和 edges；撤销一个新建主题不应需要按两次。Topic 没有独立内容栈。
 - **历史栈上限**：画布与每个 widget 各自最多 **50** 步。
 - **历史路由**：已迁移 Canvas Type 的离散内容更新进入 per-instance history；legacy widget 编辑继续使用 `undoWidget` / `redoWidget`；其他画布操作走画布 undo。各内容历史与画布历史互不感知。
 - **生命周期**：仅存在于内存中，关闭应用后清空。
@@ -1087,6 +1126,12 @@ type CanvasRPC = {
         params: { noteId: string; includeFrontmatter?: boolean };
         response: { canceled?: boolean; filePath?: string; success: boolean };
       };
+      // 主题大纲导出：Markdown 在渲染端由 shared/topicMarkdownExport.ts 生成，
+      // 主进程只负责保存对话框与落盘；空 markdown 被拒绝。
+      exportTopicOutline: {
+        params: { fileName: string; markdown: string };
+        response: { canceled?: boolean; filePath?: string; success: boolean };
+      };
       exportNotesMarkdown: {
         params: {
           scope: 'all' | 'selected' | 'view';
@@ -1304,7 +1349,7 @@ Edge 剥离 `selected`。
    - type=asset → 通过 attachmentFile / thumbnailFile hydrate previewUrl / thumbnailUrl，缺失时标记 missing
    - type=recording → 通过 attachmentFile hydrate previewUrl，保留 waveform/duration/recordingNumber，缺失时标记 missing
    - type=link → 直接使用 manifest 中的 URL 与 unfurl metadata
-   - type=sticky/group → 直接使用 manifest 中的 data
+   - type=sticky/group/topic → 直接使用 manifest 中的 data（Topic 层级随后由 nodes + `topic-child` 边推导出运行时索引）
    - type=folder → 遍历 children；Card / widget / Image / Asset / Recording / Link 同上；legacy checklist child 同样懒迁移
 5. loadWidgets(wsPath, widgetIds) → widgets map（单个缺失/损坏不影响整画布）
 6. 若发生迁移，把引用写回磁盘 manifest（仅 patch 迁移节点）
@@ -1327,7 +1372,7 @@ Folder 的子项通过 `data.children` 数组保存在 manifest 中，但 Card c
 - Asset child：走 `attachmentFile` / `thumbnailFile` / `waveform` 附件模式。
 - Link child：保存 URL 与 unfurl metadata。
 - Recording child：走 `attachmentFile` / `waveform` / `duration` / `recordingNumber` 附件模式。
-- **新准入不允许** Folder / Group / Sticky 作为 Folder child；当前 Checklist / Pomodoro / Reminder 的 Canvas Type 也声明 `canEnterFolder: false`。历史上已存入的 Widget / Extension child 是兼容数据，展开、搜索或 Extract 时必须保留其原 runtime type、引用和业务数据，不能因当前准入规则转成 Card。
+- **新准入不允许** Folder / Group / Sticky / Topic 作为 Folder child；当前 Checklist / Pomodoro / Reminder 的 Canvas Type 也声明 `canEnterFolder: false`。历史上已存入的 Widget / Extension child 是兼容数据，展开、搜索或 Extract 时必须保留其原 runtime type、引用和业务数据，不能因当前准入规则转成 Card。
 
 当前 Folder children 仍不是独立子画布：不持久化内部自由坐标（打开时用 waterfall 重算），不暴露跨层 Edge handle。需要表达外部关系时，仍连到 Folder 封面节点。
 
@@ -1469,7 +1514,7 @@ BlockNote 编辑器将文档结构保存为 JSON sidecar 文件（`content/.ghos
 
 1. **`onNodeDragStart`**：若节点有 `parentId`，解除父子关系，将局部坐标转换为画布绝对坐标。
 2. **`onNodeDrag`**：
-   - 内容节点（card/image/asset/link/recording/sticky）：`getIntersectingNodes` 检测 Group 交叉 → 高亮目标 Group；同时检测 Folder 重叠 → 设置 dropTarget。
+   - 内容节点（card/image/asset/link/recording/sticky/topic）：`getIntersectingNodes` 检测 Group 交叉 → 高亮目标 Group；同时检测 Folder 重叠 → 设置 dropTarget。Topic 只能整棵树进出 Group，且始终被 Folder 拒绝。
    - Group 节点：检测与其他 Group 的交叉（`isDescendant` 防循环）；自动推开重叠的非子节点卡片（按最短轴方向，碰撞检测避免推入其他 Group）。
 3. **`onNodeDragStop`**：
    - 若 drop 到 Folder → 移除画布节点，追加到 `folder.data.children`。

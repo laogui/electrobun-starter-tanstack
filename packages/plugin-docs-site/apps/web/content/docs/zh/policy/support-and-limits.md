@@ -42,4 +42,5 @@ GhostBoard 只对在发行包上实际运行过的内容宣称支持。此处未
 - **fake host 不是应用。** 作者测试不验证布局、持久化、对话框、安装、签名校验或平台行为。
 - **旧 ES module 闭包**可能在反复的开发重载中留在内存里；内存或重复行为成问题时重新加载窗口。
 - **混合撤销历史**（原生画布变化与插件批次交错）按工作区与视图存在，不跨重启；按批次 ID 的显式 `app.content.undo/redo` 可以。
+- **宿主自有的画布结构没有 API。** 宿主自带的核心节点类型不对插件开放扩展。具体来说，没有任何公开方式读写主题（Topic）标题、创建子主题、改变分支父级或顺序、干预主题排布，或订阅主题结构变化；主题只会作为 `content: null` 的 placement 出现在[选区](/zh/docs/guides/content-and-storage/#没有内容记录的-placement)中，`app.content` 也始终[只覆盖 Notes](/zh/docs/guides/content-and-storage/#note-快照)。为绕过这一点去读宿主 store 或 DOM 不受支持，且可能在任何版本失效。若将来开放，会作为新 SDK 版本中的加法 API 发布，并在[参考](/zh/docs/reference/sdk/)中标注 “since host x.y”。
 - **本版本没有 Bun 或原生后端入口**、没有逐 capability 审批 UI、没有应用内插件指南、没有市场。

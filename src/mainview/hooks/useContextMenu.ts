@@ -27,13 +27,21 @@ import {
 import {
   rpcExportNoteMarkdown,
   rpcExportNotesMarkdown,
+  rpcExportTopicOutline,
   rpcImportMarkdownFiles,
   rpcOpenExternalUrl,
   rpcRevealAttachment,
 } from '@/lib/rpc';
+import {
+  buildTopicIndex,
+  buildTopicOutline,
+  collectTopicBranch,
+  topicOutlineExportProblems,
+} from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../paraglide/messages.js';
 import { parseCanvasTypeMenuActionId } from '../../shared/extensions/ids';
+import { buildTopicOutlineMarkdown } from '../../shared/topicMarkdownExport';
 
 interface UseContextMenuOptions {
   onDeleteNodes?: (ids: string[]) => void;
@@ -65,6 +73,7 @@ type NodeContextTarget =
   | 'folder'
   | 'group'
   | 'sticky'
+  | 'topic'
   | 'image'
   | 'link'
   | 'recording'
@@ -81,6 +90,7 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   folder: 'folder',
   group: 'group',
   sticky: 'sticky',
+  topic: 'topic',
   image: 'image',
   link: 'link',
   recording: 'recording',
@@ -127,6 +137,14 @@ export function useContextMenu({
   const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
   const toggleNodesLocked = useCanvasStore((s) => s.toggleNodesLocked);
   const moveSelectedToView = useCanvasStore((s) => s.moveSelectedToView);
+  const setEditingTopicId = useCanvasStore((s) => s.setEditingTopicId);
+  const beginTopicRelativeDraft = useCanvasStore(
+    (s) => s.beginTopicRelativeDraft
+  );
+  const detachTopicBranch = useCanvasStore((s) => s.detachTopicBranch);
+  const deleteTopicBranch = useCanvasStore((s) => s.deleteTopicBranch);
+  const copyTopicBranch = useCanvasStore((s) => s.copyTopicBranch);
+  const tidyTopicBranch = useCanvasStore((s) => s.tidyTopicBranch);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
@@ -522,6 +540,31 @@ export function useContextMenu({
             .catch(() => toast(m.toast_export_failed()));
           break;
         }
+        case 'export-topic-outline': {
+          const { activeViewId, edges, nodes, views } =
+            useCanvasStore.getState();
+          const index = buildTopicIndex(nodes, edges);
+          if (topicOutlineExportProblems(index).length > 0) {
+            toast.error(m.toast_topic_outline_blocked());
+            break;
+          }
+          const viewName =
+            views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
+          const markdown = buildTopicOutlineMarkdown(
+            buildTopicOutline(index, nodes),
+            { heading: viewName }
+          );
+          rpcExportTopicOutline(markdown, `${viewName}-topics.md`)
+            .then((res) => {
+              if (res?.success) {
+                toast(m.toast_topic_outline_exported());
+              } else if (!res?.canceled) {
+                toast(m.toast_export_failed());
+              }
+            })
+            .catch(() => toast(m.toast_export_failed()));
+          break;
+        }
         case 'import-markdown': {
           // Capture position before the async gap — `contextMenu` will be
           // nulled by `onClose()` while the native file picker is open.
@@ -670,6 +713,63 @@ export function useContextMenu({
         case 'edit-folder': {
           if (nodeId) {
             setEditingFolderId(nodeId);
+          }
+          break;
+        }
+        case 'edit-topic-title': {
+          if (nodeId) {
+            setEditingTopicId(nodeId);
+          }
+          break;
+        }
+        case 'topic-new-child': {
+          if (nodeId) {
+            beginTopicRelativeDraft('child', nodeId);
+          }
+          break;
+        }
+        case 'topic-new-sibling': {
+          if (nodeId) {
+            beginTopicRelativeDraft('sibling', nodeId);
+          }
+          break;
+        }
+        case 'topic-copy-branch': {
+          if (nodeId) {
+            copyTopicBranch(nodeId);
+          }
+          break;
+        }
+        case 'topic-tidy-branch': {
+          if (nodeId) {
+            tidyTopicBranch(nodeId);
+          }
+          break;
+        }
+        case 'topic-select-branch': {
+          if (nodeId) {
+            const { edges, nodes, setNodes } = useCanvasStore.getState();
+            const branch = new Set(
+              collectTopicBranch(buildTopicIndex(nodes, edges), nodeId)
+            );
+            setNodes((current) =>
+              current.map((node) => ({
+                ...node,
+                selected: branch.has(node.id),
+              }))
+            );
+          }
+          break;
+        }
+        case 'topic-detach-branch': {
+          if (nodeId) {
+            detachTopicBranch(nodeId);
+          }
+          break;
+        }
+        case 'topic-delete-branch': {
+          if (nodeId) {
+            deleteTopicBranch(nodeId);
           }
           break;
         }
@@ -950,6 +1050,12 @@ export function useContextMenu({
       moveSelectedToView,
       onRequestCreate,
       onRequestCreateCanvasType,
+      setEditingTopicId,
+      beginTopicRelativeDraft,
+      copyTopicBranch,
+      detachTopicBranch,
+      deleteTopicBranch,
+      tidyTopicBranch,
     ]
   );
 

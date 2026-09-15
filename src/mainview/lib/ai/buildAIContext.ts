@@ -1,4 +1,4 @@
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 
 import type { AINodeContext } from '../../../shared/ai/types';
 import {
@@ -7,6 +7,7 @@ import {
   isExtensionInstanceLoadError,
 } from '../../../shared/extensions/instance';
 import { buildAbsoluteRects, type Rect } from '../collision';
+import { buildTopicIndex } from '../topicTree';
 
 /**
  * Serialize the renderer's live selection into the `AINodeContext[]` the Bun
@@ -95,6 +96,14 @@ function extractFromData(
       }
       return { title };
     }
+    case 'topic': {
+      // A Topic is its title; there is no body to summarize.
+      const title = asString(data.title);
+      if (!title) {
+        return null;
+      }
+      return { title };
+    }
     case 'link': {
       const title = asString(data.title);
       const url = asString(data.url);
@@ -141,11 +150,18 @@ function extractFromExtension(
   return { title, content };
 }
 
+/** The Topic's place in its tree, if it has one. */
+export interface TopicRelationContext {
+  order: number;
+  parentId: string;
+}
+
 /** Convert a single React Flow node to AI context, or null to skip it. */
 export function nodeToAIContext(
   node: Node,
   absoluteRect?: Rect,
-  extensionInstances?: ExtensionInstanceLookup
+  extensionInstances?: ExtensionInstanceLookup,
+  topicRelation?: TopicRelationContext
 ): AINodeContext | null {
   const nodeType = node.type ?? '';
   const data = (node.data ?? {}) as Record<string, unknown>;
@@ -170,23 +186,41 @@ export function nodeToAIContext(
       ? { x: absoluteRect.left, y: absoluteRect.top }
       : { x: node.position.x, y: node.position.y },
     ...(node.parentId ? { parentId: node.parentId } : {}),
+    ...(topicRelation
+      ? {
+          topicOrder: topicRelation.order,
+          topicParentId: topicRelation.parentId,
+        }
+      : {}),
     size: nodeSize(node, absoluteRect),
   };
 }
 
-/** Build the task context from the current selection. */
+/**
+ * Build the task context from the current selection.
+ *
+ * `edges` are read only to recover Topic parentage, which lives on tree edges
+ * rather than on the node. Without it a selected branch would reach the model
+ * as a flat list of titles with no outline.
+ */
 export function buildSelectionContext(
   nodes: Node[],
-  extensionInstances?: ExtensionInstanceLookup
+  extensionInstances?: ExtensionInstanceLookup,
+  edges: Edge[] = []
 ): AINodeContext[] {
   const selected = nodes.filter((node) => node.selected);
   const absoluteRects = buildAbsoluteRects(nodes);
+  const topicIndex = buildTopicIndex(nodes, edges);
   const contexts: AINodeContext[] = [];
   for (const node of selected) {
+    const relation = topicIndex.parentByChild.get(node.id);
     const context = nodeToAIContext(
       node,
       absoluteRects.get(node.id),
-      extensionInstances
+      extensionInstances,
+      relation
+        ? { order: relation.order, parentId: relation.parentId }
+        : undefined
     );
     if (context) {
       contexts.push(context);

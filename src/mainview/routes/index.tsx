@@ -110,6 +110,7 @@ import {
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
+import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
 import {
@@ -126,7 +127,12 @@ import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
-import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
+import {
+  type CreateNodeOptions,
+  previewTopicDraft,
+  previewTopicEdits,
+  useCanvasStore,
+} from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
@@ -427,6 +433,9 @@ function CanvasComponent() {
   const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
   const addConnection = useCanvasStore((s) => s.addConnection);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
+  const beginTopicDraft = useCanvasStore((s) => s.beginTopicDraft);
+  const topicDraft = useCanvasStore((s) => s.topicDraft);
+  const topicEditPreviews = useCanvasStore((s) => s.topicEditPreviews);
   const undo = useCanvasStore((s) => s.undo);
   const rfInstance = useRef<ReactFlowInstance<any, any> | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -659,15 +668,21 @@ function CanvasComponent() {
         toast.error('Canvas JSON did not contain importable nodes.');
         return;
       }
+      if (
+        !(await hasNodeQuota(state.nodes, countCountedNodes(imported.nodes)))
+      ) {
+        return;
+      }
 
-      state.saveSnapshot();
-      state.setNodes((prev) =>
+      const latest = useCanvasStore.getState();
+      latest.saveSnapshot();
+      latest.setNodes((prev) =>
         sortNodesByParent([
           ...prev.map((node) => ({ ...node, selected: false })),
           ...imported.nodes,
         ])
       );
-      state.setEdges((prev) => [...prev, ...imported.edges]);
+      latest.setEdges((prev) => [...prev, ...imported.edges]);
       if (skippedWidgetCount > 0) {
         toast.warning(
           `Skipped ${skippedWidgetCount} widget(s) that could not be imported.`
@@ -996,6 +1011,16 @@ function CanvasComponent() {
   // menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
+      if (kind === 'topic') {
+        // A Topic starts as an editable draft, not a node: an abandoned one
+        // leaves no empty node and no undo entry behind.
+        beginTopicDraft(rfInstance.current, {
+          ...(request?.anchorCenter
+            ? { anchorCenter: request.anchorCenter }
+            : {}),
+        });
+        return;
+      }
       if (kind === 'link') {
         setLinkPrompt({
           anchorCenter: request?.anchorCenter,
@@ -1036,6 +1061,7 @@ function CanvasComponent() {
       );
     },
     [
+      beginTopicDraft,
       createWidgetRecord,
       onCreateNode,
       openAssetFilePicker,
@@ -1046,6 +1072,15 @@ function CanvasComponent() {
 
   const createFromBottomMenu = useCallback(
     async (kind: CreatableCanvasNodeKind, options?: CreateNodeOptions) => {
+      if (kind === 'topic') {
+        beginTopicDraft(rfInstance.current, {
+          ...(options?.anchor ? { anchor: options.anchor } : {}),
+          ...(options?.anchorCenter
+            ? { anchorCenter: options.anchorCenter }
+            : {}),
+        });
+        return;
+      }
       if (isWidgetCreateKind(kind)) {
         const widget = await createWidgetRecord(kind);
         if (!widget) {
@@ -1068,7 +1103,7 @@ function CanvasComponent() {
       }
       await onCreateNode(kind);
     },
-    [createWidgetRecord, onCreateNode]
+    [beginTopicDraft, createWidgetRecord, onCreateNode]
   );
 
   const createCanvasTypeWithState = useCallback(
@@ -1725,19 +1760,36 @@ function CanvasComponent() {
     [onNodesChange]
   );
 
+  // The in-flight Topic draft is rendered like a node but lives outside the
+  // store's `nodes`, so it never reaches persistence, history, selection, or
+  // the node count. It joins the graph only when the first title is committed.
+  const topicPreview = useMemo(() => {
+    const draft = previewTopicDraft(nodes, edges, topicDraft, activeViewId);
+    return {
+      ...draft,
+      nodes: previewTopicEdits(draft.nodes, topicEditPreviews),
+    };
+  }, [nodes, edges, topicDraft, activeViewId, topicEditPreviews]);
+
   const renderSourceNodes = useMemo(() => {
+    const baseNodes = topicPreview.nodes;
     if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
-      return nodes;
+      return baseNodes;
     }
-    const combined = [...nodes, ...folderExpansionNodes];
+    const combined = [...baseNodes, ...folderExpansionNodes];
     return applyDragRepulsion({
       activeIds: new Set(folderExpansionNodes.map((node) => node.id)),
       gap: FOLDER_EXPANSION_GAP,
       nodes: combined,
-      origins: captureRepulsionOrigins(nodes),
+      origins: captureRepulsionOrigins(baseNodes),
       paused: closingFolderId === focusedFolderId,
     });
-  }, [closingFolderId, focusedFolderId, folderExpansionNodes, nodes]);
+  }, [
+    closingFolderId,
+    focusedFolderId,
+    folderExpansionNodes,
+    topicPreview.nodes,
+  ]);
 
   // Decorate nodes with render-only flags while keeping object identity stable
   // for unchanged nodes. Without the cache, every store update (including each
@@ -2123,6 +2175,7 @@ function CanvasComponent() {
         )}
         ref={canvasContainerRef}
         role="application"
+        tabIndex={-1}
       >
         <ReactFlow
           connectionLineComponent={ConnectionPreviewLine}
@@ -2131,7 +2184,7 @@ function CanvasComponent() {
           defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
           defaultViewport={sessionViewport ?? undefined}
           disableKeyboardA11y
-          edges={edges}
+          edges={topicPreview.edges}
           edgeTypes={edgeTypes}
           elevateEdgesOnSelect
           fitView={!sessionViewport}

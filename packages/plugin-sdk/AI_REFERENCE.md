@@ -124,7 +124,12 @@ app.commands.register({
 });
 ```
 
-Use plugin-local kebab-case IDs. Host shortcuts and text editing take priority.
+Use plugin-local kebab-case IDs. Host shortcuts and text editing take priority:
+reserved host shortcuts, IME composition, key repeat, and keys the focused
+context already owns never reach a plugin command. That includes the canvas
+keys that act on a selected core node — for example `Tab`, `Enter` and `F2`
+while a Topic is selected or its title is being edited — so do not bind a
+plugin command to a bare key and expect it to fire everywhere.
 Put business behavior in one function and call it from every entry point.
 
 ## Panels
@@ -238,7 +243,10 @@ Register arbitrary owned resources with `app.onCleanup`. Track a browser
 
 ## Note content
 
-Content snapshots are persisted Note projections, not lossless editor blocks:
+Content snapshots are persisted Note projections, not lossless editor blocks.
+`app.content` covers Notes only: widgets, extension instances and core host
+node types such as Topic are not exposed as content snapshots, and editing them
+does not emit a `content.changed` event describing a Note.
 
 ```ts
 interface NoteContentSnapshot {
@@ -336,6 +344,23 @@ interface PluginSelection {
 persisted Notes. `getPlacements()` includes selected widgets/extensions and
 placement IDs. `getSnapshot()` distinguishes `loading`, `ready`, and `error`.
 
+Core host node types without a backing content record — folders, groups,
+images and Topics — appear in `getPlacements()` with `content: null` and never
+in `get()` or `getSnapshot().items`. Selecting a container does not expand its
+children, and selecting a Topic does not expand its subtree: one selected
+Topic is exactly one placement. A mixed selection is therefore normal:
+
+```js
+app.selection.getPlacements().items;
+// [
+//   { id: 'topic-1', content: null },
+//   { id: 'note-placement', content: { id: 'note-1', kind: 'note' } },
+// ]
+```
+
+Read the Notes with `get()` and treat null-content placements as "present but
+not readable through this API" rather than filtering them out silently.
+
 React panels can import:
 
 ```ts
@@ -419,7 +444,15 @@ app.canvas.registerType({
 });
 ```
 
-The persisted type is `${pluginId}/${id}`. `summarize` supplies search,
+The persisted type is `${pluginId}/${id}`. Registered types are always
+`extension` nodes: a plugin cannot register, replace or impersonate a core host
+type such as a card, sticky, Topic, folder or group. Topic hierarchy in
+particular is host-owned — it lives on host-managed tree edges, and there is no
+SDK call to read a Topic title, create a subtopic, reparent a branch or drive
+its layout, and no event that reports topic structure changes. Use
+`registerType` for your own versioned instance state, not to model host trees.
+
+`summarize` supplies search,
 accessibility, preview, export, and missing-plugin fallback text. Treat state as
 untrusted input; validate it and provide migrations when increasing
 `dataVersion`. `updateState` returns the committed revision. Use
@@ -677,8 +710,11 @@ the `@ghostboard/sdk` package, source tests, or the host repository.
 
 ## Compatibility
 
-Reference version: `@ghostboard/sdk` `0.1.0` for GhostBoard hosts matching
+Reference version: `@ghostboard/sdk` `0.1.1` for GhostBoard hosts matching
 `>=1.0.0 <2.0.0`. `create-ghostboard-plugin` `0.1.0` generates that range.
+`0.1.1` adds no API: it documents how existing selection, command and canvas
+APIs behave next to host-owned core node types such as Topic. Templates
+pinning `^0.1.0` need no change.
 
 - `engines.ghostboard` must be exactly `>=a.b.c <x.y.z`. A host outside the
   range reports `incompatible-host-api`, runs no plugin code, and keeps the
@@ -713,6 +749,8 @@ Reference version: `@ghostboard/sdk` `0.1.0` for GhostBoard hosts matching
 - Treat snapshots and file input as untrusted; validate sizes, shapes, fields,
   revisions, and state.
 - Do not use host-private imports, stores, DOM, components, or filesystem paths.
+  Host-owned structures such as Topic trees have no public API; do not reach
+  into internal stores to reach them.
 - Test setup and pure behavior with `@ghostboard/sdk/testing`.
 - Build React with shared React/SDK imports externalized.
 - Run `bun run package` and install the resulting archive in a packaged app.

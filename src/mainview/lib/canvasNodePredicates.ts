@@ -48,6 +48,7 @@ const CANVAS_CONTENT_NODE_TYPES = new Set<string>([
   'card',
   'image',
   'sticky',
+  'topic',
   'asset',
   'link',
   'recording',
@@ -103,6 +104,9 @@ export function isFolderChildNode(
  *  (sticky, folder, group, and leftover checklist/pomodoro/reminder widgets). */
 const REJECTED_FOLDER_CHILD_NODE_TYPES = new Set<string>([
   'sticky',
+  // A Topic belongs to a tree, and a tree edge may not cross a Folder
+  // boundary, so a Folder must repel one rather than absorb it.
+  'topic',
   'folder',
   'group',
   'widget',

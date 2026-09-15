@@ -8,6 +8,7 @@ import { useCanvasKeyboard } from '@/hooks/useCanvasKeyboard';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
+import { createTopicData } from '../../shared/topic';
 
 const PASTE_ID_RE = /^paste-/;
 
@@ -23,6 +24,9 @@ vi.mock('../../paraglide/messages.js', () => ({
   toast_titles_normalize_failed: () => 'Could not normalize titles',
   toast_plugin_command_completed: () => 'Plugin command completed',
   toast_plugin_command_failed: () => 'Plugin command failed',
+  toast_topic_tree_frozen: () => 'Tree frozen',
+  toast_node_quota: () => 'Quota reached',
+  toast_topic_write_paused: () => 'Write paused',
 }));
 
 const TestComponent = () => {
@@ -86,7 +90,7 @@ describe('useCanvasKeyboard', () => {
     expect(useCanvasStore.getState().nodes).toEqual([]);
   });
 
-  it('copies and pastes selected nodes with modifier shortcuts', () => {
+  it('copies and pastes selected nodes with modifier shortcuts', async () => {
     useCanvasStore.setState({
       nodes: [
         {
@@ -105,6 +109,9 @@ describe('useCanvasKeyboard', () => {
     expect(useCanvasStore.getState().clipboard).toHaveLength(1);
 
     dispatchKeyboard({ key: 'v', metaKey: true, cancelable: true });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
     expect(useCanvasStore.getState().nodes[1]?.id).toMatch(PASTE_ID_RE);
   });
@@ -137,7 +144,7 @@ describe('useCanvasKeyboard', () => {
     expect(state.nodes.map((node) => node.id)).toEqual(['node-2']);
   });
 
-  it('duplicates selected nodes with Cmd+D', () => {
+  it('duplicates selected nodes with Cmd+D', async () => {
     useCanvasStore.setState({
       nodes: [
         {
@@ -152,6 +159,9 @@ describe('useCanvasKeyboard', () => {
 
     render(<TestComponent />);
     dispatchKeyboard({ key: 'd', metaKey: true, cancelable: true });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const state = useCanvasStore.getState();
     expect(state.nodes).toHaveLength(2);
@@ -755,6 +765,117 @@ describe('useCanvasKeyboard', () => {
     const state = useCanvasStore.getState();
     expect(state.searchOpen).toBe(false);
     expect(state.pendingSearchQuery).toBeNull();
+  });
+
+  it('does not intercept Tab for a selected Topic outside command context', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          data: { ...createTopicData('Root') },
+          id: 'topic-1',
+          position: { x: 0, y: 0 },
+          selected: true,
+          type: 'topic',
+        },
+      ],
+      topicCommandContextId: null,
+    });
+    render(<TestComponent />);
+
+    let prevented = false;
+    act(() => {
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Tab',
+      });
+      globalThis.dispatchEvent(event);
+      prevented = event.defaultPrevented;
+    });
+
+    expect(prevented).toBe(false);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+  });
+
+  it('creates a child draft on Tab only while Topic command context is active', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          data: { ...createTopicData('Root') },
+          id: 'topic-1',
+          position: { x: 0, y: 0 },
+          selected: true,
+          type: 'topic',
+        },
+      ],
+      topicCommandContextId: 'topic-1',
+    });
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ cancelable: true, key: 'Tab' });
+    });
+    expect(useCanvasStore.getState().topicDraft?.relation).toEqual({
+      kind: 'child',
+      topicId: 'topic-1',
+    });
+  });
+
+  it('lets Tab leave after Esc exits Topic command context', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          data: { ...createTopicData('Root') },
+          id: 'topic-1',
+          position: { x: 0, y: 0 },
+          selected: true,
+          type: 'topic',
+        },
+      ],
+      topicCommandContextId: 'topic-1',
+    });
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'Escape' });
+    });
+    expect(useCanvasStore.getState().topicCommandContextId).toBeNull();
+    expect(useCanvasStore.getState().nodes[0]?.selected).toBe(true);
+
+    let prevented = false;
+    act(() => {
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Tab',
+      });
+      globalThis.dispatchEvent(event);
+      prevented = event.defaultPrevented;
+    });
+    expect(prevented).toBe(false);
+    expect(useCanvasStore.getState().topicDraft).toBeNull();
+  });
+
+  it('F2 re-enters Topic command context on a selected Topic', () => {
+    useCanvasStore.setState({
+      nodes: [
+        {
+          data: { ...createTopicData('Root') },
+          id: 'topic-1',
+          position: { x: 0, y: 0 },
+          selected: true,
+          type: 'topic',
+        },
+      ],
+      topicCommandContextId: null,
+    });
+    render(<TestComponent />);
+
+    act(() => {
+      dispatchKeyboard({ key: 'F2' });
+    });
+    expect(useCanvasStore.getState().editingTopicId).toBe('topic-1');
+    expect(useCanvasStore.getState().topicCommandContextId).toBe('topic-1');
   });
 
   it('cleans up the keydown listener on unmount', () => {

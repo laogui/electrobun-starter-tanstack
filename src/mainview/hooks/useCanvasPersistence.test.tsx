@@ -19,6 +19,8 @@ vi.mock('@/lib/rpc', () => ({
 vi.mock('../../paraglide/messages.js', () => ({
   default_folder_title: () => 'New Folder',
   default_new_group_label: () => 'New Group',
+  toast_topic_write_paused: () => 'Write paused',
+  toast_node_quota: () => 'Quota reached',
 }));
 
 const TestComponent = () => {
@@ -52,6 +54,51 @@ describe('useCanvasPersistence', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('keeps title edit previews out of autosave, including dimension feedback', async () => {
+    const node = {
+      id: 'topic',
+      type: 'topic',
+      position: { x: 0, y: 0 },
+      data: { title: 'Original', topicVersion: 1 },
+      style: { width: 120, height: 40 },
+    };
+    useCanvasStore.setState({ nodes: [node] });
+    render(<TestComponent />);
+    await vi.runAllTicks();
+    useCanvasStore.getState().setTopicEditPreview('topic', 'Uncommitted title');
+    useCanvasStore.getState().applyNodesChange([
+      {
+        id: 'topic',
+        type: 'dimensions',
+        dimensions: { width: 300, height: 80 },
+      },
+    ]);
+    vi.advanceTimersByTime(2600);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+    // An unrelated edit can trigger a save while the title editor is open.
+    useCanvasStore
+      .getState()
+      .setNodes((nodes) =>
+        nodes.map((n) => ({ ...n, position: { x: 10, y: 0 } }))
+      );
+    vi.advanceTimersByTime(2600);
+    expect(rpcMocks.rpcSaveManifest).toHaveBeenCalledWith(
+      'default',
+      [{ ...node, position: { x: 10, y: 0 } }],
+      []
+    );
+    useCanvasStore.getState().resetTopicEditPreview('topic');
+    // A late observer event after cancellation must also be ignored.
+    useCanvasStore.getState().applyNodesChange([
+      {
+        id: 'topic',
+        type: 'dimensions',
+        dimensions: { width: 300, height: 80 },
+      },
+    ]);
+    expect(useCanvasStore.getState().nodes[0]?.style).toEqual(node.style);
   });
 
   it('skips changes while canvas is not hydrated', async () => {
@@ -234,6 +281,21 @@ describe('useCanvasPersistence', () => {
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
 
     // Pending timer should have been cancelled too
+    vi.advanceTimersByTime(3000);
+    expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a write-paused canvas', async () => {
+    useCanvasStore.setState({ topicWritePaused: true });
+    render(<TestComponent />);
+    await vi.runAllTicks();
+
+    useCanvasStore
+      .getState()
+      .setNodes([
+        { id: 'node-1', type: 'card', position: { x: 30, y: 30 }, data: {} },
+      ]);
+
     vi.advanceTimersByTime(3000);
     expect(rpcMocks.rpcSaveManifest).not.toHaveBeenCalled();
   });

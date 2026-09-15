@@ -47,6 +47,7 @@ import {
 import { resolveExtensionMessage } from '@/extensions/messages';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
+import { buildTopicIndex } from '@/lib/topicTree';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
@@ -54,6 +55,7 @@ import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
 import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
+import { isTopicNodeType, isTopicTreeEdge } from '../../../shared/topic';
 
 interface MenuItem {
   danger?: boolean;
@@ -83,6 +85,7 @@ type ContextMenuState = {
     | 'folder'
     | 'group'
     | 'sticky'
+    | 'topic'
     | 'recording'
     | 'widget'
     | 'extension'
@@ -95,7 +98,10 @@ type ContextMenuState = {
   folderId?: string;
 } | null;
 
-const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
+const getCanvasItems = (
+  hasClipboard: boolean,
+  hasTopics: boolean
+): MenuItem[] => [
   {
     id: 'new',
     label: m.menu_new(),
@@ -131,6 +137,14 @@ const getCanvasItems = (hasClipboard: boolean): MenuItem[] => [
     id: 'export-canvas-markdown',
     label: m.menu_export_canvas_markdown(),
     icon: FileDown,
+  },
+  {
+    id: 'export-topic-outline',
+    label: m.menu_export_topic_outline(),
+    icon: FileDown,
+    // Nothing to project when the canvas has no Topics; offering the action
+    // would only produce an empty file.
+    disabled: !hasTopics,
   },
 ];
 
@@ -218,6 +232,69 @@ const getFolderItems = (locked: boolean): MenuItem[] => [
     label: m.menu_delete(),
     icon: Trash2,
     shortcut: '⌫',
+    danger: true,
+  },
+];
+
+/**
+ * `hasParent` gates the sibling and detach actions: a root has no sibling slot
+ * and no parent relation to cut.
+ */
+const getTopicItems = (locked: boolean, hasParent: boolean): MenuItem[] => [
+  { id: 'edit-topic-title', label: m.menu_edit_label(), icon: PenLine },
+  {
+    id: 'topic-new-child',
+    label: m.menu_topic_new_child(),
+    icon: Plus,
+    shortcut: '⇥',
+  },
+  ...(hasParent
+    ? [
+        {
+          id: 'topic-new-sibling',
+          label: m.menu_topic_new_sibling(),
+          icon: Plus,
+          shortcut: '⏎',
+        },
+      ]
+    : []),
+  {
+    id: 'topic-select-branch',
+    label: m.menu_topic_select_branch(),
+    icon: Layers,
+  },
+  {
+    id: 'topic-copy-branch',
+    label: m.menu_topic_copy_branch(),
+    icon: Copy,
+  },
+  {
+    id: 'topic-tidy-branch',
+    label: m.menu_topic_tidy_branch(),
+    icon: Sparkles,
+  },
+  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
+  lockItem(locked),
+  ...(hasParent
+    ? [
+        {
+          id: 'topic-detach-branch',
+          label: m.menu_topic_detach_branch(),
+          icon: LogOut,
+        },
+      ]
+    : []),
+  {
+    id: 'delete',
+    label: m.menu_delete(),
+    icon: Trash2,
+    shortcut: '⌫',
+    danger: true,
+  },
+  {
+    id: 'topic-delete-branch',
+    label: m.menu_topic_delete_branch(),
+    icon: Trash2,
     danger: true,
   },
 ];
@@ -491,27 +568,40 @@ const getRecordingItems = (locked: boolean): MenuItem[] => [
 
 type EdgePathType = 'smoothstep' | 'bezier';
 
-const getEdgeItems = (pathType: EdgePathType): MenuItem[] => [
-  { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
-  {
-    id: 'toggle-edge-animated',
-    label: m.menu_toggle_animation(),
-    icon: Sparkles,
-  },
-  {
-    id: 'toggle-edge-path-type',
-    label:
-      pathType === 'bezier' ? m.menu_toggle_straight() : m.menu_toggle_curved(),
-    icon: Spline,
-  },
-  { id: 'cycle-edge-color', label: m.menu_edge_color(), icon: Palette },
-  {
-    id: 'delete-edge',
-    label: m.menu_delete_edge(),
-    icon: Trash2,
-    danger: true,
-  },
-];
+const getEdgeItems = (
+  pathType: EdgePathType,
+  isTreeEdge: boolean
+): MenuItem[] => {
+  if (isTreeEdge) {
+    // A Topic tree relation has no label, animation, path type, or colour of
+    // its own, and removing it re-parents a branch rather than deleting a
+    // line, so none of the generic edge actions apply.
+    return [];
+  }
+  return [
+    { id: 'edit-edge-label', label: m.menu_edit_label(), icon: Tag },
+    {
+      id: 'toggle-edge-animated',
+      label: m.menu_toggle_animation(),
+      icon: Sparkles,
+    },
+    {
+      id: 'toggle-edge-path-type',
+      label:
+        pathType === 'bezier'
+          ? m.menu_toggle_straight()
+          : m.menu_toggle_curved(),
+      icon: Spline,
+    },
+    { id: 'cycle-edge-color', label: m.menu_edge_color(), icon: Palette },
+    {
+      id: 'delete-edge',
+      label: m.menu_delete_edge(),
+      icon: Trash2,
+      danger: true,
+    },
+  ];
+};
 
 export type { ContextMenuState };
 
@@ -579,6 +669,24 @@ export function CanvasContextMenu({
       ?.pathType;
     return pathType === 'smoothstep' ? 'smoothstep' : 'bezier';
   });
+  const hasTopics = useCanvasStore((state) =>
+    state.nodes.some((node) => isTopicNodeType(node.type))
+  );
+  const topicHasParent = useCanvasStore((state) => {
+    if (menu?.target !== 'topic' || !menu.nodeId) {
+      return false;
+    }
+    return buildTopicIndex(state.nodes, state.edges).parentByChild.has(
+      menu.nodeId
+    );
+  });
+  const edgeIsTreeEdge = useCanvasStore((state) => {
+    if (menu?.target !== 'edge' || !menu.edgeId) {
+      return false;
+    }
+    const edge = state.edges.find((item) => item.id === menu.edgeId);
+    return Boolean(edge && isTopicTreeEdge(edge));
+  });
   const nodeLocked = useCanvasStore((state) => {
     if (!menu?.nodeId) {
       return false;
@@ -633,11 +741,12 @@ export function CanvasContextMenu({
   });
 
   const itemGetters: Record<string, () => MenuItem[]> = {
-    edge: () => getEdgeItems(edgePathType),
+    edge: () => getEdgeItems(edgePathType, edgeIsTreeEdge),
     'folder-child': getFolderChildItems,
     folder: () => getFolderItems(nodeLocked),
     group: () => getGroupItems(nodeLocked),
     sticky: () => getStickyItems(nodeLocked),
+    topic: () => getTopicItems(nodeLocked, topicHasParent),
     image: () => getImageItems(nodeLocked),
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
@@ -646,11 +755,14 @@ export function CanvasContextMenu({
     extension: () => getExtensionItems(nodeLocked, extensionMenuItems),
     card: () => getCardItems(nodeLocked),
     multi: () => getMultiItems(views, activeViewId, allSelectedLocked),
-    canvas: () => getCanvasItems(hasClipboard),
+    canvas: () => getCanvasItems(hasClipboard, hasTopics),
   };
 
   const baseItems = menu
-    ? (itemGetters[menu.target] ?? (() => getCanvasItems(hasClipboard)))()
+    ? (
+        itemGetters[menu.target] ??
+        (() => getCanvasItems(hasClipboard, hasTopics))
+      )()
     : [];
   const items = menu?.folderId
     ? getExpandedFolderChildItems(baseItems)

@@ -32,6 +32,8 @@ import type { RecordingRuntimeData } from './RecordingNode';
 import { RecordingContent } from './RecordingNode';
 import type { StickyData } from './StickyNode';
 import { StickyContent } from './StickyNode';
+import type { TopicData } from './TopicNode';
+import { TopicContent } from './TopicNode';
 import type { WidgetNodeData } from './WidgetNode';
 import { WidgetNodeReadOnly } from './WidgetNode';
 
@@ -136,6 +138,14 @@ export const StickyNodeReadOnly = memo(({ data }: { data: StickyData }) => (
   </div>
 ));
 StickyNodeReadOnly.displayName = 'StickyNodeReadOnly';
+
+export const TopicNodeReadOnly = memo(({ data }: { data: TopicData }) => (
+  <div className="size-full">
+    <ReadOnlyHandles />
+    <TopicContent data={data} />
+  </div>
+));
+TopicNodeReadOnly.displayName = 'TopicNodeReadOnly';
 
 export const FolderNodeReadOnly = memo(({ data }: { data: FolderData }) => (
   <div className="relative size-full">

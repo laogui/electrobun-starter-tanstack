@@ -1,3 +1,4 @@
+import { getEdgeLabelText } from '../shared/canvasEdgeFields';
 import {
   searchKindForCanvasType,
   widgetKindForCanvasType,
@@ -573,6 +574,11 @@ function addManifestNodeMatches(
     case 'sticky':
       candidates.push({ field: 'content', value: asString(data.content) });
       break;
+    case 'topic':
+      // Matched even when `topicVersion` is unknown: a forward-version record
+      // should still be findable so the user can locate and inspect it.
+      candidates.push({ field: 'title', value: asString(data.title) });
+      break;
     case 'folder':
       candidates.push({ field: 'title', value: asString(data.title) });
       candidates.push({ field: 'subtitle', value: asString(data.subtitle) });
@@ -651,40 +657,37 @@ function addEdgeMatches(
   queryLower: string
 ) {
   const { edge, viewId, viewName } = ref;
-  const dataLabel = asString(
-    (edge as { data?: { label?: unknown } }).data?.label
-  );
-  const candidates: string[] = [];
-  if (edge.label) {
-    candidates.push(asString(edge.label));
+  // Index the same label the canvas renders. When `data.label` and the
+  // historical top-level `label` disagree, indexing both would surface a hit
+  // the user cannot see on the edge.
+  const value = getEdgeLabelText(edge);
+  if (!value) {
+    return;
   }
-  if (dataLabel && dataLabel !== edge.label) {
-    candidates.push(dataLabel);
+  const idx = indexOfCi(value, queryLower);
+  if (idx === -1) {
+    return;
   }
-  for (const value of candidates) {
-    const idx = indexOfCi(value, queryLower);
-    if (idx === -1) {
-      continue;
-    }
-    results.push({
-      id: `edge:${viewId}:${edge.id}:label`,
-      kind: 'edge',
-      target: { type: 'edge', viewId, edgeId: edge.id },
-      viewId,
-      viewName,
-      edgeId: edge.id,
-      title: value,
-      excerpt: shortTextExcerpt(value),
-      matchField: 'label',
-      score: scoreFor('label', idx === 0),
-    });
-  }
+  results.push({
+    id: `edge:${viewId}:${edge.id}:label`,
+    kind: 'edge',
+    target: { type: 'edge', viewId, edgeId: edge.id },
+    viewId,
+    viewName,
+    edgeId: edge.id,
+    title: value,
+    excerpt: shortTextExcerpt(value),
+    matchField: 'label',
+    score: scoreFor('label', idx === 0),
+  });
 }
 
 function nodeKind(nodeType: string): SearchResultKind {
   switch (nodeType) {
     case 'sticky':
       return 'sticky';
+    case 'topic':
+      return 'topic';
     case 'folder':
       return 'folder';
     case 'group':

@@ -16,6 +16,30 @@ function createNode(overrides?: Partial<Node>): Node {
 }
 
 describe('applyCanvasNodeChanges', () => {
+  it('ignores Topic dimensions while applying other changes in the same batch', () => {
+    const topic = createNode({ id: 'topic', type: 'topic' });
+    const nodes = [topic, createNode()];
+    const updated = applyCanvasNodeChanges(
+      [
+        {
+          id: 'topic',
+          type: 'dimensions',
+          dimensions: { width: 800, height: 900 },
+          setAttributes: true,
+        },
+        { id: 'topic', type: 'position', position: { x: 25, y: 30 } },
+        {
+          id: 'note-1',
+          type: 'dimensions',
+          dimensions: { width: 500, height: 600 },
+        },
+      ],
+      nodes
+    );
+    expect(updated[0]).toEqual({ ...topic, position: { x: 25, y: 30 } });
+    expect(updated[1]?.style).toEqual({ width: 500, height: 600 });
+  });
+
   it('copies resized dimensions into node style for persistence', () => {
     const nodes = [createNode()];
     const changes: NodeChange[] = [

@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | 宿主版本 | `1.0.0` | 根 `package.json` `version`，经 `GHOSTBOARD_VERSION` 暴露 | `engines.ghostboard` 范围检查的被比较值 |
 | manifest 版本 | `2` | `PLUGIN_MANIFEST_VERSION` | 唯一被加载的 manifest 契约 |
-| SDK npm 版本 | `0.1.0` | `packages/plugin-sdk/package.json`，运行时 `runtime.version` | 作者类型、fake host、packer 与单文件参考 |
+| SDK npm 版本 | `0.1.1` | `packages/plugin-sdk/package.json`，运行时 `runtime.version` | 作者类型、fake host、packer 与单文件参考 |
 | 脚手架版本 | `0.1.0` | `packages/create-plugin/package.json` | `create-ghostboard-plugin` 模板 |
 | 模板默认 `engines.ghostboard` | `>=1.0.0 <2.0.0` | 四个模板的 `manifest.json` | 新插件默认宣称的宿主范围 |
 
@@ -32,6 +32,8 @@
 | `@ghostboard/sdk` | 宿主范围 | `create-ghostboard-plugin` | 说明 |
 | --- | --- | --- | --- |
 | `0.1.x` | `>=1.0.0 <2.0.0` | `0.1.x` | T1–T4 冻结的全部公开 API；无 Bun 后端入口 |
+
+`0.1.1` 是纯文档 patch：不新增、不修改任何 API，只补写既有 selection / commands / canvas API 在宿主自有核心节点类型（如 Topic）旁边的行为边界。模板固定的 `^0.1.0` 已覆盖该版本，无需改动模板或 `engines` 范围。
 
 SDK 的 patch / minor 只修正类型、fake host、参考文本或增加与宿主同步的新 API；SDK major 与宿主 major 一起变化。文档站参考页随 SDK npm 版本同步，页面顶部显示来源版本。
 

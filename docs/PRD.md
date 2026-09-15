@@ -46,13 +46,19 @@
 - 流畅动效负责维持空间上下文，不替代可用性与数据可靠性验收。不以下载量、付费率或发布完成度作为当前开发目标。
 - 公开插件另以“独立开发 → URL/ZIP 安装 → 实际使用 → 更新与恢复”的完整流程验收，四类插件均须可用；不能用新增卡片数量代替平台验收，也不能因基础流程验收而跳过插件要求。
 
+### 1.3.1 Topic 与轻量思维导图（2026-09-14 实施完成，未验收）
+
+用户提出思维导图场景缺少轻量主题节点，现有 Sticky 虽可原地编辑和调整大小，仍需逐个创建、连线与排布。[Topic 实施方案](./features/In%20Progress/topic-mindmap-implementation-plan.md) 的主体已落地：核心「主题」类型、Tab/Enter 连续创建、以树边为唯一真源的层级、向右自动排布、分支选择/拆出/删除，以及主题大纲 Markdown 导出。
+
+2026-09-14 的评审曾查出七项方案条款未实现（布局避让层、离开画布前的草稿提交、Tab 命令上下文与 Esc 退出、大纲导出的非法关系门禁、复制/整理分支动作、有损解码时的写保护与 manifest 备份、复制/导入路径的额度一致性），当日已全部补齐并各自带测试，逐条记录见 [开发计划 §1.1](./development-plan.md#11-topic-与轻量思维导图2026-09-14) 的 TG-1–TG-7。**桌面验收尚未开始**，本节按已实现的行为描述，但阶段状态不得据此升级为已验收。
+
 ### 1.4 当前不扩张的方向
 
 - 暂不确定垂直行业路线，不新增专门的论文引用系统或完整脚本编辑器。
 - 公开插件开发、分发、URL/ZIP 安装与更新属于正式范围；插件市场的评分、交易、付费和推荐系统仍延期，安装不依赖官方账号或市场在线。
 - 暂不扩张多人实时协作、移动端与支付订阅流程。
 - 已有小组件与 AI 保留，优先补齐安全与行为边界，不为丰富功能清单继续增加类型。
-- 有序大纲导出、网页剪藏、摘录溯源等先作为候选需求；只有现有手工流程的阻断点明确后，才进入下一轮开发。
+- 网页剪藏、摘录溯源等先作为候选需求；只有现有手工流程的阻断点明确后，才进入下一轮开发。「主题大纲 Markdown 导出」已随 Topic 落地，但它只输出主题标题与层级；把整张画布转成有序文章仍是候选需求。
 
 ## 2. 核心功能模块与交互逻辑
 
@@ -69,7 +75,7 @@
 | Productivity | Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可进入 Folder，见 [Checklist](../src/mainview/extensions/builtin/productivity/checklist.tsx)、[Pomodoro](../src/mainview/extensions/builtin/productivity/pomodoro.tsx)、[Reminder](../src/mainview/extensions/builtin/productivity/reminder.tsx) | OD-6 已冻结并完成 2026-09-07 桌面验收：Checklist 保留完整详情编辑，Pomodoro / Reminder 保持画布内操作；禁止新放入 Folder，旧 Folder 内条目可预览、搜索、打开并无损取回 |
 | 内容引用 | [迁移序列化](../src/shared/extensions/migrateNodes.ts) 将 extension 节点写为 `canvasTypeId + instanceId` 引用，并保留 `detached` 等宿主标记 | §5 的 widget/media 旧存储描述不能当作迁移后全部类型的现状；验收复制、保存重载与找回时不能丢失实例状态 |
 | 搜索 | [searchWorkspace](../src/bun/search.ts) 已分别收集 Note / Widget / Extension 引用；Widget 与 Extension 有 Folder children 引用收集，Note 正文引用仍从顶层循环建立 | 不再笼统写“所有 Folder 内容都漏搜”或“全类型已覆盖”；逐类型验收命中、定位和打开 |
-| AI 选区上下文 | [buildAIContext](../src/mainview/lib/ai/buildAIContext.ts) 对迁移后的 extension 使用宿主 presentation 的 `title/plainText`，不直接读取任意实例 state | 不承诺已读取图片像素、附件全文或录音转写；未知/失败实例与无有效文本内容的回退纳入验收 |
+| AI 选区上下文 | [buildAIContext](../src/mainview/lib/ai/buildAIContext.ts) 对迁移后的 extension 使用宿主 presentation 的 `title/plainText`，不直接读取任意实例 state；选中的 Topic 贡献纯文本标题，并单独给出 `topicParentId` / `topicOrder`，与表示容器归属的 `parentId` 区分 | 不承诺已读取图片像素、附件全文或录音转写；未知/失败实例与无有效文本内容的回退纳入验收；标题为空的 Topic 不计入可摘要内容 |
 
 迁移验收细项参见 [行为矩阵](./features/In%20Progress/canvas-extension-behavior-matrix.md) 与 [差距收口计划](./features/canvas-extension-gap-closure.md)。行为矩阵已记录 D0-1 的 Productivity 目标规则；D0 生命周期与异常回归已完成，其余新差异仍应逐项记录并做产品决策，不能用任何一方的“已完成”标记跳过核对。
 
@@ -104,12 +110,13 @@
   - **录音卡片 (Recording)**：支持通过创建菜单或画布右键启动麦克风录音。录音弹窗自动请求权限并展示实时 waveform 与计时，停止后以用户可读的 `recording-N.<ext>` 作为显示文件名，实际音频通过统一附件链路保存到 `attachments/audio_<id>.<ext>`，并生成 duration / waveform / stream URL。Recording 在画布上以语音备忘录样式展示，可直接播放、暂停、重命名、标记标签、改变颜色、锁定和删除；它可以进入 Group/Folder，但当前不进入 FocusedView。
   - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示富媒体卡片样式，支持打开链接、复制 URL、重新抓取预览和编辑 URL。URL 创建路径只接受安全的 http(s) 链接，打开外部链接时限制为 http/https/mailto。
   - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；普通单击进入原地编辑，`Enter` 可对已选中便签启动编辑，失焦后自动保存。便签以纯文本写入 manifest，粘贴时剥离富文本格式；装饰采用 CSS pushpin，pushpin 渐变会根据便签颜色自动派生。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
+  - **主题 (Topic)**：面向思维导图的轻量概念节点，React Flow `type: "topic"`，`data` 为 `{ title, color, topicVersion }` 且内嵌在 manifest，没有 Note 文件、附件或聚焦模式。标题按**纯文本**处理（不解析 Markdown / HTML），建议上限 2,000 个 Unicode 码点，超限时保留草稿并提示，不静默截断。尺寸按标题自动测量，第一版不提供手动 Resize。普通单击进入标题原地编辑；`Tab` 创建子主题，`Enter` 创建同级主题（根主题上改为编辑标题），`F2` 编辑标题，`Esc` 取消。颜色使用 token，树边颜色由父主题派生，不单独设置边颜色。Topic 与 Card / Sticky 共用免费额度计数。
 - **卡片通用能力**：
   - **画布预览渲染**：普通文本卡片在画布态（非聚焦态）优先渲染 sidecar 中缓存的 `previewHtml` / `previewExcerpt`；legacy Markdown 卡片通过 **markdown-it** 将正文渲染为安全的 HTML 预览，并经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist 在画布上保持独立的结构化 items 交互；迁移后读取 extension instance，legacy 数据继续读取 `widgetStore`。
   - **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。
-  - **复制/粘贴 / 剪切 / 重复**：支持 `Cmd/Ctrl+C`、`Cmd/Ctrl+V`、`Cmd/Ctrl+X`、`Cmd/Ctrl+D`；复制时保留选中集合内部的连线，粘贴和重复会分配新的 `nodeId` 并保持 parent / extent 约束。**Widget 额外克隆内容文件**并重映射 `widgetId`，避免多个节点共享同一 widget 文件。
-  - **聚焦入口约定**：普通单击 Card / Image / Asset / Link / Checklist widget 进入聚焦模式（FocusedView），已选中节点按 `Enter` 也可进入；Checklist 仍可在画布上直接勾选和添加条目。Pomodoro / Reminder 以画布内交互为主；Recording 与 Sticky 不进入 FocusedView。
-  - **创建流程**：底部 `ViewSwitcher` 右侧 `+` 是主创建入口，常用区提供 Note / Sticky / Link / Image，More 区提供 **Checklist / Pomodoro / Reminder** / Folder / Group / File / Recording，并提供 Markdown 导入和文库笔记入口；画布右键菜单提供同一套创建能力，并以右键位置作为新节点锚点。Image / File 会先打开系统文件选择器；Link 会打开 URL 表单；Recording 会打开麦克风录音弹窗；新建 Productivity 类型时先创建 extension instance 再放置引用节点，legacy widget 文件只作为兼容数据读取。
+  - **复制/粘贴 / 剪切 / 重复**：支持 `Cmd/Ctrl+C`、`Cmd/Ctrl+V`、`Cmd/Ctrl+X`、`Cmd/Ctrl+D`；复制时保留选中集合内部的连线，粘贴和重复会分配新的 `nodeId` 并保持 parent / extent 约束。**Widget 额外克隆内容文件**并重映射 `widgetId`，避免多个节点共享同一 widget 文件。复制一部分 Topic 树时只保留两端都在选集内的边，外部父边被剪断，粘贴出的副本是独立的树而不会挂回原树；整树复制保留顺序和内部关系。普通 Copy / Duplicate / Delete 只作用于显式选中集合，不暗中扩大到整棵树；整树操作由「选择分支」「删除分支」等专用动作提供。
+  - **聚焦入口约定**：普通单击 Card / Image / Asset / Link / Checklist widget 进入聚焦模式（FocusedView），已选中节点按 `Enter` 也可进入；Checklist 仍可在画布上直接勾选和添加条目。Pomodoro / Reminder 以画布内交互为主；Recording、Sticky 与 Topic 不进入 FocusedView。Topic 选中后按 `Enter` 在非根主题上创建同级主题、在根主题上编辑标题。
+  - **创建流程**：底部 `ViewSwitcher` 右侧 `+` 是主创建入口，常用区提供 Note / Sticky / Topic / Link / Image，More 区提供 **Checklist / Pomodoro / Reminder** / Folder / Group / File / Recording，并提供 Markdown 导入和文库笔记入口；画布右键菜单提供同一套创建能力，并以右键位置作为新节点锚点。Image / File 会先打开系统文件选择器；Link 会打开 URL 表单；Recording 会打开麦克风录音弹窗；新建 Productivity 类型时先创建 extension instance 再放置引用节点，legacy widget 文件只作为兼容数据读取。
 
 ### 2.3 沉浸式聚焦模式 (Focused View / Modal Expansion)
 
@@ -117,7 +124,7 @@
 - **交互逻辑**：
   - 普通单击可聚焦节点、已选中节点按 `Enter`，或右键菜单 `Open Focused` 进入聚焦模式。全屏 shell 以源卡片屏幕矩形为起点 **morph 放大**到主视图（FLIP 风格：`transformOrigin` 取卡片中心，scale 从卡片相对视口比例过渡到 1）；退出时反向收缩。背景画布被半透明遮罩覆盖。点击遮罩、返回按钮或按 `Escape` 退回画布。
   - BlockNote 与 note 加载态共用 `NoteEditorLoading` 占位，避免聚焦闪白。
-  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，普通单击进入原地编辑；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理；Pomodoro / Reminder 以画布内控件为主。
+  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，普通单击进入原地编辑；Topic 同样只在画布上原地编辑标题；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理；Pomodoro / Reminder 以画布内控件为主。
 
 ### 2.4 节点连线 (Edges / Connections)
 
@@ -131,6 +138,7 @@
   - **浮动端点与连接预览**：正式边和拖拽中的 `ConnectionPreviewLine` 都会根据源/目标节点相对位置计算"面向对方"的一侧作为端点，减少固定 handle 带来的绕路和折返。释放时若命中目标卡片的 Handle，则建立正式 Edge；若未命中，则预览线消失，不创建无效连接。
   - **端点边界（MVP）**：仅当前画布上可见的节点实例暴露 Handle；被收纳进 Folder 的子卡片在 drill-down 中只用于浏览与聚焦，不作为独立 Edge 端点。
   - **Folder 兼容规则（MVP）**：Folder 本体可作为一个摘要节点被连线，但系统不会在 drill-down 时自动把该连线映射到某个子卡片；需要表达外部关系时，应连到 Folder 封面节点本身。
+  - **两类边**：同一个 `labeledEdge` 承载两种语义，由 `data.kind` 区分。**关联边**（无 `kind`）就是上述手拉连线，行为不变。**树边**（`data.kind: 'topic-child'`）表示主题层级，是层级的**唯一**真源，只由「创建子/同级主题」这类明确动作产生。树边归宿主管理：不提供 label 编辑、动画、`pathType` 切换、视觉反向和独立颜色（颜色由父主题 token 派生），也不能直接删除——删除通过带校验的拆支 / 删分支事务完成。双击、右键菜单、通用边更新与端点改写都统一守卫，不只是隐藏 UI。手拉连线始终是普通关联，不会自动变成父子关系；Topic 也可以和 Note、Sticky、图片、链接、Folder 或插件卡片建立普通关联。
 
 ### 2.5 💡 两种分组模式 —— _核心特性_
 
@@ -159,21 +167,23 @@
       - 在此模式下，画布上的其他非同组元素不可见或不可交互。
   - **退出图层**：点击背景空白处或返回按钮，展开的卡片平滑收缩回堆叠状态，背景画布恢复明亮和可交互状态。
   - **允许收纳的节点类型**：Folder 可以收纳 `Card` / `Image` / `Asset` / `Link` / `Recording`，以及 Canvas Type 明确声明 `canEnterFolder: true` 的扩展。这些类型都被视为“内容条目”，可在 Folder 展开层中被浏览、聚焦、播放或编辑。
-  - **不允许新收纳的节点类型**：Folder 不收纳 `Folder` / `Group` / `Sticky`，当前 Checklist / Pomodoro / Reminder 也都声明 `canEnterFolder: false`。历史版本已经保存在 Folder 内的 `widget` 或已迁移 `extension` 条目属于兼容数据：仍须可预览、搜索并通过 `Extract to Canvas` 无损取回，不因当前准入规则而删除、隐藏或转成 Card。
+  - **不允许新收纳的节点类型**：Folder 不收纳 `Folder` / `Group` / `Sticky` / `Topic`（树边不能跨 Folder 边界，因此整棵树和单个主题都不进 Folder），当前 Checklist / Pomodoro / Reminder 也都声明 `canEnterFolder: false`。历史版本已经保存在 Folder 内的 `widget` 或已迁移 `extension` 条目属于兼容数据：仍须可预览、搜索并通过 `Extract to Canvas` 无损取回，不因当前准入规则而删除、隐藏或转成 Card。
   - **成员来源**：Folder 的成员通过以下方式产生：
     1. **在 Folder 内直接新建**：在 Folder drill-down 视图中通过顶部工具栏或右键菜单的 `New Card` 新建卡片，直接追加到该 Folder 的 `children` 数组。
     2. **从画布拖入**：将允许收纳的内容节点拖到 Folder 上，节点从当前画布移除并写入该 Folder 的 `data.children`。若节点带有 Edge，当前策略会阻止/提示用户先断开连线或清理相关 Edge；需要保留外部关系时，应先连接到 Folder 封面节点。
   - **取回到主画布**：drill-down 视图中选中子卡片后，可通过顶部工具栏的 ↗ `Extract to Canvas` 按钮或右键菜单将该卡片作为新的独立画布节点放回 Folder 邻近区域。**M5 之后 Folder Card 子节点本身已拥有独立 `noteId` 和 note record（sidecar 或 legacy `.md`）**，Extract 动作仅是把 manifest 中的 `children` 引用提升为顶层节点并分配新的 `nodeId`，不再涉及内容文件创建；同一 `noteId` 可在 Extract 前后被其他画布共用。
   - **Extract 可发现性**：为降低 `Extract to Canvas` 被用户忽略的风险（仅藏在右键菜单中发现性不足），drill-down 视图顶部工具栏需提供一个显式的 ↗ `Extract to Canvas` 按钮。当用户在 drill-down 中选中一张或多张子卡片时，该按钮高亮可用；未选中时置灰。此按钮与右键菜单中的 `Extract to Canvas` 行为一致。
   - **Folder 内操作边界（MVP）**：支持在 drill-down 视图中浏览和聚焦子内容；不支持自由拖拽改变顺序，也不支持跨 Folder 边界直接建立子卡片连线。后续若需要自由布局，应升级为独立的 Sub-canvas / View 模型，单独保存 `nodes + edges + viewport`，而不是继续扩展 `data.children`。
-  - **适用场景**：归档收纳、减少画布视觉噪音。空间布局、看板分区和关系可视化继续由 Group / Canvas View 承担。
+  - **适用场景**：归档收纳、减少画布视觉噪音。空间布局、看板分区和关系可视化继续由 Group / Canvas View 承担；成层级的思路展开由 Topic 与树边承担，二者互补。
+  - **Topic 与 Group 的关系**：Group 的 `node.parentId` 仍然只表示容器，与逻辑父主题无关。一棵树必须整体处在同一画布、同一直接 Group 容器内；拖入或拖出 Group 时整棵树一起变换容器坐标，部分子树跨容器的操作被拒绝。
 
 ### 2.6 右键菜单 / Context Menu
 
 - **功能描述**：右键菜单是画布上的高频操作入口，避免用户频繁依赖顶部工具栏或记忆快捷键。
 - **交互逻辑**：
-  - **画布空白处右键**：提供新建（`note` / `checklist` / `pomodoro` / `reminder` / `sticky` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown 等操作。
+  - **画布空白处右键**：提供新建（`note` / `checklist` / `pomodoro` / `reminder` / `sticky` / `topic` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown、导出主题大纲为 Markdown（画布上没有主题时置灰）等操作。
   - **卡片上右键**：提供聚焦打开、复制、Copy as Markdown（标题 + 正文写入剪贴板）、改颜色、编辑标签、锁定/解锁、移到笔记库、导出为 Markdown、删除等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
+  - **Topic 上右键**：提供编辑标题、新建子主题（`Tab`）、新建同级主题（`Enter`，根主题上不可用）、选择分支、复制分支、整理分支、拆出分支（根主题上不可用）、删除、删除分支、改颜色、锁定/解锁。复制分支只写入分支节点与内部树边，不含外部父边，粘贴出的是独立的树。整理分支对该分支重新排布——首版不承诺永久保留每个内部节点的手工偏移。拆支、删分支、整理分支各是一次事务、一步撤销；整理后位置未变则不记历史。
   - **Widget / Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。Widget 删除只移除画布引用。
   - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；含 widget 时会 clone 内容文件。Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。
   - **媒体节点右键**：Image 支持 Replace image、Copy image address、Reveal in Finder、Rename；Asset 支持 Reveal in Finder、Replace file、Rename；Link 支持 Open link、Copy URL、Refetch preview、Edit URL；Recording 支持 Reveal in Finder、Rename。
@@ -200,13 +210,13 @@
 
 ### 2.8 搜索 (Search) ✅ MVP / ✅ D1 可达性验收
 
-- **功能描述**：全局搜索当前 workspace 中的画布可定位内容，包括各画布视图、顶层 Card/Sticky/Folder/Group/Image/Asset/Recording/Link、Edge label，以及这些节点引用的 Markdown / BlockNote 正文。
+- **功能描述**：全局搜索当前 workspace 中的画布可定位内容，包括各画布视图、顶层 Card/Sticky/Topic/Folder/Group/Image/Asset/Recording/Link、Edge label，以及这些节点引用的 Markdown / BlockNote 正文。Topic 以标题参与搜索，命中后在画布上选中并居中，不进入聚焦模式。
 - **交互逻辑**：
   - 通过 `Cmd/Ctrl+K`、应用菜单，或在画布空闲时直接输入任意可打印字符唤起 `SearchDialog` 并预填首字符。
   - 输入关键词后 debounce 调用 Bun 侧 `searchCanvas`；当前画布内存状态会与后端结果合并，降低未落盘编辑被漏搜的概率。
   - 点击搜索结果项，若命中当前画布节点或连线，则选中并平移缩放至对应位置；若命中其他画布，则先安全切换 `activeViewId`，待目标 manifest hydrate 后再定位。定位相机移动不会覆盖用户持久化 viewport。
   - **排序规则（MVP）**：标题/名称匹配优先于文件名、URL、标签、正文等字段匹配，再按基础相关性评分排序。后续可引入更完整的字段权重与索引。
-  - **类型筛选 chips**：搜索框下方提供 `All / Notes / Folders / Links / Images` 切换按钮，仅在前端对 `result.kind` 做客户端过滤，不重发查询。`All` 会显示 Asset / Recording / Edge / View 等其他结果；`Notes` 同时覆盖 `note` 与 `card` 两种 kind。
+  - **类型筛选 chips**：搜索框下方提供 `All / Notes / Folders / Links / Images` 切换按钮，仅在前端对 `result.kind` 做客户端过滤，不重发查询。`All` 会显示 Asset / Recording / Topic / Edge / View 等其他结果；`Notes` 同时覆盖 `note` 与 `card` 两种 kind，Topic 不混入 `Notes` chip。
   - **搜索历史**：查询输入为空时显示「Recent searches」分组，列出 `localStorage` 中保存的最近 8 条查询（`ghostboard:v1:search-history` 键，兼容旧键 `ghostboard:search-history`），点击回填到输入框；提供 `Clear` 一键清空与单条删除入口。历史只在用户实际选中结果时落盘，避免误触污染。
   - **Detached notes 的可见性**：用户主动从画布分离的笔记 (`detachNoteFromCanvas`) 会变成 **detached notes**（`data.detached: true`，`position: {x:0,y:0}` 占位），不在画布上渲染，但仍作为 manifest 中的节点进入搜索。画布侧提供游离笔记管理入口，可将 detached notes 拖回画布并赋予真实坐标。
   - **搜索目标契约（D1-1）**：每条搜索结果同时保留可读文本与可序列化的 `target`。普通节点目标携带 `viewId + nodeId + placement`，边目标携带 `edgeId`，Folder 子项目标必须同时携带所属 `folderId` 与子项 `childId`；引用型内容可附带 `content.kind/id`，因此同一 Note 的多画布实例不会被错误合并。后端与当前画布 fallback 使用同一目标形状；Folder child 命中后会先进入所属 Folder，再展开到真实 child，支持的类型进入 FocusedView。
@@ -222,6 +232,7 @@
 - **交互逻辑**：
   - 非编辑态下，`Cmd+Z` 撤销，`Cmd+Shift+Z` 重做。若编辑焦点在某个 extension / legacy widget 内，快捷键优先路由到对应实例的 undo/redo；若焦点位于 `input` / `textarea` / `contenteditable` 中，则交给当前编辑控件；否则由画布 store 接管。
   - 维护一个画布快照历史栈（Snapshot History Stack），每次离散画布操作前保存当前 `{nodes, edges}` 快照；当前实现不记录 diff / command。Extension / Widget 内容栈与画布栈互不感知。
+  - **Topic 树事务**：提交主题草稿、编辑标题、拆出分支、删除分支、删除单个主题以及随之发生的重排都各自是一次事务，`nodes` 与 `edges` 在同一次提交中一起更新，因此只产生一步撤销，不会出现「撤销一次只回滚节点或只回滚边」的中间态。未提交的主题草稿只在内存中，不入图也不入历史。主题标题是纯文本 input，不走 BlockNote / widget 历史栈。
   - **栈深度上限**：画布与每个内容实例各自最多保留 **50** 步，超出后丢弃最早记录。
   - **撤销与持久化的一致性策略**：撤销/重做恢复业务内容，并进入正常 debounce 保存流程。Extension 历史只保留 state/presentation，不回滚持久化 revision；保存使用最新确认版本，旧保存回包不能覆盖请求期间的新编辑。保存失败保留本地内容并提示，不能视为已落盘。画布与 legacy widget 继续使用各自保存路径。
   - **生命周期**：撤销栈仅存在于内存中，关闭应用或切换 workspace 后清空，不做持久化。
@@ -241,19 +252,23 @@
 | `Cmd+N`                 | `Ctrl+N`                  | 打开新建卡片菜单                                                                |
 | `Cmd++` / `Cmd+-` / `Cmd+0` | `Ctrl++` / `Ctrl+-` / `Ctrl+0` | 放大 / 缩小 / 重置缩放到 100%                                                   |
 | `Arrow` / `Shift+Arrow` | `Arrow` / `Shift+Arrow`   | 按方向选择邻近节点；`Shift` 扩展选择，目标不在视口时平滑居中                    |
-| `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式                                                          |
-| `Escape`                | `Escape`                  | 关闭聚焦/文件夹视图、退出搜索/菜单                                              |
+| `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式；选中 Topic 时创建同级主题（根主题上改为编辑标题）        |
+| `Tab`                   | `Tab`                     | 处于 Topic 命令上下文或标题编辑中时创建子主题；其他情况仍是控件间移动焦点        |
+| `F2`                    | `F2`                      | 编辑选中 Topic 的标题                                                           |
+| `Escape`                | `Escape`                  | 关闭聚焦/文件夹视图、退出搜索/菜单；编辑主题标题时取消本次编辑（草稿被丢弃）     |
+
+**Topic 键位优先级**：`Tab` / `Enter` 只在**显式进入的 Topic 命令上下文**里拦截，不是只要选中 Topic 就拦截。显式选择某个 Topic、按 `F2`、单击进入编辑或创建相对草稿会进入该上下文；`Esc` 退出上下文并把焦点交回画布容器，此时视觉选中可以保留，但 `Tab` 已经恢复成常规的控件间移动——不能仅凭「还处于选中态」重新占用 `Tab`。焦点位于 `input` / `textarea` / `contenteditable`、搜索框、菜单或模态内时按键同样交还给这些控件。`Shift+Tab` 始终不被占用。主题标题编辑中：`Enter` 提交并创建下一个同级主题，`Tab` 提交并创建子主题，`Mod+Enter` 提交但不续接，`Esc` 取消当前编辑；取消一个尚未提交的草稿不会留下空主题。
 
 ### 2.11 交互状态机 (Interaction State Machine)
 
 | 状态                | 进入条件                                                                               | 退出条件                                 | 约束                                                                                                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idle`              | 默认状态；点击空白处；完成操作后回落                                                   | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选；普通单击可聚焦节点会直接进入 `focused` / `folder-drill-down`，普通单击 Sticky 进入 `inline-editing`                                                                            |
+| `idle`              | 默认状态；点击空白处；完成操作后回落                                                   | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选；普通单击可聚焦节点会直接进入 `focused` / `folder-drill-down`，普通单击 Sticky 或 Topic 进入 `inline-editing`                                                                            |
 | `selected`          | 框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键单选或多选集合右键                         | 点击空白、`Escape`、进入其他状态         | 允许批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、移动到其他画布。**Checklist widget 例外**：在 `selected` 状态下允许直接勾选 checkbox 和在列表末尾添加条目（局部交互，写 widgetStore） |
 | `marquee-selecting` | 在空白处左键拖拽                                                                       | 鼠标释放                                 | 桌面端启用；与空格平移模式、输入编辑态互斥                                                                                                                                                           |
 | `dragging`          | 拖拽一个或多个已选节点                                                                 | 鼠标释放或取消                           | 暂停双击判定，避免误触发编辑                                                                                                                                                                         |
-| `inline-editing`    | 普通单击 Sticky、选中 Sticky 后按 `Enter`、Group label 编辑、资源/录音标题重命名          | `Escape`、提交、失焦或点击其他区域       | 编辑期间禁用画布级快捷键；Sticky 使用纯文本 textarea，媒体标题使用行内 input。Card/Image/Asset/Link 的深度编辑进入 `focused`                                                                         |
-| `focused`           | 普通单击 Card/Image/Asset/Link；选中后按 `Enter`；右键菜单 `Open Focused`               | 返回按钮、点击遮罩、`Escape`             | 背景画布不可交互；Sticky / Recording 不可进入此状态                                                                                                                                                  |
+| `inline-editing`    | 普通单击 Sticky 或 Topic、选中 Sticky 后按 `Enter`、选中 Topic 后按 `F2`（或在根主题上按 `Enter`）、Topic 草稿创建、Group label 编辑、资源/录音标题重命名          | `Escape`、提交、失焦或点击其他区域       | 编辑期间禁用画布级快捷键；Sticky 使用纯文本 textarea，Topic 使用纯文本标题 input（`Enter` 提交并建同级、`Tab` 提交并建子级），媒体标题使用行内 input。Card/Image/Asset/Link 的深度编辑进入 `focused`                                                                         |
+| `focused`           | 普通单击 Card/Image/Asset/Link；选中后按 `Enter`；右键菜单 `Open Focused`               | 返回按钮、点击遮罩、`Escape`             | 背景画布不可交互；Sticky / Recording / Topic 不可进入此状态                                                                                                                                                  |
 | `folder-drill-down` | 普通单击 Folder；选中 Folder 后按 `Enter`；右键菜单 `Open`                             | 返回按钮、背景空白、`Escape`             | 仅当前 Folder 内容可交互；背景画布冻结                                                                                                                                                               |
 | `connecting`        | 从 Handle 开始拖出连线                                                                 | 连接成功、取消                           | 禁止进入编辑与聚焦                                                                                                                                                                                   |
 | `recording-capturing` | 创建 Recording 时打开麦克风弹窗                                                       | 停止保存、取消、权限失败后关闭           | 背景画布暂不交互；录音保存为附件后创建 `recording` 节点                                                                                                                                                |
@@ -276,7 +291,7 @@
 - **数据形态**：`position: {x:0, y:0}` 占位，`data.detached: true` 标记；不在画布上渲染。
 - **创建路径**：画布上右键菜单 > 「移出到笔记库」 → `detachNoteFromCanvas()` 保留 `.md` 和 `noteId`，但清理画布实例坐标和 edges。
 - **放回画布**：笔记库弹窗的「游离笔记」分组中，点击 detached 卡片会弹出 toast 提示 +「放到画布」按钮，点击后 `pinNoteToCanvas()` 将笔记放到视口中心并打开 FocusedView。画布侧 `CreateMenu` 也提供「文库笔记 / Library Note」入口打开 `DetachedNotesSidebar` 进行拖拽放回。
-- **搜索可见性**：detached notes 进入全局搜索；笔记库弹窗与 `DetachedNotesSidebar` 在「游离笔记」分组单独列出可聚焦/可分离的 `card` / `image` / `asset` / `link` 及声明相应能力的 Extension。Sticky、Recording、不可聚焦 Widget 不伪装成可打开的笔记条目。
+- **搜索可见性**：detached notes 进入全局搜索；笔记库弹窗与 `DetachedNotesSidebar` 在「游离笔记」分组单独列出可聚焦/可分离的 `card` / `image` / `asset` / `link` 及声明相应能力的 Extension。Sticky、Recording、Topic、不可聚焦 Widget 不伪装成可打开的笔记条目；Topic 没有 Note 文件，也不参与「移出到笔记库」和游离笔记流程。
 
 ### 2.13 标签管理 (Tag Management) ✅
 
@@ -299,7 +314,7 @@
   - **重命名**：点击铅笔图标进入行内编辑模式，调用 `rpcRenameTag` 重命名 workspace 中所有使用该标签的节点元数据。
   - **删除**：点击删除图标，弹出 `DeleteTagConfirmDialog` 二次确认，调用 `rpcDeleteTag` 从所有节点元数据中移除该标签。
   - 标签变更后自动刷新 `['tags']` 查询缓存，侧边栏计数即时更新。
-- **适用节点类型**：`card`、`image`、`asset`、`link`、`sticky`、`recording`。`folder` 和 `group` 暂不支持标签。
+- **适用节点类型**：`card`、`image`、`asset`、`link`、`sticky`、`recording`。`folder`、`group` 和 `topic` 暂不支持标签。
 
 ---
 
@@ -751,10 +766,12 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 - 所有字段（`position`、`data`、`style`、`parentId`、`extent`、`source`/`target`、`sourceHandle`/`targetHandle`）均为 React Flow 原生字段，加载时可直接传入 `<ReactFlow nodes={} edges={} />` 无需转换。
 - 业务自定义字段（`noteId`、`widgetId`、`file`、`label`、`color`、`children` 等）统一放在 `data` 对象内。
-- 节点 `type` 使用 `'card'` / `'widget'` / `'image'` / `'asset'` / `'link'` / `'recording'` / `'sticky'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
+- 节点 `type` 使用 `'card'` / `'widget'` / `'image'` / `'asset'` / `'link'` / `'recording'` / `'sticky'` / `'topic'` / `'folder'` / `'group'`，与代码中 `nodeTypes` 一致。
+- **Topic 节点**：`data` 为 `{ title, color, topicVersion }`，标题是纯文本，内容直接内嵌在 manifest，没有 `noteId` / `widgetId` / 附件指针。层级**不写在节点上**，而完全由 `data.kind: 'topic-child'` 的边表达；加载时由 `nodes + 树边` 推导运行时索引，因此不存在节点与边互相矛盾的双写来源。写盘和读盘都保留未识别字段，旧版本不认识的新字段不会被抹掉。
+- **Topic 的数据保护**：读到不支持版本或非法的主题/关系记录时，对该画布**暂停持久化写入**并提示，自动保存与切换视图的 flush 都不再落盘，避免把无法无损重写的内容表现为已保存；纯结构损坏（例如成环）只冻结该棵树的结构操作，不升级为整画布写保护。首次向某个画布写入 Topic 前，先把原 manifest 复制为 `*.pre-topic` 备份，已有备份不覆盖；恢复备份会丢弃备份后的修改，需用户显式选择。
 - 节点在数组中的顺序即为 z-order（后面的覆盖前面的）。
-- Edge 使用自定义 `labeledEdge`，曲线类型放在 `edge.data.pathType`（默认 `bezier`，可切换 `smoothstep`），label / color / animated 等显示属性也随 `data` 持久化。
-- Folder 的 `data.children` 存放被收纳的内容条目；新收纳允许 `card` / `image` / `asset` / `link` / `recording`，以及声明 `canEnterFolder: true` 的 `extension`。`folder` / `group` / `sticky` 与当前三个 Productivity 类型不进入 Folder；已存储的 legacy `widget` / `extension` child 仍作为兼容数据保留。
+- Edge 使用自定义 `labeledEdge`，曲线类型放在 `edge.data.pathType`（默认 `bezier`，可切换 `smoothstep`），label / color / animated 等显示属性也随 `data` 持久化。`data.kind: 'topic-child'` 的边是主题树边：它额外携带 `order` 和 `relationVersion`，`source` 为父主题、`target` 为子主题，视觉属性由宿主派生而非用户设置，通用的边编辑动作对它一律拒绝。
+- Folder 的 `data.children` 存放被收纳的内容条目；新收纳允许 `card` / `image` / `asset` / `link` / `recording`，以及声明 `canEnterFolder: true` 的 `extension`。`folder` / `group` / `sticky` / `topic` 与当前三个 Productivity 类型不进入 Folder；已存储的 legacy `widget` / `extension` child 仍作为兼容数据保留。
 - Folder 封面上的计数标题（如 `"3 items"`）为运行时根据 `children.length` 派生；封面只渲染摘要缩略图，不渲染内部完整小画布；展开层用 waterfall 自动排布且不持久化坐标。
 - Folder `children` 在展开层中只用于浏览、聚焦和 `Extract to Canvas`，不作为独立 Edge 端点；需要对外表达关系时，应连到 Folder 封面节点。
 - **Folder Card 子节点的水化与落盘**（M5 ✅）：加载时 `loadCanvas` 按 `noteId` 优先读取 BlockNote sidecar，缺失时回退到可选 legacy `file` 指向的 `.md`；水化回 `title` / `preview` / `content` / `color` 等字段填充到 `data` 中。保存时 `saveManifest` 对 sidecar-backed note 只合并 title/color 等元数据，不重写 blocks 或 Markdown；legacy Markdown note 继续 round-trip `.md`，直到下次聚焦编辑迁移为 sidecar。manifest 保留 `{ id, noteId, type, data: { noteId, type, file? } }` 的薄引用形式（不写正文、不写 preview 元数据）。Legacy 内嵌 children 在加载时自动 stamp 一个 `noteId`，下次 save 时迁到 note record。
@@ -781,6 +798,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
     - ⚠️ `scope: 'all'` 和 `'selected'` 的 UI 入口尚未实现（见 TODO-23）。
   - **JSON**：导出当前画布的 self-contained JSON（当前导出 schema 为 `ghostboard-canvas-export/v2`，保留 v1 导入兼容），直接从内存中的可见 nodes / edges / viewport 生成，并清理运行时 URL、hidden / detached 节点和不可持久化字段。当前实现是导出能力，尚未提供 JSON 导入恢复；widget 完整 records 是否纳入 JSON 导出仍属后续增强（workspace ZIP 已含 `.ghostboard/widgets/`）。
   - **Workspace ZIP**：设置 → Workspace →「Export workspace as ZIP…」导出整个 workspace 的可恢复候选备份，包含 views、content/sidecar、extension instances、legacy widgets 与 attachments；D2-2 已在独立临时 workspace 中通过压缩完整性和成员清单检查，恢复导入流程仍需后续任务单独验证。
+  - **主题大纲 Markdown**：画布右键 →「导出主题大纲为 Markdown…」把当前画布的主题森林导出为嵌套无序列表。根主题按 id 排序、子主题按树边 `order` 排序；标题按纯文本转义，换行折叠为空格，因此不会把用户输入当作 Markdown 语法执行。画布上没有主题时入口置灰，导出空大纲会被拒绝。存在非法树关系或不支持的主题/关系版本时**整次导出被拒绝并说明原因**，不静默省略——原始数据仍可走无损备份/导出路径。该导出只覆盖主题标题与层级，不包含 Note 正文或附件。
   - **PNG**：导出当前画布的 2x screenshot-style PNG。导出时先临时 `fitView` 全部可见节点、等待浏览器 repaint、隐藏 minimap/controls/panel/attribution，再截图 `.react-flow` 容器，最后恢复导出前 viewport。当前没有 SVG 导出。
 - **导入**：
   - 支持通过底部创建菜单或画布右键显式选择多个 Markdown 文件，解析 frontmatter / 标题 / 正文后创建新的 Note 卡片。
@@ -796,7 +814,8 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | 布局存储           | Per-view manifest，不放 frontmatter                                             | 布局和内容解耦，避免单文件热点                                             |
 | 内容树结构         | 统一 `content/` 目录                                                            | 避免 `notes/` + `folders/` 双根混乱                                        |
 | 内容生命周期       | 删 `node` 只删实例；零引用 `note` 保留为 **detached note**，可在笔记库中找回                             | 避免误删共享内容，也避免内容文件无入口可找回                               |
-| Folder 范围        | Folder 是内容集合，不是万能容器；可新收纳 Card/Image/Asset/Link/Recording 与显式允许的 Canvas Type，不收纳 Folder/Group/Sticky 或当前 Productivity 类型；历史 Widget/Extension child 保留兼容取回 | 保持 Folder 的资料夹语义，同时避免准入规则变化造成旧数据丢失或类型降级 |
+| Folder 范围        | Folder 是内容集合，不是万能容器；可新收纳 Card/Image/Asset/Link/Recording 与显式允许的 Canvas Type，不收纳 Folder/Group/Sticky/Topic 或当前 Productivity 类型；历史 Widget/Extension child 保留兼容取回 | 保持 Folder 的资料夹语义，同时避免准入规则变化造成旧数据丢失或类型降级 |
+| Topic 层级真源     | 父子关系只存放在 `data.kind: 'topic-child'` 的边上，节点不重复记录 `parentId` / `childIds`；Group 容器归属继续用 `node.parentId` 表达 | 单一真源避免节点与边互相矛盾；容器与逻辑层级两个概念互不污染 |
 | Folder Card 子节点  | 与顶层 Card 对等：独立 `noteId` + note record（sidecar 或 legacy `.md`）；manifest 仅保留薄引用（M5 ✅） | 可跨画布复用 noteId；消除早期「仅画布内可见」降级定位 |
 | Folder Widget 子节点 | 与顶层 Widget 对等：独立 `widgetId` + `.ghostboard/widgets/` JSON；manifest 仅 `{ widgetId, kind }` | items/timer 不进 canvas json，避免布局文件膨胀 |
 | Folder Image 子节点 | 继续使用 `attachments/` + `imageFile` 指针，不分配 `noteId`                                       | Image 没有文本正文概念，附件模式已足够；保持与顶层 Image 节点一致                                 |
@@ -854,7 +873,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 ### 6.2 无障碍基线 (Accessibility Baseline)
 
-- **键盘可达性**：Tab 在当前上下文的可聚焦控件间移动；方向键可在选中节点之间导航；`Enter` 打开聚焦；`Escape` 返回上一级。
+- **键盘可达性**：Tab 在当前上下文的可聚焦控件间移动；方向键可在选中节点之间导航；`Enter` 打开聚焦；`Escape` 返回上一级。例外：画布上恰好选中一个 Topic 且不在编辑态时，`Tab` 改为创建子主题；焦点进入输入控件、搜索、菜单或模态后，`Tab` 恢复常规焦点移动语义。
 - **语义标注**：卡片、Folder、连接点、上下文菜单需预留 ARIA label / role，保证后续可接入屏幕阅读器。
 - **视觉对比**：颜色不是唯一状态来源；选中、锁定、错误态需同时提供描边、图标或文字反馈，高对比主题作为预留能力。
 
@@ -970,7 +989,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | 25  | **富 Web Clips**         | Link MVP 已支持 URL 节点、基础 unfurl、favicon/image 元数据与富媒体卡片样式；后续补网页剪藏、离线快照、Magazine 风格预览                                                                                                                                 |
 | 26  | **全局快捷键快速输入**   | Quick Input from anywhere                                                                                                                                                                        |
 | 27  | **AI 辅助**              | ✅ 基础架构已实现 — 本地 HTTP 服务器支持 AI 流式传输，集成 Gemini 等 AI 能力进行内容总结、生成和关联推荐。后续需完善 UI 入口和用户体验。                                                                 |
-| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片，激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
+| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片（计数包含 `card`、`sticky` 与 `topic`，共用同一额度）；该门禁在新建、主题提交、粘贴、复制选中、JSON 画布导入与插件投放各入口一致生效，不因某个入口漏判形成隐式豁免。激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
 | 29  | **双向链接 (Backlinks)** | 支持 `[[note]]` 语法在笔记正文中引用其他笔记，自动建立反向链接索引。与 Edge 系统互补——Edge 是画布上显式的视觉关系，Backlink 是内容层隐式的语义关系。侧边栏或聚焦模式底部展示"被哪些笔记引用"列表 |
 
 ---
@@ -1033,7 +1052,8 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | Folder 展开用 waterfall，不持久化子坐标 | §2.5.2、§5.10 |
 | FocusedView 从源卡片 morph | §2.3 |
 | canvasShowMinimap + cream 背景 | §5.2 |
-| Folder 是内容集合，不是万能容器；允许 Card/Image/Asset/Link/Recording 与显式允许的 Canvas Type，不允许 Folder/Group/Sticky 或当前 Productivity 新进入；历史 Widget/Extension child 保留兼容取回 | §2.5.2、§5.6、§5.10 |
+| Folder 是内容集合，不是万能容器；允许 Card/Image/Asset/Link/Recording 与显式允许的 Canvas Type，不允许 Folder/Group/Sticky/Topic 或当前 Productivity 新进入；历史 Widget/Extension child 保留兼容取回 | §2.5.2、§5.6、§5.10 |
+| Topic 为核心节点类型；层级唯一真源是 `topic-child` 树边；树边归宿主管理；整棵树进出 Group；主题大纲可导出 Markdown | §1.3.1、§2.2、§2.4、§2.5、§2.6、§2.9、§2.10、§5.6、§5.9 |
 | Detached notes 取代早期 `unplaced notes` 概念 | §2.8、§2.12 |
 | BlockNote 与画布 undo/redo 栈隔离 | §2.10 |
 | TagEditor + TagSidebar + node-metadata.json | §2.13、§5.3 |

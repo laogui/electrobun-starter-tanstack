@@ -52,6 +52,25 @@ await app.content.undo(result.operationId);
 
 `app.selection.get()` 返回当前画布选区背后去重后的持久化 Notes；`getPlacements()` 暴露包括 widget 与 extension 的放置 ID；`getSnapshot()` / `subscribe()` 提供带 `loading` / `ready` / `error` 状态、生命周期绑定的缓存快照。选区覆盖活动画布中显式选中的 Notes；不展开容器。
 
+### 没有内容记录的 placement
+
+没有后备内容记录的核心节点类型——Folder、Group、图片与主题（Topic）——在 `getPlacements()` 中以 `content: null` 出现，且永远不会出现在 `get()` 或 `getSnapshot().items` 里。因此混合选区是正常情况：
+
+```js
+app.selection.getPlacements().items;
+// [
+//   { id: 'topic-1', content: null },
+//   { id: 'note-placement', content: { id: 'note-1', kind: 'note' } },
+// ]
+```
+
+上面这个数组是 placement 视图，不是 `app.selection.get()` 的返回值。用 `get()` 读取 Notes，并把 `content: null` 的 placement 当作“已选中但无法通过该 API 读取”，而不是默默丢弃——一条提示“选中 2 项，更新了 1 条笔记”的命令，比装作主题不存在要清楚。
+
+由此有两点需要在设计时考虑：
+
+- **容器与主题都不展开。** 选中 Folder 或 Group 不会选中其内容；选中一个主题也不会选中它的子树：不论有多少后代，一个被选中的主题就只是一个 placement。SDK 没有遍历主题分支的方法。
+- **`app.content` 只覆盖 Notes。** widget、extension 实例与主题都不会作为 `NoteContentSnapshot` 返回，`app.content.updateMany()` 也不能指向它们。编辑主题不会发出描述某条 Note 的 `content.changed` 事件；只有选区成员或活动视图变化时 `selection.changed` 仍然适用。
+
 ## 存储
 
 ```js

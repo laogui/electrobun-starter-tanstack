@@ -9,6 +9,7 @@ import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../paraglide/messages.js';
+import { isTopicNodeType } from '../../shared/topic';
 
 type CanvasDirection = 'down' | 'left' | 'right' | 'up';
 
@@ -149,6 +150,16 @@ export function useCanvasKeyboard({
             setFocusedFolder(null);
           }
           return;
+        }
+        const { exitTopicCommandContext, topicCommandContextId } =
+          useCanvasStore.getState();
+        if (topicCommandContextId) {
+          e.preventDefault();
+          exitTopicCommandContext();
+          const canvas = document.querySelector('[role="application"]');
+          if (canvas instanceof HTMLElement) {
+            canvas.focus();
+          }
         }
         return;
       }
@@ -298,8 +309,40 @@ export function useCanvasKeyboard({
         return;
       }
 
+      // Tab creates a subtopic only inside the explicit Topic command context
+      // (or the Topic editor, which is handled locally). A selected Topic
+      // after Esc must not reclaim Tab.
+      if (e.key === 'Tab' && !e.shiftKey) {
+        const { beginTopicRelativeDraft, nodes, topicCommandContextId } =
+          useCanvasStore.getState();
+        if (!topicCommandContextId) {
+          return;
+        }
+        const node = nodes.find((n) => n.id === topicCommandContextId);
+        if (node && isTopicNodeType(node.type)) {
+          e.preventDefault();
+          beginTopicRelativeDraft('child', node.id);
+        }
+        return;
+      }
+
+      // F2 edits the selected Topic's title, matching the rename convention
+      // elsewhere in the app and giving keyboard users an entry point that
+      // does not depend on Enter's per-type meaning.
+      if (e.key === 'F2') {
+        const { nodes, setEditingTopicId } = useCanvasStore.getState();
+        const selected = nodes.filter((n) => n.selected);
+        const node = selected.length === 1 ? selected[0] : undefined;
+        if (node && isTopicNodeType(node.type)) {
+          e.preventDefault();
+          setEditingTopicId(node.id);
+        }
+        return;
+      }
+
       if (e.key === 'Enter') {
-        const { nodes, setEditingStickyId } = useCanvasStore.getState();
+        const { nodes, setEditingStickyId, setEditingTopicId } =
+          useCanvasStore.getState();
         const selected = nodes.filter((n) => n.selected);
         if (selected.length !== 1) {
           return;
@@ -309,6 +352,19 @@ export function useCanvasKeyboard({
         if (node.type === 'sticky') {
           e.preventDefault();
           setEditingStickyId(node.id);
+          return;
+        }
+        // Sibling/root-edit Enter is a Topic command, not a selected-only hook.
+        if (isTopicNodeType(node.type)) {
+          const { beginTopicRelativeDraft, topicCommandContextId } =
+            useCanvasStore.getState();
+          if (topicCommandContextId !== node.id) {
+            return;
+          }
+          e.preventDefault();
+          if (!beginTopicRelativeDraft('sibling', node.id)) {
+            setEditingTopicId(node.id);
+          }
           return;
         }
         // Widgets (and other non-focusable content) stay on-canvas only.

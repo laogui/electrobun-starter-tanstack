@@ -13,7 +13,7 @@ order: 10
 | --- | --- | --- |
 | GhostBoard 宿主 | `1.0.0` | 与 `engines.ghostboard` 比较的值 |
 | manifest 版本 | `2` | 唯一会被加载的 manifest 契约 |
-| `@ghostboard/sdk` | `0.1.0` | 作者类型、fake host、打包器、单文件参考；也是 `runtime.version` |
+| `@ghostboard/sdk` | `0.1.1` | 作者类型、fake host、打包器、单文件参考；也是 `runtime.version` |
 | `create-ghostboard-plugin` | `0.1.0` | 模板 |
 | 模板默认 `engines.ghostboard` | `>=1.0.0 <2.0.0` | 新插件声明的范围 |
 
@@ -34,6 +34,8 @@ order: 10
 | `@ghostboard/sdk` | 宿主 | `create-ghostboard-plugin` | 说明 |
 | --- | --- | --- | --- |
 | `0.1.x` | `>=1.0.0 <2.0.0` | `0.1.x` | 完整的 T1–T4 API；无 Bun 后端入口 |
+
+`0.1.1` 是纯文档 patch：不新增任何 API，只记录既有 selection、commands 与 canvas API 在宿主自有核心节点类型（如主题）旁边的行为。模板固定的 `^0.1.0` 已接受该版本，无需改动 manifest 或 `engines` 范围。
 
 SDK 的 patch / minor 修正类型、fake host 或参考，或与宿主同步新增 API。SDK major 随宿主 major 变化。本文档站的参考页由固定的 SDK 版本生成，页面顶部显示该版本。
 

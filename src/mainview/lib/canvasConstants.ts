@@ -8,8 +8,10 @@ import {
   FolderNodeReadOnly,
   GroupNodeReadOnly,
   StickyNodeReadOnly,
+  TopicNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
+import TopicNode from '@/components/canvas/nodes/TopicNode';
 import ExtensionNode, {
   ExtensionNodeReadOnly,
 } from '@/extensions/ExtensionNode';
@@ -44,6 +46,7 @@ export const nodeTypes = {
   folderExpandedChild: FolderExpandedChildNode,
   group: GroupNode,
   sticky: StickyNode,
+  topic: TopicNode,
   extension: ExtensionNode,
 };
 
@@ -58,6 +61,7 @@ export const readOnlyNodeTypes = {
   folder: FolderNodeReadOnly,
   group: GroupNodeReadOnly,
   sticky: StickyNodeReadOnly,
+  topic: TopicNodeReadOnly,
   extension: ExtensionNodeReadOnly,
 };
 

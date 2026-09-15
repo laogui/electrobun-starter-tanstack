@@ -12,7 +12,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useContextMenu } from '@/hooks/useContextMenu';
 
 const rpcMocks = vi.hoisted(() => ({
+  rpcExportTopicOutline: vi.fn(),
   rpcImportMarkdownFiles: vi.fn(),
+}));
+
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  toast: vi.fn(),
 }));
 
 const hostMenuMocks = vi.hoisted(() => ({
@@ -23,9 +29,16 @@ const hostMenuMocks = vi.hoisted(() => ({
 vi.mock('@/lib/rpc', () => ({
   rpcExportNoteMarkdown: vi.fn(),
   rpcExportNotesMarkdown: vi.fn(),
+  rpcExportTopicOutline: rpcMocks.rpcExportTopicOutline,
   rpcImportMarkdownFiles: rpcMocks.rpcImportMarkdownFiles,
   rpcOpenExternalUrl: vi.fn(),
   rpcRevealAttachment: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({
+  toast: Object.assign((...args: unknown[]) => toastMocks.toast(...args), {
+    error: toastMocks.error,
+  }),
 }));
 
 vi.mock('@/extensions/hostMenu', () => ({
@@ -131,7 +144,12 @@ const storeState = {
       target: 'folder-1',
       data: { animated: false, pathType: 'smoothstep' },
     },
-  ],
+  ] as Array<{
+    data?: Record<string, unknown>;
+    id: string;
+    source: string;
+    target: string;
+  }>,
   clipboard: [],
   focusedNode: null as null | Record<string, unknown>,
   focusedFolder: null as null | Record<string, unknown>,
@@ -181,6 +199,8 @@ const storeActions = {
   groupSelected: vi.fn(),
   addFolderChild: vi.fn(),
   pasteClipboard: vi.fn(),
+  copyTopicBranch: vi.fn(),
+  tidyTopicBranch: vi.fn(),
   moveFolderChildToCanvas: vi.fn(),
   nextNodeId: vi.fn(() => `node-${Math.random().toString(36).slice(2, 10)}`),
   saveSnapshot: vi.fn(),
@@ -243,6 +263,9 @@ vi.mock('../../paraglide/messages.js', () => ({
   toast_edge_deleted: () => 'Connection deleted',
   toast_undo: () => 'Undo',
   toast_move_selection_failed: () => 'Could not move selection',
+  toast_topic_outline_blocked: () => 'Outline blocked',
+  toast_topic_outline_exported: () => 'Outline exported',
+  toast_export_failed: () => 'Export failed',
 }));
 
 vi.mock('nanoid', () => ({
@@ -716,6 +739,30 @@ const Harness = () => {
       >
         import-markdown
       </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('export-topic-outline');
+        }}
+        type="button"
+      >
+        export-topic-outline
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('topic-copy-branch', 'card-1');
+        }}
+        type="button"
+      >
+        topic-copy-branch
+      </button>
+      <button
+        onClick={() => {
+          handleContextMenuAction('topic-tidy-branch', 'card-1');
+        }}
+        type="button"
+      >
+        topic-tidy-branch
+      </button>
       <output aria-label="context-menu-state">
         {contextMenu ? JSON.stringify(contextMenu) : 'null'}
       </output>
@@ -727,6 +774,11 @@ describe('useContextMenu', () => {
   beforeEach(() => {
     screenToFlowPosition.mockClear();
     rpcMocks.rpcImportMarkdownFiles.mockReset();
+    rpcMocks.rpcExportTopicOutline.mockReset();
+    toastMocks.error.mockReset();
+    toastMocks.toast.mockReset();
+    storeActions.copyTopicBranch.mockClear();
+    storeActions.tidyTopicBranch.mockClear();
     hostMenuMocks.cycleExtensionColor.mockClear();
     hostMenuMocks.runExtensionMenuAction.mockClear();
     hostMenuMocks.runExtensionMenuAction.mockResolvedValue(false);
@@ -1095,6 +1147,64 @@ describe('useContextMenu', () => {
 
     expect(storeActions.setFocusedNode).not.toHaveBeenCalled();
     expect(storeActions.setFocusedFolder).not.toHaveBeenCalled();
+  });
+
+  it('blocks topic outline export when the tree has problems', () => {
+    const previousNodes = storeState.nodes;
+    const previousEdges = storeState.edges;
+    storeState.nodes = [
+      ...previousNodes,
+      {
+        data: { title: 'X', topicVersion: 1 },
+        id: 'topic-x',
+        position: { x: 0, y: 0 },
+        type: 'topic',
+      },
+      {
+        data: { title: 'Y', topicVersion: 1 },
+        id: 'topic-y',
+        position: { x: 0, y: 0 },
+        type: 'topic',
+      },
+    ];
+    storeState.edges = [
+      ...previousEdges,
+      {
+        data: { kind: 'topic-child', order: 0, relationVersion: 1 },
+        id: 'e-xy',
+        source: 'topic-x',
+        target: 'topic-y',
+      },
+      {
+        data: { kind: 'topic-child', order: 0, relationVersion: 1 },
+        id: 'e-yx',
+        source: 'topic-y',
+        target: 'topic-x',
+      },
+    ];
+
+    try {
+      render(<Harness />);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'export-topic-outline' })
+      );
+
+      expect(toastMocks.error).toHaveBeenCalledWith('Outline blocked');
+      expect(rpcMocks.rpcExportTopicOutline).not.toHaveBeenCalled();
+    } finally {
+      storeState.nodes = previousNodes;
+      storeState.edges = previousEdges;
+    }
+  });
+
+  it('dispatches copy and tidy branch actions', () => {
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'topic-copy-branch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'topic-tidy-branch' }));
+
+    expect(storeActions.copyTopicBranch).toHaveBeenCalledWith('card-1');
+    expect(storeActions.tidyTopicBranch).toHaveBeenCalledWith('card-1');
   });
 
   it('ignores unknown actions and edge toggles without matching edges', () => {

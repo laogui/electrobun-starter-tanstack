@@ -601,6 +601,59 @@ describe('search', () => {
     });
   });
 
+  it('indexes the same edge label the canvas renders when the two slots conflict', async () => {
+    writeWorkspace(workspaceRoot, {
+      activeViewId: 'v1',
+      views: [{ id: 'v1', name: 'V1', file: 'views/v1.canvas.json' }],
+      manifests: {
+        v1: {
+          nodes: [
+            {
+              id: 'n-a',
+              type: 'sticky',
+              position: { x: 0, y: 0 },
+              data: { content: 'a' },
+            },
+            {
+              id: 'n-b',
+              type: 'sticky',
+              position: { x: 0, y: 0 },
+              data: { content: 'b' },
+            },
+          ],
+          edges: [
+            // `data.label` is canonical: the stale top-level value is not shown
+            // on the canvas, so it must not produce a phantom search hit.
+            {
+              id: 'e-conflict',
+              source: 'n-a',
+              target: 'n-b',
+              label: 'stalelabel',
+              data: { label: 'currentlabel' },
+            },
+            // An explicitly cleared label must not be resurrected by history.
+            {
+              id: 'e-cleared',
+              source: 'n-b',
+              target: 'n-a',
+              label: 'stalelabel',
+              data: { label: '' },
+            },
+          ],
+        },
+      },
+    });
+    const { searchWorkspace } = await import('./search');
+
+    const current = await searchWorkspace(workspaceRoot, {
+      query: 'currentlabel',
+    });
+    expect(current.map((r) => r.edgeId)).toEqual(['e-conflict']);
+
+    const stale = await searchWorkspace(workspaceRoot, { query: 'stalelabel' });
+    expect(stale.filter((r) => r.kind === 'edge')).toEqual([]);
+  });
+
   it('returns explicit target placement for top-level, grouped, and detached nodes', async () => {
     writeWorkspace(workspaceRoot, {
       activeViewId: 'v1',

@@ -1,0 +1,21 @@
+# Findings
+
+- 桌面仓库 HEAD fa2feb7，已有修改仅 src/paraglide/runtime.js（用户改动，保留）。根目录规划为已完成的 T4，不覆盖。
+- 官网 /Users/laogui/Projects/react-starter-kit，HEAD 12fe8bc；最初 diff --stat 未显示未暂存差异，该提交新增双语开发文档。后续 status 发现多个与本任务无关的已暂存改动（不读取其敏感内容、不修改）。
+- 桌面 SDK packages/plugin-sdk 当前 0.1.0；官网 apps/web/package.json 依赖 vendor/ghostboard-sdk-0.1.0.tgz，sync-sdk-reference.ts 生成 SDK 参考页。
+- 桌面仓库 packages/plugin-docs-site 也保存官网文档补丁来源，需明确它与官网实际源的关系。
+- 产品范围按 Topic（主题）规划，区别于 Sticky 的关键是父子结构、连续创建和基础排布。
+- 公开 PluginContext.canvas 只有 registerType；content API 只操作 Note。SelectionPlacement 的 content 可为 null，Sticky/Group/Folder 已如此；Topic 可复用此契约而不伪装 Note。
+- 公开插件 surface 尺寸校验每个维度至少 80px（pluginCanvasTypes.tsx），没有自动尺寸/树拓扑接口；默认可进入 Folder。直接做普通第三方 Topic 卡片不能满足约 36px 高的轻量树节点。
+- 内部 BuiltinCanvasType 有 capabilities/interactions；不等同公开 SDK。需分别描述核心节点、内置 extension 与第三方 canvas type。
+- 兼容策略：同 host major 只加法；SDK 参考来自已安装包；不能仅修改官网生成页冒充新能力。
+- 官网 README 确认 apps/web 是实际站点源码权威；桌面 packages/plugin-docs-site 保留 Markdown authoring copy 与 docs.test 门禁。需同步手写内容，避免拷回旧 Astro 页面。
+- 现行画布 schema ghostboard-canvas/v1；loadManifest 直接 JSON 读取，没有严格 schema/minReader 校验。不能声称新增 schema 字段就能拦住既有旧客户端。
+- React Flow parentId 已用于 Group，导图父子应另用有类型的边；clipboard 会重映射 edge.source/target，适合边作为唯一树关系来源。
+- unifiedUndoHistory 已统一原生画布与插件历史；Topic 应沿用同一通道，节点+树边+排布一次提交。
+- 推荐首版新增核心 topic，保留 extension 作为已有实例型内容宿主；无需新增公开 API，也不改变插件 schema/instance migration/safe mode/activation。
+- 插件选区 getPlacements 包含 Topic placement ID + content:null；get/getSnapshot.items 继续只返回 Notes；不发假的 content.changed。该限制必须写进 SDK/官网开发指南。
+- 首版树边 edge.data.kind=topic-child + order，沿用 labeledEdge；不占用 node.parentId、不从普通关联边推导父子。
+- 根节点移动整树/分支移动子树；普通删除保留子主题成为根，显式删除分支才递归；锁定和 Group 容器变化要按闭包原子处理。
+- 现行统一历史是 session + workspace/view 定界，不能承诺原生 Topic undo 跨重启；保存恢复结构和跨重启 undo 是不同能力。
+- 仍需在实施时覆盖卡片额度口径、后端/前端搜索、AI context、Markdown/JSON/PNG、导入ID重映射、模板、只读节点和旧客户端降级边界。

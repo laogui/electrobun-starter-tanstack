@@ -56,3 +56,18 @@
 - 最终 `bun run check`（728 files）、type-check、`git diff --check` 与 macOS arm64 canary 构建通过；保存 T4 machine-readable result 与 update/recovery evidence。Phase 3 实现完成，Phase 4 packaged 多次启动退出验收仍待执行。
 - 新增 T4 专用 packaged runner 与 renderer probe：使用公开 packer 生成同 key 的 1.0.0/1.1.0/1.2.0 包及换 key 包，实际启动 canary launcher 四次覆盖 safe-mode、safe-recovery、update、migration。首次运行发现测试 HTTPS server 错把 releases.json 当目录导致 404，修正为独立 base URL 后重跑通过。
 - T4 packaged 退出验收通过：四次 macOS arm64 启动、34 项检查全通过，证明显式安全模式与下一次正常恢复、同 key descriptor 更新、换 key/坏摘要拒绝、current/previous 代码回退、迁移 revision-conflict 失败保持 live data、迁移 preimage 显式恢复和停用边界。机器报告见 `build/plugin-t4-artifacts/t4-evidence.json`；Phase 3/4 已收口，T4 退出，下一步为 T5。
+
+## 2026-09-18 — Canvas drag performance
+
+- Inspected route, store, drag/snapping hooks, repulsion, extension rendering and persistence. Existing edits preserved.
+
+- Implemented no-op identity preservation in repulsion/group highlighting/store, awake-pair traversal, render-data reuse, coordinate-insensitive content memo, shared Topic index, peripheral memo boundary and closed-panel subscription gating.
+- 244 targeted tests passed; 77 route/library/search tests passed including closed-panel React Profiler checks and fresh data when reopening.
+- Type-check passed after correcting Topic test fixture to spread typed data into a Record. Initial full lint passed.
+- Validation errors: attempted HMR startup found existing port 5173; reused running server. Browser instrumentation was reset by HMR during edits, so repeated after edits. Search test insertion initially used wrong describe casing; corrected exact marker. A shell glob matched no styles files; narrowed rg to source tree.
+- Full suite running; browser pointer measurement pending.
+
+- Full regression: 237 files / 2255 tests passed. Final type check, lint (764 files), and diff whitespace checks passed.
+- Browser: exact Vite module URL was needed to inspect the live store; unversioned imports created a separate diagnostic store. Initial demo dragging intersected a group, so the final smoke test used two isolated cards. Mouse drag produced progressively updated coordinates, release grid-snapped to (24,168), dragging=false; remote card stayed at (1200,100). No redundant repulsion coordinate updates during movement; release still publishes cleanup updates.
+- Removed the generated Paraglide runtime change caused by type-check compilation. Original user edits preserved.
+- Added docs/features/canvas-drag-performance.md with findings, benchmark methodology, validation and limits. All phases complete.

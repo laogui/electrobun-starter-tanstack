@@ -112,3 +112,16 @@
 - 代码切回旧 generation 前先清除当前工作区 enablement，成功后也不自动启用。这样即使旧代码不能读取已迁移数据，数据仍原样保留且旧代码不会自动运行。
 - recover 不能无条件重放所有 `installed` journals，否则显式回退会在下一启动被“恢复”成较新版本。clean registry 应是 current/previous 指针的权威；完成 journal 仅在该 ID 完全缺失时补项，未完成 committing journal 才继续事务。
 - 现有画布实例迁移已经用旧 revision CAS，迁移函数异常、返回非法状态、写入失败、并发修改或数据版本过新都不会覆盖原记录；但尚无宿主持久的迁移前备份和用户可见恢复入口，因此下一批不能只引用 T2 测试宣称 T4 数据恢复完成。
+
+## 2026-09-18 — Canvas drag performance
+
+- Existing dirty files include helper-line/grid fixes, group intersection fixes and counter drag hit areas; preserve them.
+- Drag updates positions through useHelperLines, then useNodeDrag always maps group highlighting and applyDragRepulsion always returns a fresh array, including no-op frames. setNodes always publishes state.
+- Repulsion iterates every pair up to 32 times; even sparse scenes pay quadratic pair scanning.
+- CanvasComponent subscribes to all nodes, and its un-memoized peripheral UI renders each frame. Decorated node caching protects static node identity, but moving nodes receive fresh data objects despite unchanged content.
+- Persistence debounces serialization by 2500 ms, so ordinary drag does not serialize the entire canvas each frame.
+
+- Further confirmed: closed LibraryPopup runs useLibraryData twice and SearchDialog derives recent nodes on every position update. Added disabled subscriptions while closed and profiler regression tests.
+- TopicNode previously rebuilt buildTopicIndex per mounted Topic per store notification. A shared selector now reuses the index for layout-only changes.
+- Node memo comparison now ignores only positionAbsoluteX/Y; data, dimensions, selection, dragging and all other props remain reactive.
+- Same-process repulsion benchmark (Bun, 30 warmups, 100 samples): 500 nodes median 0.349→0.131 ms; 1000 nodes 1.012→0.262 ms; 2000 nodes 3.843→0.501 ms. Not an end-to-end FPS measurement. 300 seeded dense scenes exactly match the original algorithm output.

@@ -87,3 +87,14 @@
 ## Exit Evidence
 
 `bun run test:plugin-t4` 已在 macOS arm64 canary 解包 launcher 上连续完成 `safe-mode`、`safe-recovery`、`update`、`migration` 四次启动退出，共 34 项检查通过。机器结果与包摘要见 `build/plugin-t4-artifacts/t4-evidence.json` 和 `docs/features/In Progress/trusted-plugin-t4-result.json`；T4 已退出，下一阶段为 T5 支持平台与外部作者验收。
+
+## 2026-09-18 — Canvas drag performance
+
+- [x] Trace drag updates, subscriptions, and node identity.
+- [x] Reproduce avoidable updates and benchmark collision work.
+- [x] Fix confirmed hot paths while preserving existing uncommitted drag changes.
+- [x] Run regression tests, type checking, lint and browser validation when available.
+
+## Next Step
+
+Canvas drag performance work complete; report is in docs/features/canvas-drag-performance.md.

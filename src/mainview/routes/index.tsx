@@ -533,9 +533,14 @@ function CanvasComponent() {
     onNodeDragStart,
     onNodeDrag,
     onNodeDragStop,
+    dragAnchorIdRef,
   } = useNodeDrag();
 
-  const { helperLineH, helperLineV, onNodesChange } = useHelperLines();
+  const canvasSnapToGrid = useAppSettingsStore((s) => s.canvasSnapToGrid);
+  const { helperLineH, helperLineV, onNodesChange } = useHelperLines(
+    canvasSnapToGrid ? CANVAS_GRID_SIZE : undefined,
+    dragAnchorIdRef
+  );
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -2092,7 +2097,6 @@ function CanvasComponent() {
   const isDarkTheme =
     theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
   const canvasBackgroundPreset = useAppSettingsStore((s) => s.canvasBackground);
-  const canvasSnapToGrid = useAppSettingsStore((s) => s.canvasSnapToGrid);
   const canvasShowMinimap = useAppSettingsStore((s) => s.canvasShowMinimap);
   const canvasBackground = resolveCanvasBackground(
     canvasBackgroundPreset,
@@ -2245,7 +2249,7 @@ function CanvasComponent() {
             !(spacePanActive || editableInteractionLocked || focusedFolder)
           }
           snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-          snapToGrid={canvasSnapToGrid}
+          snapToGrid={false}
           style={{ backgroundColor: canvasBackground }}
           zoomOnDoubleClick={false}
           zoomOnPinch={true}

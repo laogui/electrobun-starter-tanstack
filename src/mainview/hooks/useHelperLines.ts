@@ -3,7 +3,7 @@ import type {
   NodeDimensionChange,
   NodePositionChange,
 } from '@xyflow/react';
-import { useCallback, useRef, useState } from 'react';
+import { type MutableRefObject, useCallback, useRef, useState } from 'react';
 
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import type { Point } from '@/lib/collision';
@@ -30,7 +30,21 @@ function isPositionChange(change: NodeChange): change is NodePositionChange {
   return change.type === 'position';
 }
 
-export function useHelperLines() {
+function pickDraggingReference(
+  draggingChanges: NodePositionChange[],
+  anchorId: string | null | undefined
+): NodePositionChange {
+  return (
+    (anchorId
+      ? draggingChanges.find((change) => change.id === anchorId)
+      : undefined) ?? draggingChanges[0]!
+  );
+}
+
+export function useHelperLines(
+  gridSize?: number,
+  dragAnchorIdRef?: MutableRefObject<string | null>
+) {
   const setNodes = useCanvasStore((s) => s.setNodes);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [helperLineH, setHelperLineH] = useState<number | undefined>();
@@ -40,6 +54,7 @@ export function useHelperLines() {
   const resizeOriginsRef = useRef<Map<string, Point> | null>(null);
   /** Track which node is actively being resized (to save snapshot once). */
   const activeResizeIdRef = useRef<string | null>(null);
+  const alignedAxesRef = useRef({ x: false, y: false });
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -67,7 +82,10 @@ export function useHelperLines() {
 
       if (draggingChanges.length > 0) {
         setNodes((nds) => {
-          const reference = draggingChanges[0]!;
+          const reference = pickDraggingReference(
+            draggingChanges,
+            dragAnchorIdRef?.current
+          );
           // Exclude every co-dragged node from snap candidates.
           const excludeIds = new Set(positionChanges.map((c) => c.id));
           const { horizontal, vertical, snapPosition } = getHelperLines(
@@ -77,6 +95,10 @@ export function useHelperLines() {
           );
           setHelperLineH(horizontal);
           setHelperLineV(vertical);
+          alignedAxesRef.current = {
+            x: snapPosition.x !== undefined,
+            y: snapPosition.y !== undefined,
+          };
 
           // Apply the snap as a delta to all dragged nodes so multi-select
           // formations stay rigid.
@@ -88,22 +110,26 @@ export function useHelperLines() {
             snapPosition.y === undefined
               ? 0
               : snapPosition.y - reference.position!.y;
-          if (dx !== 0 || dy !== 0) {
-            for (const change of draggingChanges) {
-              change.position!.x += dx;
-              change.position!.y += dy;
-            }
-          }
+          // Preserve React Flow's drag-state positions across frames.
+          const snapped = changes.map((change) =>
+            isPositionChange(change) && change.dragging && change.position
+              ? {
+                  ...change,
+                  position: {
+                    x: change.position.x + dx,
+                    y: change.position.y + dy,
+                  },
+                }
+              : change
+          );
 
           // Drag repulsion is handled by useNodeDrag (onNodeDrag), which
           // React Flow invokes right after this change is applied.
-          return applyCanvasNodeChanges(changes, nds);
+          return applyCanvasNodeChanges(snapped, nds);
         });
       } else if (releaseChanges.length > 0) {
-        // Drag release: the store already holds the final (snapped) position
-        // from the last drag frame, while this change carries the raw
-        // unsnapped one. Strip positions so releasing never causes a jump,
-        // and only the `dragging` flag is cleared.
+        // Preserve the last helper-aligned position instead of restoring the
+        // raw pointer position. Grid snapping is applied once on release.
         setHelperLineH(undefined);
         setHelperLineV(undefined);
         const stripped = changes.map((c) =>
@@ -111,7 +137,40 @@ export function useHelperLines() {
             ? { ...c, position: undefined }
             : c
         );
-        setNodes((nds) => applyCanvasNodeChanges(stripped, nds));
+        setNodes((nds) => {
+          const next = applyCanvasNodeChanges(stripped, nds);
+          if (!gridSize || gridSize <= 0) {
+            return next;
+          }
+          const releasedIds = new Set(releaseChanges.map((c) => c.id));
+          const anchorId = dragAnchorIdRef?.current;
+          const reference =
+            (anchorId && releasedIds.has(anchorId)
+              ? nds.find((n) => n.id === anchorId)
+              : undefined) ?? nds.find((n) => releasedIds.has(n.id));
+          if (!reference) {
+            return next;
+          }
+          // Snap only on release, preserving alignment and selection spacing.
+          const dx = alignedAxesRef.current.x
+            ? 0
+            : Math.round(reference.position.x / gridSize) * gridSize -
+              reference.position.x;
+          const dy = alignedAxesRef.current.y
+            ? 0
+            : Math.round(reference.position.y / gridSize) * gridSize -
+              reference.position.y;
+          return next.map((n) =>
+            releasedIds.has(n.id) &&
+            !(n.parentId && releasedIds.has(n.parentId))
+              ? {
+                  ...n,
+                  position: { x: n.position.x + dx, y: n.position.y + dy },
+                }
+              : n
+          );
+        });
+        alignedAxesRef.current = { x: false, y: false };
       } else if (resizeChange) {
         // Save snapshot once when resize starts
         if (activeResizeIdRef.current !== resizeChange.id) {
@@ -145,7 +204,7 @@ export function useHelperLines() {
         setNodes((nds) => applyCanvasNodeChanges(changes, nds));
       }
     },
-    [setNodes, saveSnapshot]
+    [setNodes, saveSnapshot, gridSize, dragAnchorIdRef]
   );
 
   return { helperLineH, helperLineV, onNodesChange };

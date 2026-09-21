@@ -196,7 +196,25 @@ export function useNodeDrag() {
    *  multi-select drags are excluded because only the grabbed node carries
    *  React Flow's `.dragging` class (the transition opt-out). */
   const [repelAnimationActive, setRepelAnimationActive] = useState(false);
+  /** Node that started the current drag; helper-line snapping uses this, not changes[0]. */
+  const dragAnchorIdRef = useRef<string | null>(null);
   const rf = useReactFlow();
+  const findOverlappingGroup = useCallback(
+    (node: Node) => {
+      // Topics keep their committed dimensions in style and deliberately
+      // ignore React Flow dimension changes. Passing such a node directly
+      // makes getIntersectingNodes treat it as a zero-area rectangle, which
+      // matches every group even when the node is outside it.
+      const position = node.parentId
+        ? (rf.getInternalNode(node.id)?.internals.positionAbsolute ??
+          node.position)
+        : node.position;
+      return rf
+        .getIntersectingNodes({ ...position, ...nodeSize(node) })
+        .find((candidate) => candidate.type === 'group');
+    },
+    [rf]
+  );
   /** Subtopics following the grabbed Topic for the length of one gesture. */
   const topicFollowRef = useRef<TopicBranchFollow | null>(null);
 
@@ -281,6 +299,7 @@ export function useNodeDrag() {
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_, node, draggedNodes = []) => {
       saveSnapshot();
+      dragAnchorIdRef.current = node.id;
       originsRef.current = null;
       topicFollowRef.current = captureTopicBranchFollow(node, draggedNodes);
       setRejectedFolderId(null);
@@ -346,9 +365,7 @@ export function useNodeDrag() {
       // folders. Widgets and sticky cannot enter a folder, so when one of them
       // overlaps a folder it is rejected (red highlight) rather than absorbed.
       if (isContentNode(node)) {
-        const group = rf
-          .getIntersectingNodes(node)
-          .find((n) => n.type === 'group');
+        const group = findOverlappingGroup(node);
         targetGroupId = group?.id ?? null;
         const folder = findOverlappingFolder(
           node,
@@ -373,9 +390,7 @@ export function useNodeDrag() {
       }
       // Folders can go into groups but NOT into other folders
       else if (node.type === 'folder') {
-        const group = rf
-          .getIntersectingNodes(node)
-          .find((n) => n.type === 'group');
+        const group = findOverlappingGroup(node);
         targetGroupId = group?.id ?? null;
         // Elevate the dragged folder above the group it is about to enter.
         setDropTargetId(targetGroupId);
@@ -477,7 +492,12 @@ export function useNodeDrag() {
         return repelled;
       });
     },
-    [rf, setNodes, findOverlappingFolder, findAnyOverlappingFolder]
+    [
+      setNodes,
+      findOverlappingGroup,
+      findOverlappingFolder,
+      findAnyOverlappingFolder,
+    ]
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
@@ -486,6 +506,7 @@ export function useNodeDrag() {
       setRejectedFolderId(null);
       setRepelAnimationActive(false);
       setDraggingNodeIds([]);
+      dragAnchorIdRef.current = null;
 
       const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
       draggingIds.add(node.id);
@@ -561,14 +582,14 @@ export function useNodeDrag() {
           }
 
           // Check group drop
-          const targetGroup = rf
-            .getIntersectingNodes(node)
-            .find((n) => n.type === 'group');
+          const liveNode = nds.find((n) => n.id === node.id) ?? node;
+          const targetGroup = findOverlappingGroup(liveNode);
 
           const base = targetGroup ? restorePushedNodes(nds, draggingIds) : nds;
-          const anchorAbs =
-            rf.getInternalNode(node.id)?.internals.positionAbsolute ??
-            node.position;
+          const anchorAbs = liveNode.parentId
+            ? (rf.getInternalNode(node.id)?.internals.positionAbsolute ??
+              liveNode.position)
+            : liveNode.position;
           const groupAbs = targetGroup
             ? (rf.getInternalNode(targetGroup.id)?.internals.positionAbsolute ??
               targetGroup.position)
@@ -627,17 +648,12 @@ export function useNodeDrag() {
       // Folder can be dropped into a group
       if (node.type === 'folder') {
         setNodes((nds) => {
-          const targetGroup = rf
-            .getIntersectingNodes(node)
-            .find((n) => n.type === 'group');
+          const targetGroup = findOverlappingGroup(node);
 
           const base = targetGroup ? restorePushedNodes(nds, draggingIds) : nds;
           const updated = base.map((n) => {
             if (n.id !== node.id) {
-              if (n.type === 'group') {
-                return { ...n, data: { ...n.data, active: false } };
-              }
-              return n;
+              return deactivateGroupHighlight(n);
             }
             const abs =
               rf.getInternalNode(node.id)?.internals.positionAbsolute ??
@@ -677,6 +693,7 @@ export function useNodeDrag() {
     [
       rf,
       setNodes,
+      findOverlappingGroup,
       findOverlappingFolder,
       findAnyOverlappingFolder,
       restorePushedNodes,
@@ -688,6 +705,7 @@ export function useNodeDrag() {
     activeGroupId,
     rejectedFolderId,
     draggingNodeIds,
+    dragAnchorIdRef,
     repelAnimationActive,
     onNodeDragStart,
     onNodeDrag,

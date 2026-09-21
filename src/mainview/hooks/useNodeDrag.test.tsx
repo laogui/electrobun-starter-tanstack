@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge, Node, Rect } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeDrag } from '@/hooks/useNodeDrag';
@@ -75,7 +75,7 @@ const rfMock = {
     }
     return null;
   }),
-  getIntersectingNodes: vi.fn(() => [state.nodes[0]]),
+  getIntersectingNodes: vi.fn((_nodeOrRect: Node | Rect) => [state.nodes[0]]),
   getNodes: vi.fn(() => state.nodes),
 };
 
@@ -894,6 +894,76 @@ describe('useNodeDrag — Topic branches', () => {
     expect(positionOf('topic-parent')).toEqual({ x: 50, y: 80 });
     expect(positionOf('topic-child')).toEqual({ x: 250, y: 80 });
     expect(positionOf('topic-grand')).toEqual({ x: 450, y: 80 });
+    expect(rfMock.getIntersectingNodes).toHaveBeenCalledWith({
+      x: 50,
+      y: 80,
+      width: 160,
+      height: 40,
+    });
+  });
+
+  it.each([
+    false,
+    true,
+  ])('drags a grouped Topic out with descendants=%s', (withDescendants) => {
+    seedBranch();
+    if (!withDescendants) {
+      state.nodes = state.nodes.slice(0, 1);
+      state.edges = [];
+    }
+    const group: Node = {
+      id: 'group-topic',
+      type: 'group',
+      data: {},
+      position: { x: 100, y: 100 },
+      style: { width: 900, height: 600 },
+    };
+    state.nodes = [
+      group,
+      ...state.nodes.map((node) => ({
+        ...node,
+        parentId: group.id,
+        extent: 'parent' as const,
+      })),
+    ];
+    // Keep React Flow's cached absolute position inside the group. The store
+    // is the source of the current position once the node has been detached.
+    rfMock.getInternalNode.mockImplementation(() => ({
+      internals: { positionAbsolute: { x: 100, y: 100 } },
+      measured: { width: 160, height: 40 },
+    }));
+    rfMock.getIntersectingNodes.mockImplementation((nodeOrRect) => {
+      // React Flow treats a missing measured size as zero; zero-area nodes
+      // match even at zero overlap. An explicit nonzero rect must be used.
+      const rect = nodeOrRect as Rect;
+      if (!(rect.width && rect.height)) {
+        return [group];
+      }
+      return rect.x < 1000 &&
+        rect.x + rect.width > 100 &&
+        rect.y < 700 &&
+        rect.y + rect.height > 100
+        ? [group]
+        : [];
+    });
+    render(<BranchHarness id="topic-parent" to={{ x: 1200, y: 800 }} />);
+    fireEvent.click(screen.getByText('drag-branch'));
+
+    expect(positionOf('topic-parent')).toEqual({ x: 1200, y: 800 });
+    for (const node of state.nodes.filter((n) => n.type === 'topic')) {
+      expect(node.parentId).toBeUndefined();
+      expect(node.extent).toBeUndefined();
+    }
+    if (withDescendants) {
+      expect(positionOf('topic-child')).toEqual({ x: 1400, y: 800 });
+      expect(positionOf('topic-grand')).toEqual({ x: 1600, y: 800 });
+    }
+    expect(rfMock.getIntersectingNodes).toHaveBeenCalledWith({
+      x: 1200,
+      y: 800,
+      width: 160,
+      height: 40,
+    });
   });
 
   it('leaves ancestors and siblings behind when a subtopic is dragged', () => {

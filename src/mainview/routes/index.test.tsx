@@ -1284,14 +1284,14 @@ describe('routes/index', () => {
     ]);
   });
 
-  it('enables 24px snap-to-grid dragging', async () => {
+  it('keeps dragging continuous when grid snapping is enabled', async () => {
     render(<CanvasRoute />);
 
     await waitFor(() => {
       expect(reactFlowMocks.props).toHaveBeenCalledWith(
         expect.objectContaining({
           snapGrid: [24, 24],
-          snapToGrid: true,
+          snapToGrid: false,
         })
       );
     });

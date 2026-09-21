@@ -670,7 +670,9 @@ export function CanvasContextMenu({
     return pathType === 'smoothstep' ? 'smoothstep' : 'bezier';
   });
   const hasTopics = useCanvasStore((state) =>
-    state.nodes.some((node) => isTopicNodeType(node.type))
+    menu?.target === 'canvas'
+      ? state.nodes.some((node) => isTopicNodeType(node.type))
+      : false
   );
   const topicHasParent = useCanvasStore((state) => {
     if (menu?.target !== 'topic' || !menu.nodeId) {

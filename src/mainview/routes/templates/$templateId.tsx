@@ -20,7 +20,11 @@ import {
   bumpTemplateThumbnailVersion,
   useTemplate,
 } from '@/hooks/useTemplates';
-import { edgeTypes, readOnlyNodeTypes } from '@/lib/canvasConstants';
+import {
+  defaultLabeledEdgeOptions,
+  edgeTypes,
+  readOnlyNodeTypes,
+} from '@/lib/canvasConstants';
 import { captureCanvasThumbnailDataUrl } from '@/lib/canvasExport';
 import { rpcCreateViewFromTemplate, rpcSaveTemplateThumbnail } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -251,7 +255,7 @@ function TemplatePreviewContent() {
       </div>
 
       <ReactFlow
-        defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
+        defaultEdgeOptions={defaultLabeledEdgeOptions}
         edges={edges}
         edgeTypes={edgeTypes}
         elementsSelectable={false}

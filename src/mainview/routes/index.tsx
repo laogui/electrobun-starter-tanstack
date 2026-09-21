@@ -19,6 +19,7 @@ import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 
 import {
+  memo,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -28,8 +29,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { AISummaryPanel } from '@/components/canvas/AISummaryPanel';
-import { CanvasToolbar } from '@/components/canvas/CanvasToolbar';
+import { CanvasPanels } from '@/components/canvas/CanvasPanels';
 import { CanvasViewportChrome } from '@/components/canvas/CanvasViewportChrome';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
@@ -37,16 +37,12 @@ import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import ConnectionPreviewLine from '@/components/canvas/edges/ConnectionPreviewLine';
 import { FocusedView } from '@/components/canvas/FocusedView';
-import { FolderEditDialog } from '@/components/canvas/FolderEditDialog';
 import { HelperLines } from '@/components/canvas/HelperLines';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { SelectionAIToolbar } from '@/components/canvas/SelectionAIToolbar';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
-import { LibraryPopup } from '@/components/library/LibraryPopup';
-import { SearchDialog } from '@/components/search/SearchDialog';
-import { TagSidebar } from '@/components/tags/TagSidebar';
 import {
   initialEdges,
   initialNodes,
@@ -72,7 +68,11 @@ import {
 } from '@/hooks/useSpacePanMode';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { resolveCanvasBackground } from '@/lib/canvasBackground';
-import { edgeTypes, nodeTypes } from '@/lib/canvasConstants';
+import {
+  defaultLabeledEdgeOptions,
+  edgeTypes,
+  nodeTypes,
+} from '@/lib/canvasConstants';
 import {
   type CanvasExportDocument,
   collectWidgetIdsFromNodes,
@@ -408,6 +408,8 @@ function canvasUiReducer(
 ): CanvasUiState {
   return { ...state, ...patch };
 }
+
+const MemoViewSwitcher = memo(ViewSwitcher);
 
 // The canvas route wires React Flow, drag/drop, keyboard shortcuts, and modals.
 // react-doctor-disable-next-line react-doctor/no-giant-component
@@ -2138,10 +2140,12 @@ function CanvasComponent() {
     }
 
     try {
+      const { nodes: currentNodes, edges: currentEdges } =
+        useCanvasStore.getState();
       const exported = await exportReactFlowCanvasToJson({
-        edges,
+        edges: currentEdges,
         fileName: sanitizeExportFileName(activeViewName),
-        nodes,
+        nodes: currentNodes,
         viewId: activeViewId,
         viewName: activeViewName,
         viewport: instance.getViewport?.(),
@@ -2156,7 +2160,7 @@ function CanvasComponent() {
         error instanceof Error ? error.message : m.toast_export_failed();
       toast.error(message);
     }
-  }, [activeViewId, activeViewName, edges, nodes]);
+  }, [activeViewId, activeViewName]);
 
   if (!hydrated) {
     return (
@@ -2192,7 +2196,7 @@ function CanvasComponent() {
           connectionLineComponent={ConnectionPreviewLine}
           connectionMode={ConnectionMode.Loose}
           connectionRadius={30}
-          defaultEdgeOptions={{ type: 'labeledEdge', zIndex: 1 }}
+          defaultEdgeOptions={defaultLabeledEdgeOptions}
           defaultViewport={sessionViewport ?? undefined}
           disableKeyboardA11y
           edges={topicPreview.edges}
@@ -2315,16 +2319,9 @@ function CanvasComponent() {
         />
       ) : null}
 
-      <FolderEditDialog />
+      <CanvasPanels rfInstance={rfInstance} />
 
-      <CanvasToolbar />
-      <LibraryPopup rfInstance={rfInstance} />
-
-      <AISummaryPanel rfInstance={rfInstance} />
-
-      <TagSidebar />
-
-      <ViewSwitcher
+      <MemoViewSwitcher
         createMenuOpen={createMenuOpen}
         onCreateCanvasType={requestCreateCanvasType}
         onCreateNode={createFromBottomMenu}
@@ -2340,7 +2337,6 @@ function CanvasComponent() {
           setContextMenu(null);
         }}
       />
-      <SearchDialog rfInstance={rfInstance} />
 
       <input
         aria-label="Import asset file"

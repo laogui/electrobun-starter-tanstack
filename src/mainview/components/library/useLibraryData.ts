@@ -47,6 +47,7 @@ export interface LibraryGroup {
 }
 
 interface UseLibraryDataOptions {
+  enabled?: boolean;
   query?: string;
   sort?: LibrarySortKey;
 }
@@ -55,6 +56,8 @@ interface UseLibraryDataResult {
   groups: LibraryGroup[];
   totalItems: number;
 }
+
+const EMPTY_LIBRARY: UseLibraryDataResult = { groups: [], totalItems: 0 };
 
 function readString(data: Record<string, unknown>, key: string): string {
   const v = data[key];
@@ -269,12 +272,17 @@ function matchesQuery(item: LibraryItem, normalizedQuery: string): boolean {
 export function useLibraryData(
   options: UseLibraryDataOptions = {}
 ): UseLibraryDataResult {
-  const nodes = useCanvasStore((s) => s.nodes);
-  const widgets = useWidgetStore((s) => s.records);
-  const extensions = useExtensionInstanceStore((s) => s.records);
-  const { query = '', sort = 'recent' } = options;
+  const { enabled = true, query = '', sort = 'recent' } = options;
+  const nodes = useCanvasStore((s) => (enabled ? s.nodes : undefined));
+  const widgets = useWidgetStore((s) => (enabled ? s.records : undefined));
+  const extensions = useExtensionInstanceStore((s) =>
+    enabled ? s.records : undefined
+  );
   return useMemo(
-    () => buildLibrary(nodes, query, sort, widgets, extensions),
+    () =>
+      nodes
+        ? buildLibrary(nodes, query, sort, widgets, extensions)
+        : EMPTY_LIBRARY,
     [nodes, query, sort, widgets, extensions]
   );
 }

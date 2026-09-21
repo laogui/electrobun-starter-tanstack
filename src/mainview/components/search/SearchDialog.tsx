@@ -247,6 +247,8 @@ interface SearchDialogProps {
   rfInstance?: React.MutableRefObject<ReactFlowInstance<any, any> | null>;
 }
 
+const EMPTY_CANVAS_NODES: Node[] = [];
+
 // Component split is a broad UI refactor; keep search navigation behavior intact.
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export function SearchDialog({ rfInstance }: SearchDialogProps) {
@@ -262,7 +264,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
   const setNodes = useCanvasStore((s) => s.setNodes);
   const setEdges = useCanvasStore((s) => s.setEdges);
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
-  const nodes = useCanvasStore((s) => s.nodes);
+  const nodes = useCanvasStore((s) => (open ? s.nodes : EMPTY_CANVAS_NODES));
   const views = useCanvasStore((s) => s.views);
   const extensionRecords = useExtensionInstanceStore((s) => s.records);
 

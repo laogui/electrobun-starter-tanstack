@@ -89,10 +89,13 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
   const [recoveringFile, setRecoveringFile] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { groups, totalItems } = useLibraryData({ query, sort });
+  const { groups, totalItems } = useLibraryData({ enabled: open, query, sort });
   // Always-on recent list (ignores the active query) so the empty-search state
   // can recommend something to fall back to.
-  const { groups: recentGroups } = useLibraryData({ sort: 'recent' });
+  const { groups: recentGroups } = useLibraryData({
+    enabled: open,
+    sort: 'recent',
+  });
 
   const flatItems = useMemo(() => flattenItems(groups), [groups]);
   const recentItems = useMemo(

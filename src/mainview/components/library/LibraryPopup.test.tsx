@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { Node } from '@xyflow/react';
-import { useRef } from 'react';
+import { Profiler, useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/store/canvasStore';
@@ -53,6 +59,49 @@ describe('LibraryPopup', () => {
     vi.clearAllMocks();
     canvasFocusMock.openFocusedById.mockClear();
     rpcMocks.rpcScanUnlinkedNotes.mockReset();
+  });
+
+  it('does not render for drag frames while closed and reads fresh data on open', async () => {
+    seedNodes([
+      {
+        id: 'perf-note',
+        type: 'card',
+        position: { x: 0, y: 0 },
+        data: { title: 'Before drag' },
+      },
+    ]);
+    useCanvasStore.setState({ libraryOpen: false });
+    const onRender = vi.fn();
+    render(
+      <Profiler id="library" onRender={onRender}>
+        <Harness />
+      </Profiler>
+    );
+    await act(async () => {});
+    const initialCommits = onRender.mock.calls.length;
+    for (let frame = 0; frame < 30; frame += 1) {
+      act(() =>
+        useCanvasStore.getState().applyNodesChange([
+          {
+            id: 'perf-note',
+            type: 'position',
+            dragging: true,
+            position: { x: frame, y: frame },
+          },
+        ])
+      );
+    }
+    expect(onRender).toHaveBeenCalledTimes(initialCommits);
+    act(() =>
+      useCanvasStore
+        .getState()
+        .updateNodeData('perf-note', { title: 'After drag' })
+    );
+    expect(onRender).toHaveBeenCalledTimes(initialCommits);
+    act(() => useCanvasStore.setState({ libraryOpen: true }));
+    await waitFor(() =>
+      expect(screen.getAllByText('After drag').length).toBeGreaterThan(0)
+    );
   });
 
   it('renders nothing when libraryOpen is false', () => {

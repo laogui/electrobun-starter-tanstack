@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { Profiler } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SearchResult } from '@/lib/searchTypes';
@@ -168,6 +175,41 @@ beforeEach(() => {
 });
 
 describe('searchDialog', () => {
+  it('does not render for node movement while closed', async () => {
+    useCanvasStore.setState({
+      searchOpen: false,
+      nodes: [
+        {
+          id: 'perf-note',
+          type: 'card',
+          position: { x: 0, y: 0 },
+          data: { title: 'Note' },
+        },
+      ],
+    });
+    const onRender = vi.fn();
+    render(
+      <Profiler id="search" onRender={onRender}>
+        <SearchDialog />
+      </Profiler>
+    );
+    await act(async () => {});
+    const initialCommits = onRender.mock.calls.length;
+    for (let frame = 0; frame < 30; frame += 1) {
+      act(() =>
+        useCanvasStore.getState().applyNodesChange([
+          {
+            id: 'perf-note',
+            type: 'position',
+            dragging: true,
+            position: { x: frame, y: frame },
+          },
+        ])
+      );
+    }
+    expect(onRender).toHaveBeenCalledTimes(initialCommits);
+  });
+
   it('renders nothing when searchOpen is false', () => {
     useCanvasStore.setState({ searchOpen: false });
     render(<SearchDialog />);

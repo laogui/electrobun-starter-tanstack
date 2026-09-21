@@ -68,3 +68,8 @@ export const readOnlyNodeTypes = {
 export const edgeTypes = {
   labeledEdge: LabeledEdge,
 };
+
+export const defaultLabeledEdgeOptions = {
+  type: 'labeledEdge',
+  zIndex: 1,
+} as const;

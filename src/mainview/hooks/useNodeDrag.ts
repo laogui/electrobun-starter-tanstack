@@ -33,6 +33,13 @@ import { isTopicNodeType } from '../../shared/topic';
  */
 const isContentNode = (node: Node) => isCanvasContentNode(node.type);
 
+function deactivateGroupHighlight(node: Node): Node {
+  if (node.type !== 'group' || !node.data.active) {
+    return node;
+  }
+  return { ...node, data: { ...node.data, active: false } };
+}
+
 /** Resolve a node's live width/height for overlap math. */
 function nodeSize(node: Node): { width: number; height: number } {
   const width =
@@ -306,7 +313,7 @@ export function useNodeDrag() {
         sortNodesByParent(
           nds.map((n) => {
             if (n.type === 'group') {
-              return { ...n, data: { ...n.data, active: false } };
+              return deactivateGroupHighlight(n);
             }
             if (!detachIds.has(n.id)) {
               return n;
@@ -403,7 +410,8 @@ export function useNodeDrag() {
         originsRef.current ??= captureRepulsionOrigins(nds);
 
         // Group drop-target highlighting (clone only on actual flag changes).
-        const highlighted = nds.map((n) => {
+        let highlightChanged = false;
+        const highlightedNodes = nds.map((n) => {
           if (n.type !== 'group') {
             return n;
           }
@@ -411,8 +419,10 @@ export function useNodeDrag() {
           if (Boolean(n.data.active) === nextActive) {
             return n;
           }
+          highlightChanged = true;
           return { ...n, data: { ...n.data, active: nextActive } };
         });
+        const highlighted = highlightChanged ? highlightedNodes : nds;
 
         // The dragged node ids. React Flow reports them via the third
         // callback arg; fall back to the current selection when absent.
@@ -516,7 +526,7 @@ export function useNodeDrag() {
           if (folder) {
             const cardNode = nds.find((n) => n.id === node.id);
             if (!cardNode) {
-              return nds;
+              return nds.map(deactivateGroupHighlight);
             }
             const {
               isHidden: _,
@@ -534,7 +544,7 @@ export function useNodeDrag() {
                 continue;
               }
               if (n.id !== folder.id) {
-                nextNodes.push(n);
+                nextNodes.push(deactivateGroupHighlight(n));
                 continue;
               }
               const d = n.data as any;
@@ -584,10 +594,7 @@ export function useNodeDrag() {
           const updated = base.map((n) => {
             const isAnchor = n.id === node.id;
             if (!(isAnchor || followerIds.has(n.id))) {
-              if (n.type === 'group') {
-                return { ...n, data: { ...n.data, active: false } };
-              }
-              return n;
+              return deactivateGroupHighlight(n);
             }
             const position = isAnchor
               ? anchorNext
@@ -662,15 +669,7 @@ export function useNodeDrag() {
 
       // Groups stay top-level — no nesting into other groups or folders
       if (node.type === 'group') {
-        setNodes((nds) =>
-          applyRejectPush(
-            nds.map((n) =>
-              n.type === 'group'
-                ? { ...n, data: { ...n.data, active: false } }
-                : n
-            )
-          )
-        );
+        setNodes((nds) => applyRejectPush(nds.map(deactivateGroupHighlight)));
         setActiveGroupId(null);
       }
       originsRef.current = null;

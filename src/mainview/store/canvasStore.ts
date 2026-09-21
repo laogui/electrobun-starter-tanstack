@@ -610,6 +610,34 @@ function nextTopicCommandContext(
   return currentContext === nextTopicId ? nextTopicId : null;
 }
 
+function nodeSelectionChanged(previous: Node[], next: Node[]): boolean {
+  if (previous.length !== next.length) {
+    return true;
+  }
+  for (let i = 0; i < previous.length; i++) {
+    const previousNode = previous[i]!;
+    const nextNode = next[i]!;
+    if (
+      previousNode.id !== nextNode.id ||
+      Boolean(previousNode.selected) !== Boolean(nextNode.selected)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function topicCommandContextForNodes(
+  previousNodes: Node[],
+  nextNodes: Node[],
+  currentContext: string | null
+): string | null {
+  if (!nodeSelectionChanged(previousNodes, nextNodes)) {
+    return currentContext;
+  }
+  return nextTopicCommandContext(previousNodes, nextNodes, currentContext);
+}
+
 function cleanNodeForClipboard(node: Node): Node {
   const { isHidden, isDropTarget, ...cleanData } = node.data as any;
   return { ...node, data: cleanData };
@@ -1587,9 +1615,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setNodes: (updater) => {
     set((s) => {
       const nodes = typeof updater === 'function' ? updater(s.nodes) : updater;
+      if (nodes === s.nodes) {
+        return s;
+      }
       return {
         nodes,
-        topicCommandContextId: nextTopicCommandContext(
+        topicCommandContextId: topicCommandContextForNodes(
           s.nodes,
           nodes,
           s.topicCommandContextId
@@ -1607,9 +1638,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   applyNodesChange: (changes) => {
     set((s) => {
       const nodes = applyCanvasNodeChanges(changes, s.nodes);
+      if (nodes === s.nodes) {
+        return s;
+      }
       return {
         nodes,
-        topicCommandContextId: nextTopicCommandContext(
+        topicCommandContextId: topicCommandContextForNodes(
           s.nodes,
           nodes,
           s.topicCommandContextId
@@ -2378,7 +2412,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }));
       return {
         nodes,
-        topicCommandContextId: nextTopicCommandContext(
+        topicCommandContextId: topicCommandContextForNodes(
           s.nodes,
           nodes,
           s.topicCommandContextId

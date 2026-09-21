@@ -446,6 +446,9 @@ describe('useNodeDrag', () => {
     fireEvent.click(screen.getByRole('button', { name: 'dragging' }));
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('folder-1');
     expect(setNodesMock).toHaveBeenCalled();
+    expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      data: { active: true },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'drag-stop' }));
 
@@ -461,6 +464,9 @@ describe('useNodeDrag', () => {
           },
         ],
       },
+    });
+    expect(state.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      data: { active: false },
     });
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
     expect(screen.getByLabelText('active-group')).toHaveTextContent('none');

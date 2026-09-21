@@ -294,6 +294,26 @@ afterEach(() => {
 });
 
 describe('canvasStore — node operations', () => {
+  it('does not publish no-op node updates to subscribers', () => {
+    useCanvasStore.getState().setNodes([makeNode('a')]);
+    const notify = vi.fn();
+    const unsubscribe = useCanvasStore.subscribe(notify);
+    try {
+      const state = useCanvasStore.getState();
+      state.setNodes(state.nodes);
+      state.setNodes((nodes) => nodes);
+      state.applyNodesChange([]);
+      expect(useCanvasStore.getState()).toBe(state);
+      expect(notify).not.toHaveBeenCalled();
+      state.applyNodesChange([
+        { id: 'a', type: 'position', position: { x: 10, y: 20 } },
+      ]);
+      expect(notify).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it('setNodes replaces the node array', () => {
     const { setNodes } = useCanvasStore.getState();
     const nodes = [makeNode('a'), makeNode('b')];

@@ -214,7 +214,8 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
     }
   }
 
-  return nodes.map((node) => {
+  let changed = false;
+  const result = nodes.map((node) => {
     const box = solved.get(node.id);
     if (!box) {
       return node;
@@ -225,8 +226,10 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
     ) {
       return node;
     }
+    changed = true;
     return { ...node, position: { x: box.x, y: box.y } };
   });
+  return changed ? result : nodes;
 }
 
 /**
@@ -238,12 +241,40 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
  * movable. This keeps untouched pre-existing overlaps intact.
  */
 function solve(boxes: SolverBox[]): void {
+  // Keep the original pair order, but skip sleeping/sleeping pairs entirely.
+  // A sparse canvas with one dragged node now scans O(n) eligible pairs,
+  // instead of visiting every pair just to discover that both are asleep.
+  const awakeIndices = boxes.flatMap((box, index) =>
+    box.awake ? [index] : []
+  );
+  const wake = (index: number) => {
+    const box = boxes[index]!;
+    if (box.awake) {
+      return;
+    }
+    box.awake = true;
+    const next = awakeIndices.findIndex((awakeIndex) => awakeIndex > index);
+    awakeIndices.splice(next < 0 ? awakeIndices.length : next, 0, index);
+  };
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
     let moved = false;
 
     for (let i = 0; i < boxes.length; i += 1) {
       const a = boxes[i]!;
+      let awakeCursor = 0;
       for (let j = i + 1; j < boxes.length; j += 1) {
+        if (!a.awake) {
+          while (
+            awakeCursor < awakeIndices.length &&
+            awakeIndices[awakeCursor]! < j
+          ) {
+            awakeCursor += 1;
+          }
+          if (awakeCursor === awakeIndices.length) {
+            break;
+          }
+          j = awakeIndices[awakeCursor]!;
+        }
         const b = boxes[j]!;
         if (a.pinned && b.pinned) {
           continue;
@@ -266,29 +297,29 @@ function solve(boxes: SolverBox[]): void {
           const sign = dx > 0 ? 1 : -1;
           if (a.pinned) {
             b.x -= px * sign;
-            b.awake = true;
+            wake(j);
           } else if (b.pinned) {
             a.x += px * sign;
-            a.awake = true;
+            wake(i);
           } else {
             a.x += (px / 2) * sign;
             b.x -= (px / 2) * sign;
-            a.awake = true;
-            b.awake = true;
+            wake(i);
+            wake(j);
           }
         } else {
           const sign = dy > 0 ? 1 : -1;
           if (a.pinned) {
             b.y -= py * sign;
-            b.awake = true;
+            wake(j);
           } else if (b.pinned) {
             a.y += py * sign;
-            a.awake = true;
+            wake(i);
           } else {
             a.y += (py / 2) * sign;
             b.y -= (py / 2) * sign;
-            a.awake = true;
-            b.awake = true;
+            wake(i);
+            wake(j);
           }
         }
       }

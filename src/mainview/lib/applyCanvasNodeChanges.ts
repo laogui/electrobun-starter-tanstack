@@ -19,6 +19,13 @@ export function applyCanvasNodeChanges(
   changes: NodeChange[],
   nodes: Node[]
 ): Node[] {
+  const hasDimensionChange = changes.some(
+    (change) => change.type === 'dimensions'
+  );
+  if (!hasDimensionChange) {
+    return applyNodeChanges(changes, nodes);
+  }
+
   // Topic dimensions belong to title commits. React Flow also reports the
   // render-only edit size (sometimes after the preview has been cleared), so
   // accepting its dimension events would leak that size into the saved graph.

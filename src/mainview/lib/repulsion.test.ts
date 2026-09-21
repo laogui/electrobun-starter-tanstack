@@ -327,3 +327,50 @@ describe('applyDragRepulsion — origins and restore', () => {
     expect(result.find((n) => n.id === 'f')).toBe(nodes[2]);
   });
 });
+
+describe('repulsion update identity', () => {
+  it('retains the array when no neighbor moves, including paused frames', () => {
+    const nodes = [card('a', 0, 0), card('b', 2000, 2000)];
+    const params = {
+      nodes,
+      origins: originsOf(nodes),
+      activeIds: new Set(['a']),
+    };
+    expect(applyDragRepulsion(params)).toBe(nodes);
+    expect(applyDragRepulsion({ ...params, paused: true })).toBe(nodes);
+  });
+
+  it('restores pushed nodes after pressure ends, then stops publishing changes', () => {
+    const initial = [card('a', 0, 0), card('b', CARD_W + 5, 0)];
+    const origins = originsOf(initial);
+    const activeIds = new Set(['a']);
+    const pushed = applyDragRepulsion({ nodes: initial, origins, activeIds });
+    expect(pushed[1]).not.toBe(initial[1]);
+    const restored = applyDragRepulsion({
+      nodes: pushed,
+      origins,
+      activeIds,
+      paused: true,
+    });
+    expect(restored[1]!.position).toEqual(initial[1]!.position);
+    expect(
+      applyDragRepulsion({ nodes: restored, origins, activeIds, paused: true })
+    ).toBe(restored);
+  });
+
+  it.each([
+    0, 1, 2,
+  ])('propagates pushes when the active node is at index %i', (index) => {
+    const a = card('a', 0, 0);
+    const neighbors = [card('b', CARD_W + 5, 0), card('c', 2 * CARD_W + 10, 0)];
+    neighbors.splice(index, 0, a);
+    const result = applyDragRepulsion({
+      nodes: neighbors,
+      origins: originsOf(neighbors),
+      activeIds: new Set(['a']),
+    });
+    expect(positionOf(result, 'b').x).toBeGreaterThan(CARD_W + 5);
+    expect(positionOf(result, 'c').x).toBeGreaterThan(2 * CARD_W + 10);
+    expect(positionOf(result, 'a')).toEqual(a.position);
+  });
+});

@@ -85,4 +85,16 @@ describe('applyCanvasNodeChanges', () => {
       },
     });
   });
+
+  it('applies position-only changes without scanning Topic dimensions', () => {
+    const topic = createNode({ id: 'topic', type: 'topic' });
+    const card = createNode();
+    const updated = applyCanvasNodeChanges(
+      [{ id: 'note-1', type: 'position', position: { x: 8, y: 12 } }],
+      [topic, card]
+    );
+
+    expect(updated[0]).toEqual(topic);
+    expect(updated[1]?.position).toEqual({ x: 8, y: 12 });
+  });
 });

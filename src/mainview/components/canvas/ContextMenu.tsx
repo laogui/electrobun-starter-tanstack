@@ -34,6 +34,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -70,6 +71,18 @@ interface MenuItem {
 interface ViewSummary {
   id: string;
   name: string;
+}
+
+function clampMenuPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { x: number; y: number } {
+  return {
+    x: Math.max(8, Math.min(x, Math.max(8, window.innerWidth - width - 8))),
+    y: Math.max(8, Math.min(y, Math.max(8, window.innerHeight - height - 8))),
+  };
 }
 
 type ContextMenuState = {
@@ -985,10 +998,30 @@ export function CanvasContextMenu({
     };
   }, [menu]);
 
-  const x = menu ? Math.max(8, Math.min(menu.x, window.innerWidth - 220)) : 0;
-  const y = menu
-    ? Math.max(8, Math.min(menu.y, window.innerHeight - items.length * 40 - 16))
-    : 0;
+  const [menuPosition, setMenuPosition] = useState(() =>
+    menu ? clampMenuPosition(menu.x, menu.y, 220, 40) : { x: 0, y: 0 }
+  );
+
+  useLayoutEffect(() => {
+    if (!menu) {
+      return;
+    }
+    const updatePosition = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      const width = rect && rect.width > 0 ? rect.width : 220;
+      const height =
+        rect && rect.height > 0 ? rect.height : Math.max(items.length, 1) * 40;
+      setMenuPosition(clampMenuPosition(menu.x, menu.y, width, height));
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [items.length, menu]);
+
+  const x = menuPosition.x;
+  const y = menuPosition.y;
 
   const submenuParentIndex = openSubmenu
     ? items.findIndex((item) => item.id === openSubmenu)

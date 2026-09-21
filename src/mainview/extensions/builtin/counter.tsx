@@ -28,14 +28,14 @@ function CounterCanvasSurface({
   }
 
   return (
-    <div className="nodrag nopan flex h-full flex-col items-center justify-center gap-4 p-6">
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
       <div className="font-semibold text-neutral-500 text-xs uppercase tracking-wide">
         Counter
       </div>
       <div className="font-semibold text-4xl tabular-nums">{state.count}</div>
       <div className="flex items-center gap-2">
         <button
-          className="rounded-full border border-black/10 px-3 py-1 text-sm disabled:opacity-40 dark:border-white/15"
+          className="nodrag nopan rounded-full border border-black/10 px-3 py-1 text-sm disabled:opacity-40 dark:border-white/15"
           disabled={disabled}
           onClick={() => {
             setCount(state.count - 1).catch(() => undefined);
@@ -45,7 +45,7 @@ function CounterCanvasSurface({
           <Minus size={14} />
         </button>
         <button
-          className="rounded-full border border-black/10 px-3 py-1 text-sm disabled:opacity-40 dark:border-white/15"
+          className="nodrag nopan rounded-full border border-black/10 px-3 py-1 text-sm disabled:opacity-40 dark:border-white/15"
           disabled={disabled}
           onClick={() => {
             setCount(state.count + 1).catch(() => undefined);

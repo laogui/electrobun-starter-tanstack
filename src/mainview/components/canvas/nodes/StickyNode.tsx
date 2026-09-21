@@ -8,11 +8,17 @@ import {
   stickyPushpinBackground,
 } from '@/lib/colorUtils';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
+import { textareaCaretIndexFromPoint } from '@/lib/textareaCaretFromPoint';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
+import {
+  beginResizingNwseCursor,
+  endResizingNwseCursor,
+  useResizingNwseCursorCleanup,
+} from './_shared/ResizeHandle';
 
 export interface StickyData {
   color?: string;
@@ -118,6 +124,8 @@ const StickyNode = ({
   const [editing, setEditing] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const focusAfterEditRequestRef = useRef(false);
+  const pendingCaretPointRef = useRef<{ x: number; y: number } | null>(null);
+  useResizingNwseCursorCleanup();
 
   const handleBlur = useCallback(() => {
     const text = textRef.current?.value ?? '';
@@ -154,19 +162,24 @@ const StickyNode = ({
   // Focus the contentEditable and place the caret: at the click point when
   // available, otherwise at the end of the text (keyboard entry).
   const focusEditable = useCallback(() => {
+    const caretPoint = pendingCaretPointRef.current;
+    pendingCaretPointRef.current = null;
     setTimeout(() => {
       const el = textRef.current;
       if (!el) {
         return;
       }
       el.focus();
-      const caretIndex = el.value.length;
+      const caretIndex = caretPoint
+        ? textareaCaretIndexFromPoint(el, caretPoint.x, caretPoint.y)
+        : el.value.length;
       el.setSelectionRange(caretIndex, caretIndex);
     }, 10);
   }, []);
 
   const enterEditing = useCallback(
-    (_caretPoint?: { x: number; y: number }) => {
+    (caretPoint?: { x: number; y: number }) => {
+      pendingCaretPointRef.current = caretPoint ?? null;
       setEditing(true);
       focusEditable();
     },
@@ -241,11 +254,9 @@ const StickyNode = ({
         maxWidth={500}
         minHeight={120}
         minWidth={120}
-        onResizeEnd={() => {
-          document.body.classList.remove('resizing-nwse');
-        }}
+        onResizeEnd={endResizingNwseCursor}
         onResizeStart={() => {
-          document.body.classList.add('resizing-nwse');
+          beginResizingNwseCursor();
           saveSnapshot();
         }}
         position="bottom-right"

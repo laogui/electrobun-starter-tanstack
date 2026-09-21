@@ -716,6 +716,10 @@ body.resizing-nwse * {
   stroke-width: 2;
 }
 
+.react-flow__edge.selected .react-flow__edge-path.canvas-edge-custom-color {
+  stroke: unset;
+}
+
 .react-flow__edge.selected .react-flow__marker-arrowhead polyline,
 .react-flow__edge.selected #compact-arrow path {
   fill: hsl(var(--connection-active));

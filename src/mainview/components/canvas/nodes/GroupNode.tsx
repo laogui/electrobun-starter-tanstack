@@ -21,6 +21,8 @@ export interface GroupContentProps {
   /** Slot for Handles / resize control when wrapped inside a React Flow node. */
   children?: React.ReactNode;
   data: GroupData;
+  /** Whether the wrapper node is being dragged (grabbing cursor). */
+  dragging?: boolean;
   /** Enables contentEditable on the label. */
   editingLabel?: boolean;
   /** Ref forwarded to the contentEditable label element. */
@@ -42,6 +44,7 @@ export interface GroupContentProps {
 export const GroupContent = ({
   data,
   selected = false,
+  dragging = false,
   editingLabel = false,
   labelRef,
   onLabelBlur,
@@ -53,6 +56,7 @@ export const GroupContent = ({
     className={cn(
       `group/group-node canvas-group group-${data.color || 'blue'} size-full`,
       selected && 'selected',
+      dragging ? 'cursor-grabbing' : 'cursor-grab',
       data.active &&
         'scale-[1.02] ring-2 ring-accent ring-offset-2 transition-transform duration-200 ease-out',
       data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
@@ -96,10 +100,12 @@ const GroupNode = ({
   id,
   data,
   selected,
+  dragging = false,
 }: {
   id: string;
   data: GroupData;
   selected?: boolean;
+  dragging?: boolean;
 }) => {
   const [editingLabel, setEditingLabel] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -135,6 +141,7 @@ const GroupNode = ({
   return (
     <GroupContent
       data={data}
+      dragging={dragging}
       editingLabel={editingLabel}
       labelRef={labelRef}
       onLabelBlur={handleBlur}

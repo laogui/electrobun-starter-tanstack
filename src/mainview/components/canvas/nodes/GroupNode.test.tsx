@@ -133,6 +133,34 @@ describe('GroupNode', () => {
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
 
+  it('uses a grabbing cursor while the group is being dragged', () => {
+    const { container } = render(
+      <GroupNode
+        data={{ active: false, color: 'blue', label: 'Dragging' }}
+        dragging={true}
+        id="group-drag"
+        selected={false}
+      />
+    );
+
+    expect(container.querySelector('.cursor-grabbing')).not.toBeNull();
+  });
+
+  it('clears the resize cursor if the node unmounts mid-resize', () => {
+    const { unmount } = render(
+      <GroupNode
+        data={{ active: false, color: 'blue', label: 'Resize leak' }}
+        id="group-unmount"
+        selected={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
+    expect(document.body.classList.contains('resizing-nwse')).toBe(true);
+    unmount();
+    expect(document.body.classList.contains('resizing-nwse')).toBe(false);
+  });
+
   it('updates label on blur and falls back to default label when cleared', () => {
     render(
       <GroupNode

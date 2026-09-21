@@ -5,6 +5,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import StickyNode from './StickyNode';
 
+const caretFromPointMock = vi.hoisted(() =>
+  vi.fn(
+    (
+      _textarea: HTMLTextAreaElement,
+      _clientX: number,
+      _clientY: number
+    ): number => 0
+  )
+);
+
+vi.mock('@/lib/textareaCaretFromPoint', () => ({
+  textareaCaretIndexFromPoint: (
+    textarea: HTMLTextAreaElement,
+    clientX: number,
+    clientY: number
+  ) => caretFromPointMock(textarea, clientX, clientY),
+}));
+
 const updateNodeDataMock = vi.fn();
 
 vi.mock('@xyflow/react', () => ({
@@ -83,6 +101,8 @@ describe('StickyNode', () => {
     storeState.nodes = [];
     storeState.editingStickyId = null;
     document.body.className = '';
+    caretFromPointMock.mockReset();
+    caretFromPointMock.mockReturnValue(0);
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -144,6 +164,36 @@ describe('StickyNode', () => {
     fireEvent.click(visual);
     vi.advanceTimersByTime(20);
     expect(screen.getByLabelText('Sticky note text')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('places the caret at the click point when entering edit mode', () => {
+    vi.useFakeTimers();
+    caretFromPointMock.mockReturnValue(4);
+    const selectionSpy = vi.spyOn(
+      HTMLTextAreaElement.prototype,
+      'setSelectionRange'
+    );
+    render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Edit me now' }}
+        id="sticky-caret"
+      />
+    );
+
+    const content = screen.getByText('Edit me now');
+    fireEvent.click(content.parentElement?.parentElement!, {
+      clientX: 12,
+      clientY: 18,
+    });
+    vi.advanceTimersByTime(20);
+
+    expect(caretFromPointMock).toHaveBeenCalledWith(
+      expect.any(HTMLTextAreaElement),
+      12,
+      18
+    );
+    expect(selectionSpy).toHaveBeenCalledWith(4, 4);
     vi.useRealTimers();
   });
 
@@ -307,6 +357,20 @@ describe('StickyNode', () => {
     expect(document.body.classList.contains('resizing-nwse')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'end resize' }));
+    expect(document.body.classList.contains('resizing-nwse')).toBe(false);
+  });
+
+  it('clears the resize cursor if the sticky unmounts mid-resize', () => {
+    const { unmount } = render(
+      <StickyNode
+        data={{ color: '#ffee88', content: 'Resize leak' }}
+        id="sticky-unmount"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'start resize' }));
+    expect(document.body.classList.contains('resizing-nwse')).toBe(true);
+    unmount();
     expect(document.body.classList.contains('resizing-nwse')).toBe(false);
   });
 

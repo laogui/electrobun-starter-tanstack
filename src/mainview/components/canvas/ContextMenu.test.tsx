@@ -252,6 +252,30 @@ describe('canvasContextMenu', () => {
     expect(Number.parseFloat(submenu.style.top)).toBeGreaterThanOrEqual(8);
   });
 
+  it('clamps the menu into the viewport and reclamps on resize', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const heightSpy = vi.spyOn(window, 'innerHeight', 'get');
+    const widthSpy = vi.spyOn(window, 'innerWidth', 'get');
+    heightSpy.mockReturnValue(2000);
+    widthSpy.mockReturnValue(2000);
+
+    render(
+      <CanvasContextMenu
+        menu={{ x: 40, y: 90, target: 'canvas' }}
+        onAction={onAction}
+        onClose={onClose}
+      />
+    );
+
+    const menu = screen.getByRole('menu', { name: 'Canvas context menu' });
+    expect(Number.parseFloat(menu.style.top)).toBe(90);
+
+    heightSpy.mockReturnValue(80);
+    fireEvent(window, new Event('resize'));
+    expect(Number.parseFloat(menu.style.top)).toBe(8);
+  });
+
   it('supports keyboard navigation and activation', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();

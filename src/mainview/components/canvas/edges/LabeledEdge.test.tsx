@@ -100,8 +100,32 @@ describe('LabeledEdge', () => {
       'data-marker-end',
       'url(#compact-arrow)'
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Edge label' }));
+    expect(setEditingEdgeIdMock).toHaveBeenCalledWith('edge-1');
     fireEvent.doubleClick(screen.getByRole('button', { name: 'Edge label' }));
     expect(setEditingEdgeIdMock).toHaveBeenCalledWith('edge-1');
+  });
+
+  it('keeps a custom stroke class when the edge is selected', () => {
+    render(
+      <LabeledEdge
+        data={{ color: '#ff00aa', label: 'Tinted' }}
+        id="edge-color"
+        selected={true}
+        source="node-1"
+        sourcePosition={Position.Right}
+        sourceX={0}
+        sourceY={0}
+        target="node-2"
+        targetPosition={Position.Left}
+        targetX={100}
+        targetY={100}
+      />
+    );
+
+    expect(screen.getByTestId('base-edge')).toHaveTextContent(
+      'canvas-edge-custom-color'
+    );
   });
 
   it('renders bezier path and commits edited labels on blur and enter', () => {

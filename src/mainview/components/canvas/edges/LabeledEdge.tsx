@@ -109,7 +109,7 @@ function LabeledEdgeComponent({
     [commitLabel, setEditingEdgeId]
   );
 
-  const handleLabelDoubleClick = useCallback(
+  const handleLabelClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       setEditingEdgeId(id);
@@ -152,7 +152,8 @@ function LabeledEdgeComponent({
         className={cn(
           'transition-[stroke-width] duration-150',
           animated && 'react-flow__edge-animated-dash',
-          selected && !customColor && 'stroke-accent!'
+          selected && !customColor && 'stroke-accent!',
+          customColor && 'canvas-edge-custom-color'
         )}
         id={id}
         markerEnd={markerEnd}
@@ -192,8 +193,9 @@ function LabeledEdgeComponent({
             />
           ) : label ? (
             <button
-              className="cursor-default rounded-full bg-white px-2 py-0.5 font-medium text-stone-600 text-xs shadow-sm ring-1 ring-stone-200/60 transition-colors hover:bg-stone-100 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700"
-              onDoubleClick={handleLabelDoubleClick}
+              className="cursor-text rounded-full bg-white px-2 py-0.5 font-medium text-stone-600 text-xs shadow-sm ring-1 ring-stone-200/60 transition-colors hover:bg-stone-100 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-600/60 dark:hover:bg-stone-700"
+              onClick={handleLabelClick}
+              onDoubleClick={handleLabelClick}
               style={{ maxWidth: 140 }}
               type="button"
             >

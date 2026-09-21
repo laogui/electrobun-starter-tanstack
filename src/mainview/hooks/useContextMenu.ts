@@ -10,6 +10,7 @@ import {
 } from '@/extensions/hostMenu';
 import { runAISummarize } from '@/lib/ai/runAISummarize';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import {
   type CreatableCanvasNodeKind,
@@ -150,6 +151,7 @@ export function useContextMenu({
 
   const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault();
+    clearCanvasGraphSelection();
     setContextMenu({ x: e.clientX, y: e.clientY, target: 'canvas' });
   }, []);
 

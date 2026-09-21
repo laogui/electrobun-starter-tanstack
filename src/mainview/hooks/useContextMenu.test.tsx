@@ -147,6 +147,7 @@ const storeState = {
   ] as Array<{
     data?: Record<string, unknown>;
     id: string;
+    selected?: boolean;
     source: string;
     target: string;
   }>,
@@ -846,6 +847,25 @@ describe('useContextMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'edge' }));
     expect(output).toHaveTextContent(
       '{"x":120,"y":160,"target":"edge","edgeId":"edge-1"}'
+    );
+  });
+
+  it('clears an existing selection when right-clicking the empty pane', () => {
+    storeState.nodes = storeState.nodes.map((n) => ({
+      ...n,
+      selected: n.id === 'card-1' || n.id === 'folder-1',
+    }));
+    storeState.edges = storeState.edges.map((edge, index) =>
+      index === 0 ? { ...edge, selected: true } : edge
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'pane' }));
+
+    expect(storeState.nodes.filter((n) => n.selected)).toEqual([]);
+    expect(storeState.edges.filter((edge) => edge.selected)).toEqual([]);
+    expect(screen.getByLabelText('context-menu-state')).toHaveTextContent(
+      '{"x":210,"y":180,"target":"canvas"}'
     );
   });
 

@@ -88,6 +88,7 @@ import {
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { sortNodesByParent } from '@/lib/canvasUtils';
+import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import {
   type CreatableCanvasNodeKind,
   createLinkNodeData,
@@ -1760,6 +1761,7 @@ function CanvasComponent() {
         changes.every((change) => change.type === 'select')
       ) {
         suppressClickSelectRef.current = false;
+        clearCanvasGraphSelection();
         return;
       }
       onNodesChange(changes);

@@ -1265,6 +1265,30 @@ describe('routes/index', () => {
     expect(helperLineMocks.onNodesChange).not.toHaveBeenCalled();
   });
 
+  it('clears leftover selection when a plain node click is suppressed', async () => {
+    render(<CanvasRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument();
+    });
+
+    useCanvasStore.setState((state) => ({
+      nodes: state.nodes.map((node) => ({ ...node, selected: true })),
+      edges: state.edges.map((edge) => ({ ...edge, selected: true })),
+    }));
+
+    const element = document.querySelector('[data-id="loaded-1"]');
+    fireEvent.pointerDown(element!);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply RF selection' }));
+
+    expect(useCanvasStore.getState().nodes.some((node) => node.selected)).toBe(
+      false
+    );
+    expect(useCanvasStore.getState().edges.some((edge) => edge.selected)).toBe(
+      false
+    );
+  });
+
   it('keeps selection changes from marquee/modifier interactions', async () => {
     render(<CanvasRoute />);
 

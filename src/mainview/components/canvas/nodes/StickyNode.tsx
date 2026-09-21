@@ -7,6 +7,7 @@ import {
   isColorDark,
   stickyPushpinBackground,
 } from '@/lib/colorUtils';
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -310,4 +311,4 @@ const StickyNode = ({
   );
 };
 
-export default memo(StickyNode);
+export default memo(StickyNode, nodeRenderPropsEqual);

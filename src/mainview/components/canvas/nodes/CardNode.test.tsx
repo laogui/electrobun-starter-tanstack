@@ -75,6 +75,8 @@ vi.mock('@/hooks/useNodeMetadata', () => ({
     map: metadataStore,
     get: (id: string | undefined) => (id ? metadataStore[id] : undefined),
   }),
+  useNodeMetadataEntry: (id: string | undefined) =>
+    id ? metadataStore[id] : undefined,
   useSetNodeMetadata: () => ({ mutate: setMetadataMock }),
 }));
 

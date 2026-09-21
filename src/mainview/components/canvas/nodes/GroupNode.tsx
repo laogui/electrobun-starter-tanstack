@@ -1,6 +1,7 @@
 import { useUpdateNodeInternals } from '@xyflow/react';
 import * as motion from 'motion/react-m';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -153,4 +154,4 @@ const GroupNode = ({
   );
 };
 
-export default memo(GroupNode);
+export default memo(GroupNode, nodeRenderPropsEqual);

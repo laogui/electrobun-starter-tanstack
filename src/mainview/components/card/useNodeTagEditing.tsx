@@ -2,7 +2,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
-import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
+import {
+  useNodeMetadataEntry,
+  useSetNodeMetadata,
+} from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -39,9 +42,8 @@ export function useNodeTagEditing(
   const suggestions = (tagSummaries ?? []).map((t) => t.name);
 
   const metaKey = (data.noteId as string | undefined) ?? nodeId;
-  const { get: getMeta } = useNodeMetadata();
+  const meta = useNodeMetadataEntry(metaKey);
   const setMetadata = useSetNodeMetadata();
-  const meta = getMeta(metaKey);
 
   const tag = meta?.tag;
   const tagColor = meta?.tagColor;

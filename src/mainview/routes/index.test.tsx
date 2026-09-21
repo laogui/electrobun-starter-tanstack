@@ -622,6 +622,7 @@ vi.mock('@/hooks/useNodeMetadata', () => ({
     map: nodeMetadataMocks.map,
     get: () => undefined,
   }),
+  useNodeMetadataEntry: () => undefined,
   useSetNodeMetadata: () => ({ mutate: vi.fn() }),
   useDeleteNodeMetadata: () => ({ mutate: vi.fn() }),
 }));
@@ -1213,6 +1214,38 @@ describe('routes/index', () => {
     );
 
     expect(screen.queryByText('Focused loaded-1')).toBeNull();
+  });
+
+  it('preserves rendered content data across 60 position-only frames', async () => {
+    render(<CanvasRoute />);
+    await waitFor(() =>
+      expect(screen.getByText('Loaded Card')).toBeInTheDocument()
+    );
+    const initial = reactFlowMocks.props.mock.lastCall![0].nodes[0];
+    for (let frame = 1; frame <= 60; frame += 1) {
+      act(() => {
+        useCanvasStore.getState().applyNodesChange([
+          {
+            id: 'loaded-1',
+            type: 'position',
+            dragging: true,
+            position: { x: frame, y: frame },
+          },
+        ]);
+      });
+      const rendered = reactFlowMocks.props.mock.lastCall![0].nodes[0];
+      expect(rendered.position).toEqual({ x: frame, y: frame });
+      expect(rendered.data).toBe(initial.data);
+    }
+    act(() =>
+      useCanvasStore
+        .getState()
+        .updateNodeData('loaded-1', { title: 'Edited title' })
+    );
+    expect(reactFlowMocks.props.mock.lastCall![0].nodes[0].data).not.toBe(
+      initial.data
+    );
+    expect(screen.getByText('Edited title')).toBeInTheDocument();
   });
 
   it('drops the selection change from a plain click on a node', async () => {

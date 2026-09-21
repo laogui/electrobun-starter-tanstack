@@ -1,5 +1,6 @@
 import type { Node, NodeProps } from '@xyflow/react';
 import { memo, useEffect, useMemo } from 'react';
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
@@ -124,7 +125,7 @@ function ExtensionNodeComponent({
   );
 }
 
-export default memo(ExtensionNodeComponent);
+export default memo(ExtensionNodeComponent, nodeRenderPropsEqual);
 
 export function ExtensionNodeReadOnly({ data }: { data: ExtensionNodeData }) {
   useCanvasTypeRegistryRevision();

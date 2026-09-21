@@ -6,9 +6,9 @@ import {
   useRef,
   useState,
 } from 'react';
-
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
+import { selectCanvasTopicIndex } from '@/lib/selectCanvasTopicIndex';
 import { getTopicPalette } from '@/lib/topicColors';
-import { buildTopicIndex } from '@/lib/topicTree';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -274,7 +274,7 @@ const TopicNode = ({
   // A root has no sibling slot, so Enter there commits instead of chaining.
   // A draft has no relation yet either, so Enter ends the run.
   const canCreateSibling = useCanvasStore((s) =>
-    isDraft ? false : buildTopicIndex(s.nodes, s.edges).parentByChild.has(id)
+    isDraft ? false : selectCanvasTopicIndex(s).parentByChild.has(id)
   );
 
   const [editing, setEditing] = useState(isDraft);
@@ -452,4 +452,4 @@ const TopicNode = ({
   );
 };
 
-export default memo(TopicNode);
+export default memo(TopicNode, nodeRenderPropsEqual);

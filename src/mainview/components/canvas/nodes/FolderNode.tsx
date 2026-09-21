@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
-
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import {
   type FolderChildEntry,
@@ -16,6 +15,7 @@ import {
   THUMBNAIL_HEIGHT_PERCENT,
   THUMBNAIL_WIDTH_PERCENT,
 } from '@/lib/folderExpansion';
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -464,4 +464,4 @@ const FolderNode = ({
   );
 };
 
-export default memo(FolderNode);
+export default memo(FolderNode, nodeRenderPropsEqual);

@@ -1884,9 +1884,10 @@ function CanvasComponent() {
           ? dragLayerZIndex
           : undefined;
       const cached = cache.get(node.id);
-      if (
+      const sameRenderData =
         cached &&
-        cached.source === node &&
+        cached.source.type === node.type &&
+        cached.source.data === node.data &&
         cached.isHidden === isHidden &&
         cached.folderPeekClass === folderPeekClass &&
         cached.expansionChildren === expansionChildren &&
@@ -1894,6 +1895,13 @@ function CanvasComponent() {
         cached.isClosing === isClosing &&
         cached.isDropTarget === isDropTarget &&
         cached.isRejectingDrop === isRejectingDrop &&
+        (node.type !== 'folder' ||
+          (cached.result.data.onCollapseComplete === finishFolderClose &&
+            cached.result.data.onExpandedChildContextMenu ===
+              onFolderChildContextMenu));
+      if (
+        sameRenderData &&
+        cached.source === node &&
         cached.renderZIndex === renderZIndex
       ) {
         nextCache.set(node.id, cached);
@@ -1910,21 +1918,24 @@ function CanvasComponent() {
         .join(' ');
       const decorated: Node = {
         ...node,
-        data: {
-          ...node.data,
-          isHidden,
-          isDropTarget,
-          isRejectingDrop,
-          ...(node.type === 'folder'
-            ? {
-                expansionChildren,
-                isExpanded,
-                isClosing,
-                onCollapseComplete: finishFolderClose,
-                onExpandedChildContextMenu: onFolderChildContextMenu,
-              }
-            : {}),
-        },
+        // Position changes must not invalidate memoized card/extension content.
+        data: sameRenderData
+          ? cached.result.data
+          : {
+              ...node.data,
+              isHidden,
+              isDropTarget,
+              isRejectingDrop,
+              ...(node.type === 'folder'
+                ? {
+                    expansionChildren,
+                    isExpanded,
+                    isClosing,
+                    onCollapseComplete: finishFolderClose,
+                    onExpandedChildContextMenu: onFolderChildContextMenu,
+                  }
+                : {}),
+            },
         ...(renderZIndex === undefined ? {} : { zIndex: renderZIndex }),
         ...(className ? { className } : {}),
         ...(locked

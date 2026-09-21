@@ -4,9 +4,13 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
 import { NotePreview } from '@/components/preview/NotePreview';
-import { useNodeMetadata, useSetNodeMetadata } from '@/hooks/useNodeMetadata';
+import {
+  useNodeMetadataEntry,
+  useSetNodeMetadata,
+} from '@/hooks/useNodeMetadata';
 import { useTags } from '@/hooks/useTags';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { NodeHandles } from './_shared/NodeHandles';
@@ -265,9 +269,8 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   // Cards key node metadata by the note's stable id; the React Flow node id
   // is a fallback for legacy nodes that pre-date the noteId roll-out.
   const metaKey = (data as { noteId?: string }).noteId ?? id;
-  const { get: getMeta } = useNodeMetadata();
+  const meta = useNodeMetadataEntry(metaKey);
   const setMetadata = useSetNodeMetadata();
-  const meta = getMeta(metaKey);
 
   const viewData = useMemo<CardContentData>(
     () => ({
@@ -376,4 +379,4 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
   );
 };
 
-export default memo(CardNode);
+export default memo(CardNode, nodeRenderPropsEqual);

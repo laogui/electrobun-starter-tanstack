@@ -11,6 +11,11 @@ import {
 
 const QUERY_KEY = ['node-metadata'] as const;
 const EMPTY_NODE_METADATA: NodeMetadataMap = {};
+const NODE_METADATA_QUERY = {
+  queryFn: async () => (await rpcLoadNodeMetadata()) ?? {},
+  queryKey: QUERY_KEY,
+  staleTime: 1000 * 60 * 5,
+} as const;
 
 export type { NodeMetadata, NodeMetadataMap } from '@/lib/rpc';
 
@@ -77,11 +82,7 @@ export function useNodeMetadata() {
     promise,
     refetch,
     status,
-  } = useQuery<NodeMetadataMap>({
-    queryKey: QUERY_KEY,
-    queryFn: async () => (await rpcLoadNodeMetadata()) ?? {},
-    staleTime: 1000 * 60 * 5,
-  });
+  } = useQuery<NodeMetadataMap>(NODE_METADATA_QUERY);
 
   const map = useMemo(() => data ?? EMPTY_NODE_METADATA, [data]);
 
@@ -120,6 +121,20 @@ export function useNodeMetadata() {
     refetch,
     status,
   };
+}
+
+/**
+ * Subscribe to a single node's metadata. Other entries in the map can change
+ * without re-rendering this subscriber (react-query `select` + structural sharing).
+ */
+export function useNodeMetadataEntry(
+  id: string | undefined
+): NodeMetadata | undefined {
+  const { data } = useQuery<NodeMetadataMap, Error, NodeMetadata | undefined>({
+    ...NODE_METADATA_QUERY,
+    select: (map) => (id ? map[id] : undefined),
+  });
+  return data;
 }
 
 /**

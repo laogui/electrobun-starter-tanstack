@@ -95,8 +95,11 @@ describe('GroupNode', () => {
 
     expect(screen.getByText('Planning')).toBeInTheDocument();
     expect(screen.getByTestId('resize-control')).toBeInTheDocument();
-    expect(container.querySelector('.selected')).not.toBeNull();
-    expect(container.querySelector('.ring-2')).not.toBeNull();
+    // Selection styling hangs off React Flow's wrapper `.selected` class via
+    // the shared `.node-visual` rule; the group itself only flags drop-target.
+    expect(container.querySelector('.node-visual')).not.toBeNull();
+    expect(container.querySelector('.node-drop-target')).not.toBeNull();
+    expect(container.querySelector('.ring-2')).toBeNull();
     await waitFor(() => {
       expect(updateNodeInternalsMock).toHaveBeenCalledWith('group-1');
     });

@@ -9,6 +9,8 @@ import { useCanvasStore } from '@/store/canvasStore';
 import FolderNode from './FolderNode';
 
 const commitNodeDataMock = vi.fn();
+/** Old rectangular highlight: Tailwind ring + scale on the folder root. */
+const RECT_RING_OR_SCALE_CLASS = /ring-|scale-/;
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -406,6 +408,14 @@ describe('FolderNode', () => {
 
     expect(screen.getByText('Archive')).toBeInTheDocument();
     expect(screen.getByText('Hidden subtitle')).toBeInTheDocument();
+    // Drop targeting flags the shape root; the silhouette outline layer is
+    // always mounted and toggled by CSS. No rectangular ring or scale.
+    const visual = container.querySelector('.folder-visual');
+    expect(visual?.className).toContain('node-drop-target');
+    expect(visual?.className).not.toMatch(RECT_RING_OR_SCALE_CLASS);
+    expect(
+      container.querySelector('[data-folder-layer="outline"] path')
+    ).not.toBeNull();
     // Folders are not resizable — no bottom-right resize control.
     expect(container.querySelector('.react-flow__resize-control')).toBeNull();
     expect(screen.queryByRole('button', { name: 'start resize' })).toBeNull();

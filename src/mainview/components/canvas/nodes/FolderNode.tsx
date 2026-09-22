@@ -24,6 +24,15 @@ import { NodeHandles } from './_shared/NodeHandles';
 /** Fallback when React Flow has not measured the node yet. */
 const DEFAULT_FOLDER_SIZE = 280;
 
+/** Shared viewBox for the three stacked folder shells. */
+const FOLDER_VIEWBOX = '48 73 304 189';
+/** Outer silhouette: the back shell with its tab. */
+const FOLDER_BACK_PATH =
+  'M 50, 240 V 95 A 20,20 0 0 1 70,75 H 140 C 180,75 180,100 220,100 H 330 A 20,20 0 0 1 350,120 V 240 A 20,20 0 0 1 330,260 H 70 A 20,20 0 0 1 50,240 Z';
+/** Front shell that masks the lower part of the preview stack. */
+const FOLDER_FRONT_PATH =
+  'M 50, 240 V 145 A 20,20 0 0 1 70,125 H 330 A 20,20 0 0 1 350,145 V 240 A 20,20 0 0 1 330,260 H 70 A 20,20 0 0 1 50,240 Z';
+
 export interface FolderData {
   children?: unknown[];
   color?: string;
@@ -61,6 +70,12 @@ export interface FolderContentProps {
 
 /**
  * Folder visual using the custom SVG icon.
+ *
+ * Highlight states (selected, drop target, rejected drop) are drawn by the
+ * stroke-only `outline` layer that traces the folder silhouette — a
+ * rectangular ring around a shape reads as detached. Which state shows, and
+ * in which color, is decided in `index.css` from the `.selected` wrapper
+ * class and the `node-drop-target` / `folder-rejecting` root classes.
  */
 export const FolderContent = ({
   data,
@@ -143,8 +158,8 @@ export const FolderContent = ({
   return (
     <div
       className={cn(
-        'node-visual absolute inset-0 cursor-pointer rounded-[20px] transition-[transform,box-shadow] duration-200 ease-out will-change-transform',
-        data.isDropTarget && 'scale-105 ring-2 ring-accent ring-offset-2',
+        'node-visual folder-visual absolute inset-0 cursor-pointer rounded-[20px] will-change-transform',
+        data.isDropTarget && 'node-drop-target',
         data.isRejectingDrop && 'folder-rejecting'
       )}
       style={{ transform: 'translateZ(0)' }}
@@ -162,14 +177,14 @@ export const FolderContent = ({
             filter: 'drop-shadow(0px 12px 15px rgba(0, 24, 48, 0.12))',
             transform: 'translateZ(0)',
           }}
-          viewBox="48 73 304 189"
+          viewBox={FOLDER_VIEWBOX}
           width="100%"
           xmlns="http://www.w3.org/2000/svg"
         >
           <title>Folder</title>
           <path
-            d="M 50, 240 V 95 A 20,20 0 0 1 70,75 H 140 C 180,75 180,100 220,100 H 330 A 20,20 0 0 1 350,120 V 240 A 20,20 0 0 1 330,260 H 70 A 20,20 0 0 1 50,240 Z"
-            fill="#E2E8F0"
+            d={FOLDER_BACK_PATH}
+            fill="var(--folder-back-fill)"
             stroke="#FFFFFF"
             strokeLinejoin="round"
             strokeWidth="2"
@@ -315,13 +330,13 @@ export const FolderContent = ({
           aria-hidden="true"
           height="100%"
           preserveAspectRatio="none"
-          viewBox="48 73 304 189"
+          viewBox={FOLDER_VIEWBOX}
           width="100%"
           xmlns="http://www.w3.org/2000/svg"
         >
           <path
-            d="M 50, 240 V 145 A 20,20 0 0 1 70,125 H 330 A 20,20 0 0 1 350,145 V 240 A 20,20 0 0 1 330,260 H 70 A 20,20 0 0 1 50,240 Z"
-            fill="#F1F5F9"
+            d={FOLDER_FRONT_PATH}
+            fill="var(--folder-front-fill)"
             stroke="#FFFFFF"
             strokeLinejoin="round"
             strokeWidth="2"
@@ -372,14 +387,31 @@ export const FolderContent = ({
         ) : null}
       </div>
 
-      {/* Reject overlay: shown while an un-placeable node (widget, sticky,
-          folder, group) is dragged over this folder. */}
-      {data.isRejectingDrop ? (
-        <div
+      {/* Layer 4: highlight stroke tracing the silhouette. Always mounted;
+          visibility and color are driven by CSS state classes. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-20"
+        data-folder-layer="outline"
+      >
+        <svg
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-20 rounded-[20px] ring-2 ring-red-500 ring-offset-2"
-        />
-      ) : null}
+          height="100%"
+          preserveAspectRatio="none"
+          viewBox={FOLDER_VIEWBOX}
+          width="100%"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d={FOLDER_BACK_PATH}
+            fill="none"
+            stroke="var(--folder-outline-color)"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
     </div>
   );
 };

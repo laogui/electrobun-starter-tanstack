@@ -514,27 +514,69 @@ body.resizing-nwse * {
   border-color: hsl(var(--group-orange-border));
 }
 
-.canvas-group.selected {
-  border-color: hsl(var(--connection-active));
-  border-style: dashed;
-  border-width: 2px;
+/* ── Node highlight (selection + drop target) ──
+   One rule for every node kind: a 2px accent stroke drawn ON the node's own
+   edge. It never grows the footprint, never adds a gap, and follows the
+   node's own radius, so a card, a sticky, and a group all read the same way.
+
+   - Cards / stickies / widgets / groups: `.node-visual` gets an inset outline.
+     Outlines paint after all descendants in the node's stacking context, so
+     the stroke sits above content without touching the elevation shadow.
+   - Folders are a shape, not a box: a rectangular ring around them looks
+     detached. They carry their own stroke-only SVG layer
+     (`data-folder-layer="outline"`) that traces the folder silhouette.
+
+   Selection comes from React Flow's `.selected` wrapper class. Drop targets
+   (a node dragged over a group/folder) use the same stroke plus a soft
+   accent tint via `.node-drop-target` on the visual root — no scaling.
+   `.node-editing` marks an inline editor that is open without the node being
+   selected (topic title). */
+.react-flow__node.selected:not(.react-flow__node-folder) .node-visual,
+.node-visual.node-drop-target,
+.node-visual.node-editing {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.canvas-group.node-drop-target {
+  background-image: linear-gradient(
+    color-mix(in oklch, var(--color-accent) 10%, transparent),
+    color-mix(in oklch, var(--color-accent) 10%, transparent)
+  );
+}
+
+/* Folder shell colors live on the root so highlight states can retint the
+   shape without touching the SVG markup. */
+.folder-visual {
+  --folder-back-fill: #e2e8f0;
+  --folder-front-fill: #f1f5f9;
+  --folder-outline-color: var(--color-accent);
+}
+
+.folder-visual.node-drop-target {
+  --folder-back-fill: color-mix(in oklch, var(--color-accent) 16%, #e2e8f0);
+  --folder-front-fill: color-mix(in oklch, var(--color-accent) 12%, #f1f5f9);
+}
+
+.folder-visual.folder-rejecting {
+  --folder-outline-color: #ef4444;
+}
+
+.folder-visual [data-folder-layer="outline"] {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+/* Hidden while the folder is expanded: its children fly out past the
+   silhouette and the anchor should read as an open container, not a target. */
+.react-flow__node.selected:not(.folder-peek-anchor) .folder-visual
+  [data-folder-layer="outline"],
+.folder-visual.node-drop-target [data-folder-layer="outline"],
+.folder-visual.folder-rejecting [data-folder-layer="outline"] {
+  opacity: 1;
 }
 
 /* ── React Flow node overrides ── */
-
-/* Selected card/folder node styling — a white gap + accent ring on the
-   visual card itself so border + card share the same element, radius, and
-   stacking context. A bare white outline vanished on pale cards, so the
-   selection reads as: normal card elevation, a 2px white gap, then a crisp
-   accent ring (the outline sits at `outline-offset: 2px`, exactly outside the
-   white box-shadow gap). Works on white, tinted, and colored cards alike. */
-.react-flow__node.selected:not(.react-flow__node-group) .node-visual {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  box-shadow:
-    var(--shadow-card),
-    0 0 0 2px rgb(255 255 255 / 0.92);
-}
 
 /* Promote each node to its own compositing layer to avoid repaints
    flickering text on neighboring cards. Applied to the wrapper,

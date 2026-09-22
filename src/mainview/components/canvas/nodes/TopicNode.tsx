@@ -50,7 +50,7 @@ export const TopicContent = ({ data }: TopicContentProps) => {
   return (
     <div
       className={cn(
-        'topic-body flex size-full items-center overflow-hidden rounded-md border px-3 py-2',
+        'node-visual topic-body flex size-full items-center overflow-hidden rounded-md border px-3 py-2',
         unreadable && 'border-dashed'
       )}
       style={{
@@ -414,7 +414,7 @@ const TopicNode = ({
       <NodeHandles />
       {editing ? (
         <div
-          className="topic-body flex size-full items-center overflow-hidden rounded-md border px-3 py-2 ring-1 ring-accent"
+          className="node-visual node-editing topic-body flex size-full items-center overflow-hidden rounded-md border px-3 py-2"
           style={{
             backgroundColor: palette.background,
             borderColor: palette.border,

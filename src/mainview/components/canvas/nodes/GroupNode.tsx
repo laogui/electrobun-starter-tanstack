@@ -31,7 +31,7 @@ export interface GroupContentProps {
   onLabelBlur?: () => void;
   /** Double-click handler to enter edit mode (caller must flip `editingLabel`). */
   onLabelDoubleClick?: (e: React.MouseEvent) => void;
-  /** Whether the wrapper node is selected (adds `selected` class). */
+  /** Whether the wrapper node is selected (keeps the drag grip visible). */
   selected?: boolean;
 }
 
@@ -40,6 +40,9 @@ export interface GroupContentProps {
  * label in the top-left. No store / RPC coupling — reusable for template
  * previews. The `children` slot receives handles and resize controls from the
  * wrapper component.
+ *
+ * Selection and drop-target highlighting are styled centrally in `index.css`
+ * (`.node-visual` / `.node-drop-target`), the same rule every node kind uses.
  */
 export const GroupContent = ({
   data,
@@ -54,11 +57,9 @@ export const GroupContent = ({
   <motion.div
     animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
     className={cn(
-      `group/group-node canvas-group group-${data.color || 'blue'} size-full`,
-      selected && 'selected',
+      `group/group-node node-visual canvas-group group-${data.color || 'blue'} size-full`,
       dragging ? 'cursor-grabbing' : 'cursor-grab',
-      data.active &&
-        'scale-[1.02] ring-2 ring-accent ring-offset-2 transition-transform duration-200 ease-out',
+      data.active && 'node-drop-target',
       data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
     )}
     initial={{ opacity: 0, scale: 0.95 }}

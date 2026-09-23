@@ -638,23 +638,23 @@ export function ViewSwitcher({
             rounded-2xl chrome used by the toolbar/search/zoom panels. Border,
             tint, and blur values otherwise match `.canvas-floating-surface`
             so the three floating bars still read as one family. */}
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-black/5 bg-white/80 p-1.5 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/80">
+        <div className="fixed bottom-4 left-1/2 z-40 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-1 rounded-full border border-black/5 bg-white/80 p-1 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/80">
           <Menu.Trigger
             // Transparent at rest (not its own filled pill) — a solid
             // rounded-full surface nested directly inside the outer
             // rounded-full bar reads as a pill-inside-a-pill. Only the
             // accent create button keeps a persistent fill, as the bar's
             // one deliberate primary action.
-            className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm transition-colors hover:bg-black/5 data-popup-open:bg-black/5 dark:data-popup-open:bg-white/10 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
+            className={`flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] transition-colors hover:bg-black/5 data-popup-open:bg-black/5 dark:data-popup-open:bg-white/10 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
             render={<motion.button whileTap={{ scale: 0.95 }} />}
           >
-            <Layers className="text-accent" size={16} />
-            <span className="flex max-w-50 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
-              <span className="truncate font-semibold text-gray-900 dark:text-white">
+            <Layers className="shrink-0 text-accent" size={14} />
+            <span className="flex min-w-0 items-center gap-1 text-gray-700 dark:text-gray-200">
+              <span className="max-w-40 truncate font-medium text-gray-900 dark:text-white">
                 {activeView?.name ?? 'Canvas'}
               </span>
               <span
-                className="shrink-0 font-normal text-2xs text-gray-500 dark:text-gray-400"
+                className="hidden shrink-0 font-normal text-2xs text-gray-500 sm:inline dark:text-gray-400"
                 title={activeViewNodeCountLabel}
               >
                 · {activeViewNodeCountLabel}
@@ -662,9 +662,10 @@ export function ViewSwitcher({
             </span>
             <motion.span
               animate={{ rotate: open ? 180 : 0 }}
+              className="shrink-0"
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
             >
-              <ChevronUp className="text-gray-400" size={14} />
+              <ChevronUp className="text-gray-400" size={12} />
             </motion.span>
           </Menu.Trigger>
 
@@ -672,10 +673,10 @@ export function ViewSwitcher({
             <Menu.Root>
               <Menu.Trigger
                 aria-label="Export canvas"
-                className={`flex size-9 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
                 render={<motion.button whileTap={{ scale: 0.9 }} />}
               >
-                <Download size={16} />
+                <Download size={14} />
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Positioner
@@ -684,7 +685,7 @@ export function ViewSwitcher({
                   side="top"
                   sideOffset={12}
                 >
-                  <Menu.Popup className="min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                  <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
                     {onExportCanvas ? (
                       <Menu.Item
                         aria-label="Export PNG"
@@ -720,7 +721,7 @@ export function ViewSwitcher({
           <Menu.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
             <Menu.Trigger
               aria-label={m.menu_create_button_aria()}
-              className={`flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong ${TRIGGER_FOCUS_RING}`}
+              className={`flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm transition-colors hover:bg-accent-strong ${TRIGGER_FOCUS_RING}`}
               render={<motion.button whileTap={{ scale: 0.9 }} />}
             >
               <motion.span
@@ -728,7 +729,7 @@ export function ViewSwitcher({
                 className="flex items-center justify-center"
                 transition={{ type: 'spring', damping: 20, stiffness: 300 }}
               >
-                <Plus size={20} />
+                <Plus size={16} />
               </motion.span>
             </Menu.Trigger>
 
@@ -739,7 +740,7 @@ export function ViewSwitcher({
                 side="top"
                 sideOffset={12}
               >
-                <Menu.Popup className="min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                <Menu.Popup className="floating-menu-popup min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
                   {commonCreateItems.map((item) =>
                     renderCreateMenuItem(item, {
                       onCreateCanvasType,
@@ -792,7 +793,7 @@ export function ViewSwitcher({
             side="top"
             sideOffset={8}
           >
-            <Menu.Popup className="min-w-65 origin-(--transform-origin) overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+            <Menu.Popup className="floating-menu-popup min-w-65 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
               {views.map((view, index) => {
                 const isLast = index === views.length - 1;
                 const rowBorder = isLast
@@ -920,7 +921,7 @@ export function ViewSwitcher({
                     side="right"
                     sideOffset={4}
                   >
-                    <Menu.Popup className="min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-800/90">
+                    <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
                       <Menu.Item
                         className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
                         closeOnClick={false}

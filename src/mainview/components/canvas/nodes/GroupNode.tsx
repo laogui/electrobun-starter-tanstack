@@ -1,5 +1,4 @@
 import { useUpdateNodeInternals } from '@xyflow/react';
-import * as motion from 'motion/react-m';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 
@@ -54,16 +53,13 @@ export const GroupContent = ({
   onLabelDoubleClick,
   children,
 }: GroupContentProps) => (
-  <motion.div
-    animate={{ opacity: data.isHidden ? 0 : 1, scale: 1 }}
+  <div
     className={cn(
-      `group/group-node node-visual canvas-group group-${data.color || 'blue'} size-full`,
+      `group/group-node node-visual canvas-group group-${data.color || 'blue'} size-full transition-opacity duration-200 ease-out`,
       dragging ? 'cursor-grabbing' : 'cursor-grab',
       data.active && 'node-drop-target',
       data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
     )}
-    initial={{ opacity: 0, scale: 0.95 }}
-    transition={{ duration: 0.2 }}
   >
     {children}
 
@@ -94,7 +90,7 @@ export const GroupContent = ({
         ⋮⋮
       </span>
     </div>
-  </motion.div>
+  </div>
 );
 
 const GroupNode = ({

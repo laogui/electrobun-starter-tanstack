@@ -9,6 +9,7 @@ import {
   pushNodeAwayFromObstacle,
   REPULSION_GAP,
   REPULSION_MARGIN,
+  type RepulsionMemory,
 } from './repulsion';
 
 const card = (
@@ -178,6 +179,34 @@ describe('applyDragRepulsion — basic pushing', () => {
     });
     expect(positionOf(result, 'b')).not.toEqual({ x: 10, y: 10 });
     expect(positionOf(result, 'c')).not.toEqual({ x: 10, y: 1010 });
+  });
+});
+
+describe('applyDragRepulsion — memory hysteresis', () => {
+  const frame = (ax: number, memory?: RepulsionMemory) => {
+    const start = [card('a', 0, 0), card('b', 10, 0)];
+    return applyDragRepulsion({
+      nodes: [card('a', ax, 0), card('b', 10, 0)],
+      activeIds: new Set(['a']),
+      origins: originsOf(start),
+      memory,
+    });
+  };
+
+  it('keeps a neighbor on its side while the centers barely cross', () => {
+    const memory: RepulsionMemory = new Map();
+    expect(positionOf(frame(0, memory), 'b').x).toBeGreaterThan(0);
+    // a's center is now 10px past b's: without memory b jumps to the left.
+    expect(positionOf(frame(20), 'b').x).toBeLessThan(0);
+    expect(positionOf(frame(20, memory), 'b').x).toBe(
+      20 + CARD_W + REPULSION_GAP
+    );
+  });
+
+  it('lets the neighbor switch sides once the centers cross clearly', () => {
+    const memory: RepulsionMemory = new Map();
+    frame(0, memory);
+    expect(positionOf(frame(60, memory), 'b').x).toBeLessThan(60);
   });
 });
 

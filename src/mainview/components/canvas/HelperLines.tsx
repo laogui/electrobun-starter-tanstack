@@ -13,11 +13,15 @@ const canvasStyle = {
 };
 
 export function HelperLines({ horizontal, vertical }: HelperLinesProps) {
-  const { x, y, zoom } = useViewport();
-
   if (horizontal === undefined && vertical === undefined) {
     return null;
   }
+  return <HelperLinesSvg horizontal={horizontal} vertical={vertical} />;
+}
+
+/** Split out so pan/zoom only re-renders while a guide is visible. */
+function HelperLinesSvg({ horizontal, vertical }: HelperLinesProps) {
+  const { x, y, zoom } = useViewport();
 
   return (
     <div style={canvasStyle}>

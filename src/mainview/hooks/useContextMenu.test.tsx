@@ -1051,7 +1051,10 @@ describe('useContextMenu', () => {
     expect(storeActions.pasteClipboard).toHaveBeenCalled();
     expect(storeActions.duplicateSelected).toHaveBeenCalled();
     expect(storeActions.groupSelected).toHaveBeenCalled();
-    expect(zoomTo).toHaveBeenCalledWith(1, { duration: 300 });
+    expect(zoomTo).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ duration: 200, interpolate: 'linear' })
+    );
     expect(storeActions.deleteNodes).toHaveBeenCalledWith(['card-1']);
     expect(storeActions.changeNodeColor).toHaveBeenCalledWith('card-1');
     expect(storeActions.addFolderChild).toHaveBeenCalledWith('folder-1');

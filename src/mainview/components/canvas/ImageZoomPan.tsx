@@ -7,7 +7,7 @@ interface ImageZoomPanProps {
 }
 
 export function ImageZoomPan({ children }: ImageZoomPanProps) {
-  const { containerRef, isPanning, panX, panY, reset, zoom } =
+  const { containerRef, isPanning, isWheeling, panX, panY, reset, zoom } =
     useImageZoomPan();
 
   return (
@@ -26,7 +26,10 @@ export function ImageZoomPan({ children }: ImageZoomPanProps) {
         style={{
           transform: `scale(${zoom}) translate(${panX / zoom}px, ${panY / zoom}px)`,
           transformOrigin: 'center center',
-          transition: isPanning ? 'none' : 'transform 0.2s ease-out',
+          transition:
+            isPanning || isWheeling
+              ? 'none'
+              : 'transform 0.2s var(--motion-ease-out)',
         }}
       >
         {children}

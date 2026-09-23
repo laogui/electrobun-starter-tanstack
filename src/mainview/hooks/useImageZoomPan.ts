@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
-const ZOOM_STEP = 0.15;
+/** Zoom factor per wheel pixel; a 100px mouse notch ≈ 18%. */
+const WHEEL_ZOOM_SENSITIVITY = 0.002;
+const MAX_WHEEL_DELTA = 100;
+const LINE_HEIGHT_PX = 16;
+/** Idle time after the last wheel event before transitions resume. */
+const WHEEL_IDLE_MS = 150;
 
 interface UseImageZoomPanReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;
   isPanning: boolean;
+  isWheeling: boolean;
   panX: number;
   panY: number;
   reset: () => void;
@@ -31,6 +37,7 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
+  const [isWheeling, setIsWheeling] = useState(false);
 
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -58,19 +65,35 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
       return;
     }
 
+    let wheelIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
+      // Wheel zoom is direct manipulation: track 1:1, no easing lag.
+      setIsWheeling(true);
+      clearTimeout(wheelIdleTimer);
+      wheelIdleTimer = setTimeout(() => {
+        setIsWheeling(false);
+      }, WHEEL_IDLE_MS);
+
       const rect = container.getBoundingClientRect();
       const cursorX = e.clientX - rect.left - rect.width / 2;
       const cursorY = e.clientY - rect.top - rect.height / 2;
+      const rawDelta = e.deltaMode === 1 ? e.deltaY * LINE_HEIGHT_PX : e.deltaY;
+      const delta = Math.max(
+        -MAX_WHEEL_DELTA,
+        Math.min(MAX_WHEEL_DELTA, rawDelta)
+      );
 
       setZoom((prevZoom) => {
-        const direction = e.deltaY > 0 ? -1 : 1;
         const newZoom = Math.min(
           MAX_ZOOM,
-          Math.max(MIN_ZOOM, prevZoom + direction * ZOOM_STEP)
+          Math.max(
+            MIN_ZOOM,
+            prevZoom * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY)
+          )
         );
 
         if (newZoom === prevZoom) {
@@ -95,6 +118,7 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
     // react-doctor-disable-next-line react-doctor/client-passive-event-listeners
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
+      clearTimeout(wheelIdleTimer);
       container.removeEventListener('wheel', handleWheel);
     };
   }, []);
@@ -149,5 +173,5 @@ export function useImageZoomPan(): UseImageZoomPanReturn {
     };
   }, []);
 
-  return { containerRef, isPanning, panX, panY, reset, zoom };
+  return { containerRef, isPanning, isWheeling, panX, panY, reset, zoom };
 }

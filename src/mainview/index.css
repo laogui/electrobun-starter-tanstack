@@ -67,6 +67,11 @@
    Hover adds one more mid layer so elevation animates cleanly.
    Dark mode keeps a light ring and deeper black ambient. */
 :root {
+  /* Motion tokens — mirrored in `lib/motion.ts`. */
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-duration-fast: 150ms;
+
   --shadow-ring-rgb: 15, 23, 42; /* slate-900 ink */
   /* edge ring — primary separator on pale canvas */
   --shadow-card:
@@ -82,6 +87,12 @@
     rgba(var(--shadow-ring-rgb), 0.06) 0px 2px 4px 0px,
     rgba(var(--shadow-ring-rgb), 0.09) 0px 8px 16px -3px,
     rgba(var(--shadow-ring-rgb), 0.12) 0px 20px 40px -8px;
+  /* Picked up while dragging. */
+  --shadow-card-drag:
+    rgba(var(--shadow-ring-rgb), 0.12) 0px 0px 0px 1px,
+    rgba(var(--shadow-ring-rgb), 0.08) 0px 4px 8px -2px,
+    rgba(var(--shadow-ring-rgb), 0.12) 0px 16px 32px -6px,
+    rgba(var(--shadow-ring-rgb), 0.16) 0px 32px 64px -12px;
 }
 
 .dark {
@@ -96,6 +107,11 @@
     rgba(0, 0, 0, 0.4) 0px 2px 4px 0px,
     rgba(0, 0, 0, 0.34) 0px 8px 18px -3px,
     rgba(0, 0, 0, 0.4) 0px 22px 44px -8px;
+  --shadow-card-drag:
+    rgba(var(--shadow-ring-rgb), 0.16) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.45) 0px 4px 8px -2px,
+    rgba(0, 0, 0, 0.4) 0px 16px 32px -6px,
+    rgba(0, 0, 0, 0.48) 0px 32px 64px -12px;
 }
 
 /* Shared frosted panel for canvas chrome: search, toolbar, bottom bar, zoom.
@@ -112,6 +128,30 @@
 .dark .canvas-floating-surface {
   background-color: rgb(38 38 38 / 0.8);
   border-color: rgb(255 255 255 / 0.1);
+}
+
+/* Base UI menu/popover popups on the floating bars: grow out of the trigger
+   with a small drift toward it, and exit faster than they enter. */
+.floating-menu-popup {
+  transform-origin: var(--transform-origin);
+  transition:
+    transform 200ms var(--motion-ease-out),
+    opacity var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.floating-menu-popup[data-starting-style] {
+  opacity: 0;
+  transform: translateY(6px) scale(0.95);
+}
+
+.floating-menu-popup[data-side="right"][data-starting-style] {
+  transform: translateX(-6px) scale(0.95);
+}
+
+.floating-menu-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+  transition-duration: 120ms;
 }
 
 /* Unified minimap + zoom dock (single frosted card). Nested Controls/MiniMap
@@ -365,16 +405,23 @@
   }
 }
 
+/* Reduced motion drops movement but keeps state-change fades (opacity,
+   color, shadow), which aid comprehension without implying motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    transition-property:
+      opacity, color, background-color, border-color, box-shadow !important;
     transition-delay: 0ms !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .zoom-indicator {
+    animation-duration: 1500ms !important;
   }
 
   .folder-expanded-child-visual {
@@ -646,12 +693,31 @@ body.resizing-nwse * {
    collision solver). The dragged node itself must track the pointer 1:1, so
    `.dragging` is excluded. Group and multi-select drags never set this class:
    dragged-group children and co-dragged nodes move every frame without a
-   `.dragging` marker and would visibly lag behind. */
+   `.dragging` marker and would visibly lag behind. The class stays on for
+   one duration after drag stop so pushed neighbors finish settling. */
 .canvas-repel-anim .react-flow__node {
-  transition: transform 120ms ease-out;
+  transition: transform 240ms var(--motion-ease-out);
 }
 .canvas-repel-anim .react-flow__node.dragging {
   transition: none;
+}
+
+/* Freshly created / pasted nodes settle onto the canvas. Animates the inner
+   visual so React Flow's wrapper translate stays untouched. */
+.react-flow__node.node-entering .node-visual {
+  animation: node-enter 220ms var(--motion-ease-out) both;
+}
+
+@keyframes node-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* Picked-up cards lift off the desk. Out-specifies `hover:shadow-card-hover`. */
+.react-flow__node.dragging .node-visual.shadow-card {
+  box-shadow: var(--shadow-card-drag);
 }
 
 /* Pin text to grayscale antialiasing so opacity transitions on sibling
@@ -715,6 +781,9 @@ body.resizing-nwse * {
   border: 2px solid #fff;
   border-radius: 50%;
   opacity: 0;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-out),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 /* Selected nodes show handles at low opacity to hint connectivity */

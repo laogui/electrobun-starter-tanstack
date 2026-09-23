@@ -48,6 +48,7 @@ import {
 import { resolveExtensionMessage } from '@/extensions/messages';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
+import { POPOVER_EXIT, POPOVER_SPRING } from '@/lib/motion';
 import { buildTopicIndex } from '@/lib/topicTree';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -1053,11 +1054,11 @@ export function CanvasContextMenu({
       {menu ? (
         <>
           <motion.div
-            animate={{ opacity: 1, scale: 1, y: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
             aria-label="Canvas context menu"
             className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
+            initial={{ opacity: 0, scale: 0.95 }}
             onClick={(e) => {
               e.stopPropagation();
             }}
@@ -1069,8 +1070,12 @@ export function CanvasContextMenu({
             }}
             ref={ref}
             role="menu"
-            style={{ left: x, top: y }}
-            transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+            style={{
+              left: x,
+              top: y,
+              transformOrigin: `${menu.x - x}px ${menu.y - y}px`,
+            }}
+            transition={POPOVER_SPRING}
           >
             {items.map((item, index) => (
               <button
@@ -1149,8 +1154,12 @@ export function CanvasContextMenu({
                 animate={{ opacity: 1, scale: 1, x: 0 }}
                 aria-label="New item submenu"
                 className="fixed z-101 min-w-[180px] overflow-y-auto rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
-                exit={{ opacity: 0, scale: 0.95, x: -4 }}
-                initial={{ opacity: 0, scale: 0.95, x: -4 }}
+                exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
+                initial={{
+                  opacity: 0,
+                  scale: 0.95,
+                  x: submenuOpensRight ? -4 : 4,
+                }}
                 onMouseEnter={cancelCloseSubmenu}
                 onMouseLeave={scheduleCloseSubmenu}
                 ref={submenuRef}
@@ -1159,8 +1168,9 @@ export function CanvasContextMenu({
                   left: submenuX,
                   maxHeight: 'calc(100vh - 16px)',
                   top: submenuY,
+                  transformOrigin: submenuOpensRight ? 'left top' : 'right top',
                 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                transition={POPOVER_SPRING}
               >
                 {submenuItems.map((subItem, subIndex) => (
                   <button

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { Edge, Node, Rect } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -441,7 +441,9 @@ describe('useNodeDrag', () => {
   });
 
   it('tracks active targets while dragging and nests into folder on stop', () => {
+    vi.useFakeTimers();
     render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'drag-start' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'dragging' }));
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('folder-1');
@@ -470,7 +472,13 @@ describe('useNodeDrag', () => {
     });
     expect(screen.getByLabelText('drop-target')).toHaveTextContent('none');
     expect(screen.getByLabelText('active-group')).toHaveTextContent('none');
+    // Neighbors keep gliding for the settle window before the class drops.
+    expect(screen.getByLabelText('repel-anim')).toHaveTextContent('on');
+    act(() => {
+      vi.advanceTimersByTime(240);
+    });
     expect(screen.getByLabelText('repel-anim')).toHaveTextContent('off');
+    vi.useRealTimers();
   });
 });
 

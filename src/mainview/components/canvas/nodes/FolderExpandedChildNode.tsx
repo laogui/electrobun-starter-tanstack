@@ -9,9 +9,9 @@ import {
   getFolderChildShapeClass,
   getFolderThumbnailContentTransform,
 } from '@/lib/folderExpansion';
+import { EASE_OUT_QUINT } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
-const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
 const OPEN_BASE_DURATION = 0.34;
 const OPEN_DEPTH_DURATION = 0.1;
 const CLOSE_BASE_DURATION = 0.28;

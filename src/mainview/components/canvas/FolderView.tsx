@@ -4,6 +4,7 @@ import * as motion from 'motion/react-m';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { EASE_OUT_QUINT } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import type { FocusedItem } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
@@ -37,7 +38,6 @@ const MAX_VISIBLE_CHILDREN = 8;
 const PAGED_CHILDREN = 7;
 const PREVIEW_WIDTH = 280;
 const PREVIEW_HEIGHT = PREVIEW_WIDTH * 1.28;
-const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));

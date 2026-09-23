@@ -11,6 +11,24 @@ function isDimensionChange(
   return change.type === 'dimensions' && change.dimensions !== undefined;
 }
 
+/** React Flow always returns a fresh array; keep the input when no node changed
+ *  so the store can skip publishing a no-op update. */
+function applyNodeChangesStable(changes: NodeChange[], nodes: Node[]): Node[] {
+  if (changes.length === 0) {
+    return nodes;
+  }
+  const next = applyNodeChanges(changes, nodes);
+  if (next.length !== nodes.length) {
+    return next;
+  }
+  for (let i = 0; i < next.length; i++) {
+    if (next[i] !== nodes[i]) {
+      return next;
+    }
+  }
+  return nodes;
+}
+
 /**
  * React Flow writes resize results to runtime width/height fields.
  * Mirror those dimensions into node.style so persistence keeps the latest size.
@@ -23,7 +41,7 @@ export function applyCanvasNodeChanges(
     (change) => change.type === 'dimensions'
   );
   if (!hasDimensionChange) {
-    return applyNodeChanges(changes, nodes);
+    return applyNodeChangesStable(changes, nodes);
   }
 
   // Topic dimensions belong to title commits. React Flow also reports the
@@ -38,7 +56,7 @@ export function applyCanvasNodeChanges(
   if (savedChanges.length === 0) {
     return nodes;
   }
-  const updatedNodes = applyNodeChanges(savedChanges, nodes);
+  const updatedNodes = applyNodeChangesStable(savedChanges, nodes);
   const dimensionsById = new Map<string, { width: number; height: number }>();
   for (const change of savedChanges) {
     if (isDimensionChange(change)) {

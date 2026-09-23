@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { useSearch } from '@/hooks/useSearch';
 import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
+import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -499,7 +500,10 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
           if (center) {
             const zoom = inst.getViewport?.()?.zoom ?? 1;
             suppressViewportPersist(300);
-            inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
+            inst.setCenter?.(center.x, center.y, {
+              ...viewportMotion(VIEWPORT_PAN_MS),
+              zoom,
+            });
           }
         }
         return;
@@ -516,7 +520,10 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
         if (center) {
           const zoom = inst.getViewport?.()?.zoom ?? 1;
           suppressViewportPersist(300);
-          inst.setCenter?.(center.x, center.y, { zoom, duration: 240 });
+          inst.setCenter?.(center.x, center.y, {
+            ...viewportMotion(VIEWPORT_PAN_MS),
+            zoom,
+          });
         }
       }
     },

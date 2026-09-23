@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { openFocusedById } from '@/lib/canvasFocus';
+import { EASE_OUT } from '@/lib/motion';
 import { rpcScanUnlinkedNotes } from '@/lib/rpc';
 import type { UnlinkedFileEntry } from '@/settingsClient';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -321,7 +322,7 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
             className="relative flex max-h-[72vh] w-full max-w-[820px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(15,23,42,0.25)] ring-1 ring-black/[0.04] dark:bg-neutral-900 dark:shadow-[0_24px_64px_-16px_rgba(0,0,0,0.6)] dark:ring-white/[0.06]"
             exit={{ opacity: 0, scale: 0.96 }}
             initial={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.18, ease: EASE_OUT }}
           >
             <LibraryHeader
               onClose={close}

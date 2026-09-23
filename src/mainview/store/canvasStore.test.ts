@@ -2103,7 +2103,7 @@ describe('canvasStore — createNode', () => {
     expect(setCenter).toHaveBeenCalledWith(
       node.position.x + CARD_W / 2,
       node.position.y + CARD_H / 2,
-      { duration: 240, zoom: 1 }
+      expect.objectContaining({ duration: 240, zoom: 1 })
     );
   });
 

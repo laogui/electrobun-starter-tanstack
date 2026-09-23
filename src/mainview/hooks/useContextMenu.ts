@@ -25,6 +25,7 @@ import {
   buildImportedCardCreateOptions,
   handleMarkdownImportResult,
 } from '@/lib/importMarkdownCards';
+import { VIEWPORT_ZOOM_MS, viewportMotion } from '@/lib/motion';
 import {
   rpcExportNoteMarkdown,
   rpcExportNotesMarkdown,
@@ -522,7 +523,7 @@ export function useContextMenu({
           break;
         }
         case 'reset-zoom': {
-          rfInstance.current?.zoomTo(1, { duration: 300 });
+          rfInstance.current?.zoomTo(1, viewportMotion(VIEWPORT_ZOOM_MS));
           break;
         }
         case 'export-canvas-markdown': {

@@ -1314,8 +1314,8 @@ describe('routes/index', () => {
     await waitFor(() => {
       expect(reactFlowMocks.props).toHaveBeenCalledWith(
         expect.objectContaining({
-          snapGrid: [24, 24],
-          snapToGrid: false,
+          snapGrid: undefined,
+          snapToGrid: undefined,
         })
       );
     });
@@ -1340,8 +1340,8 @@ describe('routes/index', () => {
     await waitFor(() => {
       expect(reactFlowMocks.props).toHaveBeenCalledWith(
         expect.objectContaining({
-          snapGrid: [24, 24],
-          snapToGrid: false,
+          snapGrid: undefined,
+          snapToGrid: undefined,
         })
       );
     });

@@ -1,3 +1,4 @@
+import { Blocks, ChevronDown } from 'lucide-react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useCanvasStore } from '@/store/canvasStore';
 import type { ImporterSessionSnapshot } from './importers';
@@ -412,36 +413,29 @@ export function PluginWorkbench({
   return (
     <aside
       aria-label={pluginText('Plugin workbench', '插件工作台')}
-      style={{
-        position: 'fixed',
-        right: 16,
-        bottom: 16,
-        zIndex: 999,
-        maxWidth: 'min(360px, calc(100vw - 32px))',
-      }}
+      className="fixed top-3 right-3 z-30 max-w-[min(22rem,calc(100vw-1.5rem))]"
     >
-      <details
-        style={{
-          border: '1px solid #888',
-          borderRadius: 8,
-          padding: 8,
-          background: 'var(--background, white)',
-          color: 'var(--foreground, #222)',
-          boxShadow: '0 4px 20px #0002',
-        }}
-      >
-        <summary style={{ cursor: 'pointer' }}>
-          {pluginText('Plugins', '插件')} ({snapshot.plugins.length})
+      <details className="canvas-floating-surface group/plugins overflow-hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1 font-medium text-[13px] text-neutral-700 outline-none transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-accent/60 dark:text-neutral-200 dark:hover:bg-white/10 [&::-webkit-details-marker]:hidden">
+          <Blocks
+            aria-hidden
+            className="shrink-0 text-neutral-500 dark:text-neutral-400"
+            size={14}
+          />
+          <span>{pluginText('Plugins', '插件')}</span>
+          <span
+            aria-hidden
+            className="rounded-full bg-black/5 px-1.5 py-px font-normal text-2xs text-neutral-600 tabular-nums dark:bg-white/10 dark:text-neutral-300"
+          >
+            {snapshot.plugins.length}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className="ml-0.5 shrink-0 text-neutral-400 transition-transform group-open/plugins:rotate-180"
+            size={12}
+          />
         </summary>
-        <div
-          style={{
-            maxHeight: '60vh',
-            overflow: 'auto',
-            paddingTop: 8,
-            display: 'grid',
-            gap: 8,
-          }}
-        >
+        <div className="grid max-h-[60vh] gap-2 overflow-auto border-black/5 border-t p-3 text-[13px] dark:border-white/10">
           {snapshot.importers.length > 0 && (
             <section
               aria-label={pluginText('Import file', '导入文件')}

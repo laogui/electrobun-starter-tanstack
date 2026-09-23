@@ -28,6 +28,7 @@ import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
+import { EASE_OUT_QUINT } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import type {
@@ -56,8 +57,6 @@ const BlockNoteEditor = lazy(
   () => import('@/components/editor/BlockNoteEditor')
 );
 
-/** Matches folder-fan easing so open/close feels like one system. */
-const EASE_OUT_QUINT = [0.22, 1, 0.36, 1] as const;
 const CLOSE_DURATION_S = 0.26;
 /**
  * Floor for the expand morph's starting scale. A tiny floor makes the panel

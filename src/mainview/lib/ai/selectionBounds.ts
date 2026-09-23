@@ -1,38 +1,50 @@
 import type { Node } from '@xyflow/react';
 
-import { buildAbsoluteRects, type Rect } from '../collision';
+import { getNodeSize, type Rect } from '../collision';
 
 /**
  * Flow-space axis-aligned bounds of every selected node.
  * Returns null when nothing is selected (or sizes cannot be resolved).
+ *
+ * Runs on every store update while something is selected (including drag
+ * frames), so it only resolves the selected nodes and their parent chains
+ * instead of building rects for the whole canvas.
  */
 export function getSelectedNodesFlowBounds(nodes: Node[]): Rect | null {
-  const selected = nodes.filter((node) => node.selected);
+  const selected: Node[] = [];
+  let needsParents = false;
+  for (const node of nodes) {
+    if (node.selected) {
+      selected.push(node);
+      needsParents ||= Boolean(node.parentId);
+    }
+  }
   if (selected.length === 0) {
     return null;
   }
 
-  const absoluteRects = buildAbsoluteRects(nodes);
+  const byId = needsParents ? new Map(nodes.map((n) => [n.id, n])) : null;
   let left = Number.POSITIVE_INFINITY;
   let top = Number.POSITIVE_INFINITY;
   let right = Number.NEGATIVE_INFINITY;
   let bottom = Number.NEGATIVE_INFINITY;
-  let any = false;
 
   for (const node of selected) {
-    const rect = absoluteRects.get(node.id);
-    if (!rect) {
-      continue;
+    let x = node.position.x;
+    let y = node.position.y;
+    const visited = new Set<string>([node.id]);
+    let parent = node.parentId ? byId?.get(node.parentId) : undefined;
+    while (parent && !visited.has(parent.id)) {
+      visited.add(parent.id);
+      x += parent.position.x;
+      y += parent.position.y;
+      parent = parent.parentId ? byId?.get(parent.parentId) : undefined;
     }
-    any = true;
-    left = Math.min(left, rect.left);
-    top = Math.min(top, rect.top);
-    right = Math.max(right, rect.right);
-    bottom = Math.max(bottom, rect.bottom);
-  }
-
-  if (!any) {
-    return null;
+    const { width, height } = getNodeSize(node);
+    left = Math.min(left, x);
+    top = Math.min(top, y);
+    right = Math.max(right, x + width);
+    bottom = Math.max(bottom, y + height);
   }
 
   return { left, top, right, bottom };

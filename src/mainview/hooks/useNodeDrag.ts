@@ -1,6 +1,6 @@
 import type { Node, OnNodeDrag, XYPosition } from '@xyflow/react';
 import { useReactFlow } from '@xyflow/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   isCanvasContentNode,
@@ -15,6 +15,7 @@ import {
   captureRepulsionOrigins,
   pushNodeAwayFromObstacle,
   REPULSION_GAP,
+  type RepulsionMemory,
 } from '@/lib/repulsion';
 import {
   buildTopicIndex,
@@ -32,6 +33,9 @@ import { isTopicNodeType } from '../../shared/topic';
  * automatically.
  */
 const isContentNode = (node: Node) => isCanvasContentNode(node.type);
+
+/** Matches the `.canvas-repel-anim` transition duration in index.css. */
+const REPEL_SETTLE_MS = 240;
 
 function deactivateGroupHighlight(node: Node): Node {
   if (node.type !== 'group' || !node.data.active) {
@@ -196,6 +200,21 @@ export function useNodeDrag() {
    *  multi-select drags are excluded because only the grabbed node carries
    *  React Flow's `.dragging` class (the transition opt-out). */
   const [repelAnimationActive, setRepelAnimationActive] = useState(false);
+  /** Keeps the glide class on briefly after drag stop so pushed neighbors
+   *  finish their transition instead of snapping. */
+  const repelSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  useEffect(
+    () => () => {
+      if (repelSettleTimerRef.current) {
+        clearTimeout(repelSettleTimerRef.current);
+      }
+    },
+    []
+  );
+  /** Per-gesture solver memory so neighbors keep their push side. */
+  const repulsionMemoryRef = useRef<RepulsionMemory>(new Map());
   /** Node that started the current drag; helper-line snapping uses this, not changes[0]. */
   const dragAnchorIdRef = useRef<string | null>(null);
   const rf = useReactFlow();
@@ -301,6 +320,11 @@ export function useNodeDrag() {
       saveSnapshot();
       dragAnchorIdRef.current = node.id;
       originsRef.current = null;
+      repulsionMemoryRef.current.clear();
+      if (repelSettleTimerRef.current) {
+        clearTimeout(repelSettleTimerRef.current);
+        repelSettleTimerRef.current = null;
+      }
       topicFollowRef.current = captureTopicBranchFollow(node, draggedNodes);
       setRejectedFolderId(null);
       setDraggingNodeIds([
@@ -476,6 +500,7 @@ export function useNodeDrag() {
           origins: originsRef.current,
           paused,
           gap: REPULSION_GAP,
+          memory: repulsionMemoryRef.current,
         });
         // When the dragged node cannot enter the folder it overlaps (widget,
         // sticky, folder, group), push it out so the folder reads as a hard
@@ -504,7 +529,14 @@ export function useNodeDrag() {
     (_, node, draggedNodes = []) => {
       setDropTargetId(null);
       setRejectedFolderId(null);
-      setRepelAnimationActive(false);
+      if (repelSettleTimerRef.current) {
+        clearTimeout(repelSettleTimerRef.current);
+      }
+      repelSettleTimerRef.current = setTimeout(() => {
+        repelSettleTimerRef.current = null;
+        setRepelAnimationActive(false);
+      }, REPEL_SETTLE_MS);
+      repulsionMemoryRef.current.clear();
       setDraggingNodeIds([]);
       dragAnchorIdRef.current = null;
 

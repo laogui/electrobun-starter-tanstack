@@ -19,6 +19,20 @@ const MAX_ITERATIONS = 32;
 /** Threshold under which a solved position is considered unchanged, so the
  *  original node object (and its identity) is preserved. */
 const POSITION_EPSILON = 0.01;
+/** A remembered push axis is kept until the other axis needs this many px
+ *  less penetration, so diagonal approaches don't flip-flop every frame. */
+const AXIS_HYSTERESIS = 12;
+/** A remembered push direction is kept until the centers cross by this many
+ *  px, so pointer jitter around a neighbor's center can't bounce it across. */
+const SIGN_HYSTERESIS = 24;
+
+interface PairSeparation {
+  axis: 'x' | 'y';
+  sign: 1 | -1;
+}
+
+/** Per-gesture memory of how each overlapping pair was last separated. */
+export type RepulsionMemory = Map<string, PairSeparation>;
 
 interface SolverBox {
   awake: boolean;
@@ -42,6 +56,10 @@ export interface ApplyDragRepulsionParams {
   gap?: number;
   /** Clearance between pushed neighbors. Defaults to {@link REPULSION_MARGIN}. */
   margin?: number;
+  /** Optional per-gesture memory. When provided, pairs keep their previous
+   *  push axis/direction within a hysteresis band instead of snapping to the
+   *  other side on tiny pointer moves. */
+  memory?: RepulsionMemory;
   /** Current nodes, with the active nodes already at their live positions. */
   nodes: Node[];
   /** Top-level node positions captured at gesture start. Every frame is
@@ -140,6 +158,7 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
     activeIds,
     gap = REPULSION_GAP,
     margin = REPULSION_MARGIN,
+    memory,
     nodes,
     origins,
     paused = false,
@@ -202,7 +221,7 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
   }
 
   if (!paused) {
-    solve(boxes);
+    solve(boxes, memory);
   }
 
   // Write back: pushable boxes are always top-level, so the solved absolute
@@ -232,6 +251,34 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
   return changed ? result : nodes;
 }
 
+function pickSeparation(
+  dx: number,
+  dy: number,
+  px: number,
+  py: number,
+  prev: PairSeparation | undefined
+): PairSeparation {
+  let axis: 'x' | 'y' = px < py ? 'x' : 'y';
+  if (prev && prev.axis !== axis) {
+    const kept = prev.axis === 'x' ? px : py;
+    const alt = prev.axis === 'x' ? py : px;
+    if (kept - alt < AXIS_HYSTERESIS) {
+      axis = prev.axis;
+    }
+  }
+  const d = axis === 'x' ? dx : dy;
+  let sign: 1 | -1 = d > 0 ? 1 : -1;
+  if (
+    prev &&
+    prev.axis === axis &&
+    prev.sign !== sign &&
+    Math.abs(d) < SIGN_HYSTERESIS
+  ) {
+    sign = prev.sign;
+  }
+  return { axis, sign };
+}
+
 /**
  * Iterative pairwise separation. In-place (Gauss-Seidel) so a push propagates
  * along chains within a single sweep; converges in a handful of iterations.
@@ -240,7 +287,8 @@ export function applyDragRepulsion(params: ApplyDragRepulsionParams): Node[] {
  * pushable node already disturbed this frame) and at least one side must be
  * movable. This keeps untouched pre-existing overlaps intact.
  */
-function solve(boxes: SolverBox[]): void {
+function solve(boxes: SolverBox[], memory?: RepulsionMemory): void {
+  const seen = memory ? new Set<string>() : null;
   // Keep the original pair order, but skip sleeping/sleeping pairs entirely.
   // A sparse canvas with one dragged node now scans O(n) eligible pairs,
   // instead of visiting every pair just to discover that both are asleep.
@@ -286,47 +334,61 @@ function solve(boxes: SolverBox[]): void {
         const pad = Math.max(a.pad, b.pad);
         const dx = a.x + a.width / 2 - (b.x + b.width / 2);
         const dy = a.y + a.height / 2 - (b.y + b.height / 2);
-        const px = (a.width + b.width) / 2 + pad - Math.abs(dx);
-        const py = (a.height + b.height) / 2 + pad - Math.abs(dy);
+        const halfX = (a.width + b.width) / 2 + pad;
+        const halfY = (a.height + b.height) / 2 + pad;
+        const px = halfX - Math.abs(dx);
+        const py = halfY - Math.abs(dy);
         if (px <= OVERLAP_EPSILON || py <= OVERLAP_EPSILON) {
           continue;
         }
 
         moved = true;
-        if (px < py) {
-          const sign = dx > 0 ? 1 : -1;
+        const key = memory ? `${a.id}\u0000${b.id}` : '';
+        const { axis, sign } = pickSeparation(dx, dy, px, py, memory?.get(key));
+        if (memory && seen) {
+          memory.set(key, { axis, sign });
+          seen.add(key);
+        }
+        // Equals px/py unless hysteresis kept the pair on its previous side.
+        const depth = axis === 'x' ? halfX - sign * dx : halfY - sign * dy;
+        if (axis === 'x') {
           if (a.pinned) {
-            b.x -= px * sign;
+            b.x -= depth * sign;
             wake(j);
           } else if (b.pinned) {
-            a.x += px * sign;
+            a.x += depth * sign;
             wake(i);
           } else {
-            a.x += (px / 2) * sign;
-            b.x -= (px / 2) * sign;
+            a.x += (depth / 2) * sign;
+            b.x -= (depth / 2) * sign;
             wake(i);
             wake(j);
           }
+        } else if (a.pinned) {
+          b.y -= depth * sign;
+          wake(j);
+        } else if (b.pinned) {
+          a.y += depth * sign;
+          wake(i);
         } else {
-          const sign = dy > 0 ? 1 : -1;
-          if (a.pinned) {
-            b.y -= py * sign;
-            wake(j);
-          } else if (b.pinned) {
-            a.y += py * sign;
-            wake(i);
-          } else {
-            a.y += (py / 2) * sign;
-            b.y -= (py / 2) * sign;
-            wake(i);
-            wake(j);
-          }
+          a.y += (depth / 2) * sign;
+          b.y -= (depth / 2) * sign;
+          wake(i);
+          wake(j);
         }
       }
     }
 
     if (!moved) {
       break;
+    }
+  }
+
+  if (memory && seen) {
+    for (const key of memory.keys()) {
+      if (!seen.has(key)) {
+        memory.delete(key);
+      }
     }
   }
 }

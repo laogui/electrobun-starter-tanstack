@@ -3,6 +3,7 @@ import type {
   Connection,
   Node,
   NodeChange,
+  OnMoveEnd,
   ReactFlowInstance,
 } from '@xyflow/react';
 import {
@@ -111,6 +112,7 @@ import {
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
+import { isNodeEntering, VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
@@ -162,6 +164,7 @@ registerBuiltinCanvasTypes();
 const GRID_COLOR_LIGHT = '#D8DCDF';
 const GRID_COLOR_DARK = 'rgba(255, 255, 255, 0.14)';
 const CANVAS_GRID_SIZE = 24;
+const REACT_FLOW_PRO_OPTIONS = { hideAttribution: true };
 const REACT_FLOW_SELECTED_NODE_Z_OFFSET = 1000;
 // React Flow adds REACT_FLOW_SELECTED_NODE_Z_OFFSET to selected nodes. Use
 // +1 more so a dragged card still renders above a selected container (folder
@@ -1416,8 +1419,8 @@ function CanvasComponent() {
         const zoom = viewport?.zoom ?? 1;
         suppressViewportPersist(300);
         inst.setCenter?.(target.position.x + w / 2, target.position.y + h / 2, {
+          ...viewportMotion(VIEWPORT_PAN_MS),
           zoom,
-          duration: 240,
         });
       }
     } else if (pendingSearchTarget.edgeId) {
@@ -1449,7 +1452,10 @@ function CanvasComponent() {
           const cy = (src.position.y + sh / 2 + (tgt.position.y + th / 2)) / 2;
           const zoom = inst.getViewport?.()?.zoom ?? 1;
           suppressViewportPersist(300);
-          inst.setCenter?.(cx, cy, { zoom, duration: 240 });
+          inst.setCenter?.(cx, cy, {
+            ...viewportMotion(VIEWPORT_PAN_MS),
+            zoom,
+          });
         }
       }
     }
@@ -1769,6 +1775,15 @@ function CanvasComponent() {
     [onNodesChange]
   );
 
+  // React Flow pushes every changed tracked prop into its store, so this must
+  // stay referentially stable across drag-frame re-renders.
+  const onMoveEnd = useCallback<OnMoveEnd>(
+    (event, viewport) => {
+      setViewport(viewport, { persist: event != null });
+    },
+    [setViewport]
+  );
+
   // The in-flight Topic draft is rendered like a node but lives outside the
   // store's `nodes`, so it never reaches persistence, history, selection, or
   // the node count. It joins the graph only when the first title is committed.
@@ -1922,6 +1937,7 @@ function CanvasComponent() {
         node.className,
         locked ? 'is-locked' : '',
         folderPeekClass,
+        isNodeEntering(node.id) ? 'node-entering' : '',
       ]
         .filter(Boolean)
         .join(' ');
@@ -2227,9 +2243,7 @@ function CanvasComponent() {
           onInit={(instance) => {
             rfInstance.current = instance;
           }}
-          onMoveEnd={(event, viewport) => {
-            setViewport(viewport, { persist: event != null });
-          }}
+          onMoveEnd={onMoveEnd}
           onNodeClick={onNodeClick}
           onNodeContextMenu={onNodeContextMenu}
           onNodeDoubleClick={onNodeDoubleClick}
@@ -2245,13 +2259,11 @@ function CanvasComponent() {
           onPaneContextMenu={onPaneContextMenu}
           panOnDrag={spacePanActive}
           panOnScroll={true}
-          proOptions={{ hideAttribution: true }}
+          proOptions={REACT_FLOW_PRO_OPTIONS}
           selectionMode={SelectionMode.Partial}
           selectionOnDrag={
             !(spacePanActive || editableInteractionLocked || focusedFolder)
           }
-          snapGrid={[CANVAS_GRID_SIZE, CANVAS_GRID_SIZE]}
-          snapToGrid={false}
           style={{ backgroundColor: canvasBackground }}
           zoomOnDoubleClick={false}
           zoomOnPinch={true}

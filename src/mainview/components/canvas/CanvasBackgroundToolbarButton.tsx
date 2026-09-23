@@ -93,12 +93,12 @@ export function CanvasBackgroundToolbarButton() {
     <Popover.Root onOpenChange={setOpen} open={open}>
       <Popover.Trigger
         aria-label={m.canvas_bg_button_aria()}
-        className="relative flex size-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
+        className="relative flex size-8 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
         title={m.canvas_bg_button_aria()}
       >
         <span
           aria-hidden
-          className="relative inline-flex size-4 items-center justify-center rounded-full border border-black/15 shadow-inner dark:border-white/20"
+          className="relative inline-flex size-3.5 items-center justify-center rounded-full border border-black/15 shadow-inner dark:border-white/20"
           style={{ backgroundColor: resolved }}
         />
       </Popover.Trigger>
@@ -108,7 +108,7 @@ export function CanvasBackgroundToolbarButton() {
             the buttons stacked above it. Right/bottom-aligned end stays clear
             of every sibling and within the lower-left canvas region. */}
         <Popover.Positioner align="end" side="right" sideOffset={10}>
-          <Popover.Popup className="z-50 w-[23rem] origin-(--transform-origin) rounded-3xl border border-black/5 bg-white/90 p-4 shadow-xl outline-hidden backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
+          <Popover.Popup className="floating-menu-popup z-50 w-[23rem] rounded-3xl border border-black/5 bg-white/90 p-4 shadow-xl outline-hidden backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
             <div className="mb-3 text-center">
               <Popover.Title className="font-medium text-lg">
                 {m.canvas_bg_picker_title()}

@@ -60,6 +60,22 @@ export function getHelperLines(
   let minDistX = SNAP_THRESHOLD;
   let minDistY = SNAP_THRESHOLD;
 
+  // Runs on every drag frame for every node: keep it allocation-free.
+  const considerX = (dist: number, snapX: number, line: number) => {
+    if (dist < minDistX) {
+      minDistX = dist;
+      result.vertical = line;
+      result.snapPosition.x = snapX;
+    }
+  };
+  const considerY = (dist: number, snapY: number, line: number) => {
+    if (dist < minDistY) {
+      minDistY = dist;
+      result.horizontal = line;
+      result.snapPosition.y = snapY;
+    }
+  };
+
   for (const node of nodes) {
     if (node.id === change.id) {
       continue;
@@ -80,70 +96,30 @@ export function getHelperLines(
     const nodeCenterY = nodeY + nodeH / 2;
 
     // Vertical alignment checks (x-axis snapping)
-    const vChecks = [
-      { dist: Math.abs(dragLeft - nodeLeft), snapX: nodeLeft, line: nodeLeft },
-      {
-        dist: Math.abs(dragRight - nodeRight),
-        snapX: nodeRight - dragW,
-        line: nodeRight,
-      },
-      {
-        dist: Math.abs(dragCenterX - nodeCenterX),
-        snapX: nodeCenterX - dragW / 2,
-        line: nodeCenterX,
-      },
-      {
-        dist: Math.abs(dragLeft - nodeRight),
-        snapX: nodeRight,
-        line: nodeRight,
-      },
-      {
-        dist: Math.abs(dragRight - nodeLeft),
-        snapX: nodeLeft - dragW,
-        line: nodeLeft,
-      },
-    ];
-
-    for (const { dist, snapX, line } of vChecks) {
-      if (dist < minDistX) {
-        minDistX = dist;
-        result.vertical = line;
-        result.snapPosition.x = snapX;
-      }
-    }
+    considerX(Math.abs(dragLeft - nodeLeft), nodeLeft, nodeLeft);
+    considerX(Math.abs(dragRight - nodeRight), nodeRight - dragW, nodeRight);
+    considerX(
+      Math.abs(dragCenterX - nodeCenterX),
+      nodeCenterX - dragW / 2,
+      nodeCenterX
+    );
+    considerX(Math.abs(dragLeft - nodeRight), nodeRight, nodeRight);
+    considerX(Math.abs(dragRight - nodeLeft), nodeLeft - dragW, nodeLeft);
 
     // Horizontal alignment checks (y-axis snapping)
-    const hChecks = [
-      { dist: Math.abs(dragTop - nodeTop), snapY: nodeTop, line: nodeTop },
-      {
-        dist: Math.abs(dragBottom - nodeBottom),
-        snapY: nodeBottom - dragH,
-        line: nodeBottom,
-      },
-      {
-        dist: Math.abs(dragCenterY - nodeCenterY),
-        snapY: nodeCenterY - dragH / 2,
-        line: nodeCenterY,
-      },
-      {
-        dist: Math.abs(dragTop - nodeBottom),
-        snapY: nodeBottom,
-        line: nodeBottom,
-      },
-      {
-        dist: Math.abs(dragBottom - nodeTop),
-        snapY: nodeTop - dragH,
-        line: nodeTop,
-      },
-    ];
-
-    for (const { dist, snapY, line } of hChecks) {
-      if (dist < minDistY) {
-        minDistY = dist;
-        result.horizontal = line;
-        result.snapPosition.y = snapY;
-      }
-    }
+    considerY(Math.abs(dragTop - nodeTop), nodeTop, nodeTop);
+    considerY(
+      Math.abs(dragBottom - nodeBottom),
+      nodeBottom - dragH,
+      nodeBottom
+    );
+    considerY(
+      Math.abs(dragCenterY - nodeCenterY),
+      nodeCenterY - dragH / 2,
+      nodeCenterY
+    );
+    considerY(Math.abs(dragTop - nodeBottom), nodeBottom, nodeBottom);
+    considerY(Math.abs(dragBottom - nodeTop), nodeTop - dragH, nodeTop);
   }
 
   return result;

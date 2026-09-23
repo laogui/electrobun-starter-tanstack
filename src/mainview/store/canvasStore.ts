@@ -30,6 +30,11 @@ import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
+  markNodesEntering,
+  VIEWPORT_PAN_MS,
+  viewportMotion,
+} from '@/lib/motion';
+import {
   COUNTED_NODE_TYPES,
   countCountedNodes,
   hasNodeQuota,
@@ -1630,9 +1635,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   setEdges: (updater) => {
-    set((s) => ({
-      edges: typeof updater === 'function' ? updater(s.edges) : updater,
-    }));
+    set((s) => {
+      const edges = typeof updater === 'function' ? updater(s.edges) : updater;
+      return edges === s.edges ? s : { edges };
+    });
   },
 
   applyNodesChange: (changes) => {
@@ -1667,6 +1673,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   applyEdgesChange: (changes) => {
+    if (changes.length === 0) {
+      return;
+    }
     set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
   },
 
@@ -2464,6 +2473,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const selectedIds = new Set(selected.map((node) => node.id));
 
     get().saveSnapshot();
+    markNodesEntering([groupId]);
     set((s) => ({
       nodes: sortNodesByParent([
         ...s.nodes.map((node) => {
@@ -2932,6 +2942,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (graphContainsExtensionReference(pastedNodes)) {
       pastedNodes = await cloneExtensionReferences(pastedNodes);
     }
+    markNodesEntering(pastedNodes.map((n) => n.id));
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
@@ -2969,6 +2980,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (graphContainsExtensionReference(pastedNodes)) {
       pastedNodes = await cloneExtensionReferences(pastedNodes);
     }
+    markNodesEntering(pastedNodes.map((node) => node.id));
     set((s) => ({
       edges: [...s.edges, ...pasted.edges],
       nodes: sortNodesByParent([
@@ -3058,6 +3070,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       },
       ...(parentId ? { parentId, extent: 'parent' as const } : {}),
     };
+    markNodesEntering([id]);
     set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
 
     if (
@@ -3068,7 +3081,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rfInstance.setCenter(
         placement.x + size.width / 2,
         placement.y + size.height / 2,
-        { duration: 240, zoom: rfInstance.getViewport().zoom }
+        {
+          ...viewportMotion(VIEWPORT_PAN_MS),
+          zoom: rfInstance.getViewport().zoom,
+        }
       );
     }
 
@@ -3134,6 +3150,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       },
       ...(parentId ? { parentId, extent: 'parent' as const } : {}),
     };
+    markNodesEntering([id]);
     set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
     if (
       options?.focusViewport !== false &&
@@ -3143,7 +3160,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rfInstance.setCenter(
         placement.x + size.width / 2,
         placement.y + size.height / 2,
-        { duration: 240, zoom }
+        { ...viewportMotion(VIEWPORT_PAN_MS), zoom }
       );
     }
     return id;

@@ -489,9 +489,13 @@ describe('useCanvasKeyboard', () => {
     dispatchKeyboard({ key: '-', metaKey: true, cancelable: true });
     dispatchKeyboard({ key: '0', metaKey: true, cancelable: true });
 
-    expect(rf.zoomIn).toHaveBeenCalledWith({ duration: 180 });
-    expect(rf.zoomOut).toHaveBeenCalledWith({ duration: 180 });
-    expect(rf.zoomTo).toHaveBeenCalledWith(1, { duration: 180 });
+    const zoomOptions = expect.objectContaining({
+      duration: 200,
+      interpolate: 'linear',
+    });
+    expect(rf.zoomIn).toHaveBeenCalledWith(zoomOptions);
+    expect(rf.zoomOut).toHaveBeenCalledWith(zoomOptions);
+    expect(rf.zoomTo).toHaveBeenCalledWith(1, zoomOptions);
   });
 
   it('selects the nearest node in the arrow direction', () => {
@@ -602,10 +606,11 @@ describe('useCanvasKeyboard', () => {
     render(<TestComponentWithViewport rfInstance={rfInstance} />);
     dispatchKeyboard({ key: 'ArrowRight', cancelable: true });
 
-    expect(rf.setCenter).toHaveBeenCalledWith(2050, 50, {
-      duration: 180,
-      zoom: 1,
-    });
+    expect(rf.setCenter).toHaveBeenCalledWith(
+      2050,
+      50,
+      expect.objectContaining({ duration: 180, interpolate: 'linear', zoom: 1 })
+    );
   });
 
   it('handles escape and enter for focused cards and folders', () => {

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { VIEWPORT_ZOOM_MS, viewportMotion } from '@/lib/motion';
 import { routeUndoRedo } from '@/lib/routeUndoRedo';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -64,7 +65,7 @@ function centerNodeIfNeeded(
 
   suppressViewportPersist(200);
   rf.setCenter(center.x, center.y, {
-    duration: 180,
+    ...viewportMotion(180),
     zoom: viewport.zoom,
   });
 }
@@ -181,19 +182,26 @@ export function useCanvasKeyboard({
 
       if (mod && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
-        rfInstanceRef.current?.current?.zoomIn?.({ duration: 180 });
+        rfInstanceRef.current?.current?.zoomIn?.(
+          viewportMotion(VIEWPORT_ZOOM_MS)
+        );
         return;
       }
 
       if (mod && e.key === '-') {
         e.preventDefault();
-        rfInstanceRef.current?.current?.zoomOut?.({ duration: 180 });
+        rfInstanceRef.current?.current?.zoomOut?.(
+          viewportMotion(VIEWPORT_ZOOM_MS)
+        );
         return;
       }
 
       if (mod && e.key === '0') {
         e.preventDefault();
-        rfInstanceRef.current?.current?.zoomTo?.(1, { duration: 180 });
+        rfInstanceRef.current?.current?.zoomTo?.(
+          1,
+          viewportMotion(VIEWPORT_ZOOM_MS)
+        );
         return;
       }
 

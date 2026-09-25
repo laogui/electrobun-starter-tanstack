@@ -34,7 +34,8 @@ import { isTopicNodeType } from '../../shared/topic';
  */
 const isContentNode = (node: Node) => isCanvasContentNode(node.type);
 
-/** Matches the `.canvas-repel-anim` transition duration in index.css. */
+/** Window after drag stop in which drop-time moves (e.g. restored pushed
+ *  nodes) still start a repel spring. */
 const REPEL_SETTLE_MS = 240;
 
 function deactivateGroupHighlight(node: Node): Node {
@@ -194,14 +195,12 @@ export function useNodeDrag() {
    *  sticky, groups, other folders). Drives the red "reject" highlight. */
   const [rejectedFolderId, setRejectedFolderId] = useState<string | null>(null);
   const [draggingNodeIds, setDraggingNodeIds] = useState<string[]>([]);
-  /** True while dragging a single content/folder node — drives the CSS class
-   *  that animates repelled neighbors. Group drags are excluded because their
-   *  children re-render each frame and would visibly lag inside the group;
-   *  multi-select drags are excluded because only the grabbed node carries
-   *  React Flow's `.dragging` class (the transition opt-out). */
+  /** True while dragging a single content/folder node — enables the render
+   *  spring (`useRepelSpring`) that animates repelled neighbors. Group and
+   *  multi-select drags are excluded. */
   const [repelAnimationActive, setRepelAnimationActive] = useState(false);
-  /** Keeps the glide class on briefly after drag stop so pushed neighbors
-   *  finish their transition instead of snapping. */
+  /** Keeps the spring enabled briefly after drag stop so drop-time moves of
+   *  pushed neighbors animate instead of snapping. */
   const repelSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );

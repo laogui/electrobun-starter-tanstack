@@ -688,20 +688,6 @@ body.resizing-nwse * {
   opacity: 1;
 }
 
-/* While dragging a single content/folder node, repelled neighbors glide to
-   their solved positions instead of teleporting (masks the axis flips of the
-   collision solver). The dragged node itself must track the pointer 1:1, so
-   `.dragging` is excluded. Group and multi-select drags never set this class:
-   dragged-group children and co-dragged nodes move every frame without a
-   `.dragging` marker and would visibly lag behind. The class stays on for
-   one duration after drag stop so pushed neighbors finish settling. */
-.canvas-repel-anim .react-flow__node {
-  transition: transform 240ms var(--motion-ease-out);
-}
-.canvas-repel-anim .react-flow__node.dragging {
-  transition: none;
-}
-
 /* Freshly created / pasted nodes settle onto the canvas. Animates the inner
    visual so React Flow's wrapper translate stays untouched. */
 .react-flow__node.node-entering .node-visual {

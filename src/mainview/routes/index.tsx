@@ -63,6 +63,7 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useHelperLines } from '@/hooks/useHelperLines';
 import { useNodeCreation } from '@/hooks/useNodeCreation';
 import { useNodeDrag } from '@/hooks/useNodeDrag';
+import { useRepelSpring } from '@/hooks/useRepelSpring';
 import {
   useEditableInteractionLock,
   useSpacePanMode,
@@ -2005,6 +2006,11 @@ function CanvasComponent() {
     finishFolderClose,
     onFolderChildContextMenu,
   ]);
+  const displayNodes = useRepelSpring(
+    nodesWithState,
+    repelAnimationActive,
+    draggingNodeIds
+  );
 
   const dragDepthRef = useRef(0);
   // Cursor position (screen coords) for the drop ghost; rAF-throttled because
@@ -2194,10 +2200,7 @@ function CanvasComponent() {
 
   return (
     <div
-      className={cn(
-        'relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]',
-        repelAnimationActive && 'canvas-repel-anim'
-      )}
+      className="relative h-screen w-screen overflow-hidden bg-[#EFF3F4] font-sans dark:bg-[#141414]"
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
       onMouseMove={onPointerMoveCanvas}
@@ -2227,7 +2230,7 @@ function CanvasComponent() {
           fitView={!sessionViewport}
           maxZoom={4}
           minZoom={0.1}
-          nodes={nodesWithState}
+          nodes={displayNodes}
           nodesDraggable={
             !(spacePanActive || editableInteractionLocked || focusedFolder)
           }

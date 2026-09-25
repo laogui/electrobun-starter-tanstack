@@ -97,4 +97,22 @@ describe('applyCanvasNodeChanges', () => {
     expect(updated[0]).toEqual(topic);
     expect(updated[1]?.position).toEqual({ x: 8, y: 12 });
   });
+
+  it('returns the same array for dimensions of render-only nodes', () => {
+    // Folder expansion children are rendered by React Flow but never stored;
+    // a fresh array here re-publishes the store and re-measures them forever.
+    const nodes = [createNode()];
+    const updated = applyCanvasNodeChanges(
+      [
+        {
+          id: 'folderExpandedChild:folder:child',
+          type: 'dimensions',
+          dimensions: { width: 238, height: 306 },
+        },
+      ],
+      nodes
+    );
+
+    expect(updated).toBe(nodes);
+  });
 });

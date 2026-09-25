@@ -68,7 +68,12 @@ export function applyCanvasNodeChanges(
     return updatedNodes;
   }
 
-  return updatedNodes.map((node) => {
+  // Dimension changes for render-only nodes (e.g. folder expansion children)
+  // match no stored node; returning a fresh array for them would publish a
+  // no-op store update, rebuild those nodes, and make React Flow re-measure
+  // them — a per-frame loop.
+  let styleChanged = false;
+  const styledNodes = updatedNodes.map((node) => {
     const dimensions = dimensionsById.get(node.id);
     if (!dimensions) {
       return node;
@@ -84,6 +89,7 @@ export function applyCanvasNodeChanges(
       return node;
     }
 
+    styleChanged = true;
     return {
       ...node,
       style: {
@@ -93,4 +99,5 @@ export function applyCanvasNodeChanges(
       },
     } as Node;
   });
+  return styleChanged ? styledNodes : updatedNodes;
 }

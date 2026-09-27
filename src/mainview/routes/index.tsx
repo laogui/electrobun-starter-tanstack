@@ -116,6 +116,7 @@ import {
 } from '@/lib/importCanvasFiles';
 import { isNodeEntering, VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
+import { persistAppSettingsPatch } from '@/lib/persistAppSettings';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
 import {
@@ -2290,6 +2291,11 @@ function CanvasComponent() {
             maskColor={miniMapMask}
             nodeColor={miniMapNodeColor}
             nodeStrokeColor={MINIMAP_NODE_STROKE_COLOR}
+            onShowMinimapChange={(show) => {
+              persistAppSettingsPatch({ canvasShowMinimap: show }).catch(
+                () => undefined
+              );
+            }}
             showMinimap={canvasShowMinimap}
           />
         </ReactFlow>

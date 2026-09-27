@@ -1,14 +1,17 @@
 import type { Node } from '@xyflow/react';
 import { Controls, MiniMap, Panel } from '@xyflow/react';
 
+import { Map as MapIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import * as m from '../../../paraglide/messages.js';
 
 interface CanvasViewportChromeProps {
   backgroundColor: string;
   maskColor: string;
   nodeColor: (node: Node) => string;
   nodeStrokeColor: string;
-  /** When false, only the zoom controls strip is shown. */
+  onShowMinimapChange: (show: boolean) => void;
+  /** When false, keep the overview toggle alongside the zoom controls. */
   showMinimap?: boolean;
 }
 
@@ -21,7 +24,8 @@ export function CanvasViewportChrome({
   maskColor,
   nodeColor,
   nodeStrokeColor,
-  showMinimap = true,
+  onShowMinimapChange,
+  showMinimap = false,
 }: CanvasViewportChromeProps) {
   return (
     <Panel
@@ -33,7 +37,7 @@ export function CanvasViewportChrome({
     >
       {showMinimap ? (
         <MiniMap
-          ariaLabel="Canvas overview"
+          ariaLabel={m.settings_canvas_minimap_label()}
           maskColor={maskColor}
           nodeColor={nodeColor}
           nodeStrokeColor={nodeStrokeColor}
@@ -51,7 +55,19 @@ export function CanvasViewportChrome({
         className="canvas-viewport-controls"
         orientation="horizontal"
         showInteractive={false}
-      />
+      >
+        <button
+          aria-expanded={showMinimap}
+          aria-label={m.settings_canvas_minimap_label()}
+          aria-pressed={showMinimap}
+          className="react-flow__controls-button canvas-minimap-toggle"
+          onClick={() => onShowMinimapChange(!showMinimap)}
+          title={m.settings_canvas_minimap_label()}
+          type="button"
+        >
+          <MapIcon aria-hidden size={15} strokeWidth={1.8} />
+        </button>
+      </Controls>
     </Panel>
   );
 }

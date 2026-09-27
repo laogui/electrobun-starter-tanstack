@@ -205,7 +205,7 @@
 /* Controls-only mode: no divider line above the toolbar. */
 .canvas-viewport-chrome--controls-only
 .canvas-viewport-controls.react-flow__controls {
-  min-width: 6.5rem;
+  min-width: 8.5rem;
   border-top: none;
 }
 
@@ -864,4 +864,25 @@ body.resizing-nwse * {
 .note-editor-surface .bn-container,
 .note-editor-surface .bn-editor {
   background-color: transparent;
+}
+
+/* Keep the overview toggle visibly selected while the map is expanded. */
+.canvas-viewport-chrome .canvas-viewport-controls
+  .canvas-minimap-toggle[aria-pressed="true"] {
+  color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.canvas-viewport-chrome .canvas-minimap-toggle svg {
+  fill: none;
+}
+
+/* Lift the devtools trigger above the canvas controls, including when its
+   persisted position overrides the initial devtools config. */
+button[aria-label="Open TanStack Devtools"] {
+  top: auto !important;
+  right: 12px !important;
+  bottom: 72px !important;
+  left: auto !important;
+  transform: none !important;
 }

@@ -132,7 +132,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'en',
   fontFamily: 'system',
   canvasBackground: 'default',
-  canvasShowMinimap: true,
+  canvasShowMinimap: false,
   canvasSnapToGrid: true,
   autoSaveInterval: 800,
   aiEnabled: false,

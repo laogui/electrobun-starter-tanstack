@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,9 +8,11 @@ import { CanvasViewportChrome } from '@/components/canvas/CanvasViewportChrome';
 
 vi.mock('@xyflow/react', () => ({
   Controls: ({
+    children,
     className,
     orientation,
   }: {
+    children?: ReactNode;
     className?: string;
     orientation?: string;
   }) => (
@@ -20,6 +22,7 @@ vi.mock('@xyflow/react', () => ({
       data-testid="rf-controls"
     >
       Controls
+      {children}
     </div>
   ),
   MiniMap: () => <div data-testid="rf-minimap">MiniMap</div>,
@@ -39,13 +42,16 @@ vi.mock('@xyflow/react', () => ({
 }));
 
 describe('CanvasViewportChrome', () => {
-  it('renders minimap and horizontal controls in one bottom-right panel', () => {
+  it('renders the expanded overview and requests collapse when clicked', () => {
+    const onShowMinimapChange = vi.fn();
     render(
       <CanvasViewportChrome
         backgroundColor="#fff"
         maskColor="rgba(0,0,0,0.2)"
         nodeColor={() => '#ddd'}
         nodeStrokeColor="#999"
+        onShowMinimapChange={onShowMinimapChange}
+        showMinimap
       />
     );
 
@@ -54,23 +60,31 @@ describe('CanvasViewportChrome', () => {
     expect(panel.className).toContain('canvas-viewport-chrome');
     expect(panel.className).toContain('canvas-floating-surface');
     expect(screen.getByTestId('rf-minimap')).toBeInTheDocument();
+    expect(screen.getByRole('button')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button'));
+    expect(onShowMinimapChange).toHaveBeenCalledWith(false);
     expect(screen.getByTestId('rf-controls')).toHaveAttribute(
       'data-orientation',
       'horizontal'
     );
   });
 
-  it('hides the minimap when showMinimap is false', () => {
+  it('defaults to a collapsed overview and requests expansion when clicked', () => {
+    const onShowMinimapChange = vi.fn();
     render(
       <CanvasViewportChrome
         backgroundColor="#fff"
         maskColor="rgba(0,0,0,0.2)"
         nodeColor={() => '#ddd'}
         nodeStrokeColor="#999"
-        showMinimap={false}
+        onShowMinimapChange={onShowMinimapChange}
       />
     );
 
+    const toggle = screen.getByRole('button');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(onShowMinimapChange).toHaveBeenCalledWith(true);
     expect(screen.queryByTestId('rf-minimap')).not.toBeInTheDocument();
     expect(screen.getByTestId('rf-controls')).toBeInTheDocument();
     expect(screen.getByTestId('rf-panel').className).toContain(

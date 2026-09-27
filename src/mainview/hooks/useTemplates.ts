@@ -60,6 +60,10 @@ const TEMPLATE_I18N: Record<
     name: () => m.template_demo_name(),
     description: () => m.template_demo_description(),
   },
+  cafe: {
+    name: () => m.template_cafe_name(),
+    description: () => m.template_cafe_description(),
+  },
 };
 
 /**

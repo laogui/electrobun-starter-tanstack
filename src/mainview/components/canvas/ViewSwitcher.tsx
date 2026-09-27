@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   ChevronUp,
+  Coffee,
   Download,
   FileImage,
   FileJson,
@@ -182,6 +183,11 @@ function renderCreateMenuItem(
 }
 
 const getQuickTemplateItems = () => [
+  {
+    id: 'cafe',
+    label: m.template_cafe_name(),
+    icon: Coffee,
+  },
   {
     id: 'quick-start',
     label: m.template_quick_start_name(),

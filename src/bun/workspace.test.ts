@@ -17,7 +17,8 @@ const TRASH_ID_RE = /^trash_/;
 const NOTE_ID_RE = /^note_/;
 const WIDGET_ID_RE = /^widget_/;
 const TEMPLATE_WIDGET_ID_RE = /^widget_tpl-/;
-
+const TEMPLATE_INSTANCE_ID_RE = /^extinst_/;
+const TEMPLATE_IMAGE_FILE_RE = /^attachments\/.+\.jpg$/;
 vi.mock('electrobun/bun', () => ({
   Utils: {
     moveToTrash: vi.fn(),
@@ -797,6 +798,87 @@ describe('workspace', () => {
     expect(metadata.entries.widget_template_check).toBeUndefined();
   });
 
+  it('populateViewFromTemplate copies assets and remaps extension instances', async () => {
+    const { initWorkspace, populateViewFromTemplate } = await import(
+      './workspace'
+    );
+    initWorkspace(workspaceRoot);
+    setBunFile((filePath) => ({
+      exists: async () => existsSync(filePath),
+      json: async () => JSON.parse(readFileSync(filePath, 'utf8')),
+    }));
+
+    await populateViewFromTemplate(
+      workspaceRoot,
+      {
+        id: 'view_cafe',
+        name: 'Cafe',
+        file: 'views/cafe.canvas.json',
+      },
+      {
+        meta: {
+          id: 'cafe-seed',
+          name: 'Cafe',
+          description: '',
+          category: 'planning',
+          tags: [],
+          thumbnail: '',
+        },
+        nodes: [
+          {
+            id: 'img',
+            type: 'extension',
+            position: { x: 0, y: 0 },
+            data: {
+              canvasTypeId: 'ghostboard.media/image',
+              instanceId: 'extinst_seed_latte',
+            },
+          },
+        ],
+        edges: [],
+        assets: {
+          'latte.jpg': Buffer.from('jpeg').toString('base64'),
+        },
+        extensionInstances: {
+          extinst_seed_latte: {
+            canvasTypeId: 'ghostboard.media/image',
+            dataVersion: 1,
+            presentation: { title: '窗边的一杯' },
+            state: {
+              imageFile: 'tpl-asset:latte.jpg',
+              title: '窗边的一杯',
+            },
+          },
+        },
+      }
+    );
+
+    const manifest = JSON.parse(
+      readFileSync(
+        join(workspaceRoot, '.ghostboard', 'views', 'cafe.canvas.json'),
+        'utf8'
+      )
+    ) as { nodes: Array<{ data: { instanceId?: string } }> };
+    const instanceId = manifest.nodes[0]?.data.instanceId ?? '';
+    expect(instanceId).toMatch(TEMPLATE_INSTANCE_ID_RE);
+    expect(instanceId).not.toBe('extinst_seed_latte');
+
+    const record = JSON.parse(
+      readFileSync(
+        join(
+          workspaceRoot,
+          '.ghostboard',
+          'extension-instances',
+          `${instanceId}.json`
+        ),
+        'utf8'
+      )
+    ) as { state: { imageFile?: string } };
+    expect(record.state.imageFile).toMatch(TEMPLATE_IMAGE_FILE_RE);
+    expect(existsSync(join(workspaceRoot, record.state.imageFile ?? ''))).toBe(
+      true
+    );
+  });
   it('addViewFromTemplate throws for a non-existent template', async () => {
     const { initWorkspace, addViewFromTemplate } = await import('./workspace');
     initWorkspace(workspaceRoot);

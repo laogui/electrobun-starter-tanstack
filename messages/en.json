@@ -327,6 +327,8 @@
   "template_reading_notes_description": "One-stop reading notes: cover, key takeaways, chapters, quotes, action items, and links.",
   "template_demo_name": "Demo Canvas",
   "template_demo_description": "A showcase canvas demonstrating GhostBoard's primitives: cards, checklists, folders, sticky notes, and groups.",
+  "template_cafe_name": "Open a Shop",
+  "template_cafe_description": "A shop-planning canvas: mind map, notes, stickies, a folder, a checklist, photos, and a link.",
   "settings_title": "Settings",
   "settings_load_error": "Unable to load settings.",
   "settings_save_error": "Unable to save settings.",

@@ -139,7 +139,8 @@ vi.mock('../../../paraglide/messages.js', () => ({
   template_brainstorm_mindmap_name: () => 'Brainstorm Mindmap',
   template_eisenhower_matrix_name: () => 'Eisenhower Matrix',
   template_reading_notes_name: () => 'Reading Notes',
-  template_demo_name: () => 'Demo Canvas',
+   template_demo_name: () => 'Demo Canvas',
+   template_cafe_name: () => 'Open a Shop',
 }));
 
 const resetStore = () => {

@@ -1,0 +1,327 @@
+{
+  "nodeMetadata": {
+    "note-brief": {
+      "tagColors": { "方向": "#F59E0B" },
+      "tags": ["方向"]
+    },
+    "note-recipe": {
+      "tagColors": { "配方": "#059669" },
+      "tags": ["配方"]
+    }
+  },
+  "nodes": [
+    {
+      "id": "topic-root",
+      "type": "topic",
+      "position": { "x": 48, "y": 196 },
+      "style": { "width": 156, "height": 44 },
+      "data": { "color": "orange", "title": "开一家店", "topicVersion": 1 }
+    },
+    {
+      "id": "topic-space",
+      "type": "topic",
+      "position": { "x": 268, "y": 132 },
+      "style": { "width": 108, "height": 44 },
+      "data": { "color": "blue", "title": "空间", "topicVersion": 1 }
+    },
+    {
+      "id": "topic-beans",
+      "type": "topic",
+      "position": { "x": 268, "y": 260 },
+      "style": { "width": 108, "height": 44 },
+      "data": { "color": "green", "title": "豆子", "topicVersion": 1 }
+    },
+    {
+      "id": "topic-menu",
+      "type": "topic",
+      "position": { "x": 268, "y": 388 },
+      "style": { "width": 108, "height": 44 },
+      "data": { "color": "yellow", "title": "菜单", "topicVersion": 1 }
+    },
+    {
+      "id": "topic-pour",
+      "type": "topic",
+      "position": { "x": 440, "y": 388 },
+      "style": { "width": 96, "height": 44 },
+      "data": { "color": "pink", "title": "手冲", "topicVersion": 1 }
+    },
+    {
+      "id": "card-brief",
+      "type": "card",
+      "position": { "x": 560, "y": 24 },
+      "style": { "width": 348, "height": 440 },
+      "data": {
+        "color": "#FFFFFF",
+        "editor": "blocknote",
+        "noteId": "note-brief",
+        "title": "为什么做这家店"
+      }
+    },
+    {
+      "id": "card-recipe",
+      "type": "card",
+      "position": { "x": 948, "y": 24 },
+      "style": { "width": 328, "height": 388 },
+      "data": {
+        "color": "#FEF3C7",
+        "editor": "blocknote",
+        "noteId": "note-recipe",
+        "title": "手冲配方"
+      }
+    },
+    {
+      "id": "folder-refs",
+      "type": "folder",
+      "position": { "x": 36, "y": 548 },
+      "style": { "width": 280, "height": 200 },
+      "data": {
+        "color": "#F6F0E4",
+        "subtitle": "想留下来的细节",
+        "title": "参考",
+        "children": [
+          {
+            "id": "ref-hours",
+            "type": "card",
+            "size": { "width": 280, "height": 180 },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "周二到周日，8:00–18:00。周一留给豆子和休息。",
+              "title": "营业时间"
+            }
+          },
+          {
+            "id": "ref-seat",
+            "type": "sticky",
+            "size": { "width": 200, "height": 140 },
+            "data": {
+              "color": "#BFDBFE",
+              "content": "靠窗六席，吧台八席，不要卡座。"
+            }
+          },
+          {
+            "id": "ref-milk",
+            "type": "sticky",
+            "size": { "width": 200, "height": 140 },
+            "data": {
+              "color": "#FBCFE8",
+              "content": "全脂奶和燕麦奶。不做第三种。"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "group-week",
+      "type": "group",
+      "position": { "x": 548, "y": 508 },
+      "style": { "width": 372, "height": 228 },
+      "data": { "color": "yellow", "label": "这一周" }
+    },
+    {
+      "id": "sticky-door",
+      "type": "sticky",
+      "parentId": "group-week",
+      "extent": "parent",
+      "position": { "x": 16, "y": 48 },
+      "style": { "width": 164, "height": 156 },
+      "data": {
+        "color": "#FEF08A",
+        "content": "门口留给不带电脑的人。"
+      }
+    },
+    {
+      "id": "sticky-cup",
+      "type": "sticky",
+      "parentId": "group-week",
+      "extent": "parent",
+      "position": { "x": 192, "y": 56 },
+      "style": { "width": 164, "height": 148 },
+      "data": {
+        "color": "#BBF7D0",
+        "content": "杯子要轻，别像在表演。"
+      }
+    },
+    {
+      "id": "check-open",
+      "type": "extension",
+      "position": { "x": 948, "y": 452 },
+      "style": { "width": 292, "height": 300 },
+      "data": {
+        "canvasTypeId": "ghostboard.productivity/checklist",
+        "instanceId": "extinst_cafe_open"
+      }
+    },
+    {
+      "id": "img-latte",
+      "type": "extension",
+      "position": { "x": 1320, "y": 24 },
+      "style": { "width": 500, "height": 280 },
+      "data": {
+        "canvasTypeId": "ghostboard.media/image",
+        "instanceId": "extinst_cafe_latte"
+      }
+    },
+    {
+      "id": "img-beans",
+      "type": "extension",
+      "position": { "x": 1320, "y": 324 },
+      "style": { "width": 240, "height": 216 },
+      "data": {
+        "canvasTypeId": "ghostboard.media/image",
+        "instanceId": "extinst_cafe_beans"
+      }
+    },
+    {
+      "id": "img-pour",
+      "type": "extension",
+      "position": { "x": 1580, "y": 324 },
+      "style": { "width": 240, "height": 216 },
+      "data": {
+        "canvasTypeId": "ghostboard.media/image",
+        "instanceId": "extinst_cafe_pour"
+      }
+    },
+    {
+      "id": "link-wiki",
+      "type": "extension",
+      "position": { "x": 1320, "y": 560 },
+      "style": { "width": 500, "height": 280 },
+      "data": {
+        "canvasTypeId": "ghostboard.web/link",
+        "instanceId": "extinst_cafe_wiki"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-space",
+      "type": "labeledEdge",
+      "source": "topic-root",
+      "target": "topic-space",
+      "markerEnd": "compact-arrow",
+      "data": { "kind": "topic-child", "order": 0, "relationVersion": 1 }
+    },
+    {
+      "id": "edge-beans",
+      "type": "labeledEdge",
+      "source": "topic-root",
+      "target": "topic-beans",
+      "markerEnd": "compact-arrow",
+      "data": { "kind": "topic-child", "order": 1, "relationVersion": 1 }
+    },
+    {
+      "id": "edge-menu",
+      "type": "labeledEdge",
+      "source": "topic-root",
+      "target": "topic-menu",
+      "markerEnd": "compact-arrow",
+      "data": { "kind": "topic-child", "order": 2, "relationVersion": 1 }
+    },
+    {
+      "id": "edge-pour",
+      "type": "labeledEdge",
+      "source": "topic-menu",
+      "target": "topic-pour",
+      "markerEnd": "compact-arrow",
+      "data": { "kind": "topic-child", "order": 0, "relationVersion": 1 }
+    },
+    {
+      "id": "edge-recipe",
+      "type": "labeledEdge",
+      "source": "card-brief",
+      "target": "card-recipe",
+      "markerEnd": "compact-arrow",
+      "data": { "label": "展开" }
+    },
+    {
+      "id": "edge-check",
+      "type": "labeledEdge",
+      "source": "card-recipe",
+      "target": "check-open",
+      "markerEnd": "compact-arrow",
+      "data": { "label": "对照" }
+    }
+  ],
+  "noteContents": {
+    "note-brief": {
+      "title": "为什么做这家店",
+      "displayHint": "note",
+      "color": "#FFFFFF",
+      "body": "不是再开一家精品咖啡馆。\n\n想要的是一个能坐一下午的地方：窗边的光、不过度设计的杯子、菜单短到能背下来。\n\n- 座位不超过 24 个\n- 只做两种奶\n- 豆子每周换一次"
+    },
+    "note-recipe": {
+      "title": "手冲配方",
+      "displayHint": "note",
+      "color": "#FEF3C7",
+      "body": "## 埃塞俄比亚 · 日晒\n\n- 粉水比 1:15\n- 水温 92°C\n- 研磨 中细\n- 总时间 2:30\n\n第一段闷蒸 30 秒，之后绕圈注水。不要把粉床冲穿。"
+    }
+  },
+  "extensionInstances": {
+    "extinst_cafe_open": {
+      "canvasTypeId": "ghostboard.productivity/checklist",
+      "dataVersion": 1,
+      "presentation": {
+        "title": "开业前",
+        "subtitle": "2/4",
+        "plainText": "看过三家店面 杯子样品到了 营业执照 第一批豆子"
+      },
+      "state": {
+        "title": "开业前",
+        "items": [
+          { "id": "c1", "text": "看过三家店面", "checked": true },
+          { "id": "c2", "text": "杯子样品到了", "checked": true },
+          { "id": "c3", "text": "营业执照", "checked": false },
+          { "id": "c4", "text": "第一批豆子", "checked": false }
+        ]
+      }
+    },
+    "extinst_cafe_wiki": {
+      "canvasTypeId": "ghostboard.web/link",
+      "dataVersion": 1,
+      "presentation": {
+        "title": "拿铁咖啡",
+        "subtitle": "维基百科",
+        "plainText": "拿铁咖啡 维基百科"
+      },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "拿铁咖啡",
+        "siteName": "维基百科",
+        "unfurlStatus": "ready",
+        "url": "https://zh.wikipedia.org/wiki/%E6%8B%BF%E9%93%81%E5%92%96%E5%95%A1",
+        "description": "拿铁咖啡是一种意式咖啡，在意大利语以外的语言中常简称拿铁，泛指由热鲜奶所冲泡的饮品。",
+        "imageUrl": "tpl-asset:latte-prague.jpg"
+      }
+    },
+    "extinst_cafe_latte": {
+      "canvasTypeId": "ghostboard.media/image",
+      "dataVersion": 1,
+      "presentation": { "title": "窗边的一杯" },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "窗边的一杯",
+        "imageFile": "tpl-asset:latte.jpg"
+      }
+    },
+    "extinst_cafe_beans": {
+      "canvasTypeId": "ghostboard.media/image",
+      "dataVersion": 1,
+      "presentation": { "title": "本周的豆子" },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "本周的豆子",
+        "imageFile": "tpl-asset:beans.jpg"
+      }
+    },
+    "extinst_cafe_pour": {
+      "canvasTypeId": "ghostboard.media/image",
+      "dataVersion": 1,
+      "presentation": { "title": "手冲" },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "手冲",
+        "imageFile": "tpl-asset:pourover.jpg"
+      }
+    }
+  }
+}

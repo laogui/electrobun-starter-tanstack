@@ -327,6 +327,8 @@
   "template_reading_notes_description": "读书笔记一站式：书封 + 要点 + 章节收纳 + 金句 + 待实践 + 推荐链接。",
   "template_demo_name": "演示画布",
   "template_demo_description": "综合演示画布：展示 GhostBoard 的卡片、清单、文件夹、便签、分组等基础元件。",
+  "template_cafe_name": "开一家店",
+  "template_cafe_description": "一张能摊开的开店画布：主题导图、笔记、便签、文件夹、清单、照片和链接。",
   "settings_title": "设置",
   "settings_load_error": "无法加载设置。",
   "settings_save_error": "无法保存设置。",

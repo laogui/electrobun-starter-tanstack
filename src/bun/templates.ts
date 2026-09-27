@@ -16,6 +16,9 @@ import blankManifest from './templates/blank/manifest.canvas.json';
 import blankMeta from './templates/blank/meta.json';
 import brainstormMindmapManifest from './templates/brainstorm-mindmap/manifest.canvas.json';
 import brainstormMindmapMeta from './templates/brainstorm-mindmap/meta.json';
+import cafeAssets from './templates/cafe/assets.json';
+import cafeManifest from './templates/cafe/manifest.canvas.json';
+import cafeMeta from './templates/cafe/meta.json';
 import demoManifest from './templates/demo/manifest.canvas.json';
 import demoMeta from './templates/demo/meta.json';
 import eisenhowerMatrixManifest from './templates/eisenhower-matrix/manifest.canvas.json';
@@ -42,12 +45,30 @@ export interface TemplateMeta {
 
 export interface TemplateNoteContent {
   body: string;
+  color?: string;
   displayHint: string;
   title: string;
 }
 
+export interface TemplateExtensionSeed {
+  canvasTypeId: string;
+  dataVersion: number;
+  presentation: {
+    plainText?: string;
+    subtitle?: string;
+    title: string;
+  };
+  state: unknown;
+}
+
 export interface TemplateManifest {
+  /**
+   * JPEG bytes, base64 without a data-URL prefix. Keys are filenames
+   * referenced from extension state as `tpl-asset:<filename>`.
+   */
+  assets?: Record<string, string>;
   edges: ManifestEdge[];
+  extensionInstances?: Record<string, TemplateExtensionSeed>;
   meta: TemplateMeta;
   /**
    * Per-node metadata (tag / tagColor / tags). Keys are placeholder IDs:
@@ -61,7 +82,6 @@ export interface TemplateManifest {
   noteContents?: Record<string, TemplateNoteContent>;
   widgets?: Record<string, WidgetRecord>;
 }
-
 // ---------------------------------------------------------------------------
 // Registry — add new templates here
 // ---------------------------------------------------------------------------
@@ -115,6 +135,13 @@ const TEMPLATE_REGISTRY: Record<
     meta: demoMeta as unknown as TemplateMeta,
     manifest: demoManifest as unknown as Omit<TemplateManifest, 'meta'>,
   },
+  cafe: {
+    meta: cafeMeta as unknown as TemplateMeta,
+    manifest: {
+      ...(cafeManifest as unknown as Omit<TemplateManifest, 'meta'>),
+      assets: cafeAssets as unknown as Record<string, string>,
+    },
+  },
 };
 
 /** List all built-in templates. */
@@ -135,6 +162,8 @@ export function loadTemplate(id: string): TemplateManifest | null {
     edges: entry.manifest.edges ?? [],
     noteContents: entry.manifest.noteContents,
     nodeMetadata: entry.manifest.nodeMetadata,
+    assets: entry.manifest.assets,
+    extensionInstances: entry.manifest.extensionInstances,
     widgets: entry.manifest.widgets,
   };
 }

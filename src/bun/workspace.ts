@@ -6,6 +6,8 @@ import { Utils } from 'electrobun/bun';
 
 import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
+import { saveAttachment } from './attachments';
+import { createExtensionInstance } from './extensions/instanceStore';
 import type { CanvasManifest } from './manifest';
 import { resolveWorkspaceManifestPath, saveManifest } from './manifest';
 
@@ -83,6 +85,7 @@ export function initWorkspace(workspacePath?: string): string {
     join(wsPath, '.ghostboard', 'views'),
     join(wsPath, '.ghostboard', 'trash'),
     join(wsPath, '.ghostboard', 'widgets'),
+    join(wsPath, '.ghostboard', 'extension-instances'),
     join(wsPath, 'content'),
     join(wsPath, 'attachments'),
   ];
@@ -404,6 +407,42 @@ export interface AddViewFromTemplateResult {
   entry: ViewEntry;
   success: boolean;
 }
+const TEMPLATE_ASSET_PREFIX = 'tpl-asset:';
+
+function rewriteTemplateAssetValue(
+  value: unknown,
+  paths: Record<string, string>,
+  dataUrls: Record<string, string>,
+  key?: string
+): unknown {
+  if (typeof value === 'string' && value.startsWith(TEMPLATE_ASSET_PREFIX)) {
+    const name = value.slice(TEMPLATE_ASSET_PREFIX.length);
+    if (key === 'imageUrl') {
+      return dataUrls[name] ?? value;
+    }
+    return paths[name] ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      rewriteTemplateAssetValue(item, paths, dataUrls)
+    );
+  }
+  if (value && typeof value === 'object') {
+    const next: Record<string, unknown> = {};
+    for (const [childKey, child] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      next[childKey] = rewriteTemplateAssetValue(
+        child,
+        paths,
+        dataUrls,
+        childKey
+      );
+    }
+    return next;
+  }
+  return value;
+}
 
 /**
  * Populate an existing view's manifest from a template:
@@ -424,6 +463,10 @@ export async function populateViewFromTemplate(
   const noteContents = template.noteContents ?? {};
   const widgetIdMap = new Map<string, string>();
   const widgetSeeds = template.widgets ?? {};
+  const extensionSeeds = template.extensionInstances ?? {};
+  const instanceIdMap = new Map<string, string>();
+  const assetPaths: Record<string, string> = {};
+  const assetDataUrls: Record<string, string> = {};
 
   for (const placeholderId of Object.keys(noteContents)) {
     const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
@@ -455,6 +498,7 @@ export async function populateViewFromTemplate(
             id: realId,
             title: content.title,
             displayHint: content.displayHint,
+            ...(content.color ? { color: content.color } : {}),
             createdAt: now,
             updatedAt: now,
           },
@@ -479,6 +523,45 @@ export async function populateViewFromTemplate(
     })
   );
 
+  await Promise.all(
+    Object.entries(template.assets ?? {}).map(async ([name, base64]) => {
+      const dataUrl = `data:image/jpeg;base64,${base64}`;
+      assetDataUrls[name] = dataUrl;
+      const saved = await saveAttachment(wsPath, {
+        dataUrl,
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        suggestedName: name,
+      });
+      assetPaths[name] = saved.filePath;
+    })
+  );
+  mkdirSync(join(wsPath, '.ghostboard', 'extension-instances'), {
+    recursive: true,
+  });
+  for (const placeholderId of Object.keys(extensionSeeds)) {
+    instanceIdMap.set(
+      placeholderId,
+      `extinst_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
+    );
+  }
+  await Promise.all(
+    Array.from(instanceIdMap, async ([placeholderId, realId]) => {
+      const seed = extensionSeeds[placeholderId];
+      if (!seed) {
+        return;
+      }
+      await createExtensionInstance(wsPath, {
+        appVersion: '0.0.0',
+        canvasTypeId: seed.canvasTypeId,
+        dataVersion: seed.dataVersion,
+        id: realId,
+        presentation: seed.presentation,
+        state: rewriteTemplateAssetValue(seed.state, assetPaths, assetDataUrls),
+      });
+    })
+  );
+
   const nodes = template.nodes.map((node) => {
     const noteId = node.data.noteId as string | undefined;
     const widgetId = node.data.widgetId as string | undefined;
@@ -488,6 +571,12 @@ export async function populateViewFromTemplate(
     }
     if (widgetId && widgetIdMap.has(widgetId)) {
       nextData.widgetId = widgetIdMap.get(widgetId);
+    }
+    if (
+      typeof nextData.instanceId === 'string' &&
+      instanceIdMap.has(nextData.instanceId)
+    ) {
+      nextData.instanceId = instanceIdMap.get(nextData.instanceId);
     }
     if (node.type !== 'folder') {
       return { ...node, data: nextData };
@@ -511,6 +600,12 @@ export async function populateViewFromTemplate(
           }
           if (childWidgetId && widgetIdMap.has(childWidgetId)) {
             childData.widgetId = widgetIdMap.get(childWidgetId);
+          }
+          if (
+            typeof childData.instanceId === 'string' &&
+            instanceIdMap.has(childData.instanceId)
+          ) {
+            childData.instanceId = instanceIdMap.get(childData.instanceId);
           }
           return {
             ...child,

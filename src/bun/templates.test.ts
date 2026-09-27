@@ -253,6 +253,39 @@ describe('templates', () => {
     expect(template?.edges.length ?? 0).toBeGreaterThanOrEqual(1);
   });
 
+  it('cafe template keeps notes, photos, and extension cards wired together', () => {
+    const template = loadTemplate('cafe');
+    expect(template).not.toBeNull();
+    expect(template?.meta.category).toBe('planning');
+    expect(template?.nodes.some((node) => node.type === 'topic')).toBe(true);
+    expect(template?.nodes.some((node) => node.type === 'extension')).toBe(
+      true
+    );
+
+    const noteKeys = new Set(Object.keys(template?.noteContents ?? {}));
+    for (const node of template?.nodes ?? []) {
+      if (node.type === 'card' && typeof node.data.noteId === 'string') {
+        expect(noteKeys.has(node.data.noteId)).toBe(true);
+      }
+      if (node.type === 'extension') {
+        const instanceId = node.data.instanceId;
+        expect(typeof instanceId).toBe('string');
+        expect(
+          template?.extensionInstances?.[instanceId as string]
+        ).toBeDefined();
+      }
+    }
+
+    const assets = template?.assets ?? {};
+    expect(Object.keys(assets).length).toBeGreaterThan(0);
+    for (const seed of Object.values(template?.extensionInstances ?? {})) {
+      const state = JSON.stringify(seed.state);
+      for (const match of state.matchAll(/tpl-asset:([^"]+)/g)) {
+        expect(assets[match[1] ?? '']).toBeTruthy();
+      }
+    }
+  });
+
   it('blank template has no nodes or edges', () => {
     const template = loadTemplate('blank');
     expect(template).not.toBeNull();

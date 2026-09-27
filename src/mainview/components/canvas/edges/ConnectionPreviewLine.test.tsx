@@ -60,7 +60,10 @@ describe('ConnectionPreviewLine', () => {
 
     expect(path).not.toBeNull();
     expect(path).toHaveAttribute('d', 'preview-path');
-    expect(path).toHaveAttribute('marker-end', 'url(#compact-arrow-active)');
+    expect(path).toHaveAttribute(
+      'marker-end',
+      'url(#connection-preview-arrow)'
+    );
     expect(getBezierPathMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sourcePosition: Position.Right,

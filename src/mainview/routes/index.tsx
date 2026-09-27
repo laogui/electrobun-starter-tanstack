@@ -97,6 +97,7 @@ import {
   extractLinkUrl,
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
+import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import {
   buildFolderExpansionNodes,
   FOLDER_EXPANSION_GAP,
@@ -1796,6 +1797,11 @@ function CanvasComponent() {
     };
   }, [nodes, edges, topicDraft, activeViewId, topicEditPreviews]);
 
+  const renderEdges = useMemo(
+    () => resolveEdgeMarkers(topicPreview.edges, topicPreview.nodes),
+    [topicPreview.edges, topicPreview.nodes]
+  );
+
   const renderSourceNodes = useMemo(() => {
     const baseNodes = topicPreview.nodes;
     if (!(focusedFolderId && folderExpansionNodes.length > 0)) {
@@ -2224,7 +2230,7 @@ function CanvasComponent() {
           defaultEdgeOptions={defaultLabeledEdgeOptions}
           defaultViewport={sessionViewport ?? undefined}
           disableKeyboardA11y
-          edges={topicPreview.edges}
+          edges={renderEdges}
           edgeTypes={edgeTypes}
           elevateEdgesOnSelect
           fitView={!sessionViewport}

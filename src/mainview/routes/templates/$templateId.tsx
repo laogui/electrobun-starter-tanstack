@@ -26,6 +26,7 @@ import {
   readOnlyNodeTypes,
 } from '@/lib/canvasConstants';
 import { captureCanvasThumbnailDataUrl } from '@/lib/canvasExport';
+import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import { rpcCreateViewFromTemplate, rpcSaveTemplateThumbnail } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -181,7 +182,7 @@ function TemplatePreviewContent() {
     tags: string[];
   };
   const nodes = (template.nodes ?? []) as Node[];
-  const edges = (template.edges ?? []) as Edge[];
+  const edges = resolveEdgeMarkers((template.edges ?? []) as Edge[], nodes);
 
   return (
     <div

@@ -8,8 +8,8 @@ import {
 } from '@xyflow/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
+import { DEFAULT_EDGE_STROKE, resolveEdgeCustomColor } from '@/lib/edgeMarkers';
 import { getFloatingEdgeParams } from '@/lib/floatingEdge';
-import { topicEdgeStroke } from '@/lib/topicColors';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { resolveEdgeFields } from '../../../../shared/canvasEdgeFields';
@@ -53,13 +53,7 @@ function LabeledEdgeComponent({
   const reverseVisualDirection = isTreeEdge
     ? false
     : ((data?.reverseVisualDirection as boolean) ?? false);
-  const customColor = isTreeEdge
-    ? // Derived from the parent Topic, so the branch reads as one unit and the
-      // edge has no colour of its own to edit.
-      topicEdgeStroke(sourceNode?.data?.color)
-    : typeof data?.color === 'string'
-      ? (data.color as string)
-      : undefined;
+  const customColor = resolveEdgeCustomColor(data, sourceNode?.data?.color);
   const editingEdgeId = useCanvasStore((s) => s.editingEdgeId);
   const setEditingEdgeId = useCanvasStore((s) => s.setEditingEdgeId);
   const commitEdgeData = useCanvasStore((s) => s.commitEdgeData);
@@ -163,7 +157,7 @@ function LabeledEdgeComponent({
           strokeWidth: selected ? 2.5 : 1.5,
           stroke: selected
             ? (customColor ?? undefined)
-            : (customColor ?? 'var(--xy-edge-stroke, #b1b1b7)'),
+            : (customColor ?? DEFAULT_EDGE_STROKE),
         }}
       />
       <EdgeLabelRenderer>

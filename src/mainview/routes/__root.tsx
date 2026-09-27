@@ -135,57 +135,6 @@ function RootDocument() {
 
   return (
     <>
-      {/* Custom SVG marker definitions for edge arrows */}
-      <svg
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          width: 0,
-          height: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <defs>
-          {/* Open chevron arrow — tip aligns exactly with the node edge */}
-          <marker
-            id="compact-arrow"
-            markerHeight="8"
-            markerWidth="8"
-            orient="auto-start-reverse"
-            refX="7"
-            refY="4"
-            viewBox="0 0 8 8"
-          >
-            <path
-              d="M1,1 L7,4 L1,7"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.5"
-            />
-          </marker>
-          <marker
-            id="compact-arrow-active"
-            markerHeight="8"
-            markerWidth="8"
-            orient="auto-start-reverse"
-            refX="7"
-            refY="4"
-            viewBox="0 0 8 8"
-          >
-            <path
-              d="M1,1 L7,4 L1,7"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.5"
-            />
-          </marker>
-        </defs>
-      </svg>
-
       {/* Draggable titlebar — transparent; hosts the centered search box */}
       <div
         className="electrobun-webkit-app-region-drag fixed inset-x-0 top-0 z-50 flex h-10 select-none items-center gap-2 bg-transparent px-3"

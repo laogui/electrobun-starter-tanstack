@@ -7,6 +7,13 @@ export default {
     version: '1.0.0',
   },
   build: {
+    bun: {
+      define: {
+        __GHOSTBOARD_SUPPORT_API_URL__: JSON.stringify(
+          process.env.GHOSTBOARD_SUPPORT_API_URL ?? ''
+        ),
+      },
+    },
     artifactFolder: process.env.GHOSTBOARD_BUILD_ARTIFACT_DIR ?? 'artifacts',
     // Vite builds the renderer HTML entry to dist/, we copy from there.
     copy: {

@@ -98,7 +98,7 @@ export const LinkNodeReadOnly = memo(
     <div className="size-full">
       <ReadOnlyHandles />
       <div className="node-visual size-full overflow-hidden rounded-3xl shadow-card">
-        <LinkContent data={data} />
+        <LinkContent allowPlayback={false} data={data} />
       </div>
     </div>
   )

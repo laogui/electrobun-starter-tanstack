@@ -1,0 +1,11 @@
+Tool definition shape object [ "applyDocumentOperations" ]
+Real GhostBoard handler response 400 Invalid AI chat request
+AI state {
+  status: "user-reviewing",
+  blockId: "p1",
+}
+Pending review JSON [{"id":"p1","type":"paragraph","props":{"backgroundColor":"default","textColor":"default","textAlignment":"left"},"content":[{"type":"text","text":"OriginalRewritten by AI","styles":{}}],"children":[]}]
+Pending review Markdown OriginalRewritten by AI
+
+Reject in original editor [{"id":"p1","type":"paragraph","props":{"backgroundColor":"default","textColor":"default","textAlignment":"left"},"content":[{"type":"text","text":"Original","styles":{}}],"children":[]}]
+Reject after reload [{"id":"p1","type":"paragraph","props":{"backgroundColor":"default","textColor":"default","textAlignment":"left"},"content":[{"type":"text","text":"OriginalRewritten by AI","styles":{}}],"children":[]}]

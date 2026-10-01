@@ -1,0 +1,10 @@
+# Progress
+2026-10-01: Inspected repository instructions, runtime/RPC/settings infrastructure, API context and schema conventions. Working on report contract and runtime lifecycle discovery.
+
+Implemented main/renderer diagnostics, file queue/rotation/redaction, RPC and localized feedback panel; added backend schema/migration, submission/staff routes and report management UI. Desktop type-check passed. Starting lint/build/manual validation.
+
+Verification: 95 desktop tests across 6 existing files pass; 14 API tests across 4 existing files pass. Desktop renderer and admin SPA production builds pass, backend/db/admin TypeScript build passes. Real isolated PostgreSQL manual probe passed feedback receipts, optional log omission, redaction, concurrent dedup, fatal/abnormal recovery, persistent preference, retry, 512 KiB body limit, UTF-8 log limit, 60/hour quota, staff authorization and status updates.
+
+Browser verification completed with real SettingsApp/FeedbackPanel components and mock transport: Chinese layout, log preview, attach toggle, failure content retention, same UUID on retry, success clearing and auto upload toggle passed with no React errors. Screenshot saved as feedback-zh.png. Browser fixture setup required canonical Vite dependency URLs and QueryClientProvider; building during preview can trigger HMR reload. Optional dark screenshot was skipped after selector mismatch. Main-process Bun bundling passed with endpoint define. Final targeted probes confirmed HTTP 404 preserves queued reports and malformed persisted preferences do not enable uploads. Temporary PostgreSQL server stopped.
+
+Final redaction probe initially found invalid JSONL after double-pass whole-log sanitization; corrected preview to parse entries and re-sanitize only messages. Recheck passed valid JSONL, quoted secrets, secrets with spaces and the 128 KiB UTF-8 budget. Local code is ready; configured service database migrations and deployment remain release operations. Browser task finished and temporary DB data removed.

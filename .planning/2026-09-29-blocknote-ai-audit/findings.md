@@ -1,0 +1,13 @@
+# Findings
+- Official overview describes AI as early preview; capabilities include streaming, accept/reject, custom commands and optional RAG.
+- Project includes xl-ai 0.51.x, native UI components, and Bun streamText endpoint.
+- Read all five official AI pages, including default transport/backend, custom commands, reference, and optional advanced patterns.
+- Installed xl-ai is 0.51.4. Default menu provides write/continue/summarize/actions, selection improve/fix/translate/simplify, accept/revert, error retry/cancel; busy UI has loader but no abort control.
+- Real BlockNote + AIExtension serialization probe: pending insertion suggestion is exported in JSON/Markdown without suggestion metadata; reject restores original only in live editor.
+- GhostBoard handleChange saves every document update and does not check AI review state. Pending suggestions can persist before acceptance; reopening loses reject metadata.
+- API credential mutation has no settings-updated event; settings changes emit before saveSettings completes.
+- Provider/model/base URL/key are independent; Anthropic ignores baseUrl, OpenAI consumes stale hidden baseUrl, custom empty URL falls back to Ollama.
+- Full test suite started; output captured at /tmp/ghostboard-blocknote-ai-audit-tests.log.
+- Critical confirmed defect: real toolDefinitions is Record, production ai.ts requires Array => HTTP 400 for normal requests.
+- Final mounted real AIExtension with simulated applyDocumentOperations confirms pending review exports OriginalRewritten by AI, live reject restores Original, JSON reload cannot reject.
+- Related tests: 5 files / 58 pass. Full suite: 239 passed / 1 failed; 2254 passed / 27 failed; 37 errors; route test localization mock missing settings_canvas_minimap_label.

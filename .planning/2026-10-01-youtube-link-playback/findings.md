@@ -1,0 +1,19 @@
+# Findings
+- LinkContent in LinkNode.tsx serves canvas, focused view, folder previews and read-only nodes, and the built-in web.link extension.
+- Current cards show static link metadata and a 128px hero, with an external link action in focused view.
+- Workspace contains unrelated uncommitted AI/editor/settings/feedback changes. LinkNode.tsx and web.link source files are initially clean.
+- Existing active plan concerns a separate feedback/crash-report task; it will be preserved.
+- YouTube official embedded player requirements (https://developers.google.com/youtube/terms/required-minimum-functionality#embedded-youtube-player): HTTP Referer identification is required, recommended referrer policy is strict-origin-when-cross-origin, player viewport minimum is 200x200, and player controls must not be obscured by overlays.
+- Production main view uses views://mainview/index.html. Existing local HTTP server binds 127.0.0.1 on a random port and supports token query authentication for embedded media, so it can serve a safe player wrapper without changing the renderer origin.
+- The wrapper uses a strict referrer policy to send only its local origin to YouTube, excluding the launch token. It only renders an allowlisted YouTube iframe and validates video ID/start time.
+- Recognized URL paths: watch?v=, youtu.be/<id>, shorts/<id>, live/<id>, embed/<id>, v/<id>; allowed hosts include desktop/mobile/music YouTube and youtube-nocookie embed hosts. Timestamps use t/start/hash t and support seconds or h/m/s.
+- YouTube browser documentation inspected in ego-browser TaskSpace 3. Player parameters source: https://developers.google.com/youtube/player_parameters.
+- Manual browser scenario renders the real LinkContent source at default 380x360, minimum 320x320, wide 800x320, and focused 720x740. All footers fit after hiding the redundant site-name line on YouTube cards and capping card player height to reserve 120px for metadata.
+- Clicking the real card uses /youtube on the actual Bun local bridge, includes the launch token, preserves start=8, and places iframe inside nodrag/nopan. Wrapper successfully loads native YouTube controls.
+- Existing checks: 6 related test files / 72 tests passed; type check passed (29 vendor diagnostics ignored by existing script); targeted lint passed; Vite production build passed with existing large-chunk warnings.
+- Full repository lint currently reports 23 errors in concurrently changing diagnostics/settings/support source outside this task.
+- Final full repository lint passed across 786 files after the other task resolved its diagnostics/settings changes.
+- Final production build passed with bunx --bun vite build. The existing large-chunk warning remains.
+- Actual card playback verified via visible moving video and subtitles in the native YouTube iframe; the focused player also plays after keyboard Enter. Opening focus removes the background canvas iframe.
+- Screenshot saved as youtube-link-playback.png in this planning directory. TaskSpace 3 was finished and temporary UI/local HTTP QA services were stopped.
+- Packaged native desktop runtime was not launched; the production HTTP player wrapper and its authenticated server route were exercised in the browser.

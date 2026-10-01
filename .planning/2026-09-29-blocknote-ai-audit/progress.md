@@ -1,0 +1,17 @@
+# Progress
+- Started audit; working tree initially clean. Using ego-browser space 1.
+- Completed documentation and implementation review.
+- Captured real extension request and reproduced production 400 before model call.
+- Mounted editor with simulated AI stream; verified pending-suggestion serialization and lost rejection after JSON reload.
+- Recorded baseline test results and scope limits in docs/blocknote-ai-audit-2026-09-29.md.
+- Finished ego-browser space 1. No application source changes or external model calls.
+- Implemented protocol validation, provider-specific model/URL/key persistence with legacy migration and real streamed-tool connection testing.
+- Implemented stable editor configuration, suggestion commit boundaries, abort propagation including before-first-fetch cancellation, Chinese/English menus and safe errors.
+- Added real SDK local fixtures for OpenAI Responses, Anthropic Messages, Ollama/custom Chat Completions; all protocol tests passed.
+- Browser inspected Chinese AIPanel with a temporary memory-client fixture; screenshot provider-settings.png retained; browser space 2 finished and temporary pages/probes removed. Investigation probes promoted to permanent regression tests.
+- Repaired pre-existing route test's missing minimap localization mock so full regression can run. Left unrelated existing cafe/assets.json and ViewSwitcher.test.tsx formatting unchanged.
+- Full regression passed 243 files / 2295 tests before final extra React save-boundary test. Final rerun in progress.
+- Type check and canary build passed; final build rerun includes the last small UI feedback reset change.
+- Final verification complete: 243 test files / 2296 tests passed; type-check and canary build passed; all 24 changed/new source/catalog files passed Biome; git diff --check passed.
+- Full repository check remains blocked only by two existing unrelated formatting issues: cafe/assets.json and ViewSwitcher.test.tsx. No app source or test failures remain.
+- Repair documentation complete. No real user API keys accessed or external provider calls made; account/model availability is checked via the shipped test-connection button.

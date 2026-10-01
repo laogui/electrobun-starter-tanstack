@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const editor = {
+    dictionary: {},
+    getExtension: vi.fn<() => unknown>(() => undefined),
     blocksToMarkdownLossy: vi.fn(async () => 'Body'),
     document: [{ content: [], children: [], type: 'paragraph' }],
     replaceBlocks: vi.fn(),
@@ -141,6 +143,7 @@ import BlockNoteEditor from './BlockNoteEditor';
 
 describe('BlockNoteEditor', () => {
   beforeEach(() => {
+    mocks.editor.getExtension.mockReturnValue(undefined);
     mocks.conflict = null;
     mocks.conflictDraftReady = true;
     mocks.rpcGetLocalHttpEndpoint.mockResolvedValue({
@@ -552,5 +555,59 @@ describe('BlockNoteEditor', () => {
         'Updated by plugin'
       );
     });
+  });
+  it('does not serialize pending AI suggestions and saves only the accepted document', async () => {
+    const listeners = new Set<() => void>();
+    const ai = {
+      store: {
+        state: {
+          aiMenuState: 'closed' as
+            | 'closed'
+            | { status: string; blockId: string },
+        },
+        subscribe: (listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+      abort: vi.fn(async () => undefined),
+      rejectChanges: vi.fn(),
+    };
+    mocks.editor.getExtension.mockReturnValue(ai);
+    mocks.rpcGetLocalHttpEndpoint.mockResolvedValue({
+      aiEnabled: true,
+      baseUrl: 'http://localhost:4242',
+      token: 'local-test',
+    });
+    render(
+      <BlockNoteEditor
+        data={{}}
+        nodeId="placement"
+        noteId="note-1"
+        onMarkdownChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        title="Test"
+      />
+    );
+    const view = await screen.findByTestId('blocknote-view');
+    mocks.saveDebounced.mockClear();
+    mocks.editor.blocksToMarkdownLossy.mockClear();
+    act(() => {
+      ai.store.state.aiMenuState = { status: 'user-reviewing', blockId: 'p1' };
+      for (const listener of listeners) {
+        listener();
+      }
+    });
+    fireEvent.input(view);
+    fireEvent.blur(view);
+    expect(mocks.editor.blocksToMarkdownLossy).not.toHaveBeenCalled();
+    expect(mocks.saveDebounced).not.toHaveBeenCalled();
+    act(() => {
+      ai.store.state.aiMenuState = 'closed';
+      for (const listener of listeners) {
+        listener();
+      }
+    });
+    await waitFor(() => expect(mocks.saveDebounced).toHaveBeenCalledTimes(1));
   });
 });

@@ -1,7 +1,8 @@
 import type { LocaleSetting } from '@/settingsClient';
-
 import enMessages from '../../../../../messages/en.json';
 import zhMessages from '../../../../../messages/zh.json';
+import type { AIErrorCode } from '../../../../shared/ai/providerConfig';
+import type { SubmitReportResult } from '../../../../shared/support/reports';
 import { formatCountMessage, formatMessage } from './format';
 
 type MessageCatalog = Record<string, string>;
@@ -40,6 +41,37 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     navAi: t('settings_nav_ai'),
     navShortcuts: t('settings_nav_shortcuts'),
     navAbout: t('settings_nav_about'),
+    navFeedback: t('settings_nav_feedback'),
+
+    feedbackTitle: t('settings_feedback_title'),
+    feedbackDescription: t('settings_feedback_description'),
+    feedbackCategory: t('settings_feedback_category'),
+    feedbackBug: t('settings_feedback_bug'),
+    feedbackIdea: t('settings_feedback_idea'),
+    feedbackOther: t('settings_feedback_other'),
+    feedbackMessage: t('settings_feedback_message'),
+    feedbackPlaceholder: t('settings_feedback_placeholder'),
+    feedbackEmail: t('settings_feedback_email'),
+    feedbackEmailPlaceholder: t('settings_feedback_email_placeholder'),
+    feedbackIncludeLogs: t('settings_feedback_include_logs'),
+    feedbackLogsDescription: t('settings_feedback_logs_description'),
+    feedbackPreviewLogs: t('settings_feedback_preview_logs'),
+    feedbackLoadingLogs: t('settings_feedback_loading_logs'),
+    feedbackNoLogs: t('settings_feedback_no_logs'),
+    feedbackSend: t('settings_feedback_send'),
+    feedbackSending: t('settings_feedback_sending'),
+    feedbackSuccess: (id: string) => f('settings_feedback_success', { id }),
+    feedbackError: (
+      error: Extract<SubmitReportResult, { success: false }>['error']
+    ) => t(`settings_feedback_error_${error.replaceAll('-', '_')}`),
+    feedbackNotConfigured: t('settings_feedback_error_not_configured'),
+    feedbackAutoUpload: t('settings_feedback_auto_upload'),
+    feedbackAutoUploadDescription: t(
+      'settings_feedback_auto_upload_description'
+    ),
+    feedbackPending: (count: number) =>
+      f('settings_feedback_pending', { count }),
+    feedbackDiagnosticsError: t('settings_feedback_diagnostics_error'),
 
     generalTitle: t('settings_general_title'),
     language: t('settings_language'),
@@ -63,6 +95,14 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     autoSave2000: t('settings_auto_save_2000'),
     autoSave5000: t('settings_auto_save_5000'),
 
+    aiTestConnection: t('ai_test_connection'),
+    aiTesting: t('ai_testing'),
+    aiTestSuccess: t('ai_test_success'),
+    aiTestHint: t('ai_test_hint'),
+    aiKeyEnvironment: t('ai_key_environment'),
+    aiStop: t('ai_stop'),
+    aiReviewHint: t('ai_review_hint'),
+    aiError: (code: AIErrorCode) => t(`ai_error_${code.replaceAll('-', '_')}`),
     aiTitle: t('settings_ai_title'),
     aiDescription: t('settings_ai_description'),
     aiEnabledLabel: t('settings_ai_enabled_label'),

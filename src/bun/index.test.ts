@@ -840,7 +840,7 @@ describe('src/bun/index helpers', () => {
     expect(browserWindowFocusMock).not.toHaveBeenCalled();
   });
 
-  it('main RPC returns cached settings and saves settings without cross-window pushes', async () => {
+  it('main RPC returns cached settings and broadcasts settings only after saving', async () => {
     const { loadSettings } = await loadIndexModule();
     bunFileMock.mockReturnValueOnce({
       exists: vi.fn().mockResolvedValue(false),
@@ -868,7 +868,9 @@ describe('src/bun/index helpers', () => {
         2
       )
     );
-    expect(settingsUpdatedMock).not.toHaveBeenCalled();
+    expect(settingsUpdatedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: 'zh', theme: 'dark' })
+    );
   });
 
   it('main RPC exposes settings workspace, trash, cleanup, AI, and about handlers', async () => {
@@ -983,11 +985,32 @@ describe('src/bun/index helpers', () => {
 
     expect(canvasHandlers.getAICredentialStatus()).toEqual({
       hasApiKey: false,
+      source: 'none',
     });
     await expect(
       canvasHandlers.setAIApiKey({ apiKey: 'sk-test' })
     ).resolves.toEqual({ success: true });
-    expect(aiCredentialsMocks.saveAIApiKey).toHaveBeenCalledWith('sk-test');
+    expect(aiCredentialsMocks.saveAIApiKey).toHaveBeenCalledWith(
+      'sk-test',
+      'openai'
+    );
+    expect(
+      canvasHandlers.getAICredentialStatus({ provider: 'openai' })
+    ).toEqual({ hasApiKey: true, source: 'stored' });
+    expect(
+      canvasHandlers.getAICredentialStatus({ provider: 'anthropic' })
+    ).toEqual({ hasApiKey: false, source: 'none' });
+    await canvasHandlers.setAIApiKey({
+      provider: 'anthropic',
+      apiKey: 'other-key',
+    });
+    await canvasHandlers.setAIApiKey({ provider: 'openai', apiKey: null });
+    expect(
+      canvasHandlers.getAICredentialStatus({ provider: 'anthropic' })
+    ).toEqual({ hasApiKey: true, source: 'stored' });
+    expect(
+      canvasHandlers.getAICredentialStatus({ provider: 'openai' })
+    ).toEqual({ hasApiKey: false, source: 'none' });
   });
 
   it('exportWorkspaceArchive refuses to write archives inside the workspace', async () => {

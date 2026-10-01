@@ -21,7 +21,11 @@ Use strict TypeScript and React function components. Follow Biome/Ultracite form
 
 ## Testing Guidelines
 
-Vitest covers `src/mainview/**/*.{test,spec}.{ts,tsx}` and `src/bun/**/*.{test,spec}.{ts,tsx}` with setup from `src/test/`. Place tests beside source files, for example `canvasStore.ts` and `canvasStore.test.ts`. Use Testing Library for React behavior and direct unit tests for pure logic. Add or update tests whenever behavior changes, and run `bun run test` before submitting.
+Do not create, modify, or delete test cases or test files unless the user explicitly requests test work. This applies to new features, behavior changes, bug fixes, and regression tests. Do not routinely ask the user whether to add tests; proceed with the requested implementation.
+
+Validate changes as appropriate using existing tests, type checks, lint checks, builds, or manual verification. Running existing tests does not require a separate request. If existing tests fail because their expectations no longer match an intended behavior change, report the mismatch without rewriting or disabling those tests unless requested.
+
+When the user requests test work, Vitest covers `src/mainview/**/*.{test,spec}.{ts,tsx}`, `src/bun/**/*.{test,spec}.{ts,tsx}`, and `src/shared/**/*.{test,spec}.{ts,tsx}` with setup from `src/test/`. Place tests beside source files, for example `canvasStore.ts` and `canvasStore.test.ts`. Use Testing Library for React behavior and direct unit tests for pure logic.
 
 ## Commit & Pull Request Guidelines
 

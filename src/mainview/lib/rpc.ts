@@ -1,3 +1,8 @@
+import type {
+  AIConnectionSettings,
+  AIProvider,
+  AITestResult,
+} from '../../shared/ai/providerConfig';
 /**
  * RPC client for communicating with the Bun main process.
  * Returns null when running outside Electrobun (e.g., Vite dev server only).
@@ -44,6 +49,13 @@ import type {
   PluginSafeModeState,
   PluginUpdatePreparationResult,
 } from '../../shared/plugins/management';
+import type {
+  DiagnosticsStatus,
+  FeedbackInput,
+  ReportError,
+  SubmitReportResult,
+} from '../../shared/support/reports';
+import type { YouTubeVideo } from '../../shared/youtube';
 
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
@@ -982,6 +994,53 @@ export async function rpcGetSettings() {
   return eb.rpc.request.getSettings({});
 }
 
+export async function rpcGetDiagnosticsStatus(): Promise<DiagnosticsStatus> {
+  const eb = await getElectrobun();
+  return (
+    eb?.rpc?.request.getDiagnosticsStatus({}) ?? {
+      autoUpload: false,
+      configured: false,
+      pendingReports: 0,
+    }
+  );
+}
+
+export async function rpcGetDiagnosticsPreview(): Promise<{ logs: string }> {
+  const eb = await getElectrobun();
+  return eb?.rpc?.request.getDiagnosticsPreview({}) ?? { logs: '' };
+}
+
+export async function rpcSetCrashAutoUpload(
+  enabled: boolean
+): Promise<DiagnosticsStatus> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    throw new Error('Diagnostics unavailable');
+  }
+  return eb.rpc.request.setCrashAutoUpload({ enabled });
+}
+
+export async function rpcSubmitFeedback(
+  input: FeedbackInput
+): Promise<SubmitReportResult> {
+  const eb = await getElectrobun();
+  return (
+    eb?.rpc?.request.submitFeedback(input) ?? {
+      success: false,
+      error: 'unavailable',
+    }
+  );
+}
+
+export async function rpcRecordRendererDiagnostic(input: {
+  level: 'warn' | 'error';
+  message: string;
+  crash?: ReportError;
+}): Promise<void> {
+  const eb = await getElectrobun();
+  await eb?.rpc?.request.recordRendererDiagnostic(input);
+}
+
 export async function rpcSaveSettings(settings: AppSettings) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
@@ -1099,20 +1158,27 @@ export async function rpcCheckForUpdate(): Promise<UpdateCheckResult> {
   return eb.rpc.request.checkForUpdate({});
 }
 
-export async function rpcGetAICredentialStatus(): Promise<AICredentialStatus> {
+export async function rpcGetAICredentialStatus(
+  provider?: AIProvider
+): Promise<AICredentialStatus> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { hasApiKey: false };
   }
-  return eb.rpc.request.getAICredentialStatus({});
+  return eb.rpc.request.getAICredentialStatus(provider ? { provider } : {});
 }
 
-export async function rpcSetAIApiKey(apiKey: string | null) {
+export async function rpcSetAIApiKey(
+  apiKey: string | null,
+  provider?: AIProvider
+) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false };
   }
-  return eb.rpc.request.setAIApiKey({ apiKey });
+  return eb.rpc.request.setAIApiKey(
+    provider ? { apiKey, provider } : { apiKey }
+  );
 }
 
 export async function rpcRunAITask(
@@ -1174,6 +1240,21 @@ export async function resolveAttachmentStreamUrl(
   }
   const url = new URL(`${endpoint.baseUrl}/attachment`);
   url.searchParams.set('path', attachmentFile);
+  url.searchParams.set('token', endpoint.token);
+  return url.toString();
+}
+
+/** Use an HTTP player document so packaged views:// pages can embed YouTube. */
+export async function resolveYouTubePlayerUrl(
+  video: YouTubeVideo
+): Promise<string | null> {
+  const endpoint = await getLocalHttpEndpoint();
+  if (!endpoint?.baseUrl) {
+    return null;
+  }
+  const url = new URL(`${endpoint.baseUrl}/youtube`);
+  url.searchParams.set('videoId', video.videoId);
+  url.searchParams.set('start', String(video.startSeconds));
   url.searchParams.set('token', endpoint.token);
   return url.toString();
 }
@@ -1345,4 +1426,14 @@ export async function rpcSetActiveView(viewId: string) {
 export async function isRpcAvailable(): Promise<boolean> {
   const eb = await getElectrobun();
   return eb?.rpc != null;
+}
+
+export async function rpcTestAIConnection(
+  settings: AIConnectionSettings
+): Promise<AITestResult> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'network' };
+  }
+  return eb.rpc.request.testAIConnection(settings);
 }

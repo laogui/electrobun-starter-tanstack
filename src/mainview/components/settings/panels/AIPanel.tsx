@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-
 import {
   Select,
   SelectContent,
@@ -14,6 +13,7 @@ import {
   type AppSettings,
   type SettingsClient,
 } from '@/settingsClient';
+import { switchAIProvider } from '../../../../shared/ai/providerConfig';
 
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
@@ -26,6 +26,8 @@ interface AIPanelProps {
 
 export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [environmentKey, setEnvironmentKey] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [feedback, setFeedback] = useState<{
     kind: 'error' | 'success';
@@ -35,10 +37,11 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
   useEffect(() => {
     let mounted = true;
     client
-      .getAICredentialStatus()
+      .getAICredentialStatus(settings.aiProvider)
       .then((status) => {
         if (mounted) {
           setHasApiKey(status.hasApiKey);
+          setEnvironmentKey(status.source === 'environment');
         }
       })
       .catch(() => {
@@ -49,7 +52,7 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
     return () => {
       mounted = false;
     };
-  }, [client]);
+  }, [client, settings.aiProvider]);
 
   const providerLabels: Record<AIProviderSetting, string> = {
     openai: strings.aiProviderOpenai,
@@ -58,17 +61,18 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
     custom: strings.aiProviderCustom,
   };
   const enableLabels = { on: strings.aiEnabledOn, off: strings.aiEnabledOff };
-  const showBaseUrl =
-    settings.aiProvider === 'ollama' || settings.aiProvider === 'custom';
 
   async function commitApiKey(apiKey: string | null) {
+    setBusy(true);
     try {
-      const result = await client.setAIApiKey(apiKey);
+      const result = await client.setAIApiKey(apiKey, settings.aiProvider);
       if (!result.success) {
         setFeedback({ kind: 'error', text: strings.aiApiKeySaveFailed });
         return;
       }
-      setHasApiKey(apiKey != null && apiKey.length > 0);
+      const status = await client.getAICredentialStatus(settings.aiProvider);
+      setHasApiKey(status.hasApiKey);
+      setEnvironmentKey(status.source === 'environment');
       setApiKeyDraft('');
       setFeedback({
         kind: 'success',
@@ -76,6 +80,8 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
       });
     } catch {
       setFeedback({ kind: 'error', text: strings.aiApiKeySaveFailed });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -86,7 +92,7 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
         {strings.aiDescription}
       </p>
 
-      <div className="space-y-4">
+      <fieldset className="space-y-4" disabled={busy}>
         <PanelSelect
           id="settings-ai-enabled"
           label={strings.aiEnabledLabel}
@@ -103,7 +109,9 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
           id="settings-ai-provider"
           label={strings.aiProviderLabel}
           onValueChange={(value) => {
-            onUpdate({ aiProvider: value as AIProviderSetting });
+            setFeedback(null);
+            setApiKeyDraft('');
+            onUpdate(switchAIProvider(settings, value as AIProviderSetting));
           }}
           options={AI_PROVIDER_OPTIONS.map((value) => ({
             label: providerLabels[value],
@@ -115,33 +123,76 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
           id="settings-ai-model"
           label={strings.aiModelLabel}
           onValueChange={(aiModel) => {
+            setFeedback(null);
             onUpdate({ aiModel });
           }}
           placeholder={strings.aiModelPlaceholder}
           value={settings.aiModel}
         />
-        {showBaseUrl ? (
-          <PanelTextInput
-            description={strings.aiBaseUrlHint}
-            id="settings-ai-base-url"
-            label={strings.aiBaseUrlLabel}
-            onValueChange={(aiBaseUrl) => {
-              onUpdate({ aiBaseUrl });
-            }}
-            placeholder={strings.aiBaseUrlPlaceholder}
-            value={settings.aiBaseUrl}
-          />
-        ) : null}
+        <PanelTextInput
+          description={strings.aiBaseUrlHint}
+          id="settings-ai-base-url"
+          label={strings.aiBaseUrlLabel}
+          onValueChange={(aiBaseUrl) => {
+            setFeedback(null);
+            onUpdate({ aiBaseUrl });
+          }}
+          placeholder={strings.aiBaseUrlPlaceholder}
+          value={settings.aiBaseUrl}
+        />
 
         <ApiKeySection
           apiKeyDraft={apiKeyDraft}
           hasApiKey={hasApiKey}
           onClear={() => commitApiKey(null)}
-          onDraftChange={setApiKeyDraft}
-          onSave={() => commitApiKey(apiKeyDraft)}
+          onDraftChange={(value) => {
+            setFeedback(null);
+            setApiKeyDraft(value);
+          }}
+          onSave={() => commitApiKey(apiKeyDraft.trim())}
           strings={strings}
         />
 
+        {environmentKey ? (
+          <p className="text-neutral-500 text-xs">{strings.aiKeyEnvironment}</p>
+        ) : null}
+        <div className="space-y-2">
+          <button
+            className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            disabled={
+              busy || apiKeyDraft.trim().length > 0 || !client.testAIConnection
+            }
+            onClick={async () => {
+              if (!client.testAIConnection) {
+                return;
+              }
+              setBusy(true);
+              setFeedback(null);
+              try {
+                const result = await client.testAIConnection(settings);
+                setFeedback(
+                  result.success
+                    ? { kind: 'success', text: strings.aiTestSuccess }
+                    : {
+                        kind: 'error',
+                        text: strings.aiError(result.error ?? 'unknown'),
+                      }
+                );
+              } catch {
+                setFeedback({
+                  kind: 'error',
+                  text: strings.aiError('network'),
+                });
+              } finally {
+                setBusy(false);
+              }
+            }}
+            type="button"
+          >
+            {busy ? strings.aiTesting : strings.aiTestConnection}
+          </button>
+          <p className="text-neutral-500 text-xs">{strings.aiTestHint}</p>
+        </div>
         {feedback ? (
           <p
             className={
@@ -158,7 +209,7 @@ export function AIPanel({ client, onUpdate, settings, strings }: AIPanelProps) {
         <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
           {strings.aiReloadHint}
         </p>
-      </div>
+      </fieldset>
     </div>
   );
 }
@@ -319,7 +370,7 @@ function ApiKeySection({
         />
         <button
           className="inline-flex h-8 items-center rounded-md bg-neutral-900 px-3 font-medium text-[12px] text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
-          disabled={apiKeyDraft.length === 0}
+          disabled={apiKeyDraft.trim().length === 0}
           onClick={onSave}
           type="button"
         >

@@ -10,6 +10,7 @@ import {
   type LocaleSetting,
   type ThemeSetting,
 } from '@/settingsClient';
+import { normalizeAIProfiles } from '../../../shared/ai/providerConfig';
 
 const THEME_VALUES: readonly ThemeSetting[] = ['system', 'light', 'dark'];
 const LOCALE_VALUES: readonly LocaleSetting[] = ['en', 'zh'];
@@ -54,6 +55,9 @@ export function normalizeSettings(
     )
       ? (settings.autoSaveInterval as AutoSaveIntervalSetting)
       : DEFAULT_SETTINGS.autoSaveInterval,
+    ...(settings?.aiProfiles
+      ? { aiProfiles: normalizeAIProfiles(settings.aiProfiles) }
+      : {}),
     aiEnabled:
       typeof settings?.aiEnabled === 'boolean'
         ? settings.aiEnabled
@@ -62,7 +66,7 @@ export function normalizeSettings(
       ? (settings.aiProvider as AIProviderSetting)
       : DEFAULT_SETTINGS.aiProvider,
     aiModel:
-      typeof settings?.aiModel === 'string' && settings.aiModel.length > 0
+      typeof settings?.aiModel === 'string'
         ? settings.aiModel
         : DEFAULT_SETTINGS.aiModel,
     aiBaseUrl:

@@ -16,6 +16,7 @@ const rpcMocks = vi.hoisted(() => ({
   rpcSaveSettings: vi.fn(),
   rpcScanUnlinkedNotes: vi.fn(),
   rpcSetAIApiKey: vi.fn(),
+  rpcTestAIConnection: vi.fn(),
   rpcSwitchWorkspace: vi.fn(),
 }));
 

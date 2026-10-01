@@ -1,10 +1,11 @@
 import {
   type Block,
+  type BlockNoteEditor as Editor,
   filterSuggestionItems,
   type PartialBlock,
 } from '@blocknote/core';
 import '@blocknote/core/fonts/inter.css';
-import { en } from '@blocknote/core/locales';
+import { en, zh } from '@blocknote/core/locales';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
 import {
@@ -21,7 +22,7 @@ import {
   AIToolbarButton,
   getAISlashMenuItems,
 } from '@blocknote/xl-ai';
-import { en as aiEn } from '@blocknote/xl-ai/locales';
+import { en as aiEn, zh as aiZh } from '@blocknote/xl-ai/locales';
 import '@blocknote/xl-ai/style.css';
 import { DefaultChatTransport } from 'ai';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
@@ -39,11 +40,18 @@ import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import {
+  abortAIEditorRequest,
+  getAIRequestSignal,
+  hasPendingAIChanges,
+  observeAIEditorSession,
+} from './aiEditorSession';
 import { getBlockNoteDebounceMs } from './blockNoteEditorTiming';
 import {
   resolveBlockNoteFileUrl,
   uploadBlockNoteFile,
 } from './blocknoteAttachments';
+import { EditorAIMenu } from './EditorAIMenu';
 import { NoteConflictBanner } from './NoteConflictBanner';
 import { NoteEditorLoading } from './NoteEditorLoading';
 import {
@@ -292,10 +300,12 @@ export default function BlockNoteEditor({
 
   useEffect(() => {
     let cancelled = false;
+    let requestVersion = 0;
     const loadLocalHttpEndpoint = async () => {
+      const version = ++requestVersion;
       try {
         const info = await rpcGetLocalHttpEndpoint();
-        if (!cancelled) {
+        if (!cancelled && version === requestVersion) {
           setLocalHttpEndpoint(info);
         }
       } catch (error) {
@@ -303,7 +313,7 @@ export default function BlockNoteEditor({
           '[blocknote] Failed to resolve local HTTP endpoint:',
           error
         );
-        if (!cancelled) {
+        if (!cancelled && version === requestVersion) {
           setLocalHttpEndpoint(null);
         }
       }
@@ -315,10 +325,6 @@ export default function BlockNoteEditor({
       globalThis.removeEventListener('settings-updated', loadLocalHttpEndpoint);
     };
   }, []);
-
-  const localHttpEndpointKey = localHttpEndpoint
-    ? `${localHttpEndpoint.aiEnabled}:${localHttpEndpoint.baseUrl}:${localHttpEndpoint.token}`
-    : 'no-ai';
 
   if (!initial || localHttpEndpoint === undefined) {
     return <NoteEditorLoading color={colorValue} title={titleValue} />;
@@ -335,7 +341,6 @@ export default function BlockNoteEditor({
       initial={initial}
       initialMarkdown={initialMarkdown}
       isDark={isDark}
-      key={localHttpEndpointKey}
       latestBlocksRef={latestBlocksRef}
       latestMarkdownRef={latestMarkdownRef}
       loadFailed={loadFailed}
@@ -436,14 +441,21 @@ function BlockNoteSurface({
   // sidecar load returned blocks we use them as `initialContent`; otherwise
   // we let BlockNote start empty and then asynchronously import Markdown so
   // we don't lose the legacy `.md` body during migration.
-  // AI is wired only when the Bun endpoint reports a configured provider. The
-  // transport points at the localhost /ai/chat route with the per-launch
-  // bearer token; without it we build a plain editor unchanged.
+  // Keep the extension and undo history alive across settings changes. AI UI
+  // is gated by backend readiness; transport reads the latest endpoint at send time.
   const aiEnabled = Boolean(
     localHttpEndpoint?.aiEnabled && localHttpEndpoint.baseUrl
   );
 
-  const editor = useCreateBlockNote({
+  const locale = useAppSettingsStore((state) => state.locale);
+  const endpointRef = useRef(localHttpEndpoint);
+  endpointRef.current = localHttpEndpoint;
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const [aiPending, setAIPending] = useState(false);
+  const [, refreshDictionary] = useState(locale);
+  const disposedRef = useRef(false);
+  const editor: Editor = useCreateBlockNote({
     initialContent:
       latestBlocksRef.current ??
       (initial.blocks && initial.blocks.length > 0
@@ -455,21 +467,39 @@ function BlockNoteSurface({
     // in the JSON sidecar and serialised into the Markdown mirror.
     uploadFile: uploadBlockNoteFile,
     resolveFileUrl: resolveBlockNoteFileUrl,
-    ...(aiEnabled && localHttpEndpoint
-      ? {
-          dictionary: { ...en, ai: aiEn },
-          extensions: [
-            AIExtension({
-              transport: new DefaultChatTransport({
-                api: `${localHttpEndpoint.baseUrl}/ai/chat`,
-                headers: {
-                  Authorization: `Bearer ${localHttpEndpoint.token}`,
-                },
+    dictionary: locale === 'zh' ? { ...zh, ai: aiZh } : { ...en, ai: aiEn },
+    extensions: [
+      AIExtension({
+        transport: new DefaultChatTransport({
+          fetch: Object.assign(
+            (input: RequestInfo | URL, init?: RequestInit) =>
+              fetch(input, {
+                ...init,
+                signal: AbortSignal.any([
+                  getAIRequestSignal(editor),
+                  ...(init?.signal ? [init.signal] : []),
+                ]),
               }),
-            }),
-          ],
-        }
-      : {}),
+            { preconnect: fetch.preconnect }
+          ),
+          prepareSendMessagesRequest: ({ messages, body }) => {
+            const endpoint = endpointRef.current;
+            if (!(endpoint?.aiEnabled && endpoint.baseUrl)) {
+              throw new Error('ghostboard-ai:configuration');
+            }
+            return {
+              api: `${endpoint.baseUrl}/ai/chat`,
+              headers: { Authorization: `Bearer ${endpoint.token}` },
+              body: {
+                ...body,
+                messages,
+                context: { title: titleRef.current.slice(0, TITLE_MAX_LENGTH) },
+              },
+            };
+          },
+        }),
+      }),
+    ],
   });
 
   const editorRootRef = useRef<HTMLDivElement | null>(null);
@@ -486,7 +516,7 @@ function BlockNoteSurface({
       noteId,
       {
         canApply: (snapshot) =>
-          !titleDirtyRef.current &&
+          !(hasPendingAIChanges(editor) || titleDirtyRef.current) &&
           canApplyExternal(snapshot.revision, {
             before: snapshot.before,
             after: snapshot,
@@ -581,6 +611,8 @@ function BlockNoteSurface({
 
   const handleChange = useCallback(async () => {
     if (
+      disposedRef.current ||
+      hasPendingAIChanges(editor) ||
       applyingExternalRef.current ||
       (externalDocumentRef.current !== null &&
         externalDocumentRef.current === JSON.stringify(editor.document))
@@ -609,6 +641,43 @@ function BlockNoteSurface({
     serializeCurrentDocument,
   ]);
 
+  const handleChangeRef = useRef(handleChange);
+  handleChangeRef.current = handleChange;
+  useEffect(() => {
+    disposedRef.current = false;
+    const cleanup = observeAIEditorSession(
+      editor,
+      () => {
+        handleChangeRef.current();
+      },
+      setAIPending
+    );
+    return () => {
+      disposedRef.current = true;
+      cleanup();
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    // Dictionary is a stable object used by BlockNote's components; update its
+    // entries without recreating the editor or throwing away undo history.
+    Object.assign(
+      editor.dictionary,
+      locale === 'zh' ? { ...zh, ai: aiZh } : { ...en, ai: aiEn }
+    );
+    refreshDictionary(locale);
+  }, [editor, locale]);
+
+  useEffect(() => {
+    if (!aiEnabled) {
+      const ai = editor.getExtension(AIExtension);
+      if (ai && ai.store.state.aiMenuState !== 'closed') {
+        abortAIEditorRequest(editor).catch(() => undefined);
+        ai.rejectChanges();
+      }
+    }
+  }, [editor, aiEnabled]);
+
   const handleTitleChange = useCallback(
     (nextTitle: string) => {
       markDirty();
@@ -620,6 +689,10 @@ function BlockNoteSurface({
 
   const handleUseSavedVersion = useCallback(() => {
     try {
+      if (hasPendingAIChanges(editor)) {
+        abortAIEditorRequest(editor).catch(() => undefined);
+        editor.getExtension(AIExtension)?.rejectChanges();
+      }
       acceptSavedVersion((snapshot) => {
         applyingExternalRef.current = true;
         serializationRef.current += 1;
@@ -663,6 +736,10 @@ function BlockNoteSurface({
 
   const handleBlur = useCallback(() => {
     onTitleBlur();
+    if (hasPendingAIChanges(editor)) {
+      flushNow();
+      return;
+    }
     if (!titleDirtyRef.current) {
       flushNow();
       return;
@@ -685,6 +762,7 @@ function BlockNoteSurface({
         console.error('[blocknote] Failed to save title change:', error);
       });
   }, [
+    editor,
     flushNow,
     onMarkdownChange,
     onTitleBlur,
@@ -747,7 +825,7 @@ function BlockNoteSurface({
       ) : null}
       {conflict ? (
         <NoteConflictBanner
-          canKeepLocal={conflictDraftReady}
+          canKeepLocal={conflictDraftReady && !aiPending}
           conflict={conflict}
           isDark={isDark}
           localText={latestMarkdownRef.current}
@@ -772,6 +850,7 @@ function BlockNoteSurface({
               'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
             )}
+            disabled={aiPending}
             maxLength={TITLE_MAX_LENGTH}
             maxRows={4}
             minRows={1}
@@ -791,7 +870,7 @@ function BlockNoteSurface({
           >
             {aiEnabled ? (
               <>
-                <AIMenuController />
+                <AIMenuController aiMenu={EditorAIMenu} />
                 <FormattingToolbarController
                   formattingToolbar={() => (
                     <FormattingToolbar>

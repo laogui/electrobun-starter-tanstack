@@ -5,6 +5,8 @@ import {
   rpcExportWorkspaceArchive,
   rpcGetAICredentialStatus,
   rpcGetAppInfo,
+  rpcGetDiagnosticsPreview,
+  rpcGetDiagnosticsStatus,
   rpcGetSettings,
   rpcGetWorkspaceInfo,
   rpcListTrash,
@@ -14,8 +16,21 @@ import {
   rpcSaveSettings,
   rpcScanUnlinkedNotes,
   rpcSetAIApiKey,
+  rpcSetCrashAutoUpload,
+  rpcSubmitFeedback,
   rpcSwitchWorkspace,
+  rpcTestAIConnection,
 } from '@/lib/rpc';
+import type {
+  AIConnectionSettings,
+  AIProviderProfiles,
+  AITestResult,
+} from '../shared/ai/providerConfig';
+import type {
+  DiagnosticsStatus,
+  FeedbackInput,
+  SubmitReportResult,
+} from '../shared/support/reports';
 
 export type ThemeSetting = 'dark' | 'light' | 'system';
 export type LocaleSetting = 'en' | 'zh';
@@ -39,6 +54,7 @@ export interface AppSettings {
   aiBaseUrl: string;
   aiEnabled: boolean;
   aiModel: string;
+  aiProfiles?: AIProviderProfiles;
   aiProvider: AIProviderSetting;
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: CanvasBackgroundSetting;
@@ -51,6 +67,7 @@ export interface AppSettings {
 
 export interface AICredentialStatus {
   hasApiKey: boolean;
+  source?: 'stored' | 'environment' | 'none';
 }
 
 export interface TrashEntry {
@@ -113,8 +130,12 @@ export interface SettingsClient {
     files: string[]
   ) => Promise<{ deleted: string[]; skipped: string[] }>;
   exportWorkspaceArchive: () => Promise<ExportArchiveResult>;
-  getAICredentialStatus: () => Promise<AICredentialStatus>;
+  getAICredentialStatus: (
+    provider?: AIProviderSetting
+  ) => Promise<AICredentialStatus>;
   getAppInfo: () => Promise<AppInfo>;
+  getDiagnosticsPreview?: () => Promise<{ logs: string }>;
+  getDiagnosticsStatus?: () => Promise<DiagnosticsStatus>;
   getSettings: () => Promise<AppSettings>;
   getWorkspaceInfo: () => Promise<WorkspaceInfo>;
   listTrash: () => Promise<TrashEntry[]>;
@@ -123,8 +144,14 @@ export interface SettingsClient {
   restoreTrash: (trashId: string) => Promise<{ success: boolean }>;
   saveSettings: (settings: AppSettings) => Promise<{ success: boolean }>;
   scanUnlinkedNotes: () => Promise<UnlinkedFileEntry[]>;
-  setAIApiKey: (apiKey: string | null) => Promise<{ success: boolean }>;
+  setAIApiKey: (
+    apiKey: string | null,
+    provider?: AIProviderSetting
+  ) => Promise<{ success: boolean }>;
+  setCrashAutoUpload?: (enabled: boolean) => Promise<DiagnosticsStatus>;
+  submitFeedback?: (input: FeedbackInput) => Promise<SubmitReportResult>;
   switchWorkspace: () => Promise<SwitchWorkspaceResult>;
+  testAIConnection?: (settings: AIConnectionSettings) => Promise<AITestResult>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -145,6 +172,10 @@ export const TRASH_UPDATED_EVENT = 'trash-updated';
 
 export function createSettingsClient(): SettingsClient {
   return {
+    getDiagnosticsStatus: () => rpcGetDiagnosticsStatus(),
+    getDiagnosticsPreview: () => rpcGetDiagnosticsPreview(),
+    setCrashAutoUpload: (enabled) => rpcSetCrashAutoUpload(enabled),
+    submitFeedback: (input) => rpcSubmitFeedback(input),
     getSettings: async () => (await rpcGetSettings()) ?? DEFAULT_SETTINGS,
     saveSettings: rpcSaveSettings,
     listTrash: rpcListTrash,
@@ -161,5 +192,6 @@ export function createSettingsClient(): SettingsClient {
     checkForUpdate: rpcCheckForUpdate,
     getAICredentialStatus: rpcGetAICredentialStatus,
     setAIApiKey: rpcSetAIApiKey,
+    testAIConnection: rpcTestAIConnection,
   };
 }

@@ -5,6 +5,10 @@ import ReactDOM from 'react-dom/client';
 
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
 import { connectExtensionTaskDispatcher } from '@/extensions/taskDispatcher';
+import {
+  reportRendererError,
+  startRendererDiagnostics,
+} from '@/lib/diagnostics';
 import { router } from '@/router';
 import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
 import { connectPluginHostEvents } from './plugins/runtime/hostEvents';
@@ -13,6 +17,9 @@ import { pluginRuntime } from './plugins/runtime/PluginRuntime';
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
+
+const stopDiagnostics = startRendererDiagnostics();
+import.meta.hot?.dispose(stopDiagnostics);
 
 registerBuiltinCanvasTypes();
 
@@ -28,7 +35,14 @@ if (rootElement == null) {
   throw new Error("Root element with id 'root' not found in index.html");
 }
 
-const root = ReactDOM.createRoot(rootElement);
+const root = ReactDOM.createRoot(rootElement, {
+  onCaughtError: (error, info) =>
+    reportRendererError(error, info.componentStack),
+  onUncaughtError: (error, info) => {
+    console.error(error);
+    reportRendererError(error, info.componentStack);
+  },
+});
 root.render(
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     {/* Components import `motion/react-m` (lightweight `m.*`); LazyMotion must

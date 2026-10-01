@@ -1,0 +1,4 @@
+# Progress
+2026-10-01: Read repository instructions, inspected dirty working tree, and located shared link card rendering. Created isolated planning files without changing the active plan pointer.
+2026-10-01: Implemented shared URL parsing, click-to-load player, authenticated HTTP wrapper, compact video card layout, focused player, static preview handling and three English/Chinese messages. Initial targeted lint found six fixable style diagnostics.
+2026-10-01: Related existing tests passed (6 files, 72 tests), type check and targeted lint passed. Manually verified URL formats/timestamps, auth and invalid input responses, real card/focused video playback, keyboard start, background stop and layout at default/minimum/wide/focused sizes. Final full lint and Bun-based Vite build passed. Reviewed changes, saved screenshot, finished browser task and stopped temporary services. No test files edited.

@@ -21,7 +21,12 @@ export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
     return <ImageContent data={child.data as unknown as ImageData} />;
   }
   if (child.type === 'link') {
-    return <LinkContent data={child.data as LinkNodeRuntimeData} />;
+    return (
+      <LinkContent
+        allowPlayback={false}
+        data={child.data as LinkNodeRuntimeData}
+      />
+    );
   }
   if (child.type === 'asset') {
     return <AssetContent data={child.data as AssetNodeRuntimeData} />;

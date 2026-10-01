@@ -13,6 +13,7 @@ import type { NoteContentService } from './plugins/noteContent';
 import type { PluginStorageHost } from './plugins/storage';
 import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
+import { serveYouTubePlayer } from './youtubePlayer';
 
 export interface LocalHttpServerHandle {
   baseUrl: string;
@@ -181,6 +182,7 @@ export function startLocalHttpServer(
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
+    idleTimeout: 120,
     fetch: async (req) => {
       const url = new URL(req.url);
       if (req.method === 'OPTIONS') {
@@ -220,6 +222,9 @@ export function startLocalHttpServer(
           headers: CORS_HEADERS,
         });
       }
+      if (url.pathname === '/youtube') {
+        return serveYouTubePlayer(req, url);
+      }
       const contentResponse = await options.pluginContent?.handle(
         req,
         CORS_HEADERS
@@ -249,16 +254,19 @@ export function startLocalHttpServer(
       if (url.pathname === '/ai/chat' && req.method === 'POST') {
         const config = options.getAIConfig();
         if (!config) {
-          return new Response('AI not configured', {
-            status: 503,
-            headers: CORS_HEADERS,
-          });
+          return new Response(
+            'ghostboard-ai:configuration; AI not configured',
+            {
+              status: 503,
+              headers: CORS_HEADERS,
+            }
+          );
         }
         try {
           return await handleAIChat(req, config, CORS_HEADERS);
         } catch (err) {
           console.error('[ai] chat request failed:', err);
-          return new Response('AI request failed', {
+          return new Response('ghostboard-ai:unknown', {
             status: 500,
             headers: CORS_HEADERS,
           });

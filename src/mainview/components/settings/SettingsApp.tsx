@@ -1,6 +1,7 @@
 import {
   Info,
   Keyboard,
+  MessageSquare,
   Package,
   Puzzle,
   Settings as SettingsIcon,
@@ -24,6 +25,7 @@ import {
 import { AboutPanel } from './panels/AboutPanel';
 import { AIPanel } from './panels/AIPanel';
 import { CanvasTypesPanel } from './panels/CanvasTypesPanel';
+import { FeedbackPanel } from './panels/FeedbackPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { PluginsPanel } from './panels/PluginsPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
@@ -34,6 +36,7 @@ type SettingsSection =
   | 'about'
   | 'ai'
   | 'canvasTypes'
+  | 'feedback'
   | 'general'
   | 'plugins'
   | 'shortcuts'
@@ -47,6 +50,7 @@ interface NavItem {
     | 'navAbout'
     | 'navAi'
     | 'navCanvasTypes'
+    | 'navFeedback'
     | 'navGeneral'
     | 'navPlugins'
     | 'navShortcuts'
@@ -61,6 +65,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'plugins', icon: Package, labelKey: 'navPlugins' },
   { id: 'ai', icon: Sparkles, labelKey: 'navAi' },
   { id: 'shortcuts', icon: Keyboard, labelKey: 'navShortcuts' },
+  { id: 'feedback', icon: MessageSquare, labelKey: 'navFeedback' },
   { id: 'about', icon: Info, labelKey: 'navAbout' },
 ];
 
@@ -96,6 +101,7 @@ export function SettingsApp({
     useState<SettingsSection>('general');
   const { loadFailed, saveFailed, settings } = settingsState;
   const settingsRef = useRef(settings);
+  const savesRef = useRef(Promise.resolve());
 
   // Bottom fade hint for the dialog scroll container: revealed only while the
   // content can still scroll further down, so a half-cut last row doesn't read
@@ -183,17 +189,30 @@ export function SettingsApp({
         saveFailed: false,
         settings: nextSettings,
       }));
-      onSettingsChange?.(nextSettings);
-
-      client
-        .saveSettings(nextSettings)
+      const save = savesRef.current.then(() =>
+        client.saveSettings(nextSettings)
+      );
+      savesRef.current = save.then(
+        () => undefined,
+        () => undefined
+      );
+      save
         .then((result) => {
+          if (settingsRef.current !== nextSettings) {
+            return;
+          }
+          if (result.success) {
+            onSettingsChange?.(nextSettings);
+          }
           setSettingsState((current) => ({
             ...current,
             saveFailed: !result.success,
           }));
         })
         .catch(() => {
+          if (settingsRef.current !== nextSettings) {
+            return;
+          }
           setSettingsState((current) => ({ ...current, saveFailed: true }));
         });
     },
@@ -321,6 +340,7 @@ function SettingsContent({
       {activeSection === 'ai' ? (
         <AIPanel
           client={client}
+          key={settings.aiProvider}
           onUpdate={onUpdate}
           settings={settings}
           strings={strings}
@@ -331,6 +351,9 @@ function SettingsContent({
       ) : null}
       {activeSection === 'about' ? (
         <AboutPanel client={client} strings={strings} />
+      ) : null}
+      {activeSection === 'feedback' ? (
+        <FeedbackPanel client={client} strings={strings} />
       ) : null}
     </>
   );

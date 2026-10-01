@@ -177,7 +177,7 @@ function LinkCanvasSurface({ context, host, state }: SurfaceProps<LinkState>) {
 }
 
 function LinkPreviewSurface({ state }: PreviewProps<LinkState>) {
-  return <LinkContent data={normalizeLinkState(state)} />;
+  return <LinkContent allowPlayback={false} data={normalizeLinkState(state)} />;
 }
 
 export const linkCanvasType: BuiltinCanvasType<LinkState> = {

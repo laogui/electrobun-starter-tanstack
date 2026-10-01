@@ -1,12 +1,20 @@
 import { existsSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
-import {
+import Electrobun, {
   ApplicationMenu,
   BrowserView,
   BrowserWindow,
   Updater,
   Utils,
 } from 'electrobun/bun';
+import {
+  type AIConnectionSettings,
+  type AIProvider,
+  type AIProviderProfiles,
+  type AITestResult,
+  isAIProvider,
+  normalizeAIProfiles,
+} from '../shared/ai/providerConfig';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../shared/ai/types';
 import type { ExtensionEnablementFile } from '../shared/extensions/enablement';
 import type {
@@ -31,10 +39,17 @@ import type {
   PluginSafeModeState,
   PluginUpdatePreparationResult,
 } from '../shared/plugins/management';
-import type { AIServerConfig } from './ai';
+import {
+  type DiagnosticsStatus,
+  type FeedbackInput,
+  type ReportError,
+  reportErrorSchema,
+  type SubmitReportResult,
+} from '../shared/support/reports';
+import { type AIServerConfig, testAIConnection, validateAIConfig } from './ai';
 import { loadAICredentials, saveAIApiKey } from './aicredentials';
 import { runAITask } from './aiTasks';
-import { getAppDataRoot } from './appPaths';
+import { getAppChannel, getAppDataRoot } from './appPaths';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
@@ -55,6 +70,11 @@ import {
   scanUnlinkedNotes,
   type UnlinkedFileEntry,
 } from './cleanup';
+import {
+  DiagnosticsService,
+  initialReportAppInfo,
+  installDiagnosticLogging,
+} from './diagnostics';
 import {
   loadExtensionEnablement,
   setCanvasTypeEnabled,
@@ -1180,16 +1200,47 @@ interface CanvasRPC {
         params: Record<string, unknown>;
         response: AppSettings;
       };
+      getDiagnosticsStatus: {
+        params: Record<string, unknown>;
+        response: DiagnosticsStatus;
+      };
+      getDiagnosticsPreview: {
+        params: Record<string, unknown>;
+        response: { logs: string };
+      };
+      setCrashAutoUpload: {
+        params: { enabled: boolean };
+        response: DiagnosticsStatus;
+      };
+      submitFeedback: {
+        params: FeedbackInput;
+        response: SubmitReportResult;
+      };
+      recordRendererDiagnostic: {
+        params: {
+          level: 'warn' | 'error';
+          message: string;
+          crash?: ReportError;
+        };
+        response: { success: boolean };
+      };
       saveSettings: {
         params: AppSettings;
         response: { success: boolean };
       };
       getAICredentialStatus: {
-        params: Record<string, unknown>;
-        response: { hasApiKey: boolean };
+        params: { provider?: AIProvider };
+        response: {
+          hasApiKey: boolean;
+          source: 'stored' | 'environment' | 'none';
+        };
+      };
+      testAIConnection: {
+        params: AIConnectionSettings;
+        response: AITestResult;
       };
       setAIApiKey: {
-        params: { apiKey: string | null };
+        params: { apiKey: string | null; provider?: AIProvider };
         response: { success: boolean };
       };
       aiRunTask: {
@@ -1425,6 +1476,7 @@ interface AppSettings {
   aiBaseUrl: string;
   aiEnabled: boolean;
   aiModel: string;
+  aiProfiles?: AIProviderProfiles;
   aiProvider: (typeof AI_PROVIDER_VALUES)[number];
   autoSaveInterval: AutoSaveIntervalSetting;
   canvasBackground: string;
@@ -1478,6 +1530,9 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
     autoSaveInterval: includes(AUTO_SAVE_INTERVAL_VALUES, raw.autoSaveInterval)
       ? raw.autoSaveInterval
       : DEFAULT_SETTINGS.autoSaveInterval,
+    ...(raw.aiProfiles
+      ? { aiProfiles: normalizeAIProfiles(raw.aiProfiles) }
+      : {}),
     aiEnabled:
       typeof raw.aiEnabled === 'boolean'
         ? raw.aiEnabled
@@ -1486,9 +1541,7 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
       ? raw.aiProvider
       : DEFAULT_SETTINGS.aiProvider,
     aiModel:
-      typeof raw.aiModel === 'string' && raw.aiModel.length
-        ? raw.aiModel
-        : DEFAULT_SETTINGS.aiModel,
+      typeof raw.aiModel === 'string' ? raw.aiModel : DEFAULT_SETTINGS.aiModel,
     aiBaseUrl:
       typeof raw.aiBaseUrl === 'string'
         ? raw.aiBaseUrl
@@ -1500,11 +1553,13 @@ function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
 let cachedSettings: AppSettings = { ...DEFAULT_SETTINGS };
 let settingsFilePath = '';
 let mainWindow: BrowserWindow | null = null;
+let diagnostics: DiagnosticsService | null = null;
 // Local HTTP endpoint bridging the BlockNote editor to the LLM provider.
 // Streaming responses cannot travel over RPC, so it runs on 127.0.0.1.
 let localHttpServer: LocalHttpServerHandle | null = null;
 // LLM API key loaded from ~/.ghostboard/{channel}/ai-credentials.json (never in settings.json)
-let cachedAIApiKey: string | null = null;
+let cachedAIKeys: Partial<Record<AIProvider, string>> = {};
+let legacyEnvProvider: AIProvider = 'openai';
 // Reference to main window RPC — set in main(), used by settings to push updates
 let mainRpc: ReturnType<typeof BrowserView.defineRPC<CanvasRPC>> | null = null;
 
@@ -1526,10 +1581,10 @@ export async function loadSettings(wsPath: string): Promise<AppSettings> {
 
 export async function persistSettings(settings: AppSettings) {
   const normalized = normalizeAppSettings(settings);
-  cachedSettings = normalized;
   if (settingsFilePath) {
     await atomicWrite(settingsFilePath, JSON.stringify(normalized, null, 2));
   }
+  cachedSettings = normalized;
 }
 
 /**
@@ -1537,22 +1592,28 @@ export async function persistSettings(settings: AppSettings) {
  * in `~/.ghostboard/{channel}/ai-credentials.json`. Returns null when AI is disabled or a
  * cloud provider is missing its key, which makes /ai/chat reply 503.
  */
-function buildAIConfig(): AIServerConfig | null {
-  if (!cachedSettings.aiEnabled) {
+function getProviderKey(provider: AIProvider): string | undefined {
+  const environmentKey =
+    process.env[`GHOSTBOARD_AI_${provider.toUpperCase()}_API_KEY`] ||
+    (provider === legacyEnvProvider
+      ? process.env.GHOSTBOARD_AI_API_KEY
+      : undefined);
+  return cachedAIKeys[provider] || environmentKey;
+}
+
+function buildAIConfig(
+  settings: AIConnectionSettings = cachedSettings
+): AIServerConfig | null {
+  if (settings === cachedSettings && !cachedSettings.aiEnabled) {
     return null;
   }
-  const provider = cachedSettings.aiProvider;
-  const apiKey = cachedAIApiKey ?? process.env.GHOSTBOARD_AI_API_KEY;
-  const needsKey = provider === 'openai' || provider === 'anthropic';
-  if (needsKey && !apiKey) {
-    return null;
-  }
-  return {
-    provider,
-    model: cachedSettings.aiModel,
-    apiKey: apiKey ?? undefined,
-    baseUrl: cachedSettings.aiBaseUrl || undefined,
+  const config: AIServerConfig = {
+    provider: settings.aiProvider,
+    model: settings.aiModel.trim(),
+    apiKey: getProviderKey(settings.aiProvider),
+    baseUrl: settings.aiBaseUrl.trim() || undefined,
   };
+  return validateAIConfig(config) ? config : null;
 }
 
 async function getAppInfoData(): Promise<AppInfoResponse> {
@@ -1762,6 +1823,70 @@ function setApplicationMenu() {
 }
 
 async function main() {
+  if (!process.env.VITEST) {
+    try {
+      diagnostics = new DiagnosticsService(
+        getAppDataRoot(),
+        initialReportAppInfo(getAppChannel())
+      );
+      installDiagnosticLogging(diagnostics);
+      const service = diagnostics;
+      Electrobun.events.on('before-quit', () => service.shutdown());
+      process.once('exit', (code) => {
+        if (code === 0) {
+          service.shutdown();
+        }
+      });
+      const fatalError = (error: unknown) => {
+        try {
+          service.captureCrash(
+            {
+              source: 'main',
+              name:
+                error instanceof Error
+                  ? error.name.slice(0, 128)
+                  : 'UnhandledError',
+              message: String(
+                error instanceof Error ? error.message : error
+              ).slice(0, 4096),
+              stack:
+                error instanceof Error
+                  ? error.stack?.slice(0, 16_384)
+                  : undefined,
+            },
+            true
+          );
+        } finally {
+          process.exit(1);
+        }
+      };
+      process.once('uncaughtException', fatalError);
+      process.once('unhandledRejection', fatalError);
+      for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+        process.once(signal, () => {
+          service.shutdown();
+          Utils.quit();
+        });
+      }
+      const timer = setInterval(() => {
+        try {
+          service.heartbeat();
+        } catch (error) {
+          console.warn('[diagnostics] Heartbeat failed:', error);
+        }
+      }, 60_000);
+      timer.unref();
+      service.flush();
+      getAppInfoData()
+        .then((info) => service.updateAppInfo(info))
+        .catch((error) => {
+          console.warn('[diagnostics] Could not read app information:', error);
+        });
+    } catch (error) {
+      diagnostics = null;
+      console.warn('[diagnostics] Could not initialize diagnostics:', error);
+    }
+  }
   // NOTE on accelerators: Electrobun only auto-attaches standard macOS
   // shortcuts for the text-editing roles (undo, redo, cut, copy, paste,
   // pasteAndMatchStyle, delete, selectAll). All other roles — including quit,
@@ -1820,7 +1945,12 @@ async function main() {
   // The LLM API key lives outside the workspace so it never lands in
   // `<workspace>/.ghostboard/settings.json`. Cache it in memory for the
   // duration of the run; the secure file is only touched on read/write.
-  cachedAIApiKey = aiCredentials.apiKey ?? null;
+  cachedAIKeys = aiCredentials.providers ?? {};
+  legacyEnvProvider = cachedSettings.aiProvider;
+  if (aiCredentials.apiKey && !cachedAIKeys[cachedSettings.aiProvider]) {
+    await saveAIApiKey(aiCredentials.apiKey, cachedSettings.aiProvider);
+    cachedAIKeys[cachedSettings.aiProvider] = aiCredentials.apiKey;
+  }
   // Local HTTP endpoint for renderer calls that do not fit Electrobun RPC
   // well. The handle holds the localhost base URL + bearer token the renderer
   // connects with. AI config is resolved per-request so settings updates take
@@ -3558,17 +3688,91 @@ async function main() {
 
         getSettings: () => cachedSettings,
 
-        saveSettings: async (settings) => {
-          await persistSettings(settings);
+        getDiagnosticsStatus: () =>
+          diagnostics?.status() ?? {
+            autoUpload: false,
+            configured: false,
+            pendingReports: 0,
+          },
+
+        getDiagnosticsPreview: () => ({ logs: diagnostics?.preview() ?? '' }),
+
+        setCrashAutoUpload: ({ enabled }) => {
+          if (typeof enabled !== 'boolean' || !diagnostics) {
+            throw new Error('Diagnostics unavailable');
+          }
+          return diagnostics.setAutoUpload(enabled);
+        },
+
+        submitFeedback: (input) =>
+          diagnostics?.submitFeedback(input) ?? {
+            success: false as const,
+            error: 'unavailable' as const,
+          },
+
+        recordRendererDiagnostic: ({ level, message, crash }) => {
+          if (
+            !(diagnostics && ['warn', 'error'].includes(level)) ||
+            typeof message !== 'string'
+          ) {
+            return { success: false };
+          }
+          diagnostics.record(level, 'renderer', message.slice(0, 4096));
+          if (crash) {
+            const parsed = reportErrorSchema.safeParse(crash);
+            if (parsed.success && parsed.data.source === 'renderer') {
+              diagnostics.captureCrash(parsed.data);
+            }
+          }
           return { success: true };
         },
 
-        getAICredentialStatus: () => ({ hasApiKey: cachedAIApiKey != null }),
-
-        setAIApiKey: async ({ apiKey }) => {
-          await saveAIApiKey(apiKey);
-          cachedAIApiKey = apiKey && apiKey.length > 0 ? apiKey : null;
+        saveSettings: async (settings) => {
+          await persistSettings(settings);
+          mainRpc?.send?.settingsUpdated(cachedSettings);
           return { success: true };
+        },
+
+        getAICredentialStatus: ({
+          provider = cachedSettings.aiProvider,
+        } = {}) => ({
+          hasApiKey: Boolean(getProviderKey(provider)),
+          source: cachedAIKeys[provider]
+            ? 'stored'
+            : getProviderKey(provider)
+              ? 'environment'
+              : 'none',
+        }),
+
+        setAIApiKey: async ({
+          apiKey,
+          provider = cachedSettings.aiProvider,
+        }) => {
+          if (!isAIProvider(provider)) {
+            return { success: false };
+          }
+          await saveAIApiKey(apiKey, provider);
+          if (apiKey?.trim()) {
+            cachedAIKeys[provider] = apiKey.trim();
+          } else {
+            delete cachedAIKeys[provider];
+          }
+          mainRpc?.send?.settingsUpdated(cachedSettings);
+          return { success: true };
+        },
+
+        testAIConnection: async (settings) => {
+          if (
+            !isAIProvider(settings.aiProvider) ||
+            typeof settings.aiModel !== 'string' ||
+            typeof settings.aiBaseUrl !== 'string'
+          ) {
+            return { success: false, error: 'configuration' };
+          }
+          const config = buildAIConfig(settings);
+          return config
+            ? testAIConnection(config)
+            : { success: false, error: 'configuration' };
         },
 
         aiRunTask: async (params) => {
@@ -3756,4 +3960,16 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
+  diagnostics?.captureCrash(
+    {
+      source: 'main',
+      name: 'StartupError',
+      message: String(err instanceof Error ? err.message : err).slice(0, 4096),
+      stack: err instanceof Error ? err.stack?.slice(0, 16_384) : undefined,
+    },
+    true
+  );
+  if (!process.env.VITEST) {
+    process.exit(1);
+  }
 });

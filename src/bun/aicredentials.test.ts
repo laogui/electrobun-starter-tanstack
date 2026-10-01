@@ -64,4 +64,29 @@ describe('aicredentials', () => {
       apiKey: 'sk-test',
     });
   });
+
+  it('preserves other provider keys and migrates legacy keys without reusing them', async () => {
+    const data = await mkdtemp(join(tmpdir(), 'ai-provider-keys-'));
+    vi.stubEnv('GHOSTBOARD_DATA_DIR', data);
+    const { saveAIApiKey, loadAICredentials } = await import('./aicredentials');
+    await saveAIApiKey('legacy');
+    await saveAIApiKey('legacy', 'openai');
+    await Promise.all([
+      saveAIApiKey('anthropic-key', 'anthropic'),
+      saveAIApiKey('custom-key', 'custom'),
+    ]);
+    expect(await loadAICredentials()).toMatchObject({
+      providers: {
+        openai: 'legacy',
+        anthropic: 'anthropic-key',
+        custom: 'custom-key',
+      },
+    });
+    expect((await loadAICredentials()).apiKey).toBeUndefined();
+    await saveAIApiKey(null, 'openai');
+    expect((await loadAICredentials()).providers).toEqual({
+      anthropic: 'anthropic-key',
+      custom: 'custom-key',
+    });
+  });
 });

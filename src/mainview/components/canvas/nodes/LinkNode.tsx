@@ -26,10 +26,12 @@ import {
 import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import { parseYouTubeVideo } from '../../../../shared/youtube';
 
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 import { TypeBadge } from './_shared/TypeBadge';
+import { YouTubePlayer } from './_shared/YouTubePlayer';
 
 const DEFAULT_LINK_COLOR = '#FFFFFF';
 
@@ -99,11 +101,13 @@ function LinkFaviconBadge({
 }
 
 export const LinkContent = ({
+  allowPlayback = true,
   data,
   isFocused = false,
   onUrlChange,
   onRetry,
 }: {
+  allowPlayback?: boolean;
   data: LinkNodeRuntimeData;
   isFocused?: boolean;
   onRetry?: () => void;
@@ -113,6 +117,8 @@ export const LinkContent = ({
   const host = getLinkHost(link.url);
   const title = getLinkDisplayTitle(link);
   const openableUrl = getOpenableUrl(link.url);
+  const youtubeVideo =
+    allowPlayback && openableUrl ? parseYouTubeVideo(openableUrl) : null;
   const description = link.description?.trim();
   const [urlState, setUrlState] = useState(() => ({
     draftUrl: link.url,
@@ -159,7 +165,15 @@ export const LinkContent = ({
         style={colorToStyle(link.color)}
       >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-8 pt-10 pb-12">
-          {link.imageUrl && !heroImageError ? (
+          {youtubeVideo ? (
+            <YouTubePlayer
+              className="mb-8 aspect-video rounded-2xl"
+              isFocused
+              key={link.url}
+              title={title}
+              video={youtubeVideo}
+            />
+          ) : link.imageUrl && !heroImageError ? (
             <img
               alt=""
               className="mb-8 aspect-[21/9] w-full rounded-2xl border border-black/5 object-cover shadow-sm dark:border-white/10"
@@ -204,7 +218,7 @@ export const LinkContent = ({
               {description}
             </p>
           ) : null}
-          {link.unfurlStatus === 'failed' ? (
+          {link.unfurlStatus === 'failed' && !youtubeVideo ? (
             <div className="mt-6 inline-flex items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 text-xs dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
               <AlertTriangle size={13} />
               Preview unavailable
@@ -264,35 +278,55 @@ export const LinkContent = ({
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
       style={colorToStyle(link.color)}
     >
-      <div className="relative h-32 w-full shrink-0 overflow-hidden">
-        {showHeroImage ? (
-          <>
-            <img
-              alt=""
-              className="size-full object-cover"
-              draggable={false}
-              loading="lazy"
-              onError={() => setHeroImageError(true)}
-              src={link.imageUrl}
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/12 to-transparent dark:from-black/30" />
-          </>
-        ) : (
-          <div className="relative size-full overflow-hidden bg-gradient-to-br from-neutral-100 via-neutral-50/70 to-neutral-200 dark:from-neutral-800/90 dark:via-neutral-850 dark:to-neutral-900">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.5),transparent_50%)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.06),transparent_50%)]" />
-            <Globe2
-              className="absolute right-4 bottom-2 text-neutral-200/40 dark:text-neutral-700/40"
-              size={56}
-              strokeWidth={1.2}
-            />
-          </div>
+      {youtubeVideo ? (
+        <YouTubePlayer
+          className="aspect-video max-h-[calc(100%_-_120px)]"
+          isFocused={false}
+          key={link.url}
+          title={title}
+          video={youtubeVideo}
+        />
+      ) : (
+        <div className="relative h-32 w-full shrink-0 overflow-hidden">
+          {showHeroImage ? (
+            <>
+              <img
+                alt=""
+                className="size-full object-cover"
+                draggable={false}
+                loading="lazy"
+                onError={() => setHeroImageError(true)}
+                src={link.imageUrl}
+              />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/12 to-transparent dark:from-black/30" />
+            </>
+          ) : (
+            <div className="relative size-full overflow-hidden bg-gradient-to-br from-neutral-100 via-neutral-50/70 to-neutral-200 dark:from-neutral-800/90 dark:via-neutral-850 dark:to-neutral-900">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.5),transparent_50%)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.06),transparent_50%)]" />
+              <Globe2
+                className="absolute right-4 bottom-2 text-neutral-200/40 dark:text-neutral-700/40"
+                size={56}
+                strokeWidth={1.2}
+              />
+            </div>
+          )}
+          <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
+            Link
+          </TypeBadge>
+        </div>
+      )}
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col p-5 pb-4',
+          youtubeVideo && 'p-4 pb-3'
         )}
-        <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
-          Link
-        </TypeBadge>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col p-5 pb-4">
-        <div className="mb-3 flex shrink-0 items-start gap-3">
+      >
+        <div
+          className={cn(
+            'mb-3 flex shrink-0 items-start gap-3',
+            youtubeVideo && 'mb-0'
+          )}
+        >
           <LinkFaviconBadge faviconUrl={link.faviconUrl} />
           {link.unfurlStatus === 'loading' ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
@@ -303,13 +337,15 @@ export const LinkContent = ({
             <div className="min-w-0 flex-1">
               <h3
                 className={cn(
-                  'line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6',
+                  youtubeVideo
+                    ? 'line-clamp-2 font-bold text-base leading-5'
+                    : 'line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6',
                   !title && 'text-neutral-400'
                 )}
               >
                 {title || 'Untitled link'}
               </h3>
-              {link.siteName && host ? (
+              {link.siteName && host && !youtubeVideo ? (
                 <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
                   {link.siteName}
                 </p>
@@ -317,12 +353,12 @@ export const LinkContent = ({
             </div>
           )}
         </div>
-        {description && link.unfurlStatus !== 'loading' ? (
+        {description && link.unfurlStatus !== 'loading' && !youtubeVideo ? (
           <p className="line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400">
             {description}
           </p>
         ) : null}
-        {link.unfurlStatus === 'failed' ? (
+        {link.unfurlStatus === 'failed' && !youtubeVideo ? (
           <button
             className="nodrag nopan mt-3 inline-flex items-center gap-1.5 self-start rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 text-xs transition-colors hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200"
             onClick={(e) => {
@@ -336,12 +372,30 @@ export const LinkContent = ({
           </button>
         ) : null}
         <div className="mt-auto min-w-0 shrink-0 pt-3">
-          <div className="flex min-w-0 items-center gap-2 rounded-lg border border-black/8 bg-neutral-50/80 px-3 py-2.5 text-neutral-500 dark:border-white/8 dark:bg-white/5 dark:text-neutral-400">
-            <LinkIcon className="shrink-0 opacity-50" size={13} />
-            <span className="truncate text-xs" title={link.url || undefined}>
-              {host || link.url}
-            </span>
-          </div>
+          {youtubeVideo && openableUrl ? (
+            <a
+              className="nodrag nopan flex min-w-0 items-center gap-2 rounded-lg border border-black/8 bg-neutral-50/80 px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-900 dark:border-white/8 dark:bg-white/5 dark:text-neutral-400 dark:hover:text-neutral-100"
+              href={openableUrl}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <LinkIcon className="shrink-0 opacity-50" size={13} />
+              <span
+                className="min-w-0 flex-1 truncate text-xs"
+                title={link.url}
+              >
+                {host}
+              </span>
+              <ExternalLink className="shrink-0" size={13} />
+            </a>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2 rounded-lg border border-black/8 bg-neutral-50/80 px-3 py-2.5 text-neutral-500 dark:border-white/8 dark:bg-white/5 dark:text-neutral-400">
+              <LinkIcon className="shrink-0 opacity-50" size={13} />
+              <span className="truncate text-xs" title={link.url || undefined}>
+                {host || link.url}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

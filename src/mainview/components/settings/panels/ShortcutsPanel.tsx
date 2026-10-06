@@ -1,9 +1,5 @@
+import { MOD_KEY as MOD, SHIFT_KEY as SHIFT } from '@/lib/learningContent';
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
-
-const isMac =
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
-const MOD = isMac ? '⌘' : 'Ctrl';
-const SHIFT = isMac ? '⇧' : 'Shift';
 
 /**
  * Subset of SettingsLocaleStrings whose values are plain strings (no function
@@ -17,6 +13,7 @@ type StringValuedKey = {
 }[keyof SettingsLocaleStrings];
 
 interface ShortcutEntry {
+  gesture?: StringValuedKey;
   /** Either a single key string or a list of alt-key combinations. */
   keys: string[];
   label: StringValuedKey;
@@ -29,11 +26,20 @@ interface ShortcutGroup {
 
 const groups: ShortcutGroup[] = [
   {
+    heading: 'shortcutSectionCanvas',
+    entries: [
+      { keys: ['Space'], gesture: 'shortcutDrag', label: 'shortcutPan' },
+      { keys: [], gesture: 'shortcutDragEmpty', label: 'shortcutBoxSelect' },
+      { keys: [], gesture: 'shortcutScroll', label: 'shortcutScrollPan' },
+      { keys: [], gesture: 'shortcutPinch', label: 'shortcutPinchZoom' },
+    ],
+  },
+  {
     heading: 'shortcutSectionView',
     entries: [
       { keys: [`${MOD}+K`], label: 'shortcutSearch' },
       { keys: [`${MOD}+N`], label: 'shortcutNewMenu' },
-      { keys: [`${MOD}+=`, `${MOD}+-`], label: 'shortcutZoomIn' },
+      { keys: [`${MOD}+=`, `${MOD}+-`], label: 'shortcutZoom' },
       { keys: [`${MOD}+0`], label: 'shortcutZoomReset' },
       { keys: ['Esc'], label: 'shortcutFocusedClose' },
       { keys: ['A–Z'], label: 'shortcutTypeToSearch' },
@@ -142,6 +148,12 @@ function ShortcutGroupSection({
                         ) : null}
                       </span>
                     ))}
+                    {entry.gesture ? (
+                      <span className="text-neutral-500 text-xs dark:text-neutral-400">
+                        {entry.keys.length > 0 ? '+ ' : ''}
+                        {strings[entry.gesture]}
+                      </span>
+                    ) : null}
                   </div>
                 </td>
               </tr>

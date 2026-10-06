@@ -28,12 +28,17 @@ export interface AppSettingsState extends AppSettings {
     key: K,
     value: AppSettings[K]
   ) => void;
+  setSettingsLoaded: () => void;
   /** Convenience setter for the theme — keeps the legacy 'system' branch. */
   setTheme: (theme: ThemeSetting) => void;
+  /** Initial settings have settled; learning UI can use the correct locale. */
+  settingsLoaded: boolean;
 }
 
 export const useAppSettingsStore = create<AppSettingsState>((set) => ({
   ...DEFAULT_SETTINGS,
+  settingsLoaded: false,
+  setSettingsLoaded: () => set({ settingsLoaded: true }),
   applySettings: (next) => {
     const definedSettings = Object.fromEntries(
       Object.entries(next).filter(([, value]) => value !== undefined)

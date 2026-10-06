@@ -106,12 +106,24 @@ function RootDocument() {
 
   // Pull persisted settings on mount
   useEffect(() => {
-    rpcGetSettings().then((s) => {
-      if (!s) {
-        return;
-      }
-      applyAll(s as AppSettings);
-    });
+    let active = true;
+    rpcGetSettings()
+      .then((s) => {
+        if (active && s) {
+          applyAll(s as AppSettings);
+        }
+      })
+      .catch((error) => {
+        console.error('[settings] Failed to load app settings:', error);
+      })
+      .finally(() => {
+        if (active) {
+          useAppSettingsStore.getState().setSettingsLoaded();
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [applyAll]);
 
   // Listen for live pushes from the settings window

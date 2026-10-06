@@ -124,6 +124,14 @@ export function useCanvasKeyboard({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (
+        target?.closest('[data-canvas-learning][role="dialog"]') ||
+        (target?.closest('button[data-canvas-learning]') &&
+          (e.key === 'Enter' || e.key === ' ' || e.code === 'Space'))
+      ) {
+        return;
+      }
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
 

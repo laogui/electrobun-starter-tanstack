@@ -40,6 +40,8 @@ export function useSpacePanMode(): boolean {
     };
 
     const shouldIgnore = (event: KeyboardEvent) =>
+      (event.target instanceof Element &&
+        event.target.closest('[data-canvas-learning]')) ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||

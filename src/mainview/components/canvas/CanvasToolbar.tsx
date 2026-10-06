@@ -1,6 +1,7 @@
 import { Library, Settings, Tag as TagIcon } from 'lucide-react';
 
 import { CanvasBackgroundToolbarButton } from '@/components/canvas/CanvasBackgroundToolbarButton';
+import { CanvasHelp } from '@/components/canvas/CanvasHelp';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -49,6 +50,8 @@ export function CanvasToolbar() {
       <CanvasBackgroundToolbarButton />
 
       <div className="mx-1 my-0.5 h-px bg-black/5 dark:bg-white/10" />
+
+      <CanvasHelp />
 
       <ToolbarButton
         label={m.settings_title()}

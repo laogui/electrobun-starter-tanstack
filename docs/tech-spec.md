@@ -3,7 +3,7 @@
 > 本文档描述 GhostBoard 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
 > 产品需求与交互设计请参阅 [PRD](./PRD.md)。
 >
-> 最近同步：已按 `2026-06-15` 至 `2026-07-16` 的实现提交更新。在 Jun–Jul 的 sidecar-first note store、Asset/Link/Recording、附件 streaming、设置弹窗、PNG/JSON 导出与 `labeledEdge` 基础上，补齐 **widget 系统**（checklist / pomodoro / reminder）、Folder **waterfall** 展开、FocusedView **从卡片 morph**、`CanvasViewportChrome` / minimap 设置，以及画布背景 **cream** 色板。
+> 最近同步：2026-10 对照源码补上 Canvas Type 行为、高信任插件运行时、许可证、诊断、发布和 BlockNote AI 配置（§12–§17）。更早的正文仍以 2026-06 至 2026-07 的 sidecar、附件、widget、Folder waterfall 与 FocusedView 为主；和代码冲突时以源码为准。
 
 ---
 
@@ -191,6 +191,8 @@ src/
     markdown/                              # Markdown 解析/渲染共享 helper
     extensions/ · plugins/                 # Canvas Type 与插件运行时共享契约
 ```
+
+上面的树停在 2026-07。插件与内置扩展的现行代码在 `src/mainview/extensions/`、`src/shared/extensions/`、`src/bun/plugins/`、`src/mainview/plugins/`、`src/shared/plugins/`、`packages/plugin-sdk/`、`packages/create-plugin/`。行为与契约见 §12、§13。
 
 ---
 
@@ -1548,3 +1550,101 @@ data 内丢弃：`isHidden`, `isDropTarget`, `missing`, `previewUrl`, `thumbnail
 | T-5 | **Link unfurl hardening** | 当前有 scheme/localhost/private literal host 防护；需要 DNS resolve 后再次拦截私网 IP，降低 SSRF/DNS rebinding 风险。 |
 | T-6 | **Template P5** | 需要接入 thumbnail、补模板数量、决定模板 metadata i18n 与列表 query 参数同步，并决定模板 noteContents 是否直接生成 sidecar 而不是 legacy `.md` stub。 |
 | T-7 | **跨 note 保存冲突策略** | `useBlockNoteSaver` 与 legacy `useNoteSaver` 已独立于 manifest；未来 Library / Sub-canvas 承担重编辑场景时，需要跨视图编辑同一 note 的串行队列、dirty 指示和冲突处理。 |
+
+---
+
+## 12. 画布类型行为
+
+容器资格的代码来源是 `src/mainview/lib/canvasNodeRegistry.ts` 的 `canEnterGroup` / `canEnterFolder`。打开方式以各内置 Canvas Type 的 `openBehavior` 为准：Checklist 是 `detail`，Pomodoro 与 Reminder 是 `none`，Image / File / Link 有详情，Recording 留在画布上。
+
+| 种类 | React Flow `node.type` | 可进 Group | 可新进 Folder |
+| --- | --- | --- | --- |
+| Note (`card`) | `card` | 是 | 是 |
+| Checklist / Pomodoro / Reminder | `widget`（新数据走 `extension`） | 是 | 否 |
+| Sticky / Topic | `sticky` / `topic` | 是 | 否 |
+| Folder | `folder` | 是 | 否 |
+| Group | `group` | 否 | 否 |
+| Image / File / Link / Recording | `image` / `asset` / `link` / `recording` | 是 | 是 |
+
+`Folder: 否` 只限制新建放入。已经在 Folder 里的 legacy `widget` 和迁移后的 `extension` 仍可预览、搜索和取出，取出不得改写其类型和数据。
+
+Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'topic-child'` 的边上，节点上不存父级。整棵树必须留在同一画布、同一个直接 Group 里；拖拽和进出 Group 移动整支，分支内有锁定节点则整支不动。免费额度与 `card`、`sticky` 共用 `FREE_NODE_LIMIT = 100`（`src/mainview/lib/nodeQuota.ts`）。
+
+第三方 `extension` 节点是否可进 Group / Folder、如何打开，读该 Canvas Type 自己的声明，默认不进 Folder。右键菜单由 `ContextMenu.tsx` 与 `src/mainview/extensions/hostMenu.ts` 按宿主动作和类型动作拼出。
+
+## 13. 高信任插件运行时
+
+已启用插件与宿主前端同一个 JavaScript realm，用带启动 token 的本地 HTTP 提供模块，经 import map 共享宿主的 React 19.2.x（当前 `package.json` 为 `19.2.5`）、`react-dom` 和 `@ghostboard/sdk`。npm 上的 SDK 只提供类型、fake host、参考和 packer，不在插件包里再带一份运行时。插件不得打包第二个 React。`globalThis.__ghostboardPluginRuntime` 是冻结的共享运行时对象。
+
+安装根目录是应用数据目录下的 `plugins/`（`pluginInstallRoot`）。启用按工作区记录。包入口是 `manifest.json`，不是 `ghostboard.plugin.json`。`manifestVersion: 1` 一律拒绝，提示「旧契约，需重新安装 v2 版本」，保留用户数据。仓库里没有 QuickJS 运行时。
+
+`engines.ghostboard` 必须写成 `>=a.b.c <x.y.z`。加载前比较宿主版本，范围外返回 `incompatible-host-api`，不执行插件代码。`capabilities` 只接受 `network`、`files`、`clipboard`，只展示，不拦截调用。
+
+作者签名是 Ed25519 TOFU：未签名包可以安装，但不能原地更新；已签名包在首次安装时固定公钥和 `update.url`，之后同 ID 更新必须版本前进、同一把密钥、同一个来源。registry 保留 current 和一份 previous，回退前重新校验旧代码，回退和数据恢复都让插件保持停用。自定义画布类型在 `dataVersion` 上升前保存 preimage，备份失败则不迁移。持久 KV（`storage.app` / `storage.workspace`）没有版本迁移 API。
+
+安全模式在发布第三方代码之前生效。启动标记未完成、显式进入或标记损坏时，宿主返回空运行时，设置页仍可停用插件。
+
+公开 URL 安装只接受 HTTPS，并拒绝 loopback、私网解析、非 ZIP 和超限响应。本地 ZIP 不执行包内代码，也不跑依赖安装。
+
+同一宿主 major 内公开 SDK 只做加法。破坏性变更同时提高 `manifestVersion` 或默认 `engines` 范围、SDK major 和脚手架 major。运行时由宿主注入，不做 polyfill。
+
+`scripts/trusted-plugin-t5/verify-compat-docs.ts` 校验下面两张表与 `package.json`、SDK、脚手架和四个模板的 `manifest.json` 一致。改版本时先改代码和这两张表，再改 `packages/plugin-sdk/AI_REFERENCE.md` 与 README 的 Compatibility 节。
+
+### 13.1 当前版本标识
+
+| 标识 | 当前值 | 来源 | 作用 |
+| --- | --- | --- | --- |
+| 宿主版本 | `1.0.0` | 根 `package.json` `version`，经 `GHOSTBOARD_VERSION` 暴露 | `engines.ghostboard` 的比较值 |
+| manifest 版本 | `2` | `PLUGIN_MANIFEST_VERSION` | 唯一会被加载的 manifest |
+| SDK npm 版本 | `0.1.1` | `packages/plugin-sdk/package.json` | 类型、fake host、packer、参考 |
+| 脚手架版本 | `0.1.0` | `packages/create-plugin/package.json` | `create-ghostboard-plugin` |
+| 模板默认 `engines.ghostboard` | `>=1.0.0 <2.0.0` | 四个模板的 `manifest.json` | 新插件声明的宿主范围 |
+
+### 13.2 SDK 与宿主版本对应
+
+| `@ghostboard/sdk` | 宿主范围 | `create-ghostboard-plugin` | 说明 |
+| --- | --- | --- | --- |
+| `0.1.x` | `>=1.0.0 <2.0.0` | `0.1.x` | 当前公开 API；没有 Bun 后端入口 |
+
+### 13.3 支持范围
+
+| 项目 | 状态 |
+| --- | --- |
+| macOS arm64 | 支持。`test:plugin-t0` 至 `test:plugin-t4` 是发行包探针 |
+| macOS x64 | 工作流在 `macos-15-intel` 上，尚未把实跑结果记为已支持 |
+| Windows x64、Linux | 应用可以构建，插件系统未验证，不支持 |
+| 每插件 Bun Worker、应用内 Plugin Guide、插件市场 | 没有实现，不在首版 |
+
+探针脚本是 `bun run test:plugin-t0` 至 `test:plugin-t5`。`test:plugin-t5-compat` 只核对本节版本表。这些脚本不是日常启动路径。
+
+## 14. 许可证
+
+一次性买断。未激活时 `card`、`sticky`、`topic` 合计最多 100 个（`FREE_NODE_LIMIT`）。激活后不限制。门禁在 `src/mainview/lib/nodeQuota.ts` 的 `hasNodeQuota`，创建、主题提交、粘贴、复制和 JSON 导入都会走它。校验失败时放行，避免离线把用户锁死。
+
+主进程是 `src/bun/license.ts`，渲染进程经 `src/mainview/lib/rpc-license.ts` 调用。许可证文件是应用数据目录里的 `license.dat`，不是工作区里的文件。密钥格式 `GHOST-XXXX-XXXX-XXXX-XXXX`，段字符为 `A-Z0-9`。设备指纹是平台、主机名、CPU 型号和内存总量的哈希。文件用指纹做 XOR 混淆，跨机复制对不上指纹。`USE_ONLINE_LICENSE=true` 才访问 `LICENSE_API_URL`（默认 `http://localhost:3001/api/v1`）。这是混淆，不是密码学强度的防破解。
+
+设置页 General 里的 License 卡片负责激活。后端签发服务不在本仓库。
+
+## 15. 反馈与崩溃诊断
+
+设置里的反馈提交 bug、想法或其他，可选邮箱和日志。失败重试沿用同一个 `reportId`。诊断目录在应用数据根下的 `diagnostics/`，可用 `GHOSTBOARD_DATA_DIR` 改数据根，因此不随工作区切换。
+
+`src/bun/diagnostics.ts` 写 `app.log`（约 512 KiB 后轮转一份），权限 0600。附带日志最多 128 KiB（`MAX_DIAGNOSTICS_BYTES`）。待上传崩溃最多 20 份，超过 14 天删除。同一错误一分钟内去重。主进程未捕获异常和渲染进程的 error / unhandledrejection / React 错误边界会落盘；下次启动补传。正常退出删除当前会话文件，遗留会话记为 `UncleanExit`。Electrobun 没有把原生崩溃转储交给应用。
+
+开发渠道默认把报告发到 `http://localhost:8787/api/v1`。其他渠道没有默认地址，构建时通过 `GHOSTBOARD_SUPPORT_API_URL` 写入，运行时环境变量可以覆盖；线上地址必须是 HTTPS。请求体形状在 `src/shared/support/reports.ts`：反馈正文最多 8000 字符。接收 API 和管理后台在仓库外。
+
+## 16. 打包与应用更新
+
+`electrobun build --env=<channel>` 只为当前操作系统和架构产出 `artifacts/`，文件名 `{channel}-{os}-{arch}-*`，其中 `update.json` 由 Electrobun 生成。`scripts/upload-r2.ts` 把该目录上传到 R2。已安装客户端走 `src/bun/index.ts` 里的 `Updater.checkForUpdate()`。
+
+渠道：`dev` 不签名、不参与更新；`canary` 与 `stable` 走发布。本地命令是 `bun run release:canary` 和 `bun run release:stable`。跨平台发布在 `.github/workflows/release.yml`，矩阵包含 macOS arm64、`macos-15-intel` 和 Windows x64。Windows 构建不签名。
+
+R2 公开地址、账号和 Apple 签名变量见 `.env.example` 与该 workflow。`*-update.json` 需要绕过或缩短 CDN 缓存，否则客户端会读到旧版本信息。版本号同时改 `electrobun.config.ts` 的 `app.version` 和根 `package.json` 的 `version`。
+
+## 17. BlockNote AI 配置
+
+笔记 AI 走 BlockNote 的 AI 扩展，宿主在 `src/bun/ai.ts` 按供应商转发。供应商是 `openai`、`anthropic`、`ollama`、`custom`。模型、Base URL 和 Key 按供应商分开保存；Key 文件在应用用户目录，权限 0600。环境变量是 `GHOSTBOARD_AI_<PROVIDER>_API_KEY`，已保存的 Key 优先。旧的 `GHOSTBOARD_AI_API_KEY` 只绑本次启动时的供应商。
+
+OpenAI 与 Anthropic 的 Base URL 可空，空则用 SDK 默认地址。Ollama 默认 `http://localhost:11434/v1`。自定义供应商必须填写 Base URL，不要把 `chat/completions` 整段路径填进去。设置页的连接测试要求模型真正返回工具调用，只回文本不算成功。
+
+生成过程中的建议不写入笔记；接受或拒绝之后才保存最终正文。关闭笔记会取消未接受的修改。工作区 RAG、跨卡片检索和业务专用命令没有实现。画布级 AI 任务仍是 `src/bun/aiTasks.ts` 里的另一层，产品方案在 `docs/features/Backlog/ai-integration-plan.md`，不要把它当成已经交付的操作器。

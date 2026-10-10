@@ -2,15 +2,11 @@
 
 > **相关文档**
 >
-> - [技术规范文档](./tech-spec.md) — 架构、技术栈、目录结构、状态管理、渲染动画、性能预算、数据持久化、RPC 协议、编码约定
-> - [当前开发计划](./development-plan.md) — D0–D3 任务拆分、依赖、代码入口、测试、桌面验收与交付标准
-> - [高信任插件系统改造方案](./features/In%20Progress/trusted-plugin-platform.md) — 现行公开插件设计：同 realm 前端、宿主 SDK 服务、`capabilities` 声明、TOFU 签名更新及 T0–T6 实施与验收
+> - [技术规范文档](./tech-spec.md) — 架构、目录、状态、持久化、RPC、Canvas Type 行为、高信任插件运行时、许可证、诊断与发布
 >
-> **2026-09-09 插件模型变更**：公开插件系统从“默认不受信任代码 + 细粒度权限 + 网络隔离容器”改为**高信任模型**：用户主动安装并启用的插件按具有本机能力的应用扩展对待，宿主不提供权限沙箱，不承诺限制已启用插件的网络、文件或宿主页面访问。变更原因是 P0 容器实验证明网络隔离在目标 WebView 上不可行（见归档的 [容器实验](./features/Archive/plugin-container-experiment.md)）。§2.14、§5.12、§6、§7.1 已按新模型改写；旧 v2 方案、P0 契约与证据移入 `docs/features/Archive/`。此前完成桌面验收的 QuickJS 命令闭环属于旧模型，不计入新模型的验收状态。
+> **插件模型**：已启用的插件是高信任本机扩展，与宿主前端处于同一个 JavaScript realm。宿主不提供权限沙箱，也不按 `capabilities` 拦截调用。网络隔离容器在目标 WebView 上不可行，QuickJS 命令运行时已从仓库删除，不计入现行验收。
 >
-> **2026-09-07 产品范围更新**：公开通用插件系统纳入正式开发目标。新增要求均待实施与验收，不表示现有应用已经支持第三方插件。本文确定产品范围与用户结果，具体协议由现行插件方案完善；改变首版范围须同步本文。
->
-> **文档状态**：当前处于开发阶段；D0 内置 Canvas Type 迁移与基本操作、D1 搜索可达性、D2-1 基线、D2-2 正向项目流程/导出和 D2-3 故障流程均已完成自动回归与桌面验收（故障审计修复了标题-only 保存与损坏 PDF 空白预览阻断，并记录本地编辑与 AI/网络失败边界），D3 保持条件触发；公开插件按高信任模型重新实施，当前处于 T0（装载机制验证）待开始，四类第三方贡献均未在新模型下验收。§1 定义当前产品目标，§2.0 记录已核查的代码边界与旧描述差异，§7.1 是当前开发顺序。其余功能细则与历史完成标记主要来自 2026-06-15 至 2026-07-16 的同步记录，不代表迁移后的行为均已重新验收。
+> **文档状态**：D0–D2 已完成自动回归与桌面验收。D3 仍是条件任务。Topic 的代码与相邻测试已落地，桌面走查还没有记录。公开插件运行时已在仓库中实现，装载、四类贡献、签名更新和安全模式有 macOS arm64 探针；npm 发布、文档站上线、样例分发、macOS x64 实跑和外部作者试用未完成，首版不得标为已验收。§2.0 记录与代码核对过的边界，§7.1 是当前未完成项。历史完成标记里 2026-06 至 2026-07 的条目不代表迁移后的行为都重新验收过。
 
 ## 1. 产品概述
 
@@ -48,9 +44,7 @@
 
 ### 1.3.1 Topic 与轻量思维导图（2026-09-14 实施完成，未验收）
 
-用户提出思维导图场景缺少轻量主题节点，现有 Sticky 虽可原地编辑和调整大小，仍需逐个创建、连线与排布。[Topic 实施方案](./features/In%20Progress/topic-mindmap-implementation-plan.md) 的主体已落地：核心「主题」类型、Tab/Enter 连续创建、以树边为唯一真源的层级、向右自动排布、分支选择/拆出/删除，以及主题大纲 Markdown 导出。
-
-2026-09-14 的评审曾查出七项方案条款未实现（布局避让层、离开画布前的草稿提交、Tab 命令上下文与 Esc 退出、大纲导出的非法关系门禁、复制/整理分支动作、有损解码时的写保护与 manifest 备份、复制/导入路径的额度一致性），当日已全部补齐并各自带测试，逐条记录见 [开发计划 §1.1](./development-plan.md#11-topic-与轻量思维导图2026-09-14) 的 TG-1–TG-7。**桌面验收尚未开始**，本节按已实现的行为描述，但阶段状态不得据此升级为已验收。
+思维导图场景需要比便签更轻的主题节点。代码已实现核心「主题」类型、Tab/Enter 连续创建、以 `topic-child` 边为唯一层级真源、向右自动排布与避让、分支选择/复制/整理/拆出/删除、离开画布前提交草稿、非法关系时暂停写入并保留 `*.pre-topic` 备份、大纲导出前的关系门禁，以及与 `card` / `sticky` 共用的免费额度。实现在 `src/shared/topic.ts`、`src/mainview/lib/topicTree.ts`、`src/mainview/lib/topicLayout.ts` 和 `src/mainview/lib/nodeQuota.ts`。桌面走查（连续创建、一步撤销、整树进出 Group、锁定拒绝、重启后层级、大纲落盘）还没有记录，因此本节不把 Topic 标成已验收。
 
 ### 1.4 当前不扩张的方向
 
@@ -69,7 +63,7 @@
 | 核查项 | 当前代码事实 | 产品处理 |
 | --- | --- | --- |
 | 内置类型 | [registerBuiltins](../src/mainview/extensions/registerBuiltins.ts) 注册 Checklist / Pomodoro / Reminder / Image / File / Link / Recording，Counter 仅开发环境注册 | 用用户可见类型描述功能，不把 React Flow 的 `node.type` 当产品分类 |
-| 公开插件 | 现有 `src/bun/plugins/` 与 `src/shared/plugins/` 是旧沙箱模型（`ghostboard.plugin.json` v1、QuickJS 命令会话、选区权限二次授权）的实现；其中 ZIP/URL 解包、安装事务、标题批次 journal/Undo、工作区启用与设置页按新方案 §9.1 保留改造，QuickJS 运行时、会话协议、权限授予与容器探针计划删除。新模型（同 realm 前端装载、import map、宿主 `files`/`net` 服务）尚无代码 | 按 §2.14 在新模型下重新验收；旧模型的桌面验收不迁移为新状态；工程状态见现行方案 §10 |
+| 公开插件 | `src/bun/plugins/`、`src/mainview/plugins/`、`src/shared/plugins/` 与 `packages/plugin-sdk` 是高信任模型：`manifest.json` 且 `manifestVersion: 2`、同 realm 前端、import map、宿主 files / net / content / canvas / importer 服务、Ed25519 TOFU 更新、启动安全模式。仓库内没有 QuickJS。v1 包拒绝加载。`capabilities` 只用于展示 | 产品行为见 §2.14，运行时与版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。macOS arm64 探针已覆盖装载到恢复；§7.1 的公开验收未完成，不得把首版标为已验收 |
 | 打开与容器能力 | [Canvas Type 契约](../src/mainview/extensions/types.ts) 声明 `openBehavior`、Group/Folder 能力、详情布局、通用交互与类型菜单 | 创建、右键、聚焦、文库等入口必须使用同一能力规则 |
 | 媒体与链接 | 当前内置 Image / File / Link 声明详情视图，Recording 声明画布内操作；四者均声明可进入 Group / Folder | 迁移后继续验收预览、媒体操作、收纳、搜索、导出和错误回退，不只验收能显示 |
 | Productivity | Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可进入 Folder，见 [Checklist](../src/mainview/extensions/builtin/productivity/checklist.tsx)、[Pomodoro](../src/mainview/extensions/builtin/productivity/pomodoro.tsx)、[Reminder](../src/mainview/extensions/builtin/productivity/reminder.tsx) | OD-6 已冻结并完成 2026-09-07 桌面验收：Checklist 保留完整详情编辑，Pomodoro / Reminder 保持画布内操作；禁止新放入 Folder，旧 Folder 内条目可预览、搜索、打开并无损取回 |
@@ -77,7 +71,7 @@
 | 搜索 | [searchWorkspace](../src/bun/search.ts) 已分别收集 Note / Widget / Extension 引用；Widget 与 Extension 有 Folder children 引用收集，Note 正文引用仍从顶层循环建立 | 不再笼统写“所有 Folder 内容都漏搜”或“全类型已覆盖”；逐类型验收命中、定位和打开 |
 | AI 选区上下文 | [buildAIContext](../src/mainview/lib/ai/buildAIContext.ts) 对迁移后的 extension 使用宿主 presentation 的 `title/plainText`，不直接读取任意实例 state；选中的 Topic 贡献纯文本标题，并单独给出 `topicParentId` / `topicOrder`，与表示容器归属的 `parentId` 区分 | 不承诺已读取图片像素、附件全文或录音转写；未知/失败实例与无有效文本内容的回退纳入验收；标题为空的 Topic 不计入可摘要内容 |
 
-迁移验收细项参见 [行为矩阵](./features/In%20Progress/canvas-extension-behavior-matrix.md) 与 [差距收口计划](./features/canvas-extension-gap-closure.md)。行为矩阵已记录 D0-1 的 Productivity 目标规则；D0 生命周期与异常回归已完成，其余新差异仍应逐项记录并做产品决策，不能用任何一方的“已完成”标记跳过核对。
+容器与打开规则以 [tech-spec §12](./tech-spec.md#12-画布类型行为) 和 `canvasNodeRegistry.ts` 为准。D0 的生命周期回归已完成。之后新增类型仍要逐项核对，不能用旧的“已完成”标记跳过。
 
 ### 2.1 无限自由画布 (Infinite Canvas)
 
@@ -318,7 +312,7 @@
 
 ---
 
-### 2.14 公开通用插件系统（待实施，高信任模型）
+### 2.14 公开通用插件系统（高信任模型，运行时已实现）
 
 #### 2.14.0 信任模型
 
@@ -398,9 +392,15 @@ SDK 覆盖内容、画布、选区、设置、事件、文件选择与读写、�
 6. 一个组合插件可复用命令、菜单与面板；停用后无残留注册、订阅或任务。
 7. 更新、作者密钥变更、坏包、运行故障与迁移失败不会静默覆盖已有数据，恢复过程有桌面操作记录；旧 v1 包被拒绝且数据保留。
 
-证据状态（2026-09-13）：第 2–7 项已由 T1–T4 的 macOS arm64 发行包探针覆盖（[§10](./features/In%20Progress/trusted-plugin-platform.md#10-实施阶段与退出条件) 各批证据、[T3 退出](./features/In%20Progress/trusted-plugin-t3-exit-evidence.md)、[T4 更新与恢复](./features/In%20Progress/trusted-plugin-t4-update-recovery-evidence.md)）。第 1 项"在主仓库之外开发并在干净环境通过 URL 安装"的工程路径已由 T5 完成——npm 脚手架、公开签名样例与不走 loopback 的公共 HTTPS 探针、[兼容策略](./features/In%20Progress/trusted-plugin-compatibility-policy.md)与文档站——但其"有记录"部分（npm 发布、样例上传、macOS x64 实跑、外部作者试用）仍待在仓外运行并回填到 [T5 阶段汇总](./features/In%20Progress/trusted-plugin-t5-evidence.md)；回填前公开插件首版**不得**标记为已验收。
+代码与 macOS arm64 探针已经覆盖第 2–7 项的工程路径，以及第 1 项里的脚手架、签名样例脚本和公共 HTTPS 探针。下面五件事还没有发生，完成前不得把公开插件首版标为已验收：
 
-详细装载机制、包格式、SDK、签名与阶段退出条件由 [高信任插件系统改造方案](./features/In%20Progress/trusted-plugin-platform.md) 维护，不以此处产品要求替代工程验证。
+1. 发布 `@ghostboard/sdk` 与 `create-ghostboard-plugin`。
+2. 把插件文档站部署到真实域名。
+3. 把签名样例包上传到公开地址，并在不走 loopback 的前提下完成安装与更新。
+4. 在 macOS x64 上跑通平台回归。
+5. 至少两名仓库外作者按四类模板各自做出可用插件。
+
+Windows 与 Linux 不支持插件系统。装载、包格式、签名和版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。每插件一个 Bun Worker 的后端入口没有实现，也不在首版。
 
 ## 3. 关键动画与动效规范 (Motion Design Specs)
 
@@ -844,14 +844,14 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 > 桌面运行时选型对比（Electrobun / Tauri / Electron）已迁移至 [技术规范文档 §1.3](./tech-spec.md#13-桌面运行时选型)。
 
-### 5.12 公开插件的数据保障（目标要求，待实施）
+### 5.12 公开插件的数据保障
 
 - 插件代码、本机安装信息、工作区启用与版本选择、插件业务数据、画布实例内容分别管理。纯命令和面板不创建虚假实例；现有内容 ID 与兼容数据不因插件化批量改名。
 - 插件读取和修改资料通过宿主正式接口；保留内容实体与画布放置位置的区别。批量修改必须有一致性、冲突检查和可撤销结果，不能以逐个文件保存伪装完整事务。
 - 保存失败不报告成功，加载失败不替换成初始空内容。更新迁移保护原始数据和备份；代码回退与数据回退是不同操作。
 - 插件经 SDK 进行的操作绑定明确的工作区上下文，异步操作不因“当前工作区”切换而写入错误位置。插件直接读写文件可绕过这些机制，官方示例与文档一律使用 SDK。
 - 陌生工作区中的插件来源只是提示，不能触发自动下载或执行；工作区启用配置用于体验管理，不是数据访问边界。
-- 卸载、禁用和清理缓存不得删除用户内容、插件持久数据或历史恢复依赖；永久删除另行确认。具体存储路径与事务协议由现行插件方案 §7–8 维护。
+- 卸载、禁用和清理缓存不得删除用户内容、插件持久数据或历史恢复依赖；永久删除另行确认。安装目录、签名与版本规则见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。
 
 ---
 
@@ -883,7 +883,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 ### 7.1 当前开发顺序与验收门槛
 
-当前有两条交付线：下表 D0–D3 负责基础项目流程；公开插件 T0–T6 负责 §2.14 的新增产品要求，执行依据为 [高信任插件系统改造方案](./features/In%20Progress/trusted-plugin-platform.md) §10。T 编号有意区别于已归档 v2 方案的插件 P0–P5 和 §7.3 保留的历史 P0–P3。代码存在、单项测试通过、完整流程验收通过是不同状态；本轮文档更新不将任何项目自动升级为验收通过。
+下表是基础项目流程。公开插件的产品要求在 §2.14，运行时在 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。本节的阶段编号和 §7.3 的历史 P0–P3 不是同一套编号。代码存在、测试通过、桌面走查通过是三种状态。
 
 | 顺序 | 目标 | 验收条件 | 当前状态 |
 | --- | --- | --- | --- |
@@ -896,13 +896,11 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 **基础流程不作为前置条件的事项**：应用发布签名、公测、支付、定价、官网、获客指标和垂直用户市场选择。插件手动安装允许未签名包，但未签名包不接受自动更新；已签名包的更新必须通过作者密钥校验，这属于 §2.14.4 的正式要求，不能据此豁免。
 
-**公开插件交付线**：T0 在真实发行包上验证装载机制（本地 HTTP 挂载 + `import()`、import map 共享 React / SDK、独立 createRoot、宿主 `files` / `net` 服务）；T1 完成命令与面板的开发者闭环与 manifest v2；T2 完成内容 SDK 与自定义画布类型；T3 完成导入器、ZIP / HTTPS 安装与组合插件；T4 完成安全模式、作者密钥签名更新与迁移恢复；T5 完成文档、外部作者试用与平台回归；T6+ 按真实需求加入 Bun Worker 后端入口。T0 的三项装载机制任一不成立都会改变架构，因此必须先于 SDK 设计完成。阶段状态与工程证据在现行方案 §10 维护。
-
-当前先做 T0 装载验证，并按现行方案 §9.1 删除 QuickJS 运行时、会话协议与容器探针、改造保留模块；不要求为此新增 D3 功能。T2 涉及的内容一致性与生命周期与 D0 共享修复与测试，避免重复实施；公开插件发布前必须通过受影响的基础操作回归。完整多工作区界面不是 T0 前置，但 SDK 操作绑定工作区上下文、切换后不写错位置必须验证。D3 的“仅按基础流程缺口触发”不限制已明确纳入范围的公开插件工作。
+**公开插件**：装载（本地 HTTP + `import()`、import map、独立 root、宿主 `files` / `net`）、命令与面板、内容事务与自定义卡片、导入器、Ed25519 签名更新和安全模式都已在代码中，并有 `bun run test:plugin-t0` 至 `test:plugin-t4` 的 macOS arm64 发行包探针。QuickJS 运行时已删除。尚未完成的是 §2.14.6 的五项公开验收。每插件 Bun Worker 没有实现。SDK 写操作绑定工作区，切换后不得写到另一个工作区。D3 只在基础流程出现新阻断时启动，不挡住已经纳入范围的插件收尾。
 
 ### 7.2 开发计划与任务索引
 
-基础流程详细执行以 [当前开发计划](./development-plan.md) 为准，公开插件详细执行以 [高信任插件系统改造方案 §10–11](./features/In%20Progress/trusted-plugin-platform.md) 为准；本节只维护产品阶段与任务映射，不重复维护单任务进度。
+下表保留 D0–D3 做过什么。当前未完成项是 Topic 桌面走查、§2.14.6 的插件公开验收，以及只有新阻断才会启动的 D3。
 
 | 阶段 | 开发任务 | 关键依赖与交付 |
 | --- | --- | --- |
@@ -911,7 +909,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | D2 | D2-1 合成资料与基线；D2-2 项目流程及导出；D2-3 阻断点记录与阶段关闭 | 样例可提前准备；最终验收依赖 D0/D1，通过重启、失败恢复和外部文件阅读核验成果 |
 | D3 | D3-1 按问题证据补最小体验缺口 | 由 D2 问题触发；有序输出涉及 OD-7，不自动新增大纲、剪藏或行业系统 |
 
-**现在从哪里开始**：D1 的搜索目标、Folder 命中到打开、detached / unlinked 找回及位置×类型自动化矩阵已完成，并已用 D2-1 临时夹具通过桌面点击、文库放回和重启走查；D2-2 正向流程已完成结论 Note 编辑、图片/PDF/音频/链接/Productivity 阅读和 Markdown/JSON/PNG/Workspace ZIP 导出；D2-3 已完成离线链接、缺失/损坏附件、保存失败、跨视图删除、不可写导出、撤销重启以及本地编辑/AI 网络边界，两个可靠性阻断已修复并固定回归。当前没有新 D3 交互证据；若继续实施，优先进入公开插件 T0 装载验证与旧运行时清理，或等待新的完整项目流程阻断再启动 D3-1。共享的数据修复继续复用 D0 已验收的边界，不重复建设；改变四类首版形态、信任模型或数据保障时需同步 PRD。
+D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验收，以及 Topic 的桌面走查。改变四类插件形态、信任模型或数据保障时同步本文。
 
 ### 7.3 历史能力清单（非当前排期）
 
@@ -1017,7 +1015,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 ### 8.3 已知待办
 
-公开插件为正式待实施项目：范围见 §2.14，工程任务和状态在现行插件方案的 T0–T6 集中维护，不复用下表历史优先级编号。装载机制属于 T0 待验证项；信任模型（高信任）、公开开发与四类首版范围已不再是待决产品方向。
+公开插件的未完成项是 §2.14.6，不是重新实现运行时。下表沿用历史优先级，不重新给插件编号。
 
 | ID | 事项 | 目标 | 优先级 |
 | --- | --- | --- | --- |

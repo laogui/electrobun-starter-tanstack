@@ -20,4 +20,4 @@ GHOSTBOARD_BUILD_ARTIFACT_DIR=build/plugin-t0-regular-artifacts bun run build:ca
 
 Do not run Vite/Paraglide generation concurrently with Vitest: generation recreates `src/paraglide/` while tests import it. The host needs Bun, Node, `tar`, `zstd`, and the macOS packaging tools. Linux and Windows are intentionally not claimed by this runner.
 
-See [the acceptance record](../../docs/features/In%20Progress/trusted-plugin-t0-evidence.md) and [the current design](../../docs/features/In%20Progress/trusted-plugin-platform.md).
+The runtime contract is `docs/tech-spec.md` §13. This runner's pass/fail output is the acceptance record; it is not checked in.

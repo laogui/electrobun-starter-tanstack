@@ -14,8 +14,7 @@ import {
  * templates publish must match the values compiled into the host.
  */
 const project = resolve(import.meta.dir, '../..');
-const POLICY_PATH =
-  'docs/features/In Progress/trusted-plugin-compatibility-policy.md';
+const POLICY_PATH = 'docs/tech-spec.md';
 const TEMPLATES = ['combined', 'importer', 'javascript', 'react'] as const;
 
 interface PackageJson {

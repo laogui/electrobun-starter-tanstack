@@ -12,5 +12,6 @@ configuration, segmentation, retry and rollback regression. The automated file s
 `GHOSTBOARD_PLUGIN_T3_DIR` is explicitly set by this evidence runner; ordinary
 application launches continue to use the native system picker. Loopback HTTP is
 also evidence-only; normal URL installation remains restricted to public HTTPS.
-See `docs/features/In Progress/trusted-plugin-t3-exit-evidence.md` for exact
-hashes, checks, and the unverified public-HTTPS / platform boundaries.
+Public HTTPS and non-arm64 boundaries are in `docs/tech-spec.md` §13.3 and
+`docs/PRD.md` §2.14.6. This runner prints the check list; those results are not
+checked in.

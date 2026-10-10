@@ -7,7 +7,7 @@
  * search, and export must agree on which one wins, otherwise an edge can show
  * one label on the canvas and match a different one in search.
  *
- * Rules (see docs/features/In Progress/topic-mindmap-implementation-plan.md §4.1):
+ * Rules:
  * - `data.<field>` is the canonical format. Its mere *presence* wins, so an
  *   explicit empty label or `animated: false` is never overwritten by a stale
  *   top-level value.

@@ -80,7 +80,7 @@
   - **平移 (Panning)**：支持触控板双指滑动或鼠标中键拖拽，实现画布的无级平移。
   - **缩放 (Zooming)**：支持触控板捏合、`Ctrl/Cmd + 滚轮` 以及 `Cmd/Ctrl + +/-/0` 缩放。节点在所有缩放等级保持同一套真实内容与视觉结构，不在固定阈值批量切换 placeholder / skeleton；Image / Asset 继续使用既有缩略图和摘要数据控制媒体成本。低缩放专用 LOD 只有在实际 Profiler 数据证明必要后才重新引入。
   - **选择与聚焦 (Selection & Focus)**：
-    - 当前采用"单击打开 + 显式选择"模型（✅ 已实现）——普通单击可聚焦节点直接进入 FocusedView，普通单击 Folder 进入 drill-down；Sticky 的普通单击直接进入原地编辑。选择主要通过框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键菜单同步选择来完成。
+    - 当前采用"单击打开 + 显式选择"模型（✅ 已实现）——普通单击可聚焦节点直接进入 FocusedView，普通单击 Folder 进入 drill-down；未锁定 Sticky 的普通单击直接进入原地编辑。锁定的 Sticky 不进入编辑。选择主要通过框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键菜单同步选择来完成。
     - 多选集合支持批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、改色、编辑标签、移动到其他画布，以及拖入 Group/Folder。
     - 为避免误触发，拖拽、连线和框选判定优先于单击打开；普通节点点击产生的 React Flow 纯 selection change 会被抑制，避免"打开同时残留选中"。
   - **框选 (Marquee Selection)**：桌面端在画布空白处左键拖拽绘制选择框，按部分相交规则选中多个节点。当前 `selectionOnDrag` 在普通画布状态启用；按住空格进入平移模式或处于文本/输入编辑态时临时关闭，避免与平移和编辑冲突。进入聚焦模式或 Folder drill-down 后，框选仅作用于当前上下文，不影响背景画布。
@@ -103,11 +103,14 @@
   - **本地文件卡片 (Asset)**：支持从文件选择器、拖拽和粘贴导入本地文件，文件内容保存到 `attachments/`。导入流程优先使用原生路径拷贝或本地 HTTP 流式上传，避免大文件走 data URL；保留 25 MB data URL 限制仅作为 legacy 路径。画布态以预览为主：视频 poster、音频 waveform、图片缩略图、PDF/普通文件纸张图标、文本/JSON 摘要、压缩包条目摘要；文件名、大小、时长、路径等细节进入 hover 信息面板。FocusedView 中视频/音频可播放，图片、文本和 PDF 可预览，普通文件提供 `Open file`。支持替换文件、在 Finder 中显示、标题重命名和标签管理。PDF 已有基础内嵌预览，但页面级缩略图、页码导航和批注仍属后续增强。
   - **录音卡片 (Recording)**：支持通过创建菜单或画布右键启动麦克风录音。录音弹窗自动请求权限并展示实时 waveform 与计时，停止后以用户可读的 `recording-N.<ext>` 作为显示文件名，实际音频通过统一附件链路保存到 `attachments/audio_<id>.<ext>`，并生成 duration / waveform / stream URL。Recording 在画布上以语音备忘录样式展示，可直接播放、暂停、重命名、标记标签、改变颜色、锁定和删除；它可以进入 Group/Folder，但当前不进入 FocusedView。
   - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示富媒体卡片样式，支持打开链接、复制 URL、重新抓取预览和编辑 URL。URL 创建路径只接受安全的 http(s) 链接，打开外部链接时限制为 http/https/mailto。
-  - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可自由调整大小，提供多种预设颜色。便签默认可拖拽；普通单击进入原地编辑，`Enter` 可对已选中便签启动编辑，失焦后自动保存。便签以纯文本写入 manifest，粘贴时剥离富文本格式；装饰采用 CSS pushpin，pushpin 渐变会根据便签颜色自动派生。便签**不支持**聚焦放大模式（FocusedView），所有编辑均在画布上原地完成。
+  - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可在 120–500 × 120–500 范围内调整大小，提供多种预设颜色。正文以纯文本写入 manifest 的 `data.content`，粘贴时剥离富文本格式。便签不进入聚焦放大模式（FocusedView），编辑都在画布上原地完成。
+    - **未钉住（默认）**：可以拖拽，光标为抓取。普通单击进入原地编辑；已选中时按 `Enter`，或焦点在便签上时按 `Enter` / `Space`，也会进入编辑。失焦后把正文写回 `data.content`。未钉住时不渲染图钉。
+    - **钉住位置**：右键「固定位置」/「取消固定」（英文 Pin in Place / Unpin），状态写入 `data.pinned`。钉住只固定便签在**当前父坐标系**中的位置，正文编辑、缩放、连线、改色、改标签和删除仍然可用。钉住后光标为默认箭头，并显示 CSS 图钉；图钉渐变按便签颜色派生，只在 `data.pinned === true` 时渲染，正文同时留出顶部间距。用户拖拽、碰撞排斥、普通 position 更新和 AI `move_node` 都不会移动它。父级 Group 移动时，子便签的相对坐标保持不变，因此随 Group 一起移动。父级归属变化带来的坐标换算（例如进出 Group）会保留换算后的位置，避免把局部坐标当成绝对坐标。锁定已经固定位置，所以锁定的便签不再提供这项菜单。
+    - **锁定**：`data.locked` 比钉住更严。锁定的便签不进入原地编辑（单击、双击、`Enter`、`Space` 都无效），也不渲染缩放手柄，并与其他锁定节点一样禁止拖拽、连线和删除。锁定规则见 §2.6。
   - **主题 (Topic)**：面向思维导图的轻量概念节点，React Flow `type: "topic"`，`data` 为 `{ title, color, topicVersion }` 且内嵌在 manifest，没有 Note 文件、附件或聚焦模式。标题按**纯文本**处理（不解析 Markdown / HTML），建议上限 2,000 个 Unicode 码点，超限时保留草稿并提示，不静默截断。尺寸按标题自动测量，第一版不提供手动 Resize。普通单击进入标题原地编辑；`Tab` 创建子主题，`Enter` 创建同级主题（根主题上改为编辑标题），`F2` 编辑标题，`Esc` 取消。颜色使用 token，树边颜色由父主题派生，不单独设置边颜色。Topic 与 Card / Sticky 共用免费额度计数。
 - **卡片通用能力**：
   - **画布预览渲染**：普通文本卡片在画布态（非聚焦态）优先渲染 sidecar 中缓存的 `previewHtml` / `previewExcerpt`；legacy Markdown 卡片通过 **markdown-it** 将正文渲染为安全的 HTML 预览，并经 **DOMPurify** 清理后展示。预览层仅渲染摘要级别内容（标题、段落、列表、代码块等），不挂载完整的编辑器实例，保证首屏性能。Checklist 在画布上保持独立的结构化 items 交互；迁移后读取 extension instance，legacy 数据继续读取 `widgetStore`。
-  - **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。
+  - **自由调整大小 (Resize)**：所有卡片均支持拖拽边角/边缘来调整宽高，不再固定为 350×450。调整时保持内容自适应重排。锁定的便签不渲染缩放手柄；钉住的便签仍可缩放。
   - **复制/粘贴 / 剪切 / 重复**：支持 `Cmd/Ctrl+C`、`Cmd/Ctrl+V`、`Cmd/Ctrl+X`、`Cmd/Ctrl+D`；复制时保留选中集合内部的连线，粘贴和重复会分配新的 `nodeId` 并保持 parent / extent 约束。**Widget 额外克隆内容文件**并重映射 `widgetId`，避免多个节点共享同一 widget 文件。复制一部分 Topic 树时只保留两端都在选集内的边，外部父边被剪断，粘贴出的副本是独立的树而不会挂回原树；整树复制保留顺序和内部关系。普通 Copy / Duplicate / Delete 只作用于显式选中集合，不暗中扩大到整棵树；整树操作由「选择分支」「删除分支」等专用动作提供。
   - **聚焦入口约定**：普通单击 Card / Image / Asset / Link / Checklist widget 进入聚焦模式（FocusedView），已选中节点按 `Enter` 也可进入；Checklist 仍可在画布上直接勾选和添加条目。Pomodoro / Reminder 以画布内交互为主；Recording、Sticky 与 Topic 不进入 FocusedView。Topic 选中后按 `Enter` 在非根主题上创建同级主题、在根主题上编辑标题。
   - **创建流程**：底部 `ViewSwitcher` 右侧 `+` 是主创建入口，常用区提供 Note / Sticky / Topic / Link / Image，More 区提供 **Checklist / Pomodoro / Reminder** / Folder / Group / File / Recording，并提供 Markdown 导入和文库笔记入口；画布右键菜单提供同一套创建能力，并以右键位置作为新节点锚点。Image / File 会先打开系统文件选择器；Link 会打开 URL 表单；Recording 会打开麦克风录音弹窗；新建 Productivity 类型时先创建 extension instance 再放置引用节点，legacy widget 文件只作为兼容数据读取。
@@ -118,7 +121,7 @@
 - **交互逻辑**：
   - 普通单击可聚焦节点、已选中节点按 `Enter`，或右键菜单 `Open Focused` 进入聚焦模式。全屏 shell 以源卡片屏幕矩形为起点 **morph 放大**到主视图（FLIP 风格：`transformOrigin` 取卡片中心，scale 从卡片相对视口比例过渡到 1）；退出时反向收缩。背景画布被半透明遮罩覆盖。点击遮罩、返回按钮或按 `Escape` 退回画布。
   - BlockNote 与 note 加载态共用 `NoteEditorLoading` 占位，避免聚焦闪白。
-  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，普通单击进入原地编辑；Topic 同样只在画布上原地编辑标题；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理；Pomodoro / Reminder 以画布内控件为主。
+  - **不可聚焦的节点类型**：Sticky（便签）不支持聚焦模式，未锁定时普通单击进入原地编辑，锁定时单击不进入编辑；Topic 同样只在画布上原地编辑标题；Recording 当前不进入 FocusedView，在画布卡片上直接播放和管理；Pomodoro / Reminder 以画布内控件为主。
 
 ### 2.4 节点连线 (Edges / Connections)
 
@@ -147,7 +150,7 @@
   - **嵌套**：Group 可嵌套 Group（需防止循环嵌套）。
   - **连线**：Group 内的子节点可以与画布上任意节点建立连线。
   - **适用场景**：主题分区、看板、思维导图分支。
-  - **排斥与碰撞**：拖拽单个内容节点或 Folder 时，与邻近顶层内容节点存在实时 gentle repulsion（柔和排斥）机制。被推开的节点会基于拖拽起点反复求解，随压力消失回流，避免级联漂移；Group / Folder / locked 节点作为不可移动障碍，子节点不单独参与求解。悬停到 Group 或 Folder drop target 时暂停排斥并恢复已推开节点，避免为即将被收纳的节点腾出无意义空间。同时提供**碰撞检测与放置解析**能力：释放节点时若检测到与 Group 区域重叠，系统会自动判断是"纳入 Group"还是"放在 Group 旁边"，确保放置意图明确。
+  - **排斥与碰撞**：拖拽单个内容节点或 Folder 时，与邻近顶层内容节点存在实时 gentle repulsion（柔和排斥）机制。被推开的节点会基于拖拽起点反复求解，随压力消失回流，避免级联漂移；Group / Folder / locked 节点，以及钉住的 Sticky，作为不可移动障碍，子节点不单独参与求解。悬停到 Group 或 Folder drop target 时暂停排斥并恢复已推开节点，避免为即将被收纳的节点腾出无意义空间。同时提供**碰撞检测与放置解析**能力：释放节点时若检测到与 Group 区域重叠，系统会自动判断是"纳入 Group"还是"放在 Group 旁边"，确保放置意图明确。
 
 #### 2.5.2 Folder 堆叠式文件夹 (Folder Stack)
 
@@ -178,8 +181,8 @@
   - **画布空白处右键**：提供新建（`note` / `checklist` / `pomodoro` / `reminder` / `sticky` / `topic` / `image` / `link` / `folder` / `group` / `file` / `recording`）、粘贴、重置缩放到 100%、导入 Markdown、导出当前画布为 Markdown、导出主题大纲为 Markdown（画布上没有主题时置灰）等操作。
   - **卡片上右键**：提供聚焦打开、复制、Copy as Markdown（标题 + 正文写入剪贴板）、改颜色、编辑标签、锁定/解锁、移到笔记库、导出为 Markdown、删除等操作；"永久删除内容"属于显式二次确认的破坏性动作，不与普通删节点合并。
   - **Topic 上右键**：提供编辑标题、新建子主题（`Tab`）、新建同级主题（`Enter`，根主题上不可用）、选择分支、复制分支、整理分支、拆出分支（根主题上不可用）、删除、删除分支、改颜色、锁定/解锁。复制分支只写入分支节点与内部树边，不含外部父边，粘贴出的是独立的树。整理分支对该分支重新排布——首版不承诺永久保留每个内部节点的手工偏移。拆支、删分支、整理分支各是一次事务、一步撤销；整理后位置未变则不记历史。
-  - **Widget / Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力，所有可拖拽节点的菜单中都包含 `Lock` / `Unlock` 项，锁定后该节点禁用拖拽、连线和删除，右上角显示锁定徽章；解锁后恢复默认行为。Widget 删除只移除画布引用。
-  - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；含 widget 时会 clone 内容文件。Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。
+  - **Widget / Sticky / Image / Asset / Link / Recording / Group / Folder 右键**：根据节点类型提供对应能力。未锁定的 Sticky 额外提供「固定位置」/「取消固定」。所有可拖拽节点的菜单都包含 `Lock` / `Unlock`。锁定写入 `data.locked`，右上角显示锁定徽章，并禁止拖拽、连线和删除。目标已锁定时（多选则是选中集合全部锁定），菜单中的改颜色、编辑标签、删除和删除分支置灰。改色、打开标签编辑会跳过已锁定节点；删除分支在分支内含锁定节点时整支拒绝。删除请求里夹带锁定节点时，这些节点留在画布上，并提示一次「已锁定的内容无法删除，已跳过」；成功提示只计算实际删除的数量，一个都没删掉时不提示成功。AI `move_node` 遇到锁定节点或钉住的便签会跳过并给出警告。解锁后恢复默认行为。锁定的便签同时不能进入原地编辑，也不显示缩放手柄。Widget 删除只移除画布引用。
+  - **多选右键**：在选中集合内右键时显示批量菜单，支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete。批量复制会保留选中集合内部连线；含 widget 时会 clone 内容文件。Move to View 会先读取目标 manifest，复制节点/内部边并从当前画布移除。集合里混有锁定节点时，删除和改色仍可执行，但只作用于未锁定的成员。
   - **媒体节点右键**：Image 支持 Replace image、Copy image address、Reveal in Finder、Rename；Asset 支持 Reveal in Finder、Replace file、Rename；Link 支持 Open link、Copy URL、Refetch preview、Edit URL；Recording 支持 Reveal in Finder、Rename。
   - **Folder 上右键**：提供打开 Folder、重命名显示标签、在该 Folder 内新建内容、锁定/解锁、删除等操作。**注**：M5 之后 Folder 子卡片是独立 note / widget record，不再对应系统目录，因此不提供「在系统文件管理器中显示目录」入口；如需查看原始数据，可在 `content/.ghostboard/blocknote/`、`content/*.md` 或 `.ghostboard/widgets/` 按 id 查找。Folder 展开层中的子项菜单需额外提供 `Extract to Canvas`。
   - **连线上右键**：提供编辑标签、切换动画、切换曲线/折线、`Cycle Color` 循环切换连线颜色、删除连线等操作。
@@ -246,7 +249,7 @@
 | `Cmd+N`                 | `Ctrl+N`                  | 打开新建卡片菜单                                                                |
 | `Cmd++` / `Cmd+-` / `Cmd+0` | `Ctrl++` / `Ctrl+-` / `Ctrl+0` | 放大 / 缩小 / 重置缩放到 100%                                                   |
 | `Arrow` / `Shift+Arrow` | `Arrow` / `Shift+Arrow`   | 按方向选择邻近节点；`Shift` 扩展选择，目标不在视口时平滑居中                    |
-| `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式；选中 Topic 时创建同级主题（根主题上改为编辑标题）        |
+| `Enter`                 | `Enter`                   | 打开选中卡片的聚焦模式；选中未锁定 Sticky 时进入原地编辑；选中 Topic 时创建同级主题（根主题上改为编辑标题） |
 | `Tab`                   | `Tab`                     | 处于 Topic 命令上下文或标题编辑中时创建子主题；其他情况仍是控件间移动焦点        |
 | `F2`                    | `F2`                      | 编辑选中 Topic 的标题                                                           |
 | `Escape`                | `Escape`                  | 关闭聚焦/文件夹视图、退出搜索/菜单；编辑主题标题时取消本次编辑（草稿被丢弃）     |
@@ -257,11 +260,11 @@
 
 | 状态                | 进入条件                                                                               | 退出条件                                 | 约束                                                                                                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idle`              | 默认状态；点击空白处；完成操作后回落                                                   | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选；普通单击可聚焦节点会直接进入 `focused` / `folder-drill-down`，普通单击 Sticky 或 Topic 进入 `inline-editing`                                                                            |
+| `idle`              | 默认状态；点击空白处；完成操作后回落                                                   | 选中节点、开始拖拽、打开菜单、按下快捷键 | 允许平移、缩放、框选；普通单击可聚焦节点会直接进入 `focused` / `folder-drill-down`，普通单击未锁定的 Sticky 或 Topic 进入 `inline-editing`。锁定的 Sticky 不因单击进入编辑                                                                            |
 | `selected`          | 框选、`Shift/Cmd/Ctrl+Click`、方向键导航、右键单选或多选集合右键                         | 点击空白、`Escape`、进入其他状态         | 允许批量拖拽、删除、复制/剪切/粘贴、重复、分组、锁定/解锁、移动到其他画布。**Checklist widget 例外**：在 `selected` 状态下允许直接勾选 checkbox 和在列表末尾添加条目（局部交互，写 widgetStore） |
 | `marquee-selecting` | 在空白处左键拖拽                                                                       | 鼠标释放                                 | 桌面端启用；与空格平移模式、输入编辑态互斥                                                                                                                                                           |
 | `dragging`          | 拖拽一个或多个已选节点                                                                 | 鼠标释放或取消                           | 暂停双击判定，避免误触发编辑                                                                                                                                                                         |
-| `inline-editing`    | 普通单击 Sticky 或 Topic、选中 Sticky 后按 `Enter`、选中 Topic 后按 `F2`（或在根主题上按 `Enter`）、Topic 草稿创建、Group label 编辑、资源/录音标题重命名          | `Escape`、提交、失焦或点击其他区域       | 编辑期间禁用画布级快捷键；Sticky 使用纯文本 textarea，Topic 使用纯文本标题 input（`Enter` 提交并建同级、`Tab` 提交并建子级），媒体标题使用行内 input。Card/Image/Asset/Link 的深度编辑进入 `focused`                                                                         |
+| `inline-editing`    | 普通单击未锁定的 Sticky 或 Topic、选中未锁定 Sticky 后按 `Enter`（焦点在便签上时 `Enter` / `Space` 同样进入）、选中 Topic 后按 `F2`（或在根主题上按 `Enter`）、Topic 草稿创建、Group label 编辑、资源/录音标题重命名 | `Escape`、提交、失焦或点击其他区域       | 编辑期间禁用画布级快捷键；Sticky 使用纯文本 textarea，Topic 使用纯文本标题 input（`Enter` 提交并建同级、`Tab` 提交并建子级），媒体标题使用行内 input。锁定的 Sticky 不能进入此状态。Card/Image/Asset/Link 的深度编辑进入 `focused`                                                                         |
 | `focused`           | 普通单击 Card/Image/Asset/Link；选中后按 `Enter`；右键菜单 `Open Focused`               | 返回按钮、点击遮罩、`Escape`             | 背景画布不可交互；Sticky / Recording / Topic 不可进入此状态                                                                                                                                                  |
 | `folder-drill-down` | 普通单击 Folder；选中 Folder 后按 `Enter`；右键菜单 `Open`                             | 返回按钮、背景空白、`Escape`             | 仅当前 Folder 内容可交互；背景画布冻结                                                                                                                                                               |
 | `connecting`        | 从 Handle 开始拖出连线                                                                 | 连接成功、取消                           | 禁止进入编辑与聚焦                                                                                                                                                                                   |
@@ -625,7 +628,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | `title`、`createdAt`、`updatedAt`         | `position`、`style: { width, height }` |
 | `color`（内容默认颜色）                   | z-order（数组顺序）                    |
 | `displayHint` / `type`                    | `color`（per-view 视觉覆盖，可选）     |
-| BlockNote `blocks`、cached `preview`      | `locked`、`parentId`、`extent`         |
+| BlockNote `blocks`、cached `preview`      | `locked`、`parentId`、`extent`；Sticky 另有 `pinned`（钉住当前位置，缺省为未钉住） |
 
 **颜色优先级**（三层回退）：`manifest.data.color`（per-view override）→ sidecar / frontmatter `color`（内容默认）→ 组件默认色板。当同一笔记出现在多个画布中时，每个画布可通过 manifest `color` 独立覆盖颜色，而不影响内容文件本身的默认颜色。**Sticky 例外**：Sticky 无 sidecar / frontmatter，仅走两层回退——`manifest.data.color` → 组件默认色板。
 
@@ -934,7 +937,7 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | --- | ------------------------------------------------- | ------ | --------- |
 | 6   | **Group 开放式分组** — 三阶段拖拽 + 预设颜色 + 排斥力学 | 高     | ✅ 已完成 |
 | 7   | **撤销/重做 (Undo/Redo)** — 快照历史栈            | 中     | ✅ 已完成 |
-| 8   | **便签 (Sticky Note)** — 单击原地编辑、CSS pushpin、纯文本保存、不进入聚焦 | 低     | ✅ 已完成 |
+| 8   | **便签 (Sticky Note)** — 单击原地编辑、钉住后才显示 CSS pushpin、纯文本保存、不进入聚焦；钉住只锁位置 | 低     | ✅ 已完成 |
 | 9   | **图片卡片** — 拖拽/粘贴/选择器导入，缩略图生成，聚焦懒加载原图，替换与缺失重试 | 中     | ✅ 已完成 |
 | 9.1 | **BlockNote 块编辑器** — 聚焦模式块级编辑，JSON sidecar canonical source，支持标题/列表/任务/代码块等，Markdown 按需导出 | 中     | ✅ 已完成（取代旧 Tiptap 方案） |
 | 9.2 | **画布预览渲染** — sidecar cached preview + legacy markdown-it / DOMPurify 安全预览 | 低     | ✅ 已完成 |
@@ -970,7 +973,7 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | ---  | ---------------------------- | ------ | --------- |
 | 15   | **多画布视图切换**           | 中     | ✅ 已完成 |
 | 16   | **多 workspace 管理**        | 中     | ❌ 待实现 |
-| 17   | **节点锁定**                 | 低     | ✅ 已完成（节点右键 Lock/Unlock，data.locked 持久化，锁定时禁用 drag/connect/delete 并显示右上角锁定徽章） |
+| 17   | **节点锁定**                 | 低     | ✅ 已完成（节点右键 Lock/Unlock，`data.locked` 持久化，锁定时禁用 drag/connect/delete，并置灰改色、编辑标签、删除和删除分支；夹带锁定节点的删除会跳过它们并提示一次。锁定的便签额外不能编辑、不能缩放。右上角显示锁定徽章） |
 | 18   | **框选 (Marquee Selection)** | 低     | ✅ 已完成（React Flow 内置框选 + 自定义选框样式） |
 | 19   | **导入 JSON / Markdown 覆盖重新导入** | 低     | ❌ 待实现 |
 | 20   | **移动端适配**               | 高     | ❌ 待实现 |
@@ -1058,5 +1061,6 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | BlockNote JSON sidecar (`content/.ghostboard/blocknote/`) | §2.2、§5.3 |
 | 旧 `.md` 同步副本退役，Markdown 变为 legacy/import fallback 与按需导出格式 | §2.2、§5.4、§5.9、§5.10 |
 | Asset / Link / Recording 作为独立 node kind，不混入 Card frontmatter | §2.2、§5.1、§5.6、§5.10 |
+| Sticky 钉住（`data.pinned`）只固定当前位置；锁定（`data.locked`）才禁止编辑、缩放、连线和删除 | §2.2、§2.5.1、§2.6、§2.11、§5.4 |
 | Settings 从独立窗口入口收敛到主窗口内 `SettingsDialog`，workspace 指针拆到 app-level `userprefs.json` | §2.12、§5.2、§5.10 |
 | PNG / JSON 导出已落地；JSON 导入和 Markdown 覆盖重新导入仍待补 | §5.9、§7、§8.3 |

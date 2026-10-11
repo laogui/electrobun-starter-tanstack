@@ -214,7 +214,7 @@ src/
 | `recording` | `RecordingNode` | `attachments/audio_<id>.<ext>` + `recordingNumber` + waveform/duration | ❌            | ✅ (默认 380×150)            |
 | `folder`    | `FolderNode`    | manifest `data.children` 引用子节点/子笔记                    | ✅ drill-down | ✅ (250~600 × 250~600)       |
 | `group`     | `GroupNode`     | manifest `data.label` + `data.color`                          | ❌            | ✅ NodeResizer (min 300×200) |
-| `sticky`    | `StickyNode`    | manifest `data.content` + `data.color` 内嵌                   | ❌ 原地编辑   | ✅ (120~500 × 120~500)       |
+| `sticky`    | `StickyNode`    | manifest `data.content` + `data.color` 内嵌；可选 `data.pinned` 钉住当前位置 | ❌ 原地编辑（锁定时不可编辑） | ✅ (120~500 × 120~500；锁定时无手柄。钉住仍可缩放) |
 | `topic`     | `TopicNode`     | manifest `data.title` + `data.color` + `data.topicVersion` 内嵌；层级只在 `topic-child` 边上 | ❌ 原地编辑标题 | ❌ 按标题自动测量尺寸 |
 
 > 上表的 `widget` 路径描述 legacy 兼容模型。当前三个内置 Productivity 类型通过 Canvas Type 注册为 `extension` 节点：Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可新进入 Folder。已存在于 Folder 中的 legacy `widget` 或迁移后 `extension` 子项仍须可读取并无损 Extract。
@@ -406,6 +406,8 @@ interface CanvasNodeDataShapes {
   sticky: {
     content: string;
     color?: string;
+    /** 只固定便签在当前父坐标系中的位置。缺省或 false 表示未钉住，不渲染图钉。 */
+    pinned?: boolean;
   };
   topic: {
     title: string; // 纯文本，不解析 Markdown / HTML，上限 2000 码点

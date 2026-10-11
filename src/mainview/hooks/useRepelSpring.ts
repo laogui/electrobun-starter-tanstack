@@ -1,5 +1,6 @@
 import type { Node, XYPosition } from '@xyflow/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { prefersReducedMotion } from '@/lib/motion';
 
 /** Critically damped spring: fast response, no overshoot. */
@@ -83,7 +84,7 @@ export function useRepelSpring(
     const pinned = new Set(pinnedIds);
     const targets = new Map<string, XYPosition>();
     for (const node of nodes) {
-      if (node.parentId || pinned.has(node.id)) {
+      if (node.parentId || pinned.has(node.id) || isPinnedSticky(node)) {
         springs.delete(node.id);
         lastSeen.set(node.id, node.position);
         continue;

@@ -15,6 +15,8 @@ import {
   isDetachableNode,
   isFolderChildNode,
   isGroupChildNode,
+  isLockedNode,
+  isPinnedSticky,
 } from '@/lib/canvasNodePredicates';
 import {
   buildNewNodeSpec,
@@ -1123,7 +1125,8 @@ export interface CanvasState {
   cutSelected: () => void;
   deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
-  deleteNodes: (ids: string[]) => void;
+  /** Deletes the unlocked nodes in `ids`; returns how many were deleted. */
+  deleteNodes: (ids: string[]) => number;
   /** Remove a Topic and every descendant as one transaction. */
   deleteTopicBranch: (topicId: string) => void;
   deselectAll: () => void;
@@ -1254,6 +1257,7 @@ export interface CanvasState {
   toggleNodeLocked: (nodeId: string) => void;
   /** Lock every node in `ids` unless all are already locked, then unlock. */
   toggleNodesLocked: (ids: string[]) => void;
+  toggleStickyPinned: (nodeId: string) => void;
   /** Toggle a single tag in/out of the active filters (case-insensitive). */
   toggleTagFilter: (tag: string) => void;
   toggleTagSidebar: () => void;
@@ -1619,10 +1623,30 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // -- core actions ---------------------------------------------------------
   setNodes: (updater) => {
     set((s) => {
-      const nodes = typeof updater === 'function' ? updater(s.nodes) : updater;
-      if (nodes === s.nodes) {
+      const updated =
+        typeof updater === 'function' ? updater(s.nodes) : updater;
+      if (updated === s.nodes) {
         return s;
       }
+      const pinned = new Map(
+        s.nodes.filter(isPinnedSticky).map((node) => [node.id, node])
+      );
+      const nodes = pinned.size
+        ? updated.map((node) => {
+            const previous = pinned.get(node.id);
+            // Reparenting converts coordinates; moving a parent leaves its
+            // children's relative positions untouched.
+            if (
+              !(previous && isPinnedSticky(node)) ||
+              node.parentId !== previous.parentId ||
+              (node.position.x === previous.position.x &&
+                node.position.y === previous.position.y)
+            ) {
+              return node;
+            }
+            return { ...node, position: previous.position };
+          })
+        : updated;
       return {
         nodes,
         topicCommandContextId: topicCommandContextForNodes(
@@ -2204,6 +2228,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   commitEdgeData: (edgeId, updates) => {
     get().saveSnapshot();
     get().updateEdgeData(edgeId, updates);
+  },
+
+  toggleStickyPinned: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (node?.type !== 'sticky') {
+      return;
+    }
+    get().commitNodeData(nodeId, { pinned: !isPinnedSticky(node) });
   },
 
   toggleNodeLocked: (nodeId) => {
@@ -3167,7 +3199,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   deleteNodes: (ids) => {
-    const idSet = new Set(ids);
+    const lockedIds = new Set(
+      get()
+        .nodes.filter(isLockedNode)
+        .map((node) => node.id)
+    );
+    const idSet = new Set(ids.filter((id) => !lockedIds.has(id)));
+    if (ids.some((id) => lockedIds.has(id))) {
+      toast.error(m.toast_locked_nodes_not_deleted());
+    }
+    if (idSet.size === 0) {
+      return 0;
+    }
     // Collect backing widget files for top-level widget nodes being removed.
     // Folder children are detached (not deleted) when a folder is removed, so
     // their widget files are intentionally left intact here.
@@ -3227,6 +3270,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         toast.error('Failed to delete widget file');
       });
     }
+    return idSet.size;
   },
 
   changeNodeColor: (nodeId) => {

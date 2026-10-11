@@ -2,7 +2,7 @@ import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { addEdge } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 
-import { isGroupChildNode } from '@/lib/canvasNodePredicates';
+import { isGroupChildNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, getNodeSpec } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects } from '@/lib/collision';
@@ -221,6 +221,16 @@ async function applyActionBatch(
         if (!node) {
           warnings.push(
             `Skipped move_node "${action.nodeId}": node not found on canvas`
+          );
+          break;
+        }
+        if ((node.data as { locked?: unknown }).locked) {
+          warnings.push(`Skipped move_node "${action.nodeId}": node is locked`);
+          break;
+        }
+        if (isPinnedSticky(node)) {
+          warnings.push(
+            `Skipped move_node "${action.nodeId}": sticky position is pinned`
           );
           break;
         }

@@ -24,6 +24,10 @@ export interface StickyData {
   color?: string;
   content?: string;
   isHidden?: boolean;
+  /** Read-only: no move, edit, resize, delete, connect, recolor or retag. */
+  locked?: boolean;
+  /** Position only: the sticky stays editable, deletable and connectable. */
+  pinned?: boolean;
 }
 
 export interface StickyContentProps {
@@ -42,7 +46,7 @@ export interface StickyContentProps {
 
 /**
  * Pure presentational sticky-note content. Renders the colored body, editable
- * (or read-only) text area, and the pushpin decoration. No store / RPC
+ * (or read-only) text area, and the pin-state decoration. No store / RPC
  * coupling — reusable for template previews, exports, thumbnails.
  */
 export const StickyContent = ({
@@ -56,7 +60,10 @@ export const StickyContent = ({
   return (
     <>
       <div
-        className="flex size-full flex-col overflow-hidden rounded-sm p-4 pt-10 transition-shadow duration-150"
+        className={cn(
+          'flex size-full flex-col overflow-hidden rounded-sm p-4 transition-shadow duration-150',
+          data.pinned === true && 'pt-10'
+        )}
         style={colorToStyle(data.color)}
       >
         {editing ? (
@@ -89,20 +96,24 @@ export const StickyContent = ({
           never cut off by the note's rounded container. Rendered as a pure-CSS
           metallic ball (gradient + inset highlight/shadow + cast shadow) with a
           nested glint instead of a bitmap, so it stays crisp at any zoom. */}
-      <div
-        aria-hidden
-        className="sticky-pushpin pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 select-none"
-        data-sticky-pushpin
-        style={
-          {
-            '--sticky-pushpin-background': stickyPushpinBackground(data.color),
-            borderRadius: '50%',
-          } as React.CSSProperties
-        }
-      >
-        {/* Edge reflection glint (the reference's ::before) */}
-        <span className="sticky-pushpin-glint" />
-      </div>
+      {data.pinned === true && (
+        <div
+          aria-hidden
+          className="sticky-pushpin pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 select-none"
+          data-sticky-pushpin
+          style={
+            {
+              '--sticky-pushpin-background': stickyPushpinBackground(
+                data.color
+              ),
+              borderRadius: '50%',
+            } as React.CSSProperties
+          }
+        >
+          {/* Edge reflection glint (the reference's ::before) */}
+          <span className="sticky-pushpin-glint" />
+        </div>
+      )}
     </>
   );
 };
@@ -119,6 +130,7 @@ const StickyNode = ({
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
     useNodeTagEditing(id, data as unknown as Record<string, unknown>);
   const isDark = isColorDark(data.color);
+  const locked = data.locked === true;
   const onUpdate = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const [editing, setEditing] = useState(false);
@@ -194,12 +206,12 @@ const StickyNode = ({
     if (!editRequested) {
       return;
     }
-    if (!editing) {
+    if (!(editing || locked)) {
       focusAfterEditRequestRef.current = true;
       setEditing(true);
     }
     setEditingStickyId(null);
-  }, [editRequested, editing, setEditingStickyId]);
+  }, [editRequested, editing, locked, setEditingStickyId]);
   useEffect(() => {
     if (editing && focusAfterEditRequestRef.current) {
       focusAfterEditRequestRef.current = false;
@@ -213,13 +225,20 @@ const StickyNode = ({
   // so neither starts editing.
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (editing || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
+      if (
+        editing ||
+        locked ||
+        e.shiftKey ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      ) {
         return;
       }
       e.stopPropagation();
       enterEditing({ x: e.clientX, y: e.clientY });
     },
-    [editing, enterEditing]
+    [editing, enterEditing, locked]
   );
 
   // Double-click stays as a redundant edit path in case the first click is
@@ -227,13 +246,13 @@ const StickyNode = ({
   // entered editing.
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (editing) {
+      if (editing || locked) {
         return;
       }
       e.stopPropagation();
       enterEditing({ x: e.clientX, y: e.clientY });
     },
-    [editing, enterEditing]
+    [editing, enterEditing, locked]
   );
 
   return (
@@ -248,50 +267,56 @@ const StickyNode = ({
       )}
     >
       {tagEditor}
-      <NodeResizeControl
-        className="z-10 border-none! bg-transparent!"
-        maxHeight={500}
-        maxWidth={500}
-        minHeight={120}
-        minWidth={120}
-        onResizeEnd={endResizingNwseCursor}
-        onResizeStart={() => {
-          beginResizingNwseCursor();
-          saveSnapshot();
-        }}
-        position="bottom-right"
-        style={{ padding: 0 }}
-      >
-        <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/sticky:opacity-100">
-          <svg
-            height="12"
-            viewBox="0 0 16 16"
-            width="12"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Resize</title>
-            <g fill="none" fillRule="evenodd">
-              <path
-                d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
-                fill="#1B2536"
-                fillOpacity="0.3"
-              />
-            </g>
-          </svg>
-        </div>
-      </NodeResizeControl>
+      {locked ? null : (
+        <NodeResizeControl
+          className="z-10 border-none! bg-transparent!"
+          maxHeight={500}
+          maxWidth={500}
+          minHeight={120}
+          minWidth={120}
+          onResizeEnd={endResizingNwseCursor}
+          onResizeStart={() => {
+            beginResizingNwseCursor();
+            saveSnapshot();
+          }}
+          position="bottom-right"
+          style={{ padding: 0 }}
+        >
+          <div className="absolute right-2 bottom-2 cursor-nwse-resize opacity-0 group-hover/sticky:opacity-100">
+            <svg
+              height="12"
+              viewBox="0 0 16 16"
+              width="12"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <title>Resize</title>
+              <g fill="none" fillRule="evenodd">
+                <path
+                  d="M13.146 12.146a.5.5 0 0 1 .708.708l-1 1a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-5 5a.5.5 0 0 1-.708-.708zm0-4a.5.5 0 0 1 .708.708l-9 9a.5.5 0 0 1-.708-.708z"
+                  fill="#1B2536"
+                  fillOpacity="0.3"
+                />
+              </g>
+            </svg>
+          </div>
+        </NodeResizeControl>
+      )}
 
       <NodeHandles />
 
       <div
         className={cn(
           'node-visual relative z-0 size-full rounded-sm shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover',
-          dragging ? 'cursor-grabbing' : 'cursor-grab'
+          dragging
+            ? 'cursor-grabbing'
+            : data.pinned === true
+              ? 'cursor-default'
+              : 'cursor-grab'
         )}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
+          if (!locked && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
             enterEditing();
           }

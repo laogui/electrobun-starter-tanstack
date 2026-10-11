@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   isCanvasContentNode,
   isGroupChildNode,
+  isPinnedSticky,
   isRejectedFolderChildNode,
 } from '@/lib/canvasNodePredicates';
 import { CARD_H, CARD_W, FOLDER_H, FOLDER_W } from '@/lib/canvasNodeRegistry';
@@ -77,7 +78,7 @@ export function pushDraggedNodesOutOfFolder(
     height: folderSize.height,
   };
   return nodes.map((n) => {
-    if (!draggedIds.has(n.id)) {
+    if (!draggedIds.has(n.id) || isPinnedSticky(n)) {
       return n;
     }
     const size = nodeSize(n);
@@ -180,7 +181,9 @@ function applyTopicBranchFollow(
 function getDraggingNodeIds(node: Node, draggedNodes: Node[]): string[] {
   const ids = new Set<string>();
   for (const draggedNode of draggedNodes) {
-    ids.add(draggedNode.id);
+    if (!isPinnedSticky(draggedNode)) {
+      ids.add(draggedNode.id);
+    }
   }
   ids.add(node.id);
   return [...ids];
@@ -467,11 +470,13 @@ export function useNodeDrag() {
         const draggingIds = new Set<string>();
         if (draggedNodes.length > 0) {
           for (const draggedNode of draggedNodes) {
-            draggingIds.add(draggedNode.id);
+            if (!isPinnedSticky(draggedNode)) {
+              draggingIds.add(draggedNode.id);
+            }
           }
         } else {
           for (const n of highlighted) {
-            if (n.selected) {
+            if (n.selected && !isPinnedSticky(n)) {
               draggingIds.add(n.id);
             }
           }
@@ -539,7 +544,9 @@ export function useNodeDrag() {
       setDraggingNodeIds([]);
       dragAnchorIdRef.current = null;
 
-      const draggingIds = new Set<string>(draggedNodes.map((n) => n.id));
+      const draggingIds = new Set<string>(
+        draggedNodes.filter((n) => !isPinnedSticky(n)).map((n) => n.id)
+      );
       draggingIds.add(node.id);
       // React Flow's final snap moves the anchor one last time, so the branch
       // has to be re-translated before the ref is dropped.

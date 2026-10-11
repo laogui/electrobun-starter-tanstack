@@ -17,6 +17,8 @@ import {
   Maximize2,
   Palette,
   PenLine,
+  Pin,
+  PinOff,
   Plus,
   RefreshCw,
   Sparkles,
@@ -47,6 +49,7 @@ import {
 } from '@/extensions/hostMenu';
 import { resolveExtensionMessage } from '@/extensions/messages';
 import { canvasTypeRegistry } from '@/extensions/registry';
+import { isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { getCreatableMenuItems } from '@/lib/creatableNodes';
 import { POPOVER_EXIT, POPOVER_SPRING } from '@/lib/motion';
 import { buildTopicIndex } from '@/lib/topicTree';
@@ -161,6 +164,13 @@ const getCanvasItems = (
     disabled: !hasTopics,
   },
 ];
+
+const LOCKED_NODE_BLOCKED_ACTIONS = new Set([
+  'change-color',
+  'delete',
+  'edit-tag',
+  'topic-delete-branch',
+]);
 
 const lockItem = (locked: boolean): MenuItem => ({
   id: 'toggle-lock',
@@ -313,7 +323,7 @@ const getTopicItems = (locked: boolean, hasParent: boolean): MenuItem[] => [
   },
 ];
 
-const getStickyItems = (locked: boolean): MenuItem[] => [
+const getStickyItems = (locked: boolean, pinned: boolean): MenuItem[] => [
   { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
   { id: 'change-color', label: m.menu_change_color(), icon: Palette },
   { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
@@ -322,6 +332,16 @@ const getStickyItems = (locked: boolean): MenuItem[] => [
     label: m.menu_ai_summarize(),
     icon: Sparkles,
   },
+  // Lock already fixes the position, so pinning a locked sticky is a no-op.
+  ...(locked
+    ? []
+    : [
+        {
+          id: 'toggle-sticky-pin',
+          label: pinned ? m.menu_unpin_sticky() : m.menu_pin_sticky(),
+          icon: pinned ? PinOff : Pin,
+        },
+      ]),
   lockItem(locked),
   {
     id: 'delete',
@@ -710,6 +730,10 @@ export function CanvasContextMenu({
     const node = state.nodes.find((item) => item.id === menu.nodeId);
     return Boolean((node?.data as { locked?: unknown } | undefined)?.locked);
   });
+  const stickyPinned = useCanvasStore((state) => {
+    const node = state.nodes.find((item) => item.id === menu?.nodeId);
+    return Boolean(node && isPinnedSticky(node));
+  });
   const hasClipboard = useCanvasStore((state) => state.clipboard.length > 0);
   const activeViewId = useCanvasStore((state) => state.activeViewId);
   const views = useCanvasStore((state) => state.views);
@@ -761,7 +785,7 @@ export function CanvasContextMenu({
     'folder-child': getFolderChildItems,
     folder: () => getFolderItems(nodeLocked),
     group: () => getGroupItems(nodeLocked),
-    sticky: () => getStickyItems(nodeLocked),
+    sticky: () => getStickyItems(nodeLocked, stickyPinned),
     topic: () => getTopicItems(nodeLocked, topicHasParent),
     image: () => getImageItems(nodeLocked),
     link: () => getLinkItems(nodeLocked),
@@ -780,9 +804,15 @@ export function CanvasContextMenu({
         (() => getCanvasItems(hasClipboard, hasTopics))
       )()
     : [];
-  const items = menu?.folderId
-    ? getExpandedFolderChildItems(baseItems)
-    : baseItems;
+  const targetLocked =
+    menu?.target === 'multi' ? allSelectedLocked : nodeLocked;
+  const items = (
+    menu?.folderId ? getExpandedFolderChildItems(baseItems) : baseItems
+  ).map((item) =>
+    targetLocked && LOCKED_NODE_BLOCKED_ACTIONS.has(item.id)
+      ? { ...item, disabled: true }
+      : item
+  );
   const submenuItems = openSubmenu
     ? items.find((item) => item.id === openSubmenu)?.submenu
     : undefined;

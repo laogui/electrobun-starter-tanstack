@@ -226,13 +226,15 @@ export function useCanvasKeyboard({
           if (deleteHandler) {
             deleteHandler(selectedIds);
           } else {
-            deleteNodes(selectedIds);
-            toast(
-              selectedIds.length > 1
-                ? m.toast_nodes_deleted({ count: selectedIds.length })
-                : m.toast_node_deleted(),
-              { action: { label: m.toast_undo(), onClick: () => undo() } }
-            );
+            const deleted = deleteNodes(selectedIds);
+            if (deleted > 0) {
+              toast(
+                deleted > 1
+                  ? m.toast_nodes_deleted({ count: deleted })
+                  : m.toast_node_deleted(),
+                { action: { label: m.toast_undo(), onClick: () => undo() } }
+              );
+            }
           }
         }
         return;

@@ -2,6 +2,7 @@ import type { Node, NodeChange, NodeDimensionChange } from '@xyflow/react';
 import { applyNodeChanges } from '@xyflow/react';
 import type { CSSProperties } from 'react';
 import { isTopicNodeType } from '../../shared/topic';
+import { isPinnedSticky } from './canvasNodePredicates';
 
 function isDimensionChange(
   change: NodeChange
@@ -37,11 +38,19 @@ export function applyCanvasNodeChanges(
   changes: NodeChange[],
   nodes: Node[]
 ): Node[] {
-  const hasDimensionChange = changes.some(
+  const pinnedIds = new Set(
+    nodes.filter(isPinnedSticky).map((node) => node.id)
+  );
+  const allowedChanges = pinnedIds.size
+    ? changes.filter(
+        (change) => change.type !== 'position' || !pinnedIds.has(change.id)
+      )
+    : changes;
+  const hasDimensionChange = allowedChanges.some(
     (change) => change.type === 'dimensions'
   );
   if (!hasDimensionChange) {
-    return applyNodeChangesStable(changes, nodes);
+    return applyNodeChangesStable(allowedChanges, nodes);
   }
 
   // Topic dimensions belong to title commits. React Flow also reports the
@@ -50,7 +59,7 @@ export function applyCanvasNodeChanges(
   const topicIds = new Set(
     nodes.filter((node) => isTopicNodeType(node.type)).map((node) => node.id)
   );
-  const savedChanges = changes.filter(
+  const savedChanges = allowedChanges.filter(
     (change) => change.type !== 'dimensions' || !topicIds.has(change.id)
   );
   if (savedChanges.length === 0) {

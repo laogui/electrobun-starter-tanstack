@@ -87,7 +87,11 @@ import {
   collectExtensionInstanceIdsFromCanvasExport,
   collectWidgetIdsFromCanvasExport,
 } from '@/lib/canvasImport';
-import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import {
+  isFocusableNode,
+  isLockedNode,
+  isPinnedSticky,
+} from '@/lib/canvasNodePredicates';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
@@ -1253,10 +1257,13 @@ function CanvasComponent() {
 
   const deleteNodesWithToast = useCallback(
     (ids: string[]) => {
-      deleteNodes(ids);
+      const deleted = deleteNodes(ids);
+      if (deleted === 0) {
+        return;
+      }
       toast(
-        ids.length > 1
-          ? m.toast_nodes_deleted({ count: ids.length })
+        deleted > 1
+          ? m.toast_nodes_deleted({ count: deleted })
           : m.toast_node_deleted(),
         { action: { label: m.toast_undo(), onClick: () => undo() } }
       );
@@ -1269,7 +1276,10 @@ function CanvasComponent() {
       const idSet = new Set(ids);
       const hasFolder = useCanvasStore
         .getState()
-        .nodes.some((node) => idSet.has(node.id) && node.type === 'folder');
+        .nodes.some(
+          (node) =>
+            idSet.has(node.id) && node.type === 'folder' && !isLockedNode(node)
+        );
 
       if (hasFolder) {
         setPendingFolderDeleteIds(ids);
@@ -1978,6 +1988,7 @@ function CanvasComponent() {
               deletable: false,
             }
           : {}),
+        ...(isPinnedSticky(node) ? { draggable: false } : {}),
       };
       nextCache.set(node.id, {
         expansionChildren,

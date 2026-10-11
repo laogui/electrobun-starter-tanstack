@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 
-import { isCanvasContentNode } from './canvasNodePredicates';
+import { isCanvasContentNode, isPinnedSticky } from './canvasNodePredicates';
 import { buildAbsoluteRects, type Point } from './collision';
 
 /** Minimum clearance kept between an active (dragged / resized) node and the
@@ -127,7 +127,10 @@ function isLockedNode(node: Node): boolean {
  *  dragging toward them (to drop into them) never scatters them. */
 function isPushableNode(node: Node): boolean {
   return (
-    !node.parentId && isCanvasContentNode(node.type) && !isLockedNode(node)
+    !node.parentId &&
+    isCanvasContentNode(node.type) &&
+    !isLockedNode(node) &&
+    !isPinnedSticky(node)
   );
 }
 

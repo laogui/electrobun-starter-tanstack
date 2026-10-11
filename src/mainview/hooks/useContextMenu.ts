@@ -9,7 +9,7 @@ import {
   runExtensionMenuAction,
 } from '@/extensions/hostMenu';
 import { runAISummarize } from '@/lib/ai/runAISummarize';
-import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { isFocusableNode, isLockedNode } from '@/lib/canvasNodePredicates';
 import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import {
@@ -137,6 +137,7 @@ export function useContextMenu({
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const detachNoteFromCanvas = useCanvasStore((s) => s.detachNoteFromCanvas);
   const toggleNodeLocked = useCanvasStore((s) => s.toggleNodeLocked);
+  const toggleStickyPinned = useCanvasStore((s) => s.toggleStickyPinned);
   const toggleNodesLocked = useCanvasStore((s) => s.toggleNodesLocked);
   const moveSelectedToView = useCanvasStore((s) => s.moveSelectedToView);
   const setEditingTopicId = useCanvasStore((s) => s.setEditingTopicId);
@@ -675,13 +676,15 @@ export function useContextMenu({
             if (onDeleteNodes) {
               onDeleteNodes(ids);
             } else {
-              deleteNodes(ids);
-              toast(
-                ids.length > 1
-                  ? m.toast_nodes_deleted({ count: ids.length })
-                  : m.toast_node_deleted(),
-                { action: { label: m.toast_undo(), onClick: () => undo() } }
-              );
+              const deleted = deleteNodes(ids);
+              if (deleted > 0) {
+                toast(
+                  deleted > 1
+                    ? m.toast_nodes_deleted({ count: deleted })
+                    : m.toast_node_deleted(),
+                  { action: { label: m.toast_undo(), onClick: () => undo() } }
+                );
+              }
             }
           }
           break;
@@ -696,6 +699,9 @@ export function useContextMenu({
                 : [nodeId];
             for (const id of ids) {
               const node = nodes.find((entry) => entry.id === id);
+              if (node && isLockedNode(node)) {
+                continue;
+              }
               if (node?.type === 'extension') {
                 cycleExtensionColor(
                   (node.data ?? {}) as Record<string, unknown>
@@ -784,7 +790,10 @@ export function useContextMenu({
           break;
         }
         case 'edit-tag': {
-          if (nodeId) {
+          const node = useCanvasStore
+            .getState()
+            .nodes.find((entry) => entry.id === nodeId);
+          if (nodeId && !(node && isLockedNode(node))) {
             setEditingTagNodeId(nodeId);
           }
           break;
@@ -870,6 +879,12 @@ export function useContextMenu({
             toast(m.toast_edge_deleted(), {
               action: { label: m.toast_undo(), onClick: () => undo() },
             });
+          }
+          break;
+        }
+        case 'toggle-sticky-pin': {
+          if (nodeId) {
+            toggleStickyPinned(nodeId);
           }
           break;
         }
@@ -1049,6 +1064,7 @@ export function useContextMenu({
       saveSnapshot,
       createNode,
       toggleNodeLocked,
+      toggleStickyPinned,
       toggleNodesLocked,
       moveSelectedToView,
       onRequestCreate,

@@ -1,3 +1,4 @@
+import type { Node } from '@xyflow/react';
 import { canvasTypeRegistry } from '@/extensions/registry';
 import { CANVAS_NODE_SPECS } from './canvasNodeRegistry';
 
@@ -78,6 +79,15 @@ function canvasTypeFromData(
 
 export function isCanvasContentNode(type: string | undefined): boolean {
   return type ? CANVAS_CONTENT_NODE_TYPES.has(type) : false;
+}
+
+export function isLockedNode(node: Pick<Node, 'data'>): boolean {
+  return Boolean((node.data as { locked?: unknown } | undefined)?.locked);
+}
+
+/** Pin fixes a sticky's position in its current parent coordinate space. */
+export function isPinnedSticky(node: Pick<Node, 'type' | 'data'>): boolean {
+  return node.type === 'sticky' && node.data.pinned === true;
 }
 
 export function isGroupChildNode(

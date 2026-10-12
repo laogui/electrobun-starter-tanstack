@@ -12,7 +12,8 @@ GhostBoard is a Bun/Electrobun desktop app with a React renderer. Main-process c
 - `bun run hmr` starts the renderer-only Vite server.
 - `bun run start` builds the renderer, then launches `electrobun dev`.
 - `bun run build:canary` creates a canary desktop build.
-- `bun run test`, `bun run test:watch`, and `bun run test:coverage` run Vitest once, in watch mode, or with coverage.
+- `bun run test` and `bun run test:watch` run the curated Vitest suite (see Testing Guidelines).
+- `bun run test:plugin-*` runs the trusted-plugin integration harnesses (see Testing Guidelines).
 - `bun run type-check`, `bun run check`, `bun run fix`, and `bun run ci` run TypeScript and Ultracite/Biome validation. Treat `package.json` as the command source of truth.
 
 ## Coding Style & Naming Conventions
@@ -21,11 +22,9 @@ Use strict TypeScript and React function components. Follow Biome/Ultracite form
 
 ## Testing Guidelines
 
-Do not create, modify, or delete test cases or test files unless the user explicitly requests test work. This applies to new features, behavior changes, bug fixes, and regression tests. Do not routinely ask the user whether to add tests; proceed with the requested implementation.
+Unit tests are a deliberately small curated suite (~20 files) covering two categories only: security trust boundaries (plugin install/signature/URL network policy, local HTTP auth) and data-integrity invariants (import/export round-trips, corruption recovery, undo history). Do not add test files beyond these categories unless the user explicitly asks. Validate all other changes with `bun run type-check`, `bun run check`, builds, or manual verification.
 
-Validate changes as appropriate using existing tests, type checks, lint checks, builds, or manual verification. Running existing tests does not require a separate request. If existing tests fail because their expectations no longer match an intended behavior change, report the mismatch without rewriting or disabling those tests unless requested.
-
-When the user requests test work, Vitest covers `src/mainview/**/*.{test,spec}.{ts,tsx}`, `src/bun/**/*.{test,spec}.{ts,tsx}`, and `src/shared/**/*.{test,spec}.{ts,tsx}` with setup from `src/test/`. Place tests beside source files, for example `canvasStore.ts` and `canvasStore.test.ts`. Use Testing Library for React behavior and direct unit tests for pure logic.
+Shared helpers live in `src/test/` (`pluginPackage.ts`, `setup-node.ts`); config is `vitest.config.ts`. The `test:plugin-t0` through `test:plugin-t5` scripts are trusted-plugin integration harnesses under `scripts/`, not unit tests. Plugin scaffold templates under `packages/create-plugin/templates/` ship their own `bun test` examples, verified by `bun run test:plugin-templates` in the SDK publish workflow.
 
 ## Commit & Pull Request Guidelines
 

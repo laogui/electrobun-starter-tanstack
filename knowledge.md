@@ -16,7 +16,7 @@ An **Electrobun desktop app** built with React 19, TanStack Router/Query, Tailwi
 - **Lint:** `bun run lint` (ESLint with `--fix`, modifies files)
 - **Format:** `bun run format` (biome, modifies files)
 - **All checks:** `bun run ci` (type-check + lint + format concurrently)
-- **Test:** `bun run test` (vitest, single run)
+- **Test:** `bun run test` (vitest, curated suite of ~20 security/data-integrity files)
 - **Test (watch):** `bun run test:watch`
 - **Ultracite check:** `bun run check`
 - **Ultracite fix:** `bun run fix`

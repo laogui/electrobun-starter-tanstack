@@ -10,8 +10,10 @@ imported by the GhostBoard app.
 on branch `feat/plugin-docs-site` (commit `12fe8bc`), where `bun run check`,
 `bun run build`, `vitest --project @repo/web` and the pre-commit lint pass.
 From now on `react-starter-kit/apps/web` is the source of truth for the site
-code; this directory is kept as the authoring copy of the Markdown content and
-for the `lib/docs.test.ts` gate that runs in this repository's `bun run test`.
+code; this directory is kept as the authoring copy of the Markdown content.
+(The `lib/docs.test.ts` vitest gate that used to run in this repository was
+removed along with the repo-wide Vitest suite; the helpers in `lib/docs.ts`
+remain.)
 Differences between the two copies are listed under "Applied deltas".
 
 ```text
@@ -19,7 +21,6 @@ apps/web/
 ├── content.config.ts                 # `docs` content collection (glob loader, frontmatter schema)
 ├── content/docs/{en,zh}/<section>/*.md
 ├── lib/docs.ts                       # locale/slug parsing, sidebar, fallback, prev/next, llms text
-├── lib/docs.test.ts                  # vitest coverage for the helpers above
 ├── components/DocsSidebar.astro
 ├── layouts/DocsLayout.astro          # wraps the site's BaseLayout with sidebar, TOC, pagination
 ├── pages/docs/index.astro            # /docs/ and /zh/docs/
@@ -64,7 +65,7 @@ packages/core/messages/docs.{en,zh}.json  # message keys to merge into the site'
 
 ## Verification performed in this repository
 
-- `bun run test` runs `apps/web/lib/docs.test.ts` (11 cases: id parsing, ordering, zh→en fallback, sidebar badges, prev/next, llms output).
+- ~~`bun run test` runs `apps/web/lib/docs.test.ts` (11 cases: id parsing, ordering, zh→en fallback, sidebar badges, prev/next, llms output).~~ The repo-wide Vitest suite (including that gate) was removed on 2026-10-12.
 - The Astro files were compiled in a scratch Astro 5 project with the Node adapter, stub `BaseLayout`, stub Paraglide runtime/messages and a `/zh` prefix-stripping middleware: `astro check` reported 0 errors, `astro build` succeeded, and the built server returned 200 for `/docs/`, `/docs/start/first-plugin/`, `/zh/docs/start/first-plugin/` (localized), `/zh/docs/reference/sdk/` (English fallback with banner), `/docs/llms.txt`, `/docs/llms-full.txt` (18 pages) and 404 for `/docs/nope/`.
 - `scripts/sync-sdk-reference.ts` was run against the packed `@ghostboard/sdk` 0.1.0 tarball and `--check` passed.
 

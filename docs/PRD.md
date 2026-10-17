@@ -98,11 +98,11 @@
     - **番茄钟 (Pomodoro)**：专注 / 短休 / 长休计时器，画布上直接操作。运行中 tick **不**每秒写盘，仅在 start / pause / complete 等状态转换时保存；加载时若 `running` 已超时则按完成结算。
     - **提醒 (Reminder)**：截止时间与状态（scheduled / snoozed / done / missed）。第一版仅在 app 打开时做应用内提示，`repeat` 只实现 `'none'`；系统通知与重复提醒后置。
     - **生命周期**：legacy widget 删除、克隆和撤销继续遵守原有 `widgetStore` / widget 文件规则；迁移后的实例更新走 extension instance store 与 per-instance history，同样不写入画布快照。D0-3 已按七个内置类型完成复制、删除、画布/实例撤销与重载矩阵，并验证未知/损坏数据保留。
-    - **Checklist 迁移**：旧版 `type: "card"` + `data.type: "checklist"` 在 `loadCanvas` 时懒迁移为 widget；标签 key 从 `note_*` 同步为 `widget_*`。
+    - **Checklist 迁移**：⚠️ 代码走查修正——旧版 `type: "card"` + `data.type: "checklist"` **不会**在 `loadCanvas` 时迁移为 widget；legacy 卡片仍由 `CardNode` 渲染，与新式 extension widget 双格式并存（见 TODO-29，待决策是否补迁移）。已实现的只有标签 key 懒迁移：legacy `note_*` 标签在 workspace 初始化时同步为 `widget_*`（`migrateLegacyTagsFromNotes`）。
   - **图片卡片**：支持拖拽上传、粘贴、或从文件选择器导入图片。导入时按图片自然宽高自动计算卡片尺寸，并生成轻量缩略图；画布态优先显示缩略图，聚焦模式下懒加载原图。支持图片替换二次确认、缺失图片重试、标题重命名和标签管理。
   - **本地文件卡片 (Asset)**：支持从文件选择器、拖拽和粘贴导入本地文件，文件内容保存到 `attachments/`。导入流程优先使用原生路径拷贝或本地 HTTP 流式上传，避免大文件走 data URL；保留 25 MB data URL 限制仅作为 legacy 路径。画布态以预览为主：视频 poster、音频 waveform、图片缩略图、PDF/普通文件纸张图标、文本/JSON 摘要、压缩包条目摘要；文件名、大小、时长、路径等细节进入 hover 信息面板。FocusedView 中视频/音频可播放，图片、文本和 PDF 可预览，普通文件提供 `Open file`。支持替换文件、在 Finder 中显示、标题重命名和标签管理。PDF 已有基础内嵌预览，但页面级缩略图、页码导航和批注仍属后续增强。
   - **录音卡片 (Recording)**：支持通过创建菜单或画布右键启动麦克风录音。录音弹窗自动请求权限并展示实时 waveform 与计时，停止后以用户可读的 `recording-N.<ext>` 作为显示文件名，实际音频通过统一附件链路保存到 `attachments/audio_<id>.<ext>`，并生成 duration / waveform / stream URL。Recording 在画布上以语音备忘录样式展示，可直接播放、暂停、重命名、标记标签、改变颜色、锁定和删除；它可以进入 Group/Folder，但当前不进入 FocusedView。
-  - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示富媒体卡片样式，支持打开链接、复制 URL、重新抓取预览和编辑 URL。URL 创建路径只接受安全的 http(s) 链接，打开外部链接时限制为 http/https/mailto。
+  - **链接卡片 (Link)**：支持从创建菜单输入 URL，或粘贴/拖拽 URL 到画布后自动创建 Link 节点。系统通过本地 HTTP 服务器进行链接预览（unfurling），抓取网页标题、描述、站点名、favicon/image 元数据；画布 UI 展示富媒体卡片样式，支持打开链接、复制 URL、重新抓取预览和编辑 URL。URL 创建路径只接受安全的 http(s) 链接，打开外部链接时限制为 http/https/mailto；unfurl 抓取在 DNS 解析后校验目标 IP，拒绝私网地址，降低 DNS rebinding 风险。
   - **便签 (Sticky Note)**：轻量级的彩色便签，支持快速记录短文本。可在 120–500 × 120–500 范围内调整大小，提供多种预设颜色。正文以纯文本写入 manifest 的 `data.content`，粘贴时剥离富文本格式。便签不进入聚焦放大模式（FocusedView），编辑都在画布上原地完成。
     - **未钉住（默认）**：可以拖拽，光标为抓取。普通单击进入原地编辑；已选中时按 `Enter`，或焦点在便签上时按 `Enter` / `Space`，也会进入编辑。失焦后把正文写回 `data.content`。未钉住时不渲染图钉。
     - **钉住位置**：右键「固定位置」/「取消固定」（英文 Pin in Place / Unpin），状态写入 `data.pinned`。钉住只固定便签在**当前父坐标系**中的位置，正文编辑、缩放、连线、改色、改标签和删除仍然可用。钉住后光标为默认箭头，并显示 CSS 图钉；图钉渐变按便签颜色派生，只在 `data.pinned === true` 时渲染，正文同时留出顶部间距。用户拖拽、碰撞排斥、普通 position 更新和 AI `move_node` 都不会移动它。父级 Group 移动时，子便签的相对坐标保持不变，因此随 Group 一起移动。父级归属变化带来的坐标换算（例如进出 Group）会保留换算后的位置，避免把局部坐标当成绝对坐标。锁定已经固定位置，所以锁定的便签不再提供这项菜单。
@@ -196,7 +196,7 @@
   - **切换画布**：点击切换器展开画布列表，点击任一画布立即切换。切换前会先保存当前画布；若保存失败则中止切换并提示，避免未保存变更被清空。切换成功后清空节点/边、聚焦模式、Folder drill-down、undo/redo 历史栈并加载目标画布；剪贴板保留，支持跨画布复制粘贴。
   - **Viewport 持久化**：每个画布视图的 ReactFlow viewport（`x` / `y` / `zoom`）随 manifest 一起持久化到 `.canvas.json` 的 `viewport` 字段。切换画布时恢复目标画布的上次 viewport；刷新页面或重启应用后 viewport 也会恢复。搜索定位、聚焦定位等程序化相机移动会短暂抑制 viewport 持久化，避免把临时跳转写成用户的长期浏览位置。
   - **活跃画布持久化**：用户当前选中的画布 `activeViewId` 持久化到 `workspace.json`，重启应用后自动恢复到上次使用的画布。
-  - **新建画布**：通过切换器右侧的 `+` 按钮触发子菜单，提供两种创建方式：① **空白画布**（沿用原有 `handleCreate` 流程，自动命名为 `Canvas N` 并切换过去）；② **选择模板…**（跳转 `/templates` 路由页浏览模板库，选中模板后在只读 ReactFlow 预览页确认后基于模板创建新画布，自动为模板中的每张 Card 生成新 `noteId` 和初始 note record，首次聚焦编辑后迁移为 BlockNote sidecar；legacy checklist 在加载时懒迁移为 widget）。
+  - **新建画布**：通过切换器右侧的 `+` 按钮触发子菜单，提供两种创建方式：① **空白画布**（沿用原有 `handleCreate` 流程，自动命名为 `Canvas N` 并切换过去）；② **选择模板…**（跳转 `/templates` 路由页浏览模板库，选中模板后在只读 ReactFlow 预览页确认后基于模板创建新画布，自动为模板中的每张 Card 生成新 `noteId` 和初始 note record，首次聚焦编辑后迁移为 BlockNote sidecar）。
   - **重命名**：在弹出菜单中点击铅笔图标进入行内编辑模式，`Enter` 确认、`Escape` 取消。名称为空、超过 80 字符或与其他画布重名时阻止提交并显示行内错误。
   - **删除画布**：在弹出菜单中点击删除图标。至少保留一个画布，删除最后一个时操作被拒绝。删除当前画布时自动切换到列表中的第一个画布。
   - **恢复画布**：删除画布后进入 workspace trash，并通过 toast 提供 Undo 恢复；设置页的 Workspace 面板也可恢复 trash 中的画布。
@@ -405,6 +405,11 @@ SDK 覆盖内容、画布、选区、设置、事件、文件选择与读写、�
 
 Windows 与 Linux 不支持插件系统。装载、包格式、签名和版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。每插件一个 Bun Worker 的后端入口没有实现，也不在首版。
 
+### 2.15 首次启动引导 (Onboarding) ✅
+
+- **功能描述**：首次启动应用时，除 seed `quick-start` 模板画布外，还通过 4 步引导浮层（`OnboardingDialog`）介绍核心操作：① 拖拽平移画布；② 点击卡片打开、框选/修饰键选择；③ 右键或 `+` 创建新内容；④ `Cmd+K` 搜索。引导文案与日常提示统一来自 `lib/learningContent.ts`。
+- **交互逻辑**：由 `learningStore` 的 `ONBOARDING_VERSION` 控制首次启动自动弹出；完成后记录版本，`CanvasHelp` 提供再次查看入口，引导内容版本升级时可重新展示。
+
 ## 3. 关键动画与动效规范 (Motion Design Specs)
 
 动效服务于上下文连续性，不是独立的功能完成标准。所有动画都必须遵循**"空间连续性"**原则，即用户要清晰地感知到元素是从哪里来的，又回到了哪里。开发优先保证输入响应、可中断性、内容可读性与 reduced-motion 回退，再追求表现细节；性能目标需要实际测量，不以文字要求代替验收。
@@ -461,7 +466,7 @@ Windows 与 Linux 不支持插件系统。装载、包格式、签名和版本�
 
 1. **本地文件即数据源（Local Files as Source of Truth）**—— 每张 **Card 类型**卡片对应一个以 `noteId` 标识的 note record。当前优先使用 BlockNote JSON sidecar（`content/.ghostboard/blocknote/<noteId>.json`）作为内容级 canonical source；legacy/imported `.md` 文件仍会被发现、读取、导出和迁移，但新编辑保存不再维护同步 Markdown 副本。迁移后的 Canvas Type 内容以 `instanceId` 标识，canonical source 为 `.ghostboard/extension-instances/<instanceId>.json`；legacy **Widget** 内容仍以 `widgetId` 标识并从 `.ghostboard/widgets/<widgetId>.json` 兼容读取。画布布局用独立的 manifest 文件管理。Folder 子节点与对应顶层内容共享同一内容引用，准入与兼容规则见 §2.5.2。Sticky 内容内嵌在 manifest `data.content`；Image / Asset / Recording 走 `attachments/`；Link 走 URL + unfurl 元数据。
 
-   > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会迁到独立 note record。Checklist 曾以 Card + `data.type: "checklist"` 存在，现已懒迁移为 Widget。
+   > **早期版本历史**：MVP 初版 Folder children 是以 `{ id, data: {...content inline} }` 内嵌在 manifest 中的「legacy」形式。它们会在 `loadCanvas` 加载时被自动迁移：分配 `noteId`，下次 `saveManifest` 会迁到独立 note record。Checklist 曾以 Card + `data.type: "checklist"` 存在；该 legacy 格式至今未迁移，仍按原样加载（见 TODO-29）。
 2. **内容与布局解耦** —— 内容级属性（标题、颜色、创建时间、BlockNote blocks / preview、widget items/timer）存 sidecar / widget JSON 或 legacy frontmatter；视图级属性（位置、大小、层级）存 manifest。
 3. **`noteId` / `widgetId` ≠ `nodeId`** —— 内容实体 ID 和画布实例 ID 分离；同一内容可在多画布出现。Widget 的 duplicate/粘贴会克隆文件（不共享 widgetId）。
 4. **删除实例不等于删除内容** —— 删除顶层 `node` 只影响当前画布实例；当某个 `noteId` / `widgetId` 不再被任何画布引用时，内容文件保留，直到用户显式永久删除或 Unlinked Files 清理。删除 Folder 时，其 children 会被转换为 detached 节点，不随 Folder 一起丢失；单独删除 Folder child 时，Card child 的 note record 清理策略与顶层一致，Widget 默认只删引用，Image/Asset/Recording 仍遵循附件 + manifest 引用模式，Link 只清理 URL 元数据。
@@ -614,7 +619,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | `note`      | `text`                 | 普通文本笔记（默认值） | 显示标题 + 正文摘要                         | ✅ 可进入聚焦 |
 | `image`     | `image`                | 以图片为主（legacy）   | 显示图表/图片内容                           | ✅ 可进入聚焦 |
 
-> **Checklist 不再使用 Card `displayHint`**：待办列表是 **Widget**（`type: "widget"`, `kind: "checklist"`），内容在 `.ghostboard/widgets/`。导出 Markdown 时 checklist widget 会序列化为 GFM 任务列表。磁盘上若仍存在 legacy `displayHint: 'checklist'` 的 Card，加载时会懒迁移为 widget。
+> **Checklist 不再使用 Card `displayHint`**：新待办列表是 **Widget**（`type: "widget"`, `kind: "checklist"`），内容在 `.ghostboard/widgets/`。导出 Markdown 时 checklist widget 会序列化为 GFM 任务列表。⚠️ 代码走查修正：磁盘上若仍存在 legacy `displayHint: 'checklist'` 的 Card，**不会**被迁移，加载后仍以 legacy 卡片形式与 widget 并存（`displayHintToType` 双向保留）；是否补懒迁移见 TODO-29。
 
 > **Sticky / Widget / Asset / Link / Recording 不属于 Card 的 `displayHint` 枚举**：Sticky 内嵌 `data.content`；Widget 用 `widgetId` + `kind`；Asset / Link / Recording 引用附件或 URL 元数据。
 
@@ -828,7 +833,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 | Folder 内布局      | 打开时 bottom-up waterfall 自动排布，不存子坐标                                 | 避免过早引入子画布复杂度                                                   |
 | ID 生成            | note / widget 使用 nanoid 风格 id，写入各自内容文件                             | 文件重命名不影响引用关系                                                   |
 | 文件监听           | 暂不承诺持续 watcher；当前通过 load/search/export 按需读取 sidecar / widget / legacy `.md`，未来如做外部编辑器实时同步再引入 `fs.watch` / `chokidar` | 避免 watcher 循环、跨 workspace 切换 teardown 和 JSON 冲突过早复杂化 |
-| 持久化策略         | manifest/layout 约 2500ms debounce，viewport 约 500ms debounce，widget 内容独立 debounce，视图切换/失焦/隐藏时立即 flush | 平衡输入流畅度与磁盘写入频率 |
+| 持久化策略         | manifest/layout 约 2500ms debounce，viewport 约 500ms debounce，widget 内容独立 debounce，视图切换/失焦/隐藏时立即 flush；BlockNote 走 `useBlockNoteSaver` + `rpcSaveBlockNote` 独立 debounce（legacy Markdown 走 `useNoteSaver` + `rpcSaveNote`），均支持 blur / hidden / unmount flush | 平衡输入流畅度与磁盘写入频率 |
 | 写入协调           | 分 debounce + 单串行写入队列 + 原子写                                           | 降低内容/布局竞态与文件损坏风险                                            |
 | Checklist 导出     | Markdown 导出生成 GFM `- [x]` 任务列表                                          | 与 Obsidian/Typora 等生态兼容                                              |
 | 图片/附件          | `attachments/` + `{kind}_{uuid8}.{ext}` 文件名，媒体流通过本地 token-auth HTTP 服务读取，视频/音频支持 byte range | 避免同名冲突，支持大文件导入和播放器 seek                                 |
@@ -947,21 +952,21 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | #    | 任务                                                               | 复杂度 | 状态      |
 | ---  | ------------------------------------------------------------------ | ------ | --------- |
 | 10   | **数据持久化** — 端到端链路（manifest + .md 拆分 + RPC + hydrate） | 高     | ✅ 已完成 |
-| 11   | **全局搜索** — Cmd/Ctrl+K，跨画布搜索与定位；Folder children / unreferenced Markdown 覆盖待补 | 中     | ✅ MVP 已完成 / ⚠️ 覆盖待补 |
+| 11   | **全局搜索** — Cmd/Ctrl+K，跨画布搜索与定位；Folder children 与 detached 已覆盖（`src/bun/search.ts` 的 `folder-child` / `detached` 目标）；无 manifest 引用的内容按 D1-3/OD-2 决策走 Note Library Unlinked Files 找回，不进全局搜索 | 中     | ✅ 已完成 |
 | 12   | **连线标签与动画** — 可编辑 label + 流动虚线 + Marker 端点           | 低     | ✅ 已完成 |
 | 13   | **Group 嵌套** — 多级 parentId + 防循环                            | 中     | ✅ 已完成 |
 | 13.1 | **画布标题栏模糊** — 顶部工具栏背景模糊效果                          | 低     | ✅ 已完成 |
 | 14   | **画布导出 PNG/JSON**                                              | 低     | ✅ 已完成 |
 | 14.2 | **Folder Card 子节点迁移 noteId + 独立 note record**（M5）                     | 中     | ✅ 已完成 |
 | 14.3 | **设置弹窗（General / Workspace / AI / Shortcuts / About）**            | 低     | ✅ 已完成 |
-| 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮子菜单、`/templates` 列表、`/templates/$templateId` 只读预览、基于模板创建新画布 | 高     | ✅ MVP 已完成 / ⚠️ P5 收尾待补 |
+| 14.5 | **Canvas 模板库** — ViewSwitcher「+」按钮子菜单、`/templates` 列表、`/templates/$templateId` 只读预览、基于模板创建新画布；`preview-test` 路由已删除，10 个内置模板全部接入 thumbnail 并在列表 UI 展示 | 高     | ✅ 已完成 |
 | 14.6 | **Per-view Viewport 持久化** — 每个画布的 ReactFlow viewport（x/y/zoom）随 `.canvas.json` 持久化，切换画布/重启后恢复 | 低     | ✅ 已完成 |
 | 14.7 | **活跃画布持久化** — `activeViewId` 写入 `workspace.json`，重启后恢复到上次使用的画布 | 低     | ✅ 已完成 |
 | 14.8 | **Asset / Link 多模态节点** — 本地文件、视频/音频/文本/压缩包预览、链接创建与 unfurl、Document 类型视图接入 | 高 | ✅ MVP 已完成 / ⚠️ PDF 页级预览、视频转码、网页剪藏待补 |
 | 14.9 | **标签管理** — TagEditor、TagSidebar、node-metadata.json、标签筛选与重命名/删除 | 中 | ✅ 已完成 |
 | 14.10 | **Recording 录音节点** — 麦克风录制、实时 waveform、附件保存、画布播放、Folder/Group 收纳 | 中 | ✅ 已完成 |
 | 14.11 | **Markdown 文件导入** — 多文件选择导入为新 Note，创建卡片并保留 frontmatter / 正文 | 低 | ✅ 已完成 |
-| 14.12 | **Widget 系统** — `type: widget` + checklist/pomodoro/reminder；独立 JSON；懒迁移 checklist；per-widget undo；Folder 收纳 | 高 | ✅ MVP 已完成 |
+| 14.12 | **Widget 系统** — `type: widget` + checklist/pomodoro/reminder；独立 JSON；per-widget undo；Folder 收纳。⚠️ legacy checklist 卡片懒迁移未实现，双格式并存（TODO-29） | 高 | ✅ MVP 已完成 |
 | 14.13 | **Folder waterfall 展开** — bottom-up 多列排布、动态封面缩略图、展开层子项右键 | 中 | ✅ 已完成 |
 | 14.14 | **FocusedView morph + 共享 loading** — 从源卡片 scale 展开；`NoteEditorLoading` | 中 | ✅ 已完成 |
 | 14.15 | **画布 viewport chrome** — minimap + zoom 合一面板；`canvasShowMinimap` 设置 | 低 | ✅ 已完成 |
@@ -989,8 +994,8 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | 24  | **高级视频/PDF 卡片**    | Asset MVP 已支持大文件原生导入、视频/音频播放、音频 waveform、视频 poster 和基础 PDF 预览；后续补 PDF 页级缩略图/导航/批注、视频转码/封面编辑                                                                                                                                 |
 | 25  | **富 Web Clips**         | Link MVP 已支持 URL 节点、基础 unfurl、favicon/image 元数据与富媒体卡片样式；后续补网页剪藏、离线快照、Magazine 风格预览                                                                                                                                 |
 | 26  | **全局快捷键快速输入**   | Quick Input from anywhere                                                                                                                                                                        |
-| 27  | **AI 辅助**              | ✅ 基础架构已实现 — 本地 HTTP 服务器支持 AI 流式传输，集成 Gemini 等 AI 能力进行内容总结、生成和关联推荐。后续需完善 UI 入口和用户体验。                                                                 |
-| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片（计数包含 `card`、`sticky` 与 `topic`，共用同一额度）；该门禁在新建、主题提交、粘贴、复制选中、JSON 画布导入与插件投放各入口一致生效，不因某个入口漏判形成隐式豁免。激活用户无限制。后续需完善支付集成和订阅管理。                                                                 |
+| 27  | **AI 辅助**              | ✅ 已实现 — 本地 HTTP `/ai/chat` 流式传输（`src/bun/ai.ts`），provider 为 anthropic / openai / openai-compatible custom / ollama（**无 Gemini 直连**，可经 openai-compatible baseUrl 间接接入）；UI 已完整：选区 AI 工具栏（`SelectionAIToolbar`）、`AISummaryPanel`、设置页 AI 面板与凭据管理。后续是按实际使用反馈迭代体验，不是补入口。                                                                 |
+| 28  | **商业化**               | ✅ 许可证管理系统已实现 — 硬件绑定 + 本地加密存储，后端 API 支持签发/激活/验证/撤销，未激活用户限制 100 张卡片（计数包含 `card`、`sticky` 与 `topic`，共用同一额度）；该门禁在新建、主题提交、粘贴、复制选中、JSON 画布导入与插件投放各入口一致生效，不因某个入口漏判形成隐式豁免。激活用户无限制。⚠️ 已知缺口：Markdown 文件导入路径（`lib/importMarkdownCards.ts`）未接配额检查，AI 批量路径（`lib/ai/applyAIActions.ts`）重复定义限额且漏算 `topic`——见 TODO-27 / TODO-28。后续需完善支付集成和订阅管理（仓库内无任何支付代码）。                                                                 |
 | 29  | **双向链接 (Backlinks)** | 支持 `[[note]]` 语法在笔记正文中引用其他笔记，自动建立反向链接索引。与 Edge 系统互补——Edge 是画布上显式的视觉关系，Backlink 是内容层隐式的语义关系。侧边栏或聚焦模式底部展示"被哪些笔记引用"列表 |
 
 ---
@@ -1022,34 +1027,29 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 
 | ID | 事项 | 目标 | 优先级 |
 | --- | --- | --- | --- |
-| TODO-1 | **补齐 Folder 搜索与打开** | Widget / Extension 后端引用收集已有；补齐 Note 等缺口，并逐类型验证前端 fallback、搜索命中、进入 Folder 和打开子内容，不能只定位封面。 | D1-2 自动化实现、D1-4 位置×类型矩阵及 2026-09-07 桌面走查完成；后续新增类型沿用矩阵 |
-| TODO-2 | **明确无引用内容入口** | 解决 OD-2，为无 manifest 引用的内容定义正式搜索或文库找回入口，并区分浏览、恢复与永久清理。 | D1-3 已决策并实现 Note Library 清单及稳定 note 恢复；D1-4 自动化 + 2026-09-07 桌面放回/重启验收完成 |
-| TODO-3 | **Asset 大文件导入** | ✅ 已实现 — 文件选择优先 native path copy，拖拽/粘贴走本地 HTTP 流式上传；25 MB data URL 限制仅保留为 legacy fallback。 | ~~P1~~ ✅ |
-| TODO-4 | **Link 富预览与安全硬化** | ✅ 已实现 — UI 展示 favicon/image preview；unfurl 已增加 DNS 解析后的私网 IP 防护，降低 DNS rebinding 风险。 | ~~P1~~ ✅ |
 | TODO-5 | **PDF 页级预览** | 基础内嵌 PDF 预览已实现；后续补页面缩略图、页码导航、批注和更稳定的失败兜底。 | P2 |
-| TODO-6 | **模板库 P5 收尾** | 补模板数量，接入 thumbnail，删除 `preview-test` 路由，决定从模板创建的画布命名规则，考虑 URL query 同步与 i18n metadata。 | P1 |
 | TODO-7 | **Multi-workspace** | 欢迎页、创建/打开/切换 workspace、recent list、app config、settings 迁移策略。 | P2 |
-| TODO-8 | **独立 saveNote debounce** | ✅ 已实现 — BlockNote 走 `useBlockNoteSaver` + `rpcSaveBlockNote` 独立 debounce；legacy Markdown 走 `useNoteSaver` + `rpcSaveNote`，均支持 blur / hidden / unmount flush。 | ~~P2~~ ✅ |
-| TODO-9 | **ContextMenu 多选批量操作** | ✅ 已实现 — 多选右键菜单支持 Duplicate、Group、Change Color、Edit Tags、Lock/Unlock、Move to View、Copy、Delete，并保留选中集合内部连线。来源：原 UX 审计 8.2.1。 | ~~P2~~ ✅ |
-| TODO-10 | **FocusedView 遮罩关闭保存确认** | 检测 BlockNote 是否有未 flush 的修改，有则弹出 "Discard changes?" 确认。当前点击黑色遮罩直接 `onClose()`（[FocusedView.tsx#L291](./../src/mainview/components/canvas/FocusedView.tsx)），debounce 未到期的编辑可能丢失。来源：原 UX 审计 8.5.3。 | P2 |
+| TODO-10 | **FocusedView 遮罩关闭保存确认** | 点击遮罩仍直接 `finishClose()`（FocusedView.tsx `handleClose`），无 "Discard changes?" 对话框；但 `useBlockNoteSaver` 已在 unmount / blur / `visibilitychange` 时 flush 未保存编辑，实际丢数据风险已大幅降低，仅剩冲突状态 toast 提示。是否还要显式确认框可重新评估。 | ~~P2~~ P3（已缓解） |
 | TODO-12 | **FocusedView 卡片位置面包屑** | 在返回按钮旁显示 `{FolderName} > {CardTitle}`，让聚焦中的卡片有归属感（尤其是 Folder child）。来源：原 UX 审计 8.5.2。 | P3 |
-| TODO-16b | **BlockNote 选区字数统计** | FocusedView 当前已展示整篇正文字数/字符数（基于 markdown 文本剥离格式后统计）。后续可在 BlockNote 选区变化时给出选中文本的字数统计。来源：原 UX 审计 8.1。 | P3 |
+| TODO-16b | **BlockNote 选区字数统计** | ⚠️ 回退：PRD 此前记录的整篇字数/字符数统计已不在代码中（components/editor/ 无任何字数统计代码，仅 FocusedView.tsx 顶部留有一行悬空注释），需先恢复整篇统计，再做选区统计。来源：原 UX 审计 8.1。 | P3 |
 | TODO-17 | **BlockNote 查找替换** | 当前 BlockNote 无内置 find/replace；接入或自研一个轻量查找替换面板，至少支持 `Cmd+F` 高亮匹配。来源：原 UX 审计 8.1。 | P3 |
 | TODO-23 | **Markdown 批量导出 UI 入口** | 设置页添加「导出所有笔记为 Markdown…」按钮；画布多选后提供「批量导出选中」入口。RPC `exportNotesMarkdown` 已支持 `scope: 'all' \| 'selected'`，只缺前端入口；当前 Settings 已是主窗口内 Dialog，可直接复用现有 renderer/RPC 通道。 | P2 |
 | TODO-24 | **显式「从 Markdown 重新导入」** | 当前已支持选择多个外部 `.md` 文件导入为新 Note；仍缺"覆盖当前笔记内容"路径。新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。 | P1 |
 | TODO-25 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
-| TODO-26 | **Markdown 预览附件渲染** | 预览 HTML 中附件真正渲染（注册自定义 scheme 或懒解析），当前用稳定占位 badge 未渲染真实图片。 | P3 |
-| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（当前约 2841 行），每加一个功能都要改这个文件。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`、`handlers/assets.ts`。来源：原架构审计。 | P2 |
-| TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（当前约 1584 行）。建议继续提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit`、`useCanvasSearchNavigation` 等自定义 hooks。来源：原架构审计。 | P2 |
-| TODO-20 | **深色主题覆盖不完整** | 近期 design tokens / accent 色已有改善，但 Group label、部分 placeholder、媒体卡片 hover 信息等仍需逐组件审查深色主题适配。来源：原架构审计。 | P2 |
-| TODO-22 | **Onboarding 引导流程** | 首次打开应用 seed 了 `quick-start` 模板，但没有任何浮层引导。建议在首次启动时显示 3-4 步引导浮层：1.「拖拽平移画布」2.「点击卡片打开，框选/修饰键选择」3.「右键或 + 创建新内容」4.「Cmd+K 搜索」。来源：原架构审计。 | P2 |
+| TODO-26 | **Markdown 预览附件渲染** | 部分完成 — 预览 HTML 中首张安全图片已渲染为真实 `<img>`（`src/bun/blocknotePreview.ts`），renderer 经 `hydratePreviewImageSources.ts` 将附件路径水合为 data URL；超出预算的图片折叠为 "+N images"。仍为占位 badge 的是视频 / 音频 / 文件附件（`renderMediaPlaceholder`）。 | P3 |
+| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（**当前约 3975 行**，业务逻辑已拆到 notes.ts / widgets.ts / templates.ts / ai*.ts 等兄弟模块，但注册仍单体）。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`、`handlers/assets.ts`。来源：原架构审计。 | P2 |
+| TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（**当前约 2462 行**）。建议继续提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit`、`useCanvasSearchNavigation` 等自定义 hooks。来源：原架构审计。 | P2 |
+| TODO-20 | **深色主题覆盖不完整** | 已定位的具体缺口：`GroupNode.tsx` 全文件无 `dark:` 变体（label `text-gray-600`、grip `text-gray-300`）；`ImageNode.tsx` 聚焦说明/空态 `text-zinc-500/600`、`text-gray-300/400` 无 dark 变体；`WidgetNode.tsx` placeholder 无 dark 变体。媒体 overlay 的固定白字为有意设计。来源：原架构审计 + 代码走查。 | P2 |
+| TODO-27 | **Markdown 导入绕过免费配额** | `lib/importMarkdownCards.ts` 与 ViewSwitcher 的 .md 导入路径完全未接 `nodeQuota` 检查，未激活用户可经导入突破 100 张上限。需在导入入口按拟创建节点数预检并提示激活。来源：代码走查（对照 PRD #28 的「各入口一致生效」要求）。 | P1 |
+| TODO-28 | **AI 批量路径配额与主逻辑不一致** | `lib/ai/applyAIActions.ts` 自定义 `CARD_LIMIT = 100` 且只计 `card` / `sticky`，漏算 `topic`，未复用 `nodeQuota.ts`。应改为引用统一配额模块。来源：代码走查。 | P1 |
+| TODO-29 | **legacy checklist 迁移路径缺失** | 代码中没有 legacy `displayHint: 'checklist'` 卡片 → widget 的迁移：legacy 卡片经 `CardNode` 渲染、widget 经 extension 宿主，双格式并存（`displayHintToType` 仍 round-trip），§2.2 / §5.4 已按此现状描述。需决策：实现 `loadCanvas` 懒迁移收敛为单格式，或正式接受双格式长期并存。来源：代码走查。 | P2 |
 
 ### 8.4 已落地的关键决策映射（供回查）
 
 | 决策摘要 | 落地位置 |
 | --- | --- |
 | Folder Card 子节点强制 `noteId + note record`（M5） | §5.1、§5.6、§5.10 |
-| Widget 独立于 Card；checklist 懒迁移；内容不进 manifest | §2.2、§5.1、§5.3、§5.10；[tech-spec](./tech-spec.md) §3.3 / §4.2.1 / §7 |
+| Widget 独立于 Card；legacy checklist 卡片未迁移、双格式并存（TODO-29）；widget 内容不进 manifest | §2.2、§5.1、§5.3、§5.10；[tech-spec](./tech-spec.md) §3.3 / §4.2.1 / §7 |
 | Folder 展开用 waterfall，不持久化子坐标 | §2.5.2、§5.10 |
 | FocusedView 从源卡片 morph | §2.3 |
 | canvasShowMinimap + cream 背景 | §5.2 |

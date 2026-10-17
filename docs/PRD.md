@@ -6,7 +6,7 @@
 >
 > **插件模型**：已启用的插件是高信任本机扩展，与宿主前端处于同一个 JavaScript realm。宿主不提供权限沙箱，也不按 `capabilities` 拦截调用。网络隔离容器在目标 WebView 上不可行，QuickJS 命令运行时已从仓库删除，不计入现行验收。
 >
-> **文档状态**：D0–D2 已完成自动回归与桌面验收。D3 仍是条件任务。Topic 的代码与相邻测试已落地，桌面走查还没有记录。公开插件运行时已在仓库中实现，装载、四类贡献、签名更新和安全模式有 macOS arm64 探针；npm 发布、文档站上线、样例分发、macOS x64 实跑和外部作者试用未完成，首版不得标为已验收。§2.0 记录与代码核对过的边界，§7.1 是当前未完成项。历史完成标记里 2026-06 至 2026-07 的条目不代表迁移后的行为都重新验收过。
+> **文档状态**：D0–D2 已完成自动回归与桌面验收。D3 仍是条件任务。Topic 的代码与相邻测试已落地，桌面走查还没有记录。公开插件运行时已在仓库中实现，装载、四类贡献、签名更新和安全模式有 macOS arm64 探针；发布与分发的仓库内机器也已就位——npm 发布工作流（`.github/workflows/publish-sdk.yml`，`sdk-v*` tag 触发）、签名样例构建/上传脚本（`scripts/upload-plugin-examples.ts`）、docs 站内容（`packages/plugin-docs-site/`，成品在外部仓库分支经 Cloudflare Workers 部署）和 macOS x64 CI 矩阵（`.github/workflows/plugin-platform-regression.yml`，含 `macos-15-intel`，手动触发）。尚未发生的是实际执行与证据：`sdk-v*` 发布、真实域名上线、样例包公开分发与非 loopback 安装更新、一次有记录的 x64 回归、外部作者试用；完成前首版不得标为已验收。§2.0 记录与代码核对过的边界，§7.1 是当前未完成项。历史完成标记里 2026-06 至 2026-07 的条目不代表迁移后的行为都重新验收过。
 
 ## 1. 产品概述
 
@@ -63,7 +63,7 @@
 | 核查项 | 当前代码事实 | 产品处理 |
 | --- | --- | --- |
 | 内置类型 | [registerBuiltins](../src/mainview/extensions/registerBuiltins.ts) 注册 Checklist / Pomodoro / Reminder / Image / File / Link / Recording，Counter 仅开发环境注册 | 用用户可见类型描述功能，不把 React Flow 的 `node.type` 当产品分类 |
-| 公开插件 | `src/bun/plugins/`、`src/mainview/plugins/`、`src/shared/plugins/` 与 `packages/plugin-sdk` 是高信任模型：`manifest.json` 且 `manifestVersion: 2`、同 realm 前端、import map、宿主 files / net / content / canvas / importer 服务、Ed25519 TOFU 更新、启动安全模式。仓库内没有 QuickJS。v1 包拒绝加载。`capabilities` 只用于展示 | 产品行为见 §2.14，运行时与版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。macOS arm64 探针已覆盖装载到恢复；§7.1 的公开验收未完成，不得把首版标为已验收 |
+| 公开插件 | `src/bun/plugins/`、`src/mainview/plugins/`、`src/shared/plugins/` 与 `packages/plugin-sdk` 是高信任模型：`manifest.json` 且 `manifestVersion: 2`、同 realm 前端、import map、宿主 files / net / content / canvas / importer 服务、Ed25519 TOFU 更新、启动安全模式。仓库内没有 QuickJS。v1 包拒绝加载。`capabilities` 只用于展示 | 产品行为见 §2.14，运行时与版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。macOS arm64 探针已覆盖装载到恢复，发布工作流、签名样例上传脚本与 x64 CI 矩阵已就位；§7.1 的公开验收未执行完成，不得把首版标为已验收 |
 | 打开与容器能力 | [Canvas Type 契约](../src/mainview/extensions/types.ts) 声明 `openBehavior`、Group/Folder 能力、详情布局、通用交互与类型菜单 | 创建、右键、聚焦、文库等入口必须使用同一能力规则 |
 | 媒体与链接 | 当前内置 Image / File / Link 声明详情视图，Recording 声明画布内操作；四者均声明可进入 Group / Folder | 迁移后继续验收预览、媒体操作、收纳、搜索、导出和错误回退，不只验收能显示 |
 | Productivity | Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可进入 Folder，见 [Checklist](../src/mainview/extensions/builtin/productivity/checklist.tsx)、[Pomodoro](../src/mainview/extensions/builtin/productivity/pomodoro.tsx)、[Reminder](../src/mainview/extensions/builtin/productivity/reminder.tsx) | OD-6 已冻结并完成 2026-09-07 桌面验收：Checklist 保留完整详情编辑，Pomodoro / Reminder 保持画布内操作；禁止新放入 Folder，旧 Folder 内条目可预览、搜索、打开并无损取回 |
@@ -395,13 +395,13 @@ SDK 覆盖内容、画布、选区、设置、事件、文件选择与读写、�
 6. 一个组合插件可复用命令、菜单与面板；停用后无残留注册、订阅或任务。
 7. 更新、作者密钥变更、坏包、运行故障与迁移失败不会静默覆盖已有数据，恢复过程有桌面操作记录；旧 v1 包被拒绝且数据保留。
 
-代码与 macOS arm64 探针已经覆盖第 2–7 项的工程路径，以及第 1 项里的脚手架、签名样例脚本和公共 HTTPS 探针。下面五件事还没有发生，完成前不得把公开插件首版标为已验收：
+代码与 macOS arm64 探针已经覆盖第 2–7 项的工程路径，以及第 1 项里的脚手架、签名样例脚本和公共 HTTPS 探针。下面五件事还没有发生，完成前不得把公开插件首版标为已验收（括号内为已就位的机器，缺的是执行与证据）：
 
-1. 发布 `@ghostboard/sdk` 与 `create-ghostboard-plugin`。
-2. 把插件文档站部署到真实域名。
-3. 把签名样例包上传到公开地址，并在不走 loopback 的前提下完成安装与更新。
-4. 在 macOS x64 上跑通平台回归。
-5. 至少两名仓库外作者按四类模板各自做出可用插件。
+1. 发布 `@ghostboard/sdk` 与 `create-ghostboard-plugin`。（`publish-sdk.yml` 全流程就绪，`@ghostboard/sdk@0.1.1` 与 `create-ghostboard-plugin@0.1.0` 均带 `publishConfig.access: public`；尚未打 `sdk-v*` tag 实际发布。）
+2. 把插件文档站部署到真实域名。（内容已完成：`packages/plugin-docs-site/` 为 authoring 副本，源在外部仓库 `react-starter-kit` 的 `feat/plugin-docs-site` 分支，经 Cloudflare Workers 部署；真实域名上线状态未在本仓库记录。）
+3. 把签名样例包上传到公开地址，并在不走 loopback 的前提下完成安装与更新。（`scripts/upload-plugin-examples.ts` 构建、Ed25519 签名并上传到 `https://dl.ghostboard.app/plugins/examples`，T5 探针默认走该公共地址；实际上传与安装/更新未执行。）
+4. 在 macOS x64 上跑通平台回归。（`plugin-platform-regression.yml` 矩阵已含真 Intel 的 `macos-15-intel`；仅手动触发，无已完成运行记录。）
+5. 至少两名仓库外作者按四类模板各自做出可用插件。（T5 外部作者试用协议与证据模板已写好，未执行。）
 
 Windows 与 Linux 不支持插件系统。装载、包格式、签名和版本表见 [tech-spec §13](./tech-spec.md#13-高信任插件运行时)。每插件一个 Bun Worker 的后端入口没有实现，也不在首版。
 
@@ -899,7 +899,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 
 **基础流程不作为前置条件的事项**：应用发布签名、公测、支付、定价、官网、获客指标和垂直用户市场选择。插件手动安装允许未签名包，但未签名包不接受自动更新；已签名包的更新必须通过作者密钥校验，这属于 §2.14.4 的正式要求，不能据此豁免。
 
-**公开插件**：装载（本地 HTTP + `import()`、import map、独立 root、宿主 `files` / `net`）、命令与面板、内容事务与自定义卡片、导入器、Ed25519 签名更新和安全模式都已在代码中，并有 `bun run test:plugin-t0` 至 `test:plugin-t4` 的 macOS arm64 发行包探针。QuickJS 运行时已删除。尚未完成的是 §2.14.6 的五项公开验收。每插件 Bun Worker 没有实现。SDK 写操作绑定工作区，切换后不得写到另一个工作区。D3 只在基础流程出现新阻断时启动，不挡住已经纳入范围的插件收尾。
+**公开插件**：装载（本地 HTTP + `import()`、import map、独立 root、宿主 `files` / `net`）、命令与面板、内容事务与自定义卡片、导入器、Ed25519 签名更新和安全模式都已在代码中，并有 `bun run test:plugin-t0` 至 `test:plugin-t5` 的发行包探针（t5 走公共 HTTPS 安装/更新）。QuickJS 运行时已删除。npm 发布工作流、签名样例上传脚本、docs 站内容与 x64 CI 矩阵均已在仓库就位；尚未完成的是 §2.14.6 五项公开验收的实际执行与证据。每插件 Bun Worker 没有实现。SDK 写操作绑定工作区，切换后不得写到另一个工作区。D3 只在基础流程出现新阻断时启动，不挡住已经纳入范围的插件收尾。
 
 ### 7.2 开发计划与任务索引
 

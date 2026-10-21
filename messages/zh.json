@@ -205,6 +205,7 @@
   "toast_json_exported": "JSON 已导出。",
   "toast_asset_file_unsaved": "文件尚未保存。",
   "toast_asset_file_open_failed": "无法打开文件。",
+  "toast_asset_file_open_blocked": "出于安全考虑，GhostBoard 不会直接打开可执行文件或脚本。如果你信任该文件，请使用“在访达中显示”。",
   "toast_image_thumbnail_failed": "无法保存图片缩略图。",
   "toast_recording_save_failed": "无法保存录音。",
   "menu_edit_folder_info": "编辑信息",

@@ -205,6 +205,7 @@
   "toast_json_exported": "JSON exported.",
   "toast_asset_file_unsaved": "File has not been saved yet.",
   "toast_asset_file_open_failed": "File could not be opened.",
+  "toast_asset_file_open_blocked": "GhostBoard won't open executable or script files directly. Use “Reveal in Finder” if you trust this file.",
   "toast_image_thumbnail_failed": "Could not save image thumbnail.",
   "toast_recording_save_failed": "Could not save the recording.",
   "menu_edit_folder_info": "Edit Info",

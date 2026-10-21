@@ -58,6 +58,7 @@ import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
   loadAttachment as loadWorkspaceAttachment,
+  type OpenAttachmentResult,
   openAttachment as openWorkspaceAttachment,
   revealAttachment as revealWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
@@ -1140,7 +1141,7 @@ interface CanvasRPC {
       };
       openAttachment: {
         params: { filePath: string };
-        response: { success: boolean };
+        response: OpenAttachmentResult;
       };
       revealAttachment: {
         params: { filePath: string };

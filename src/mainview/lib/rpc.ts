@@ -711,8 +711,8 @@ export async function uploadAttachmentBlob(
   if (!endpoint?.baseUrl) {
     throw new Error('Local attachment upload bridge is unavailable.');
   }
+  // The renderer token travels only in the Authorization header.
   const url = new URL(`${endpoint.baseUrl}/attachment/upload`);
-  url.searchParams.set('token', endpoint.token);
   url.searchParams.set('fileName', options.fileName);
   url.searchParams.set('mimeType', options.mimeType);
   url.searchParams.set('kind', options.kind);
@@ -816,10 +816,15 @@ export interface UnfurlLinkResult {
 // occasionally dropping responses for subsequent unfurls when Vite HMR caused
 // webview reloads, leaving the promise dangling forever. HTTP is request-scoped
 // and immune to that class of socket-routing issue.
-let cachedLocalEndpoint: { baseUrl: string; token: string } | null = null;
+let cachedLocalEndpoint: {
+  baseUrl: string;
+  mediaToken: string;
+  token: string;
+} | null = null;
 
 async function getLocalHttpEndpoint(): Promise<{
   baseUrl: string;
+  mediaToken: string;
   token: string;
 } | null> {
   if (cachedLocalEndpoint) {
@@ -829,7 +834,11 @@ async function getLocalHttpEndpoint(): Promise<{
   if (!endpoint?.baseUrl) {
     return null;
   }
-  cachedLocalEndpoint = { baseUrl: endpoint.baseUrl, token: endpoint.token };
+  cachedLocalEndpoint = {
+    baseUrl: endpoint.baseUrl,
+    mediaToken: endpoint.mediaToken,
+    token: endpoint.token,
+  };
   return cachedLocalEndpoint;
 }
 
@@ -1211,12 +1220,14 @@ export async function rpcActivateLicense(
 
 /**
  * Fetch the localhost HTTP endpoint started by the Bun process. Returns the
- * base URL + bearer token used by local HTTP routes, plus whether an AI
- * provider is currently configured. Null outside Electrobun.
+ * base URL, the renderer bearer token (send it only as an `Authorization`
+ * header), the read-only media token for `<video>`/iframe URLs, and whether
+ * an AI provider is currently configured. Null outside Electrobun.
  */
 export async function rpcGetLocalHttpEndpoint(): Promise<{
   aiEnabled: boolean;
   baseUrl: string;
+  mediaToken: string;
   token: string;
 } | null> {
   const eb = await getElectrobun();
@@ -1228,8 +1239,8 @@ export async function rpcGetLocalHttpEndpoint(): Promise<{
 
 /**
  * Build a localhost streaming URL for a workspace attachment. Video and audio
- * players cannot attach Authorization headers, so the token is embedded in the
- * query string. Falls back to null when the local HTTP bridge is unavailable.
+ * players cannot attach Authorization headers, so the read-only media token
+ * (never the renderer token) is embedded in the query string. Falls back to null when the local HTTP bridge is unavailable.
  */
 export async function resolveAttachmentStreamUrl(
   attachmentFile: string
@@ -1240,7 +1251,7 @@ export async function resolveAttachmentStreamUrl(
   }
   const url = new URL(`${endpoint.baseUrl}/attachment`);
   url.searchParams.set('path', attachmentFile);
-  url.searchParams.set('token', endpoint.token);
+  url.searchParams.set('token', endpoint.mediaToken);
   return url.toString();
 }
 
@@ -1255,7 +1266,7 @@ export async function resolveYouTubePlayerUrl(
   const url = new URL(`${endpoint.baseUrl}/youtube`);
   url.searchParams.set('videoId', video.videoId);
   url.searchParams.set('start', String(video.startSeconds));
-  url.searchParams.set('token', endpoint.token);
+  url.searchParams.set('token', endpoint.mediaToken);
   return url.toString();
 }
 

@@ -46,7 +46,7 @@ export interface PluginFilesTransport extends PluginFileDataTransport {
   release(request: PluginFileReleaseRequest): Promise<{ success: boolean }>;
 }
 
-const defaultTransport: PluginFilesTransport = {
+export const defaultPluginFilesTransport: PluginFilesTransport = {
   fetch: globalThis.fetch.bind(globalThis),
   getEndpoint: rpcGetLocalHttpEndpoint,
   list: rpcListPluginDirectory,
@@ -149,7 +149,7 @@ export function normalizePluginFileFilters(
 
 export function createPluginFiles(
   context: PluginFileContext & { signal: AbortSignal },
-  transport: PluginFilesTransport = defaultTransport
+  transport: PluginFilesTransport = defaultPluginFilesTransport
 ): PluginFiles {
   const handles = new Map<string, PluginFileSystemHandle>();
   const release = (ids: readonly string[]) => {

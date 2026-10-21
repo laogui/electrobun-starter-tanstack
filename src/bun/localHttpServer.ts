@@ -1,11 +1,10 @@
-import { randomUUID } from 'node:crypto';
-
 import { type AIServerConfig, handleAIChat } from './ai';
 import {
   assertWorkspaceAttachmentPath,
   saveAttachmentStream,
 } from './attachments';
 import { unfurlLink } from './linkPreview';
+import { LocalHttpCredentials, type LocalHttpPrincipal } from './localHttpAuth';
 import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
 import type { PluginFileStore } from './plugins/files';
 import type { PluginHostController } from './plugins/hostController';
@@ -17,11 +16,22 @@ import { serveYouTubePlayer } from './youtubePlayer';
 
 export interface LocalHttpServerHandle {
   baseUrl: string;
+  /**
+   * Read-only token that may travel in a URL query (`<video src>`, iframe
+   * `src`). Only accepted for GET/HEAD on `/attachment` and `/youtube`.
+   */
+  mediaToken: string;
   stop: () => void;
+  /** Main renderer token. Accepted only as an `Authorization` header. */
   token: string;
 }
 
 export interface LocalHttpServerOptions {
+  /**
+   * Origins allowed to read cross-origin responses. Defaults to the packaged
+   * renderer (`views://`) and the Vite dev server on port 5173.
+   */
+  allowedOrigins?: readonly string[];
   getAIConfig: () => AIServerConfig | null;
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
@@ -31,18 +41,75 @@ export interface LocalHttpServerOptions {
   pluginStorage?: PluginStorageHost;
 }
 
-// The renderer webview (http://localhost:5173 in dev, views:// in prod) calls
-// this 127.0.0.1 endpoint cross-origin with an Authorization header, which
-// triggers a CORS preflight. Auth is enforced by the per-launch bearer token,
-// so a wildcard origin is safe; without these headers the webview blocks the
-// request before it ever reaches the local route handler.
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+// The renderer webview (http://localhost:5173 in dev, views://mainview in
+// prod) calls this 127.0.0.1 endpoint cross-origin with an Authorization
+// header, which triggers a CORS preflight; plugin modules are also loaded
+// cross-origin with `import()`. Only the app's own origins are reflected.
+// `null` is kept because WebKit may report an opaque origin for custom
+// schemes; every non-asset route still requires a token, so CORS is a second
+// line of defence rather than the authentication boundary.
+export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = Object.freeze([
+  'views://mainview',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'null',
+]);
+
+const CORS_BASE_HEADERS = {
   'Access-Control-Allow-Methods': 'DELETE, GET, HEAD, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Range',
   'Access-Control-Expose-Headers':
     'Content-Length, Content-Range, Accept-Ranges',
 } as const;
+
+function corsHeadersFor(
+  origin: string | null,
+  allowed: ReadonlySet<string>
+): Record<string, string> {
+  if (origin === null || !allowed.has(origin)) {
+    return { Vary: 'Origin' };
+  }
+  return {
+    ...CORS_BASE_HEADERS,
+    'Access-Control-Allow-Origin': origin,
+    Vary: 'Origin',
+  };
+}
+
+// Routes a plugin-scoped token may call. Everything else is renderer-only.
+const PLUGIN_DATA_ROUTES = new Set(['/plugins/storage', '/plugins/content']);
+const PLUGIN_FILES_PREFIX = '/plugins/files/';
+
+function isPluginDataRoute(pathname: string): boolean {
+  return (
+    PLUGIN_DATA_ROUTES.has(pathname) || pathname.startsWith(PLUGIN_FILES_PREFIX)
+  );
+}
+
+function isMediaRoute(request: Request, pathname: string): boolean {
+  return (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    (pathname === '/attachment' || pathname === '/youtube')
+  );
+}
+
+/** Whether `principal` may call `pathname` at all (before per-route checks). */
+export function isRouteAllowed(
+  principal: LocalHttpPrincipal,
+  request: Request,
+  pathname: string
+): boolean {
+  switch (principal.kind) {
+    case 'renderer':
+      return true;
+    case 'media':
+      return isMediaRoute(request, pathname);
+    case 'plugin':
+      return isPluginDataRoute(pathname);
+    default:
+      return false;
+  }
+}
 
 const BYTE_RANGE_RE = /^bytes=(?:(\d+)-(\d*)|-(\d+))$/i;
 const ATTACHMENT_KINDS = new Set(['audio', 'file', 'image', 'video']);
@@ -84,34 +151,22 @@ function parseByteRange(value: string, size: number): ByteRange | null {
   return { start, end: Math.min(requestedEnd, size - 1) };
 }
 
-function readRequestToken(
-  req: Request,
-  url: URL,
-  expectedToken: string
-): boolean {
-  const header = req.headers.get('authorization');
-  if (header === `Bearer ${expectedToken}`) {
-    return true;
-  }
-  const queryToken = url.searchParams.get('token');
-  return queryToken === expectedToken;
-}
-
 async function serveWorkspaceAttachment(
   req: Request,
   wsPath: string,
-  relativePath: string
+  relativePath: string,
+  cors: HeadersInit
 ): Promise<Response> {
   const { fullPath } = assertWorkspaceAttachmentPath(wsPath, relativePath);
   const file = Bun.file(fullPath);
   if (!(await file.exists())) {
-    return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+    return new Response('Not found', { status: 404, headers: cors });
   }
 
   const size = file.size;
   const mimeType = file.type || 'application/octet-stream';
   const baseHeaders = {
-    ...CORS_HEADERS,
+    ...cors,
     'Content-Type': mimeType,
     'Accept-Ranges': 'bytes',
   };
@@ -119,7 +174,7 @@ async function serveWorkspaceAttachment(
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method not allowed', {
       status: 405,
-      headers: CORS_HEADERS,
+      headers: cors,
     });
   }
 
@@ -170,14 +225,22 @@ async function serveWorkspaceAttachment(
  * Start a localhost-only HTTP endpoint for renderer calls that do not fit
  * Electrobun RPC well: streamed AI chat responses, request-scoped link
  * unfurls, and workspace attachment streaming for media playback. The random
- * port is bound to 127.0.0.1 and every route is gated by a per-launch bearer
- * token passed to the renderer through RPC.
+ * port is bound to 127.0.0.1. Credentials are minted per launch (see
+ * `LocalHttpCredentials`): the renderer token (header only, every route), a
+ * read-only media token (query allowed, `/attachment` + `/youtube`), an
+ * asset-only path token for plugin modules, and per-plugin host tokens that
+ * only reach that plugin's storage/content/files routes.
  */
 export function startLocalHttpServer(
   options: LocalHttpServerOptions
 ): LocalHttpServerHandle {
-  const token = randomUUID();
+  const credentials = new LocalHttpCredentials();
+  const token = credentials.rendererToken;
+  const allowedOrigins = new Set(
+    options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
+  );
   const t0 = createT0Host();
+  options.pluginRuntime?.bindCredentials(credentials);
 
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -185,56 +248,61 @@ export function startLocalHttpServer(
     idleTimeout: 120,
     fetch: async (req) => {
       const url = new URL(req.url);
+      const cors = corsHeadersFor(req.headers.get('origin'), allowedOrigins);
       if (req.method === 'OPTIONS') {
-        return new Response(null, { status: 204, headers: CORS_HEADERS });
+        return new Response(null, { status: 204, headers: cors });
       }
-      // `/plugins/<launch-token>/<plugin>/...` is also the static module
-      // namespace. Dispatch this reserved authenticated service prefix first
-      // so the asset router cannot mistake `files` for a launch token.
-      if (url.pathname.startsWith('/plugins/files/')) {
-        if (!readRequestToken(req, url, token)) {
-          return new Response('Unauthorized', {
-            status: 401,
-            headers: CORS_HEADERS,
-          });
-        }
-        return (
-          (await options.pluginFiles?.handle(req, CORS_HEADERS)) ??
-          new Response('Not found', { status: 404, headers: CORS_HEADERS })
-        );
-      }
+      // Static plugin modules: asset-only token in the path, no other
+      // credential, and nothing but files inside an active plugin mount.
       const pluginAsset = await servePluginAsset(
         req,
-        token,
+        credentials.assetToken,
         [
           ...(options.pluginRuntime?.getMounts() ?? []),
           ...(options.getPluginMounts?.() ?? []),
           ...(t0?.mounts ?? []),
         ],
-        CORS_HEADERS
+        cors
       );
       if (pluginAsset) {
         return pluginAsset;
       }
-      if (!readRequestToken(req, url, token)) {
-        return new Response('Unauthorized', {
-          status: 401,
-          headers: CORS_HEADERS,
-        });
+      const principal = credentials.authenticate(req, url);
+      if (!principal) {
+        return new Response('Unauthorized', { status: 401, headers: cors });
+      }
+      if (!isRouteAllowed(principal, req, url.pathname)) {
+        return new Response('Forbidden', { status: 403, headers: cors });
+      }
+      const scope =
+        principal.kind === 'plugin' ? { pluginId: principal.pluginId } : {};
+      if (url.pathname.startsWith(PLUGIN_FILES_PREFIX)) {
+        if (
+          scope.pluginId !== undefined &&
+          url.searchParams.get('pluginId') !== scope.pluginId
+        ) {
+          return new Response('Forbidden', { status: 403, headers: cors });
+        }
+        return (
+          (await options.pluginFiles?.handle(req, cors)) ??
+          new Response('Not found', { status: 404, headers: cors })
+        );
       }
       if (url.pathname === '/youtube') {
         return serveYouTubePlayer(req, url);
       }
       const contentResponse = await options.pluginContent?.handle(
         req,
-        CORS_HEADERS
+        cors,
+        scope
       );
       if (contentResponse) {
         return contentResponse;
       }
       const storageResponse = await options.pluginStorage?.handle(
         req,
-        CORS_HEADERS
+        cors,
+        scope
       );
       if (storageResponse) {
         return storageResponse;
@@ -242,12 +310,17 @@ export function startLocalHttpServer(
       const runtimeResponse = await options.pluginRuntime?.handle(
         req,
         token,
-        CORS_HEADERS
+        cors
       );
       if (runtimeResponse) {
         return runtimeResponse;
       }
-      const t0Response = await t0?.handle(req, token, CORS_HEADERS);
+      const t0Response = await t0?.handle(
+        req,
+        token,
+        cors,
+        credentials.assetToken
+      );
       if (t0Response) {
         return t0Response;
       }
@@ -258,17 +331,17 @@ export function startLocalHttpServer(
             'ghostboard-ai:configuration; AI not configured',
             {
               status: 503,
-              headers: CORS_HEADERS,
+              headers: cors,
             }
           );
         }
         try {
-          return await handleAIChat(req, config, CORS_HEADERS);
+          return await handleAIChat(req, config, cors);
         } catch (err) {
           console.error('[ai] chat request failed:', err);
           return new Response('ghostboard-ai:unknown', {
             status: 500,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
       }
@@ -277,17 +350,17 @@ export function startLocalHttpServer(
         if (!target) {
           return new Response('Missing url', {
             status: 400,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
         try {
           const result = await unfurlLink(target);
-          return Response.json(result, { headers: CORS_HEADERS });
+          return Response.json(result, { headers: cors });
         } catch (err) {
           console.error('[unfurl] request failed:', err);
           return new Response('Unfurl failed', {
             status: 500,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
       }
@@ -299,13 +372,13 @@ export function startLocalHttpServer(
         if (!(fileName && req.body)) {
           return new Response('Missing fileName or body', {
             status: 400,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
         if (!ATTACHMENT_KINDS.has(kind)) {
           return new Response('Invalid attachment kind', {
             status: 400,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
         try {
@@ -321,15 +394,12 @@ export function startLocalHttpServer(
             saved.filePath
           );
           const metadata = await generateFileMetadata(fullPath, mimeType);
-          return Response.json(
-            { ...saved, ...metadata },
-            { headers: CORS_HEADERS }
-          );
+          return Response.json({ ...saved, ...metadata }, { headers: cors });
         } catch (err) {
           console.error('[attachment] upload failed:', err);
           return new Response('Attachment upload failed', {
             status: 500,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
       }
@@ -338,30 +408,32 @@ export function startLocalHttpServer(
         if (!relativePath) {
           return new Response('Missing path', {
             status: 400,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
         try {
           return await serveWorkspaceAttachment(
             req,
             options.getWorkspacePath(),
-            relativePath
+            relativePath,
+            cors
           );
         } catch (err) {
           console.error('[attachment] stream failed:', err);
           return new Response('Attachment unavailable', {
             status: 400,
-            headers: CORS_HEADERS,
+            headers: cors,
           });
         }
       }
-      return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+      return new Response('Not found', { status: 404, headers: cors });
     },
   });
 
   const diagnostics = t0?.diagnose(`http://127.0.0.1:${server.port}`, token);
   return {
     baseUrl: `http://127.0.0.1:${server.port}`,
+    mediaToken: credentials.mediaToken,
     token,
     stop: () => {
       clearTimeout(diagnostics);

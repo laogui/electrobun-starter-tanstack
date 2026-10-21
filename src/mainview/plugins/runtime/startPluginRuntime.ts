@@ -29,7 +29,8 @@ function isRuntimeSnapshot(value: unknown): value is PluginRuntimeSnapshot {
         typeof plugin.version === 'string' &&
         typeof plugin.development === 'boolean' &&
         typeof plugin.generation === 'string' &&
-        typeof plugin.entryUrl === 'string'
+        typeof plugin.entryUrl === 'string' &&
+        (plugin.hostToken === undefined || typeof plugin.hostToken === 'string')
     ) &&
     snapshot.diagnostics.every(
       (diagnostic) =>

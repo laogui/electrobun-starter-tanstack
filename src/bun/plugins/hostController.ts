@@ -10,6 +10,7 @@ import type {
   PluginRuntimeDescriptor,
   PluginRuntimeSnapshot,
 } from '../../shared/plugins/runtime';
+import type { PluginHostCredentials } from '../localHttpAuth';
 import { type PluginDirectoryMount, pluginModulePath } from '../pluginAssets';
 import { readPluginContents } from './directoryContents';
 import { loadPluginDirectory } from './loadDirectory';
@@ -46,6 +47,7 @@ export class PluginHostController {
   private readonly latest = new Map<string, RuntimeGeneration>();
   private readonly reloads = new Set<string>();
   private mounts: readonly PluginDirectoryMount[] = [];
+  private credentials: PluginHostCredentials | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
 
@@ -63,9 +65,18 @@ export class PluginHostController {
     return this.mounts;
   }
 
+  /**
+   * Bind the local server's credentials. Descriptors then carry an asset-only
+   * module URL and a per-plugin host-service token instead of the renderer
+   * token, so plugin code never sees the renderer's credential in its URL.
+   */
+  bindCredentials(credentials: PluginHostCredentials): void {
+    this.credentials = credentials;
+  }
+
   async handle(
     request: Request,
-    token: string,
+    _rendererToken: string,
     corsHeaders: HeadersInit
   ): Promise<Response | null> {
     const url = new URL(request.url);
@@ -102,7 +113,7 @@ export class PluginHostController {
         if (method === 'POST') {
           return await this.reload(request, headers);
         }
-        const snapshot = await this.refresh(url.origin, token);
+        const snapshot = await this.refresh(url.origin);
         return Response.json(snapshot, { headers });
       });
     this.queue = operation;
@@ -128,6 +139,7 @@ export class PluginHostController {
     this.generations.clear();
     this.latest.clear();
     this.reloads.clear();
+    this.credentials?.revokeAllPlugins();
     this.mounts = [];
     await Promise.all(
       directories.map((directory) =>
@@ -137,6 +149,7 @@ export class PluginHostController {
   }
 
   private async remove(pluginId: string): Promise<void> {
+    this.credentials?.revokePlugin(pluginId);
     this.latest.delete(pluginId);
     this.reloads.delete(pluginId);
     const removed = [...this.generations.values()].filter(
@@ -299,12 +312,13 @@ export class PluginHostController {
   private descriptor(
     current: RuntimeGeneration,
     origin: string,
-    token: string
+    credentials: PluginHostCredentials
   ): PluginRuntimeDescriptor {
     return {
       development: current.development,
+      hostToken: credentials.pluginToken(current.mount.id),
       entryUrl: new URL(
-        `${pluginModulePath(token, current.mount)}${current.entry.split('/').map(encodeURIComponent).join('/')}`,
+        `${pluginModulePath(credentials.assetToken, current.mount)}${current.entry.split('/').map(encodeURIComponent).join('/')}`,
         origin
       ).href,
       generation: current.mount.generation,
@@ -314,10 +328,11 @@ export class PluginHostController {
     };
   }
 
-  private async refresh(
-    origin: string,
-    token: string
-  ): Promise<PluginRuntimeSnapshot> {
+  private async refresh(origin: string): Promise<PluginRuntimeSnapshot> {
+    const credentials = this.credentials;
+    if (!credentials) {
+      throw new Error('Plugin host credentials are not bound');
+    }
     const snapshot: PluginRuntimeSnapshot = {
       workspaceId: this.workspaceId,
       plugins: [],
@@ -363,7 +378,7 @@ export class PluginHostController {
         }
       }
       if (current) {
-        snapshot.plugins.push(this.descriptor(current, origin, token));
+        snapshot.plugins.push(this.descriptor(current, origin, credentials));
       }
     }
     return snapshot;

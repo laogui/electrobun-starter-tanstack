@@ -47,7 +47,11 @@ import {
   type SubmitReportResult,
 } from '../shared/support/reports';
 import { type AIServerConfig, testAIConnection, validateAIConfig } from './ai';
-import { loadAICredentials, saveAIApiKey } from './aicredentials';
+import {
+  loadAICredentials,
+  migrateLegacyAIApiKey,
+  saveAIApiKey,
+} from './aicredentials';
 import { runAITask } from './aiTasks';
 import { getAppChannel, getAppDataRoot } from './appPaths';
 import {
@@ -1947,9 +1951,11 @@ async function main() {
   // duration of the run; the secure file is only touched on read/write.
   cachedAIKeys = aiCredentials.providers ?? {};
   legacyEnvProvider = cachedSettings.aiProvider;
-  if (aiCredentials.apiKey && !cachedAIKeys[cachedSettings.aiProvider]) {
-    await saveAIApiKey(aiCredentials.apiKey, cachedSettings.aiProvider);
-    cachedAIKeys[cachedSettings.aiProvider] = aiCredentials.apiKey;
+  if (aiCredentials.apiKey) {
+    const migrated = await migrateLegacyAIApiKey(cachedSettings.aiProvider);
+    if (migrated) {
+      cachedAIKeys[cachedSettings.aiProvider] = migrated;
+    }
   }
   // Local HTTP endpoint for renderer calls that do not fit Electrobun RPC
   // well. The handle holds the localhost base URL + bearer token the renderer

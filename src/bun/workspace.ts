@@ -1,18 +1,26 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { rename } from 'node:fs/promises';
+import { readdir, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
+import { z } from 'zod';
 
 import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
 import { saveAttachment } from './attachments';
 import { createExtensionInstance } from './extensions/instanceStore';
 import type { CanvasManifest } from './manifest';
-import { resolveWorkspaceManifestPath, saveManifest } from './manifest';
+import {
+  manifestBackupViewFile,
+  resolveWorkspaceManifestPath,
+  saveManifest,
+} from './manifest';
 
 import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
 import { createNote, saveNote } from './notes';
+import { rotateBackup } from './persistence/backupFile';
+import { readJsonOrEmpty } from './persistence/corruptFile';
+import { withFileQueue } from './persistence/fileQueue';
 import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
 import { saveWidget } from './widgets';
@@ -104,14 +112,18 @@ export function initWorkspace(workspacePath?: string): string {
  * → Blank Canvas" creations leave manifests untouched.
  */
 export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
-  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
-  if (existsSync(configPath)) {
+  const configPath = workspaceConfigPath(wsPath);
+  // The default workspace config must be written even when template seeding is disabled.
+  const created = await withWorkspaceConfig(wsPath, async () => {
+    if (existsSync(configPath)) {
+      return false;
+    }
+    await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
+    return true;
+  });
+  if (!created) {
     return;
   }
-
-  // The default workspace config must be written even when template seeding is disabled.
-  // react-doctor-disable-next-line react-doctor/async-defer-await
-  await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
 
   if (!FIRST_RUN_SEED_TEMPLATE_ID) {
     return;
@@ -128,59 +140,216 @@ export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
   }
 }
 
-/** Read workspace.json. Returns default config if not found. */
-export async function loadWorkspaceConfig(
+const workspaceViewEntrySchema = z
+  .object({
+    file: z.string().min(1),
+    id: z.string().min(1),
+    name: z.string(),
+  })
+  .loose();
+
+const workspaceConfigSchema = z
+  .object({
+    activeViewId: z.string(),
+    schema: z.literal('ghostboard-workspace/v1').optional(),
+    trash: z
+      .array(
+        z
+          .object({
+            deletedAt: z.number(),
+            trashFile: z.string().min(1),
+            trashId: z.string().min(1),
+            view: workspaceViewEntrySchema,
+          })
+          .loose()
+      )
+      .optional(),
+    views: z.array(workspaceViewEntrySchema),
+  })
+  .loose();
+
+/** Validate a parsed workspace.json value. Throws on any structural problem. */
+export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
+  const parsed = workspaceConfigSchema.parse(value);
+  return {
+    ...parsed,
+    schema: 'ghostboard-workspace/v1',
+  } as WorkspaceConfig;
+}
+
+function workspaceConfigPath(wsPath: string): string {
+  return join(wsPath, '.ghostboard', 'workspace.json');
+}
+
+function workspaceConfigBackupPath(wsPath: string): string {
+  return `${workspaceConfigPath(wsPath)}.bak`;
+}
+
+function cloneDefaultConfig(): WorkspaceConfig {
+  return structuredClone(DEFAULT_CONFIG);
+}
+
+const CANVAS_FILE_SUFFIX = '.canvas.json';
+
+/**
+ * Last-resort recovery: rebuild the view list from the manifests that are
+ * still in `.ghostboard/views/`. Names are lost (the id is used), but every
+ * canvas stays reachable instead of the workspace collapsing to one default.
+ */
+async function rebuildConfigFromViews(
+  wsPath: string
+): Promise<WorkspaceConfig | null> {
+  const names = await readdir(join(wsPath, '.ghostboard', 'views')).catch(
+    () => [] as string[]
+  );
+  const views: ViewEntry[] = names
+    .filter((name) => name.endsWith(CANVAS_FILE_SUFFIX))
+    .toSorted()
+    .map((name) => {
+      const id = name.slice(0, -CANVAS_FILE_SUFFIX.length);
+      return { id, name: id, file: `views/${name}` };
+    })
+    .filter((view) => resolveManagedManifestPath(wsPath, view.file) !== null);
+  const first = views[0];
+  if (!first) {
+    return null;
+  }
+  return {
+    schema: 'ghostboard-workspace/v1',
+    activeViewId: first.id,
+    views,
+  };
+}
+
+async function readBackupConfig(
+  wsPath: string
+): Promise<WorkspaceConfig | null> {
+  try {
+    return parseWorkspaceConfig(
+      JSON.parse(
+        await readFile(workspaceConfigBackupPath(wsPath), 'utf8')
+      ) as unknown
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read and validate workspace.json without taking the queue. A missing file
+ * is replaced by the default config. A damaged file is copied aside to
+ * `workspace.json.corrupt-<timestamp>`, then restored from `workspace.json.bak`
+ * or rebuilt from the canvases on disk, and the recovered config is written
+ * back so the app keeps working.
+ */
+async function readWorkspaceConfigUnlocked(
   wsPath: string
 ): Promise<WorkspaceConfig> {
-  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
-  const file = Bun.file(configPath);
-  if (await file.exists()) {
-    return await file.json();
+  const configPath = workspaceConfigPath(wsPath);
+  const read = await readJsonOrEmpty(configPath, parseWorkspaceConfig);
+  if (read.kind === 'ok') {
+    return read.value;
   }
-  // Write default config
-  await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
-  return DEFAULT_CONFIG;
+  if (read.kind === 'empty') {
+    const config = cloneDefaultConfig();
+    await atomicWrite(configPath, JSON.stringify(config, null, 2));
+    return config;
+  }
+  console.warn(
+    `[workspace] workspace.json is corrupt (${read.error.message}); preserved at ${read.backupPath}`
+  );
+  const recovered =
+    (await readBackupConfig(wsPath)) ??
+    (await rebuildConfigFromViews(wsPath)) ??
+    cloneDefaultConfig();
+  // Do not rotate the corrupt bytes into .bak; they are already preserved.
+  await atomicWrite(configPath, JSON.stringify(recovered, null, 2));
+  return recovered;
+}
+
+async function writeWorkspaceConfigUnlocked(
+  wsPath: string,
+  config: WorkspaceConfig
+): Promise<void> {
+  const configPath = workspaceConfigPath(wsPath);
+  await rotateBackup(configPath, workspaceConfigBackupPath(wsPath));
+  await atomicWrite(configPath, JSON.stringify(config, null, 2));
+}
+
+/**
+ * Serialize every workspace.json read-modify-write for one workspace so
+ * concurrent RPCs (add/rename/remove view, active view, trash) cannot lose
+ * each other's updates. Not reentrant: never call a public workspace
+ * function from inside `work`.
+ */
+function withWorkspaceConfig<T>(
+  wsPath: string,
+  work: () => Promise<T>
+): Promise<T> {
+  return withFileQueue(workspaceConfigPath(wsPath), work);
+}
+
+/** Read workspace.json. Returns (and writes) the default config if not found. */
+export function loadWorkspaceConfig(wsPath: string): Promise<WorkspaceConfig> {
+  return withWorkspaceConfig(wsPath, () => readWorkspaceConfigUnlocked(wsPath));
 }
 
 export { atomicWrite } from './atomicWrite';
 
-/** Save workspace config to disk (atomic write). */
-export async function saveWorkspaceConfig(
+/** Save workspace config to disk (atomic write, previous copy kept as .bak). */
+export function saveWorkspaceConfig(
   wsPath: string,
   config: WorkspaceConfig
 ): Promise<void> {
-  const configPath = join(wsPath, '.ghostboard', 'workspace.json');
-  await atomicWrite(configPath, JSON.stringify(config, null, 2));
+  return withWorkspaceConfig(wsPath, () =>
+    writeWorkspaceConfigUnlocked(wsPath, config)
+  );
+}
+
+/**
+ * Run one read-modify-write of workspace.json inside the queue. `mutate`
+ * receives a fresh config and returns `{ result, save }`; the config is
+ * written back only when `save` is true.
+ */
+function updateWorkspaceConfig<T>(
+  wsPath: string,
+  mutate: (config: WorkspaceConfig) => Promise<{ result: T; save: boolean }>
+): Promise<T> {
+  return withWorkspaceConfig(wsPath, async () => {
+    const config = await readWorkspaceConfigUnlocked(wsPath);
+    const { result, save } = await mutate(config);
+    if (save) {
+      await writeWorkspaceConfigUnlocked(wsPath, config);
+    }
+    return result;
+  });
 }
 
 /** Persist the active view selection so it survives app restarts. */
-export async function setActiveViewId(
+export function setActiveViewId(
   wsPath: string,
   viewId: string
 ): Promise<boolean> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const exists = config.views.some((v) => v.id === viewId);
-  if (!exists) {
-    return false;
-  }
-  config.activeViewId = viewId;
-  await saveWorkspaceConfig(wsPath, config);
-  return true;
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const exists = config.views.some((v) => v.id === viewId);
+    if (!exists) {
+      return { result: false, save: false };
+    }
+    config.activeViewId = viewId;
+    return { result: true, save: true };
+  });
 }
 
 /** Add a new view to the workspace. Returns the new view entry. */
-export async function addView(
-  wsPath: string,
-  name: string
-): Promise<ViewEntry> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const id = `view_${crypto.randomUUID().slice(0, 8)}`;
-  const file = `views/${id}.canvas.json`;
-  const entry: ViewEntry = { id, name, file };
-  config.views.push(entry);
-  config.activeViewId = id;
-  await saveWorkspaceConfig(wsPath, config);
-  return entry;
+export function addView(wsPath: string, name: string): Promise<ViewEntry> {
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const id = `view_${crypto.randomUUID().slice(0, 8)}`;
+    const file = `views/${id}.canvas.json`;
+    const entry: ViewEntry = { id, name, file };
+    config.views.push(entry);
+    config.activeViewId = id;
+    return { result: entry, save: true };
+  });
 }
 
 export interface RemoveViewResult {
@@ -189,65 +358,110 @@ export interface RemoveViewResult {
   trashId?: string;
 }
 
+/** Move a manifest's rolling `.bak` along with it (best effort). */
+async function moveManifestBackup(
+  wsPath: string,
+  fromViewFile: string,
+  toViewFile: string
+): Promise<void> {
+  const from = resolveManagedManifestPath(
+    wsPath,
+    manifestBackupViewFile(fromViewFile)
+  );
+  const to = resolveManagedManifestPath(
+    wsPath,
+    manifestBackupViewFile(toViewFile)
+  );
+  if (!(from && to && existsSync(from))) {
+    return;
+  }
+  await rename(from, to).catch((error: unknown) => {
+    console.warn('[workspace] Failed to move manifest backup:', error);
+  });
+}
+
+/** Send a trashed manifest's rolling `.bak` to the system Trash (best effort). */
+function trashManifestBackup(wsPath: string, viewFile: string): void {
+  const path = resolveManagedManifestPath(
+    wsPath,
+    manifestBackupViewFile(viewFile)
+  );
+  if (!(path && existsSync(path))) {
+    return;
+  }
+  try {
+    Utils.moveToTrash(path);
+  } catch (error) {
+    console.warn('[workspace] Failed to trash manifest backup:', error);
+  }
+}
+
 /**
  * Soft-delete a view: move its manifest into `.ghostboard/trash/` and
  * record a TrashEntry in workspace.json. The deletion is recoverable via
  * `restoreView` until the trash entry is purged. Returns success=false if
  * this is the last remaining view.
  */
-export async function removeView(
+export function removeView(
   wsPath: string,
   viewId: string
 ): Promise<RemoveViewResult> {
-  const config = await loadWorkspaceConfig(wsPath);
-  if (config.views.length <= 1) {
-    return { success: false };
-  }
-  const viewEntry = config.views.find((v) => v.id === viewId);
-  if (!viewEntry) {
-    return { success: false };
-  }
-  config.views = config.views.filter((v) => v.id !== viewId);
-  if (config.activeViewId === viewId) {
-    const nextView = config.views[0];
-    if (!nextView) {
-      return { success: false };
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const fail = { result: { success: false }, save: false };
+    if (config.views.length <= 1) {
+      return fail;
     }
-    config.activeViewId = nextView.id;
-  }
-
-  const trashId = `trash_${crypto.randomUUID().slice(0, 8)}`;
-  const deletedAt = Date.now();
-  const trashFile = `trash/${trashId}.canvas.json`;
-  const sourcePath = resolveManagedManifestPath(wsPath, viewEntry.file);
-  const trashPath = resolveManagedManifestPath(wsPath, trashFile);
-  if (!(sourcePath && trashPath)) {
-    return { success: false };
-  }
-
-  // Move manifest into trash. If the source is missing we still record the
-  // trash entry with an empty payload so restore can succeed gracefully.
-  try {
-    if (existsSync(sourcePath)) {
-      await rename(sourcePath, trashPath);
-    } else {
-      await Bun.write(trashPath, '{}');
+    const viewEntry = config.views.find((v) => v.id === viewId);
+    if (!viewEntry) {
+      return fail;
     }
-  } catch (err) {
-    console.error('[workspace] Failed to move manifest to trash:', err);
-    return { success: false };
-  }
+    const remainingViews = config.views.filter((v) => v.id !== viewId);
+    let activeViewId = config.activeViewId;
+    if (activeViewId === viewId) {
+      const nextView = remainingViews[0];
+      if (!nextView) {
+        return fail;
+      }
+      activeViewId = nextView.id;
+    }
 
-  const trashEntry: TrashEntry = {
-    trashId,
-    view: viewEntry,
-    trashFile,
-    deletedAt,
-  };
-  config.trash = [...(config.trash ?? []), trashEntry];
+    const trashId = `trash_${crypto.randomUUID().slice(0, 8)}`;
+    const deletedAt = Date.now();
+    const trashFile = `trash/${trashId}.canvas.json`;
+    const sourcePath = resolveManagedManifestPath(wsPath, viewEntry.file);
+    const trashPath = resolveManagedManifestPath(wsPath, trashFile);
+    if (!(sourcePath && trashPath)) {
+      return fail;
+    }
 
-  await saveWorkspaceConfig(wsPath, config);
-  return { success: true, activeViewId: config.activeViewId, trashId };
+    // Move manifest into trash. If the source is missing we still record the
+    // trash entry with an empty payload so restore can succeed gracefully.
+    try {
+      if (existsSync(sourcePath)) {
+        await rename(sourcePath, trashPath);
+      } else {
+        await atomicWrite(trashPath, '{}');
+      }
+    } catch (err) {
+      console.error('[workspace] Failed to move manifest to trash:', err);
+      return fail;
+    }
+    await moveManifestBackup(wsPath, viewEntry.file, trashFile);
+
+    const trashEntry: TrashEntry = {
+      trashId,
+      view: viewEntry,
+      trashFile,
+      deletedAt,
+    };
+    config.views = remainingViews;
+    config.activeViewId = activeViewId;
+    config.trash = [...(config.trash ?? []), trashEntry];
+    return {
+      result: { success: true, activeViewId, trashId },
+      save: true,
+    };
+  });
 }
 
 export interface RestoreViewResult {
@@ -261,45 +475,50 @@ export interface RestoreViewResult {
  * original location and re-inserts the view entry into `views`. The active
  * view is left unchanged unless it is now invalid.
  */
-export async function restoreView(
+export function restoreView(
   wsPath: string,
   trashId: string
 ): Promise<RestoreViewResult> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const trash = config.trash ?? [];
-  const entry = trash.find((t) => t.trashId === trashId);
-  if (!entry) {
-    return { success: false };
-  }
-
-  const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
-  const restorePath = resolveManagedManifestPath(wsPath, entry.view.file);
-  if (!(trashPath && restorePath)) {
-    return { success: false };
-  }
-
-  // If the original id is somehow already taken, refuse rather than clobber.
-  if (config.views.some((v) => v.id === entry.view.id)) {
-    return { success: false };
-  }
-
-  try {
-    if (existsSync(trashPath)) {
-      await rename(trashPath, restorePath);
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const fail = { result: { success: false }, save: false };
+    const trash = config.trash ?? [];
+    const entry = trash.find((t) => t.trashId === trashId);
+    if (!entry) {
+      return fail;
     }
-  } catch (err) {
-    console.error('[workspace] Failed to restore manifest from trash:', err);
-    return { success: false };
-  }
 
-  config.views = [...config.views, entry.view];
-  config.trash = trash.filter((t) => t.trashId !== trashId);
-  await saveWorkspaceConfig(wsPath, config);
-  return {
-    success: true,
-    view: entry.view,
-    activeViewId: config.activeViewId,
-  };
+    const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+    const restorePath = resolveManagedManifestPath(wsPath, entry.view.file);
+    if (!(trashPath && restorePath)) {
+      return fail;
+    }
+
+    // If the original id is somehow already taken, refuse rather than clobber.
+    if (config.views.some((v) => v.id === entry.view.id)) {
+      return fail;
+    }
+
+    try {
+      if (existsSync(trashPath)) {
+        await rename(trashPath, restorePath);
+      }
+    } catch (err) {
+      console.error('[workspace] Failed to restore manifest from trash:', err);
+      return fail;
+    }
+    await moveManifestBackup(wsPath, entry.trashFile, entry.view.file);
+
+    config.views = [...config.views, entry.view];
+    config.trash = trash.filter((t) => t.trashId !== trashId);
+    return {
+      result: {
+        success: true,
+        view: entry.view,
+        activeViewId: config.activeViewId,
+      },
+      save: true,
+    };
+  });
 }
 
 /** List soft-deleted views, newest first. */
@@ -313,94 +532,102 @@ export async function listTrash(wsPath: string): Promise<TrashEntry[]> {
  * of trash entries that were purged (regardless of whether the underlying
  * manifest file still existed on disk).
  */
-export async function clearAllTrash(
+export function clearAllTrash(
   wsPath: string
 ): Promise<{ purged: number; success: boolean }> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const trash = config.trash ?? [];
-  if (trash.length === 0) {
-    return { success: true, purged: 0 };
-  }
-  const remaining: TrashEntry[] = [];
-  for (const entry of trash) {
-    const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
-    if (!trashPath) {
-      remaining.push(entry);
-      continue;
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const trash = config.trash ?? [];
+    if (trash.length === 0) {
+      return { result: { success: true, purged: 0 }, save: false };
     }
-    if (!existsSync(trashPath)) {
-      continue;
-    }
-    try {
-      const moved = Utils.moveToTrash(trashPath);
-      if (!moved) {
+    const remaining: TrashEntry[] = [];
+    for (const entry of trash) {
+      const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+      if (!trashPath) {
+        remaining.push(entry);
+        continue;
+      }
+      if (!existsSync(trashPath)) {
+        trashManifestBackup(wsPath, entry.trashFile);
+        continue;
+      }
+      try {
+        const moved = Utils.moveToTrash(trashPath);
+        if (moved) {
+          trashManifestBackup(wsPath, entry.trashFile);
+        } else {
+          remaining.push(entry);
+        }
+      } catch (err) {
+        console.warn(
+          '[workspace] Failed to move trashed manifest to system Trash:',
+          err
+        );
         remaining.push(entry);
       }
-    } catch (err) {
-      console.warn(
-        '[workspace] Failed to move trashed manifest to system Trash:',
-        err
-      );
-      remaining.push(entry);
     }
-  }
-  const purged = trash.length - remaining.length;
-  config.trash = remaining;
-  await saveWorkspaceConfig(wsPath, config);
-  return { success: remaining.length === 0, purged };
+    const purged = trash.length - remaining.length;
+    config.trash = remaining;
+    return {
+      result: { success: remaining.length === 0, purged },
+      save: true,
+    };
+  });
 }
 
 /**
  * Permanently remove a trash entry: drop it from `workspace.json` and move
  * the manifest file to the system Trash via Electrobun's `Utils.moveToTrash`.
  */
-export async function purgeTrash(
+export function purgeTrash(
   wsPath: string,
   trashId: string
 ): Promise<{ success: boolean }> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const trash = config.trash ?? [];
-  const entry = trash.find((t) => t.trashId === trashId);
-  if (!entry) {
-    return { success: false };
-  }
-  const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
-  if (!trashPath) {
-    return { success: false };
-  }
-  if (existsSync(trashPath)) {
-    try {
-      const moved = Utils.moveToTrash(trashPath);
-      if (!moved) {
-        return { success: false };
-      }
-    } catch (err) {
-      console.warn(
-        '[workspace] Failed to move trashed manifest to system Trash:',
-        err
-      );
-      return { success: false };
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const fail = { result: { success: false }, save: false };
+    const trash = config.trash ?? [];
+    const entry = trash.find((t) => t.trashId === trashId);
+    if (!entry) {
+      return fail;
     }
-  }
-  config.trash = trash.filter((t) => t.trashId !== trashId);
-  await saveWorkspaceConfig(wsPath, config);
-  return { success: true };
+    const trashPath = resolveManagedManifestPath(wsPath, entry.trashFile);
+    if (!trashPath) {
+      return fail;
+    }
+    if (existsSync(trashPath)) {
+      try {
+        const moved = Utils.moveToTrash(trashPath);
+        if (!moved) {
+          return fail;
+        }
+      } catch (err) {
+        console.warn(
+          '[workspace] Failed to move trashed manifest to system Trash:',
+          err
+        );
+        return fail;
+      }
+    }
+    trashManifestBackup(wsPath, entry.trashFile);
+    config.trash = trash.filter((t) => t.trashId !== trashId);
+    return { result: { success: true }, save: true };
+  });
 }
 
 /** Rename a view. */
-export async function renameView(
+export function renameView(
   wsPath: string,
   viewId: string,
   name: string
 ): Promise<boolean> {
-  const config = await loadWorkspaceConfig(wsPath);
-  const view = config.views.find((v) => v.id === viewId);
-  if (!view) {
-    return false;
-  }
-  view.name = name;
-  await saveWorkspaceConfig(wsPath, config);
-  return true;
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const view = config.views.find((v) => v.id === viewId);
+    if (!view) {
+      return { result: false, save: false };
+    }
+    view.name = name;
+    return { result: true, save: true };
+  });
 }
 
 export interface AddViewFromTemplateResult {

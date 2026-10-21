@@ -1623,7 +1623,7 @@ Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'top
 
 一次性买断。未激活时 `card`、`sticky`、`topic` 合计最多 100 个（`FREE_NODE_LIMIT`）。激活后不限制。门禁在 `src/mainview/lib/nodeQuota.ts` 的 `hasNodeQuota`，创建、主题提交、粘贴、复制和 JSON 导入都会走它。校验失败时放行，避免离线把用户锁死。
 
-主进程是 `src/bun/license.ts`，渲染进程经 `src/mainview/lib/rpc-license.ts` 调用。许可证文件是应用数据目录里的 `license.dat`，不是工作区里的文件。密钥格式 `GHOST-XXXX-XXXX-XXXX-XXXX`，段字符为 `A-Z0-9`。设备指纹是平台、主机名、CPU 型号和内存总量的哈希。文件用指纹做 XOR 混淆，跨机复制对不上指纹。`USE_ONLINE_LICENSE=true` 才访问 `LICENSE_API_URL`（默认 `http://localhost:3001/api/v1`）。这是混淆，不是密码学强度的防破解。
+主进程是 `src/bun/license.ts`，渲染进程经 `src/mainview/lib/rpc-license.ts` 调用。许可证文件是应用数据目录里的 `license.dat`，不是工作区里的文件。密钥格式 `GHOST-XXXX-XXXX-XXXX-XXXX`，段字符为 `A-Z0-9`。设备指纹是平台、主机名、CPU 型号和内存总量的哈希。文件用指纹做 XOR 混淆，跨机复制对不上指纹。`USE_ONLINE_LICENSE=true` 才访问 `LICENSE_API_URL`；该变量没有内置默认值，且必须是 https（仅本机回环地址允许 http，用于开发），未配置或不合规时跳过在线校验。密钥生成器不随产品打包。这是混淆，不是密码学强度的防破解。
 
 设置页 General 里的 License 卡片负责激活。后端签发服务不在本仓库。
 

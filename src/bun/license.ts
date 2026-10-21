@@ -1,13 +1,42 @@
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { cpus, hostname, totalmem } from 'node:os';
 import { join } from 'node:path';
 
 import { getAppDataRoot } from './appPaths';
 
-// API Configuration
-const _API_BASE_URL =
-  process.env.LICENSE_API_URL || 'http://localhost:3001/api/v1';
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const VERIFY_TIMEOUT_MS = 10_000;
+const TRAILING_SLASH_RE = /\/+$/;
+
+/**
+ * Online verification endpoint from `LICENSE_API_URL`. There is no built-in
+ * default: a license check must never go out over cleartext, so only https
+ * is accepted (plain http is allowed for a loopback dev server only).
+ * Returns null when unset or unsafe, which disables online verification.
+ */
+export function resolveLicenseApiBaseUrl(
+  raw: string | undefined = process.env.LICENSE_API_URL
+): string | null {
+  const value = raw?.trim();
+  if (!value) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    console.warn('[license] LICENSE_API_URL is not a valid URL; ignoring it.');
+    return null;
+  }
+  const loopbackHttp =
+    parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !loopbackHttp) {
+    console.warn('[license] LICENSE_API_URL must use https; ignoring it.');
+    return null;
+  }
+  return parsed.toString().replace(TRAILING_SLASH_RE, '');
+}
+
 const _USE_ONLINE_VALIDATION = process.env.USE_ONLINE_LICENSE === 'true';
 
 /**
@@ -29,7 +58,6 @@ export interface LicenseInfo {
 const LICENSE_FILE = 'license.dat';
 const LICENSE_KEY_PATTERN =
   /^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
-const LICENSE_KEY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 /**
  * 生成设备指纹 - 基于硬件信息的唯一标识
@@ -173,12 +201,23 @@ async function verifyLicenseOnline(
   key: string,
   deviceId: string
 ): Promise<LicenseInfo | null> {
+  const baseUrl = resolveLicenseApiBaseUrl();
+  if (!baseUrl) {
+    console.warn(
+      '[license] Online verification is enabled but LICENSE_API_URL is missing or not https.'
+    );
+    return null;
+  }
   try {
-    const response = await fetch(`${_API_BASE_URL}/licenses/verify`, {
+    const response = await fetch(`${baseUrl}/licenses/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, deviceId }),
+      signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
     });
+    if (!response.ok) {
+      return null;
+    }
 
     const data = (await response.json()) as VerifyLicenseResponse;
 
@@ -221,36 +260,4 @@ export async function checkLicenseStatus(): Promise<LicenseInfo> {
   }
 
   return license?.activated ? license : { activated: false };
-}
-
-/**
- * 生成许可证密钥(仅用于测试)
- */
-export function generateLicenseKey(): string {
-  const s1 = randomLicenseSegment();
-  const s2 = randomLicenseSegment();
-  const s3 = randomLicenseSegment();
-  const checksum = Bun.hash(`${s1}${s2}${s3}`)
-    .toString(16)
-    .slice(0, 4)
-    .toUpperCase();
-  return `GHOST-${s1}-${s2}-${s3}-${checksum}`;
-}
-
-function randomLicenseSegment(): string {
-  let segment = '';
-  while (segment.length < 4) {
-    const bytes = randomBytes(8);
-    for (const byte of bytes) {
-      // Rejection sampling avoids modulo bias for the 36-character alphabet.
-      if (byte >= 252) {
-        continue;
-      }
-      segment += LICENSE_KEY_CHARS[byte % LICENSE_KEY_CHARS.length];
-      if (segment.length === 4) {
-        break;
-      }
-    }
-  }
-  return segment;
 }

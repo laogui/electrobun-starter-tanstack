@@ -760,5 +760,10 @@
   "tip_library_title": "Your notes also live in the library",
   "tip_library_description": "Open Note Library from the bottom-left toolbar to browse workspace notes, including notes that are not on the current canvas.",
   "tip_navigate_title": "Move between cards with the keyboard",
-  "tip_navigate_description": "Arrow keys select nearby cards in that direction. Hold Shift while pressing an arrow to add to the selection. Press Enter to open a selected note."
+  "tip_navigate_description": "Arrow keys select nearby cards in that direction. Hold Shift while pressing an arrow to add to the selection. Press Enter to open a selected note.",
+  "link_preview_failed": "Could not load link preview.",
+  "link_preview_loading": "Loading preview…",
+  "link_untitled": "Untitled link",
+  "link_preview_retry": "Retry preview",
+  "toast_image_read_failed": "Failed to read image file"
 }

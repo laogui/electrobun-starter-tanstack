@@ -120,6 +120,7 @@ import {
 } from '@/lib/importCanvasFiles';
 import { isNodeEntering, VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
+import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import { persistAppSettingsPatch } from '@/lib/persistAppSettings';
 import { saveRecording } from '@/lib/recordingFiles';
 import { applyDragRepulsion, captureRepulsionOrigins } from '@/lib/repulsion';
@@ -554,7 +555,6 @@ function CanvasComponent() {
   );
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
-  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const createExtensionNode = useCanvasStore((s) => s.createExtensionNode);
   const createWidgetRecord = useWidgetStore((s) => s.createWidget);
   const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
@@ -907,24 +907,36 @@ function CanvasComponent() {
       if (!(file && target)) {
         return;
       }
+      // Pin the write-back to the file fields as they were when the picker
+      // returned: a delete/undo/replace during the save drops the result.
+      const expectation = captureNodeData(
+        useCanvasStore.getState().nodes,
+        target.nodeId,
+        target.kind === 'image'
+          ? ['imageFile', 'imageUrl', 'thumbnailFile']
+          : ['attachmentFile']
+      );
+      if (!expectation) {
+        return;
+      }
       try {
         const saved = await saveAssetFileWithProgressToast(file);
         if (target.kind === 'image') {
-          updateNodeData(target.nodeId, {
+          applyIfNodeUnchanged(useCanvasStore, expectation, {
             imageFile: saved.attachmentFile,
             imageUrl: undefined,
             thumbnailFile: saved.thumbnailFile,
             thumbnailUrl: saved.thumbnailUrl,
           });
         } else {
-          updateNodeData(target.nodeId, { ...saved });
+          applyIfNodeUnchanged(useCanvasStore, expectation, { ...saved });
         }
       } catch (error) {
         console.error('[canvas] replace file failed:', error);
         toast.error(m.toast_replace_failed());
       }
     },
-    [updateNodeData]
+    []
   );
 
   const closeRecorder = useCallback(() => {

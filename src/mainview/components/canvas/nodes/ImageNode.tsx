@@ -4,6 +4,12 @@ import { toast } from 'sonner';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import {
+  applyIfNodeUnchanged,
+  captureNodeData,
+  findNodeData,
+  isNodeDataUnchanged,
+} from '@/lib/nodeWriteGuard';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
@@ -255,16 +261,44 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       const reader = new FileReader();
       reader.addEventListener('load', async (e) => {
         const imageUrl = e.target?.result as string;
-        const title = data.title || file.name.replace(FILE_EXT_RE, '');
+        const live = findNodeData(useCanvasStore.getState().nodes, id);
+        if (!live) {
+          return;
+        }
+        const liveTitle = typeof live.title === 'string' ? live.title : '';
+        const title = liveTitle || file.name.replace(FILE_EXT_RE, '');
 
         // Show image immediately with data URL — snapshot for undo
         commitNodeData(id, { imageUrl, title });
 
+        // Everything below writes after an await. Pin the write-back to the
+        // data URL we just committed: if the user undoes, deletes the node or
+        // drops another image meanwhile, the stale result is discarded.
+        const expectation = captureNodeData(
+          useCanvasStore.getState().nodes,
+          id,
+          ['imageUrl']
+        );
+        if (!expectation) {
+          return;
+        }
+        const previousImageFile =
+          typeof live.imageFile === 'string' ? live.imageFile : undefined;
+        const previousThumbnailFile =
+          typeof live.thumbnailFile === 'string'
+            ? live.thumbnailFile
+            : undefined;
+
         // Save the original to a workspace attachment (side-effect; no extra snapshot)
         try {
-          const original = await rpcSaveAttachment(imageUrl, data.imageFile);
-          if (original?.filePath) {
-            updateNodeData(id, { imageFile: original.filePath });
+          const original = await rpcSaveAttachment(imageUrl, previousImageFile);
+          if (
+            original?.filePath &&
+            !applyIfNodeUnchanged(useCanvasStore, expectation, {
+              imageFile: original.filePath,
+            })
+          ) {
+            return;
           }
         } catch (error) {
           console.error('[ImageNode] Failed to save attachment:', error);
@@ -279,9 +313,14 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
           if (!thumbnailDataUrl) {
             return;
           }
+          if (
+            !isNodeDataUnchanged(useCanvasStore.getState().nodes, expectation)
+          ) {
+            return;
+          }
           const thumb = await rpcSaveAttachment(
             thumbnailDataUrl,
-            data.thumbnailFile,
+            previousThumbnailFile,
             {
               kind: 'image',
               mimeType: 'image/jpeg',
@@ -289,7 +328,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             }
           );
           if (thumb?.filePath) {
-            updateNodeData(id, {
+            applyIfNodeUnchanged(useCanvasStore, expectation, {
               thumbnailFile: thumb.filePath,
               thumbnailUrl: thumbnailDataUrl,
             });
@@ -301,11 +340,11 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       });
       reader.addEventListener('error', () => {
         console.error('[ImageNode] FileReader error:', reader.error);
-        toast.error('Failed to read image file');
+        toast.error(m.toast_image_read_failed());
       });
       reader.readAsDataURL(file);
     },
-    [id, data, commitNodeData, updateNodeData]
+    [id, commitNodeData]
   );
 
   // Pending replacement file — when set, the confirm dialog is shown.

@@ -23,9 +23,11 @@ import {
   getLinkHost,
   normalizeLinkUrl,
 } from '@/lib/contentTypes';
+import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 import { parseYouTubeVideo } from '../../../../shared/youtube';
 
 import { NodeHandles } from './_shared/NodeHandles';
@@ -331,7 +333,7 @@ export const LinkContent = ({
           {link.unfurlStatus === 'loading' ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
               <Loader2 className="shrink-0 animate-spin" size={16} />
-              <span>Loading preview...</span>
+              <span>{m.link_preview_loading()}</span>
             </div>
           ) : (
             <div className="min-w-0 flex-1">
@@ -343,7 +345,7 @@ export const LinkContent = ({
                   !title && 'text-neutral-400'
                 )}
               >
-                {title || 'Untitled link'}
+                {title || m.link_untitled()}
               </h3>
               {link.siteName && host && !youtubeVideo ? (
                 <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
@@ -368,7 +370,7 @@ export const LinkContent = ({
             type="button"
           >
             <RefreshCw size={12} />
-            <span>Retry preview</span>
+            <span>{m.link_preview_retry()}</span>
           </button>
         ) : null}
         <div className="mt-auto min-w-0 shrink-0 pt-3">
@@ -438,6 +440,21 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     }
     unfurlAttemptRef.current = normalized;
     updateNodeData(id, { unfurlStatus: 'loading' });
+    // Pin the write-back to the url this request was issued for: if the node
+    // is deleted, undone, or its url edited before the response lands, the
+    // stale preview is dropped instead of being written over newer data.
+    const expectation = captureNodeData(useCanvasStore.getState().nodes, id, [
+      'url',
+    ]);
+    if (!expectation) {
+      return;
+    }
+    const writeBack = (patch: Record<string, unknown>) => {
+      if (unfurlAttemptRef.current !== normalized) {
+        return;
+      }
+      applyIfNodeUnchanged(useCanvasStore, expectation, patch);
+    };
 
     // Apply the result only while this url is still the active attempt. The
     // effect re-runs when we set the status to 'loading' above (and again when
@@ -446,18 +463,15 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     // request, which otherwise leaves the node stuck on "Loading preview...".
     rpcUnfurlLink(normalized)
       .then((result) => {
-        if (unfurlAttemptRef.current !== normalized) {
-          return;
-        }
         if (!result || result.status === 'failed') {
-          updateNodeData(id, {
+          writeBack({
             unfurlStatus: 'failed',
-            unfurlError: 'Could not load link preview.',
+            unfurlError: m.link_preview_failed(),
           });
           return;
         }
         const { status: _status, url: _url, ...meta } = result;
-        updateNodeData(id, {
+        writeBack({
           unfurlStatus: 'ready',
           unfurlError: undefined,
           ...(meta.title ? { title: meta.title } : {}),
@@ -468,13 +482,12 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         });
       })
       .catch((error) => {
-        if (unfurlAttemptRef.current !== normalized) {
-          return;
+        if (unfurlAttemptRef.current === normalized) {
+          console.warn('[LinkNode] Unfurl failed for', normalized, error);
         }
-        console.warn('[LinkNode] Unfurl failed for', normalized, error);
-        updateNodeData(id, {
+        writeBack({
           unfurlStatus: 'failed',
-          unfurlError: 'Could not load link preview.',
+          unfurlError: m.link_preview_failed(),
         });
       });
   }, [data.url, data.unfurlStatus, id, updateNodeData]);

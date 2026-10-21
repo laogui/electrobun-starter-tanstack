@@ -760,5 +760,10 @@
   "tip_library_title": "画布之外，还有笔记库",
   "tip_library_description": "点击左下角的笔记库，可以浏览工作区里的笔记，包括没有放在当前画布上的笔记。",
   "tip_navigate_title": "用方向键在卡片间移动",
-  "tip_navigate_description": "方向键会选中对应方向的附近卡片；按住 Shift 再按方向键可以扩展选择。选中笔记后按 Enter 即可打开。"
+  "tip_navigate_description": "方向键会选中对应方向的附近卡片；按住 Shift 再按方向键可以扩展选择。选中笔记后按 Enter 即可打开。",
+  "link_preview_failed": "无法加载链接预览。",
+  "link_preview_loading": "正在加载预览…",
+  "link_untitled": "未命名链接",
+  "link_preview_retry": "重新加载预览",
+  "toast_image_read_failed": "无法读取图片文件"
 }

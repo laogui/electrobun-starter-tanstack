@@ -16,5 +16,11 @@ export default defineConfig({
       'src/bun/**/*.{test,spec}.{ts,tsx}',
       'src/shared/**/*.{test,spec}.{ts,tsx}',
     ],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/paraglide/**', 'src/mainview/routeTree.gen.ts'],
+      reporter: ['text', 'html'],
+    },
   },
 });

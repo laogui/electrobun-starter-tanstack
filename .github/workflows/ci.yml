@@ -1,0 +1,49 @@
+name: CI
+
+# PR / push gate: type-check, lint, format check, unit tests and a
+# high-severity dependency audit. Nothing here writes to the tree.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type-check, lint, test, audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Type-check
+        run: bun run type-check
+
+      - name: Lint (ultracite / biome, no fixes)
+        run: bun run check
+
+      - name: Format check (no writes)
+        run: bun run format:check
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Renderer build
+        run: bunx vite build
+
+      - name: Dependency audit (high and above)
+        run: bun audit --audit-level=high

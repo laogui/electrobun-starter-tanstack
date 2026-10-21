@@ -2,7 +2,7 @@
 
 GhostBoard is a local-first spatial canvas for visual knowledge management. Instead of linear notes, you organize ideas the way you would on a whiteboard — by position, distance, and grouping — on an infinite, zoomable canvas. It is a desktop app built with Electrobun (Bun runtime) and a React 19 renderer.
 
-Your content stays on your machine. Every text card is a plain Markdown file you can open, back up, or edit with any external editor; canvas layout lives in separate manifest files.
+Your content stays on your machine, inside a workspace folder you choose. Each note's source of truth is a BlockNote JSON sidecar (`content/.ghostboard/blocknote/<noteId>.json`); canvas layout lives in separate manifest files. Markdown is an import/export format, not the storage format: you can import `.md` files and export notes or canvases to Markdown, but editing files in the workspace with an external editor is not synced back into GhostBoard.
 
 ## Features
 
@@ -83,8 +83,9 @@ React 19, TypeScript (strict), TanStack Router/Query, Tailwind CSS v4, @xyflow/r
 - Type-check: `bun run type-check`
 - Lint/format check: `bun run check`
 - Auto-fix: `bun run fix`
-- Combined checks: `bun run ci`
-- Tests: `bun run test` (single run), `bun run test:watch`, `bun run test:coverage`
+- Combined non-mutating checks (type-check, lint, format check): `bun run ci`
+- Format check (no writes): `bun run format:check`
+- Tests: `bun run test` (single run), `bun run test:watch`, `bun run test:coverage` (V8 coverage report in `coverage/`)
 
 Run `bun run check && bun run test` before submitting changes. See `AGENTS.md` for full contributor guidelines and `docs/` for the PRD and technical specification.
 

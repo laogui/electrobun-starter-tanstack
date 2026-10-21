@@ -1,11 +1,18 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { handleAIChat } from './ai';
+import type { PluginHostCredentials } from './localHttpAuth';
 import { startLocalHttpServer } from './localHttpServer';
 import type { PluginFileStore } from './plugins/files';
 import type { PluginHostController } from './plugins/hostController';
-import type { PluginStorageHost } from './plugins/storage';
+import { PluginStorageHost } from './plugins/storage';
 
-vi.mock('./ai', () => ({ handleAIChat: vi.fn() }));
+vi.mock('./ai', () => ({
+  handleAIChat: vi.fn(async () => new Response('streamed')),
+}));
 vi.mock('./attachments', () => ({
   assertWorkspaceAttachmentPath: vi.fn(),
   saveAttachmentStream: vi.fn(),
@@ -88,6 +95,7 @@ describe('local HTTP plugin host integration', () => {
       ],
       handle,
       dispose,
+      bindCredentials: vi.fn(),
     } as unknown as PluginHostController;
     const server = startLocalHttpServer({
       getAIConfig: () => null,
@@ -123,5 +131,276 @@ describe('local HTTP plugin host integration', () => {
     ]);
     server.stop();
     expect(dispose).toHaveBeenCalledOnce();
+  });
+});
+
+const AI_CONFIG = {} as never;
+
+function bindingRuntime() {
+  let credentials: PluginHostCredentials | undefined;
+  const runtime = {
+    getMounts: () => [],
+    handle: vi.fn(async (request: Request) =>
+      new URL(request.url).pathname.startsWith('/plugins/')
+        ? Response.json({ plugins: [] })
+        : null
+    ),
+    dispose: vi.fn(),
+    bindCredentials: (value: PluginHostCredentials) => {
+      credentials = value;
+    },
+  } as unknown as PluginHostController;
+  return {
+    runtime,
+    credentials: () => {
+      if (!credentials) {
+        throw new Error('credentials were not bound');
+      }
+      return credentials;
+    },
+  };
+}
+
+function bearer(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
+describe('local HTTP credential scoping', () => {
+  it('never accepts the plugin asset token for AI chat or other services', async () => {
+    const { runtime, credentials } = bindingRuntime();
+    const server = startLocalHttpServer({
+      getAIConfig: () => AI_CONFIG,
+      getWorkspacePath: () => '/workspace',
+      pluginRuntime: runtime,
+    });
+    const { assetToken } = credentials();
+    expect(assetToken).not.toBe(server.token);
+    expect(assetToken).not.toBe(server.mediaToken);
+    const chat = `${server.baseUrl}/ai/chat`;
+    for (const request of [
+      new Request(chat, { method: 'POST', headers: bearer(assetToken) }),
+      new Request(`${chat}?token=${assetToken}`, { method: 'POST' }),
+      new Request(`${server.baseUrl}/plugins/runtime`, {
+        headers: bearer(assetToken),
+      }),
+      new Request(`${server.baseUrl}/attachment?path=a&token=${assetToken}`),
+    ]) {
+      expect((await fetchRequest(request)).status).toBe(401);
+    }
+    expect(handleAIChat).not.toHaveBeenCalled();
+    const allowed = await fetchRequest(
+      new Request(chat, { method: 'POST', headers: bearer(server.token) })
+    );
+    expect(allowed.status).toBe(200);
+    expect(handleAIChat).toHaveBeenCalledOnce();
+    server.stop();
+  });
+
+  it('rejects query-string tokens for AI chat and uploads, including the renderer token', async () => {
+    const server = startLocalHttpServer({
+      getAIConfig: () => AI_CONFIG,
+      getWorkspacePath: () => '/workspace',
+    });
+    for (const token of [server.token, server.mediaToken]) {
+      const chat = await fetchRequest(
+        new Request(`${server.baseUrl}/ai/chat?token=${token}`, {
+          method: 'POST',
+        })
+      );
+      expect(chat.status).toBe(401);
+      const upload = await fetchRequest(
+        new Request(
+          `${server.baseUrl}/attachment/upload?fileName=a.txt&token=${token}`,
+          { method: 'POST', body: 'x' }
+        )
+      );
+      expect(upload.status).toBe(401);
+    }
+    // The media token is read-only even when sent as a header.
+    const mediaHeader = await fetchRequest(
+      new Request(`${server.baseUrl}/ai/chat`, {
+        method: 'POST',
+        headers: bearer(server.mediaToken),
+      })
+    );
+    expect(mediaHeader.status).toBe(401);
+    expect(handleAIChat).not.toHaveBeenCalled();
+    server.stop();
+  });
+
+  it('limits the query media token to attachment and YouTube reads', async () => {
+    const storage = vi.fn(async (request: Request) =>
+      new URL(request.url).pathname === '/plugins/storage'
+        ? Response.json({ success: true })
+        : null
+    );
+    const server = startLocalHttpServer({
+      getAIConfig: () => AI_CONFIG,
+      getWorkspacePath: () => '/workspace',
+      pluginStorage: { handle: storage } as unknown as PluginStorageHost,
+    });
+    const media = server.mediaToken;
+    const attachment = await fetchRequest(
+      new Request(`${server.baseUrl}/attachment?path=a.png&token=${media}`)
+    );
+    // Past authentication (the mocked path helper yields no file).
+    expect([401, 403]).not.toContain(attachment.status);
+    const storageResponse = await fetchRequest(
+      new Request(`${server.baseUrl}/plugins/storage?token=${media}`)
+    );
+    expect(storageResponse.status).toBe(403);
+    const unfurl = await fetchRequest(
+      new Request(`${server.baseUrl}/unfurl?url=https://a.test&token=${media}`)
+    );
+    expect(unfurl.status).toBe(403);
+    expect(
+      storage.mock.calls.some(
+        ([request]) => new URL(request.url).pathname === '/plugins/storage'
+      )
+    ).toBe(false);
+    server.stop();
+  });
+
+  it('keeps plugin host tokens off renderer-only routes', async () => {
+    const { runtime, credentials } = bindingRuntime();
+    const server = startLocalHttpServer({
+      getAIConfig: () => AI_CONFIG,
+      getWorkspacePath: () => '/workspace',
+      pluginRuntime: runtime,
+    });
+    const token = credentials().pluginToken('community.alpha.tools');
+    for (const request of [
+      new Request(`${server.baseUrl}/ai/chat`, {
+        method: 'POST',
+        headers: bearer(token),
+      }),
+      new Request(`${server.baseUrl}/attachment?path=a.png`, {
+        headers: bearer(token),
+      }),
+      new Request(`${server.baseUrl}/attachment/upload?fileName=a`, {
+        method: 'POST',
+        headers: bearer(token),
+        body: 'x',
+      }),
+      new Request(`${server.baseUrl}/plugins/runtime`, {
+        headers: bearer(token),
+      }),
+      new Request(`${server.baseUrl}/plugins/reload`, {
+        method: 'POST',
+        headers: bearer(token),
+      }),
+    ]) {
+      expect((await fetchRequest(request)).status).toBe(403);
+    }
+    expect(handleAIChat).not.toHaveBeenCalled();
+    expect(runtime.handle).not.toHaveBeenCalled();
+    server.stop();
+  });
+
+  it("does not let plugin A's token read plugin B's storage or files", async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ghostboard-scope-'));
+    try {
+      const appDataRoot = join(root, 'app');
+      const workspacePath = join(root, 'workspace');
+      const pluginA = 'community.alpha.tools';
+      const pluginB = 'community.bravo.tools';
+      await mkdir(join(appDataRoot, 'plugin-data', pluginB), {
+        recursive: true,
+      });
+      await writeFile(
+        join(appDataRoot, 'plugin-data', pluginB, 'kv.json'),
+        JSON.stringify({
+          schema: 'ghostboard-plugin-kv/v1',
+          entries: [['secret', 'bravo-only']],
+        })
+      );
+      const files = vi.fn(async () => new Response('bytes', { status: 206 }));
+      const { runtime, credentials } = bindingRuntime();
+      const server = startLocalHttpServer({
+        getAIConfig: () => null,
+        getWorkspacePath: () => workspacePath,
+        pluginFiles: { handle: files } as unknown as PluginFileStore,
+        pluginRuntime: runtime,
+        pluginStorage: new PluginStorageHost({
+          appDataRoot,
+          workspacePath,
+          workspaceId: 'ws-1',
+        }),
+      });
+      const tokenA = credentials().pluginToken(pluginA);
+      const tokenB = credentials().pluginToken(pluginB);
+      expect(tokenA).not.toBe(tokenB);
+      expect(credentials().pluginToken(pluginA)).toBe(tokenA);
+      const readSecret = (token: string) =>
+        fetchRequest(
+          new Request(`${server.baseUrl}/plugins/storage`, {
+            method: 'POST',
+            headers: { ...bearer(token), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              operation: 'get',
+              key: 'secret',
+              pluginId: pluginB,
+              scope: 'app',
+              workspaceId: 'ws-1',
+            }),
+          })
+        );
+      const denied = await readSecret(tokenA);
+      expect(denied.status).toBe(403);
+      expect(JSON.stringify(await denied.json())).not.toContain('bravo-only');
+      const owner = await readSecret(tokenB);
+      expect(owner.status).toBe(200);
+      expect(await owner.json()).toEqual({ found: true, value: 'bravo-only' });
+
+      const fileUrl = (pluginId: string) =>
+        `${server.baseUrl}/plugins/files/read?pluginId=${pluginId}&workspaceId=ws-1&activationId=x&handleId=h`;
+      expect(
+        (
+          await fetchRequest(
+            new Request(fileUrl(pluginB), { headers: bearer(tokenA) })
+          )
+        ).status
+      ).toBe(403);
+      expect(files).not.toHaveBeenCalled();
+      expect(
+        (
+          await fetchRequest(
+            new Request(fileUrl(pluginA), { headers: bearer(tokenA) })
+          )
+        ).status
+      ).toBe(206);
+
+      credentials().revokePlugin(pluginB);
+      expect((await readSecret(tokenB)).status).toBe(401);
+      server.stop();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reflects only allowed origins in CORS headers', async () => {
+    const server = startLocalHttpServer({
+      getAIConfig: () => null,
+      getWorkspacePath: () => '/workspace',
+    });
+    const preflight = (origin: string) =>
+      fetchRequest(
+        new Request(`${server.baseUrl}/ai/chat`, {
+          method: 'OPTIONS',
+          headers: { Origin: origin },
+        })
+      );
+    const allowed = await preflight('views://mainview');
+    expect(allowed.headers.get('access-control-allow-origin')).toBe(
+      'views://mainview'
+    );
+    const dev = await preflight('http://localhost:5173');
+    expect(dev.headers.get('access-control-allow-origin')).toBe(
+      'http://localhost:5173'
+    );
+    const hostile = await preflight('https://evil.example');
+    expect(hostile.headers.get('access-control-allow-origin')).toBeNull();
+    expect(hostile.headers.get('access-control-allow-headers')).toBeNull();
+    server.stop();
   });
 });

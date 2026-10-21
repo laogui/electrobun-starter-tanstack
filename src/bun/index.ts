@@ -1305,7 +1305,12 @@ interface CanvasRPC {
       };
       getLocalHttpEndpoint: {
         params: Record<string, unknown>;
-        response: { aiEnabled: boolean; baseUrl: string; token: string };
+        response: {
+          aiEnabled: boolean;
+          baseUrl: string;
+          mediaToken: string;
+          token: string;
+        };
       };
       listViews: {
         params: Record<string, unknown>;
@@ -3830,6 +3835,7 @@ async function main() {
         getLocalHttpEndpoint: () => ({
           baseUrl: localHttpServer?.baseUrl ?? '',
           token: localHttpServer?.token ?? '',
+          mediaToken: localHttpServer?.mediaToken ?? '',
           aiEnabled: localHttpServer != null && buildAIConfig() !== null,
         }),
 

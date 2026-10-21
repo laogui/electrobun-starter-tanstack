@@ -1,7 +1,10 @@
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-const PLUGIN_ASSET_PATH = /^\/plugins\/[^/]+\//;
+// Static plugin modules live under their own prefix, keyed by an asset-only
+// token that grants nothing but these static files. It must never be the
+// renderer token: plugin code can read its own URL via `import.meta.url`.
+const PLUGIN_ASSET_PATH = /^\/plugin-assets\/[^/]+\//;
 const JAVASCRIPT_FILE = /\.(m?js)$/;
 
 export interface PluginDirectoryMount {
@@ -11,16 +14,19 @@ export interface PluginDirectoryMount {
   version: string;
 }
 
-export function pluginModulePath(token: string, mount: PluginDirectoryMount) {
+export function pluginModulePath(
+  assetToken: string,
+  mount: PluginDirectoryMount
+) {
   const generation = mount.generation
     ? `${encodeURIComponent(mount.generation)}/`
     : '';
-  return `/plugins/${encodeURIComponent(token)}/${encodeURIComponent(mount.id)}/${encodeURIComponent(mount.version)}/${generation}`;
+  return `/plugin-assets/${encodeURIComponent(assetToken)}/${encodeURIComponent(mount.id)}/${encodeURIComponent(mount.version)}/${generation}`;
 }
 
 export async function servePluginAsset(
   request: Request,
-  token: string,
+  assetToken: string,
   mounts: readonly PluginDirectoryMount[],
   headers: HeadersInit
 ): Promise<Response | null> {
@@ -29,7 +35,7 @@ export async function servePluginAsset(
     return null;
   }
   const mount = mounts.find((entry) =>
-    url.pathname.startsWith(pluginModulePath(token, entry))
+    url.pathname.startsWith(pluginModulePath(assetToken, entry))
   );
   if (!mount) {
     return new Response('Not found', { status: 404, headers });
@@ -39,7 +45,7 @@ export async function servePluginAsset(
   }
   try {
     const path = decodeURIComponent(
-      url.pathname.slice(pluginModulePath(token, mount).length)
+      url.pathname.slice(pluginModulePath(assetToken, mount).length)
     );
     if (
       !path ||

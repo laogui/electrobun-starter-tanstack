@@ -364,7 +364,16 @@ export class NoteContentService {
     this.workspaceId = workspaceId;
   }
 
-  async handle(request: Request, cors: HeadersInit): Promise<Response | null> {
+  /**
+   * @param scope.pluginId When the caller authenticated with a plugin-scoped
+   * token, the plugin id it was issued to; batches may only be recorded,
+   * undone or redone under that id.
+   */
+  async handle(
+    request: Request,
+    cors: HeadersInit,
+    scope: { pluginId?: string } = {}
+  ): Promise<Response | null> {
     if (new URL(request.url).pathname !== '/plugins/content') {
       return null;
     }
@@ -389,6 +398,12 @@ export class NoteContentService {
       const pluginId = string(input.pluginId, 200);
       if (!isPluginId(pluginId)) {
         return invalid('Invalid plugin id');
+      }
+      if (scope.pluginId !== undefined && pluginId !== scope.pluginId) {
+        return Response.json(
+          { code: 'forbidden', error: 'Token belongs to another plugin' },
+          { status: 403, headers }
+        );
       }
       id =
         typeof input.operationId === 'string' ? input.operationId : undefined;

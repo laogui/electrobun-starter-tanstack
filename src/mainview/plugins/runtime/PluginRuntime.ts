@@ -23,9 +23,11 @@ import { ActivationServices } from './activationServices';
 import { createPluginContent } from './content';
 import {
   createPluginFiles,
+  defaultPluginFilesTransport,
   normalizePluginFileFilters,
   type PluginFilesTransport,
 } from './files';
+import { scopeHostTransport } from './hostEndpoint';
 import {
   type ImporterSessionSnapshot,
   notesForCommit,
@@ -629,15 +631,28 @@ export class PluginRuntime {
       workspaceId: instance.workspaceId,
     });
     instance.services = services;
+    const hostToken = instance.descriptor.hostToken;
+    const contentTransport = scopeHostTransport(
+      this.options.contentTransport ?? {},
+      hostToken,
+      true
+    );
+    const storageTransport = scopeHostTransport(
+      this.options.storageTransport ?? {},
+      hostToken,
+      true
+    );
+    const filesTransport = scopeHostTransport(
+      this.options.filesTransport ?? defaultPluginFilesTransport,
+      hostToken,
+      false
+    );
     const storageContext = {
       pluginId,
       workspaceId: instance.workspaceId,
       signal: instance.controller.signal,
     };
-    const content = createPluginContent(
-      storageContext,
-      this.options.contentTransport
-    );
+    const content = createPluginContent(storageContext, contentTransport);
     instance.content = content;
     const files = createPluginFiles(
       {
@@ -646,7 +661,7 @@ export class PluginRuntime {
         workspaceId: instance.workspaceId,
         signal: instance.controller.signal,
       },
-      this.options.filesTransport
+      filesTransport
     );
     instance.files = files;
     const selection = new PluginSelectionStore({
@@ -684,15 +699,11 @@ export class PluginRuntime {
       files,
       selection,
       storage: {
-        app: createPluginStorage(
-          storageContext,
-          'app',
-          this.options.storageTransport
-        ),
+        app: createPluginStorage(storageContext, 'app', storageTransport),
         workspace: createPluginStorage(
           storageContext,
           'workspace',
-          this.options.storageTransport
+          storageTransport
         ),
       },
       events: services.events,

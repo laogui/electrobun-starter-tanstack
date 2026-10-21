@@ -120,9 +120,15 @@ export class PluginStorageHost {
     this.workspaceId = options.workspaceId;
   }
 
+  /**
+   * @param scope.pluginId When the caller authenticated with a plugin-scoped
+   * token, the plugin id it was issued to. Requests for any other plugin's
+   * storage are refused.
+   */
   async handle(
     request: Request,
-    corsHeaders: HeadersInit
+    corsHeaders: HeadersInit,
+    scope: { pluginId?: string } = {}
   ): Promise<Response | null> {
     if (new URL(request.url).pathname !== '/plugins/storage') {
       return null;
@@ -143,6 +149,12 @@ export class PluginStorageHost {
       input = parseRequest(JSON.parse(text));
     } catch (error) {
       return Response.json({ error: String(error) }, { status: 400, headers });
+    }
+    if (scope.pluginId !== undefined && input.pluginId !== scope.pluginId) {
+      return Response.json(
+        { error: 'Storage belongs to another plugin' },
+        { status: 403, headers }
+      );
     }
     if (input.workspaceId !== this.workspaceId) {
       return Response.json(

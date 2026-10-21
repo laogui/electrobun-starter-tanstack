@@ -29,7 +29,12 @@ export function createT0Host(directory = process.env.GHOSTBOARD_PLUGIN_T0_DIR) {
         }
       }, 10_000);
     },
-    async handle(request: Request, token: string, headers: HeadersInit) {
+    async handle(
+      request: Request,
+      token: string,
+      headers: HeadersInit,
+      assetToken: string
+    ) {
       const url = new URL(request.url);
       if (!url.pathname.startsWith('/plugin-t0/')) {
         return null;
@@ -43,7 +48,7 @@ export function createT0Host(directory = process.env.GHOSTBOARD_PLUGIN_T0_DIR) {
             {
               entries: mounts.map(
                 (mount) =>
-                  `${url.origin}${pluginModulePath(token, mount)}app.js`
+                  `${url.origin}${pluginModulePath(assetToken, mount)}app.js`
               ),
               filePath: join(directory, 'roundtrip.txt'),
               networkUrl: 'https://example.com/',

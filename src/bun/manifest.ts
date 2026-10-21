@@ -1,7 +1,10 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, normalize, relative, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { rotateBackup } from './persistence/backupFile';
+import { readJsonOrEmpty } from './persistence/corruptFile';
 
 export interface ManifestNode {
   data: Record<string, unknown>;
@@ -89,30 +92,196 @@ export function resolveWorkspaceManifestPath(
   return fullPath;
 }
 
-/** Load a canvas manifest from disk. Returns null if file doesn't exist. */
-export async function loadManifest(
+export type ManifestRead =
+  | { kind: 'ok'; manifest: CanvasManifest }
+  | { kind: 'missing' }
+  | { error: Error; kind: 'invalid-path' }
+  | {
+      /** Copy of the unreadable bytes, kept next to the manifest. */
+      backupPath: string;
+      error: Error;
+      kind: 'corrupt';
+      /** A usable manifest restored from a backup, when one parsed. */
+      recovered?: { from: string; manifest: CanvasManifest };
+    };
+
+/**
+ * Thrown by `loadManifest` when a manifest is damaged and no backup could be
+ * used. Callers that delete data based on manifest references must stop.
+ */
+export class ManifestCorruptError extends Error {
+  readonly backupPath: string;
+  readonly viewFile: string;
+
+  constructor(viewFile: string, backupPath: string, cause: Error) {
+    super(
+      `Canvas manifest ${viewFile} is unreadable; a copy was kept at ${backupPath}.`,
+      { cause }
+    );
+    this.name = 'ManifestCorruptError';
+    this.backupPath = backupPath;
+    this.viewFile = viewFile;
+  }
+}
+
+/** Rolling copy of the previous on-disk manifest, refreshed on every save. */
+export function manifestBackupViewFile(viewFile: string): string {
+  return `${viewFile}.bak`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Structural check for a manifest read from disk. Missing `nodes` / `edges`
+ * default to empty (older trash payloads were written as `{}`), but a value
+ * that is not an object, or arrays of the wrong type, count as corruption.
+ */
+export function parseCanvasManifest(value: unknown): CanvasManifest {
+  if (!isRecord(value)) {
+    throw new Error('Manifest is not a JSON object.');
+  }
+  const nodes = value.nodes ?? [];
+  const edges = value.edges ?? [];
+  if (!(Array.isArray(nodes) && Array.isArray(edges))) {
+    throw new Error('Manifest nodes/edges must be arrays.');
+  }
+  if (!nodes.every(isRecord)) {
+    throw new Error('Manifest contains a non-object node.');
+  }
+  if (!edges.every(isRecord)) {
+    throw new Error('Manifest contains a non-object edge.');
+  }
+  return { ...value, nodes, edges } as unknown as CanvasManifest;
+}
+
+async function readBackupManifest(
   wsPath: string,
   viewFile: string
-): Promise<CanvasManifest | null> {
+): Promise<{ from: string; manifest: CanvasManifest } | undefined> {
+  for (const candidate of [
+    manifestBackupViewFile(viewFile),
+    preTopicBackupViewFile(viewFile),
+  ]) {
+    let path: string;
+    try {
+      path = resolveWorkspaceManifestPath(wsPath, candidate);
+    } catch {
+      continue;
+    }
+    try {
+      const manifest = parseCanvasManifest(
+        JSON.parse(await readFile(path, 'utf8')) as unknown
+      );
+      return { from: candidate, manifest };
+    } catch {
+      // Missing or also damaged; try the next backup.
+    }
+  }
+  return;
+}
+
+/**
+ * Read a canvas manifest and say exactly what happened. A damaged file is
+ * copied aside to `<file>.corrupt-<timestamp>` (never overwritten) and the
+ * rolling `.bak` / `.pre-topic` backups are tried for a usable copy.
+ */
+export async function readManifest(
+  wsPath: string,
+  viewFile: string
+): Promise<ManifestRead> {
   let filePath: string;
   try {
     filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[manifest] Refused to load ${viewFile}: ${message}`);
-    return null;
+    return {
+      kind: 'invalid-path',
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
   }
-  const file = Bun.file(filePath);
-  if (!(await file.exists())) {
-    return null;
+  const read = await readJsonOrEmpty(filePath, parseCanvasManifest);
+  if (read.kind === 'empty') {
+    return { kind: 'missing' };
   }
-  try {
-    return await file.json();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[manifest] Failed to load ${viewFile}: ${message}`);
-    return null;
+  if (read.kind === 'ok') {
+    return { kind: 'ok', manifest: read.value };
   }
+  console.warn(
+    `[manifest] ${viewFile} is corrupt (${read.error.message}); preserved at ${read.backupPath}`
+  );
+  const recovered = await readBackupManifest(wsPath, viewFile);
+  return {
+    kind: 'corrupt',
+    backupPath: read.backupPath,
+    error: read.error,
+    ...(recovered ? { recovered } : {}),
+  };
+}
+
+/**
+ * Load a canvas manifest for display. Returns null when the file doesn't
+ * exist (or the path is refused). A corrupt manifest falls back to its newest
+ * usable backup; with no usable backup it throws `ManifestCorruptError`
+ * instead of pretending the canvas is empty, so nothing overwrites it.
+ */
+export async function loadManifest(
+  wsPath: string,
+  viewFile: string
+): Promise<CanvasManifest | null> {
+  const read = await readManifest(wsPath, viewFile);
+  switch (read.kind) {
+    case 'ok':
+      return read.manifest;
+    case 'missing':
+      return null;
+    case 'invalid-path':
+      console.warn(
+        `[manifest] Refused to load ${viewFile}: ${read.error.message}`
+      );
+      return null;
+    default:
+      if (read.recovered) {
+        console.warn(
+          `[manifest] Recovered ${viewFile} from ${read.recovered.from}`
+        );
+        return read.recovered.manifest;
+      }
+      throw new ManifestCorruptError(viewFile, read.backupPath, read.error);
+  }
+}
+
+/**
+ * Load every manifest that reference-based cleanup depends on. Any manifest
+ * that is unreadable (even if a backup could be shown) aborts with
+ * `ManifestCorruptError`: a stale or missing reference set would make live
+ * notes and instances look unreferenced and get deleted.
+ */
+export async function loadManifestsStrict(
+  wsPath: string,
+  viewFiles: readonly string[]
+): Promise<CanvasManifest[]> {
+  const reads = await Promise.all(
+    viewFiles.map(async (file) => ({
+      file,
+      read: await readManifest(wsPath, file),
+    }))
+  );
+  const manifests: CanvasManifest[] = [];
+  for (const { file, read } of reads) {
+    if (read.kind === 'corrupt') {
+      throw new ManifestCorruptError(file, read.backupPath, read.error);
+    }
+    if (read.kind === 'invalid-path') {
+      throw new Error(
+        `Refusing to scan references: ${file} has an invalid manifest path (${read.error.message}).`
+      );
+    }
+    if (read.kind === 'ok') {
+      manifests.push(read.manifest);
+    }
+  }
+  return manifests;
 }
 
 export function preTopicBackupViewFile(viewFile: string): string {
@@ -146,19 +315,19 @@ export async function backupManifestBeforeFirstTopics(
     return { created: false };
   }
 
-  const source = Bun.file(sourcePath);
-  if (!(await source.exists())) {
+  if (!existsSync(sourcePath)) {
     return { created: false };
   }
 
-  const existing = await loadManifest(wsPath, viewFile);
-  if (existing && nodesIncludeTopics(existing.nodes)) {
+  const existing = await readManifest(wsPath, viewFile);
+  if (existing.kind !== 'ok' || nodesIncludeTopics(existing.manifest.nodes)) {
+    // Never snapshot a damaged file as the pre-Topic restore point.
     return { created: false };
   }
 
   const backupFile = preTopicBackupViewFile(viewFile);
   const destPath = resolveWorkspaceManifestPath(wsPath, backupFile);
-  if (await Bun.file(destPath).exists()) {
+  if (existsSync(destPath)) {
     return { backupFile, created: false };
   }
 
@@ -174,5 +343,9 @@ export async function saveManifest(
 ): Promise<void> {
   const filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
   await backupManifestBeforeFirstTopics(wsPath, viewFile, manifest.nodes);
+  await rotateBackup(
+    filePath,
+    resolveWorkspaceManifestPath(wsPath, manifestBackupViewFile(viewFile))
+  );
   await atomicWrite(filePath, JSON.stringify(manifest, null, 2));
 }

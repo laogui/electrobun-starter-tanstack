@@ -6,7 +6,7 @@ import { Utils } from 'electrobun/bun';
 import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import { blocknoteSidecarDir } from './blocknote';
 import { cancelExtensionTasksByInstance } from './extensions/scheduler';
-import { loadManifest, type ManifestNode } from './manifest';
+import { loadManifestsStrict, type ManifestNode } from './manifest';
 import { listFilesRecursiveAsync, parseFrontmatter } from './notes';
 import { loadWorkspaceConfig } from './workspace';
 
@@ -81,20 +81,10 @@ async function collectReferencedIds(wsPath: string): Promise<Set<string>> {
   for (const entry of config.trash ?? []) {
     manifestFiles.push(entry.trashFile);
   }
-  const manifests = await Promise.all(
-    manifestFiles.map(async (file) => {
-      try {
-        return await loadManifest(wsPath, file);
-      } catch (error) {
-        console.warn(`[cleanup] Failed to load manifest ${file}:`, error);
-        return null;
-      }
-    })
-  );
+  // Fail closed: an unreadable manifest would make everything it references
+  // look unlinked, so the scan/delete is aborted and the error reaches the UI.
+  const manifests = await loadManifestsStrict(wsPath, manifestFiles);
   for (const manifest of manifests) {
-    if (!manifest) {
-      continue;
-    }
     for (const node of manifest.nodes) {
       collectNoteIdsFromNode(node, ids);
       for (const instanceId of collectExtensionInstanceIds([node])) {

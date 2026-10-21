@@ -75,7 +75,8 @@ src/
     notes.ts                               # legacy .md 文件 CRUD + frontmatter 解析/序列化
     noteStore.ts                           # sidecar-first note record 读取抽象，合并 legacy .md 索引
     attachments.ts                         # attachments/ 附件保存、streaming upload、读取、打开/Reveal 与路径校验
-    localHttpServer.ts                     # localhost HTTP bridge：附件上传、附件 byte range stream、AI proxy
+    localHttpServer.ts                     # localhost HTTP bridge：附件上传、附件 byte range stream、AI proxy、插件模块/宿主服务
+    localHttpAuth.ts                       # 本地 HTTP 凭据：主渲染端 / 媒体 / 资源 / 插件作用域 token
     blocknote.ts                           # BlockNote JSON sidecar 读写、schema 校验、revision 管理
     thumbnail.ts                           # 文本 excerpt / archive summary 元数据生成（saveAttachment 后调用）
     linkPreview.ts                         # Link unfurl：抓取网页 title/description/icon/image
@@ -1228,7 +1229,8 @@ type CanvasRPC = {
       };
       getLocalHttpEndpoint: {
         params: Record<string, unknown>;
-        response: { aiEnabled: boolean; baseUrl: string; token: string };
+        // token: 主渲染端 token，只能放 Authorization 头；mediaToken: 只读媒体 token，可放 query
+        response: { aiEnabled: boolean; baseUrl: string; mediaToken: string; token: string };
       };
 
       // Search / tags
@@ -1576,7 +1578,18 @@ Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'top
 
 ## 13. 高信任插件运行时
 
-已启用插件与宿主前端同一个 JavaScript realm，用带启动 token 的本地 HTTP 提供模块，经 import map 共享宿主的 React 19.2.x（当前 `package.json` 为 `19.2.5`）、`react-dom` 和 `@ghostboard/sdk`。npm 上的 SDK 只提供类型、fake host、参考和 packer，不在插件包里再带一份运行时。插件不得打包第二个 React。`globalThis.__ghostboardPluginRuntime` 是冻结的共享运行时对象。
+已启用插件与宿主前端同一个 JavaScript realm，用本地 HTTP 的资源专用路径（`/plugin-assets/<assetToken>/…`）提供模块，经 import map 共享宿主的 React 19.2.x（当前 `package.json` 为 `19.2.5`）、`react-dom` 和 `@ghostboard/sdk`。npm 上的 SDK 只提供类型、fake host、参考和 packer，不在插件包里再带一份运行时。插件不得打包第二个 React。`globalThis.__ghostboardPluginRuntime` 是冻结的共享运行时对象。
+
+本地 HTTP 凭据（`src/bun/localHttpAuth.ts`，每次启动在内存中随机生成，不落盘）：
+
+| 凭据 | 携带方式 | 可访问 |
+| --- | --- | --- |
+| 主渲染端 token（`getLocalHttpEndpoint().token`） | 仅 `Authorization: Bearer` 头；query 中出现一律 401 | 全部路由：`/ai/chat`、`/attachment*`、`/unfurl`、`/youtube`、`/plugins/runtime|reload|release|startup-ready`、插件数据路由 |
+| 媒体 token（`mediaToken`） | `?token=`，仅 GET/HEAD（`<video src>`、iframe 无法带头） | 只读：`GET/HEAD /attachment`、`GET /youtube` |
+| 资源 token（`assetToken`） | 模块 URL 路径段 | 仅 `/plugin-assets/<assetToken>/<id>/<version>/<generation>/…` 下活跃挂载的静态文件；不能作为 bearer 使用 |
+| 插件作用域 token（`PluginRuntimeDescriptor.hostToken`） | `Authorization: Bearer` 头 | 仅 `/plugins/storage`、`/plugins/content`、`/plugins/files/*`，且请求里的 `pluginId` 必须等于签发对象，否则 403；插件停用/移除时吊销 |
+
+渲染端 `PluginRuntime` 用 `scopeHostTransport` 把每个插件的 storage / content / files 传输绑定到其 `hostToken`；描述符缺少 `hostToken`（旧宿主或探针）时退回主渲染端 token。CORS 只回显 `views://mainview`、`http://localhost:5173`、`http://127.0.0.1:5173` 与 `null`（WebKit 自定义 scheme 可能上报不透明来源），其他来源不返回 `Access-Control-Allow-*`。这是作用域收窄：同 realm 插件仍可调用 Electrobun RPC 桥（含 `getLocalHttpEndpoint`）或包装 `fetch`，见 PRD §2.14.0 / §6。
 
 安装根目录是应用数据目录下的 `plugins/`（`pluginInstallRoot`）。启用按工作区记录。包入口是 `manifest.json`，不是 `ghostboard.plugin.json`。`manifestVersion: 1` 一律拒绝，提示「旧契约，需重新安装 v2 版本」，保留用户数据。仓库里没有 QuickJS 运行时。
 

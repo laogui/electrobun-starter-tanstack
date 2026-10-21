@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
+import { pickFile } from '@/lib/pickFile';
 import {
   rpcCancelExtensionTask,
   rpcListExtensionTasks,
@@ -38,20 +39,6 @@ function metadataFromSavedAsset(data: AssetNodeData): AssetMetadata {
       : {}),
     ...(data.archiveSummary ? { archiveSummary: data.archiveSummary } : {}),
   };
-}
-
-function pickFiles(accept?: string): Promise<File | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    if (accept) {
-      input.accept = accept;
-    }
-    input.addEventListener('change', () => {
-      resolve(input.files?.[0] ?? null);
-    });
-    input.click();
-  });
 }
 
 export function createExtensionHostApi(input: {
@@ -147,7 +134,7 @@ export function createExtensionHostApi(input: {
     },
     assets: {
       importFile: async (options) => {
-        const file = await pickFiles(options?.accept);
+        const file = await pickFile(options?.accept);
         if (!file) {
           return null;
         }

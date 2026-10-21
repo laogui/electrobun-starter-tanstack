@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
-
+import * as m from '../../../paraglide/messages.js';
 import type { CardContentData, ChecklistItem } from './nodes/CardNode';
 
 interface ChecklistFocusedViewProps {
@@ -45,7 +45,7 @@ const ItemRow = ({
     return (
       <div className="group flex items-center gap-3 pt-6 pb-1">
         <input
-          aria-label="Section title"
+          aria-label={m.a11y_checklist_section_title()}
           className={cn(
             'w-full border-none bg-transparent font-semibold text-sm uppercase tracking-wide outline-hidden',
             isDark
@@ -63,12 +63,12 @@ const ItemRow = ({
               onDeleteEmptyBackwards();
             }
           }}
-          placeholder="Section"
+          placeholder={m.checklist_section_placeholder()}
           ref={inputRef}
           value={text}
         />
         <button
-          aria-label="Delete section"
+          aria-label={m.a11y_checklist_delete_section()}
           className={cn(
             'hover:!opacity-100 shrink-0 rounded-md p-1 opacity-0 transition-opacity group-focus-within:opacity-60 group-hover:opacity-60',
             isDark ? 'text-white' : 'text-neutral-500'
@@ -109,7 +109,7 @@ const ItemRow = ({
         ) : null}
       </button>
       <input
-        aria-label="Checklist item text"
+        aria-label={m.a11y_checklist_item_text()}
         className={cn(
           'w-full border-none bg-transparent text-base outline-hidden transition-colors',
           item.checked
@@ -131,12 +131,12 @@ const ItemRow = ({
             onDeleteEmptyBackwards();
           }
         }}
-        placeholder="To-do"
+        placeholder={m.checklist_item_placeholder()}
         ref={inputRef}
         value={text}
       />
       <button
-        aria-label="Delete item"
+        aria-label={m.a11y_checklist_delete_item()}
         className={cn(
           'hover:!opacity-100 shrink-0 rounded-md p-1 opacity-0 transition-opacity group-focus-within:opacity-60 group-hover:opacity-60',
           isDark ? 'text-white' : 'text-neutral-500'
@@ -258,7 +258,7 @@ export const ChecklistFocusedView = ({
         />
 
         <input
-          aria-label="Checklist title"
+          aria-label={m.a11y_checklist_title()}
           className={cn(
             'w-full border-none bg-transparent font-bold text-4xl leading-tight tracking-tight outline-hidden',
             isDark ? 'placeholder-white/30' : 'placeholder-neutral-300'
@@ -277,7 +277,7 @@ export const ChecklistFocusedView = ({
               e.currentTarget.blur();
             }
           }}
-          placeholder="Untitled checklist"
+          placeholder={m.checklist_untitled_placeholder()}
         />
 
         {tasks.length > 0 ? (
@@ -345,7 +345,7 @@ export const ChecklistFocusedView = ({
               />
             </div>
             <input
-              aria-label="New checklist item"
+              aria-label={m.a11y_checklist_new_item()}
               className={cn(
                 'w-full border-none bg-transparent text-base outline-hidden',
                 isDark ? 'placeholder-white/40' : 'placeholder-neutral-400'
@@ -357,7 +357,7 @@ export const ChecklistFocusedView = ({
                   handleAddItem();
                 }
               }}
-              placeholder="Add item..."
+              placeholder={m.checklist_add_item_placeholder()}
               type="text"
               value={newItem}
             />

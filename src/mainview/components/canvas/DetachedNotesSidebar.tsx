@@ -19,6 +19,7 @@ import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import * as m from '../../../paraglide/messages.js';
 import {
   type ExtensionInstanceLoadError,
   type ExtensionInstanceRecord,
@@ -270,7 +271,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
         {selectedNode ? (
           <motion.section
             animate={{ opacity: 1 }}
-            aria-label="Note preview"
+            aria-label={m.a11y_note_preview()}
             className="absolute inset-y-0 left-0 z-50 flex flex-col bg-white/95 backdrop-blur-sm dark:bg-neutral-900/95"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
@@ -282,7 +283,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                 {selectedTitle}
               </h2>
               <button
-                aria-label="Close preview"
+                aria-label={m.a11y_close_preview()}
                 className="electrobun-webkit-app-region-no-drag flex size-6 shrink-0 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
                 onClick={() => {
                   setSelectedNodeId(null);
@@ -327,7 +328,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                   <div className="space-y-4 rounded-xl border border-black/5 bg-white p-5 text-sm shadow-sm dark:border-white/10 dark:bg-white/5">
                     <div>
                       <p className="font-medium text-gray-500 text-xs uppercase tracking-normal dark:text-gray-400">
-                        Type
+                        {m.asset_meta_type()}
                       </p>
                       <p className="mt-1 break-all text-gray-800 dark:text-gray-100">
                         {selectedData
@@ -338,7 +339,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                     </div>
                     <div>
                       <p className="font-medium text-gray-500 text-xs uppercase tracking-normal dark:text-gray-400">
-                        File
+                        {m.asset_meta_file()}
                       </p>
                       <p className="mt-1 break-all font-mono text-gray-700 dark:text-gray-200">
                         {selectedData
@@ -372,10 +373,10 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
         {/* h-10 matches the app titlebar so the title sits in the window chrome row */}
         <header className="electrobun-webkit-app-region-drag flex h-10 shrink-0 items-center justify-between border-black/5 border-b px-4 dark:border-white/5">
           <h2 className="font-semibold text-[13px] text-gray-800 dark:text-gray-100">
-            Note Library
+            {m.library_sidebar_title()}
           </h2>
           <button
-            aria-label="Close sidebar"
+            aria-label={m.a11y_close_sidebar()}
             className="electrobun-webkit-app-region-no-drag flex size-6 items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/10"
             onClick={onClose}
             type="button"
@@ -388,7 +389,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
           {entries.length === 0 ? (
             <div className="flex flex-col items-center gap-3 p-8 text-center text-gray-400 dark:text-gray-500">
               <FileText size={32} strokeWidth={1.2} />
-              <p className="text-xs">All notes are on the canvas.</p>
+              <p className="text-xs">{m.library_all_on_canvas()}</p>
             </div>
           ) : (
             <ul className="flex flex-col">
@@ -483,7 +484,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
 
                       {/* Pin button */}
                       <button
-                        aria-label="Pin to canvas"
+                        aria-label={m.a11y_pin_to_canvas()}
                         className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-2xs text-accent-strong opacity-0 transition-opacity hover:bg-accent-softer group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -492,7 +493,7 @@ export function DetachedNotesSidebar({ onClose }: { onClose: () => void }) {
                         type="button"
                       >
                         <MapPin size={11} />
-                        Pin
+                        {m.library_pin()}
                       </button>
                     </div>
                   </li>

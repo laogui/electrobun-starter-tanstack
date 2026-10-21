@@ -102,7 +102,6 @@ function ExtensionNodeComponent({
         <ExtensionFallback
           availability="corrupted"
           canvasTypeId={canvasTypeId}
-          message="This instance could not be loaded. The original file is kept."
           presentation={presentation}
         />
       ) : canvasType && compatible && availability === 'available' ? (

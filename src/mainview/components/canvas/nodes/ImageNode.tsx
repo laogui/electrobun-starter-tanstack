@@ -4,6 +4,12 @@ import { toast } from 'sonner';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { useNodeTagEditing } from '@/components/card/useNodeTagEditing';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
+import {
+  applyIfNodeUnchanged,
+  captureNodeData,
+  findNodeData,
+  isNodeDataUnchanged,
+} from '@/lib/nodeWriteGuard';
 import { rpcLoadAttachment, rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
 import { cn } from '@/lib/utils';
@@ -125,7 +131,7 @@ export const ImageContent = ({
         <div className="flex size-full flex-col items-center justify-center gap-3 border border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
           <div className="flex items-center gap-2 font-medium text-sm">
             <AlertTriangle size={isFocused ? 20 : 16} />
-            Missing image
+            {m.image_missing()}
           </div>
           <button
             className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-red-300/60 bg-white/70 px-3 py-1.5 text-red-700 text-xs shadow-sm transition-colors hover:bg-white dark:border-red-400/30 dark:bg-white/10 dark:text-red-200 dark:hover:bg-white/20"
@@ -140,7 +146,7 @@ export const ImageContent = ({
             type="button"
           >
             <RefreshCw size={12} />
-            Retry
+            {m.action_retry()}
           </button>
         </div>
       );
@@ -163,7 +169,7 @@ export const ImageContent = ({
             isFocused ? 'text-zinc-500' : 'text-gray-400'
           )}
         >
-          No image
+          {m.image_empty()}
         </span>
       </div>
     );
@@ -255,16 +261,44 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       const reader = new FileReader();
       reader.addEventListener('load', async (e) => {
         const imageUrl = e.target?.result as string;
-        const title = data.title || file.name.replace(FILE_EXT_RE, '');
+        const live = findNodeData(useCanvasStore.getState().nodes, id);
+        if (!live) {
+          return;
+        }
+        const liveTitle = typeof live.title === 'string' ? live.title : '';
+        const title = liveTitle || file.name.replace(FILE_EXT_RE, '');
 
         // Show image immediately with data URL — snapshot for undo
         commitNodeData(id, { imageUrl, title });
 
+        // Everything below writes after an await. Pin the write-back to the
+        // data URL we just committed: if the user undoes, deletes the node or
+        // drops another image meanwhile, the stale result is discarded.
+        const expectation = captureNodeData(
+          useCanvasStore.getState().nodes,
+          id,
+          ['imageUrl']
+        );
+        if (!expectation) {
+          return;
+        }
+        const previousImageFile =
+          typeof live.imageFile === 'string' ? live.imageFile : undefined;
+        const previousThumbnailFile =
+          typeof live.thumbnailFile === 'string'
+            ? live.thumbnailFile
+            : undefined;
+
         // Save the original to a workspace attachment (side-effect; no extra snapshot)
         try {
-          const original = await rpcSaveAttachment(imageUrl, data.imageFile);
-          if (original?.filePath) {
-            updateNodeData(id, { imageFile: original.filePath });
+          const original = await rpcSaveAttachment(imageUrl, previousImageFile);
+          if (
+            original?.filePath &&
+            !applyIfNodeUnchanged(useCanvasStore, expectation, {
+              imageFile: original.filePath,
+            })
+          ) {
+            return;
           }
         } catch (error) {
           console.error('[ImageNode] Failed to save attachment:', error);
@@ -279,9 +313,14 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
           if (!thumbnailDataUrl) {
             return;
           }
+          if (
+            !isNodeDataUnchanged(useCanvasStore.getState().nodes, expectation)
+          ) {
+            return;
+          }
           const thumb = await rpcSaveAttachment(
             thumbnailDataUrl,
-            data.thumbnailFile,
+            previousThumbnailFile,
             {
               kind: 'image',
               mimeType: 'image/jpeg',
@@ -289,7 +328,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             }
           );
           if (thumb?.filePath) {
-            updateNodeData(id, {
+            applyIfNodeUnchanged(useCanvasStore, expectation, {
               thumbnailFile: thumb.filePath,
               thumbnailUrl: thumbnailDataUrl,
             });
@@ -301,11 +340,11 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
       });
       reader.addEventListener('error', () => {
         console.error('[ImageNode] FileReader error:', reader.error);
-        toast.error('Failed to read image file');
+        toast.error(m.toast_image_read_failed());
       });
       reader.readAsDataURL(file);
     },
-    [id, data, commitNodeData, updateNodeData]
+    [id, commitNodeData]
   );
 
   // Pending replacement file — when set, the confirm dialog is shown.
@@ -403,7 +442,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       <input
         accept="image/*"
-        aria-label="Replace image file"
+        aria-label={m.a11y_replace_image_file()}
         className="hidden"
         onChange={handleFileInput}
         ref={fileInputRef}
@@ -453,7 +492,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               >
                 <ImagePlus className="text-gray-300" size={40} />
                 <span className="text-gray-400 text-sm">
-                  Click to add image
+                  {m.image_click_to_add()}
                 </span>
               </button>
               <span className="text-gray-300 text-xs">
@@ -462,7 +501,9 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             </div>
           )}
           {hasImage ? (
-            <TypeBadge className="absolute top-5 right-5 z-10">Image</TypeBadge>
+            <TypeBadge className="absolute top-5 right-5 z-10">
+              {m.type_badge_image()}
+            </TypeBadge>
           ) : null}
           {isRenaming && hasImage ? (
             <div
@@ -471,7 +512,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               onPointerDown={(e) => e.stopPropagation()}
             >
               <input
-                aria-label="Rename image"
+                aria-label={m.a11y_rename_image()}
                 className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => setRenameDraft(e.target.value)}

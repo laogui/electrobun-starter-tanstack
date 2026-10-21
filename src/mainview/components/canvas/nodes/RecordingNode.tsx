@@ -504,7 +504,7 @@ const RecordingNode = ({
             onPointerDown={(e) => e.stopPropagation()}
           >
             <input
-              aria-label="Rename recording"
+              aria-label={m.a11y_rename_recording()}
               className="w-full rounded-lg border border-black/15 bg-white px-3 py-1.5 font-semibold text-neutral-900 text-sm shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
               onBlur={commitRename}
               onChange={(e) => setRenameDraft(e.target.value)}

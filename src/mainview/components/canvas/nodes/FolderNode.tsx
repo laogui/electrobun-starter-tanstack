@@ -18,7 +18,7 @@ import {
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
-
+import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 
 /** Fallback when React Flow has not measured the node yet. */
@@ -350,7 +350,7 @@ export const FolderContent = ({
         <div className="relative flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
             <h3
-              aria-label="Folder name"
+              aria-label={m.a11y_folder_name()}
               className="truncate font-bold text-slate-800 text-xl leading-none"
             >
               {data.title}
@@ -371,7 +371,7 @@ export const FolderContent = ({
               </span>
             ) : null}
             <button
-              aria-label="Folder menu"
+              aria-label={m.a11y_folder_menu()}
               className="nodrag grid size-7 shrink-0 place-items-center rounded-full border border-slate-300/80 text-slate-500 transition-[transform,background-color] hover:scale-110 hover:bg-slate-900/5"
               onClick={onMenuClick}
               type="button"

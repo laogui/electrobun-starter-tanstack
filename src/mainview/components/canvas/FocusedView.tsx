@@ -765,16 +765,6 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                             : extensionAvailability
                     }
                     canvasTypeId={extensionCanvasTypeId}
-                    message={
-                      !extensionRecord ||
-                      isExtensionInstanceLoadError(extensionRecord)
-                        ? 'This instance could not be loaded. The original file is kept.'
-                        : extensionAvailability === 'disabled'
-                          ? 'This canvas type is disabled in the current workspace.'
-                          : extensionType && !extensionCompatible
-                            ? 'This card needs a compatible plugin migration. The original data is kept.'
-                            : 'This canvas type is unavailable. Data is kept.'
-                    }
                     onEnable={() => {
                       setExtensionEnabled(extensionCanvasTypeId, true).catch(
                         () => undefined

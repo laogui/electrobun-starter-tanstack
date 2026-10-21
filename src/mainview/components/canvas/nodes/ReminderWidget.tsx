@@ -1,5 +1,5 @@
 import { AlarmClock, Bell, Check, CheckCircle2 } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { memo, type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { DatePicker } from '@/components/ui/DatePicker';
 import { formatClock, formatDay, parseDate } from '@/lib/dateTime';
@@ -171,7 +171,7 @@ function ReminderHero({
   );
 }
 
-export function ReminderWidgetBody({
+function ReminderWidgetBodyImpl({
   data,
   onChange,
   onTitleChange,
@@ -368,3 +368,5 @@ export function ReminderWidgetBody({
     </div>
   );
 }
+
+export const ReminderWidgetBody = memo(ReminderWidgetBodyImpl);

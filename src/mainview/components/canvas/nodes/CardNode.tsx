@@ -13,6 +13,7 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 
@@ -184,7 +185,7 @@ export const CardContent = ({
                 )}
               />
               <input
-                aria-label="New checklist item"
+                aria-label={m.a11y_checklist_new_item()}
                 className={cn(
                   'nodrag nopan w-full border-none bg-transparent text-sm outline-hidden',
                   isDark ? 'placeholder-white/40' : 'placeholder-gray-500'
@@ -203,7 +204,7 @@ export const CardContent = ({
                     setNewItem('');
                   }
                 }}
-                placeholder="Add item..."
+                placeholder={m.checklist_add_item_placeholder()}
                 type="text"
                 value={newItem}
               />

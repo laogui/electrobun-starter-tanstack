@@ -577,9 +577,11 @@ export function useContextMenu({
           const anchorCenter = savedMenu
             ? screenToFlow(savedMenu.x, savedMenu.y)
             : undefined;
-          handleMarkdownImportResult(result, (notes) => {
+          await handleMarkdownImportResult(result, async (notes) => {
             for (const [index, note] of notes.entries()) {
-              createNode(
+              // Sequential so cards keep order and each create sees the last.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
+              await createNode(
                 'card',
                 rfInstance.current,
                 buildImportedCardCreateOptions(
@@ -827,7 +829,7 @@ export function useContextMenu({
         case 'detach-from-canvas': {
           if (nodeId) {
             detachNoteFromCanvas(nodeId);
-            toast('Note moved to library', {
+            toast(m.toast_note_moved_to_library(), {
               action: { label: m.toast_undo(), onClick: () => undo() },
             });
           }

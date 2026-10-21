@@ -17,7 +17,7 @@ import {
   type LocaleSetting,
   type ThemeSetting,
 } from '@/settingsClient';
-
+import * as m from '../../../../paraglide/messages.js';
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 interface SelectOption<TValue extends string> {
@@ -156,7 +156,7 @@ export function GeneralPanel({
       {/* License Status */}
       <div className="space-y-2">
         <h3 className="font-medium text-gray-700 text-sm dark:text-gray-300">
-          License
+          {m.settings_license_heading()}
         </h3>
         <LicenseStatusCard onActivateClick={() => setShowLicenseDialog(true)} />
       </div>

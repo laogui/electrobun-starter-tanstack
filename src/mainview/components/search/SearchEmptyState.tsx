@@ -112,7 +112,7 @@ export function SearchEmptyState({
                   <span className="flex-1 truncate">{entry}</span>
                 </button>
                 <button
-                  aria-label="Remove from history"
+                  aria-label={m.a11y_remove_from_history()}
                   className="shrink-0 text-gray-300 outline-hidden hover:text-gray-500 focus-visible:text-gray-500 dark:text-gray-600 dark:focus-visible:text-gray-400 dark:hover:text-gray-400"
                   onClick={() => {
                     onRemoveHistory(entry);

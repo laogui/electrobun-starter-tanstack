@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { mockLicenseAPI } from '@/lib/license-api-mock';
 import { rpcActivateLicense } from '@/lib/rpc-license';
+import * as m from '../../paraglide/messages.js';
 
 interface LicenseActivationDialogProps {
   onClose: () => void;
@@ -38,7 +39,7 @@ export function LicenseActivationDialog({
     const trimmedKey = key.trim().toUpperCase();
 
     if (!trimmedKey) {
-      toast.error('Please enter a license key');
+      toast.error(m.license_enter_key());
       return;
     }
 
@@ -60,16 +61,16 @@ export function LicenseActivationDialog({
       }
 
       if (result?.success) {
-        toast.success('License activated successfully!');
+        toast.success(m.license_activated());
         setKey('');
         onSuccess?.();
         onClose();
       } else {
-        toast.error(result?.error || 'Invalid license key');
+        toast.error(result?.error || m.license_invalid_key());
       }
     } catch (error: any) {
       console.error('[License] Activation error:', error);
-      toast.error(error?.message || 'Failed to activate license');
+      toast.error(error?.message || m.license_activate_failed());
     } finally {
       setLoading(false);
     }
@@ -91,9 +92,10 @@ export function LicenseActivationDialog({
         {/* Header */}
         <div className="flex items-center justify-between border-gray-200 border-b p-6 dark:border-gray-700">
           <h2 className="font-bold text-gray-900 text-xl dark:text-white">
-            Activate License
+            {m.license_dialog_title()}
           </h2>
           <button
+            aria-label={m.license_close()}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             onClick={onClose}
             type="button"
@@ -105,8 +107,7 @@ export function LicenseActivationDialog({
         {/* Body */}
         <div className="p-6">
           <p className="mb-4 text-gray-600 text-sm dark:text-gray-400">
-            Enter your license key to unlock unlimited cards and premium
-            features.
+            {m.license_dialog_description()}
           </p>
 
           <div className="mb-4">
@@ -114,7 +115,7 @@ export function LicenseActivationDialog({
               className="mb-2 block font-medium text-gray-700 text-sm dark:text-gray-300"
               htmlFor="license-key"
             >
-              License Key
+              {m.license_key_label()}
             </label>
             <input
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-gray-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-accent dark:border-gray-600 dark:bg-gray-700 dark:text-white"
@@ -163,14 +164,14 @@ export function LicenseActivationDialog({
             onClick={handleActivate}
             type="button"
           >
-            {loading ? 'Activating...' : 'Activate'}
+            {loading ? m.license_activating() : m.license_activate()}
           </button>
           <button
             className="rounded-lg border border-gray-300 px-4 py-2 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
             onClick={onClose}
             type="button"
           >
-            Cancel
+            {m.license_cancel()}
           </button>
         </div>
       </div>

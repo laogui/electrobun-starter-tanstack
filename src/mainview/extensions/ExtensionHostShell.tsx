@@ -16,11 +16,11 @@ import { isColorDark } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
+import * as m from '../../paraglide/messages.js';
 import { RECORDING_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
 import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
-
 import { ExtensionFallback } from './ExtensionFallback';
 import { canvasTypeRegistry } from './registry';
 import type { AnyBuiltinCanvasType } from './types';
@@ -216,15 +216,6 @@ export function ExtensionHostShell({
           <ExtensionFallback
             availability={availability}
             canvasTypeId={canvasTypeId}
-            message={
-              availability === 'corrupted'
-                ? 'This instance could not be loaded. The original file is kept.'
-                : availability === 'incompatible'
-                  ? 'This card needs a compatible plugin migration. The original data is kept.'
-                  : availability === 'disabled'
-                    ? 'This canvas type is disabled in the current workspace.'
-                    : 'This canvas type is unavailable. Data is kept.'
-            }
             onEnable={onEnable}
             presentation={presentation}
           />
@@ -254,7 +245,7 @@ export function ExtensionHostShell({
             onPointerDown={(event) => event.stopPropagation()}
           >
             <input
-              aria-label="Rename"
+              aria-label={m.a11y_rename()}
               className="nodrag nopan w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
               onBlur={commitRename}
               onChange={(event) => setRenameDraft(event.target.value)}

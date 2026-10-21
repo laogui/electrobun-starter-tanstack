@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import { LinkContent } from '@/components/canvas/nodes/LinkNode';
 import { resolveExtensionMessage } from '@/extensions/messages';
+import * as m from '../../../../paraglide/messages.js';
 import { LINK_CANVAS_TYPE_ID } from '../../../../shared/extensions/builtinIds';
 import {
   buildLinkPresentation,
@@ -11,7 +12,6 @@ import {
   type LinkState,
   normalizeLinkState,
 } from '../../../../shared/extensions/web/link';
-
 import {
   type BuiltinCanvasType,
   type CanvasTypeMenuAction,
@@ -34,7 +34,7 @@ function applyUnfurl(state: LinkState, body: string): LinkState {
       return {
         ...state,
         unfurlStatus: 'failed',
-        unfurlError: 'Could not load link preview.',
+        unfurlError: m.link_preview_failed(),
       };
     }
     return {
@@ -51,7 +51,7 @@ function applyUnfurl(state: LinkState, body: string): LinkState {
     return {
       ...state,
       unfurlStatus: 'failed',
-      unfurlError: 'Could not load link preview.',
+      unfurlError: m.link_preview_failed(),
     };
   }
 }

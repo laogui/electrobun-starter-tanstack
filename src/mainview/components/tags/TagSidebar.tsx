@@ -210,7 +210,7 @@ function TagSidebarBody() {
                     key={t.name}
                   >
                     <input
-                      aria-label="Tag name"
+                      aria-label={m.a11y_tag_name()}
                       className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-hidden focus:border-primary dark:border-white/10 dark:bg-neutral-800"
                       onChange={(e) => {
                         setEditingName(e.target.value);

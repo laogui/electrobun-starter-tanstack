@@ -656,7 +656,7 @@ function AssetThumbnail({
     return (
       <div className="flex size-full flex-col items-center justify-center gap-2 bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-200">
         <AlertTriangle size={28} />
-        <span className="font-medium text-sm">Missing file</span>
+        <span className="font-medium text-sm">{m.asset_missing_file()}</span>
       </div>
     );
   }
@@ -693,7 +693,7 @@ function MetadataGrid({ asset }: { asset: AssetNodeData }) {
     <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
       <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
         <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-          Type
+          {m.asset_meta_type()}
         </p>
         <p className="mt-1 break-words text-neutral-800 dark:text-neutral-100">
           {asset.mimeType}
@@ -701,7 +701,7 @@ function MetadataGrid({ asset }: { asset: AssetNodeData }) {
       </div>
       <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
         <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-          Size
+          {m.asset_meta_size()}
         </p>
         <p className="mt-1 text-neutral-800 dark:text-neutral-100">
           {formatFileSize(asset.size)}
@@ -710,7 +710,7 @@ function MetadataGrid({ asset }: { asset: AssetNodeData }) {
       {duration ? (
         <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-black/20">
           <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-            Duration
+            {m.asset_meta_duration()}
           </p>
           <p className="mt-1 text-neutral-800 dark:text-neutral-100">
             {duration}
@@ -724,10 +724,10 @@ function MetadataGrid({ asset }: { asset: AssetNodeData }) {
         )}
       >
         <p className="font-medium text-neutral-500 text-xs uppercase tracking-normal dark:text-neutral-400">
-          File
+          {m.asset_meta_file()}
         </p>
         <p className="mt-1 break-all font-mono text-neutral-700 text-sm dark:text-neutral-200">
-          {asset.fileName || 'Untitled file'}
+          {asset.fileName || m.asset_untitled_file()}
         </p>
       </div>
     </div>
@@ -748,7 +748,7 @@ function getMediaLoadState({
       <div className="grid min-h-56 place-items-center rounded-2xl border border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
         <div className="flex items-center gap-2 font-medium text-sm">
           <AlertTriangle size={16} />
-          Missing attachment
+          {m.asset_missing_attachment()}
         </div>
       </div>
     );
@@ -758,7 +758,7 @@ function getMediaLoadState({
       <div className="grid min-h-56 place-items-center rounded-2xl border border-black/10 bg-neutral-50 text-neutral-500 dark:border-white/10 dark:bg-black/20 dark:text-neutral-300">
         <div className="flex items-center gap-2 font-medium text-sm">
           <Loader2 className="animate-spin" size={16} />
-          Loading media
+          {m.asset_loading_media()}
         </div>
       </div>
     );
@@ -835,7 +835,7 @@ export const AssetContent = ({
     if (asset.previewUrl) {
       if (pdfPreview && !isLikelyPdfDataUrl(asset.previewUrl)) {
         dispatchMedia({
-          message: 'Media file could not be loaded.',
+          message: m.asset_media_load_failed(),
           type: 'failed',
         });
         return;
@@ -890,7 +890,7 @@ export const AssetContent = ({
         if (!src) {
           if (!asset.thumbnailUrl) {
             dispatchMedia({
-              message: 'Media file could not be loaded.',
+              message: m.asset_media_load_failed(),
               type: 'failed',
             });
           }
@@ -898,7 +898,7 @@ export const AssetContent = ({
         }
         if (pdfPreview && !isLikelyPdfDataUrl(src)) {
           dispatchMedia({
-            message: 'Media file could not be loaded.',
+            message: m.asset_media_load_failed(),
             type: 'failed',
           });
           return;
@@ -908,7 +908,7 @@ export const AssetContent = ({
       .catch(() => {
         if (!(cancelled || asset.thumbnailUrl)) {
           dispatchMedia({
-            message: 'Media file could not be loaded.',
+            message: m.asset_media_load_failed(),
             type: 'failed',
           });
         }
@@ -1084,7 +1084,7 @@ export const AssetContent = ({
             onClick={handleOpen}
             type="button"
           >
-            Open file
+            {m.asset_open_file()}
             <ExternalLink size={16} />
           </button>
         </div>
@@ -1211,7 +1211,7 @@ const AssetNode = ({
               onPointerDown={(e) => e.stopPropagation()}
             >
               <input
-                aria-label="Rename asset"
+                aria-label={m.a11y_rename_asset()}
                 className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => {

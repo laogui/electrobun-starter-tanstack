@@ -764,7 +764,7 @@ async function cloneExtensionReferences(nodes: Node[]): Promise<Node[]> {
     }
     const record = await cloneInstance(instanceId);
     if (!record) {
-      toast.error('Failed to clone a canvas type; the copy was skipped.');
+      toast.error(m.toast_clone_canvas_type_failed());
       return null;
     }
     return record.id;
@@ -874,7 +874,7 @@ async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
         : 'checklist';
     const fallback = await createWidget(kind);
     if (!fallback) {
-      toast.error('Failed to clone a widget; the copy was skipped.');
+      toast.error(m.toast_clone_widget_failed());
       return null;
     }
     return fallback.id;
@@ -1478,7 +1478,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           '[canvasStore] Failed to delete folder child note:',
           error
         );
-        toast.error('Failed to delete note file');
+        toast.error(m.toast_delete_note_file_failed());
       });
     }
     // Widget children own a backing JSON file; delete it so disk does not
@@ -1491,7 +1491,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             '[canvasStore] Failed to delete folder child widget:',
             error
           );
-          toast.error('Failed to delete widget file');
+          toast.error(m.toast_delete_widget_file_failed());
         });
       }
     }
@@ -3267,7 +3267,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     for (const widgetId of widgetIdsToDelete) {
       rpcDeleteWidget(widgetId).catch((error) => {
         console.error('[canvasStore] Failed to delete widget file:', error);
-        toast.error('Failed to delete widget file');
+        toast.error(m.toast_delete_widget_file_failed());
       });
     }
     return idSet.size;

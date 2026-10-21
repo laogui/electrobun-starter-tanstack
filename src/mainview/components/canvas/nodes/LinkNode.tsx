@@ -23,9 +23,11 @@ import {
   getLinkHost,
   normalizeLinkUrl,
 } from '@/lib/contentTypes';
+import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 import { parseYouTubeVideo } from '../../../../shared/youtube';
 
 import { NodeHandles } from './_shared/NodeHandles';
@@ -204,7 +206,7 @@ export const LinkContent = ({
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open link
+                {m.link_open()}
                 <ExternalLink size={16} />
               </a>
             ) : null}
@@ -221,7 +223,7 @@ export const LinkContent = ({
           {link.unfurlStatus === 'failed' && !youtubeVideo ? (
             <div className="mt-6 inline-flex items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 text-xs dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
               <AlertTriangle size={13} />
-              Preview unavailable
+              {m.link_preview_unavailable()}
             </div>
           ) : null}
 
@@ -234,7 +236,7 @@ export const LinkContent = ({
               <form onSubmit={handleUrlSubmit}>
                 <div className="flex items-center gap-2">
                   <input
-                    aria-label="Link URL"
+                    aria-label={m.a11y_link_url()}
                     className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-hidden transition-colors focus:border-accent dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
                     onChange={(event) => {
                       setUrlState((current) => ({
@@ -248,7 +250,7 @@ export const LinkContent = ({
                     className="nodrag nopan shrink-0 rounded-lg bg-neutral-950 px-3 py-2 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
                     type="submit"
                   >
-                    Save URL
+                    {m.link_save_url()}
                   </button>
                 </div>
                 {urlError ? (
@@ -311,7 +313,7 @@ export const LinkContent = ({
             </div>
           )}
           <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
-            Link
+            {m.type_badge_link()}
           </TypeBadge>
         </div>
       )}
@@ -331,7 +333,7 @@ export const LinkContent = ({
           {link.unfurlStatus === 'loading' ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
               <Loader2 className="shrink-0 animate-spin" size={16} />
-              <span>Loading preview...</span>
+              <span>{m.link_preview_loading()}</span>
             </div>
           ) : (
             <div className="min-w-0 flex-1">
@@ -343,7 +345,7 @@ export const LinkContent = ({
                   !title && 'text-neutral-400'
                 )}
               >
-                {title || 'Untitled link'}
+                {title || m.link_untitled()}
               </h3>
               {link.siteName && host && !youtubeVideo ? (
                 <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
@@ -368,7 +370,7 @@ export const LinkContent = ({
             type="button"
           >
             <RefreshCw size={12} />
-            <span>Retry preview</span>
+            <span>{m.link_preview_retry()}</span>
           </button>
         ) : null}
         <div className="mt-auto min-w-0 shrink-0 pt-3">
@@ -438,6 +440,21 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     }
     unfurlAttemptRef.current = normalized;
     updateNodeData(id, { unfurlStatus: 'loading' });
+    // Pin the write-back to the url this request was issued for: if the node
+    // is deleted, undone, or its url edited before the response lands, the
+    // stale preview is dropped instead of being written over newer data.
+    const expectation = captureNodeData(useCanvasStore.getState().nodes, id, [
+      'url',
+    ]);
+    if (!expectation) {
+      return;
+    }
+    const writeBack = (patch: Record<string, unknown>) => {
+      if (unfurlAttemptRef.current !== normalized) {
+        return;
+      }
+      applyIfNodeUnchanged(useCanvasStore, expectation, patch);
+    };
 
     // Apply the result only while this url is still the active attempt. The
     // effect re-runs when we set the status to 'loading' above (and again when
@@ -446,18 +463,15 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
     // request, which otherwise leaves the node stuck on "Loading preview...".
     rpcUnfurlLink(normalized)
       .then((result) => {
-        if (unfurlAttemptRef.current !== normalized) {
-          return;
-        }
         if (!result || result.status === 'failed') {
-          updateNodeData(id, {
+          writeBack({
             unfurlStatus: 'failed',
-            unfurlError: 'Could not load link preview.',
+            unfurlError: m.link_preview_failed(),
           });
           return;
         }
         const { status: _status, url: _url, ...meta } = result;
-        updateNodeData(id, {
+        writeBack({
           unfurlStatus: 'ready',
           unfurlError: undefined,
           ...(meta.title ? { title: meta.title } : {}),
@@ -468,13 +482,12 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
         });
       })
       .catch((error) => {
-        if (unfurlAttemptRef.current !== normalized) {
-          return;
+        if (unfurlAttemptRef.current === normalized) {
+          console.warn('[LinkNode] Unfurl failed for', normalized, error);
         }
-        console.warn('[LinkNode] Unfurl failed for', normalized, error);
-        updateNodeData(id, {
+        writeBack({
           unfurlStatus: 'failed',
-          unfurlError: 'Could not load link preview.',
+          unfurlError: m.link_preview_failed(),
         });
       });
   }, [data.url, data.unfurlStatus, id, updateNodeData]);

@@ -2,6 +2,7 @@ import type { ErrorComponentProps } from '@tanstack/react-router';
 import { ErrorComponent, useRouter } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { reportRendererError } from '@/lib/diagnostics';
+import * as m from '../../../paraglide/messages.js';
 
 export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
@@ -15,7 +16,7 @@ export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <div>Error</div>
+      <div>{m.error_generic()}</div>
       <button
         onClick={() => {
           reset();
@@ -23,7 +24,7 @@ export function ErrorBoundaryFallback({ error, reset }: ErrorComponentProps) {
         }}
         type="button"
       >
-        Reset
+        {m.action_reset()}
       </button>
     </div>
   );

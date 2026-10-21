@@ -23,9 +23,13 @@ import.meta.hot?.dispose(stopDiagnostics);
 
 registerBuiltinCanvasTypes();
 
-if (import.meta.env.VITE_PLUGIN_T0 === '1') {
-  import('./plugins/t0/run')
-    .then(({ runT0Probe }) => runT0Probe())
+// Trusted-plugin verification probes (scripts/trusted-plugin-t*/run.ts) are
+// compiled in only when a harness sets a VITE_PLUGIN_T* flag or in the dev
+// server; see vite.config.ts. Release `vite build` folds the constant to
+// false so neither the loader nor any probe chunk ships.
+if (__GHOSTBOARD_PLUGIN_PROBES__) {
+  import('./plugins/probes')
+    .then(({ startPluginProbes }) => startPluginProbes())
     .catch(console.error);
 }
 
@@ -63,49 +67,4 @@ if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
     disconnectTasks();
     stopPlugins();
   });
-}
-if (import.meta.env.VITE_PLUGIN_T2_SELECTION === '1') {
-  import('./plugins/t2-selection/run')
-    .then(({ runT2SelectionProbe }) => runT2SelectionProbe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T2_CANVAS === '1') {
-  import('./plugins/t2-canvas/run')
-    .then(({ runT2CanvasProbe }) => runT2CanvasProbe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T2_HISTORY === '1') {
-  import('./plugins/t2-history/run')
-    .then(({ runT2HistoryProbe }) => runT2HistoryProbe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T2_CONTENT === '1') {
-  import('./plugins/t2-content/run')
-    .then(({ runT2ContentProbe }) => runT2ContentProbe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T2_A4 === '1') {
-  import('./plugins/t2-a4/run')
-    .then(({ runT2A4Probe }) => runT2A4Probe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T3 === '1') {
-  import('./plugins/t3/run')
-    .then(({ runT3Probe }) => runT3Probe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T4 === '1') {
-  import('./plugins/t4/run')
-    .then(({ runT4Probe }) => runT4Probe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T5 === '1') {
-  import('./plugins/t5/run')
-    .then(({ runT5Probe }) => runT5Probe())
-    .catch(console.error);
-}
-if (import.meta.env.VITE_PLUGIN_T1 === '1') {
-  import('./plugins/t1/run')
-    .then(({ runT1Probe }) => runT1Probe())
-    .catch(console.error);
 }

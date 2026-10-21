@@ -720,7 +720,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup
-          aria-label="Search"
+          aria-label={m.a11y_search()}
           className="fixed top-[15%] left-1/2 z-50 flex max-h-[70vh] w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-hidden transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-neutral-900"
         >
           <div className="flex items-center gap-2 border-gray-100 border-b px-4 py-3 dark:border-neutral-800">
@@ -730,7 +730,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
               size={18}
             />
             <input
-              aria-label="Search query"
+              aria-label={m.a11y_search_query()}
               className="flex-1 bg-transparent text-base text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100"
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -747,7 +747,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
           </div>
 
           <div
-            aria-label="Filter results by type"
+            aria-label={m.a11y_search_filter_type()}
             className="flex items-center gap-1.5 border-gray-100 border-b px-3 py-2 dark:border-neutral-800"
             role="tablist"
           >

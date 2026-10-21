@@ -570,7 +570,7 @@ export function ViewSwitcher({
 
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
-    const imported = handleMarkdownImportResult(result, async (notes) => {
+    const imported = await handleMarkdownImportResult(result, async (notes) => {
       for (const [index, note] of notes.entries()) {
         // Imported notes are inserted sequentially so their generated nodes keep order.
         // react-doctor-disable-next-line react-doctor/async-await-in-loop
@@ -678,7 +678,7 @@ export function ViewSwitcher({
           {onExportCanvas || onExportCanvasJson ? (
             <Menu.Root>
               <Menu.Trigger
-                aria-label="Export canvas"
+                aria-label={m.a11y_export_canvas()}
                 className={`flex size-8 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10 ${TRIGGER_FOCUS_RING}`}
                 render={<motion.button whileTap={{ scale: 0.9 }} />}
               >
@@ -694,7 +694,7 @@ export function ViewSwitcher({
                   <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
                     {onExportCanvas ? (
                       <Menu.Item
-                        aria-label="Export PNG"
+                        aria-label={m.a11y_export_png()}
                         className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
                         onClick={onExportCanvas}
                       >
@@ -702,12 +702,12 @@ export function ViewSwitcher({
                           className="text-gray-500 dark:text-gray-400"
                           size={16}
                         />
-                        <span>Export PNG</span>
+                        <span>{m.a11y_export_png()}</span>
                       </Menu.Item>
                     ) : null}
                     {onExportCanvasJson ? (
                       <Menu.Item
-                        aria-label="Export JSON"
+                        aria-label={m.a11y_export_json()}
                         className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
                         onClick={onExportCanvasJson}
                       >
@@ -715,7 +715,7 @@ export function ViewSwitcher({
                           className="text-gray-500 dark:text-gray-400"
                           size={16}
                         />
-                        <span>Export JSON</span>
+                        <span>{m.a11y_export_json()}</span>
                       </Menu.Item>
                     ) : null}
                   </Menu.Popup>
@@ -816,7 +816,7 @@ export function ViewSwitcher({
                       <div className="flex items-center gap-2">
                         <input
                           aria-invalid={hasError}
-                          aria-label="View name"
+                          aria-label={m.a11y_view_name()}
                           className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-accent dark:bg-neutral-700 dark:text-white ${
                             hasError
                               ? 'border-red-400 dark:border-red-500'
@@ -836,7 +836,7 @@ export function ViewSwitcher({
                           value={editingName}
                         />
                         <button
-                          aria-label="Confirm rename"
+                          aria-label={m.a11y_confirm_rename()}
                           className="rounded-sm p-1 text-green-600 transition-opacity hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/30"
                           disabled={hasError}
                           onClick={handleRenameConfirm}
@@ -845,7 +845,7 @@ export function ViewSwitcher({
                           <Check size={14} />
                         </button>
                         <button
-                          aria-label="Cancel rename"
+                          aria-label={m.a11y_cancel_rename()}
                           className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
                           onClick={handleRenameCancel}
                           type="button"

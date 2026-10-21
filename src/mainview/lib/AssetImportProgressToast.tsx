@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import type { AssetImportProgress } from '@/lib/assetFiles';
+import * as m from '../../paraglide/messages.js';
 
 function progressPercent(progress: number): number {
   if (!(Number.isFinite(progress) && progress > 0)) {
@@ -23,7 +24,9 @@ export function AssetImportProgressToast({
         <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-neutral-500 dark:text-neutral-400" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className="truncate font-medium text-sm">Adding file</p>
+            <p className="truncate font-medium text-sm">
+              {m.asset_import_adding()}
+            </p>
             <p className="shrink-0 text-neutral-500 text-xs tabular-nums dark:text-neutral-400">
               {percent}%
             </p>

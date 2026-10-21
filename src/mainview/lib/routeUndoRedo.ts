@@ -6,6 +6,33 @@ import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
 import { unifiedUndoHistory } from './unifiedUndoHistory';
 
+/*
+ * Undo/redo routing between GhostBoard's four history stacks
+ * -----------------------------------------------------------
+ * The stacks do not know about each other; this module is the only place
+ * that decides which one a Cmd+Z / menu Undo goes to. First match wins:
+ *
+ * 1. Extension instance stack (extensionInstanceStore.undoInstance/redo):
+ *    per-instance state history of a canvas-type extension. Chosen when the
+ *    event target sits inside `[data-extension-instance]`, or when the
+ *    focused (detail) node is an `extension` node.
+ * 2. Legacy widget stack (widgetStore.undoWidget/redoWidget): per-widget
+ *    data history. Chosen when the focused (detail) node is a `widget`.
+ * 3. Native text editing: when an input/textarea/contentEditable has focus,
+ *    keyboard shortcuts return false so the browser's own edit stack runs;
+ *    the native menu path calls document.execCommand instead.
+ * 4. Unified history (unifiedUndoHistory): the canvas-level timeline that
+ *    interleaves canvas snapshots (lib/undoRedo.ts via canvasStore.undo/redo,
+ *    the third stack) with committed plugin note batches, so they replay in
+ *    the order they happened. With no active workspace/view context it falls
+ *    back to the canvas snapshot stack directly.
+ *
+ * Consequences worth knowing: while a widget or extension is focused, canvas
+ * edits are not reachable by Cmd+Z until focus leaves it, and the per-node
+ * stacks never enter the unified timeline. Migrating legacy widgets onto the
+ * unified history is tracked in PRD §2.9. Covered by routeUndoRedo.test.ts.
+ */
+
 function isEditingElement(element: Element | null): boolean {
   if (typeof HTMLElement === 'undefined' || !element) {
     return false;

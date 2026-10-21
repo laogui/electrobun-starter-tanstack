@@ -12,7 +12,7 @@ A successful process exit requires real renderer checks for HTTP imports (includ
 
 The printed evidence directory contains `package-evidence.json`, `result.json`, the built `index.html`, and build/application logs. Tests use `build/plugin-t0-artifacts/`, which Electrobun recreates on every run. Do not store unrelated files there. Nothing is published or uploaded.
 
-`VITE_PLUGIN_T0=1` enables the renderer-only experimental import-map SDK entries. `GHOSTBOARD_PLUGIN_T0_DIR` enables the host's experimental routes. They are **T0 fixtures, not the T1 public SDK**. An ordinary build has neither the probe nor the experimental SDK entries in its renderer; an ordinary launch exposes no T0 routes. To restore an ordinary canary build without replacing the repository's default `artifacts/` directory:
+`VITE_PLUGIN_T0=1` enables the renderer-only experimental import-map SDK entries. `GHOSTBOARD_PLUGIN_T0_DIR` enables the host's experimental routes, but only in `dev` channel runs or in non-stable builds compiled with `GHOSTBOARD_ENABLE_PLUGIN_T0=1` (the runner sets it); a stable build ignores the variable. They are **T0 fixtures, not the T1 public SDK**. An ordinary build has neither the probe nor the experimental SDK entries in its renderer; an ordinary launch exposes no T0 routes. To restore an ordinary canary build without replacing the repository's default `artifacts/` directory:
 
 ```sh
 GHOSTBOARD_BUILD_ARTIFACT_DIR=build/plugin-t0-regular-artifacts bun run build:canary

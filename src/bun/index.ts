@@ -47,13 +47,18 @@ import {
   type SubmitReportResult,
 } from '../shared/support/reports';
 import { type AIServerConfig, testAIConnection, validateAIConfig } from './ai';
-import { loadAICredentials, saveAIApiKey } from './aicredentials';
+import {
+  loadAICredentials,
+  migrateLegacyAIApiKey,
+  saveAIApiKey,
+} from './aicredentials';
 import { runAITask } from './aiTasks';
 import { getAppChannel, getAppDataRoot } from './appPaths';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
   loadAttachment as loadWorkspaceAttachment,
+  type OpenAttachmentResult,
   openAttachment as openWorkspaceAttachment,
   revealAttachment as revealWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
@@ -174,6 +179,7 @@ import {
   type PreviewArtifacts,
   writeNoteWithPreview,
 } from './preview';
+import { withRpcWriteValidation } from './rpc/writeParamSchemas';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
 import type {
@@ -1136,7 +1142,7 @@ interface CanvasRPC {
       };
       openAttachment: {
         params: { filePath: string };
-        response: { success: boolean };
+        response: OpenAttachmentResult;
       };
       revealAttachment: {
         params: { filePath: string };
@@ -1947,9 +1953,11 @@ async function main() {
   // duration of the run; the secure file is only touched on read/write.
   cachedAIKeys = aiCredentials.providers ?? {};
   legacyEnvProvider = cachedSettings.aiProvider;
-  if (aiCredentials.apiKey && !cachedAIKeys[cachedSettings.aiProvider]) {
-    await saveAIApiKey(aiCredentials.apiKey, cachedSettings.aiProvider);
-    cachedAIKeys[cachedSettings.aiProvider] = aiCredentials.apiKey;
+  if (aiCredentials.apiKey) {
+    const migrated = await migrateLegacyAIApiKey(cachedSettings.aiProvider);
+    if (migrated) {
+      cachedAIKeys[cachedSettings.aiProvider] = migrated;
+    }
   }
   // Local HTTP endpoint for renderer calls that do not fit Electrobun RPC
   // well. The handle holds the localhost base URL + bearer token the renderer
@@ -2059,7 +2067,7 @@ async function main() {
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: Number.POSITIVE_INFINITY,
     handlers: {
-      requests: {
+      requests: withRpcWriteValidation({
         loadCanvas: async ({ viewId }) => {
           const config = await loadWorkspaceConfig(wsPath);
           const viewEntry = config.views.find((v) => v.id === viewId);
@@ -3931,7 +3939,7 @@ async function main() {
 
         activateLicense: async (params: { key: string }) =>
           await activateLicenseKey(params.key),
-      },
+      }),
       messages: {},
     },
   }));

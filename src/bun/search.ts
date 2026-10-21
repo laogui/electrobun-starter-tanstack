@@ -13,6 +13,7 @@ import type {
   SearchResultTarget,
 } from '../shared/searchTypes';
 import { blocksToPlainText } from './blocknotePreview';
+import { FS_CONCURRENCY, mapWithConcurrency } from './concurrency';
 import { loadExtensionEnablement } from './extensions/enablement';
 import { loadExtensionInstances } from './extensions/instanceStore';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
@@ -250,15 +251,17 @@ export async function searchWorkspace(
   const instanceIdToNodes = new Map<string, NodeRef[]>();
 
   // Walk manifests once: collect noteId → node mapping AND search short text.
-  const loadedManifests = await Promise.all(
-    views.map(async (view) => {
+  const loadedManifests = await mapWithConcurrency(
+    views,
+    FS_CONCURRENCY,
+    async (view) => {
       try {
         return { manifest: await loadManifest(wsPath, view.file), view };
       } catch (error) {
         console.warn(`[search] Failed to load manifest for ${view.id}:`, error);
         return { manifest: null, view };
       }
-    })
+    }
   );
   for (const { manifest, view } of loadedManifests) {
     if (!manifest) {
@@ -877,12 +880,14 @@ async function scanNotes(
   const searchable: Array<{ record: NoteRecord; refs: NodeRef[] }> = [];
   const unresolved: string[] = [];
 
-  const initialRecords = await Promise.all(
-    Array.from(noteIdToNodes.entries()).map(async ([noteId, refs]) => {
+  const initialRecords = await mapWithConcurrency(
+    Array.from(noteIdToNodes.entries()),
+    FS_CONCURRENCY,
+    async ([noteId, refs]) => {
       const markdownFile = markdownFileFromRefs(refs);
       const record = await loadNoteRecord(wsPath, noteId, markdownFile);
       return { noteId, record, refs };
-    })
+    }
   );
   for (const { noteId, record, refs } of initialRecords) {
     if (record) {
@@ -894,8 +899,10 @@ async function scanNotes(
 
   if (unresolved.length > 0) {
     const noteIndex = await buildNoteIndex(wsPath);
-    const resolvedRecords = await Promise.all(
-      unresolved.map(async (noteId) => {
+    const resolvedRecords = await mapWithConcurrency(
+      unresolved,
+      FS_CONCURRENCY,
+      async (noteId) => {
         const refs = noteIdToNodes.get(noteId);
         if (!refs) {
           return null;
@@ -907,7 +914,7 @@ async function scanNotes(
           location?.markdownFile
         );
         return record ? { record, refs } : null;
-      })
+      }
     );
     for (const entry of resolvedRecords) {
       if (!entry) {

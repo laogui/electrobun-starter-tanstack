@@ -1,7 +1,8 @@
-import { rename, rm } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { rename, rm, stat } from 'node:fs/promises';
+import { isAbsolute } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
+import { resolveWorkspaceSubpath } from './workspacePaths';
 
 const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)*;base64,(.+)$/i;
 const SAFE_EXTENSION_RE = /^[a-z0-9]{1,12}$/;
@@ -70,38 +71,14 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'video/webm': 'webm',
 };
 
-function normalizeManifestPath(filePath: string): string {
-  return normalize(filePath).replaceAll('\\', '/');
-}
-
 export function assertWorkspaceAttachmentPath(
   wsPath: string,
   filePath: string
 ): WorkspaceAttachmentPath {
-  if (!filePath.trim()) {
-    throw new Error('Attachment path is required.');
-  }
-  if (isAbsolute(filePath)) {
-    throw new Error('Attachment path must be relative.');
-  }
-
-  const relativePath = normalizeManifestPath(filePath);
-  if (
-    relativePath === 'attachments' ||
-    !relativePath.startsWith('attachments/') ||
-    relativePath.split('/').includes('..')
-  ) {
-    throw new Error('Attachment path must stay inside attachments/.');
-  }
-
-  const attachmentRoot = resolve(wsPath, 'attachments');
-  const fullPath = resolve(wsPath, relativePath);
-  const rootRelative = relative(attachmentRoot, fullPath);
-  if (rootRelative.startsWith('..') || isAbsolute(rootRelative)) {
-    throw new Error('Attachment path escapes the workspace.');
-  }
-
-  return { fullPath, relativePath };
+  return resolveWorkspaceSubpath(wsPath, filePath, {
+    dir: 'attachments',
+    label: 'Attachment',
+  });
 }
 
 function extensionFromName(name: string | undefined): string {
@@ -275,16 +252,120 @@ export async function attachmentExists(
   return await Bun.file(fullPath).exists();
 }
 
+/**
+ * Extensions the OS would execute, install, or hand to an interpreter when
+ * "opened". A shared or git-pulled workspace can contain any file, and files
+ * the app copied in carry no quarantine flag, so these are never opened
+ * directly; the user can still reveal them in the file manager.
+ */
+const BLOCKED_OPEN_EXTENSIONS = new Set([
+  // macOS bundles, installers, and launchers
+  'action',
+  'app',
+  'applescript',
+  'command',
+  'dmg',
+  'fileloc',
+  'inetloc',
+  'kext',
+  'mpkg',
+  'osax',
+  'pkg',
+  'plugin',
+  'prefpane',
+  'scpt',
+  'scptd',
+  'service',
+  'terminal',
+  'tool',
+  'workflow',
+  'xpc',
+  // Shell and interpreter scripts
+  'bash',
+  'csh',
+  'fish',
+  'ksh',
+  'php',
+  'pl',
+  'py',
+  'pyc',
+  'pyw',
+  'rb',
+  'sh',
+  'zsh',
+  // Cross-platform runtimes and Linux packages
+  'appimage',
+  'deb',
+  'desktop',
+  'jar',
+  'rpm',
+  'run',
+  // Windows executables and script hosts
+  'bat',
+  'cmd',
+  'com',
+  'cpl',
+  'exe',
+  'hta',
+  'js',
+  'jse',
+  'lnk',
+  'msc',
+  'msi',
+  'pif',
+  'ps1',
+  'psm1',
+  'reg',
+  'scr',
+  'url',
+  'vbe',
+  'vbs',
+  'wsf',
+  'wsh',
+]);
+
+const EXECUTABLE_MODE_BITS = 0o111;
+
+export type OpenAttachmentResult =
+  | { success: true }
+  | { error?: 'blocked-executable' | 'missing'; success: false };
+
+/** True when the OS would run (rather than view) a file with this name. */
+export function isBlockedOpenExtension(filePath: string): boolean {
+  const name = filePath.split('/').pop() ?? '';
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0 || dot === name.length - 1) {
+    return false;
+  }
+  return BLOCKED_OPEN_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
+
 export async function openAttachment(
   wsPath: string,
   filePath: string
-): Promise<{ success: boolean }> {
-  const { fullPath } = assertWorkspaceAttachmentPath(wsPath, filePath);
-  const file = Bun.file(fullPath);
-  if (!(await file.exists())) {
-    return { success: false };
+): Promise<OpenAttachmentResult> {
+  const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
+    wsPath,
+    filePath
+  );
+  let mode: number;
+  try {
+    mode = (await stat(fullPath)).mode;
+  } catch {
+    return { success: false, error: 'missing' };
   }
-  return { success: Utils.openPath(fullPath) };
+  // Extension-less files with an exec bit (Mach-O binaries, shebang scripts)
+  // launch in Terminal on macOS, so they are blocked too.
+  // biome-ignore lint/suspicious/noBitwiseOperators: POSIX permission mask
+  const executableBit = (mode & EXECUTABLE_MODE_BITS) !== 0;
+  if (
+    isBlockedOpenExtension(relativePath) ||
+    (executableBit && !relativePath.split('/').pop()?.includes('.'))
+  ) {
+    console.warn(`[attachments] Refused to open executable ${relativePath}`);
+    return { success: false, error: 'blocked-executable' };
+  }
+  return Utils.openPath(fullPath) ? { success: true } : { success: false };
 }
 
 export async function revealAttachment(

@@ -14,6 +14,7 @@ const artifactFolder = 'build/plugin-t0-artifacts';
 const env = {
   ...process.env,
   VITE_PLUGIN_T0: '1',
+  GHOSTBOARD_ENABLE_PLUGIN_T0: '1',
   GHOSTBOARD_BUILD_ARTIFACT_DIR: artifactFolder,
 };
 

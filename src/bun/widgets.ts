@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { notifyContentChanged } from './plugins/contentEvents';
+import { resolveWorkspaceSubpath } from './workspacePaths';
 
 /** Schema version for widget JSON files. */
 export const WIDGET_SCHEMA = 'ghostboard-widget/v1';
@@ -181,27 +182,11 @@ function assertWorkspaceWidgetPath(
   wsPath: string,
   relativePath: string
 ): string {
-  if (!relativePath.trim()) {
-    throw new Error('Widget path is required.');
-  }
-  if (isAbsolute(relativePath)) {
-    throw new Error('Widget path must be relative.');
-  }
-  const normalized = normalize(relativePath).replaceAll('\\', '/');
-  if (
-    !normalized.startsWith('.ghostboard/widgets/') ||
-    normalized.split('/').includes('..') ||
-    !normalized.endsWith('.json')
-  ) {
-    throw new Error('Widget path must stay inside .ghostboard/widgets/.');
-  }
-  const fullPath = resolve(wsPath, normalized);
-  const root = resolve(wsPath, '.ghostboard', 'widgets');
-  const rel = relative(root, fullPath);
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Widget path must stay inside .ghostboard/widgets/.');
-  }
-  return fullPath;
+  return resolveWorkspaceSubpath(wsPath, relativePath, {
+    dir: '.ghostboard/widgets',
+    extension: '.json',
+    label: 'Widget',
+  }).fullPath;
 }
 
 function defaultDataForKind(kind: WidgetKind): WidgetData {

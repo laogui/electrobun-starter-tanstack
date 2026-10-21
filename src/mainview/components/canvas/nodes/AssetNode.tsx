@@ -809,7 +809,11 @@ export const AssetContent = ({
     try {
       const result = await rpcOpenAttachment(asset.attachmentFile);
       if (!result.success) {
-        toast.error(m.toast_asset_file_open_failed());
+        toast.error(
+          'error' in result && result.error === 'blocked-executable'
+            ? m.toast_asset_file_open_blocked()
+            : m.toast_asset_file_open_failed()
+        );
       }
     } catch (error) {
       console.error('[AssetNode] Failed to open attachment:', error);

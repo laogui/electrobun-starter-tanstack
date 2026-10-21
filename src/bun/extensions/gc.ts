@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { collectAttachmentPaths } from '../../shared/extensions/media/state';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
-import { loadManifest } from '../manifest';
+import { loadManifestsStrict } from '../manifest';
 import { loadWorkspaceConfig } from '../workspace';
 import { instanceDir, loadExtensionInstance } from './instanceStore';
 
@@ -25,19 +25,9 @@ export async function collectReferencedInstanceIds(
     ...(config.trash ?? []).map((entry) => entry.trashFile),
   ];
   const ids = new Set<string>();
-  const manifests = await Promise.all(
-    files.map(async (file) => {
-      try {
-        return await loadManifest(wsPath, file);
-      } catch {
-        return null;
-      }
-    })
-  );
+  // Fail closed: see loadManifestsStrict.
+  const manifests = await loadManifestsStrict(wsPath, files);
   for (const manifest of manifests) {
-    if (!manifest) {
-      continue;
-    }
     for (const id of collectExtensionInstanceIds(manifest.nodes)) {
       ids.add(id);
     }

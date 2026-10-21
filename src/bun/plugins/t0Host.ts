@@ -1,13 +1,39 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 
+import { getAppChannel } from '../appPaths';
 import { atomicWrite } from '../atomicWrite';
 import { type PluginDirectoryMount, pluginModulePath } from '../pluginAssets';
 import { loadPluginDirectory, PluginDirectoryError } from './loadDirectory';
 
+declare const __GHOSTBOARD_ENABLE_PLUGIN_T0__: boolean | undefined;
+
+/**
+ * The T0 host grants arbitrary absolute-path reads/writes and unrestricted
+ * fetch, so an environment variable alone must never turn it on in a shipped
+ * app. It is available only in `dev` channel runs, or in non-stable builds
+ * compiled with `GHOSTBOARD_ENABLE_PLUGIN_T0=1` (the T0 harness).
+ */
+export function isT0HostAllowed(
+  channel: string,
+  compiledIn = typeof __GHOSTBOARD_ENABLE_PLUGIN_T0__ === 'boolean' &&
+    __GHOSTBOARD_ENABLE_PLUGIN_T0__
+): boolean {
+  if (channel === 'dev') {
+    return true;
+  }
+  return compiledIn && channel !== 'stable';
+}
+
 // Opt-in packaged-app experiment; no T0 services exist in a normal launch.
 export function createT0Host(directory = process.env.GHOSTBOARD_PLUGIN_T0_DIR) {
   if (!directory) {
+    return null;
+  }
+  if (!isT0HostAllowed(getAppChannel())) {
+    console.warn(
+      '[plugins] GHOSTBOARD_PLUGIN_T0_DIR ignored: the T0 host is not available in this build.'
+    );
     return null;
   }
   if (!isAbsolute(directory)) {

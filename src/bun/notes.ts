@@ -1,9 +1,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { readdir, unlink } from 'node:fs/promises';
-import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { notifyContentChanged } from './plugins/contentEvents';
+import { resolveWorkspaceSubpath } from './workspacePaths';
 
 export interface NoteFrontmatter {
   color?: string;
@@ -28,39 +29,15 @@ export interface NoteDocument {
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const NUMERIC_FRONTMATTER_KEYS = new Set(['previewBlocks', 'previewVersion']);
 
-function normalizeManifestPath(filePath: string): string {
-  return normalize(filePath).replaceAll('\\', '/');
-}
-
 function assertWorkspaceNotePath(
   wsPath: string,
   filePath: string
 ): { fullPath: string; relativePath: string } {
-  if (!filePath.trim()) {
-    throw new Error('Note path is required.');
-  }
-  if (isAbsolute(filePath)) {
-    throw new Error('Note path must be relative.');
-  }
-
-  const relativePath = normalizeManifestPath(filePath);
-  if (
-    relativePath === 'content' ||
-    !relativePath.startsWith('content/') ||
-    relativePath.split('/').includes('..') ||
-    !relativePath.endsWith('.md')
-  ) {
-    throw new Error('Note path must stay inside content/.');
-  }
-
-  const contentRoot = resolve(wsPath, 'content');
-  const fullPath = resolve(wsPath, relativePath);
-  const rootRelative = relative(contentRoot, fullPath);
-  if (rootRelative.startsWith('..') || isAbsolute(rootRelative)) {
-    throw new Error('Note path must stay inside content/.');
-  }
-
-  return { fullPath, relativePath };
+  return resolveWorkspaceSubpath(wsPath, filePath, {
+    dir: 'content',
+    extension: '.md',
+    label: 'Note',
+  });
 }
 
 // Simple YAML frontmatter parser

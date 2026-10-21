@@ -570,7 +570,7 @@ export function ViewSwitcher({
 
   const handleImportMarkdown = useCallback(async () => {
     const result = await rpcImportMarkdownFiles().catch(() => null);
-    const imported = handleMarkdownImportResult(result, async (notes) => {
+    const imported = await handleMarkdownImportResult(result, async (notes) => {
       for (const [index, note] of notes.entries()) {
         // Imported notes are inserted sequentially so their generated nodes keep order.
         // react-doctor-disable-next-line react-doctor/async-await-in-loop

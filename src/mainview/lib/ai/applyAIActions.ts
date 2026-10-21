@@ -6,8 +6,12 @@ import { isGroupChildNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, getNodeSpec } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects } from '@/lib/collision';
+import {
+  COUNTED_NODE_TYPES,
+  FREE_NODE_LIMIT,
+  hasNodeQuota,
+} from '@/lib/nodeQuota';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
-import { getCachedLicense, refreshLicense } from '@/lib/rpc-license';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import { filterValidAIActions } from '../../../shared/ai/schema';
@@ -28,9 +32,6 @@ import type { AIAction } from '../../../shared/ai/types';
 
 /** Padding around grouped children — mirrors `canvasStore.groupSelected`. */
 const AI_GROUP_PADDING = 24;
-
-/** Free-tier card/sticky ceiling, mirrors `canvasStore.createNode`. */
-const CARD_LIMIT = 100;
 
 export interface ApplyAIActionsResult {
   /** Number of actions that actually mutated the canvas. */
@@ -86,34 +87,39 @@ export async function applyAIActions(
 // Batch path
 // ---------------------------------------------------------------------------
 
+/** Number of creates in `actions` that count against the free-tier quota. */
+export function countQuotaCountedCreates(actions: readonly AIAction[]): number {
+  return actions.filter(
+    (a) =>
+      a.type === 'create_node' &&
+      COUNTED_NODE_TYPES.has(getNodeSpec(a.nodeKind).nodeType)
+  ).length;
+}
+
 async function applyActionBatch(
   actions: AIAction[],
   warnings: string[]
 ): Promise<ApplyAIActionsResult> {
-  const store = useCanvasStore.getState();
-
-  // License gate for batch card/sticky creation (mirrors createNode).
-  const limitedCreates = actions.filter(
-    (a) =>
-      a.type === 'create_node' &&
-      (a.nodeKind === 'card' || a.nodeKind === 'sticky')
-  ).length;
-  const currentLimitedCount = store.nodes.filter(
-    (n) => n.type === 'card' || n.type === 'sticky'
-  ).length;
-  if (limitedCreates > 0 && currentLimitedCount + limitedCreates > CARD_LIMIT) {
-    const allowed = await checkCardLimit();
-    if (!allowed) {
-      return {
-        applied: 0,
-        createdNodeIds: [],
-        warnings: [
-          ...warnings,
-          'Free version limited to 100 cards. Activate a license to continue.',
-        ],
-      };
-    }
+  // License gate for batch creation, shared with every other create path
+  // (nodeQuota.ts): existing notes/stickies/topics all count.
+  const quotaCreates = countQuotaCountedCreates(actions);
+  if (
+    quotaCreates > 0 &&
+    !(await hasNodeQuota(useCanvasStore.getState().nodes, quotaCreates))
+  ) {
+    return {
+      applied: 0,
+      createdNodeIds: [],
+      warnings: [
+        ...warnings,
+        `Free version limited to ${FREE_NODE_LIMIT} cards. Activate a license to continue.`,
+      ],
+    };
   }
+
+  // Re-read after the (possibly async) license check: the graph may have
+  // changed while it ran.
+  const store = useCanvasStore.getState();
 
   // Allocate real ids for every tempId up front so later actions can
   // reference nodes created earlier in the same batch.
@@ -381,21 +387,4 @@ async function applyActionBatch(
   }
 
   return { applied, createdNodeIds, warnings };
-}
-
-/** Mirrors the license escape hatch inside `canvasStore.createNode`. */
-async function checkCardLimit(): Promise<boolean> {
-  try {
-    const cachedLicense = getCachedLicense();
-    const license = cachedLicense?.activated
-      ? cachedLicense
-      : await refreshLicense();
-    if (license && !license.activated) {
-      return false;
-    }
-  } catch (error) {
-    console.error('[AI] License check failed:', error);
-    // Continue on error to avoid blocking offline users (same as createNode).
-  }
-  return true;
 }

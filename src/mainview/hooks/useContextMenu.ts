@@ -577,9 +577,11 @@ export function useContextMenu({
           const anchorCenter = savedMenu
             ? screenToFlow(savedMenu.x, savedMenu.y)
             : undefined;
-          handleMarkdownImportResult(result, (notes) => {
+          await handleMarkdownImportResult(result, async (notes) => {
             for (const [index, note] of notes.entries()) {
-              createNode(
+              // Sequential so cards keep order and each create sees the last.
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop
+              await createNode(
                 'card',
                 rfInstance.current,
                 buildImportedCardCreateOptions(

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, unlink } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import {
   generateInstanceId,
   isCanvasTypeId,
@@ -20,6 +20,7 @@ import type { ExtensionPresentation } from '../../shared/extensions/presentation
 import { isPluginId } from '../../shared/plugins/ids';
 import { atomicWrite } from '../atomicWrite';
 import { notifyContentChanged } from '../plugins/contentEvents';
+import { resolveWorkspaceSubpath } from '../workspacePaths';
 
 const MIGRATION_BACKUP_SCHEMA = 'ghostboard-plugin-migration-backup/v1';
 const MIGRATION_BACKUP_MAX_BYTES = INSTANCE_JSON_MAX_BYTES + 16 * 1024;
@@ -170,31 +171,11 @@ function assertWorkspaceInstancePath(
   wsPath: string,
   relativePath: string
 ): string {
-  if (!relativePath.trim()) {
-    throw new Error('Instance path is required.');
-  }
-  if (isAbsolute(relativePath)) {
-    throw new Error('Instance path must be relative.');
-  }
-  const normalized = normalize(relativePath).replaceAll('\\', '/');
-  if (
-    !normalized.startsWith('.ghostboard/extension-instances/') ||
-    normalized.split('/').includes('..') ||
-    !normalized.endsWith('.json')
-  ) {
-    throw new Error(
-      'Instance path must stay inside .ghostboard/extension-instances/.'
-    );
-  }
-  const fullPath = resolve(wsPath, normalized);
-  const root = resolve(wsPath, '.ghostboard', 'extension-instances');
-  const rel = relative(root, fullPath);
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(
-      'Instance path must stay inside .ghostboard/extension-instances/.'
-    );
-  }
-  return fullPath;
+  return resolveWorkspaceSubpath(wsPath, relativePath, {
+    dir: '.ghostboard/extension-instances',
+    extension: '.json',
+    label: 'Instance',
+  }).fullPath;
 }
 
 function parsedToError(

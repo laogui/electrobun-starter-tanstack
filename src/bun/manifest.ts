@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { rotateBackup } from './persistence/backupFile';
 import { readJsonOrEmpty } from './persistence/corruptFile';
+import { assertInside, normalizeManifestPath } from './workspacePaths';
 
 export interface ManifestNode {
   data: Record<string, unknown>;
@@ -49,10 +50,6 @@ export interface CanvasManifest {
   viewport?: { x: number; y: number; zoom: number };
 }
 
-function normalizeWorkspaceRelativePath(filePath: string): string {
-  return normalize(filePath).replaceAll('\\', '/');
-}
-
 /**
  * Resolve a workspace.json `file` / `trashFile` to an absolute path under
  * `.ghostboard/views/` or `.ghostboard/trash/`. Rejects absolute paths,
@@ -70,7 +67,7 @@ export function resolveWorkspaceManifestPath(
     throw new Error('Manifest path must be relative.');
   }
 
-  const relativePath = normalizeWorkspaceRelativePath(viewFile);
+  const relativePath = normalizeManifestPath(viewFile);
   const inViews =
     relativePath.startsWith('views/') && relativePath !== 'views/';
   const inTrash =
@@ -83,13 +80,11 @@ export function resolveWorkspaceManifestPath(
     throw new Error('Manifest path must stay inside views/ or trash/.');
   }
 
-  const ghostRoot = resolve(wsPath, '.ghostboard');
-  const fullPath = resolve(ghostRoot, relativePath);
-  const rootRelative = relative(ghostRoot, fullPath);
-  if (rootRelative.startsWith('..') || isAbsolute(rootRelative)) {
-    throw new Error('Manifest path escapes .ghostboard/.');
-  }
-  return fullPath;
+  return assertInside(
+    resolve(wsPath, '.ghostboard'),
+    relativePath,
+    'Manifest path escapes .ghostboard/.'
+  );
 }
 
 export type ManifestRead =

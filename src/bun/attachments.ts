@@ -1,7 +1,8 @@
 import { rename, rm } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { isAbsolute } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
+import { resolveWorkspaceSubpath } from './workspacePaths';
 
 const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)*;base64,(.+)$/i;
 const SAFE_EXTENSION_RE = /^[a-z0-9]{1,12}$/;
@@ -70,38 +71,14 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'video/webm': 'webm',
 };
 
-function normalizeManifestPath(filePath: string): string {
-  return normalize(filePath).replaceAll('\\', '/');
-}
-
 export function assertWorkspaceAttachmentPath(
   wsPath: string,
   filePath: string
 ): WorkspaceAttachmentPath {
-  if (!filePath.trim()) {
-    throw new Error('Attachment path is required.');
-  }
-  if (isAbsolute(filePath)) {
-    throw new Error('Attachment path must be relative.');
-  }
-
-  const relativePath = normalizeManifestPath(filePath);
-  if (
-    relativePath === 'attachments' ||
-    !relativePath.startsWith('attachments/') ||
-    relativePath.split('/').includes('..')
-  ) {
-    throw new Error('Attachment path must stay inside attachments/.');
-  }
-
-  const attachmentRoot = resolve(wsPath, 'attachments');
-  const fullPath = resolve(wsPath, relativePath);
-  const rootRelative = relative(attachmentRoot, fullPath);
-  if (rootRelative.startsWith('..') || isAbsolute(rootRelative)) {
-    throw new Error('Attachment path escapes the workspace.');
-  }
-
-  return { fullPath, relativePath };
+  return resolveWorkspaceSubpath(wsPath, filePath, {
+    dir: 'attachments',
+    label: 'Attachment',
+  });
 }
 
 function extensionFromName(name: string | undefined): string {

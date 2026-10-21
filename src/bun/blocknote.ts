@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { isAbsolute, normalize, relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { withNoteWorkspace } from './noteTransactions';
 import { notifyContentChanged } from './plugins/contentEvents';
+import { resolveWorkspaceSubpath } from './workspacePaths';
 
 /** Schema version for the BlockNote JSON sidecar file. */
 export const BLOCKNOTE_SCHEMA = 'ghostboard-blocknote/v1';
@@ -76,31 +77,11 @@ function assertWorkspaceSidecarPath(
   wsPath: string,
   relativePath: string
 ): string {
-  if (!relativePath.trim()) {
-    throw new Error('BlockNote sidecar path is required.');
-  }
-  if (isAbsolute(relativePath)) {
-    throw new Error('BlockNote sidecar path must be relative.');
-  }
-  const normalized = normalize(relativePath).replaceAll('\\', '/');
-  if (
-    !normalized.startsWith('content/.ghostboard/blocknote/') ||
-    normalized.split('/').includes('..') ||
-    !normalized.endsWith('.json')
-  ) {
-    throw new Error(
-      'BlockNote sidecar path must stay inside content/.ghostboard/blocknote/.'
-    );
-  }
-  const fullPath = resolve(wsPath, normalized);
-  const root = resolve(wsPath, 'content', '.ghostboard', 'blocknote');
-  const rel = relative(root, fullPath);
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(
-      'BlockNote sidecar path must stay inside content/.ghostboard/blocknote/.'
-    );
-  }
-  return fullPath;
+  return resolveWorkspaceSubpath(wsPath, relativePath, {
+    dir: 'content/.ghostboard/blocknote',
+    extension: '.json',
+    label: 'BlockNote sidecar',
+  }).fullPath;
 }
 
 /** sha256 hex digest. */

@@ -12,6 +12,11 @@ export default {
         __GHOSTBOARD_SUPPORT_API_URL__: JSON.stringify(
           process.env.GHOSTBOARD_SUPPORT_API_URL ?? ''
         ),
+        // The T0 plugin experiment exposes arbitrary file and network access;
+        // only harness builds (scripts/trusted-plugin-t0) compile it in.
+        __GHOSTBOARD_ENABLE_PLUGIN_T0__: JSON.stringify(
+          process.env.GHOSTBOARD_ENABLE_PLUGIN_T0 === '1'
+        ),
       },
     },
     artifactFolder: process.env.GHOSTBOARD_BUILD_ARTIFACT_DIR ?? 'artifacts',

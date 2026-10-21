@@ -79,10 +79,8 @@ labels
 /.opencode.json
 /.qoder/
 /.windsurfrules
-/AGENTS.md
 /GEMINI.md
 /QODER.md
 /config.json
 /events.jsonl
 /statuses/
-.planning

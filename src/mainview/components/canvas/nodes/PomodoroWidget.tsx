@@ -9,7 +9,7 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { memo, type ReactNode, useEffect, useState } from 'react';
 import {
   applyClockKind,
   applyPomodoroPause,
@@ -357,7 +357,7 @@ function ActionChip({
   );
 }
 
-export function PomodoroWidgetBody({
+function PomodoroWidgetBodyImpl({
   data,
   onChange,
   onCompleteIfDue,
@@ -608,3 +608,5 @@ export function PomodoroWidgetBody({
     </div>
   );
 }
+
+export const PomodoroWidgetBody = memo(PomodoroWidgetBodyImpl);

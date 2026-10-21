@@ -31,6 +31,7 @@ const sanitizePreviewHtml = (html: string): string =>
   DOMPurify.sanitize(html, markdownSanitizeConfig) as string;
 
 const previewAllowedTags = new Set<string>(markdownAllowedTags);
+const UNSAFE_URL_RE = /^\s*(?:javascript|vbscript):/i;
 const previewVoidTags = new Set(['br', 'hr', 'img']);
 
 function propsForPreviewElement(element: Element): Record<string, unknown> {
@@ -41,7 +42,13 @@ function propsForPreviewElement(element: Element): Record<string, unknown> {
   }
   for (const attribute of ['alt', 'href', 'loading', 'rel', 'src', 'title']) {
     const value = element.getAttribute(attribute);
-    if (value) {
+    if (
+      value &&
+      !(
+        (attribute === 'href' || attribute === 'src') &&
+        UNSAFE_URL_RE.test(value)
+      )
+    ) {
       props[attribute] = value;
     }
   }
@@ -76,14 +83,18 @@ function renderPreviewNode(node: Node, key: string): ReactNode {
   return createElement(tagName, props, children);
 }
 
+/**
+ * `html` must already be sanitized: NotePreviewComponent sanitizes once when
+ * deriving `previewHtml`, and hydratePreviewImageSources only swaps
+ * workspace `img[src]` values for `data:image/` URLs. The element/attribute
+ * allowlists in renderPreviewNode remain as the structural backstop, so a
+ * second DOMPurify pass here would be redundant work on every render.
+ */
 function renderPreviewHtml(html: string): ReactNode {
   if (typeof DOMParser === 'undefined') {
     return null;
   }
-  const documentFragment = new DOMParser().parseFromString(
-    sanitizePreviewHtml(html),
-    'text/html'
-  );
+  const documentFragment = new DOMParser().parseFromString(html, 'text/html');
   const children = Array.from(documentFragment.body.childNodes).map(
     (child, index) => renderPreviewNode(child, `${index}`)
   );

@@ -10,6 +10,10 @@ import { defineConfig, type PluginOption, type UserConfig } from 'vite';
 const SHARED_REACT_MODULE = /\/node_modules\/(react|react-dom|scheduler)\//;
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 const pluginT0 = process.env.VITE_PLUGIN_T0 === '1';
+/** Any trusted-plugin harness flag (scripts/trusted-plugin-t*) is set. */
+const pluginProbeRequested = Object.entries(process.env).some(
+  ([key, value]) => key.startsWith('VITE_PLUGIN_T') && value === '1'
+);
 const sharedEntries = {
   'host-react': 'shared/react.ts',
   'host-react-dom': 'shared/react-dom.ts',
@@ -121,6 +125,13 @@ export default defineConfig(async ({ command }) => {
 
   return {
     base: command === 'build' ? 'views://mainview/' : '/',
+    define: {
+      // Gates src/mainview/plugins/probes.ts (t0…t5 verification probes) so a
+      // release build tree-shakes them; harness builds opt in via env flags.
+      __GHOSTBOARD_PLUGIN_PROBES__: JSON.stringify(
+        command === 'serve' || pluginProbeRequested
+      ),
+    },
     plugins,
     resolve: {
       tsconfigPaths: true,

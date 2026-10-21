@@ -179,6 +179,7 @@ import {
   type PreviewArtifacts,
   writeNoteWithPreview,
 } from './preview';
+import { withRpcWriteValidation } from './rpc/writeParamSchemas';
 import type { SearchResult } from './search';
 import { searchWorkspace } from './search';
 import type {
@@ -2066,7 +2067,7 @@ async function main() {
   const rpc = (mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: Number.POSITIVE_INFINITY,
     handlers: {
-      requests: {
+      requests: withRpcWriteValidation({
         loadCanvas: async ({ viewId }) => {
           const config = await loadWorkspaceConfig(wsPath);
           const viewEntry = config.views.find((v) => v.id === viewId);
@@ -3938,7 +3939,7 @@ async function main() {
 
         activateLicense: async (params: { key: string }) =>
           await activateLicenseKey(params.key),
-      },
+      }),
       messages: {},
     },
   }));

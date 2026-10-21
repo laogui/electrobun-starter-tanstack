@@ -1,8 +1,12 @@
-import { lookup } from 'node:dns/promises';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PLUGIN_RELEASE_MAX_BYTES } from '../../shared/plugins/release';
 import { isIpLiteral, isPublicAddress } from '../net/outboundPolicy';
+import {
+  assertPublicTarget as assertPublicNetworkTarget,
+  isLoopbackHost,
+  OutboundTargetError,
+} from '../net/publicTarget';
 import type { LoadedPluginDirectory } from './loadDirectory';
 import { loadPluginFromZip, PLUGIN_ZIP_MAX_UNCOMPRESSED } from './zipInstall';
 
@@ -23,14 +27,6 @@ export class PluginDownloadError extends Error {
     this.name = 'PluginDownloadError';
     this.code = code;
   }
-}
-
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
-const BRACKETS_RE = /^\[|\]$/g;
-
-function isLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(BRACKETS_RE, '');
-  return LOOPBACK_HOSTS.has(host);
 }
 
 export function parsePluginDownloadUrl(
@@ -82,50 +78,26 @@ export function parsePluginDownloadUrl(
   );
 }
 
-/**
- * Rejects a hop whose hostname resolves to anything non-public.
- *
- * There is a TOCTOU window between this lookup and the socket connect: Bun's
- * `fetch` has no `lookup` hook, and dialing the resolved IP directly would
- * break SNI and certificate validation. We accept the window rather than
- * weaken TLS.
- */
+/** Maps the shared outbound policy onto plugin download error codes. */
 async function assertPublicTarget(
   url: URL,
   allowLoopback: boolean
 ): Promise<void> {
-  if (allowLoopback && isLoopbackHost(url.hostname)) {
-    return;
-  }
-  const hostname = url.hostname.replace(BRACKETS_RE, '');
-  let addresses: string[];
-  if (isIpLiteral(hostname)) {
-    addresses = [hostname];
-  } else {
-    try {
-      addresses = (await lookup(hostname, { all: true })).map(
-        (entry) => entry.address
-      );
-    } catch {
-      throw new PluginDownloadError(
-        'download-failed',
-        `plugin download host could not be resolved: ${hostname}`
-      );
+  try {
+    await assertPublicNetworkTarget(url, { allowLoopback });
+  } catch (error) {
+    if (!(error instanceof OutboundTargetError)) {
+      throw error;
     }
-  }
-  if (addresses.length === 0) {
-    throw new PluginDownloadError(
-      'download-failed',
-      `plugin download host could not be resolved: ${hostname}`
-    );
-  }
-  for (const address of addresses) {
-    if (!isPublicAddress(address)) {
-      throw new PluginDownloadError(
-        'forbidden-target',
-        `plugin download host resolves to a non-public address: ${address}`
-      );
-    }
+    throw error.code === 'unresolved'
+      ? new PluginDownloadError(
+          'download-failed',
+          `plugin download ${error.message}`
+        )
+      : new PluginDownloadError(
+          'forbidden-target',
+          `plugin download ${error.message}`
+        );
   }
 }
 

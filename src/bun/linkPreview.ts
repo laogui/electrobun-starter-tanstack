@@ -1,3 +1,9 @@
+import {
+  assertPublicTarget,
+  isObviouslyNonPublicHost,
+  OutboundTargetError,
+} from './net/publicTarget';
+
 /**
  * Lightweight link unfurling. Fetches a remote http(s) document, extracts
  * Open Graph / standard metadata, and returns a small payload that the
@@ -6,8 +12,10 @@
  * Safety constraints:
  *   - Only http and https URLs are followed.
  *   - The server is given a short timeout to keep the UI responsive.
- *   - Hostnames that resolve to localhost / private networks are rejected
- *     before the fetch starts, to avoid SSRF against the user's machine.
+ *   - Every hop (including redirects, which are followed manually) is
+ *     DNS-resolved and refused unless all addresses are public, to avoid
+ *     SSRF against the user's machine / LAN / cloud metadata endpoints.
+ *   - Returned image/favicon URLs are restricted to https on public hosts.
  *   - Reading stops at </head> (or after ~1 MiB) so we never buffer
  *     arbitrarily large pages into memory.
  */
@@ -23,15 +31,6 @@ const MAX_REDIRECTS = 5;
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-const LOCALHOST_HOSTNAMES = new Set([
-  'localhost',
-  'localhost.localdomain',
-  'broadcasthost',
-  'ip6-localhost',
-  'ip6-loopback',
-]);
-const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-
 export interface UnfurlResult {
   description?: string;
   faviconUrl?: string;
@@ -40,98 +39,6 @@ export interface UnfurlResult {
   status: 'ready' | 'failed';
   title?: string;
   url: string;
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  const match = IPV4_RE.exec(hostname);
-  if (!match) {
-    return false;
-  }
-  const parts = match.slice(1).map((part) => Number.parseInt(part, 10));
-  if (parts.some((value) => Number.isNaN(value) || value < 0 || value > 255)) {
-    return false;
-  }
-  const [a, b] = parts as [number, number, number, number];
-  if (a === 10) {
-    return true;
-  }
-  if (a === 127) {
-    return true;
-  }
-  if (a === 0) {
-    return true;
-  }
-  if (a === 169 && b === 254) {
-    return true;
-  }
-  if (a === 192 && b === 168) {
-    return true;
-  }
-  if (a === 172 && b >= 16 && b <= 31) {
-    return true;
-  }
-  return false;
-}
-
-function ipv4FromMappedIpv6(suffix: string): string | null {
-  if (IPV4_RE.test(suffix)) {
-    return suffix;
-  }
-  const parts = suffix.split(':');
-  if (parts.length !== 2) {
-    return null;
-  }
-  const [highRaw, lowRaw] = parts as [string, string];
-  if (!(HEX_GROUP_RE.test(highRaw) && HEX_GROUP_RE.test(lowRaw))) {
-    return null;
-  }
-  const high = Number.parseInt(highRaw, 16);
-  const low = Number.parseInt(lowRaw, 16);
-  return `${Math.floor(high / 256)}.${high % 256}.${Math.floor(low / 256)}.${low % 256}`;
-}
-
-function isPrivateIpv6(hostname: string): boolean {
-  const lower = hostname
-    .toLowerCase()
-    .replace(BRACKET_OPEN_RE, '')
-    .replace(BRACKET_CLOSE_RE, '');
-  if (!lower.includes(':')) {
-    return false;
-  }
-  if (lower.startsWith('::ffff:')) {
-    const mappedIpv4 = ipv4FromMappedIpv6(lower.slice('::ffff:'.length));
-    return mappedIpv4 ? isPrivateIpv4(mappedIpv4) : true;
-  }
-  if (lower === '::1' || lower === '::') {
-    return true;
-  }
-  if (lower.startsWith('fc') || lower.startsWith('fd')) {
-    return true;
-  }
-  if (LINK_LOCAL_FE_RE.test(lower)) {
-    return true;
-  }
-  return false;
-}
-
-export function isPrivateOrLocalHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
-  if (!lower) {
-    return true;
-  }
-  if (LOCALHOST_HOSTNAMES.has(lower)) {
-    return true;
-  }
-  if (lower.endsWith('.localhost') || lower.endsWith('.local')) {
-    return true;
-  }
-  if (isPrivateIpv4(lower)) {
-    return true;
-  }
-  if (isPrivateIpv6(lower)) {
-    return true;
-  }
-  return false;
 }
 
 function parseSafeHttpUrl(value: string, base?: string): URL | null {
@@ -144,19 +51,36 @@ function parseSafeHttpUrl(value: string, base?: string): URL | null {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return null;
   }
-  if (isPrivateOrLocalHost(parsed.hostname)) {
+  if (parsed.username || parsed.password) {
+    return null;
+  }
+  if (isObviouslyNonPublicHost(parsed.hostname)) {
     return null;
   }
   return parsed;
 }
 
+/**
+ * True when `url` passes the shared outbound policy: the hostname must
+ * resolve only to public addresses (blocks DNS names pointing at 10/8,
+ * 169.254.169.254, ::1, ...). Checked again on every redirect hop.
+ */
+async function isPublicTarget(url: URL): Promise<boolean> {
+  try {
+    await assertPublicTarget(url);
+    return true;
+  } catch (error) {
+    if (error instanceof OutboundTargetError) {
+      console.warn('[unfurlLink] Refused target:', error.message);
+      return false;
+    }
+    throw error;
+  }
+}
+
 const TITLE_TAG_RE = /<title[^>]*>([\s\S]*?)<\/title>/i;
 const LINK_ICON_TAG_RE =
   /<link[^>]+rel\s*=\s*["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi;
-const HEX_GROUP_RE = /^[0-9a-f]{1,4}$/i;
-const BRACKET_OPEN_RE = /^\[/;
-const BRACKET_CLOSE_RE = /\]$/;
-const LINK_LOCAL_FE_RE = /^fe[89ab]/;
 const REGEX_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
 
 function decodeHtmlEntities(value: string): string {
@@ -242,18 +166,34 @@ export function parseHtmlMetadata(html: string): ParsedMetadata {
   return meta;
 }
 
-function resolveUrl(
+/**
+ * Resolve a page-supplied image/favicon URL for the renderer to load. Only
+ * https to a non-local host survives: plain http and private hosts are
+ * dropped so a preview cannot turn into a LAN probe or a cleartext tracker.
+ */
+export function resolvePreviewAssetUrl(
   value: string | undefined,
   base: string
 ): string | undefined {
   if (!value) {
     return;
   }
+  let resolved: URL;
   try {
-    return new URL(value, base).toString();
+    resolved = new URL(value, base);
   } catch {
     return;
   }
+  if (resolved.protocol !== 'https:') {
+    return;
+  }
+  if (resolved.username || resolved.password) {
+    return;
+  }
+  if (isObviouslyNonPublicHost(resolved.hostname)) {
+    return;
+  }
+  return resolved.toString();
 }
 
 async function readBoundedText(
@@ -309,6 +249,9 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
       redirectCount <= MAX_REDIRECTS;
       redirectCount += 1
     ) {
+      if (!(await isPublicTarget(parsed))) {
+        return { url: rawUrl, status: 'failed' };
+      }
       const response = await fetch(parsed.toString(), {
         method: 'GET',
         redirect: 'manual',
@@ -344,18 +287,19 @@ export async function unfurlLink(rawUrl: string): Promise<UnfurlResult> {
       const html = await readBoundedText(response, MAX_BYTES);
       const meta = parseHtmlMetadata(html);
 
+      const imageUrl = resolvePreviewAssetUrl(meta.imageUrl, parsed.toString());
+      const faviconUrl = resolvePreviewAssetUrl(
+        meta.faviconUrl,
+        parsed.toString()
+      );
       const result = {
         url: rawUrl,
         status: 'ready' as const,
         ...(meta.title ? { title: meta.title } : {}),
         ...(meta.description ? { description: meta.description } : {}),
         ...(meta.siteName ? { siteName: meta.siteName } : {}),
-        ...(meta.imageUrl
-          ? { imageUrl: resolveUrl(meta.imageUrl, parsed.toString()) }
-          : {}),
-        ...(meta.faviconUrl
-          ? { faviconUrl: resolveUrl(meta.faviconUrl, parsed.toString()) }
-          : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(faviconUrl ? { faviconUrl } : {}),
       };
       return result;
     }

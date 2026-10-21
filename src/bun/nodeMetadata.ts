@@ -2,6 +2,7 @@ import { join } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { listFilesRecursive, loadNote } from './notes';
+import { readJsonOrEmpty } from './persistence/corruptFile';
 
 export interface NodeMetadata {
   tag?: string;
@@ -214,27 +215,50 @@ export function sanitizeTagList(input: unknown): string[] {
   return out;
 }
 
+function parseNodeMetadataDocument(value: unknown): NodeMetadataMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('node-metadata.json is not a JSON object.');
+  }
+  const entries = (value as Partial<NodeMetadataDocument>).entries;
+  if (entries === undefined) {
+    return {};
+  }
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+    throw new Error('node-metadata.json entries must be an object.');
+  }
+  const cleaned: NodeMetadataMap = {};
+  for (const [id, raw] of Object.entries(entries)) {
+    const norm = normalizeEntry(raw);
+    if (norm) {
+      cleaned[id] = norm;
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Damaged metadata still starts as an empty map (tags are recoverable
+ * decoration, not content), but the original bytes are first copied to
+ * `node-metadata.json.corrupt-<timestamp>` so the next flush cannot destroy
+ * them.
+ */
 async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
-  const file = Bun.file(resolvePath(wsPath));
-  if (!(await file.exists())) {
-    return {};
+  const read = await readJsonOrEmpty(
+    resolvePath(wsPath),
+    parseNodeMetadataDocument
+  ).catch((error: unknown) => {
+    console.warn('[nodeMetadata] Failed to read metadata:', error);
+    return { kind: 'empty' as const };
+  });
+  if (read.kind === 'ok') {
+    return read.value;
   }
-  try {
-    const doc = (await file.json()) as Partial<NodeMetadataDocument>;
-    if (!doc || typeof doc !== 'object' || !doc.entries) {
-      return {};
-    }
-    const cleaned: NodeMetadataMap = {};
-    for (const [id, raw] of Object.entries(doc.entries)) {
-      const norm = normalizeEntry(raw);
-      if (norm) {
-        cleaned[id] = norm;
-      }
-    }
-    return cleaned;
-  } catch {
-    return {};
+  if (read.kind === 'corrupt') {
+    console.warn(
+      `[nodeMetadata] node-metadata.json is corrupt (${read.error.message}); preserved at ${read.backupPath}`
+    );
   }
+  return {};
 }
 
 async function writeToDisk(wsPath: string): Promise<void> {

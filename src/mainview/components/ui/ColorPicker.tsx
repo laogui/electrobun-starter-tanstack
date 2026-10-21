@@ -13,6 +13,7 @@ import { RgbaColorPicker } from 'react-colorful';
 
 import { hexToRgba, type RgbaColor, rgbaToHex } from '@/lib/hexColor';
 import { cn } from '@/lib/utils';
+import * as m from '../../../paraglide/messages.js';
 
 const DEFAULT_TRIGGER = (
   <div className="flex aspect-square size-fit items-center justify-center rounded-full bg-gradient-to-br from-pink-300/20 via-violet-300/20 to-indigo-300/20 p-0.5">
@@ -150,7 +151,7 @@ export function ColorPicker({
                   value={draftHex}
                 />
                 <input
-                  aria-label="Alpha"
+                  aria-label={m.a11y_color_alpha()}
                   className="h-10 w-16 rounded-r-md border border-neutral-200 border-l-0 bg-white px-2 font-mono text-sm tracking-widest outline-hidden focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-950"
                   max={1}
                   min={0}

@@ -2,6 +2,7 @@ import { ArrowRight, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { createLinkNodeData, type LinkNodeData } from '@/lib/contentTypes';
+import * as m from '../../../paraglide/messages.js';
 
 export function LinkCreateForm({
   onCreate,
@@ -38,7 +39,7 @@ export function LinkCreateForm({
       }}
     >
       <label className="sr-only" htmlFor="create-link-url">
-        Link URL
+        {m.a11y_link_url()}
       </label>
       <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-neutral-600 dark:bg-neutral-900">
         <LinkIcon className="shrink-0 text-gray-400" size={16} />

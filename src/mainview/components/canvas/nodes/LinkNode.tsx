@@ -206,7 +206,7 @@ export const LinkContent = ({
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open link
+                {m.link_open()}
                 <ExternalLink size={16} />
               </a>
             ) : null}
@@ -223,7 +223,7 @@ export const LinkContent = ({
           {link.unfurlStatus === 'failed' && !youtubeVideo ? (
             <div className="mt-6 inline-flex items-center gap-2 self-start rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 text-xs dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
               <AlertTriangle size={13} />
-              Preview unavailable
+              {m.link_preview_unavailable()}
             </div>
           ) : null}
 
@@ -236,7 +236,7 @@ export const LinkContent = ({
               <form onSubmit={handleUrlSubmit}>
                 <div className="flex items-center gap-2">
                   <input
-                    aria-label="Link URL"
+                    aria-label={m.a11y_link_url()}
                     className="nodrag nopan min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 font-mono text-neutral-700 text-sm outline-hidden transition-colors focus:border-accent dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
                     onChange={(event) => {
                       setUrlState((current) => ({
@@ -250,7 +250,7 @@ export const LinkContent = ({
                     className="nodrag nopan shrink-0 rounded-lg bg-neutral-950 px-3 py-2 font-semibold text-neutral-50 text-sm transition-colors hover:bg-neutral-800 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200"
                     type="submit"
                   >
-                    Save URL
+                    {m.link_save_url()}
                   </button>
                 </div>
                 {urlError ? (
@@ -313,7 +313,7 @@ export const LinkContent = ({
             </div>
           )}
           <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
-            Link
+            {m.type_badge_link()}
           </TypeBadge>
         </div>
       )}

@@ -1085,7 +1085,7 @@ export function CanvasContextMenu({
         <>
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
-            aria-label="Canvas context menu"
+            aria-label={m.a11y_canvas_context_menu()}
             className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
             exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
             initial={{ opacity: 0, scale: 0.95 }}
@@ -1182,7 +1182,7 @@ export function CanvasContextMenu({
             {openSubmenu && submenuItems ? (
               <motion.div
                 animate={{ opacity: 1, scale: 1, x: 0 }}
-                aria-label="New item submenu"
+                aria-label={m.a11y_new_item_submenu()}
                 className="fixed z-101 min-w-[180px] overflow-y-auto rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
                 exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
                 initial={{

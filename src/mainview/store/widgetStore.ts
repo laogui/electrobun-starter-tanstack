@@ -194,7 +194,7 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
     });
     for (const record of dueReminderRecords) {
       const data = record.data as ReminderWidgetData;
-      toast.info(`Reminder due: ${record.title || record.id}`, {
+      toast.info(m.toast_reminder_due({ title: record.title || record.id }), {
         ...(data.note ? { description: data.note } : {}),
       });
     }

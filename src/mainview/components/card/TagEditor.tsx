@@ -409,7 +409,7 @@ export function TagEditor({
             ) : null}
             <div className="mt-2 flex items-stretch gap-1.5">
               <input
-                aria-label="Tag name"
+                aria-label={m.a11y_tag_name()}
                 className={cn(
                   'min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1.5 text-sm outline-hidden focus:border-black/30 dark:border-white/10 dark:bg-neutral-900 dark:focus:border-white/30',
                   limitReached && 'cursor-not-allowed opacity-50'

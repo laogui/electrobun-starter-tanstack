@@ -68,7 +68,7 @@ export const StickyContent = ({
       >
         {editing ? (
           <textarea
-            aria-label="Sticky note text"
+            aria-label={m.a11y_sticky_text()}
             className="sticky-editable nodrag nopan custom-scrollbar flex-1 resize-none overflow-y-auto border-none bg-transparent p-0 text-sm/relaxed outline-hidden"
             defaultValue={data.content ?? ''}
             onBlur={onBlur}

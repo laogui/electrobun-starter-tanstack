@@ -12,6 +12,7 @@ import { DEFAULT_EDGE_STROKE, resolveEdgeCustomColor } from '@/lib/edgeMarkers';
 import { getFloatingEdgeParams } from '@/lib/floatingEdge';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../../paraglide/messages.js';
 import { resolveEdgeFields } from '../../../../shared/canvasEdgeFields';
 import { isTopicTreeEdge } from '../../../../shared/topic';
 
@@ -170,7 +171,7 @@ function LabeledEdgeComponent({
         >
           {isEditing ? (
             <input
-              aria-label="Edge label"
+              aria-label={m.a11y_edge_label()}
               className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-xs shadow-sm outline-hidden focus:border-accent focus:ring-1 focus:ring-accent dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
               onBlur={commitLabel}
               onChange={(e) => {

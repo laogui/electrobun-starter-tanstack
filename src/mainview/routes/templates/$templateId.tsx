@@ -115,12 +115,12 @@ function TemplatePreviewContent() {
         width: THUMBNAIL_WIDTH,
       });
       if (!dataUrl) {
-        toast.error('画布为空，无法生成缩略图');
+        toast.error(m.template_thumbnail_empty());
         return;
       }
       const result = await rpcSaveTemplateThumbnail(templateId, dataUrl);
       if (!result) {
-        toast.error('RPC 不可用（确认 Electrobun 已启动）');
+        toast.error(m.template_thumbnail_rpc_unavailable());
         return;
       }
       if (result.success) {
@@ -133,13 +133,19 @@ function TemplatePreviewContent() {
         await queryClient.invalidateQueries({
           queryKey: ['templates', templateId],
         });
-        toast.success(`已写入 ${result.path ?? 'thumbnail.png'}`);
+        toast.success(
+          m.template_thumbnail_written({ path: result.path ?? 'thumbnail.png' })
+        );
       } else {
-        toast.error(`保存失败：${result.reason ?? '未知错误'}`);
+        toast.error(
+          m.template_thumbnail_save_failed({
+            reason: result.reason ?? m.error_unknown(),
+          })
+        );
       }
     } catch (error) {
       console.error('[templates] export thumbnail failed', error);
-      toast.error('导出缩略图失败');
+      toast.error(m.template_thumbnail_export_failed());
     } finally {
       setExportingThumbnail(false);
     }

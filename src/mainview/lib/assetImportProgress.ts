@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { type AssetImportProgress, saveAssetFile } from '@/lib/assetFiles';
 import type { AssetNodeData } from '@/lib/contentTypes';
+import * as m from '../../paraglide/messages.js';
 import { AssetImportProgressToast } from './AssetImportProgressToast';
 
 const IMPORT_TOAST_DURATION_MS = 60 * 60 * 1000;
@@ -30,7 +31,7 @@ export async function saveAssetFileWithProgressToast(
         );
       },
     });
-    toast.success('File added', {
+    toast.success(m.asset_import_added(), {
       id: toastId,
       description: file.name,
       duration: 2200,
@@ -38,7 +39,7 @@ export async function saveAssetFileWithProgressToast(
     return data;
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : 'File could not be saved.';
+      error instanceof Error ? error.message : m.asset_import_save_failed();
     toast.error(message, {
       id: toastId,
       description: file.name,

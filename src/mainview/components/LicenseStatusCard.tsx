@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Sparkles } from 'lucide-react';
 import { formatLicenseActivationDate } from '@/lib/licenseDates';
 import { refreshLicense } from '@/lib/rpc-license';
+import * as m from '../../paraglide/messages.js';
 
 interface LicenseStatusCardProps {
   onActivateClick: () => void;
@@ -32,7 +33,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
           <div className="flex-1">
             <div className="mb-1 flex items-center gap-2">
               <h3 className="font-semibold text-green-900 dark:text-green-100">
-                Pro License Active
+                {m.license_pro_active()}
               </h3>
               <Sparkles
                 className="text-green-600 dark:text-green-400"
@@ -40,11 +41,13 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
               />
             </div>
             <p className="mb-2 text-green-700 text-sm dark:text-green-300">
-              Unlimited cards • All features unlocked
+              {m.license_pro_benefits()}
             </p>
             {license.activatedAt && (
               <p className="text-green-600 text-xs dark:text-green-400">
-                Activated {formatLicenseActivationDate(license.activatedAt)}
+                {m.license_activated_on({
+                  date: formatLicenseActivationDate(license.activatedAt),
+                })}
               </p>
             )}
           </div>
@@ -61,10 +64,10 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
         </div>
         <div className="flex-1">
           <h3 className="mb-1 font-semibold text-accent-strong">
-            Free Version
+            {m.license_free_version()}
           </h3>
           <p className="mb-3 text-accent-strong text-sm">
-            Limited to 100 cards
+            {m.license_free_limit()}
           </p>
           <button
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 font-medium text-accent-foreground text-sm transition-colors hover:bg-accent-strong dark:hover:bg-accent"
@@ -72,7 +75,7 @@ export function LicenseStatusCard({ onActivateClick }: LicenseStatusCardProps) {
             type="button"
           >
             <Sparkles size={14} />
-            Activate Pro License
+            {m.license_activate_pro()}
           </button>
         </div>
       </div>
@@ -95,7 +98,7 @@ export function LicenseStatusBadge() {
     return (
       <div className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-100 px-2 py-1 font-medium text-green-700 text-xs dark:border-green-800 dark:bg-green-900/30 dark:text-green-300">
         <Check size={12} />
-        Pro
+        {m.license_pro_badge()}
       </div>
     );
   }

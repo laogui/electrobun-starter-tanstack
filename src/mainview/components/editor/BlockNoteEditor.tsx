@@ -40,6 +40,7 @@ import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../../paraglide/messages.js';
 import {
   abortAIEditorRequest,
   getAIRequestSignal,
@@ -845,7 +846,7 @@ function BlockNoteSurface({
       >
         <div className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12">
           <TextareaAutosize
-            aria-label="Note title"
+            aria-label={m.a11y_note_title()}
             className={cn(
               'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
@@ -857,7 +858,7 @@ function BlockNoteSurface({
             onBlur={handleBlur}
             onChange={(event) => handleTitleChange(event.target.value)}
             onKeyDown={handleTitleKeyDown}
-            placeholder="Untitled"
+            placeholder={m.editor_title_placeholder()}
             value={title}
           />
           <BlockNoteView

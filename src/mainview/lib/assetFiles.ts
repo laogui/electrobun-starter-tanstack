@@ -16,6 +16,7 @@ import {
   createVideoThumbnail,
   summarizeWaveform,
 } from '@/lib/thumbnail';
+import * as m from '../../paraglide/messages.js';
 
 // Re-export for the test surface that historically lived in this module.
 export { summarizeWaveform };
@@ -89,9 +90,7 @@ function assertAttachmentSaved(
 ): string {
   const filePath = result?.filePath;
   if (!filePath) {
-    throw new Error(
-      `Failed to save "${fileName}" to the workspace. Is GhostBoard connected to a workspace?`
-    );
+    throw new Error(m.asset_save_failed_workspace({ fileName }));
   }
   return filePath;
 }
@@ -189,22 +188,22 @@ async function extractMediaMetadata(
   reportProgress: ProgressReporter
 ): Promise<MediaMetadata> {
   if (kind === 'video') {
-    reportProgress(0.08, 'Reading media metadata');
+    reportProgress(0.08, m.asset_progress_reading_metadata());
     const videoMetadata = await createVideoThumbnail(file);
     const savedThumb = await saveVideoThumbnail(
       videoMetadata.thumbnailUrl,
       file.name
     );
-    reportProgress(0.22, 'Copying file');
+    reportProgress(0.22, m.asset_progress_copying());
     return {
       ...(videoMetadata.duration ? { duration: videoMetadata.duration } : {}),
       ...savedThumb,
     };
   }
   if (kind === 'audio') {
-    reportProgress(0.08, 'Reading media metadata');
+    reportProgress(0.08, m.asset_progress_reading_metadata());
     const audioMetadata = await createAudioWaveform(file);
-    reportProgress(0.18, 'Copying file');
+    reportProgress(0.18, m.asset_progress_copying());
     return {
       ...(audioMetadata.duration ? { duration: audioMetadata.duration } : {}),
       ...(audioMetadata.waveform && audioMetadata.waveform.length > 0
@@ -216,9 +215,9 @@ async function extractMediaMetadata(
     file.type.startsWith('image/') ||
     classifyFile(file).mimeType.startsWith('image/')
   ) {
-    reportProgress(0.12, 'Generating thumbnail');
+    reportProgress(0.12, m.asset_progress_thumbnail());
     const imageThumb = await saveImageAssetThumbnail(file, file.name);
-    reportProgress(0.22, 'Copying file');
+    reportProgress(0.22, m.asset_progress_copying());
     return imageThumb;
   }
   return {};
@@ -230,14 +229,14 @@ async function copyFileIntoWorkspace(
   reportProgress: ProgressReporter
 ): Promise<SaveAttachmentRpcResult> {
   const sourcePath = getDesktopFilePath(file);
-  reportProgress(0.84, 'Copying file');
+  reportProgress(0.84, m.asset_progress_copying());
   if (sourcePath) {
     const result = await rpcSaveAttachmentFile(sourcePath, {
       kind: classified.kind,
       mimeType: classified.mimeType,
       suggestedName: file.name,
     });
-    reportProgress(0.96, 'Copying file');
+    reportProgress(0.96, m.asset_progress_copying());
     return result ?? {};
   }
   const result = await uploadAttachmentBlob(file, {
@@ -245,7 +244,7 @@ async function copyFileIntoWorkspace(
     kind: classified.kind,
     mimeType: classified.mimeType,
   });
-  reportProgress(0.96, 'Copying file');
+  reportProgress(0.96, m.asset_progress_copying());
   return result;
 }
 
@@ -276,7 +275,7 @@ export async function saveAssetFile(
 ): Promise<AssetNodeData> {
   const classified = classifyFile(file);
   const reportProgress = createProgressReporter(file, options);
-  reportProgress(0.02, 'Preparing file');
+  reportProgress(0.02, m.asset_progress_preparing());
 
   let [media, result] = await Promise.all([
     extractMediaMetadata(file, classified.kind, reportProgress),
@@ -288,7 +287,7 @@ export async function saveAssetFile(
     media = await ensureVideoThumbnail(attachmentFile, media);
   }
 
-  reportProgress(1, 'Added to canvas');
+  reportProgress(1, m.asset_progress_added());
   return buildAssetNodePayload(file, attachmentFile, result, media);
 }
 
@@ -323,7 +322,7 @@ export async function saveAssetFromPath(
   let media: MediaMetadata = {};
   if (input.file) {
     const reportProgress = createProgressReporter(input.file, options);
-    reportProgress(0.08, 'Reading media metadata');
+    reportProgress(0.08, m.asset_progress_reading_metadata());
     media = await extractMediaMetadata(
       input.file,
       classified.kind,

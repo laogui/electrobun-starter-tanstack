@@ -683,7 +683,7 @@ function CanvasComponent() {
         instanceIdMap
       );
       if (imported.nodes.length === 0) {
-        toast.error('Canvas JSON did not contain importable nodes.');
+        toast.error(m.toast_canvas_json_empty());
         return;
       }
       if (
@@ -703,10 +703,10 @@ function CanvasComponent() {
       latest.setEdges((prev) => [...prev, ...imported.edges]);
       if (skippedWidgetCount > 0) {
         toast.warning(
-          `Skipped ${skippedWidgetCount} widget(s) that could not be imported.`
+          m.toast_canvas_json_widgets_skipped({ count: skippedWidgetCount })
         );
       } else {
-        toast.success('Canvas JSON imported.');
+        toast.success(m.toast_canvas_json_imported());
       }
     },
     [
@@ -736,7 +736,7 @@ function CanvasComponent() {
             await importCanvasExportDocument(canvasExportDocument, position);
           } catch (error) {
             console.error('[canvas] Failed to import canvas JSON:', error);
-            toast.error('Canvas JSON could not be imported.');
+            toast.error(m.toast_canvas_json_import_failed());
           }
           continue;
         }
@@ -2395,14 +2395,14 @@ function CanvasComponent() {
       />
 
       <input
-        aria-label="Import asset file"
+        aria-label={m.a11y_import_asset_file()}
         className="hidden"
         onChange={onAssetFileInputChange}
         ref={assetFileInputRef}
         type="file"
       />
       <input
-        aria-label="Replace asset file"
+        aria-label={m.a11y_replace_asset_file()}
         className="hidden"
         onChange={onReplaceFileInputChange}
         ref={replaceFileInputRef}

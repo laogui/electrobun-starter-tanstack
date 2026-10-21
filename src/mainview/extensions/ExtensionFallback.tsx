@@ -1,6 +1,29 @@
 import { AlertTriangle, Hash } from 'lucide-react';
+import * as m from '../../paraglide/messages.js';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
+
+type FallbackAvailability =
+  | ExtensionAvailability
+  | 'crashed'
+  | 'corrupted'
+  | 'incompatible';
+
+/** Single source for the fallback copy shown by canvas, detail and node hosts. */
+export function extensionFallbackMessage(
+  availability: FallbackAvailability
+): string {
+  switch (availability) {
+    case 'corrupted':
+      return m.extension_fallback_corrupted();
+    case 'incompatible':
+      return m.extension_fallback_incompatible();
+    case 'disabled':
+      return m.extension_fallback_disabled();
+    default:
+      return m.extension_fallback_unavailable();
+  }
+}
 
 export function ExtensionFallback({
   availability,
@@ -9,13 +32,10 @@ export function ExtensionFallback({
   onEnable,
   presentation,
 }: {
-  availability:
-    | ExtensionAvailability
-    | 'crashed'
-    | 'corrupted'
-    | 'incompatible';
+  availability: FallbackAvailability;
   canvasTypeId: string;
-  message: string;
+  /** Defaults to {@link extensionFallbackMessage} for the availability. */
+  message?: string;
   onEnable?: () => void;
   presentation?: ExtensionPresentation;
 }) {
@@ -29,14 +49,16 @@ export function ExtensionFallback({
         <AlertTriangle className="opacity-50" size={18} />
       )}
       <div className="font-medium text-sm">{title}</div>
-      <div className="text-neutral-500 text-xs">{message}</div>
+      <div className="text-neutral-500 text-xs">
+        {message ?? extensionFallbackMessage(availability)}
+      </div>
       {availability === 'disabled' && onEnable ? (
         <button
           className="nodrag nopan mt-1 rounded-full border border-black/10 px-3 py-1 text-xs dark:border-white/15"
           onClick={onEnable}
           type="button"
         >
-          Enable
+          {m.extension_fallback_enable()}
         </button>
       ) : null}
     </div>

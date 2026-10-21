@@ -131,7 +131,7 @@ export const ImageContent = ({
         <div className="flex size-full flex-col items-center justify-center gap-3 border border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-200">
           <div className="flex items-center gap-2 font-medium text-sm">
             <AlertTriangle size={isFocused ? 20 : 16} />
-            Missing image
+            {m.image_missing()}
           </div>
           <button
             className="nodrag nopan inline-flex items-center gap-1.5 rounded-full border border-red-300/60 bg-white/70 px-3 py-1.5 text-red-700 text-xs shadow-sm transition-colors hover:bg-white dark:border-red-400/30 dark:bg-white/10 dark:text-red-200 dark:hover:bg-white/20"
@@ -146,7 +146,7 @@ export const ImageContent = ({
             type="button"
           >
             <RefreshCw size={12} />
-            Retry
+            {m.action_retry()}
           </button>
         </div>
       );
@@ -169,7 +169,7 @@ export const ImageContent = ({
             isFocused ? 'text-zinc-500' : 'text-gray-400'
           )}
         >
-          No image
+          {m.image_empty()}
         </span>
       </div>
     );
@@ -442,7 +442,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
 
       <input
         accept="image/*"
-        aria-label="Replace image file"
+        aria-label={m.a11y_replace_image_file()}
         className="hidden"
         onChange={handleFileInput}
         ref={fileInputRef}
@@ -492,7 +492,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               >
                 <ImagePlus className="text-gray-300" size={40} />
                 <span className="text-gray-400 text-sm">
-                  Click to add image
+                  {m.image_click_to_add()}
                 </span>
               </button>
               <span className="text-gray-300 text-xs">
@@ -501,7 +501,9 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
             </div>
           )}
           {hasImage ? (
-            <TypeBadge className="absolute top-5 right-5 z-10">Image</TypeBadge>
+            <TypeBadge className="absolute top-5 right-5 z-10">
+              {m.type_badge_image()}
+            </TypeBadge>
           ) : null}
           {isRenaming && hasImage ? (
             <div
@@ -510,7 +512,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
               onPointerDown={(e) => e.stopPropagation()}
             >
               <input
-                aria-label="Rename image"
+                aria-label={m.a11y_rename_image()}
                 className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-bold text-neutral-900 text-xl shadow-md outline-hidden focus:border-accent dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-50"
                 onBlur={commitRename}
                 onChange={(e) => setRenameDraft(e.target.value)}

@@ -14,8 +14,8 @@ export const queryClient = new QueryClient({
       const message =
         error instanceof Error
           ? error.message
-          : String(error ?? 'Unknown error');
-      toast.error(`Error: ${message}`, {
+          : String(error ?? m.error_unknown());
+      toast.error(m.toast_query_error({ message }), {
         action: {
           label: m.action_retry(),
           onClick: () => {

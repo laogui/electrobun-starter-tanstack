@@ -9,6 +9,7 @@ import type {
 } from '@/lib/widgetTypes';
 import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useWidgetStore } from '@/store/widgetStore';
+import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
 import { PomodoroWidgetBody } from './PomodoroWidget';
@@ -119,7 +120,7 @@ export function ChecklistWidgetBody({
           >
             <Plus className="size-4 shrink-0 text-gray-400" />
             <input
-              aria-label="New checklist item"
+              aria-label={m.a11y_checklist_new_item()}
               className="nodrag nopan w-full border-none bg-transparent text-sm placeholder-gray-500 outline-hidden"
               data-testid={`widget-new-item-${nodeId}`}
               onChange={(e) => {
@@ -141,7 +142,7 @@ export function ChecklistWidgetBody({
                   setNewItem('');
                 }
               }}
-              placeholder="Add item..."
+              placeholder={m.checklist_add_item_placeholder()}
               type="text"
               value={newItem}
             />
@@ -162,7 +163,7 @@ function WidgetNode({ id, data }: { data: WidgetNodeData; id: string }) {
         <NodeHandles />
         <WidgetFallback
           message="This widget could not be found."
-          title="Missing widget"
+          title={m.widget_missing_title()}
         />
       </div>
     );
@@ -178,7 +179,7 @@ function WidgetNode({ id, data }: { data: WidgetNodeData; id: string }) {
               ? 'The widget file is corrupted.'
               : 'The widget file is missing.'
           }
-          title="Broken widget"
+          title={m.widget_broken_title()}
         />
       </div>
     );

@@ -829,7 +829,7 @@ export function useContextMenu({
         case 'detach-from-canvas': {
           if (nodeId) {
             detachNoteFromCanvas(nodeId);
-            toast('Note moved to library', {
+            toast(m.toast_note_moved_to_library(), {
               action: { label: m.toast_undo(), onClick: () => undo() },
             });
           }

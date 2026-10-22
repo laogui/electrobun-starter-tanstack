@@ -1,14 +1,11 @@
-import type { Edge, Node, NodeChange, ReactFlowInstance } from '@xyflow/react';
+import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { create } from 'zustand';
-import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import {
   isDetachableNode,
   isFolderChildNode,
   isGroupChildNode,
-  isLockedNode,
-  isPinnedSticky,
 } from '@/lib/canvasNodePredicates';
 import {
   buildNewNodeSpec,
@@ -21,7 +18,6 @@ import {
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
-import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
 import {
   markNodesEntering,
@@ -33,7 +29,6 @@ import {
   countCountedNodes,
   hasNodeQuota,
 } from '@/lib/nodeQuota';
-import { collectNoteIdsFromCanvasNodes } from '@/lib/noteTitleProjection';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import {
@@ -86,24 +81,22 @@ import {
 } from './canvas/cloneReferences';
 import {
   type FolderChildEntry,
-  folderChildToDetachedNode,
   resolveFolderChildSize,
   resolveFolderChildSpec,
   uniqueDetachedNodeId,
   uniqueEdgeId,
 } from './canvas/folderChildren';
-import { noteTitleMap, projectNoteTitles } from './canvas/noteTitles';
 import { topicCommandContextForNodes } from './canvas/topicCommandContext';
 import {
   attachDraftToTree,
   relayoutTopicTree,
-  settleTopicsAfterDelete,
   toastTopicHardFailure,
   toastTopicSoftOverlap,
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
 import { createEdgesSlice, type EdgesSlice } from './slices/edgesSlice';
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
+import { createNodesSlice, type NodesSlice } from './slices/nodesSlice';
 import { createUiSlice, type UiSlice } from './slices/uiSlice';
 import {
   createViewportSlice,
@@ -197,10 +190,6 @@ const GROUP_SELECTION_PADDING = 24;
 
 const DUPLICATE_OFFSET = 30;
 
-function nodeZIndex(node: Node): number {
-  return typeof node.zIndex === 'number' ? node.zIndex : 0;
-}
-
 /**
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
@@ -209,7 +198,8 @@ export interface CanvasState
   extends UiSlice,
     ViewportSlice,
     HistorySlice,
-    EdgesSlice {
+    EdgesSlice,
+    NodesSlice {
   // Hydration
   _hydrated: boolean;
 
@@ -219,11 +209,6 @@ export interface CanvasState
   // Multi-view
   activeViewId: string;
   addFolderChild: (folderId: string) => void;
-  applyNodesChange: (changes: NodeChange[]) => void;
-  applyNoteTitles: (
-    titles: Record<string, string>,
-    options?: { snapshot?: boolean }
-  ) => void;
   /** Start a new Topic. It renders and accepts typing immediately but does not
    *  enter the graph until the first non-empty commit. */
   beginTopicDraft: (
@@ -242,20 +227,14 @@ export interface CanvasState
     kind: 'child' | 'sibling',
     anchorTopicId: string
   ) => boolean;
-  bringNodesForward: (ids: string[]) => void;
-  bringNodesToFront: (ids: string[]) => void;
   cancelTopicDraft: () => void;
-  changeNodeColor: (nodeId: string) => void;
   clipboard: Node[];
   clipboardEdges: Edge[];
-  collectSelectedNoteIds: () => string[];
   commitFolderChildData: (
     folderId: string,
     childId: string,
     updates: Record<string, unknown>
   ) => void;
-  /** Snapshots history then updates node data — for discrete user edits (blur commits, image upload, checklist toggles, etc.). */
-  commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
   commitTopicDraft: (title: string) => Promise<string | undefined>;
   commitTopicTitle: (nodeId: string, title: string) => void;
 
@@ -278,8 +257,6 @@ export interface CanvasState
   ) => Promise<string | undefined>;
   cutSelected: () => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
-  /** Deletes the unlocked nodes in `ids`; returns how many were deleted. */
-  deleteNodes: (ids: string[]) => number;
   /** Remove a Topic and every descendant as one transaction. */
   deleteTopicBranch: (topicId: string) => void;
   deselectAll: () => void;
@@ -304,8 +281,6 @@ export interface CanvasState
 
   // Helpers
   nextNodeId: () => string;
-  // Core data
-  nodes: Node[];
   pasteClipboard: (offset?: number) => Promise<void>;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   reset: () => void;
@@ -315,8 +290,6 @@ export interface CanvasState
     direction: 'down' | 'left' | 'right' | 'up',
     options?: { extend?: boolean }
   ) => Node | null;
-  sendNodesBackward: (ids: string[]) => void;
-  sendNodesToBack: (ids: string[]) => void;
 
   // Actions – multi-view
   /**
@@ -326,9 +299,6 @@ export interface CanvasState
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
   setEditingTopicId: (id: string | null) => void;
-
-  // Actions – core
-  setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   setTopicDraftText: (text: string) => void;
   /** Live-resize an existing Topic to the title currently being typed, so the
    *  box fits the text while editing. Ephemeral: no relayout and no history
@@ -344,10 +314,6 @@ export interface CanvasState
   switchView: (viewId: string) => Promise<boolean>;
   /** Re-run layout for the branch rooted at `topicId`. */
   tidyTopicBranch: (topicId: string) => void;
-  toggleNodeLocked: (nodeId: string) => void;
-  /** Lock every node in `ids` unless all are already locked, then unlock. */
-  toggleNodesLocked: (ids: string[]) => void;
-  toggleStickyPinned: (nodeId: string) => void;
 
   // Actions – topic
   /**
@@ -372,7 +338,6 @@ export interface CanvasState
     childId: string,
     updates: Record<string, unknown>
   ) => void;
-  updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
   views: Array<{ id: string; name: string }>;
 }
 
@@ -385,8 +350,7 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createViewportSlice(set, get, api),
   ...createHistorySlice(set, get, api),
   ...createEdgesSlice(set, get, api),
-  // -- initial state --------------------------------------------------------
-  nodes: [],
+  ...createNodesSlice(set, get, api),
   _hydrated: false,
   clipboard: [],
   clipboardEdges: [],
@@ -592,75 +556,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
       topicEditPreviews: {},
       topicWritePaused: false,
     });
-  },
-
-  // -- core actions ---------------------------------------------------------
-  setNodes: (updater) => {
-    set((s) => {
-      const updated =
-        typeof updater === 'function' ? updater(s.nodes) : updater;
-      if (updated === s.nodes) {
-        return s;
-      }
-      const pinned = new Map(
-        s.nodes.filter(isPinnedSticky).map((node) => [node.id, node])
-      );
-      const nodes = pinned.size
-        ? updated.map((node) => {
-            const previous = pinned.get(node.id);
-            // Reparenting converts coordinates; moving a parent leaves its
-            // children's relative positions untouched.
-            if (
-              !(previous && isPinnedSticky(node)) ||
-              node.parentId !== previous.parentId ||
-              (node.position.x === previous.position.x &&
-                node.position.y === previous.position.y)
-            ) {
-              return node;
-            }
-            return { ...node, position: previous.position };
-          })
-        : updated;
-      return {
-        nodes,
-        topicCommandContextId: topicCommandContextForNodes(
-          s.nodes,
-          nodes,
-          s.topicCommandContextId
-        ),
-      };
-    });
-  },
-
-  applyNodesChange: (changes) => {
-    set((s) => {
-      const nodes = applyCanvasNodeChanges(changes, s.nodes);
-      if (nodes === s.nodes) {
-        return s;
-      }
-      return {
-        nodes,
-        topicCommandContextId: topicCommandContextForNodes(
-          s.nodes,
-          nodes,
-          s.topicCommandContextId
-        ),
-      };
-    });
-  },
-
-  collectSelectedNoteIds: () =>
-    collectNoteIdsFromCanvasNodes(get().nodes, { selectedOnly: true }),
-
-  applyNoteTitles: (titles, options) => {
-    const map = noteTitleMap(titles);
-    if (!map) {
-      return;
-    }
-    if (options?.snapshot !== false) {
-      get().saveSnapshot();
-    }
-    set((s) => projectNoteTitles(s.nodes, s.focusedNode, map));
   },
 
   // -- topic actions --------------------------------------------------------
@@ -1062,142 +957,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
     }
     get().saveSnapshot();
     set({ nodes: laidOut.nodes });
-  },
-
-  updateNodeData: (nodeId, updates) => {
-    set((s) => {
-      // The focused view reads from `focusedNode.data`, a snapshot captured when
-      // the view opened. Without syncing it here, edits made inside the focused
-      // view (e.g. deleting a checklist item) write to `nodes` but the view
-      // keeps rendering stale data, so the edit appears to "not work". Mirror
-      // the folder-child path (see updateFolderChildData) by refreshing the
-      // snapshot whenever it points at the node being updated.
-      const focusedNode =
-        s.focusedNode?.id === nodeId
-          ? {
-              ...s.focusedNode,
-              data: { ...s.focusedNode.data, ...updates },
-            }
-          : s.focusedNode;
-      return {
-        focusedNode,
-        nodes: s.nodes.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
-        ),
-      };
-    });
-  },
-
-  commitNodeData: (nodeId, updates) => {
-    get().saveSnapshot();
-    get().updateNodeData(nodeId, updates);
-  },
-
-  toggleStickyPinned: (nodeId) => {
-    const node = get().nodes.find((n) => n.id === nodeId);
-    if (node?.type !== 'sticky') {
-      return;
-    }
-    get().commitNodeData(nodeId, { pinned: !isPinnedSticky(node) });
-  },
-
-  toggleNodeLocked: (nodeId) => {
-    const node = get().nodes.find((n) => n.id === nodeId);
-    if (!node) {
-      return;
-    }
-    const current = Boolean(
-      (node.data as { locked?: unknown } | undefined)?.locked
-    );
-    get().commitNodeData(nodeId, { locked: !current });
-  },
-
-  toggleNodesLocked: (ids) => {
-    const idSet = new Set(ids);
-    const targets = get().nodes.filter((node) => idSet.has(node.id));
-    if (targets.length === 0) {
-      return;
-    }
-    // Mixed selections lock everything; only a fully locked selection unlocks.
-    const nextLocked = targets.some(
-      (node) => !(node.data as { locked?: unknown } | undefined)?.locked
-    );
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((node) =>
-        idSet.has(node.id)
-          ? { ...node, data: { ...node.data, locked: nextLocked } }
-          : node
-      ),
-    }));
-  },
-
-  bringNodesToFront: (ids) => {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) {
-      return;
-    }
-    const { nodes } = get();
-    const targets = nodes.filter((node) => idSet.has(node.id));
-    if (targets.length === 0) {
-      return;
-    }
-    const maxZ = Math.max(0, ...nodes.map(nodeZIndex));
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((node) => {
-        const index = targets.findIndex((target) => target.id === node.id);
-        return index === -1 ? node : { ...node, zIndex: maxZ + index + 1 };
-      }),
-    }));
-  },
-
-  sendNodesToBack: (ids) => {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) {
-      return;
-    }
-    const { nodes } = get();
-    const targets = nodes.filter((node) => idSet.has(node.id));
-    if (targets.length === 0) {
-      return;
-    }
-    const minZ = Math.min(0, ...nodes.map(nodeZIndex));
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((node) => {
-        const index = targets.findIndex((target) => target.id === node.id);
-        return index === -1
-          ? node
-          : { ...node, zIndex: minZ - targets.length + index };
-      }),
-    }));
-  },
-
-  bringNodesForward: (ids) => {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) {
-      return;
-    }
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((node) =>
-        idSet.has(node.id) ? { ...node, zIndex: nodeZIndex(node) + 1 } : node
-      ),
-    }));
-  },
-
-  sendNodesBackward: (ids) => {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) {
-      return;
-    }
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((node) =>
-        idSet.has(node.id) ? { ...node, zIndex: nodeZIndex(node) - 1 } : node
-      ),
-    }));
   },
 
   deselectAll: () => {
@@ -2026,136 +1785,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
       );
     }
     return id;
-  },
-
-  deleteNodes: (ids) => {
-    const lockedIds = new Set(
-      get()
-        .nodes.filter(isLockedNode)
-        .map((node) => node.id)
-    );
-    const idSet = new Set(ids.filter((id) => !lockedIds.has(id)));
-    if (ids.some((id) => lockedIds.has(id))) {
-      toast.error(m.toast_locked_nodes_not_deleted());
-    }
-    if (idSet.size === 0) {
-      return 0;
-    }
-    // Collect backing widget files for top-level widget nodes being removed.
-    // Folder children are detached (not deleted) when a folder is removed, so
-    // their widget files are intentionally left intact here.
-    const widgetIdsToDelete: string[] = [];
-    for (const node of get().nodes) {
-      if (idSet.has(node.id) && node.type === 'widget') {
-        const widgetId = (node.data as Record<string, unknown> | undefined)
-          ?.widgetId;
-        if (typeof widgetId === 'string' && widgetId) {
-          widgetIdsToDelete.push(widgetId);
-        }
-      }
-    }
-    get().saveSnapshot();
-    set((s) => {
-      const usedNodeIds = new Set<string>();
-      for (const node of s.nodes) {
-        if (!idSet.has(node.id)) {
-          usedNodeIds.add(node.id);
-        }
-      }
-      const detachedFolderChildren = s.nodes.flatMap((node) => {
-        if (!idSet.has(node.id) || node.type !== 'folder') {
-          return [];
-        }
-        const children = ((node.data as any)?.children ??
-          []) as FolderChildEntry[];
-        return children.map((child) =>
-          folderChildToDetachedNode(child, usedNodeIds)
-        );
-      });
-
-      return settleTopicsAfterDelete(
-        s.nodes,
-        s.edges,
-        sortNodesByParent([
-          ...s.nodes.flatMap((n) => {
-            if (idSet.has(n.id)) {
-              return [];
-            }
-            if (n.parentId && idSet.has(n.parentId)) {
-              const { parentId, extent, ...rest } = n as any;
-              return [rest as Node];
-            }
-            return [n];
-          }),
-          ...detachedFolderChildren,
-        ]),
-        s.edges.filter((e) => !(idSet.has(e.source) || idSet.has(e.target))),
-        idSet
-      );
-    });
-    // Fire-and-forget widget file cleanup for removed top-level widget nodes.
-    for (const widgetId of widgetIdsToDelete) {
-      rpcDeleteWidget(widgetId).catch((error) => {
-        console.error('[canvasStore] Failed to delete widget file:', error);
-        toast.error(m.toast_delete_widget_file_failed());
-      });
-    }
-    return idSet.size;
-  },
-
-  changeNodeColor: (nodeId) => {
-    const node = get().nodes.find((entry) => entry.id === nodeId);
-    if (!node || node.type === 'extension') {
-      return;
-    }
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.map((n) => {
-        if (n.id !== nodeId) {
-          return n;
-        }
-        if (n.type === 'group') {
-          const idx = GROUP_COLORS.indexOf((n.data as any).color ?? 'blue');
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              color: GROUP_COLORS[(idx + 1) % GROUP_COLORS.length],
-            },
-          };
-        }
-        if (n.type === 'sticky') {
-          const idx = STICKY_COLORS.indexOf(
-            (n.data as any).color ?? STICKY_COLORS[0]
-          );
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              color: STICKY_COLORS[(idx + 1) % STICKY_COLORS.length],
-            },
-          };
-        }
-        if (n.type === 'image') {
-          const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              color: CARD_COLORS[(idx + 1) % CARD_COLORS.length],
-            },
-          };
-        }
-        const idx = CARD_COLORS.indexOf((n.data as any).color ?? '#FFFFFF');
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            color: CARD_COLORS[(idx + 1) % CARD_COLORS.length],
-          },
-        };
-      }),
-    }));
   },
 
   addFolderChild: (folderId) => {

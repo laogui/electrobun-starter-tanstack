@@ -62,6 +62,8 @@ afterEach(async () => {
 });
 
 function controller() {
+  // T3HostController forwards `management` to the PluginHostController base,
+  // which requires the full service; the test only exercises these two calls.
   const management = {
     prepareFromFile: vi.fn(async () => preview),
     prepareFromUrl: vi.fn(async () => ({

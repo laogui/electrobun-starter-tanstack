@@ -57,6 +57,22 @@ function nodeData(node: { data?: unknown }): Record<string, unknown> {
   return isRecord(node.data) ? node.data : {};
 }
 
+/**
+ * Apply a migrated node (an open record from the shared migration helpers)
+ * back onto its typed manifest node. Migration only rewrites `type` and
+ * `data`; every other field is carried over from the spread of the original.
+ */
+function withMigratedFields(
+  original: ManifestNode,
+  migrated: Record<string, unknown>
+): ManifestNode {
+  return {
+    ...original,
+    type: typeof migrated.type === 'string' ? migrated.type : original.type,
+    data: nodeData(migrated),
+  };
+}
+
 async function ensureInstance(
   wsPath: string,
   input: {
@@ -302,7 +318,7 @@ export async function migrateLegacyCanvasNodes(
   let changed = false;
   const next: ManifestNode[] = [];
   for (const rawNode of nodes) {
-    const node = rawNode as unknown as Record<string, unknown>;
+    const node: Record<string, unknown> = { ...rawNode };
     if (node.type === 'folder') {
       const data = nodeData(node);
       const children = Array.isArray(data.children) ? data.children : [];
@@ -319,7 +335,7 @@ export async function migrateLegacyCanvasNodes(
         next.push({
           ...rawNode,
           data: { ...data, children: migratedChildren.children },
-        } as ManifestNode);
+        });
         continue;
       }
       next.push(rawNode);
@@ -328,8 +344,10 @@ export async function migrateLegacyCanvasNodes(
     const result = await migrateOneNode(wsPath, appVersion, viewId, node);
     if (result.changed) {
       changed = true;
+      next.push(withMigratedFields(rawNode, result.node));
+    } else {
+      next.push(rawNode);
     }
-    next.push(result.node as unknown as ManifestNode);
   }
   return { changed, nodes: next };
 }
@@ -354,11 +372,14 @@ export function buildManifestNodesAfterExtensionMigration(
         typeof data.canvasTypeId === 'string' &&
         typeof data.instanceId === 'string'
       ) {
-        return persistableExtensionNode(
-          node as unknown as Record<string, unknown>,
-          data.canvasTypeId,
-          data.instanceId
-        ) as unknown as ManifestNode;
+        return withMigratedFields(
+          node,
+          persistableExtensionNode(
+            { ...node },
+            data.canvasTypeId,
+            data.instanceId
+          )
+        );
       }
     }
 

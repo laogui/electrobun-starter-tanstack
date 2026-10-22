@@ -35,10 +35,14 @@ export interface LocalHttpServerOptions {
   getAIConfig: () => AIServerConfig | null;
   getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
-  pluginContent?: NoteContentService;
-  pluginFiles?: PluginFileStore;
-  pluginRuntime?: PluginHostController;
-  pluginStorage?: PluginStorageHost;
+  // Narrowed to the members the server calls so tests can pass light fakes.
+  pluginContent?: Pick<NoteContentService, 'handle'>;
+  pluginFiles?: Pick<PluginFileStore, 'handle'>;
+  pluginRuntime?: Pick<
+    PluginHostController,
+    'bindCredentials' | 'dispose' | 'getMounts' | 'handle'
+  >;
+  pluginStorage?: Pick<PluginStorageHost, 'handle'>;
 }
 
 // The renderer webview (http://localhost:5173 in dev, views://mainview in

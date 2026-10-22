@@ -319,11 +319,13 @@
 
 #### 2.14.0 信任模型
 
-插件是用户主动安装并启用的高信任代码，与 Obsidian、VS Code 的扩展模型同类。用户在首次启用时看到一次明确的说明：插件可以访问工作区、本机文件与网络，并可修改应用界面。确认后不再逐项授权。
+插件是用户主动安装并启用的高信任代码，与 Obsidian、VS Code 的扩展模型同类。用户在首次启用时看到一次明确的说明：插件可以访问工作区、本机文件与网络，并可修改应用界面。确认后不再逐项授权；例外是打开本机文件 / 选择目录与插件自身发起的批量删除，这两类由主进程原生对话框按插件授权（见下文「主进程授权」）。
 
 产品**不承诺**：插件运行在沙箱内、未声明的能力会被拦截、插件不能联网、插件不能读取其他插件的数据。产品**承诺**：安装与更新阶段不执行包内代码；更新只接受同一作者密钥签名的包；停用与卸载不删除用户内容；坏插件不会让用户失去应用的管理与恢复入口。
 
 **宿主凭据作用域（纵深防御，不是隔离）**：本地 HTTP 服务按用途发放互不通用的启动期凭据——插件模块 URL 只带“资源专用 token”，只能取插件静态文件；每个插件经 SDK 拿到的 storage / content / files 宿主服务只使用绑定该插件 ID 的作用域 token，不能读写其他插件的持久 KV 与文件句柄，也不能调用 AI 对话、附件读写、插件运行时控制等主渲染端接口；AI 与附件上传只接受主渲染端 token 且只走 `Authorization` 头。这保证插件**不会因为正常使用 SDK 或读取自己的 `import.meta.url` 就拿到** AI 凭据或其他插件的数据。但插件与宿主同 realm，恶意插件仍可直接调用 Electrobun RPC 桥（包括取得主渲染端 token 的接口）、包装全局 `fetch` 截获请求头、读取 DOM 中的媒体 URL、调用启用插件 / 提交安装等宿主 RPC；这些不在技术隔离范围内，仍由“是否安装该插件”决定。
+
+**主进程授权（纵深防御）**：插件经 SDK 触达本机文件（打开文件 / 选择目录）以及插件自身发起的批量删除（撤销其创建的多条笔记）时，由 Bun 主进程弹出原生对话框（允许一次 / 始终允许 / 拒绝），授权按插件持久化在应用数据目录（0600）。该对话框不在渲染端 realm 中，插件代码无法自动确认。它不改变上一段的结论：同 realm 恶意插件冒用宿主 RPC 的路径主进程无法归属到具体插件，详见 [tech-spec §13.0](./tech-spec.md#130-主进程插件授权srcbunpluginspermissionsts)。
 
 #### 2.14.1 产品目标与首版范围
 
@@ -871,7 +873,7 @@ Body text stored in BlockNote sidecar (or legacy Markdown body).
 - **无账号体系**：MVP 阶段不需要用户注册或登录。
 - **外部访问边界**：链接预览、打开外链、远程 AI、插件 URL 下载、已启用的更新检查以及**任何已启用的第三方插件**都可能联网；需区分本地资料操作与用户触发或用户已启用的外部访问，不使用“任何数据绝不出设备”的笼统承诺。本地 ZIP 安装可离线完成。
 - **AI 功能的隐私边界**：已有 AI 接入不代表全库读取。产品要求明确告知用户发送范围、服务提供方及失败状态，并保留关闭能力。extension 选区上下文当前取宿主 presentation 文本，不直接序列化任意实例 state；其他上下文补全路径仍需逐项验收。
-- **插件执行边界（高信任模型）**：已启用的第三方插件与宿主前端代码运行在同一 JavaScript realm，可读取页面状态、修改 DOM、经宿主服务读写本机文件与联网；宿主不提供权限沙箱，不按能力逐项授权，`capabilities` 声明只用于展示。产品向用户传达的是“安装插件等同于运行第三方程序”，而不是任何隔离承诺。SDK 交给插件的宿主服务只携带该插件的作用域 token：它不能调用 AI 对话（不会花用户的 AI 额度）、不能读写附件、不能访问其他插件的 storage / files；插件模块 URL 里只有资源专用 token。这是作用域收窄而非隔离：同 realm 的恶意插件仍可经 Electrobun RPC 桥取得主渲染端凭据、截获 `fetch`、调用启用/安装插件等 RPC，因此插件对 AI 密钥、其他插件数据等敏感资源的访问最终仍由“是否安装该插件”决定。本地 HTTP 服务只绑定 127.0.0.1，CORS 只回显应用自身来源（`views://mainview`、开发态 `http://localhost:5173` / `127.0.0.1:5173`，以及 WebKit 自定义 scheme 可能上报的 `null`）。
+- **插件执行边界（高信任模型）**：已启用的第三方插件与宿主前端代码运行在同一 JavaScript realm，可读取页面状态、修改 DOM、经宿主服务读写本机文件与联网；宿主不提供权限沙箱，不按 `capabilities` 逐项授权，`capabilities` 声明只用于展示；本机文件访问与插件发起的批量删除另由主进程原生对话框按插件授权（[tech-spec §13.0](./tech-spec.md#130-主进程插件授权srcbunpluginspermissionsts)），属纵深防御而非隔离。产品向用户传达的是“安装插件等同于运行第三方程序”，而不是任何隔离承诺。SDK 交给插件的宿主服务只携带该插件的作用域 token：它不能调用 AI 对话（不会花用户的 AI 额度）、不能读写附件、不能访问其他插件的 storage / files；插件模块 URL 里只有资源专用 token。这是作用域收窄而非隔离：同 realm 的恶意插件仍可经 Electrobun RPC 桥取得主渲染端凭据、截获 `fetch`、调用启用/安装插件等 RPC，因此插件对 AI 密钥、其他插件数据等敏感资源的访问最终仍由“是否安装该插件”决定。本地 HTTP 服务只绑定 127.0.0.1，CORS 只回显应用自身来源（`views://mainview`、开发态 `http://localhost:5173` / `127.0.0.1:5173`，以及 WebKit 自定义 scheme 可能上报的 `null`）。
 - **安装与更新阶段的保证**：下载、解包与审阅阶段不执行包内代码，不运行依赖安装脚本；解包拒绝路径穿越与覆盖任意位置。作者自述、插件 ID 和下载摘要不等于已验证身份；更新必须由首次安装时固定的作者密钥签名，密钥变更、来源变化和不兼容版本须显式呈现并由用户决定。下载不复用宿主或浏览器登录凭据。
 - **故障恢复保证**：安全模式在任何第三方代码加载前生效；坏插件、坏包、失败更新均不会使用户失去插件管理与数据恢复入口。
 
@@ -1039,7 +1041,7 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | TODO-24 | **显式「从 Markdown 重新导入」** | 当前已支持选择多个外部 `.md` 文件导入为新 Note；仍缺"覆盖当前笔记内容"路径。新增 RPC（解析外部 `.md` → blocks → 写 sidecar → invalidate）；focused view 工具栏 / 卡片右键提供入口；二次确认对话框说明「会覆盖当前编辑器内容、可能丢失高级块结构」。 | P1 |
 | TODO-25 | **Phase 0 文案** | 设置页 / onboarding 添加说明：「Markdown 是按需导出格式，不会在每次保存时自动生成；外部 Markdown 需显式导入」。 | P2 |
 | TODO-26 | **Markdown 预览附件渲染** | 部分完成 — 预览 HTML 中首张安全图片已渲染为真实 `<img>`（`src/bun/blocknotePreview.ts`），renderer 经 `hydratePreviewImageSources.ts` 将附件路径水合为 data URL；超出预算的图片折叠为 "+N images"。仍为占位 badge 的是视频 / 音频 / 文件附件（`renderMediaPlaceholder`）。 | P3 |
-| TODO-18 | **`src/bun/index.ts` 单文件过长** | 所有 RPC handler 注册在一个文件里（**当前约 3975 行**，业务逻辑已拆到 notes.ts / widgets.ts / templates.ts / ai*.ts 等兄弟模块，但注册仍单体）。建议按业务域拆分为 `handlers/canvas.ts`、`handlers/settings.ts`、`handlers/template.ts`、`handlers/assets.ts`。来源：原架构审计。 | P2 |
+| ~~TODO-18~~ | **`src/bun/index.ts` 单文件过长** | ✅ 已完成：RPC handler 已按业务域拆分到 `src/bun/rpc/handlers/<domain>.ts`（handler 工厂接收 `RpcContext`），共享状态移至 `appState.ts` / `settings.ts`，`index.ts` 仅保留启动与装配（约 370 行）。`index.ts` 中 handler 映射以 `RpcRequestHandlers<keyof CanvasRPC['bun']['requests']>` 标注，漏注册任何 RPC 即编译失败。 | — |
 | TODO-19 | **主路由 `index.tsx` 过长** | 画布页面的全部逻辑集中在一个组件中（**当前约 2462 行**）。建议继续提取 `useCanvasDragDrop`、`useCanvasExport`、`useCanvasInit`、`useCanvasSearchNavigation` 等自定义 hooks。来源：原架构审计。 | P2 |
 | TODO-20 | **深色主题覆盖不完整** | 已定位的具体缺口：`GroupNode.tsx` 全文件无 `dark:` 变体（label `text-gray-600`、grip `text-gray-300`）；`ImageNode.tsx` 聚焦说明/空态 `text-zinc-500/600`、`text-gray-300/400` 无 dark 变体；`WidgetNode.tsx` placeholder 无 dark 变体。媒体 overlay 的固定白字为有意设计。来源：原架构审计 + 代码走查。 | P2 |
 | TODO-27 | **Markdown 导入绕过免费配额** | `lib/importMarkdownCards.ts` 与 ViewSwitcher 的 .md 导入路径完全未接 `nodeQuota` 检查，未激活用户可经导入突破 100 张上限。需在导入入口按拟创建节点数预检并提示激活。来源：代码走查（对照 PRD #28 的「各入口一致生效」要求）。 | P1 |

@@ -69,34 +69,72 @@ export function parseWidgetRecord(
   }
 
   const kind = input.kind;
-  if (kind === 'checklist') {
-    if (!Array.isArray(data.items)) {
-      return { id, error: 'corrupted' };
-    }
-  } else if (kind === 'pomodoro') {
-    if (
-      !(
-        isFiniteNumber(data.focusMinutes) &&
-        isFiniteNumber(data.shortBreakMinutes) &&
-        isFiniteNumber(data.longBreakMinutes) &&
-        isFiniteNumber(data.sessionsBeforeLongBreak) &&
-        isFiniteNumber(data.completedSessions) &&
-        isStringRecord(data.timer)
-      ) ||
-      typeof data.timer.state !== 'string'
-    ) {
-      return { id, error: 'corrupted' };
-    }
-  } else if (
-    kind === 'reminder' &&
-    (typeof data.dueAt !== 'string' ||
-      typeof data.timezone !== 'string' ||
-      typeof data.status !== 'string')
-  ) {
+  if (!isWidgetDataForKind(kind, data)) {
     return { id, error: 'corrupted' };
   }
 
-  return input as unknown as WidgetRecord;
+  // Spread first so unknown forward-compatible keys survive and the original
+  // key order is kept; the validated fields then overwrite in place.
+  return {
+    ...input,
+    createdAt: input.createdAt,
+    data,
+    id,
+    kind,
+    schema: WIDGET_SCHEMA,
+    title: input.title,
+    updatedAt: input.updatedAt,
+  };
+}
+
+function isChecklistWidgetData(
+  data: Record<string, unknown>
+): data is Record<string, unknown> & ChecklistWidgetData {
+  return Array.isArray(data.items);
+}
+
+function isPomodoroWidgetData(
+  data: Record<string, unknown>
+): data is Record<string, unknown> & PomodoroWidgetData {
+  return (
+    isFiniteNumber(data.focusMinutes) &&
+    isFiniteNumber(data.shortBreakMinutes) &&
+    isFiniteNumber(data.longBreakMinutes) &&
+    isFiniteNumber(data.sessionsBeforeLongBreak) &&
+    isFiniteNumber(data.completedSessions) &&
+    isStringRecord(data.timer) &&
+    typeof data.timer.state === 'string'
+  );
+}
+
+function isReminderWidgetData(
+  data: Record<string, unknown>
+): data is Record<string, unknown> & ReminderWidgetData {
+  return (
+    typeof data.dueAt === 'string' &&
+    typeof data.timezone === 'string' &&
+    typeof data.status === 'string'
+  );
+}
+
+/**
+ * Structural check of `data` for a widget `kind`. Mirrors what the renderer
+ * dereferences unguarded; nested values are normalized by the widget UIs.
+ */
+function isWidgetDataForKind(
+  kind: WidgetKind,
+  data: Record<string, unknown>
+): data is Record<string, unknown> & WidgetData {
+  switch (kind) {
+    case 'checklist':
+      return isChecklistWidgetData(data);
+    case 'pomodoro':
+      return isPomodoroWidgetData(data);
+    case 'reminder':
+      return isReminderWidgetData(data);
+    default:
+      return false;
+  }
 }
 
 export interface ChecklistWidgetItem {

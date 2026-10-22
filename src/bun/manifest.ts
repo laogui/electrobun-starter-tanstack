@@ -129,6 +129,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Load-time trust boundary for persisted nodes/edges. Loading is deliberately
+ * lenient — only "is an object" is enforced, so a node with an odd field still
+ * loads instead of sending the whole canvas to corruption recovery. Field
+ * shapes are enforced on the write path (`rpc/writeParamSchemas.ts`) and by
+ * renderer normalization.
+ */
+function isPersistedManifestNode(value: unknown): value is ManifestNode {
+  return isRecord(value);
+}
+
+function isPersistedManifestEdge(value: unknown): value is ManifestEdge {
+  return isRecord(value);
+}
+
+/**
+ * Same boundary for the manifest envelope: `schema` / `viewId` are not
+ * required on load (older trash payloads were written as `{}`).
+ */
+function hasManifestArrays(
+  value: Record<string, unknown>
+): value is Record<string, unknown> & CanvasManifest {
+  return Array.isArray(value.nodes) && Array.isArray(value.edges);
+}
+
+/**
  * Structural check for a manifest read from disk. Missing `nodes` / `edges`
  * default to empty (older trash payloads were written as `{}`), but a value
  * that is not an object, or arrays of the wrong type, count as corruption.
@@ -142,13 +167,17 @@ export function parseCanvasManifest(value: unknown): CanvasManifest {
   if (!(Array.isArray(nodes) && Array.isArray(edges))) {
     throw new Error('Manifest nodes/edges must be arrays.');
   }
-  if (!nodes.every(isRecord)) {
+  if (!nodes.every(isPersistedManifestNode)) {
     throw new Error('Manifest contains a non-object node.');
   }
-  if (!edges.every(isRecord)) {
+  if (!edges.every(isPersistedManifestEdge)) {
     throw new Error('Manifest contains a non-object edge.');
   }
-  return { ...value, nodes, edges } as unknown as CanvasManifest;
+  const manifest = { ...value, nodes, edges };
+  if (!hasManifestArrays(manifest)) {
+    throw new Error('Manifest nodes/edges must be arrays.');
+  }
+  return manifest;
 }
 
 async function readBackupManifest(

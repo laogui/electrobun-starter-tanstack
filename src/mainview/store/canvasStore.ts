@@ -121,6 +121,7 @@ import {
   toastTopicSoftOverlap,
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
+import { createUiSlice, type UiSlice } from './slices/uiSlice';
 
 export { previewTopicDraft, previewTopicEdits } from './canvas/topicGraph';
 
@@ -217,7 +218,7 @@ function nodeZIndex(node: Node): number {
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
  */
-export interface CanvasState {
+export interface CanvasState extends UiSlice {
   // Hydration
   _hydrated: boolean;
   /**
@@ -231,14 +232,6 @@ export interface CanvasState {
 
   // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
-
-  /**
-   * Active tag filters (OR semantics, case-insensitive). When non-empty,
-   * cards that do not carry at least one of these tags are dimmed on the
-   * canvas. Closing the tag sidebar clears this list — see
-   * {@link setTagSidebarOpen}.
-   */
-  activeTagFilters: string[];
 
   // Multi-view
   activeViewId: string;
@@ -277,8 +270,6 @@ export interface CanvasState {
   canRedo: () => boolean;
   canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
-  /** Drop every active tag filter. */
-  clearTagFilters: () => void;
   clipboard: Node[];
   clipboardEdges: Edge[];
   collectSelectedNoteIds: () => string[];
@@ -306,8 +297,6 @@ export interface CanvasState {
     rfInstance: ReactFlowInstance<any, any> | null,
     options?: CreateNodeOptions
   ) => Promise<string | undefined>;
-
-  createMenuOpen: boolean;
   createNode: (
     type: CreatableCanvasNodeKind,
     rfInstance: ReactFlowInstance<any, any> | null,
@@ -329,27 +318,14 @@ export interface CanvasState {
 
   // Actions – edge
   editingEdgeId: string | null;
-  /** Folder id whose info (name + description) dialog is open. */
-  editingFolderId: string | null;
-  /** Sticky id that should enter inline text editing (driven by Enter key). */
-  editingStickyId: string | null;
-  /** Card id whose TagEditor should auto-open (driven by context-menu action). */
-  editingTagNodeId: string | null;
   /** Topic id that should enter inline title editing (F2 / keyboard entry). */
   editingTopicId: string | null;
   /** Enter the explicit Topic single-select command context (Tab/Enter). */
   enterTopicCommandContext: (topicId: string) => void;
   /** Leave Topic command context; selection may remain. */
   exitTopicCommandContext: () => void;
-  focusedFolder: FocusedItem | null;
-
-  // UI state
-  focusedNode: FocusedItem | null;
   groupSelected: () => void;
   hydrate: (nodes: Node[], edges: Edge[]) => void;
-
-  // Library popup (browse notes on the current canvas)
-  libraryOpen: boolean;
   moveFolderChildToCanvas: (
     folderId: string,
     childId: string,
@@ -362,19 +338,12 @@ export interface CanvasState {
   // Core data
   nodes: Node[];
   pasteClipboard: (offset?: number) => Promise<void>;
-
-  // Search
-  pendingSearchQuery: string | null;
-  pendingSearchTarget: PendingSearchTarget | null;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
   redo: () => boolean;
-  /** Asset/image card id whose displayName is in inline-rename mode. */
-  renamingNodeId: string | null;
   reset: () => void;
   /** Discard the render-only size override without changing the saved graph. */
   resetTopicEditPreview: (nodeId: string) => void;
   saveSnapshot: () => void;
-  searchOpen: boolean;
   selectNodeInDirection: (
     direction: 'down' | 'left' | 'right' | 'up',
     options?: { extend?: boolean }
@@ -388,9 +357,6 @@ export interface CanvasState {
    */
   sessionViewport: CanvasViewport | null;
 
-  /** Replace the entire active-tag-filters list. */
-  setActiveTagFilters: (tags: string[]) => void;
-
   // Actions – multi-view
   /**
    * Low-level view swap: clears canvas state without persisting anything.
@@ -398,36 +364,18 @@ export interface CanvasState {
    */
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
-  setCreateMenuOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;
-  setEditingFolderId: (id: string | null) => void;
-  setEditingStickyId: (id: string | null) => void;
-  setEditingTagNodeId: (id: string | null) => void;
   setEditingTopicId: (id: string | null) => void;
-  setFocusedFolder: (v: FocusedItem | null) => void;
-
-  // Actions – UI
-  setFocusedNode: (v: FocusedItem | null) => void;
-  setLibraryOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
 
   // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
-  setPendingSearchQuery: (query: string | null) => void;
-  setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
-  setRenamingNodeId: (id: string | null) => void;
-  setSearchOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
-  setSettingsOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
-  setTagSidebarOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setTopicDraftText: (text: string) => void;
   /** Live-resize an existing Topic to the title currently being typed, so the
    *  box fits the text while editing. Ephemeral: no relayout and no history
    *  snapshot — the commit writes the final size and layout;
    *  `resetTopicEditPreview` restores the stored title's size. */
   setTopicEditPreview: (nodeId: string, title: string) => void;
-
-  // In-window settings dialog
-  settingsOpen: boolean;
   setViewport: (
     viewport: CanvasViewport | null,
     options?: { persist?: boolean }
@@ -439,19 +387,12 @@ export interface CanvasState {
    * callers can surface an error instead of silently dropping edits.
    */
   switchView: (viewId: string) => Promise<boolean>;
-
-  // Tag filter sidebar (workspace-wide tag list)
-  tagSidebarOpen: boolean;
   /** Re-run layout for the branch rooted at `topicId`. */
   tidyTopicBranch: (topicId: string) => void;
-  toggleLibrary: () => void;
   toggleNodeLocked: (nodeId: string) => void;
   /** Lock every node in `ids` unless all are already locked, then unlock. */
   toggleNodesLocked: (ids: string[]) => void;
   toggleStickyPinned: (nodeId: string) => void;
-  /** Toggle a single tag in/out of the active filters (case-insensitive). */
-  toggleTagFilter: (tag: string) => void;
-  toggleTagSidebar: () => void;
 
   // Actions – topic
   /**
@@ -492,86 +433,26 @@ export interface CanvasState {
 // Store
 // ---------------------------------------------------------------------------
 
-export const useCanvasStore = create<CanvasState>()((set, get, _api) => ({
+export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
+  ...createUiSlice(set, get, api),
   // -- initial state --------------------------------------------------------
   nodes: [],
   edges: [],
   _hydrated: false,
-  focusedNode: null,
-  focusedFolder: null,
-  createMenuOpen: false,
   clipboard: [],
   clipboardEdges: [],
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingEdgeId: null,
-  editingFolderId: null,
-  editingStickyId: null,
-  editingTagNodeId: null,
   editingTopicId: null,
   topicCommandContextId: null,
   topicDraft: null,
   topicEditPreviews: {},
   topicWritePaused: false,
-  renamingNodeId: null,
   _undoRedo: createUndoRedoState(),
-  searchOpen: false,
-  settingsOpen: false,
-  pendingSearchQuery: null,
-  pendingSearchTarget: null,
-  libraryOpen: false,
-  tagSidebarOpen: false,
-  activeTagFilters: [],
   viewport: null,
   sessionViewport: null,
   _sessionViewports: {},
-
-  setLibraryOpen: (v) => {
-    set((s) => ({
-      libraryOpen: typeof v === 'function' ? v(s.libraryOpen) : v,
-    }));
-  },
-  toggleLibrary: () => {
-    set((s) => ({ libraryOpen: !s.libraryOpen }));
-  },
-
-  // Closing the tag sidebar always clears active filters — the sidebar is
-  // the *only* surface for managing them, so leaving them set while the
-  // panel is hidden creates an invisible "why are my cards dimmed?" trap.
-  setTagSidebarOpen: (v) => {
-    set((s) => {
-      const next = typeof v === 'function' ? v(s.tagSidebarOpen) : v;
-      if (next === s.tagSidebarOpen) {
-        return s;
-      }
-      return {
-        tagSidebarOpen: next,
-        activeTagFilters: next ? s.activeTagFilters : [],
-      };
-    });
-  },
-  toggleTagSidebar: () => {
-    get().setTagSidebarOpen(!get().tagSidebarOpen);
-  },
-  setActiveTagFilters: (tags) => {
-    set({ activeTagFilters: tags });
-  },
-  toggleTagFilter: (tag) => {
-    const needle = tag.toLowerCase();
-    set((s) => {
-      const present = s.activeTagFilters.some(
-        (t) => t.toLowerCase() === needle
-      );
-      return {
-        activeTagFilters: present
-          ? s.activeTagFilters.filter((t) => t.toLowerCase() !== needle)
-          : [...s.activeTagFilters, tag],
-      };
-    });
-  },
-  clearTagFilters: () => {
-    set({ activeTagFilters: [] });
-  },
 
   absorbCardIntoFolder: (cardId, folderId) => {
     const { nodes } = get();
@@ -929,14 +810,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, _api) => ({
       }
     }
     set({ editingEdgeId: id });
-  },
-
-  setEditingFolderId: (id) => {
-    set({ editingFolderId: id });
-  },
-
-  setEditingStickyId: (id) => {
-    set({ editingStickyId: id });
   },
 
   // -- topic actions --------------------------------------------------------
@@ -1338,14 +1211,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, _api) => ({
     }
     get().saveSnapshot();
     set({ nodes: laidOut.nodes });
-  },
-
-  setEditingTagNodeId: (id) => {
-    set({ editingTagNodeId: id });
-  },
-
-  setRenamingNodeId: (id) => {
-    set({ renamingNodeId: id });
   },
 
   updateEdgeData: (edgeId, updates) => {
@@ -1787,39 +1652,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, _api) => ({
         ),
       };
     });
-  },
-
-  // -- UI actions -----------------------------------------------------------
-  setFocusedNode: (v) => {
-    set({ focusedNode: v });
-  },
-  setFocusedFolder: (v) => {
-    set({ focusedFolder: v });
-  },
-  setCreateMenuOpen: (v) => {
-    set((s) => ({
-      createMenuOpen: typeof v === 'function' ? v(s.createMenuOpen) : v,
-    }));
-  },
-
-  setSearchOpen: (v) => {
-    set((s) => ({
-      searchOpen: typeof v === 'function' ? v(s.searchOpen) : v,
-    }));
-  },
-
-  setSettingsOpen: (v) => {
-    set((s) => ({
-      settingsOpen: typeof v === 'function' ? v(s.settingsOpen) : v,
-    }));
-  },
-
-  setPendingSearchQuery: (query) => {
-    set({ pendingSearchQuery: query });
-  },
-
-  setPendingSearchTarget: (target) => {
-    set({ pendingSearchTarget: target });
   },
 
   // -- multi-view actions ---------------------------------------------------

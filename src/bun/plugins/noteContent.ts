@@ -214,7 +214,24 @@ async function readHistory(workspace: string): Promise<History> {
       'Invalid content history; original file retained'
     );
   }
-  for (const raw of data.batches) {
+  const schema: History['schema'] = data.schema;
+  assertHistoryBatches(workspace, schema, data.batches);
+  assertHistoryReceipts(workspace, data.operations);
+  return {
+    ...data,
+    schema,
+    batches: data.batches,
+    operations: data.operations,
+  };
+}
+
+/** Throws `corrupt-history` unless every persisted batch has the `Batch` shape. */
+function assertHistoryBatches(
+  workspace: string,
+  schema: History['schema'],
+  batches: unknown[]
+): asserts batches is Batch[] {
+  for (const raw of batches) {
     const batch = record(raw);
     operationId(batch.id);
     if (
@@ -231,7 +248,7 @@ async function readHistory(workspace: string): Promise<History> {
     }
     if (batch.created !== undefined) {
       if (
-        data.schema !== 'ghostboard-content-history/v3' ||
+        schema !== 'ghostboard-content-history/v3' ||
         !Array.isArray(batch.created) ||
         !batch.created.length ||
         batch.created.length > 100 ||
@@ -298,7 +315,14 @@ async function readHistory(workspace: string): Promise<History> {
       }
     }
   }
-  for (const raw of data.operations) {
+}
+
+/** Throws `corrupt-history` unless every persisted receipt has the `Receipt` shape. */
+function assertHistoryReceipts(
+  workspace: string,
+  operations: unknown[]
+): asserts operations is Receipt[] {
+  for (const raw of operations) {
     const receipt = record(raw);
     operationId(receipt.id);
     const result = record(receipt.result);
@@ -333,7 +357,6 @@ async function readHistory(workspace: string): Promise<History> {
       noteFilePath(workspace, removedId as string);
     }
   }
-  return data as unknown as History;
 }
 
 function snapshot(note: NoteRecord): NoteContentSnapshot {

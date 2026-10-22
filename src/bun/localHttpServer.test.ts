@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAIChat } from './ai';
 import type { PluginHostCredentials } from './localHttpAuth';
 import { startLocalHttpServer } from './localHttpServer';
-import type { PluginFileStore } from './plugins/files';
-import type { PluginHostController } from './plugins/hostController';
 import { PluginStorageHost } from './plugins/storage';
 
 vi.mock('./ai', () => ({
@@ -49,7 +47,7 @@ describe('local HTTP plugin host integration', () => {
     const server = startLocalHttpServer({
       getAIConfig: () => null,
       getWorkspacePath: () => '/workspace',
-      pluginFiles: { handle } as unknown as PluginFileStore,
+      pluginFiles: { handle },
     });
     const url = `${server.baseUrl}/plugins/files/read`;
     expect((await fetchRequest(new Request(url))).status).toBe(401);
@@ -69,7 +67,7 @@ describe('local HTTP plugin host integration', () => {
     const server = startLocalHttpServer({
       getAIConfig: () => null,
       getWorkspacePath: () => '/workspace',
-      pluginStorage: { handle } as unknown as PluginStorageHost,
+      pluginStorage: { handle },
     });
     const url = `${server.baseUrl}/plugins/storage`;
     expect(
@@ -96,7 +94,7 @@ describe('local HTTP plugin host integration', () => {
       handle,
       dispose,
       bindCredentials: vi.fn(),
-    } as unknown as PluginHostController;
+    };
     const server = startLocalHttpServer({
       getAIConfig: () => null,
       getWorkspacePath: () => '/workspace',
@@ -149,7 +147,7 @@ function bindingRuntime() {
     bindCredentials: (value: PluginHostCredentials) => {
       credentials = value;
     },
-  } as unknown as PluginHostController;
+  };
   return {
     runtime,
     credentials: () => {
@@ -237,7 +235,7 @@ describe('local HTTP credential scoping', () => {
     const server = startLocalHttpServer({
       getAIConfig: () => AI_CONFIG,
       getWorkspacePath: () => '/workspace',
-      pluginStorage: { handle: storage } as unknown as PluginStorageHost,
+      pluginStorage: { handle: storage },
     });
     const media = server.mediaToken;
     const attachment = await fetchRequest(
@@ -319,7 +317,7 @@ describe('local HTTP credential scoping', () => {
       const server = startLocalHttpServer({
         getAIConfig: () => null,
         getWorkspacePath: () => workspacePath,
-        pluginFiles: { handle: files } as unknown as PluginFileStore,
+        pluginFiles: { handle: files },
         pluginRuntime: runtime,
         pluginStorage: new PluginStorageHost({
           appDataRoot,

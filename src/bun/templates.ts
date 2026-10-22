@@ -2,9 +2,10 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { z } from 'zod';
 import type { ManifestEdge, ManifestNode } from './manifest';
 import type { NodeMetadata } from './nodeMetadata';
-import type { WidgetRecord } from './widgets';
+import { parseWidgetRecord, type WidgetRecord } from './widgets';
 
 // ---------------------------------------------------------------------------
 // Inline template data — imported at build time so the bundler embeds them
@@ -83,78 +84,176 @@ export interface TemplateManifest {
   widgets?: Record<string, WidgetRecord>;
 }
 // ---------------------------------------------------------------------------
+// Schemas — bundled JSON is parsed (not cast) into the template types. Object
+// schemas are `loose()` so fields the types do not name (edge `markerEnd`,
+// node extras, forward-compatible keys) pass through untouched.
+// ---------------------------------------------------------------------------
+
+const looseRecord = z.record(z.string(), z.unknown());
+
+const templateMetaSchema = z.object({
+  category: z.enum(['planning', 'thinking', 'knowledge', 'blank']),
+  description: z.string(),
+  id: z.string(),
+  name: z.string(),
+  tags: z.array(z.string()),
+  thumbnail: z.string(),
+}) satisfies z.ZodType<TemplateMeta>;
+
+const manifestNodeSchema = z
+  .object({
+    data: looseRecord,
+    extent: z.string().optional(),
+    id: z.string(),
+    parentId: z.string().optional(),
+    position: z.object({ x: z.number(), y: z.number() }).loose(),
+    style: looseRecord.optional(),
+    type: z.string(),
+  })
+  .loose() satisfies z.ZodType<ManifestNode>;
+
+const manifestEdgeSchema = z
+  .object({
+    animated: z.boolean().optional(),
+    data: looseRecord.optional(),
+    id: z.string(),
+    label: z.string().optional(),
+    source: z.string(),
+    sourceHandle: z.string().optional(),
+    target: z.string(),
+    targetHandle: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .loose() satisfies z.ZodType<ManifestEdge>;
+
+const nodeMetadataSchema = z
+  .object({
+    tag: z.string().optional(),
+    tagColor: z.string().optional(),
+    tagColors: z.record(z.string(), z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+  })
+  .loose() satisfies z.ZodType<NodeMetadata>;
+
+const noteContentSchema = z
+  .object({
+    body: z.string(),
+    color: z.string().optional(),
+    displayHint: z.string(),
+    title: z.string(),
+  })
+  .loose() satisfies z.ZodType<TemplateNoteContent>;
+
+const extensionSeedSchema = z
+  .object({
+    canvasTypeId: z.string(),
+    dataVersion: z.number(),
+    presentation: z
+      .object({
+        plainText: z.string().optional(),
+        subtitle: z.string().optional(),
+        title: z.string(),
+      })
+      .loose(),
+    state: z.unknown(),
+  })
+  .loose() satisfies z.ZodType<TemplateExtensionSeed>;
+
+/** Widget seeds go through the same validator the workspace loader uses. */
+const widgetSeedSchema = z.unknown().transform((value, ctx): WidgetRecord => {
+  const parsed = parseWidgetRecord(value);
+  if ('error' in parsed) {
+    ctx.addIssue({ code: 'custom', message: 'Invalid widget record' });
+    return z.NEVER;
+  }
+  return parsed;
+});
+
+const templateBodySchema = z.object({
+  assets: z.record(z.string(), z.string()).optional(),
+  edges: z.array(manifestEdgeSchema).default([]),
+  extensionInstances: z.record(z.string(), extensionSeedSchema).optional(),
+  nodeMetadata: z.record(z.string(), nodeMetadataSchema).optional(),
+  nodes: z.array(manifestNodeSchema).default([]),
+  noteContents: z.record(z.string(), noteContentSchema).optional(),
+  widgets: z.record(z.string(), widgetSeedSchema).optional(),
+}) satisfies z.ZodType<Omit<TemplateManifest, 'meta'>>;
+
+type TemplateBody = Omit<TemplateManifest, 'meta'>;
+
+// ---------------------------------------------------------------------------
 // Registry — add new templates here
 // ---------------------------------------------------------------------------
 
-const TEMPLATE_REGISTRY: Record<
-  string,
-  { meta: TemplateMeta; manifest: Omit<TemplateManifest, 'meta'> }
-> = {
-  'quick-start': {
-    meta: quickStartMeta as unknown as TemplateMeta,
-    manifest: quickStartManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
-  blank: {
-    meta: blankMeta as unknown as TemplateMeta,
-    manifest: blankManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
+interface TemplateSource {
+  manifest: unknown;
+  meta: unknown;
+}
+
+const TEMPLATE_SOURCES: Record<string, TemplateSource> = {
+  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
+  blank: { meta: blankMeta, manifest: blankManifest },
   'weekly-planner': {
-    meta: weeklyPlannerMeta as unknown as TemplateMeta,
-    manifest: weeklyPlannerManifest as unknown as Omit<
-      TemplateManifest,
-      'meta'
-    >,
+    meta: weeklyPlannerMeta,
+    manifest: weeklyPlannerManifest,
   },
-  kanban: {
-    meta: kanbanMeta as unknown as TemplateMeta,
-    manifest: kanbanManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
-  'sprint-retro': {
-    meta: sprintRetroMeta as unknown as TemplateMeta,
-    manifest: sprintRetroManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
+  kanban: { meta: kanbanMeta, manifest: kanbanManifest },
+  'sprint-retro': { meta: sprintRetroMeta, manifest: sprintRetroManifest },
   'brainstorm-mindmap': {
-    meta: brainstormMindmapMeta as unknown as TemplateMeta,
-    manifest: brainstormMindmapManifest as unknown as Omit<
-      TemplateManifest,
-      'meta'
-    >,
+    meta: brainstormMindmapMeta,
+    manifest: brainstormMindmapManifest,
   },
   'eisenhower-matrix': {
-    meta: eisenhowerMatrixMeta as unknown as TemplateMeta,
-    manifest: eisenhowerMatrixManifest as unknown as Omit<
-      TemplateManifest,
-      'meta'
-    >,
+    meta: eisenhowerMatrixMeta,
+    manifest: eisenhowerMatrixManifest,
   },
-  'reading-notes': {
-    meta: readingNotesMeta as unknown as TemplateMeta,
-    manifest: readingNotesManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
-  demo: {
-    meta: demoMeta as unknown as TemplateMeta,
-    manifest: demoManifest as unknown as Omit<TemplateManifest, 'meta'>,
-  },
-  cafe: {
-    meta: cafeMeta as unknown as TemplateMeta,
-    manifest: {
-      ...(cafeManifest as unknown as Omit<TemplateManifest, 'meta'>),
-      assets: cafeAssets as unknown as Record<string, string>,
-    },
-  },
+  'reading-notes': { meta: readingNotesMeta, manifest: readingNotesManifest },
+  demo: { meta: demoMeta, manifest: demoManifest },
+  cafe: { meta: cafeMeta, manifest: { ...cafeManifest, assets: cafeAssets } },
 };
+
+const parsedMeta = new Map<string, TemplateMeta>();
+const parsedBody = new Map<string, TemplateBody>();
+
+/**
+ * Parse a bundled template lazily (first use) and cache it. Built-in data is
+ * checked by `templates.test.ts`, so a throw here means a broken bundle.
+ */
+function templateMeta(id: string, source: TemplateSource): TemplateMeta {
+  let meta = parsedMeta.get(id);
+  if (!meta) {
+    meta = templateMetaSchema.parse(source.meta);
+    parsedMeta.set(id, meta);
+  }
+  return meta;
+}
+
+function templateBody(id: string, source: TemplateSource): TemplateBody {
+  let body = parsedBody.get(id);
+  if (!body) {
+    body = templateBodySchema.parse(source.manifest);
+    parsedBody.set(id, body);
+  }
+  return body;
+}
 
 /** List all built-in templates. */
 export function listAllTemplates(): TemplateMeta[] {
-  return Object.values(TEMPLATE_REGISTRY).map((t) => ({ ...t.meta }));
+  return Object.entries(TEMPLATE_SOURCES).map(([id, source]) => ({
+    ...templateMeta(id, source),
+  }));
 }
 
 /** Load a single template by id. Returns null if not found. */
 export function loadTemplate(id: string): TemplateManifest | null {
-  const entry = TEMPLATE_REGISTRY[id];
-  if (!entry) {
+  const source = TEMPLATE_SOURCES[id];
+  if (!source) {
     return null;
   }
+  const entry = {
+    meta: templateMeta(id, source),
+    manifest: templateBody(id, source),
+  };
 
   return {
     meta: { ...entry.meta },
@@ -241,7 +340,7 @@ export async function writeTemplateThumbnail(
   templateId: string,
   pngBase64OrDataUrl: string
 ): Promise<WriteTemplateThumbnailResult> {
-  if (!TEMPLATE_REGISTRY[templateId]) {
+  if (!TEMPLATE_SOURCES[templateId]) {
     return { success: false, reason: 'unknown-template' };
   }
 

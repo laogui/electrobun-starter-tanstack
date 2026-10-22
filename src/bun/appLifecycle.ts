@@ -13,17 +13,7 @@ export async function getAppInfoData(): Promise<AppInfoResponse> {
     // Updater.getLocalInfo returns the full version.json shape
     // (version + hash + channel + name + identifier) — Updater.localInfo
     // only exposes a subset, so we use the lower-level call here.
-    const info = await (
-      Updater as unknown as {
-        getLocalInfo: () => Promise<{
-          channel: string;
-          hash: string;
-          identifier: string;
-          name: string;
-          version: string;
-        }>;
-      }
-    ).getLocalInfo();
+    const info = await Updater.getLocalInfo();
     return {
       version: info.version,
       hash: info.hash,

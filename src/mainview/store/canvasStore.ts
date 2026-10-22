@@ -70,10 +70,7 @@ import {
   undo as undoSnapshot,
 } from '@/lib/undoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
-import {
-  shouldPersistViewport,
-  suppressViewportPersist,
-} from '@/lib/viewportPersist';
+import { suppressViewportPersist } from '@/lib/viewportPersist';
 import * as m from '../../paraglide/messages.js';
 import { buildLegacyEdgeCompatPatch } from '../../shared/canvasEdgeFields';
 import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
@@ -122,6 +119,10 @@ import {
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
 import { createUiSlice, type UiSlice } from './slices/uiSlice';
+import {
+  createViewportSlice,
+  type ViewportSlice,
+} from './slices/viewportSlice';
 
 export { previewTopicDraft, previewTopicEdits } from './canvas/topicGraph';
 
@@ -218,14 +219,9 @@ function nodeZIndex(node: Node): number {
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
  */
-export interface CanvasState extends UiSlice {
+export interface CanvasState extends UiSlice, ViewportSlice {
   // Hydration
   _hydrated: boolean;
-  /**
-   * Per-view session camera cache. Survives view switches within the process;
-   * cleared on full reset / app quit (never disk-backed).
-   */
-  _sessionViewports: Record<string, CanvasViewport>;
 
   // Undo / Redo
   _undoRedo: UndoRedoState;
@@ -350,12 +346,6 @@ export interface CanvasState extends UiSlice {
   ) => Node | null;
   sendNodesBackward: (ids: string[]) => void;
   sendNodesToBack: (ids: string[]) => void;
-  /**
-   * User-confirmed camera for the active view. Session-only (in-memory):
-   * restored when re-entering a view in the same app session; cold start fits
-   * the canvas to the window instead. Never written to disk.
-   */
-  sessionViewport: CanvasViewport | null;
 
   // Actions – multi-view
   /**
@@ -376,10 +366,6 @@ export interface CanvasState extends UiSlice {
    *  snapshot — the commit writes the final size and layout;
    *  `resetTopicEditPreview` restores the stored title's size. */
   setTopicEditPreview: (nodeId: string, title: string) => void;
-  setViewport: (
-    viewport: CanvasViewport | null,
-    options?: { persist?: boolean }
-  ) => void;
   setViews: (views: Array<{ id: string; name: string }>) => void;
   /**
    * Flush the current canvas to disk, then switch to `viewId`. Resolves to
@@ -420,12 +406,6 @@ export interface CanvasState extends UiSlice {
     updates: Record<string, unknown>
   ) => void;
   updateNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
-
-  /**
-   * Live React Flow camera — may differ from sessionViewport after
-   * programmatic moves (search jump, focus, export fit).
-   */
-  viewport: CanvasViewport | null;
   views: Array<{ id: string; name: string }>;
 }
 
@@ -435,6 +415,7 @@ export interface CanvasState extends UiSlice {
 
 export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createUiSlice(set, get, api),
+  ...createViewportSlice(set, get, api),
   // -- initial state --------------------------------------------------------
   nodes: [],
   edges: [],
@@ -450,9 +431,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   topicEditPreviews: {},
   topicWritePaused: false,
   _undoRedo: createUndoRedoState(),
-  viewport: null,
-  sessionViewport: null,
-  _sessionViewports: {},
 
   absorbCardIntoFolder: (cardId, folderId) => {
     const { nodes } = get();
@@ -647,48 +625,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
       topicDraft: null,
       topicEditPreviews: {},
       topicWritePaused: false,
-    });
-  },
-
-  setViewport: (viewport, options) => {
-    // `persist` means "remember in the session cache", not disk.
-    const persist = options?.persist ?? shouldPersistViewport();
-    const {
-      activeViewId,
-      viewport: current,
-      sessionViewport: currentSession,
-      _sessionViewports,
-    } = get();
-    const viewportUnchanged =
-      current?.x === viewport?.x &&
-      current?.y === viewport?.y &&
-      current?.zoom === viewport?.zoom;
-    const sessionUnchanged =
-      !persist ||
-      (currentSession?.x === viewport?.x &&
-        currentSession?.y === viewport?.y &&
-        currentSession?.zoom === viewport?.zoom);
-
-    if (viewportUnchanged && sessionUnchanged) {
-      return;
-    }
-
-    if (!persist) {
-      set({ viewport });
-      return;
-    }
-
-    const nextSessionMap = { ..._sessionViewports };
-    if (viewport) {
-      nextSessionMap[activeViewId] = viewport;
-    } else {
-      delete nextSessionMap[activeViewId];
-    }
-
-    set({
-      viewport,
-      sessionViewport: viewport,
-      _sessionViewports: nextSessionMap,
     });
   },
 

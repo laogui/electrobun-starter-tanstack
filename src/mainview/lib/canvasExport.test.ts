@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { Node, ReactFlowInstance } from '@xyflow/react';
+import type { Node } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetRecord } from '@/lib/widgetTypes';
 
@@ -30,6 +30,7 @@ vi.mock('html-to-image', () => ({
 import {
   buildCanvasExportJson,
   CANVAS_EXPORT_SCHEMA,
+  type CanvasExportFlowInstance,
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   getVisibleExportNodes,
@@ -46,7 +47,6 @@ const createNode = (id: string, data: Record<string, unknown> = {}): Node => ({
 
 const createInstance = (nodes: Node[], bounds = { x: 10, y: 20 }) =>
   ({
-    getEdges: () => [],
     getNodes: () => nodes,
     getNodesBounds: vi.fn(() => ({
       ...bounds,
@@ -56,7 +56,7 @@ const createInstance = (nodes: Node[], bounds = { x: 10, y: 20 }) =>
     getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
     setViewport: vi.fn(),
     fitView: vi.fn(),
-  }) as unknown as ReactFlowInstance<any, any>;
+  }) satisfies CanvasExportFlowInstance;
 
 describe('canvas export helpers', () => {
   afterEach(() => {
@@ -311,7 +311,7 @@ describe('canvas export helpers', () => {
         kind: 'checklist',
         items: [{ id: 'leak', text: 'Do not export in node data' }],
       },
-    } as unknown as Node;
+    } satisfies Node;
     const folderNode = {
       id: 'folder-node',
       type: 'folder',
@@ -329,7 +329,7 @@ describe('canvas export helpers', () => {
           },
         ],
       },
-    } as unknown as Node;
+    } satisfies Node;
 
     const doc = buildCanvasExportJson({
       nodes: [
@@ -343,7 +343,7 @@ describe('canvas export helpers', () => {
             kind: 'checklist',
             isHidden: true,
           },
-        } as unknown as Node,
+        } satisfies Node,
       ],
       edges: [],
       widgets: {

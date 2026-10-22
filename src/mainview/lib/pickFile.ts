@@ -11,9 +11,18 @@
 
 export const FILE_PICKER_FOCUS_GRACE_MS = 1000;
 
+/** The parts of `<input type="file">` the picker drives. */
+export interface PickFileInput
+  extends Pick<EventTarget, 'addEventListener' | 'removeEventListener'> {
+  accept: string;
+  click(): void;
+  readonly files: ArrayLike<File> | null;
+  type: string;
+}
+
 export interface PickFileEnvironment {
   /** Creates the hidden input; defaults to `document.createElement`. */
-  createInput?: () => HTMLInputElement;
+  createInput?: () => PickFileInput;
   focusGraceMs?: number;
   /** Target that receives `focus` when the dialog closes; defaults to window. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;

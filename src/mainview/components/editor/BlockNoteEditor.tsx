@@ -607,7 +607,8 @@ function BlockNoteSurface({
     } catch (error) {
       console.error('[blocknote] Failed to serialize markdown:', error);
     }
-    return { blocks: blocks as unknown as unknown[], markdown };
+    const serializedBlocks: unknown[] = blocks;
+    return { blocks: serializedBlocks, markdown };
   }, [editor]);
 
   const handleChange = useCallback(async () => {

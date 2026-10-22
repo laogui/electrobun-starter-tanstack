@@ -90,7 +90,7 @@ describe('serializeNodeForManifest', () => {
         previewUrl: 'blob:preview',
         content: 'Keep me',
       },
-    } as unknown as Node;
+    } satisfies Node;
 
     const result = serializeNodeForManifest(node) as Record<string, unknown>;
 
@@ -133,7 +133,7 @@ describe('sanitizeForPersistence', () => {
           title: 'Card',
           previewUrl: 'blob:preview',
         },
-      } as unknown as Node,
+      } satisfies Node,
     ];
 
     const edges = [
@@ -143,7 +143,7 @@ describe('sanitizeForPersistence', () => {
         target: 'node-2',
         selected: true,
         data: { label: 'link' },
-      } as unknown as Edge,
+      } satisfies Edge,
     ];
 
     const result = sanitizeForPersistence(nodes, edges);
@@ -388,7 +388,7 @@ describe('sanitizeForPersistence', () => {
             items: [{ id: 'item_1', text: 'No leak', checked: false }],
             title: 'Runtime title',
           },
-        } as unknown as Node,
+        } satisfies Node,
         {
           id: 'widget-missing',
           type: 'widget',
@@ -398,7 +398,7 @@ describe('sanitizeForPersistence', () => {
             kind: null,
             items: [{ id: 'item_2', text: 'Also no leak', checked: true }],
           },
-        } as unknown as Node,
+        } satisfies Node,
         {
           id: 'folder-1',
           type: 'folder',
@@ -430,7 +430,7 @@ describe('sanitizeForPersistence', () => {
               },
             ],
           },
-        } as unknown as Node,
+        } satisfies Node,
       ],
       []
     );

@@ -261,8 +261,10 @@ function toByteStream(data: PluginFileWriteData): {
     };
   }
   if (data instanceof Blob) {
+    // `Response` exposes the blob as a typed DOM byte stream without
+    // buffering it, sidestepping the Bun/DOM `Blob.stream()` typing clash.
     return {
-      stream: data.stream() as unknown as ReadableStream<Uint8Array>,
+      stream: new Response(data).body ?? byteStream(new Uint8Array(0)),
       total: data.size,
     };
   }

@@ -269,10 +269,10 @@ export async function createVideoThumbnail(
 type AudioContextLike = AudioContext & { close(): Promise<void> };
 
 function getAudioContextConstructor(): (new () => AudioContextLike) | null {
-  const w = globalThis as unknown as {
+  const w: {
     AudioContext?: new () => AudioContextLike;
     webkitAudioContext?: new () => AudioContextLike;
-  };
+  } = globalThis;
   return w.AudioContext ?? w.webkitAudioContext ?? null;
 }
 

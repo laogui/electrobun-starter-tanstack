@@ -15,7 +15,7 @@ const setup = () => {
   const input = new FakeInput();
   const focusTarget = new EventTarget();
   const promise = pickFile('image/*', {
-    createInput: () => input as unknown as HTMLInputElement,
+    createInput: () => input,
     focusGraceMs: 500,
     focusTarget,
   });

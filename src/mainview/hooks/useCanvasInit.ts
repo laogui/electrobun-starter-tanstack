@@ -120,7 +120,7 @@ export function useCanvasInit(): void {
           // a canvas with zero widgets still prunes records from the previous
           // view. Pass the referenced id set so unreferenced entries are dropped.
           const referencedWidgetIds = new Set(
-            collectWidgetIdsFromNodes(data.nodes as unknown as Node[])
+            collectWidgetIdsFromNodes(data.nodes)
           );
           hydrateWidgets(data.widgets ?? {}, referencedWidgetIds);
           const referencedExtensionIds = new Set(

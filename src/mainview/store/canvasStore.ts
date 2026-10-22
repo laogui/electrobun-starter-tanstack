@@ -41,10 +41,7 @@ import {
   countCountedNodes,
   hasNodeQuota,
 } from '@/lib/nodeQuota';
-import {
-  applyNoteTitlesToCanvasNodes,
-  collectNoteIdsFromCanvasNodes,
-} from '@/lib/noteTitleProjection';
+import { collectNoteIdsFromCanvasNodes } from '@/lib/noteTitleProjection';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import {
@@ -55,15 +52,8 @@ import {
   rpcSaveManifest,
   rpcSetActiveView,
 } from '@/lib/rpc';
-import {
-  collectTopicLayoutObstacles,
-  diffTopicPositions,
-  layoutTopicTreeAvoiding,
-  type TopicLayoutHardReason,
-} from '@/lib/topicLayout';
 import { measureTopicSize } from '@/lib/topicMeasure';
 import {
-  buildTopicChildEdge,
   buildTopicIndex,
   collectTopicBranch,
   findTopicRoot,
@@ -84,7 +74,6 @@ import {
   shouldPersistViewport,
   suppressViewportPersist,
 } from '@/lib/viewportPersist';
-import type { WidgetKind } from '@/lib/widgetTypes';
 import * as m from '../../paraglide/messages.js';
 import { buildLegacyEdgeCompatPatch } from '../../shared/canvasEdgeFields';
 import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
@@ -102,6 +91,38 @@ import {
   TOPIC_NODE_TYPE,
   TOPIC_SIBLING_GAP,
 } from '../../shared/topic';
+import {
+  buildPastedClipboard,
+  cleanEdgeForClipboard,
+  cleanNodeForClipboard,
+  getInternalEdgesForNodes,
+} from './canvas/clipboardGraph';
+import {
+  cloneExtensionReferences,
+  cloneWidgetReferences,
+  graphContainsExtensionReference,
+  graphContainsWidgetReference,
+} from './canvas/cloneReferences';
+import {
+  type FolderChildEntry,
+  folderChildToDetachedNode,
+  resolveFolderChildSize,
+  resolveFolderChildSpec,
+  uniqueDetachedNodeId,
+  uniqueEdgeId,
+} from './canvas/folderChildren';
+import { noteTitleMap, projectNoteTitles } from './canvas/noteTitles';
+import { topicCommandContextForNodes } from './canvas/topicCommandContext';
+import {
+  attachDraftToTree,
+  relayoutTopicTree,
+  settleTopicsAfterDelete,
+  toastTopicHardFailure,
+  toastTopicSoftOverlap,
+} from './canvas/topicGraph';
+import { getViewportCenter } from './canvas/viewportCenter';
+
+export { previewTopicDraft, previewTopicEdits } from './canvas/topicGraph';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,45 +141,6 @@ export interface FocusedItem {
   id: string;
   rect: DOMRect;
   type?: string;
-}
-
-function noteTitleMap(
-  titles: Record<string, string>
-): Map<string, string> | null {
-  const map = new Map(
-    Object.entries(titles).filter(
-      (entry): entry is [string, string] => typeof entry[1] === 'string'
-    )
-  );
-  return map.size === 0 ? null : map;
-}
-
-function projectNoteTitles(
-  nodes: Node[],
-  focusedNode: FocusedItem | null,
-  map: Map<string, string>
-): { focusedNode: FocusedItem | null; nodes: Node[] } {
-  const nextNodes = applyNoteTitlesToCanvasNodes(nodes, map);
-  const focused = focusedNode
-    ? applyNoteTitlesToCanvasNodes(
-        [
-          {
-            id: focusedNode.id,
-            type: focusedNode.type,
-            position: { x: 0, y: 0 },
-            data: focusedNode.data,
-          },
-        ],
-        map
-      )[0]
-    : undefined;
-  return {
-    nodes: nextNodes,
-    focusedNode:
-      focusedNode && focused
-        ? { ...focusedNode, data: focused.data }
-        : focusedNode,
-  };
 }
 
 export interface PendingSearchTarget {
@@ -223,809 +205,18 @@ export interface TopicDraft {
   viewId: string;
 }
 
-interface FolderChildEntry {
-  data: Record<string, unknown>;
-  id: string;
-  noteId?: string;
-  size?: Size;
-  type?: string;
-}
-
 const GROUP_SELECTION_PADDING = 24;
+
 const DUPLICATE_OFFSET = 30;
-
-/** Flow coordinates at the centre of the visible canvas, used as the default
- *  anchor for a node created from a menu rather than a cursor position. */
-function getViewportCenter(rfInstance: ReactFlowInstance<any, any> | null): {
-  x: number;
-  y: number;
-} {
-  // Prefer React Flow's own projection so this does not couple to window size.
-  if (rfInstance?.screenToFlowPosition) {
-    return rfInstance.screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-  }
-  const viewport = rfInstance?.getViewport();
-  const zoom = viewport?.zoom ?? 1;
-  return {
-    x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
-    y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
-  };
-}
-
-/** Rendered size of each Topic, preferring the persisted style and falling
- *  back to a fresh measurement for nodes that have never been sized. */
-function collectTopicSizes(
-  nodes: Node[],
-  ids: Iterable<string>
-): Map<string, Size> {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const sizes = new Map<string, Size>();
-  for (const id of ids) {
-    const node = byId.get(id);
-    if (!node) {
-      continue;
-    }
-    const style = node.style as Record<string, unknown> | undefined;
-    const width = typeof style?.width === 'number' ? style.width : undefined;
-    const height = typeof style?.height === 'number' ? style.height : undefined;
-    sizes.set(
-      id,
-      width && height
-        ? { height, width }
-        : measureTopicSize(
-            typeof (node.data as { title?: unknown })?.title === 'string'
-              ? (node.data as { title: string }).title
-              : ''
-          )
-    );
-  }
-  return sizes;
-}
-
-type TopicRelayoutResult =
-  | { nodes: Node[]; ok: true; softOverlap: boolean }
-  | { ok: false; reason: TopicLayoutHardReason };
-
-function toastTopicHardFailure(reason: TopicLayoutHardReason): void {
-  toast.error(
-    reason === 'group-bounds'
-      ? m.toast_topic_layout_group_full()
-      : m.toast_topic_layout_locked()
-  );
-}
-
-function toastTopicSoftOverlap(): void {
-  toast(m.toast_topic_layout_overlap());
-}
-
-/**
- * Re-run the rightward layout for the tree containing `rootId`, then the §5
- * avoidance pass (soft obstacles, Group hard bounds, locked nodes).
- *
- * Hard failure refuses the whole operation. Soft overlap still returns a
- * graph so the caller can commit and warn.
- */
-function relayoutTopicTree(
-  nodes: Node[],
-  edges: Edge[],
-  rootId: string
-): TopicRelayoutResult {
-  const index = buildTopicIndex(nodes, edges);
-  const branch = collectTopicBranch(index, rootId);
-  const root = nodes.find((node) => node.id === rootId);
-  if (!root) {
-    return { nodes, ok: true, softOverlap: false };
-  }
-
-  const branchSet = new Set(branch);
-  const current = new Map<string, { x: number; y: number }>();
-  const lockedIds = new Set<string>();
-  for (const node of nodes) {
-    if (!branchSet.has(node.id)) {
-      continue;
-    }
-    current.set(node.id, node.position);
-    if ((node.data as { locked?: unknown } | undefined)?.locked) {
-      lockedIds.add(node.id);
-    }
-  }
-
-  const containerId = root.parentId;
-  const absolute = containerId ? buildAbsoluteRects(nodes) : undefined;
-  const origin = containerId
-    ? {
-        x: absolute?.get(containerId)?.left ?? 0,
-        y: absolute?.get(containerId)?.top ?? 0,
-      }
-    : { x: 0, y: 0 };
-  const excludeIds = new Set(branchSet);
-  if (containerId) {
-    excludeIds.add(containerId);
-  }
-
-  let hardBounds:
-    | { bottom: number; left: number; right: number; top: number }
-    | undefined;
-  if (containerId) {
-    const container = nodes.find((node) => node.id === containerId);
-    if (container) {
-      const size = getNodeSize(container);
-      hardBounds = {
-        bottom: size.height,
-        left: 0,
-        right: size.width,
-        top: 0,
-      };
-    }
-  }
-
-  const laidOut = layoutTopicTreeAvoiding(index, rootId, {
-    currentPositions: current,
-    hardBounds,
-    lockedIds,
-    obstacles: collectTopicLayoutObstacles(nodes, excludeIds, origin),
-    rootAnchor: root.position,
-    sizes: collectTopicSizes(nodes, branch),
-  });
-  if (laidOut.hardFailure) {
-    return { ok: false, reason: laidOut.hardFailure };
-  }
-
-  const moved = diffTopicPositions(current, laidOut.positions);
-  if (moved.size === 0) {
-    return { nodes, ok: true, softOverlap: laidOut.softOverlap };
-  }
-  return {
-    nodes: nodes.map((node) => {
-      const position = moved.get(node.id);
-      return position ? { ...node, position } : node;
-    }),
-    ok: true,
-    softOverlap: laidOut.softOverlap,
-  };
-}
-
-/**
- * Repair the Topic trees left behind by a generic node delete.
- *
- * The generic path already drops every edge incident to a removed node, so the
- * deleted Topic's children are detached and keep their positions as new roots —
- * which is the documented behaviour for deleting a single Topic. What it cannot
- * do is close the `order` gap left among the deleted Topic's siblings, or
- * re-pack the parent's remaining subtree. Unlike the explicit branch commands,
- * a lock that blocks relayout only skips the repositioning here: the delete
- * itself was already asked for and must not be silently half-refused.
- */
-function settleTopicsAfterDelete(
-  previousNodes: Node[],
-  previousEdges: Edge[],
-  nextNodes: Node[],
-  nextEdges: Edge[],
-  removedIds: ReadonlySet<string>
-): { edges: Edge[]; nodes: Node[] } {
-  const index = buildTopicIndex(previousNodes, previousEdges);
-  const survivingParents = new Set<string>();
-  for (const id of removedIds) {
-    const parentId = index.parentByChild.get(id)?.parentId;
-    if (parentId && !removedIds.has(parentId)) {
-      survivingParents.add(parentId);
-    }
-  }
-  if (survivingParents.size === 0) {
-    return { edges: nextEdges, nodes: nextNodes };
-  }
-
-  let edges = nextEdges;
-  let nodes = nextNodes;
-  for (const parentId of survivingParents) {
-    edges = renumberSiblingEdges(
-      edges,
-      parentId,
-      getTopicChildren(index, parentId)
-        .map((relation) => relation.childId)
-        .filter((childId) => !removedIds.has(childId))
-    );
-  }
-  const roots = new Set(
-    [...survivingParents].map((parentId) => findTopicRoot(index, parentId))
-  );
-  for (const rootId of roots) {
-    if (removedIds.has(rootId)) {
-      continue;
-    }
-    const relaid = relayoutTopicTree(nodes, edges, rootId);
-    if (relaid.ok) {
-      nodes = relaid.nodes;
-    }
-  }
-  return { edges, nodes };
-}
-
-/**
- * Insert a freshly created Topic into the tree, returning the next edge set and
- * the root whose layout must be recomputed.
- *
- * Returns `null` when the insertion must be refused: a missing or locked anchor,
- * a container mismatch, or a tree whose relations are already damaged. Refusing
- * here (before any snapshot is taken) is what keeps a rejected commit from
- * leaving a half-built branch or a stray history entry behind.
- */
-function attachDraftToTree(
-  nodes: Node[],
-  edges: Edge[],
-  newTopicId: string,
-  relation: { kind: 'child' | 'sibling'; topicId: string },
-  edgeId = `edge-${nanoid(8)}`
-): { edges: Edge[]; rootId: string } | null {
-  const anchor = nodes.find((node) => node.id === relation.topicId);
-  const created = nodes.find((node) => node.id === newTopicId);
-  if (!(anchor && created && isTopicNodeType(anchor.type))) {
-    return null;
-  }
-  if ((anchor.data as { locked?: unknown }).locked) {
-    return null;
-  }
-  // A tree edge may not cross a Group boundary.
-  if ((anchor.parentId ?? '') !== (created.parentId ?? '')) {
-    return null;
-  }
-
-  const index = buildTopicIndex(nodes, edges);
-  if (getStructurallyFrozenTopics(index).has(anchor.id)) {
-    return null;
-  }
-
-  const parentId =
-    relation.kind === 'child'
-      ? anchor.id
-      : index.parentByChild.get(anchor.id)?.parentId;
-  if (!parentId) {
-    // A root has no sibling slot to insert into; the caller should have offered
-    // "edit the root" instead.
-    return null;
-  }
-  const parent = nodes.find((node) => node.id === parentId);
-  if (!parent || (parent.data as { locked?: unknown }).locked) {
-    return null;
-  }
-
-  const siblings = getTopicChildren(index, parentId).map((r) => r.childId);
-  const insertAt =
-    relation.kind === 'child'
-      ? siblings.length
-      : siblings.indexOf(anchor.id) + 1;
-  const ordered = [
-    ...siblings.slice(0, insertAt),
-    newTopicId,
-    ...siblings.slice(insertAt),
-  ];
-
-  const nextEdges = renumberSiblingEdges(
-    [
-      ...edges,
-      buildTopicChildEdge(
-        edgeId,
-        parentId,
-        newTopicId,
-        ordered.indexOf(newTopicId)
-      ),
-    ],
-    parentId,
-    ordered
-  );
-  return { edges: nextEdges, rootId: findTopicRoot(index, parentId) };
-}
-
-/** Overlay title edit sizes only on the graph passed to React Flow. */
-export function previewTopicEdits(
-  nodes: Node[],
-  previews: Record<string, Size>
-): Node[] {
-  if (Object.keys(previews).length === 0) {
-    return nodes;
-  }
-  return nodes.map((node) => {
-    const size = previews[node.id];
-    return size && isTopicNodeType(node.type)
-      ? { ...node, measured: size, style: { ...node.style, ...size } }
-      : node;
-  });
-}
-
-/** Preview the same insertion/layout as commit without mutating the saved graph. */
-export function previewTopicDraft(
-  nodes: Node[],
-  edges: Edge[],
-  draft: TopicDraft | null,
-  activeViewId: string
-): { edges: Edge[]; nodes: Node[] } {
-  if (!draft || draft.viewId !== activeViewId) {
-    return { edges, nodes };
-  }
-  // Measure the raw text, not its normalized form: the textarea shows literal
-  // newlines while typing (Shift+Enter, paste), and the box must fit what is
-  // on screen. The commit collapses them and re-measures.
-  const size = measureTopicSize(draft.text);
-  const node: Node = {
-    data: { ...createTopicData(draft.text), isDraft: true },
-    deletable: false,
-    draggable: false,
-    // Render-only drafts do not receive the persisted graph's measurement
-    // updates. Supply dimensions so replacing the preview cannot hide it.
-    measured: size,
-    id: draft.id,
-    position: draft.anchor,
-    selectable: false,
-    style: { width: size.width, height: size.height },
-    type: TOPIC_NODE_TYPE,
-    ...(draft.parentId
-      ? { extent: 'parent' as const, parentId: draft.parentId }
-      : {}),
-  };
-  const nextNodes = sortNodesByParent([...nodes, node]);
-  if (!draft.relation) {
-    return { edges, nodes: nextNodes };
-  }
-  const attached = attachDraftToTree(
-    nextNodes,
-    edges,
-    draft.id,
-    draft.relation,
-    `${draft.id}-edge`
-  );
-  if (!attached) {
-    return { edges, nodes: nextNodes };
-  }
-  const layout = relayoutTopicTree(nextNodes, attached.edges, attached.rootId);
-  return {
-    edges: attached.edges.map((edge) =>
-      edge.id === `${draft.id}-edge`
-        ? { ...edge, selectable: false, deletable: false, focusable: false }
-        : edge
-    ),
-    nodes: layout.ok ? layout.nodes : nextNodes,
-  };
-}
-
-/**
- * Topic command context follows an *explicit* selection change onto a single
- * Topic, not the mere fact that one is selected. After Esc the same node may
- * stay highlighted; the next store update must not put Tab back in Topic mode.
- */
-function nextTopicCommandContext(
-  previousNodes: Node[],
-  nextNodes: Node[],
-  currentContext: string | null
-): string | null {
-  const nextSelected = nextNodes.filter((node) => node.selected);
-  const nextTopicId =
-    nextSelected.length === 1 && isTopicNodeType(nextSelected[0]?.type)
-      ? nextSelected[0]!.id
-      : null;
-  if (!nextTopicId) {
-    return null;
-  }
-  const previousSelected = previousNodes.filter((node) => node.selected);
-  const previousId =
-    previousSelected.length === 1 ? previousSelected[0]?.id : undefined;
-  if (previousId !== nextTopicId) {
-    return nextTopicId;
-  }
-  return currentContext === nextTopicId ? nextTopicId : null;
-}
-
-function nodeSelectionChanged(previous: Node[], next: Node[]): boolean {
-  if (previous.length !== next.length) {
-    return true;
-  }
-  for (let i = 0; i < previous.length; i++) {
-    const previousNode = previous[i]!;
-    const nextNode = next[i]!;
-    if (
-      previousNode.id !== nextNode.id ||
-      Boolean(previousNode.selected) !== Boolean(nextNode.selected)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function topicCommandContextForNodes(
-  previousNodes: Node[],
-  nextNodes: Node[],
-  currentContext: string | null
-): string | null {
-  if (!nodeSelectionChanged(previousNodes, nextNodes)) {
-    return currentContext;
-  }
-  return nextTopicCommandContext(previousNodes, nextNodes, currentContext);
-}
-
-function cleanNodeForClipboard(node: Node): Node {
-  const { isHidden, isDropTarget, ...cleanData } = node.data as any;
-  return { ...node, data: cleanData };
-}
-
-function cleanEdgeForClipboard(edge: Edge): Edge {
-  const { selected: _selected, ...clean } = edge as Edge & {
-    selected?: boolean;
-  };
-  return clean as Edge;
-}
-
-function getInternalEdgesForNodes(edges: Edge[], nodeIds: Set<string>): Edge[] {
-  const internalEdges: Edge[] = [];
-  for (const edge of edges) {
-    if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
-      internalEdges.push(cleanEdgeForClipboard(edge));
-    }
-  }
-  return internalEdges;
-}
 
 function nodeZIndex(node: Node): number {
   return typeof node.zIndex === 'number' ? node.zIndex : 0;
 }
 
-function buildPastedClipboard(
-  clipboard: Node[],
-  clipboardEdges: Edge[],
-  currentNodes: Node[],
-  offset: number
-): { edges: Edge[]; nodes: Node[] } {
-  const existingIds = new Set(currentNodes.map((n) => n.id));
-  const clipboardIds = new Set(clipboard.map((n) => n.id));
-
-  const idMap = new Map<string, string>(
-    clipboard.map((n) => [n.id, `paste-${nanoid(8)}`])
-  );
-
-  const nodes = clipboard.map((n) => {
-    const newId = idMap.get(n.id)!;
-    const { parentId, extent, ...rest } = n as any;
-    const remappedParentId =
-      parentId != null
-        ? clipboardIds.has(parentId)
-          ? idMap.get(parentId)
-          : existingIds.has(parentId)
-            ? parentId
-            : null
-        : null;
-
-    return {
-      ...rest,
-      ...(remappedParentId != null
-        ? { parentId: remappedParentId, extent }
-        : {}),
-      id: newId,
-      position: { x: n.position.x + offset, y: n.position.y + offset },
-      selected: true,
-    } as Node;
-  });
-
-  const edges = clipboardEdges.flatMap((edge) => {
-    const source = idMap.get(edge.source);
-    const target = idMap.get(edge.target);
-    if (!(source && target)) {
-      return [];
-    }
-    const rest = cleanEdgeForClipboard(edge);
-    return [
-      {
-        ...rest,
-        id: `paste-edge-${nanoid(8)}`,
-        source,
-        target,
-      } as Edge,
-    ];
-  });
-
-  return { edges, nodes };
-}
-
 /**
- * Detect whether any node in the graph references a widget - either as a
- * top-level widget node or as a widget child nested inside a folder's
- * `data.children`. Used to gate cloning so folder-only-widget paste/duplicate
- * is not silently skipped.
+ * Full canvas store shape: the intersection of every slice. Each slice owns
+ * its state keys and actions; cross-slice calls go through `get()`.
  */
-function graphContainsExtensionReference(nodes: Node[]): boolean {
-  for (const node of nodes) {
-    if (node.type === EXTENSION_NODE_TYPE) {
-      return true;
-    }
-    if (node.type === 'folder') {
-      const children = (node.data as { children?: Array<{ type?: string }> })
-        ?.children;
-      if (
-        Array.isArray(children) &&
-        children.some((child) => child?.type === EXTENSION_NODE_TYPE)
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-async function cloneExtensionReferences(nodes: Node[]): Promise<Node[]> {
-  const { useExtensionInstanceStore } = await import(
-    '@/store/extensionInstanceStore'
-  );
-  const { cloneInstance } = useExtensionInstanceStore.getState();
-
-  async function cloneInstanceId(instanceId: unknown): Promise<string | null> {
-    if (typeof instanceId !== 'string' || !instanceId) {
-      return null;
-    }
-    const record = await cloneInstance(instanceId);
-    if (!record) {
-      toast.error(m.toast_clone_canvas_type_failed());
-      return null;
-    }
-    return record.id;
-  }
-
-  const results = await Promise.all(
-    nodes.map(async (node) => {
-      if (node.type === EXTENSION_NODE_TYPE) {
-        const data = node.data as Record<string, unknown>;
-        const clonedId = await cloneInstanceId(data.instanceId);
-        if (!clonedId) {
-          return null;
-        }
-        return {
-          ...node,
-          data: {
-            ...data,
-            instanceId: clonedId,
-          },
-        };
-      }
-
-      if (node.type === 'folder') {
-        const data = node.data as Record<string, unknown>;
-        const children = data?.children;
-        if (!Array.isArray(children)) {
-          return node;
-        }
-        const nextChildren = await Promise.all(
-          children.map(async (rawChild) => {
-            const child = rawChild as {
-              data?: Record<string, unknown>;
-              type?: string;
-            } | null;
-            if (!child || child.type !== EXTENSION_NODE_TYPE) {
-              return child;
-            }
-            const childData = child.data;
-            const clonedId = await cloneInstanceId(childData?.instanceId);
-            if (!clonedId) {
-              return null;
-            }
-            return {
-              ...child,
-              data: { ...(childData ?? {}), instanceId: clonedId },
-            };
-          })
-        );
-        return {
-          ...node,
-          data: {
-            ...data,
-            children: nextChildren.filter((child) => child !== null),
-          },
-        };
-      }
-
-      return node;
-    })
-  );
-
-  return results.filter((node): node is Node => node !== null);
-}
-
-function graphContainsWidgetReference(nodes: Node[]): boolean {
-  for (const node of nodes) {
-    if (node.type === 'widget') {
-      return true;
-    }
-    if (node.type === 'folder') {
-      const children = (node.data as any)?.children as
-        | Array<{ type?: string }>
-        | undefined;
-      if (
-        Array.isArray(children) &&
-        children.some((c) => c?.type === 'widget')
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
-  const { useWidgetStore } = await import('@/store/widgetStore');
-  const { cloneWidget, createWidget } = useWidgetStore.getState();
-
-  async function cloneWidgetId(
-    widgetId: unknown,
-    fallbackKind: unknown
-  ): Promise<string | null> {
-    if (typeof widgetId !== 'string' || !widgetId) {
-      return null;
-    }
-    const record = await cloneWidget(widgetId);
-    if (record) {
-      return record.id;
-    }
-    // Cloning the backing record failed. Rather than reuse the source id (which
-    // would silently couple the original and the copy to the same JSON file),
-    // create an independent empty widget of the same kind so the copy stands
-    // alone. If that also fails, signal the caller to drop the node.
-    const kind =
-      typeof fallbackKind === 'string'
-        ? (fallbackKind as WidgetKind)
-        : 'checklist';
-    const fallback = await createWidget(kind);
-    if (!fallback) {
-      toast.error(m.toast_clone_widget_failed());
-      return null;
-    }
-    return fallback.id;
-  }
-
-  const results = await Promise.all(
-    nodes.map(async (node) => {
-      if (node.type === 'widget') {
-        const data = node.data as Record<string, unknown>;
-        const clonedId = await cloneWidgetId(data.widgetId, data.kind);
-        if (!clonedId) {
-          return null;
-        }
-        return {
-          ...node,
-          data: {
-            ...data,
-            widgetId: clonedId,
-          },
-        };
-      }
-
-      if (node.type === 'folder') {
-        const data = node.data as Record<string, unknown>;
-        const children = data?.children;
-        if (!Array.isArray(children)) {
-          return node;
-        }
-        const nextChildren = await Promise.all(
-          children.map(async (child: any) => {
-            if (!child || child.type !== 'widget') {
-              return child;
-            }
-            const childData = child.data as Record<string, unknown> | undefined;
-            const clonedId = await cloneWidgetId(
-              childData?.widgetId,
-              childData?.kind
-            );
-            if (!clonedId) {
-              return null;
-            }
-            return {
-              ...child,
-              data: { ...(childData ?? {}), widgetId: clonedId },
-            };
-          })
-        );
-        // Drop any folder children whose widget could not be materialized.
-        const filteredChildren = nextChildren.filter((c) => c !== null);
-        return {
-          ...node,
-          data: { ...data, children: filteredChildren },
-        };
-      }
-
-      return node;
-    })
-  );
-  return results.filter((node): node is Node => node !== null);
-}
-
-function uniqueDetachedNodeId(
-  candidateId: string,
-  usedNodeIds: Set<string>
-): string {
-  let id = candidateId;
-  while (usedNodeIds.has(id)) {
-    id = `node-${nanoid(8)}`;
-  }
-  usedNodeIds.add(id);
-  return id;
-}
-
-function uniqueEdgeId(candidateId: string, usedEdgeIds: Set<string>): string {
-  let id = candidateId;
-  while (usedEdgeIds.has(id)) {
-    id = `edge-${nanoid(8)}`;
-  }
-  usedEdgeIds.add(id);
-  return id;
-}
-
-function resolveFolderChildSpec(child: FolderChildEntry) {
-  if (!child.type) {
-    return buildNewNodeSpec('card');
-  }
-  const spec = findSpecByNodeType(child.type);
-  if (spec) {
-    return buildNewNodeSpec(spec.kind);
-  }
-  if (child.type === EXTENSION_NODE_TYPE) {
-    const fallback = buildNewNodeSpec('card');
-    return {
-      ...fallback,
-      base: { ...fallback.base, type: EXTENSION_NODE_TYPE },
-    };
-  }
-  // Unknown historical children retain their data but use the safe Card
-  // renderer until a compatible runtime type becomes available.
-  return buildNewNodeSpec('card');
-}
-
-function resolveFolderChildSize(child: FolderChildEntry, fallback: Size): Size {
-  const width = child.size?.width;
-  const height = child.size?.height;
-  if (
-    typeof width !== 'number' ||
-    typeof height !== 'number' ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return fallback;
-  }
-  return {
-    width: Math.min(1200, Math.max(80, width)),
-    height: Math.min(1200, Math.max(80, height)),
-  };
-}
-
-function folderChildToDetachedNode(
-  child: FolderChildEntry,
-  usedNodeIds: Set<string>
-): Node {
-  const spec = resolveFolderChildSpec(child);
-  const size = resolveFolderChildSize(child, spec.size);
-  const {
-    isDropTarget: _isDropTarget,
-    isHidden: _isHidden,
-    ...data
-  } = child.data;
-  return {
-    id: uniqueDetachedNodeId(child.id, usedNodeIds),
-    type: spec.base.type,
-    position: { x: 0, y: 0 },
-    style: { ...spec.base.style, width: size.width, height: size.height },
-    data: {
-      ...data,
-      ...(child.noteId && spec.base.type === 'card'
-        ? { noteId: child.noteId }
-        : {}),
-      detached: true,
-    },
-  };
-}
-
-// `buildNewNodeSpec` (and its result shape) now lives in
-// `@/lib/canvasNodeRegistry` so all node defaults (size, data, type) come from
-// a single registry.
-
 export interface CanvasState {
   // Hydration
   _hydrated: boolean;
@@ -1301,7 +492,7 @@ export interface CanvasState {
 // Store
 // ---------------------------------------------------------------------------
 
-export const useCanvasStore = create<CanvasState>((set, get) => ({
+export const useCanvasStore = create<CanvasState>()((set, get, _api) => ({
   // -- initial state --------------------------------------------------------
   nodes: [],
   edges: [],

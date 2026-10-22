@@ -1,0 +1,215 @@
+import type { Node } from '@xyflow/react';
+import { toast } from 'sonner';
+import type { WidgetKind } from '@/lib/widgetTypes';
+import * as m from '../../../paraglide/messages.js';
+import { EXTENSION_NODE_TYPE } from '../../../shared/extensions/ids';
+// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+
+/**
+ * Detect whether any node in the graph references a widget - either as a
+ * top-level widget node or as a widget child nested inside a folder's
+ * `data.children`. Used to gate cloning so folder-only-widget paste/duplicate
+ * is not silently skipped.
+ */
+export function graphContainsExtensionReference(nodes: Node[]): boolean {
+  for (const node of nodes) {
+    if (node.type === EXTENSION_NODE_TYPE) {
+      return true;
+    }
+    if (node.type === 'folder') {
+      const children = (node.data as { children?: Array<{ type?: string }> })
+        ?.children;
+      if (
+        Array.isArray(children) &&
+        children.some((child) => child?.type === EXTENSION_NODE_TYPE)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export async function cloneExtensionReferences(nodes: Node[]): Promise<Node[]> {
+  const { useExtensionInstanceStore } = await import(
+    '@/store/extensionInstanceStore'
+  );
+  const { cloneInstance } = useExtensionInstanceStore.getState();
+
+  async function cloneInstanceId(instanceId: unknown): Promise<string | null> {
+    if (typeof instanceId !== 'string' || !instanceId) {
+      return null;
+    }
+    const record = await cloneInstance(instanceId);
+    if (!record) {
+      toast.error(m.toast_clone_canvas_type_failed());
+      return null;
+    }
+    return record.id;
+  }
+
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      if (node.type === EXTENSION_NODE_TYPE) {
+        const data = node.data as Record<string, unknown>;
+        const clonedId = await cloneInstanceId(data.instanceId);
+        if (!clonedId) {
+          return null;
+        }
+        return {
+          ...node,
+          data: {
+            ...data,
+            instanceId: clonedId,
+          },
+        };
+      }
+
+      if (node.type === 'folder') {
+        const data = node.data as Record<string, unknown>;
+        const children = data?.children;
+        if (!Array.isArray(children)) {
+          return node;
+        }
+        const nextChildren = await Promise.all(
+          children.map(async (rawChild) => {
+            const child = rawChild as {
+              data?: Record<string, unknown>;
+              type?: string;
+            } | null;
+            if (!child || child.type !== EXTENSION_NODE_TYPE) {
+              return child;
+            }
+            const childData = child.data;
+            const clonedId = await cloneInstanceId(childData?.instanceId);
+            if (!clonedId) {
+              return null;
+            }
+            return {
+              ...child,
+              data: { ...(childData ?? {}), instanceId: clonedId },
+            };
+          })
+        );
+        return {
+          ...node,
+          data: {
+            ...data,
+            children: nextChildren.filter((child) => child !== null),
+          },
+        };
+      }
+
+      return node;
+    })
+  );
+
+  return results.filter((node): node is Node => node !== null);
+}
+
+export function graphContainsWidgetReference(nodes: Node[]): boolean {
+  for (const node of nodes) {
+    if (node.type === 'widget') {
+      return true;
+    }
+    if (node.type === 'folder') {
+      const children = (node.data as any)?.children as
+        | Array<{ type?: string }>
+        | undefined;
+      if (
+        Array.isArray(children) &&
+        children.some((c) => c?.type === 'widget')
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export async function cloneWidgetReferences(nodes: Node[]): Promise<Node[]> {
+  const { useWidgetStore } = await import('@/store/widgetStore');
+  const { cloneWidget, createWidget } = useWidgetStore.getState();
+
+  async function cloneWidgetId(
+    widgetId: unknown,
+    fallbackKind: unknown
+  ): Promise<string | null> {
+    if (typeof widgetId !== 'string' || !widgetId) {
+      return null;
+    }
+    const record = await cloneWidget(widgetId);
+    if (record) {
+      return record.id;
+    }
+    // Cloning the backing record failed. Rather than reuse the source id (which
+    // would silently couple the original and the copy to the same JSON file),
+    // create an independent empty widget of the same kind so the copy stands
+    // alone. If that also fails, signal the caller to drop the node.
+    const kind =
+      typeof fallbackKind === 'string'
+        ? (fallbackKind as WidgetKind)
+        : 'checklist';
+    const fallback = await createWidget(kind);
+    if (!fallback) {
+      toast.error(m.toast_clone_widget_failed());
+      return null;
+    }
+    return fallback.id;
+  }
+
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      if (node.type === 'widget') {
+        const data = node.data as Record<string, unknown>;
+        const clonedId = await cloneWidgetId(data.widgetId, data.kind);
+        if (!clonedId) {
+          return null;
+        }
+        return {
+          ...node,
+          data: {
+            ...data,
+            widgetId: clonedId,
+          },
+        };
+      }
+
+      if (node.type === 'folder') {
+        const data = node.data as Record<string, unknown>;
+        const children = data?.children;
+        if (!Array.isArray(children)) {
+          return node;
+        }
+        const nextChildren = await Promise.all(
+          children.map(async (child: any) => {
+            if (!child || child.type !== 'widget') {
+              return child;
+            }
+            const childData = child.data as Record<string, unknown> | undefined;
+            const clonedId = await cloneWidgetId(
+              childData?.widgetId,
+              childData?.kind
+            );
+            if (!clonedId) {
+              return null;
+            }
+            return {
+              ...child,
+              data: { ...(childData ?? {}), widgetId: clonedId },
+            };
+          })
+        );
+        // Drop any folder children whose widget could not be materialized.
+        const filteredChildren = nextChildren.filter((c) => c !== null);
+        return {
+          ...node,
+          data: { ...data, children: filteredChildren },
+        };
+      }
+
+      return node;
+    })
+  );
+  return results.filter((node): node is Node => node !== null);
+}

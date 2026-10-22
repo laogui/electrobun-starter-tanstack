@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import { rpcCloneWidget, rpcCreateWidget, rpcSaveWidget } from '@/lib/rpc';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import type {
   PomodoroWidgetData,
   ReminderWidgetData,
@@ -40,9 +41,11 @@ export interface WidgetStoreState {
     referencedWidgetIds?: Set<string>
   ) => void;
   records: Record<string, WidgetRecord | WidgetLoadError>;
-  redoWidget: (widgetId: string) => void;
+  /** Returns false when the widget has nothing to redo. */
+  redoWidget: (widgetId: string) => boolean;
   saveWidgetNow: (widgetId: string) => Promise<void>;
-  undoWidget: (widgetId: string) => void;
+  /** Returns false when the widget has nothing to undo. */
+  undoWidget: (widgetId: string) => boolean;
   updateWidget: (
     widgetId: string,
     updater: (record: WidgetRecord) => WidgetRecord,
@@ -160,6 +163,9 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
     set((s) => {
       const nextHistory = { ...s.history };
       for (const id of Object.keys(normalizedRecords)) {
+        if (nextHistory[id]) {
+          unifiedUndoHistory.forgetWidget(id);
+        }
         delete nextHistory[id];
       }
       // When the caller supplies the set of widget ids referenced by the
@@ -269,6 +275,9 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
           : s.history,
       };
     });
+    if (shouldRecordHistory) {
+      unifiedUndoHistory.recordWidget(widgetId);
+    }
     scheduleSave(widgetId, () => get().saveWidgetNow(widgetId));
   },
 
@@ -276,7 +285,7 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
     const entry = get().history[widgetId];
     const current = get().records[widgetId];
     if (!(entry && entry.past.length > 0) || isWidgetLoadError(current)) {
-      return;
+      return false;
     }
     const previous = entry.past.at(-1) as WidgetRecord;
     const past = entry.past.slice(0, -1);
@@ -287,14 +296,16 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       records: { ...s.records, [widgetId]: previous },
       history: { ...s.history, [widgetId]: { past, future } },
     }));
+    unifiedUndoHistory.observeWidgetTransition(widgetId, 'undo');
     scheduleSave(widgetId, () => get().saveWidgetNow(widgetId));
+    return true;
   },
 
   redoWidget: (widgetId) => {
     const entry = get().history[widgetId];
     const current = get().records[widgetId];
     if (!(entry && entry.future.length > 0) || isWidgetLoadError(current)) {
-      return;
+      return false;
     }
     const next = entry.future.at(-1) as WidgetRecord;
     const future = entry.future.slice(0, -1);
@@ -305,7 +316,9 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
       records: { ...s.records, [widgetId]: next },
       history: { ...s.history, [widgetId]: { past, future } },
     }));
+    unifiedUndoHistory.observeWidgetTransition(widgetId, 'redo');
     scheduleSave(widgetId, () => get().saveWidgetNow(widgetId));
+    return true;
   },
 
   saveWidgetNow: async (widgetId) => {

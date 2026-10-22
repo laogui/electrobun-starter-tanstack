@@ -1,26 +1,79 @@
 import type { PluginContentHistoryEvent } from '../../shared/plugins/contentHistory';
 
-const MAX_HISTORY = 50;
+/*
+ * Unified undo coordinator
+ * ------------------------
+ * One linear timeline that orders every user-visible history entry produced
+ * in the active (workspace, canvas view), whatever its origin:
+ *
+ *   - `canvas`              one canvas snapshot push (store/slices/historySlice)
+ *   - `widget`              one recorded legacy widget edit (widgetStore)
+ *   - `extension-instance`  one recorded canvas-type instance edit
+ *                           (extensionInstanceStore)
+ *   - `plugin-note`         one committed plugin note batch (host events)
+ *
+ * The coordinator never stores payloads. Each source keeps its own stack and
+ * the coordinator only decides *which* source the next Undo/Redo goes to, so
+ * Cmd+Z reverts the most recent action regardless of origin.
+ *
+ * Invariant for stack sources (canvas, widget, extension-instance): for every
+ * source key, the entries of that key in `past` are a suffix of the source's
+ * own past, and the entries in `future` are a prefix of its own future. It is
+ * maintained even when a source moves on its own (focused widget undo, a
+ * direct store call): `observe*Transition` moves the matching entry, or drops
+ * that key's entries on the other side when no matching entry is left. A
+ * stack entry whose source reports nothing to undo/redo is stale; it and the
+ * rest of that key's entries on the same side are dropped and the next entry
+ * is tried, so a desynced source can never wedge Cmd+Z.
+ *
+ * Plugin batches are batch-addressed rather than stack-ordered: an explicit
+ * SDK undo/redo that does not match the timeline top/front clears the whole
+ * timeline instead of synthesising a false order (see
+ * .planning/2026-09-11-plugin-unified-undo/findings.md).
+ *
+ * Text editing (inputs, textareas, BlockNote) keeps its editor-native history
+ * and never enters this timeline; routeUndoRedo leaves those keystrokes to the
+ * editor.
+ */
+
+const MAX_HISTORY = 100;
 const MAX_COMPLETED_OPERATIONS = 100;
 
-export interface CanvasHistoryEntry {
+interface HistoryEntryScope {
   id: string;
-  kind: 'canvas';
   viewId: string;
   workspaceId: string;
 }
 
-export interface PluginNoteHistoryEntry {
+export interface CanvasHistoryEntry extends HistoryEntryScope {
+  kind: 'canvas';
+}
+
+export interface WidgetHistoryEntry extends HistoryEntryScope {
+  kind: 'widget';
+  widgetId: string;
+}
+
+export interface ExtensionInstanceHistoryEntry extends HistoryEntryScope {
+  instanceId: string;
+  kind: 'extension-instance';
+}
+
+export interface PluginNoteHistoryEntry extends HistoryEntryScope {
   batchId: string;
-  id: string;
   kind: 'plugin-note';
   label: string;
   pluginId: string;
-  viewId: string;
-  workspaceId: string;
 }
 
-export type UnifiedHistoryEntry = CanvasHistoryEntry | PluginNoteHistoryEntry;
+export type StackHistoryEntry =
+  | CanvasHistoryEntry
+  | ExtensionInstanceHistoryEntry
+  | WidgetHistoryEntry;
+
+export type UnifiedHistoryEntry = PluginNoteHistoryEntry | StackHistoryEntry;
+
+export type HistoryAction = 'redo' | 'undo';
 
 export interface UnifiedHistorySnapshot {
   future: readonly UnifiedHistoryEntry[];
@@ -31,34 +84,78 @@ export interface UnifiedHistorySnapshot {
 }
 
 export interface UnifiedHistoryHandlers {
-  canvas(action: 'redo' | 'undo'): boolean;
+  /** Apply a canvas snapshot transition; false when the stack is empty. */
+  canvas(action: HistoryAction): boolean;
+  /** Apply an extension-instance transition; false when nothing moved. */
+  extensionInstance?(instanceId: string, action: HistoryAction): boolean;
   plugin(
     entry: PluginNoteHistoryEntry,
-    action: 'redo' | 'undo',
+    action: HistoryAction,
     operationId: string
   ): Promise<void>;
+  /** Apply a widget transition; false when nothing moved. */
+  widget?(widgetId: string, action: HistoryAction): boolean;
 }
 
+export type UnifiedHistoryResult = 'applied' | 'empty' | 'pending';
+
 interface PendingTransition {
-  action: 'redo' | 'undo';
+  action: HistoryAction;
   entry: UnifiedHistoryEntry;
   operationId: string;
   transitioned: boolean;
 }
 
+type StackSourceKey =
+  | `canvas`
+  | `extension-instance:${string}`
+  | `widget:${string}`;
+
 function sameEntry(left: UnifiedHistoryEntry, right: UnifiedHistoryEntry) {
   return left.id === right.id && left.kind === right.kind;
+}
+
+function isStackEntry(entry: UnifiedHistoryEntry): entry is StackHistoryEntry {
+  return entry.kind !== 'plugin-note';
+}
+
+function stackSourceKey(entry: StackHistoryEntry): StackSourceKey {
+  if (entry.kind === 'widget') {
+    return `widget:${entry.widgetId}`;
+  }
+  if (entry.kind === 'extension-instance') {
+    return `extension-instance:${entry.instanceId}`;
+  }
+  return 'canvas';
+}
+
+function hasSourceKey(entry: UnifiedHistoryEntry, key: StackSourceKey) {
+  return isStackEntry(entry) && stackSourceKey(entry) === key;
 }
 
 function pluginEntryId(workspaceId: string, pluginId: string, batchId: string) {
   return `plugin-note:${workspaceId}:${pluginId}:${batchId}`;
 }
 
+function applyStackEntry(
+  entry: StackHistoryEntry,
+  action: HistoryAction,
+  handlers: UnifiedHistoryHandlers
+): boolean {
+  if (entry.kind === 'widget') {
+    return handlers.widget?.(entry.widgetId, action) ?? false;
+  }
+  if (entry.kind === 'extension-instance') {
+    return handlers.extensionInstance?.(entry.instanceId, action) ?? false;
+  }
+  return handlers.canvas(action);
+}
+
 export class UnifiedUndoHistory {
   private completedOperationIds: string[] = [];
   private readonly completedOperations = new Set<string>();
   private future: UnifiedHistoryEntry[] = [];
-  private nextCanvasId = 0;
+  private nextEntryId = 0;
   private past: UnifiedHistoryEntry[] = [];
   private pending: PendingTransition | null = null;
   private viewId = '';
@@ -86,24 +183,64 @@ export class UnifiedUndoHistory {
     return Boolean(this.workspaceId && this.viewId);
   }
 
-  observeCanvasTransition(action: 'redo' | 'undo', viewId: string): void {
+  // -- recording ------------------------------------------------------------
+
+  recordCanvas(viewId: string): void {
     if (!(this.isActive() && viewId === this.viewId)) {
       return;
     }
-    const expected = action === 'undo' ? this.past.at(-1) : this.future[0];
-    const pending = this.pending;
-    if (
-      expected?.kind !== 'canvas' ||
-      (pending &&
-        (pending.action !== action || !sameEntry(pending.entry, expected)))
-    ) {
-      this.clear();
+    this.push({ ...this.scope('canvas'), kind: 'canvas' });
+  }
+
+  recordWidget(widgetId: string): void {
+    if (!this.isActive()) {
       return;
     }
-    this.transition(action, expected);
-    if (pending) {
-      pending.transitioned = true;
+    this.push({ ...this.scope('widget'), kind: 'widget', widgetId });
+  }
+
+  recordExtensionInstance(instanceId: string): void {
+    if (!this.isActive()) {
+      return;
     }
+    this.push({
+      ...this.scope('extension-instance'),
+      instanceId,
+      kind: 'extension-instance',
+    });
+  }
+
+  // -- source transitions -----------------------------------------------------
+
+  observeCanvasTransition(action: HistoryAction, viewId: string): void {
+    if (!(this.isActive() && viewId === this.viewId)) {
+      return;
+    }
+    this.observeStackTransition('canvas', action);
+  }
+
+  observeWidgetTransition(widgetId: string, action: HistoryAction): void {
+    if (this.isActive()) {
+      this.observeStackTransition(`widget:${widgetId}`, action);
+    }
+  }
+
+  observeExtensionInstanceTransition(
+    instanceId: string,
+    action: HistoryAction
+  ): void {
+    if (this.isActive()) {
+      this.observeStackTransition(`extension-instance:${instanceId}`, action);
+    }
+  }
+
+  /** A source discarded its whole stack (e.g. re-hydrated from disk). */
+  forgetWidget(widgetId: string): void {
+    this.dropSource(`widget:${widgetId}`, 'both');
+  }
+
+  forgetExtensionInstance(instanceId: string): void {
+    this.dropSource(`extension-instance:${instanceId}`, 'both');
   }
 
   observePluginTransition(
@@ -153,24 +290,59 @@ export class UnifiedUndoHistory {
     }
   }
 
+  // -- replay -------------------------------------------------------------------
+
   async perform(
-    action: 'redo' | 'undo',
+    action: HistoryAction,
     handlers: UnifiedHistoryHandlers
-  ): Promise<'applied' | 'empty' | 'pending'> {
+  ): Promise<UnifiedHistoryResult> {
     if (this.pending) {
       return 'pending';
     }
-    const entry = action === 'undo' ? this.past.at(-1) : this.future[0];
-    if (!entry) {
-      if (!this.isActive()) {
-        return handlers.canvas(action) ? 'applied' : 'empty';
+    // Each stale entry removes at least one entry, so this terminates; the
+    // bound only guards against a misbehaving handler.
+    for (let attempt = 0; attempt <= MAX_HISTORY * 2; attempt += 1) {
+      const entry = action === 'undo' ? this.past.at(-1) : this.future[0];
+      if (!entry) {
+        if (!this.isActive()) {
+          return handlers.canvas(action) ? 'applied' : 'empty';
+        }
+        return 'empty';
       }
-      return 'empty';
+      const result = await this.apply(entry, action, handlers);
+      if (result !== 'stale') {
+        return result;
+      }
     }
+    return 'empty';
+  }
+
+  reset(): void {
+    this.clear();
+    this.viewId = '';
+    this.workspaceId = '';
+  }
+
+  setContext(workspaceId: string, viewId: string): void {
+    if (workspaceId === this.workspaceId && viewId === this.viewId) {
+      return;
+    }
+    this.clear();
+    this.workspaceId = workspaceId;
+    this.viewId = viewId;
+  }
+
+  // -- internals ------------------------------------------------------------
+
+  private async apply(
+    entry: UnifiedHistoryEntry,
+    action: HistoryAction,
+    handlers: UnifiedHistoryHandlers
+  ): Promise<'applied' | 'stale'> {
     const operationId =
-      entry.kind === 'canvas'
-        ? `${entry.id}:${action}`
-        : `native_${action}_${crypto.randomUUID()}`;
+      entry.kind === 'plugin-note'
+        ? `native_${action}_${crypto.randomUUID()}`
+        : `${entry.id}:${action}`;
     const pending: PendingTransition = {
       action,
       entry,
@@ -179,9 +351,15 @@ export class UnifiedUndoHistory {
     };
     this.pending = pending;
     try {
-      if (entry.kind === 'canvas') {
-        if (!handlers.canvas(action)) {
-          return 'empty';
+      if (isStackEntry(entry)) {
+        if (!applyStackEntry(entry, action, handlers)) {
+          // The source has nothing left on this side: every remaining entry
+          // of the same source on this side is unreachable too.
+          this.dropSource(
+            stackSourceKey(entry),
+            action === 'undo' ? 'past' : 'future'
+          );
+          return 'stale';
         }
       } else {
         await handlers.plugin(entry, action, operationId);
@@ -201,32 +379,60 @@ export class UnifiedUndoHistory {
     }
   }
 
-  recordCanvas(viewId: string): void {
-    if (!(this.isActive() && viewId === this.viewId)) {
-      return;
+  private dropSource(
+    key: StackSourceKey,
+    side: 'both' | 'future' | 'past'
+  ): void {
+    if (side !== 'future') {
+      this.past = this.past.filter((entry) => !hasSourceKey(entry, key));
     }
-    this.nextCanvasId += 1;
-    this.push({
-      id: `canvas:${this.nextCanvasId}`,
-      kind: 'canvas',
-      viewId,
-      workspaceId: this.workspaceId,
-    });
+    if (side !== 'past') {
+      this.future = this.future.filter((entry) => !hasSourceKey(entry, key));
+    }
   }
 
-  reset(): void {
-    this.clear();
-    this.viewId = '';
-    this.workspaceId = '';
-  }
-
-  setContext(workspaceId: string, viewId: string): void {
-    if (workspaceId === this.workspaceId && viewId === this.viewId) {
+  private observeStackTransition(
+    key: StackSourceKey,
+    action: HistoryAction
+  ): void {
+    const pending = this.pending;
+    if (
+      pending &&
+      !pending.transitioned &&
+      pending.action === action &&
+      hasSourceKey(pending.entry, key)
+    ) {
+      // The coordinator's own replay: move the entry it is applying.
+      this.transition(action, pending.entry);
+      pending.transitioned = true;
       return;
     }
-    this.clear();
-    this.workspaceId = workspaceId;
-    this.viewId = viewId;
+    this.reconcile(key, action);
+  }
+
+  /** Keep the timeline consistent with a source that moved on its own. */
+  private reconcile(key: StackSourceKey, action: HistoryAction): void {
+    if (action === 'undo') {
+      const index = this.past.findLastIndex((entry) =>
+        hasSourceKey(entry, key)
+      );
+      if (index === -1) {
+        this.dropSource(key, 'future');
+        return;
+      }
+      const entry = this.past[index]!;
+      this.past = this.past.filter((_, position) => position !== index);
+      this.future = [entry, ...this.future];
+      return;
+    }
+    const index = this.future.findIndex((entry) => hasSourceKey(entry, key));
+    if (index === -1) {
+      this.dropSource(key, 'past');
+      return;
+    }
+    const entry = this.future[index]!;
+    this.future = this.future.filter((_, position) => position !== index);
+    this.past = [...this.past, entry].slice(-MAX_HISTORY);
   }
 
   private push(entry: UnifiedHistoryEntry): void {
@@ -248,12 +454,19 @@ export class UnifiedUndoHistory {
     }
   }
 
-  private transition(
-    action: 'redo' | 'undo',
-    entry: UnifiedHistoryEntry
-  ): void {
+  private scope(prefix: string): HistoryEntryScope {
+    this.nextEntryId += 1;
+    return {
+      id: `${prefix}:${this.nextEntryId}`,
+      viewId: this.viewId,
+      workspaceId: this.workspaceId,
+    };
+  }
+
+  private transition(action: HistoryAction, entry: UnifiedHistoryEntry): void {
     if (action === 'undo') {
-      if (!sameEntry(this.past.at(-1)!, entry)) {
+      const top = this.past.at(-1);
+      if (!(top && sameEntry(top, entry))) {
         this.clear();
         return;
       }
@@ -261,7 +474,8 @@ export class UnifiedUndoHistory {
       this.future = [entry, ...this.future];
       return;
     }
-    if (!sameEntry(this.future[0]!, entry)) {
+    const front = this.future[0];
+    if (!(front && sameEntry(front, entry))) {
       this.clear();
       return;
     }

@@ -7,30 +7,28 @@ import * as m from '../../paraglide/messages.js';
 import { unifiedUndoHistory } from './unifiedUndoHistory';
 
 /*
- * Undo/redo routing between GhostBoard's four history stacks
- * -----------------------------------------------------------
- * The stacks do not know about each other; this module is the only place
- * that decides which one a Cmd+Z / menu Undo goes to. First match wins:
+ * Undo/redo routing
+ * -----------------
+ * Every history source registers its entries with the unified coordinator
+ * (lib/unifiedUndoHistory.ts): canvas snapshots, legacy widget edits,
+ * canvas-type extension instance edits and committed plugin note batches.
+ * This module decides who handles a Cmd+Z / menu Undo. First match wins:
  *
- * 1. Extension instance stack (extensionInstanceStore.undoInstance/redo):
- *    per-instance state history of a canvas-type extension. Chosen when the
- *    event target sits inside `[data-extension-instance]`, or when the
- *    focused (detail) node is an `extension` node.
- * 2. Legacy widget stack (widgetStore.undoWidget/redoWidget): per-widget
- *    data history. Chosen when the focused (detail) node is a `widget`.
- * 3. Native text editing: when an input/textarea/contentEditable has focus,
- *    keyboard shortcuts return false so the browser's own edit stack runs;
- *    the native menu path calls document.execCommand instead.
- * 4. Unified history (unifiedUndoHistory): the canvas-level timeline that
- *    interleaves canvas snapshots (lib/undoRedo.ts via canvasStore.undo/redo,
- *    the third stack) with committed plugin note batches, so they replay in
- *    the order they happened. With no active workspace/view context it falls
- *    back to the canvas snapshot stack directly.
+ * 1. Focused extension instance (`[data-extension-instance]` ancestor of the
+ *    event target, or an `extension` detail view): that instance's own stack.
+ * 2. Focused legacy widget detail view: that widget's own stack.
+ *    Both keep local ownership so a checklist undo never reverts an unrelated
+ *    canvas move; the stores report the local move back to the coordinator,
+ *    which keeps the global timeline consistent with it.
+ * 3. Native text editing: while an input/textarea/contentEditable (including
+ *    BlockNote) has focus, keyboard shortcuts return false so the editor's own
+ *    stack runs; the native menu path calls document.execCommand instead.
+ * 4. Otherwise the unified timeline: the most recent entry from any source is
+ *    reverted, so canvas edits, inline widget/extension edits and plugin
+ *    batches undo in the order they happened. With no active workspace/view
+ *    context it falls back to the canvas snapshot stack directly.
  *
- * Consequences worth knowing: while a widget or extension is focused, canvas
- * edits are not reachable by Cmd+Z until focus leaves it, and the per-node
- * stacks never enter the unified timeline. Migrating legacy widgets onto the
- * unified history is tracked in PRD §2.9. Covered by routeUndoRedo.test.ts.
+ * Covered by routeUndoRedo.test.ts and unifiedUndoHistory.test.ts.
  */
 
 function isEditingElement(element: Element | null): boolean {
@@ -65,6 +63,18 @@ function routeUnifiedHistory(kind: 'redo' | 'undo'): void {
   unifiedUndoHistory
     .perform(kind, {
       canvas: (action) => useCanvasStore.getState()[action](),
+      widget: (widgetId, action) => {
+        const widgets = useWidgetStore.getState();
+        return action === 'undo'
+          ? widgets.undoWidget(widgetId)
+          : widgets.redoWidget(widgetId);
+      },
+      extensionInstance: (instanceId, action) => {
+        const instances = useExtensionInstanceStore.getState();
+        return action === 'undo'
+          ? instances.undoInstance(instanceId)
+          : instances.redoInstance(instanceId);
+      },
       plugin: async (entry, action, operationId) => {
         const content = createPluginContent({
           pluginId: entry.pluginId,

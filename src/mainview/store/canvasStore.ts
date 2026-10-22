@@ -2,17 +2,10 @@ import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { create } from 'zustand';
-import { buildNewNodeSpec } from '@/lib/canvasNodeRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { normalizeCanvasParenting, sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
-import type { CreatableCanvasNodeKind } from '@/lib/contentTypes';
-import {
-  markNodesEntering,
-  VIEWPORT_PAN_MS,
-  viewportMotion,
-} from '@/lib/motion';
-import { COUNTED_NODE_TYPES, hasNodeQuota } from '@/lib/nodeQuota';
+import { hasNodeQuota } from '@/lib/nodeQuota';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import {
@@ -33,9 +26,7 @@ import {
 } from '@/lib/topicTree';
 import { createUndoRedoState } from '@/lib/undoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
-import { suppressViewportPersist } from '@/lib/viewportPersist';
 import * as m from '../../paraglide/messages.js';
-import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
 import type { SearchResultTarget } from '../../shared/searchTypes';
 import {
   createTopicData,
@@ -69,6 +60,10 @@ import {
 import { createEdgesSlice, type EdgesSlice } from './slices/edgesSlice';
 import { createFolderSlice, type FolderSlice } from './slices/folderSlice';
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
+import {
+  createNodeCreationSlice,
+  type NodeCreationSlice,
+} from './slices/nodeCreationSlice';
 import { createNodesSlice, type NodesSlice } from './slices/nodesSlice';
 import {
   createSelectionSlice,
@@ -175,6 +170,7 @@ export interface CanvasState
     NodesSlice,
     SelectionSlice,
     ClipboardSlice,
+    NodeCreationSlice,
     FolderSlice {
   // Hydration
   _hydrated: boolean;
@@ -204,19 +200,6 @@ export interface CanvasState
   commitTopicTitle: (nodeId: string, title: string) => void;
   /** Copy a Topic and its descendants (internal tree edges only). */
   copyTopicBranch: (topicId: string) => void;
-
-  // Actions – node CRUD
-  createExtensionNode: (
-    canvasTypeId: string,
-    instanceId: string,
-    rfInstance: ReactFlowInstance<any, any> | null,
-    options?: CreateNodeOptions
-  ) => Promise<string | undefined>;
-  createNode: (
-    type: CreatableCanvasNodeKind,
-    rfInstance: ReactFlowInstance<any, any> | null,
-    options?: CreateNodeOptions
-  ) => Promise<string | undefined>;
   /** Remove a Topic and every descendant as one transaction. */
   deleteTopicBranch: (topicId: string) => void;
   /** Cut a Topic's parent relation, promoting its branch to a separate tree. */
@@ -229,9 +212,6 @@ export interface CanvasState
   exitTopicCommandContext: () => void;
   hydrate: (nodes: Node[], edges: Edge[]) => void;
   moveSelectedToView: (targetViewId: string) => Promise<boolean>;
-
-  // Helpers
-  nextNodeId: () => string;
   reset: () => void;
   /** Discard the render-only size override without changing the saved graph. */
   resetTopicEditPreview: (nodeId: string) => void;
@@ -291,6 +271,7 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createNodesSlice(set, get, api),
   ...createSelectionSlice(set, get, api),
   ...createClipboardSlice(set, get, api),
+  ...createNodeCreationSlice(set, get, api),
   ...createFolderSlice(set, get, api),
   _hydrated: false,
   activeViewId: 'default',
@@ -1049,167 +1030,5 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
         .map(cleanNodeForClipboard),
       clipboardEdges: getInternalEdgesForNodes(edges, branchSet),
     });
-  },
-
-  // -- node CRUD ------------------------------------------------------------
-  nextNodeId: () => `node-${nanoid(8)}`,
-
-  createNode: async (type, rfInstance, options) => {
-    const spec = buildNewNodeSpec(type);
-    const size = options?.size ?? spec.size;
-    if (
-      COUNTED_NODE_TYPES.has(spec.base.type ?? '') &&
-      !(await hasNodeQuota(get().nodes))
-    ) {
-      return;
-    }
-
-    const center = options?.anchorCenter ?? getViewportCenter(rfInstance);
-    const anchor = options?.anchor ?? {
-      x: center.x - size.width / 2,
-      y: center.y - size.height / 2,
-    };
-
-    const { nodes } = get();
-    const specType = spec.base.type ?? 'card';
-    const { placement, parentId, canPlace } = resolveNodePlacement({
-      anchor,
-      canEnterGroup: options?.canEnterGroup,
-      nodes,
-      newType: specType,
-      size,
-    });
-
-    if (!canPlace) {
-      toast.error(m.toast_no_placement_slot());
-      return;
-    }
-
-    let position = placement;
-    if (parentId) {
-      const parentRect = buildAbsoluteRects(nodes).get(parentId);
-      if (parentRect) {
-        position = {
-          x: placement.x - parentRect.left,
-          y: placement.y - parentRect.top,
-        };
-      }
-    }
-
-    get().saveSnapshot();
-    const id = get().nextNodeId();
-    const newNode: Node = {
-      ...spec.base,
-      id,
-      position,
-      ...(options?.size
-        ? {
-            style: {
-              ...(spec.base.style as Record<string, unknown>),
-              width: size.width,
-              height: size.height,
-            },
-          }
-        : {}),
-      data: {
-        ...(spec.base.data as Record<string, unknown>),
-        ...(options?.data ?? {}),
-      },
-      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
-    };
-    markNodesEntering([id]);
-    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
-
-    if (
-      options?.focusViewport !== false &&
-      typeof rfInstance?.setCenter === 'function'
-    ) {
-      suppressViewportPersist(300);
-      rfInstance.setCenter(
-        placement.x + size.width / 2,
-        placement.y + size.height / 2,
-        {
-          ...viewportMotion(VIEWPORT_PAN_MS),
-          zoom: rfInstance.getViewport().zoom,
-        }
-      );
-    }
-
-    return id;
-  },
-
-  createExtensionNode: async (
-    canvasTypeId,
-    instanceId,
-    rfInstance,
-    options
-  ) => {
-    const size = options?.size ?? { width: 240, height: 200 };
-    const viewport = rfInstance?.getViewport();
-    const zoom = viewport?.zoom ?? 1;
-    const viewportCenter = rfInstance?.screenToFlowPosition
-      ? rfInstance.screenToFlowPosition({
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2,
-        })
-      : {
-          x: (window.innerWidth / 2 - (viewport?.x ?? 0)) / zoom,
-          y: (window.innerHeight / 2 - (viewport?.y ?? 0)) / zoom,
-        };
-    const center = options?.anchorCenter ?? viewportCenter;
-    const anchor = options?.anchor ?? {
-      x: center.x - size.width / 2,
-      y: center.y - size.height / 2,
-    };
-    const { nodes } = get();
-    const { placement, parentId, canPlace } = resolveNodePlacement({
-      anchor,
-      nodes,
-      newType: EXTENSION_NODE_TYPE,
-      size,
-      canEnterGroup: true,
-    });
-    if (!canPlace) {
-      toast.error(m.toast_no_placement_slot());
-      return;
-    }
-    let position = placement;
-    if (parentId) {
-      const parentRect = buildAbsoluteRects(nodes).get(parentId);
-      if (parentRect) {
-        position = {
-          x: placement.x - parentRect.left,
-          y: placement.y - parentRect.top,
-        };
-      }
-    }
-    get().saveSnapshot();
-    const id = get().nextNodeId();
-    const newNode: Node = {
-      id,
-      type: EXTENSION_NODE_TYPE,
-      position,
-      style: { width: size.width, height: size.height },
-      data: {
-        canvasTypeId,
-        instanceId,
-        ...(options?.data ?? {}),
-      },
-      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
-    };
-    markNodesEntering([id]);
-    set((s) => ({ nodes: sortNodesByParent([...s.nodes, newNode]) }));
-    if (
-      options?.focusViewport !== false &&
-      typeof rfInstance?.setCenter === 'function'
-    ) {
-      suppressViewportPersist(300);
-      rfInstance.setCenter(
-        placement.x + size.width / 2,
-        placement.y + size.height / 2,
-        { ...viewportMotion(VIEWPORT_PAN_MS), zoom }
-      );
-    }
-    return id;
   },
 }));

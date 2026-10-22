@@ -69,7 +69,19 @@
 ```
 src/
   bun/                                     # Bun 主进程
-    index.ts                               # 窗口创建 + RPC handler 定义
+    index.ts                               # 薄启动层：诊断初始化、workspace/插件宿主/本地 HTTP 启动、组装 RPC handler、创建窗口
+    appState.ts                            # 进程级可变状态（mainWindow / mainRpc / diagnostics / localHttpServer / AI key 缓存）
+    settings.ts                            # AppSettings 规范化 + settings.json 读写（getCachedSettings）
+    aiConfig.ts                            # 按当前设置 + 凭据组装 AIServerConfig
+    appLifecycle.ts                        # 应用菜单、版本信息、更新检查、切换 workspace
+    mainView.ts                            # 渲染端入口 URL（dev server 探测）
+    canvasHydration.ts                     # loadCanvas/saveManifest 的节点水合 / 序列化 / checklist→widget 迁移辅助
+    exportHelpers.ts                       # 导出文件名清洗、附件拷贝、workspace zip 归档
+    rpc/
+      types.ts                             # CanvasRPC schema + RpcRequestHandlers<K> 辅助类型
+      context.ts                           # RpcContext：handler 工厂共享的 workspace 级服务
+      writeParamSchemas.ts                 # 写入类 RPC 的 zod 参数校验（withRpcWriteValidation）
+      handlers/<domain>.ts                 # 按业务域拆分的 handler 工厂：canvas / widgets / plugins / extensions / notes / attachments / export / settings / diagnostics / ai / trash / app / views / metadata / templates / license
     workspace.ts                           # workspace 初始化 + 读写 workspace.json + 画布视图 CRUD (addView/removeView/renameView)
     manifest.ts                            # canvas manifest 读写 + 原子写入
     notes.ts                               # legacy .md 文件 CRUD + frontmatter 解析/序列化

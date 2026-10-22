@@ -1,24 +1,26 @@
 import { ExtensionNodeReadOnly } from '@/extensions/ExtensionNode';
 import { colorToStyle } from '@/lib/colorUtils';
 import type { FolderChildEntry } from '@/lib/folderExpansion';
-import type { ExtensionNodeData } from '../../../shared/extensions/protocol';
 
 import type { AssetNodeRuntimeData } from './nodes/AssetNode';
 import { AssetContent } from './nodes/AssetNode';
-import type { CardContentData } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
-import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import type { LinkNodeRuntimeData } from './nodes/LinkNode';
 import { LinkContent } from './nodes/LinkNode';
+import {
+  isExtensionNodeData,
+  isWidgetNodeData,
+  toCardContentData,
+  toImageData,
+} from './nodes/nodeDataGuards';
 import type { RecordingRuntimeData } from './nodes/RecordingNode';
 import { RecordingContent } from './nodes/RecordingNode';
-import type { WidgetNodeData } from './nodes/WidgetNode';
 import { WidgetNodeReadOnly } from './nodes/WidgetNode';
 
 export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
   if (child.type === 'image') {
-    return <ImageContent data={child.data as unknown as ImageData} />;
+    return <ImageContent data={toImageData(child.data)} />;
   }
   if (child.type === 'link') {
     return (
@@ -34,17 +36,11 @@ export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
   if (child.type === 'recording') {
     return <RecordingContent data={child.data as RecordingRuntimeData} />;
   }
-  if (child.type === 'widget') {
-    return (
-      <WidgetNodeReadOnly data={child.data as unknown as WidgetNodeData} />
-    );
+  if (child.type === 'widget' && isWidgetNodeData(child.data)) {
+    return <WidgetNodeReadOnly data={child.data} />;
   }
-  if (child.type === 'extension') {
-    return (
-      <ExtensionNodeReadOnly
-        data={child.data as unknown as ExtensionNodeData}
-      />
-    );
+  if (child.type === 'extension' && isExtensionNodeData(child.data)) {
+    return <ExtensionNodeReadOnly data={child.data} />;
   }
   if (child.type === 'sticky') {
     const color =
@@ -59,5 +55,5 @@ export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
       </div>
     );
   }
-  return <CardContent data={child.data as CardContentData} readOnly />;
+  return <CardContent data={toCardContentData(child.data)} readOnly />;
 }

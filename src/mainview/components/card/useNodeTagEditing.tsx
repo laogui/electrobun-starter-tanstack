@@ -32,7 +32,7 @@ interface UseNodeTagEditingResult {
  */
 export function useNodeTagEditing(
   nodeId: string,
-  data: Record<string, unknown>
+  data: object
 ): UseNodeTagEditingResult {
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
@@ -41,7 +41,8 @@ export function useNodeTagEditing(
   const { data: tagSummaries } = useTags();
   const suggestions = (tagSummaries ?? []).map((t) => t.name);
 
-  const metaKey = (data.noteId as string | undefined) ?? nodeId;
+  const noteId = 'noteId' in data ? data.noteId : undefined;
+  const metaKey = typeof noteId === 'string' ? noteId : nodeId;
   const meta = useNodeMetadataEntry(metaKey);
   const setMetadata = useSetNodeMetadata();
 

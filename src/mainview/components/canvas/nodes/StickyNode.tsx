@@ -128,7 +128,7 @@ const StickyNode = ({
   dragging?: boolean;
 }) => {
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
-    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
+    useNodeTagEditing(id, data);
   const isDark = isColorDark(data.color);
   const locked = data.locked === true;
   const onUpdate = useCanvasStore((s) => s.commitNodeData);

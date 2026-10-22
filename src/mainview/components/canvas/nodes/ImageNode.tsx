@@ -211,7 +211,7 @@ const ImageNode = ({ id, data }: { id: string; data: ImageData }) => {
   const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
-    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
+    useNodeTagEditing(id, data);
   const isDark = isColorDark(data.color);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);

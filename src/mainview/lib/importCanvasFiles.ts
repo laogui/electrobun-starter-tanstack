@@ -1,3 +1,4 @@
+import type { Viewport } from '@xyflow/react';
 import {
   type CanvasExportDocument,
   isCanvasExportSchema,
@@ -6,6 +7,11 @@ import { IMAGE_H, IMAGE_W } from '@/lib/canvasNodeRegistry';
 import { classifyFile } from '@/lib/contentTypes';
 import { rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
+import { parseUntrustedWidgetRecord } from '@/lib/widgetTypes';
+import {
+  type ExtensionInstanceRecord,
+  parseExtensionInstanceRecord,
+} from '../../shared/extensions/instance';
 
 const FILE_EXT_RE = /\.[^.]+$/;
 
@@ -106,6 +112,48 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function parseRecordMap<T>(
+  value: unknown,
+  parse: (entry: unknown) => T | null
+): Record<string, T> | null {
+  if (value === undefined) {
+    return {};
+  }
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const result: Record<string, T> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const parsed = parse(entry);
+    if (parsed) {
+      result[key] = parsed;
+    }
+  }
+  return result;
+}
+
+function parseExportedInstance(entry: unknown): ExtensionInstanceRecord | null {
+  const parsed = parseExtensionInstanceRecord(entry);
+  return 'record' in parsed ? parsed.record : null;
+}
+
+function parseViewport(value: unknown): Viewport | undefined {
+  if (
+    isPlainObject(value) &&
+    typeof value.x === 'number' &&
+    typeof value.y === 'number' &&
+    typeof value.zoom === 'number'
+  ) {
+    return { x: value.x, y: value.y, zoom: value.zoom };
+  }
+  return;
+}
+
+/**
+ * Parse an exported canvas file. The file is untrusted: nodes / edges must be
+ * objects, and embedded widget / extension-instance records are validated
+ * individually (invalid ones are dropped, so their nodes import as skipped).
+ */
 export function parseCanvasExportJson(
   text: string
 ): CanvasExportDocument | null {
@@ -119,22 +167,41 @@ export function parseCanvasExportJson(
   if (!isPlainObject(parsed)) {
     return null;
   }
-  if (!isCanvasExportSchema(parsed.schema)) {
+  const { schema } = parsed;
+  if (!isCanvasExportSchema(schema)) {
     return null;
   }
   if (!(Array.isArray(parsed.nodes) && Array.isArray(parsed.edges))) {
     return null;
   }
-  if (parsed.widgets !== undefined && !isPlainObject(parsed.widgets)) {
+  const widgets = parseRecordMap(parsed.widgets, parseUntrustedWidgetRecord);
+  const extensionInstances = parseRecordMap(
+    parsed.extensionInstances,
+    parseExportedInstance
+  );
+  if (!(widgets && extensionInstances)) {
     return null;
   }
-  if (
-    parsed.extensionInstances !== undefined &&
-    !isPlainObject(parsed.extensionInstances)
-  ) {
-    return null;
-  }
-  return parsed as unknown as CanvasExportDocument;
+  const viewport = parseViewport(parsed.viewport);
+  const referencedCanvasTypes = Array.isArray(parsed.referencedCanvasTypes)
+    ? parsed.referencedCanvasTypes.filter(
+        (entry): entry is string => typeof entry === 'string'
+      )
+    : undefined;
+  return {
+    schema,
+    exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : '',
+    nodes: parsed.nodes.filter(isPlainObject),
+    edges: parsed.edges.filter(isPlainObject),
+    ...(parsed.widgets === undefined ? {} : { widgets }),
+    ...(parsed.extensionInstances === undefined ? {} : { extensionInstances }),
+    ...(referencedCanvasTypes ? { referencedCanvasTypes } : {}),
+    ...(typeof parsed.viewId === 'string' ? { viewId: parsed.viewId } : {}),
+    ...(typeof parsed.viewName === 'string'
+      ? { viewName: parsed.viewName }
+      : {}),
+    ...(viewport ? { viewport } : {}),
+  };
 }
 
 function readFileAsText(file: File): Promise<string> {

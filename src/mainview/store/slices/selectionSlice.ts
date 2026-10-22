@@ -1,3 +1,4 @@
+// Canvas store slice: Selection, keyboard navigation and grouping.
 import type { Node } from '@xyflow/react';
 import type { StateCreator } from 'zustand';
 import { isGroupChildNode } from '@/lib/canvasNodePredicates';

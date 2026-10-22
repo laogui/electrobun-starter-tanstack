@@ -1,3 +1,4 @@
+// Canvas store slice: Topic drafts, Topic tree commands and the Topic command context.
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
@@ -87,7 +88,6 @@ export interface TopicsSlice {
   /** Re-run layout for the branch rooted at `topicId`. */
   tidyTopicBranch: (topicId: string) => void;
 
-  // Actions – topic
   /**
    * Explicit Topic command context. Tab/Enter create child/sibling only while
    * this is set; Esc clears it without requiring the node to be deselected.

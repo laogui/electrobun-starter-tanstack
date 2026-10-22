@@ -26,7 +26,7 @@ import {
   TOPIC_NODE_TYPE,
 } from '../../../shared/topic';
 import type { TopicDraft } from '../canvasStore';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Topic tree graph transforms: relayout, delete repair, draft attachment, previews.
 
 /** Rendered size of each Topic, preferring the persisted style and falling
  *  back to a fresh measurement for nodes that have never been sized. */

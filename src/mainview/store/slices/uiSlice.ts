@@ -1,3 +1,4 @@
+// Canvas store slice: Transient UI state: dialogs, sidebars, focus targets, tag filters, search.
 import type { StateCreator } from 'zustand';
 import type {
   CanvasState,
@@ -25,13 +26,11 @@ export interface UiSlice {
   editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
 
-  // UI state
   focusedNode: FocusedItem | null;
 
   // Library popup (browse notes on the current canvas)
   libraryOpen: boolean;
 
-  // Search
   pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
   /** Asset/image card id whose displayName is in inline-rename mode. */
@@ -46,7 +45,6 @@ export interface UiSlice {
   setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
-  // Actions – UI
   setFocusedNode: (v: FocusedItem | null) => void;
   setLibraryOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setPendingSearchQuery: (query: string | null) => void;

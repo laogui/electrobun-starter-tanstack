@@ -1,3 +1,4 @@
+// Canvas store slice: Creating built-in and extension nodes on the canvas.
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
@@ -20,7 +21,6 @@ import { getViewportCenter } from '../canvas/viewportCenter';
 import type { CanvasState, CreateNodeOptions } from '../canvasStore';
 
 export interface NodeCreationSlice {
-  // Actions – node CRUD
   createExtensionNode: (
     canvasTypeId: string,
     instanceId: string,
@@ -33,7 +33,6 @@ export interface NodeCreationSlice {
     options?: CreateNodeOptions
   ) => Promise<string | undefined>;
 
-  // Helpers
   nextNodeId: () => string;
 }
 

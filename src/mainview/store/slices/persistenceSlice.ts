@@ -1,3 +1,4 @@
+// Canvas store slice: Hydration, reset and multi-view switching / persistence.
 import type { Edge, Node } from '@xyflow/react';
 import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
@@ -27,7 +28,6 @@ import { uniqueDetachedNodeId, uniqueEdgeId } from '../canvas/folderChildren';
 import type { CanvasState } from '../canvasStore';
 
 export interface PersistenceSlice {
-  // Hydration
   _hydrated: boolean;
 
   // Multi-view
@@ -36,7 +36,6 @@ export interface PersistenceSlice {
   moveSelectedToView: (targetViewId: string) => Promise<boolean>;
   reset: () => void;
 
-  // Actions – multi-view
   /**
    * Low-level view swap: clears canvas state without persisting anything.
    * User-initiated switches should go through `switchView` instead.

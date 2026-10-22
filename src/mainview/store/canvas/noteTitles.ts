@@ -1,7 +1,7 @@
 import type { Node } from '@xyflow/react';
 import { applyNoteTitlesToCanvasNodes } from '@/lib/noteTitleProjection';
 import type { FocusedItem } from '../canvasStore';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Project note titles from disk onto canvas nodes and the focused item.
 
 export function noteTitleMap(
   titles: Record<string, string>

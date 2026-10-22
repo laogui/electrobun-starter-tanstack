@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import { nanoid } from 'nanoid';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Pure clipboard helpers: strip transient flags and remap ids for paste.
 
 export function cleanNodeForClipboard(node: Node): Node {
   const { isHidden, isDropTarget, ...cleanData } = node.data as any;

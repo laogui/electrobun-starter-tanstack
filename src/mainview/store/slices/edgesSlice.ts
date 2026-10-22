@@ -1,3 +1,4 @@
+// Canvas store slice: Edge state and edge mutations (connect, label, delete).
 import type { Connection, Edge, EdgeChange } from '@xyflow/react';
 import { addEdge, applyEdgeChanges } from '@xyflow/react';
 import { nanoid } from 'nanoid';
@@ -17,7 +18,6 @@ export interface EdgesSlice {
   deleteEdge: (edgeId: string) => void;
   edges: Edge[];
 
-  // Actions – edge
   editingEdgeId: string | null;
   setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setEditingEdgeId: (id: string | null) => void;

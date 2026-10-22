@@ -1,3 +1,4 @@
+// Canvas store slice: Node state and node-level mutations (data, lock, z-order, colour, delete).
 import type { Node, NodeChange } from '@xyflow/react';
 import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
@@ -35,12 +36,10 @@ export interface NodesSlice {
   commitNodeData: (nodeId: string, updates: Record<string, unknown>) => void;
   /** Deletes the unlocked nodes in `ids`; returns how many were deleted. */
   deleteNodes: (ids: string[]) => number;
-  // Core data
   nodes: Node[];
   sendNodesBackward: (ids: string[]) => void;
   sendNodesToBack: (ids: string[]) => void;
 
-  // Actions – core
   setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
   toggleNodeLocked: (nodeId: string) => void;
   /** Lock every node in `ids` unless all are already locked, then unlock. */

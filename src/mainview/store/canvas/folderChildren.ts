@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { buildNewNodeSpec, findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import type { Size } from '@/lib/collision';
 import { EXTENSION_NODE_TYPE } from '../../../shared/extensions/ids';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Folder-child entries and their conversion back into top-level canvas nodes.
 
 export interface FolderChildEntry {
   data: Record<string, unknown>;

@@ -1,3 +1,4 @@
+// Canvas store slice: Live and session-cached camera state.
 import type { StateCreator } from 'zustand';
 import { shouldPersistViewport } from '@/lib/viewportPersist';
 import type { CanvasState, CanvasViewport } from '../canvasStore';

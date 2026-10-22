@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import type { WidgetKind } from '@/lib/widgetTypes';
 import * as m from '../../../paraglide/messages.js';
 import { EXTENSION_NODE_TYPE } from '../../../shared/extensions/ids';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Clone widget / extension backing records when nodes are pasted or duplicated.
 
 /**
  * Detect whether any node in the graph references a widget - either as a

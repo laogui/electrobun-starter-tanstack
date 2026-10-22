@@ -1,3 +1,4 @@
+// Canvas store slice: Canvas snapshot history (undo/redo), registered with the unified undo timeline.
 import type { StateCreator } from 'zustand';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {

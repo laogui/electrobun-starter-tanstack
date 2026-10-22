@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 import { isTopicNodeType } from '../../../shared/topic';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Derive the explicit Topic command context from selection transitions.
 
 /**
  * Topic command context follows an *explicit* selection change onto a single

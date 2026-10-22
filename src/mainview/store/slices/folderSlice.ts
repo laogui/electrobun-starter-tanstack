@@ -1,3 +1,4 @@
+// Canvas store slice: Folder children and detached-note mutations.
 import type { Node } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';

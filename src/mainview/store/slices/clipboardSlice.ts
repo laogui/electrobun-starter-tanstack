@@ -1,3 +1,4 @@
+// Canvas store slice: Copy / cut / paste / duplicate of canvas selections.
 import type { Edge, Node } from '@xyflow/react';
 import type { StateCreator } from 'zustand';
 import { sortNodesByParent } from '@/lib/canvasUtils';
@@ -22,7 +23,6 @@ export interface ClipboardSlice {
   clipboard: Node[];
   clipboardEdges: Edge[];
 
-  // Actions – clipboard
   copySelected: () => void;
   cutSelected: () => void;
   duplicateSelected: (offset?: number) => Promise<void>;

@@ -1,5 +1,5 @@
 import type { ReactFlowInstance } from '@xyflow/react';
-// Split out of canvasStore.ts; see store/canvasStore.ts for composition.
+// Flow-space centre of the visible canvas (default anchor for menu-created nodes).
 
 /** Flow coordinates at the centre of the visible canvas, used as the default
  *  anchor for a node created from a menu rather than a cursor position. */

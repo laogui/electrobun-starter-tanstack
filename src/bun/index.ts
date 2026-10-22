@@ -28,6 +28,7 @@ import { PluginFileStore } from './plugins/files';
 import { PluginHostController } from './plugins/hostController';
 import { PluginManagementService } from './plugins/management';
 import { NoteContentService } from './plugins/noteContent';
+import { createPluginPermissionGate } from './plugins/permissionPrompt';
 import { PluginStartupGuard } from './plugins/safeMode';
 import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
@@ -171,6 +172,16 @@ async function main() {
         argv: process.argv,
         env: process.env,
       });
+  const pluginPermissions = createPluginPermissionGate({
+    appDataRoot: getAppDataRoot(),
+    listPlugins: () => pluginManagement.list(),
+    scriptedProbes:
+      pluginProbeActive ||
+      Boolean(
+        process.env.GHOSTBOARD_PLUGIN_T4_DIR ||
+          process.env.GHOSTBOARD_PLUGIN_T5_DIR
+      ),
+  });
   pluginManagement.recover().catch((error) => {
     console.warn('[plugins] Failed to recover package transactions:', error);
   });
@@ -199,7 +210,9 @@ async function main() {
   appState.localHttpServer = startLocalHttpServer({
     getAIConfig: () => buildAIConfig(),
     getWorkspacePath: () => wsPath,
-    pluginContent: new NoteContentService(wsPath, pluginWorkspaceId(wsPath)),
+    pluginContent: new NoteContentService(wsPath, pluginWorkspaceId(wsPath), {
+      permissions: pluginPermissions,
+    }),
     pluginFiles,
     pluginStorage: new PluginStorageHost({
       appDataRoot: getAppDataRoot(),
@@ -301,6 +314,7 @@ async function main() {
     wsPath,
     pluginManagement,
     pluginFiles,
+    pluginPermissions,
     pluginStartupGuard,
     extensionScheduler,
     isDevChannel,

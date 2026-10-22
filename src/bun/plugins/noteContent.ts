@@ -22,6 +22,7 @@ import {
   withNoteWorkspace,
 } from '../noteTransactions';
 import { assertCreationUnreferenced } from './noteCreation';
+import type { PluginPermissionGate } from './permissions';
 
 const OPERATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_HISTORY_BYTES = 8 * 1024 * 1024;
@@ -379,12 +380,29 @@ function snapshot(note: NoteRecord): NoteContentSnapshot {
   };
 }
 
+/**
+ * Plugin-initiated creation undo that would delete more than this many notes
+ * needs main-process consent (`content.delete`).
+ */
+export const BULK_DELETE_CONFIRM_THRESHOLD = 1;
+
+export interface NoteContentServiceOptions {
+  /** Main-process consent gate for plugin-token callers. */
+  permissions?: Pick<PluginPermissionGate, 'check'>;
+}
+
 export class NoteContentService {
   readonly workspace: string;
   readonly workspaceId: string;
-  constructor(workspace: string, workspaceId: string) {
+  private readonly permissions: NoteContentServiceOptions['permissions'];
+  constructor(
+    workspace: string,
+    workspaceId: string,
+    options: NoteContentServiceOptions = {}
+  ) {
     this.workspace = workspace;
     this.workspaceId = workspaceId;
+    this.permissions = options.permissions;
   }
 
   /**
@@ -460,7 +478,9 @@ export class NoteContentService {
         ) {
           return invalid('Unsupported content action');
         }
-        return this.mutate(pluginId, input, request.signal);
+        return this.mutate(pluginId, input, request.signal, {
+          pluginInitiated: scope.pluginId !== undefined,
+        });
       });
       return Response.json(result, { headers });
     } catch (error) {
@@ -485,7 +505,9 @@ export class NoteContentService {
             ? 409
             : code === 'invalid-input'
               ? 400
-              : 500,
+              : code === 'permission-denied'
+                ? 403
+                : 500,
           headers,
         }
       );
@@ -561,7 +583,8 @@ export class NoteContentService {
   private async mutate(
     pluginId: string,
     input: Record<string, unknown>,
-    signal: AbortSignal
+    signal: AbortSignal,
+    origin: { pluginInitiated: boolean }
   ): Promise<ContentBatchResult> {
     const id = operationId(input.operationId);
     const action = input.action as 'create' | 'update' | 'undo' | 'redo';
@@ -631,6 +654,7 @@ export class NoteContentService {
         pluginId,
         fingerprint,
         signal,
+        pluginInitiated: origin.pluginInitiated,
       });
     }
     const planned: (NoteContentUpdate & { body?: Body })[] =
@@ -808,6 +832,7 @@ export class NoteContentService {
     pluginId,
     fingerprint,
     signal,
+    pluginInitiated,
   }: {
     batch: Batch;
     notes?: NoteContentCreate[];
@@ -818,6 +843,7 @@ export class NoteContentService {
     pluginId: string;
     fingerprint: string;
     signal: AbortSignal;
+    pluginInitiated: boolean;
   }): Promise<ContentBatchResult> {
     const index = await buildNoteIndex(this.workspace);
     if (notes) {
@@ -853,6 +879,25 @@ export class NoteContentService {
         created.map((note) => note.id),
         input.protectedIds ?? []
       );
+    }
+    if (
+      action === 'undo' &&
+      pluginInitiated &&
+      created.length > BULK_DELETE_CONFIRM_THRESHOLD
+    ) {
+      // Asked in the Bun process: a renderer-side confirm is bypassable by
+      // same-realm plugin code. Host (renderer-token) undo is user-driven.
+      const allowed = await this.permissions?.check(
+        pluginId,
+        'content.delete',
+        `Undoing “${batch.label}” would delete ${created.length} notes this plugin created.`
+      );
+      if (!allowed) {
+        throw new NoteTransactionError(
+          'permission-denied',
+          'Deleting these notes was not allowed'
+        );
+      }
     }
     const files: NoteFileChange[] = [];
     const items: ContentBatchResult['items'] = [];

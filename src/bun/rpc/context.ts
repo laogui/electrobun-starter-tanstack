@@ -1,6 +1,7 @@
 import type { ExtensionSchedulerService } from '../extensions/schedulerService';
 import type { PluginFileStore } from '../plugins/files';
 import type { PluginManagementService } from '../plugins/management';
+import type { PluginPermissionGate } from '../plugins/permissions';
 import type { PluginStartupGuard } from '../plugins/safeMode';
 
 /**
@@ -12,6 +13,7 @@ export interface RpcContext {
   isDevChannel: boolean;
   pluginFiles: PluginFileStore;
   pluginManagement: PluginManagementService;
+  pluginPermissions: PluginPermissionGate;
   pluginStartupGuard: PluginStartupGuard | undefined;
   wsPath: string;
 }

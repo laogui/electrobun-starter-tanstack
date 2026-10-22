@@ -1617,6 +1617,31 @@ Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'top
 
 `scripts/trusted-plugin-t5/verify-compat-docs.ts` 校验下面两张表与 `package.json`、SDK、脚手架和四个模板的 `manifest.json` 一致。改版本时先改代码和这两张表，再改 `packages/plugin-sdk/AI_REFERENCE.md` 与 README 的 Compatibility 节。
 
+### 13.0 主进程插件授权（`src/bun/plugins/permissions.ts`）
+
+插件与渲染端同 realm，渲染端画的确认框可以被插件代码跳过，所以敏感操作的确认放在 Bun 主进程，用 Electrobun 原生对话框 `Utils.showMessageBox`（`src/bun/plugins/permissionPrompt.ts`）询问。按钮为「Allow Once / Always Allow / Deny」，默认与 Esc 都是 Deny。
+
+| 权限 | 触发点 | 归属依据 |
+| --- | --- | --- |
+| `files.read` | RPC `pluginFilesPick`（`kind: 'file'`），在原生文件选择器打开**之前** | 请求声明的 `pluginId`（渲染端 RPC，无调用者身份） |
+| `files.directory` | RPC `pluginFilesPick`（`kind: 'directory'`），同上；目录句柄用于列目录与写入 | 同上 |
+| `content.delete` | `/plugins/content` 撤销「创建」批次且将删除 > 1 条（`BULK_DELETE_CONFIRM_THRESHOLD`）笔记时 | **插件作用域 token**（`scope.pluginId`）；主渲染端 token 发起的宿主撤销不弹窗 |
+
+规则：
+
+- 授权按「插件 × 权限」存于应用数据根的 `plugin-permissions.json`（`atomicWrite`，0600，zod 校验；损坏时按无授权处理并保留副本）。只有 Always Allow 会持久化；Allow Once 只放行本次。
+- Deny 在本次启动内记住（防止插件刷弹窗），不落盘，下次启动会再问。同一插件同一权限的并发请求共享一个对话框，对话框串行显示。
+- 未安装或未启用的插件 ID 直接拒绝、不弹窗，避免调用方把任意名称放到用户面前。无原生对话框、对话框异常一律拒绝。
+- 只有原生对话框能写入授权。RPC 只提供 `pluginPermissionsList` 与 `pluginPermissionsRevoke`（只减不增），没有授予接口。设置页的授权管理 UI 尚未实现（渲染端未接这两个 RPC）。
+- 文件句柄只能由通过授权的 `pluginFilesPick` 签发，`/plugins/files/read|write` 与 `pluginFilesReadText` / `pluginFilesListDirectory` 依赖句柄归属，不再逐次弹窗。
+- 自动化探针（`GHOSTBOARD_PLUGIN_T*_DIR` 启动）使用自动 Allow Once 的门，因为探针插件不是已安装包且无人应答；能设置这些环境变量的人已控制进程。
+
+仍然存在的缺口（如实记录）：
+
+- AI 对话、附件读写/上传、`/unfurl`、打开外部 URL、导出、批量删除用户笔记：插件作用域 token **根本不能调用**（`isRouteAllowed` 403，Electrobun RPC 也不接受该 token），因此不需要授权——这比授权更严格。但同 realm 的恶意插件可以经 Electrobun RPC 桥调用 `getLocalHttpEndpoint` 取得主渲染端 token，或直接调用 `openExternalUrl`、`exportNotesMarkdown`、`deleteNote`、`aiRunTask` 等 RPC。Electrobun 的 webview RPC 不携带调用者身份，主进程无法区分这些调用来自宿主 UI 还是插件，所以无法在主进程对其做按插件的授权；给这些宿主自身操作统一加原生确认会打扰用户本人的正常操作，未采用。
+- `pluginFilesPick` 等 RPC 的 `pluginId` 是请求自报的：恶意插件可以冒用另一个已获 Always Allow 的插件 ID。原生选择器仍会弹出，用户仍需亲手选择文件。
+- 因此本授权层防的是「正常使用 SDK 的插件在未经用户同意时触达本机文件 / 批量删除」，不是对恶意同 realm 代码的隔离；后者仍由「是否安装该插件」决定。真正的隔离需要把插件移出渲染端 realm（独立 iframe/worker + 仅作用域 token 的消息通道），不在本次范围。
+
 ### 13.1 当前版本标识
 
 | 标识 | 当前值 | 来源 | 作用 |

@@ -1,6 +1,7 @@
 import { Utils } from 'electrobun/bun';
 import { pluginPickerFileTypes } from '../../plugins/files';
 import { pluginInstallErrorMessage } from '../../plugins/management';
+import { isPluginPermission } from '../../plugins/permissions';
 import { scriptedProbeSelection } from '../../plugins/probeSelection';
 import type { RpcContext } from '../context';
 import type { RpcRequestHandlers } from '../types';
@@ -24,8 +25,15 @@ export function createPluginsHandlers(
   | 'pluginFilesReadText'
   | 'pluginFilesListDirectory'
   | 'pluginFilesRelease'
+  | 'pluginPermissionsList'
+  | 'pluginPermissionsRevoke'
 > {
-  const { pluginManagement, pluginFiles, pluginStartupGuard } = ctx;
+  const {
+    pluginManagement,
+    pluginFiles,
+    pluginPermissions,
+    pluginStartupGuard,
+  } = ctx;
   return {
     pluginInstallList: async () => ({
       plugins: await pluginManagement.list(),
@@ -204,8 +212,26 @@ export function createPluginsHandlers(
             'Directory selection does not support multiple items.'
           );
         }
+        const scripted = scriptedProbeSelection(process.env, kind);
+        // Main-process consent before any native picker opens for a plugin.
+        // Handles minted below are the only way to reach the plugin file
+        // read/write routes, so this gates them too.
+        if (
+          !(
+            scripted ||
+            (await pluginPermissions.check(
+              request.pluginId,
+              kind === 'directory' ? 'files.directory' : 'files.read'
+            ))
+          )
+        ) {
+          return {
+            success: false,
+            error: 'Permission denied: file access was not allowed.',
+          };
+        }
         const selected =
-          scriptedProbeSelection(process.env, kind) ??
+          scripted ??
           (await Utils.openFileDialog({
             allowedFileTypes:
               kind === 'file' ? pluginPickerFileTypes(request.extensions) : '*',
@@ -263,6 +289,20 @@ export function createPluginsHandlers(
       } catch {
         return { success: false };
       }
+    },
+
+    // Grants are created only by the native prompt; renderer code can list
+    // and revoke them but there is deliberately no grant RPC.
+    pluginPermissionsList: async () => ({
+      grants: await pluginPermissions.list(),
+    }),
+
+    pluginPermissionsRevoke: async ({ permission, pluginId }) => {
+      if (permission !== undefined && !isPluginPermission(permission)) {
+        return { success: false };
+      }
+      await pluginPermissions.revoke(pluginId, permission);
+      return { success: true };
     },
   };
 }

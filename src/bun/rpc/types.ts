@@ -43,6 +43,7 @@ import type {
   TagMutationResult,
   TagSummary,
 } from '../nodeMetadata';
+import type { PluginPermissionGrant } from '../plugins/permissions';
 import type { PreviewArtifacts } from '../preview';
 import type { SearchResult } from '../search';
 import type { AppSettings } from '../settings';
@@ -174,6 +175,14 @@ export interface CanvasRPC {
           workspaceId: string;
         };
         response: PluginDirectoryListResult;
+      };
+      pluginPermissionsList: {
+        params: Record<string, unknown>;
+        response: { grants: PluginPermissionGrant[] };
+      };
+      pluginPermissionsRevoke: {
+        params: { permission?: string; pluginId: string };
+        response: { success: boolean };
       };
       pluginFilesRelease: {
         params: {

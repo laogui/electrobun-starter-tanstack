@@ -152,6 +152,9 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
   createViewFromTemplate: z
     .object({ name: z.string().max(512), templateId: id })
     .loose(),
+  pluginPermissionsRevoke: z
+    .object({ permission: z.string().optional(), pluginId: id })
+    .loose(),
   saveTemplateThumbnail: z
     .object({ pngBase64: z.string().min(1), templateId: id })
     .loose(),

@@ -368,7 +368,7 @@ const RecordingNode = ({
   const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
-    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
+    useNodeTagEditing(id, data);
   const recording = resolveRecordingData(data);
   const isDark = isColorDark(recording.color);
   const title = getRecordingDisplayTitle(recording, m.menu_new_recording());

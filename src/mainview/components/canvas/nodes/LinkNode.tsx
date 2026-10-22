@@ -408,7 +408,7 @@ const LinkNode = ({ id, data }: { id: string; data: LinkNodeRuntimeData }) => {
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
-    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
+    useNodeTagEditing(id, data);
   const isDark = isColorDark(data.color);
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const isVisibleRef = useRef(false);

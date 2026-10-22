@@ -35,19 +35,18 @@ export function isAudioRecordingSupported(): boolean {
   return (
     typeof navigator !== 'undefined' &&
     !!navigator.mediaDevices?.getUserMedia &&
-    !!(
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext
-    )
+    getAudioContextConstructor() !== null
   );
 }
 
+/** Legacy WebKit builds expose only the prefixed constructor. */
+interface LegacyAudioWindow {
+  AudioContext?: new () => AudioContext;
+  webkitAudioContext?: new () => AudioContext;
+}
+
 function getAudioContextConstructor(): (new () => AudioContext) | null {
-  const w = window as unknown as {
-    AudioContext?: new () => AudioContext;
-    webkitAudioContext?: new () => AudioContext;
-  };
+  const w: LegacyAudioWindow = window;
   return w.AudioContext ?? w.webkitAudioContext ?? null;
 }
 

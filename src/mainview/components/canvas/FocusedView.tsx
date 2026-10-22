@@ -48,9 +48,9 @@ import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
 import type { CardContentData, ChecklistItem } from './nodes/CardNode';
 import { CardContent } from './nodes/CardNode';
-import type { ImageData } from './nodes/ImageNode';
 import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
+import { toCardContentData, toImageData } from './nodes/nodeDataGuards';
 
 // Word/character counts derived from markdown body. Stripping fenced code,
 const BlockNoteEditor = lazy(
@@ -781,10 +781,7 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
               </ExtensionHostShell>
             ) : node.type === 'image' ? (
               <ImageZoomPan>
-                <ImageContent
-                  data={node.data as unknown as ImageData}
-                  isFocused={true}
-                />
+                <ImageContent data={toImageData(node.data)} isFocused={true} />
               </ImageZoomPan>
             ) : node.type === 'asset' ? (
               <AssetContent data={node.data} isFocused={true} />
@@ -831,14 +828,14 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
               </Suspense>
             ) : isChecklist ? (
               <ChecklistFocusedView
-                data={node.data as unknown as CardContentData}
+                data={toCardContentData(node.data)}
                 onCommit={(updates) => {
                   commitFocusedData(updates);
                 }}
               />
             ) : (
               <CardContent
-                data={node.data as unknown as CardContentData}
+                data={toCardContentData(node.data)}
                 isFocused={true}
                 onChange={(newData) => {
                   commitFocusedData(newData);

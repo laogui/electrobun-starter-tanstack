@@ -76,7 +76,7 @@ const TRANSPARENT_IMAGE_PLACEHOLDER =
 interface ExportCanvasOptions {
   backgroundColor: string;
   fileName: string;
-  instance: ReactFlowInstance<any, any>;
+  instance: CanvasExportFlowInstance;
   pixelRatio?: number;
 }
 
@@ -112,7 +112,13 @@ type BrowserSaveHandle = Awaited<
 
 type CanvasNodeData = Record<string, unknown>;
 
-export function getVisibleExportNodes(instance: ReactFlowInstance<any, any>) {
+/** The slice of the React Flow instance that canvas export relies on. */
+export type CanvasExportFlowInstance = Pick<
+  ReactFlowInstance<any, any>,
+  'fitView' | 'getNodes' | 'getNodesBounds' | 'getViewport' | 'setViewport'
+>;
+
+export function getVisibleExportNodes(instance: CanvasExportFlowInstance) {
   return instance.getNodes().filter((node: Node) => {
     const data = node.data as CanvasNodeData | undefined;
     return !(data?.detached || data?.isHidden);
@@ -130,7 +136,7 @@ export function sanitizeExportFileName(name: string) {
 }
 
 export function prepareCanvasExport(
-  instance: ReactFlowInstance<any, any>,
+  instance: CanvasExportFlowInstance,
   nodes: Node[]
 ): PreparedExport | null {
   if (nodes.length === 0) {
@@ -393,7 +399,7 @@ export async function exportReactFlowCanvasToPng({
 interface CaptureThumbnailOptions {
   backgroundColor: string;
   height: number;
-  instance: ReactFlowInstance<any, any>;
+  instance: CanvasExportFlowInstance;
   width: number;
 }
 
@@ -457,37 +463,48 @@ function isWidgetRecord(
   return !!record && !('error' in record);
 }
 
-export function collectWidgetIdsFromNodes(nodes: Node[]): string[] {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function widgetIdOf(data: unknown): string | null {
+  if (!isPlainRecord(data)) {
+    return null;
+  }
+  const widgetId = data.widgetId;
+  return typeof widgetId === 'string' && widgetId ? widgetId : null;
+}
+
+/**
+ * Widget ids referenced by top-level widget nodes and widget folder children.
+ * Accepts untyped manifest nodes (straight from disk) as well as live nodes.
+ */
+export function collectWidgetIdsFromNodes(nodes: readonly unknown[]): string[] {
   const ids = new Set<string>();
   for (const node of nodes) {
-    const data = (node.data ?? {}) as CanvasNodeData;
+    if (!isPlainRecord(node)) {
+      continue;
+    }
     if (node.type === 'widget') {
-      const widgetId = data.widgetId;
-      if (typeof widgetId === 'string' && widgetId) {
+      const widgetId = widgetIdOf(node.data);
+      if (widgetId) {
         ids.add(widgetId);
       }
       continue;
     }
-    if (node.type !== 'folder') {
+    if (node.type !== 'folder' || !isPlainRecord(node.data)) {
       continue;
     }
-    const children = data.children;
+    const children = node.data.children;
     if (!Array.isArray(children)) {
       continue;
     }
-    for (const rawChild of children) {
-      if (!rawChild || typeof rawChild !== 'object') {
+    for (const child of children) {
+      if (!isPlainRecord(child) || child.type !== 'widget') {
         continue;
       }
-      const child = rawChild as {
-        data?: Record<string, unknown>;
-        type?: unknown;
-      };
-      if (child.type !== 'widget') {
-        continue;
-      }
-      const widgetId = child.data?.widgetId;
-      if (typeof widgetId === 'string' && widgetId) {
+      const widgetId = widgetIdOf(child.data);
+      if (widgetId) {
         ids.add(widgetId);
       }
     }

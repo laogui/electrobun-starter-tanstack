@@ -6,6 +6,17 @@ import type { ExtensionAvailability } from '../../shared/extensions/protocol';
 
 import type { AnyBuiltinCanvasType, BuiltinCanvasType } from './types';
 
+/**
+ * The registry stores heterogeneous canvas types, so their state parameter is
+ * erased at this single boundary. Each surface only ever receives state that
+ * the same type's `validateState` / `migrateState` produced.
+ */
+function eraseCanvasType<TState>(
+  type: BuiltinCanvasType<TState>
+): AnyBuiltinCanvasType {
+  return type as AnyBuiltinCanvasType;
+}
+
 function assertComplete(type: AnyBuiltinCanvasType): void {
   if (!isCanvasTypeId(type.id)) {
     throw new Error(`Invalid canvas type id: ${type.id}`);
@@ -54,11 +65,11 @@ export class CanvasTypeRegistry {
   };
 
   register<TState>(type: BuiltinCanvasType<TState>): void {
-    assertComplete(type as AnyBuiltinCanvasType);
+    assertComplete(eraseCanvasType(type));
     if (this.types.has(type.id)) {
       throw new Error(`Duplicate canvas type id: ${type.id}`);
     }
-    this.types.set(type.id, { type: type as AnyBuiltinCanvasType });
+    this.types.set(type.id, { type: eraseCanvasType(type) });
     this.publish();
   }
 
@@ -70,7 +81,7 @@ export class CanvasTypeRegistry {
     if (!(owner && Number.isSafeInteger(generation) && generation > 0)) {
       throw new Error('Canvas type owner and generation are required');
     }
-    const normalizedTypes = types as unknown as AnyBuiltinCanvasType[];
+    const normalizedTypes = types.map(eraseCanvasType);
     const nextIds = new Set<string>();
     for (const type of normalizedTypes) {
       assertComplete(type);

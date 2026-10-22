@@ -6,6 +6,7 @@ import {
   rpcCreateExtensionInstance,
   rpcUpdateExtensionInstance,
 } from '@/lib/rpc';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import * as m from '../../paraglide/messages.js';
 import {
   type ExtensionInstanceLoadError,
@@ -78,9 +79,11 @@ export interface ExtensionInstanceStoreState {
   ) => void;
   migrateInstance: (instanceId: string) => Promise<boolean>;
   records: Record<string, ExtensionInstanceRecord | ExtensionInstanceLoadError>;
-  redoInstance: (instanceId: string) => void;
+  /** Returns false when the instance has nothing to redo. */
+  redoInstance: (instanceId: string) => boolean;
   saveNow: (instanceId: string) => Promise<void>;
-  undoInstance: (instanceId: string) => void;
+  /** Returns false when the instance has nothing to undo. */
+  undoInstance: (instanceId: string) => boolean;
   updateState: (
     instanceId: string,
     request: ExtensionStateUpdate
@@ -96,6 +99,9 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
       set((s) => {
         const nextHistory = { ...s.history };
         for (const id of Object.keys(records)) {
+          if (nextHistory[id]) {
+            unifiedUndoHistory.forgetExtensionInstance(id);
+          }
           delete nextHistory[id];
         }
         let nextRecords = { ...s.records, ...records };
@@ -265,6 +271,7 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         };
       });
       if (shouldRecord) {
+        unifiedUndoHistory.recordExtensionInstance(instanceId);
         scheduleSave(instanceId, () => get().saveNow(instanceId));
       }
       return {
@@ -281,7 +288,7 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         !(entry && entry.past.length > 0 && current) ||
         isExtensionInstanceLoadError(current)
       ) {
-        return;
+        return false;
       }
       const previous = entry.past.at(-1) as InstanceContent;
       set((s) => ({
@@ -303,7 +310,9 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
           },
         },
       }));
+      unifiedUndoHistory.observeExtensionInstanceTransition(instanceId, 'undo');
       scheduleSave(instanceId, () => get().saveNow(instanceId));
+      return true;
     },
 
     redoInstance: (instanceId) => {
@@ -313,7 +322,7 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
         !(entry && entry.future.length > 0 && current) ||
         isExtensionInstanceLoadError(current)
       ) {
-        return;
+        return false;
       }
       const next = entry.future.at(-1) as InstanceContent;
       set((s) => ({
@@ -335,7 +344,9 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
           },
         },
       }));
+      unifiedUndoHistory.observeExtensionInstanceTransition(instanceId, 'redo');
       scheduleSave(instanceId, () => get().saveNow(instanceId));
+      return true;
     },
 
     saveNow: async (instanceId) => {

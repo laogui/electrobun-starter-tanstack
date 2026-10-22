@@ -1121,7 +1121,7 @@ const AssetNode = ({
   const isRenaming = useCanvasStore((s) => s.renamingNodeId === id);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
   const { tag, tagColor, tagColors, tags, dimmedByFilter, tagEditor } =
-    useNodeTagEditing(id, data as unknown as Record<string, unknown>);
+    useNodeTagEditing(id, data);
   const asset = resolveAssetData(data);
   const isDark = isColorDark(asset.color);
 

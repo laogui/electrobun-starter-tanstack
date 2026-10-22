@@ -24,14 +24,9 @@ interface NodeBoxMetrics {
 }
 
 function getNodeBoxMetrics(node: Node): NodeBoxMetrics {
-  const anyNode = node as unknown as {
-    measured?: { width?: number; height?: number };
-    width?: number;
-    height?: number;
-  };
   return {
-    width: anyNode.measured?.width ?? anyNode.width ?? DEFAULT_NODE_WIDTH,
-    height: anyNode.measured?.height ?? anyNode.height ?? DEFAULT_NODE_HEIGHT,
+    width: node.measured?.width ?? node.width ?? DEFAULT_NODE_WIDTH,
+    height: node.measured?.height ?? node.height ?? DEFAULT_NODE_HEIGHT,
   };
 }
 

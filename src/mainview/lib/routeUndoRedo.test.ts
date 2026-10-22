@@ -21,7 +21,7 @@ const focus = (type: string, data: Record<string, unknown>) =>
   });
 
 describe('routeUndoRedo (undo stack routing)', () => {
-  type IdHandler = (id: string) => void;
+  type IdHandler = (id: string) => boolean;
   let undoInstance: ReturnType<typeof vi.fn<IdHandler>>;
   let redoInstance: ReturnType<typeof vi.fn<IdHandler>>;
   let undoWidget: ReturnType<typeof vi.fn<IdHandler>>;
@@ -31,10 +31,10 @@ describe('routeUndoRedo (undo stack routing)', () => {
     useCanvasStore.getState().reset();
     unifiedUndoHistory.clear();
     unifiedUndoHistory.setContext('', '');
-    undoInstance = vi.fn<IdHandler>();
-    redoInstance = vi.fn<IdHandler>();
-    undoWidget = vi.fn<IdHandler>();
-    redoWidget = vi.fn<IdHandler>();
+    undoInstance = vi.fn<IdHandler>(() => true);
+    redoInstance = vi.fn<IdHandler>(() => true);
+    undoWidget = vi.fn<IdHandler>(() => true);
+    redoWidget = vi.fn<IdHandler>(() => true);
     useExtensionInstanceStore.setState({ undoInstance, redoInstance });
     useWidgetStore.setState({ undoWidget, redoWidget });
   });

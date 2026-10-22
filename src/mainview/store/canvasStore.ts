@@ -12,11 +12,7 @@ import {
   VIEWPORT_PAN_MS,
   viewportMotion,
 } from '@/lib/motion';
-import {
-  COUNTED_NODE_TYPES,
-  countCountedNodes,
-  hasNodeQuota,
-} from '@/lib/nodeQuota';
+import { COUNTED_NODE_TYPES, hasNodeQuota } from '@/lib/nodeQuota';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import {
@@ -54,17 +50,10 @@ import {
   TOPIC_SIBLING_GAP,
 } from '../../shared/topic';
 import {
-  buildPastedClipboard,
   cleanEdgeForClipboard,
   cleanNodeForClipboard,
   getInternalEdgesForNodes,
 } from './canvas/clipboardGraph';
-import {
-  cloneExtensionReferences,
-  cloneWidgetReferences,
-  graphContainsExtensionReference,
-  graphContainsWidgetReference,
-} from './canvas/cloneReferences';
 import { uniqueDetachedNodeId, uniqueEdgeId } from './canvas/folderChildren';
 import {
   attachDraftToTree,
@@ -73,6 +62,10 @@ import {
   toastTopicSoftOverlap,
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
+import {
+  type ClipboardSlice,
+  createClipboardSlice,
+} from './slices/clipboardSlice';
 import { createEdgesSlice, type EdgesSlice } from './slices/edgesSlice';
 import { createFolderSlice, type FolderSlice } from './slices/folderSlice';
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
@@ -170,8 +163,6 @@ export interface TopicDraft {
   viewId: string;
 }
 
-const DUPLICATE_OFFSET = 30;
-
 /**
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
@@ -183,6 +174,7 @@ export interface CanvasState
     EdgesSlice,
     NodesSlice,
     SelectionSlice,
+    ClipboardSlice,
     FolderSlice {
   // Hydration
   _hydrated: boolean;
@@ -208,13 +200,8 @@ export interface CanvasState
     anchorTopicId: string
   ) => boolean;
   cancelTopicDraft: () => void;
-  clipboard: Node[];
-  clipboardEdges: Edge[];
   commitTopicDraft: (title: string) => Promise<string | undefined>;
   commitTopicTitle: (nodeId: string, title: string) => void;
-
-  // Actions – clipboard
-  copySelected: () => void;
   /** Copy a Topic and its descendants (internal tree edges only). */
   copyTopicBranch: (topicId: string) => void;
 
@@ -230,12 +217,10 @@ export interface CanvasState
     rfInstance: ReactFlowInstance<any, any> | null,
     options?: CreateNodeOptions
   ) => Promise<string | undefined>;
-  cutSelected: () => void;
   /** Remove a Topic and every descendant as one transaction. */
   deleteTopicBranch: (topicId: string) => void;
   /** Cut a Topic's parent relation, promoting its branch to a separate tree. */
   detachTopicBranch: (topicId: string) => void;
-  duplicateSelected: (offset?: number) => Promise<void>;
   /** Topic id that should enter inline title editing (F2 / keyboard entry). */
   editingTopicId: string | null;
   /** Enter the explicit Topic single-select command context (Tab/Enter). */
@@ -247,7 +232,6 @@ export interface CanvasState
 
   // Helpers
   nextNodeId: () => string;
-  pasteClipboard: (offset?: number) => Promise<void>;
   reset: () => void;
   /** Discard the render-only size override without changing the saved graph. */
   resetTopicEditPreview: (nodeId: string) => void;
@@ -306,10 +290,9 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createEdgesSlice(set, get, api),
   ...createNodesSlice(set, get, api),
   ...createSelectionSlice(set, get, api),
+  ...createClipboardSlice(set, get, api),
   ...createFolderSlice(set, get, api),
   _hydrated: false,
-  clipboard: [],
-  clipboardEdges: [],
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
   editingTopicId: null,
@@ -1053,21 +1036,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
     return true;
   },
 
-  // -- clipboard ------------------------------------------------------------
-  copySelected: () => {
-    set((s) => {
-      const selected = s.nodes.filter((n) => n.selected);
-      if (selected.length === 0) {
-        return s;
-      }
-      const selectedIds = new Set(selected.map((n) => n.id));
-      return {
-        clipboard: selected.map(cleanNodeForClipboard),
-        clipboardEdges: getInternalEdgesForNodes(s.edges, selectedIds),
-      };
-    });
-  },
-
   copyTopicBranch: (topicId) => {
     const { edges, nodes } = get();
     const index = buildTopicIndex(nodes, edges);
@@ -1081,93 +1049,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
         .map(cleanNodeForClipboard),
       clipboardEdges: getInternalEdgesForNodes(edges, branchSet),
     });
-  },
-
-  pasteClipboard: async (offset = 30) => {
-    const { clipboard, nodes: currentNodes } = get();
-    if (clipboard.length === 0) {
-      return;
-    }
-    if (!(await hasNodeQuota(currentNodes, countCountedNodes(clipboard)))) {
-      return;
-    }
-    const latest = get();
-    if (latest.clipboard.length === 0) {
-      return;
-    }
-    get().saveSnapshot();
-    const pasted = buildPastedClipboard(
-      latest.clipboard,
-      latest.clipboardEdges,
-      latest.nodes,
-      offset
-    );
-    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-      ? await cloneWidgetReferences(pasted.nodes)
-      : pasted.nodes;
-    if (graphContainsExtensionReference(pastedNodes)) {
-      pastedNodes = await cloneExtensionReferences(pastedNodes);
-    }
-    markNodesEntering(pastedNodes.map((n) => n.id));
-    set((s) => ({
-      edges: [...s.edges, ...pasted.edges],
-      nodes: sortNodesByParent([
-        ...s.nodes.map((n) => ({ ...n, selected: false })),
-        ...pastedNodes,
-      ]),
-    }));
-  },
-
-  duplicateSelected: async (offset = DUPLICATE_OFFSET) => {
-    const { nodes } = get();
-    const selected = nodes.filter((node) => node.selected);
-    if (selected.length === 0) {
-      return;
-    }
-    if (!(await hasNodeQuota(nodes, countCountedNodes(selected)))) {
-      return;
-    }
-    const latest = get();
-    const selectedLatest = latest.nodes.filter((node) => node.selected);
-    if (selectedLatest.length === 0) {
-      return;
-    }
-    const selectedIds = new Set(selectedLatest.map((node) => node.id));
-    const pasted = buildPastedClipboard(
-      selectedLatest.map(cleanNodeForClipboard),
-      getInternalEdgesForNodes(latest.edges, selectedIds),
-      latest.nodes,
-      offset
-    );
-    get().saveSnapshot();
-    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-      ? await cloneWidgetReferences(pasted.nodes)
-      : pasted.nodes;
-    if (graphContainsExtensionReference(pastedNodes)) {
-      pastedNodes = await cloneExtensionReferences(pastedNodes);
-    }
-    markNodesEntering(pastedNodes.map((node) => node.id));
-    set((s) => ({
-      edges: [...s.edges, ...pasted.edges],
-      nodes: sortNodesByParent([
-        ...s.nodes.map((node) => ({ ...node, selected: false })),
-        ...pastedNodes,
-      ]),
-    }));
-  },
-
-  cutSelected: () => {
-    const selectedIds: string[] = [];
-    for (const node of get().nodes) {
-      if (node.selected) {
-        selectedIds.push(node.id);
-      }
-    }
-    if (selectedIds.length === 0) {
-      return;
-    }
-    get().copySelected();
-    get().deleteNodes(selectedIds);
   },
 
   // -- node CRUD ------------------------------------------------------------

@@ -1,12 +1,4 @@
-import type {
-  Connection,
-  Edge,
-  EdgeChange,
-  Node,
-  NodeChange,
-  ReactFlowInstance,
-} from '@xyflow/react';
-import { addEdge, applyEdgeChanges } from '@xyflow/react';
+import type { Edge, Node, NodeChange, ReactFlowInstance } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { create } from 'zustand';
@@ -66,14 +58,12 @@ import { createUndoRedoState } from '@/lib/undoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import * as m from '../../paraglide/messages.js';
-import { buildLegacyEdgeCompatPatch } from '../../shared/canvasEdgeFields';
 import { EXTENSION_NODE_TYPE } from '../../shared/extensions/ids';
 import type { SearchResultTarget } from '../../shared/searchTypes';
 import {
   createTopicData,
   isTopicNodeType,
   isTopicTitleWithinLimit,
-  isTopicTreeEdge,
   normalizeTopicTitle,
   parseTopicData,
   TOPIC_LEVEL_GAP,
@@ -112,6 +102,7 @@ import {
   toastTopicSoftOverlap,
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
+import { createEdgesSlice, type EdgesSlice } from './slices/edgesSlice';
 import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createUiSlice, type UiSlice } from './slices/uiSlice';
 import {
@@ -214,7 +205,11 @@ function nodeZIndex(node: Node): number {
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
  */
-export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
+export interface CanvasState
+  extends UiSlice,
+    ViewportSlice,
+    HistorySlice,
+    EdgesSlice {
   // Hydration
   _hydrated: boolean;
 
@@ -223,12 +218,7 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
 
   // Multi-view
   activeViewId: string;
-  addConnection: (
-    connection: Connection,
-    options?: AddConnectionOptions
-  ) => void;
   addFolderChild: (folderId: string) => void;
-  applyEdgesChange: (changes: EdgeChange[]) => void;
   applyNodesChange: (changes: NodeChange[]) => void;
   applyNoteTitles: (
     titles: Record<string, string>,
@@ -259,8 +249,6 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
   clipboard: Node[];
   clipboardEdges: Edge[];
   collectSelectedNoteIds: () => string[];
-  /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
-  commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   commitFolderChildData: (
     folderId: string,
     childId: string,
@@ -289,7 +277,6 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
     options?: CreateNodeOptions
   ) => Promise<string | undefined>;
   cutSelected: () => void;
-  deleteEdge: (edgeId: string) => void;
   deleteFolderChild: (folderId: string, childId: string) => void;
   /** Deletes the unlocked nodes in `ids`; returns how many were deleted. */
   deleteNodes: (ids: string[]) => number;
@@ -300,10 +287,6 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
   /** Cut a Topic's parent relation, promoting its branch to a separate tree. */
   detachTopicBranch: (topicId: string) => void;
   duplicateSelected: (offset?: number) => Promise<void>;
-  edges: Edge[];
-
-  // Actions – edge
-  editingEdgeId: string | null;
   /** Topic id that should enter inline title editing (F2 / keyboard entry). */
   editingTopicId: string | null;
   /** Enter the explicit Topic single-select command context (Tab/Enter). */
@@ -342,8 +325,6 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
    */
   setActiveView: (viewId: string) => void;
   setActiveViewId: (viewId: string) => void;
-  setEdges: (updater: Edge[] | ((prev: Edge[]) => Edge[])) => void;
-  setEditingEdgeId: (id: string | null) => void;
   setEditingTopicId: (id: string | null) => void;
 
   // Actions – core
@@ -386,7 +367,6 @@ export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
   topicWritePaused: boolean;
 
   ungroupSelected: () => void;
-  updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   updateFolderChildData: (
     folderId: string,
     childId: string,
@@ -404,15 +384,14 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createUiSlice(set, get, api),
   ...createViewportSlice(set, get, api),
   ...createHistorySlice(set, get, api),
+  ...createEdgesSlice(set, get, api),
   // -- initial state --------------------------------------------------------
   nodes: [],
-  edges: [],
   _hydrated: false,
   clipboard: [],
   clipboardEdges: [],
   activeViewId: 'default',
   views: [{ id: 'default', name: 'Default Canvas' }],
-  editingEdgeId: null,
   editingTopicId: null,
   topicCommandContextId: null,
   topicDraft: null,
@@ -653,13 +632,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
     });
   },
 
-  setEdges: (updater) => {
-    set((s) => {
-      const edges = typeof updater === 'function' ? updater(s.edges) : updater;
-      return edges === s.edges ? s : { edges };
-    });
-  },
-
   applyNodesChange: (changes) => {
     set((s) => {
       const nodes = applyCanvasNodeChanges(changes, s.nodes);
@@ -689,50 +661,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
       get().saveSnapshot();
     }
     set((s) => projectNoteTitles(s.nodes, s.focusedNode, map));
-  },
-
-  applyEdgesChange: (changes) => {
-    if (changes.length === 0) {
-      return;
-    }
-    set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
-  },
-
-  addConnection: (connection, options) => {
-    if (connection.source === connection.target) {
-      return;
-    }
-    get().saveSnapshot();
-    set((s) => ({
-      edges: addEdge(
-        {
-          id: `edge-${nanoid(8)}`,
-          source: connection.source,
-          target: connection.target,
-          sourceHandle: connection.sourceHandle,
-          targetHandle: connection.targetHandle,
-          type: 'labeledEdge',
-          data: {
-            pathType: 'bezier',
-            reverseVisualDirection: options?.reverseVisualDirection ?? false,
-          },
-          markerEnd: 'compact-arrow',
-        },
-        s.edges
-      ),
-    }));
-  },
-
-  // -- edge actions -----------------------------------------------------------
-  setEditingEdgeId: (id) => {
-    if (id !== null) {
-      const edge = get().edges.find((e) => e.id === id);
-      if (edge && isTopicTreeEdge(edge)) {
-        // Tree relations carry no user-editable label.
-        return;
-      }
-    }
-    set({ editingEdgeId: id });
   },
 
   // -- topic actions --------------------------------------------------------
@@ -1136,45 +1064,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
     set({ nodes: laidOut.nodes });
   },
 
-  updateEdgeData: (edgeId, updates) => {
-    const edge = get().edges.find((e) => e.id === edgeId);
-    if (!edge) {
-      return;
-    }
-    // Tree relations are host-owned: no label, animation, path type, colour or
-    // visual reversal. Guarding here (not only in the menus) covers
-    // double-click label editing, context-menu toggles, AI actions, and any
-    // future caller in one place. Topic transactions rewrite tree edges through
-    // their own atomic graph commit, never through this generic path.
-    if (isTopicTreeEdge(edge)) {
-      return;
-    }
-    const legacyPatch = buildLegacyEdgeCompatPatch(
-      edge,
-      updates
-    ) as Partial<Edge> | null;
-    set((s) => ({
-      edges: s.edges.map((e) =>
-        e.id === edgeId
-          ? { ...e, ...legacyPatch, data: { ...e.data, ...updates } }
-          : e
-      ),
-    }));
-  },
-
-  deleteEdge: (edgeId) => {
-    const edge = get().edges.find((e) => e.id === edgeId);
-    if (!edge || isTopicTreeEdge(edge)) {
-      // Removing a tree relation re-parents a whole branch, so it runs as a
-      // validated split transaction rather than a bare edge delete.
-      return;
-    }
-    get().saveSnapshot();
-    set((s) => ({
-      edges: s.edges.filter((e) => e.id !== edgeId),
-    }));
-  },
-
   updateNodeData: (nodeId, updates) => {
     set((s) => {
       // The focused view reads from `focusedNode.data`, a snapshot captured when
@@ -1202,11 +1091,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   commitNodeData: (nodeId, updates) => {
     get().saveSnapshot();
     get().updateNodeData(nodeId, updates);
-  },
-
-  commitEdgeData: (edgeId, updates) => {
-    get().saveSnapshot();
-    get().updateEdgeData(edgeId, updates);
   },
 
   toggleStickyPinned: (nodeId) => {

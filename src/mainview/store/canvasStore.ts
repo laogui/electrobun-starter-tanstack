@@ -62,13 +62,7 @@ import {
   renumberSiblingEdges,
   topicCanvasWritePaused,
 } from '@/lib/topicTree';
-import type { UndoRedoState } from '@/lib/undoRedo';
-import {
-  createUndoRedoState,
-  pushSnapshot,
-  redo as redoSnapshot,
-  undo as undoSnapshot,
-} from '@/lib/undoRedo';
+import { createUndoRedoState } from '@/lib/undoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import * as m from '../../paraglide/messages.js';
@@ -118,6 +112,7 @@ import {
   toastTopicSoftOverlap,
 } from './canvas/topicGraph';
 import { getViewportCenter } from './canvas/viewportCenter';
+import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createUiSlice, type UiSlice } from './slices/uiSlice';
 import {
   createViewportSlice,
@@ -219,12 +214,9 @@ function nodeZIndex(node: Node): number {
  * Full canvas store shape: the intersection of every slice. Each slice owns
  * its state keys and actions; cross-slice calls go through `get()`.
  */
-export interface CanvasState extends UiSlice, ViewportSlice {
+export interface CanvasState extends UiSlice, ViewportSlice, HistorySlice {
   // Hydration
   _hydrated: boolean;
-
-  // Undo / Redo
-  _undoRedo: UndoRedoState;
 
   // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
@@ -263,8 +255,6 @@ export interface CanvasState extends UiSlice, ViewportSlice {
   bringNodesForward: (ids: string[]) => void;
   bringNodesToFront: (ids: string[]) => void;
   cancelTopicDraft: () => void;
-  canRedo: () => boolean;
-  canUndo: () => boolean;
   changeNodeColor: (nodeId: string) => void;
   clipboard: Node[];
   clipboardEdges: Edge[];
@@ -335,11 +325,9 @@ export interface CanvasState extends UiSlice, ViewportSlice {
   nodes: Node[];
   pasteClipboard: (offset?: number) => Promise<void>;
   pinNoteToCanvas: (nodeId: string, position: { x: number; y: number }) => void;
-  redo: () => boolean;
   reset: () => void;
   /** Discard the render-only size override without changing the saved graph. */
   resetTopicEditPreview: (nodeId: string) => void;
-  saveSnapshot: () => void;
   selectNodeInDirection: (
     direction: 'down' | 'left' | 'right' | 'up',
     options?: { extend?: boolean }
@@ -396,7 +384,6 @@ export interface CanvasState extends UiSlice, ViewportSlice {
    * edited in memory, but auto-save must not overwrite the original file.
    */
   topicWritePaused: boolean;
-  undo: () => boolean;
 
   ungroupSelected: () => void;
   updateEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
@@ -416,6 +403,7 @@ export interface CanvasState extends UiSlice, ViewportSlice {
 export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   ...createUiSlice(set, get, api),
   ...createViewportSlice(set, get, api),
+  ...createHistorySlice(set, get, api),
   // -- initial state --------------------------------------------------------
   nodes: [],
   edges: [],
@@ -430,7 +418,6 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
   topicDraft: null,
   topicEditPreviews: {},
   topicWritePaused: false,
-  _undoRedo: createUndoRedoState(),
 
   absorbCardIntoFolder: (cardId, folderId) => {
     const { nodes } = get();
@@ -2447,50 +2434,4 @@ export const useCanvasStore = create<CanvasState>()((set, get, api) => ({
       edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     }));
   },
-
-  // -- undo / redo ----------------------------------------------------------
-  saveSnapshot: () => {
-    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
-    set({
-      _undoRedo: pushSnapshot(_undoRedo, { nodes, edges, viewport }),
-    });
-    unifiedUndoHistory.recordCanvas(activeViewId);
-  },
-
-  // Note: undo/redo intentionally leave `viewport` / sessionViewport untouched.
-  // The React Flow camera only reads the stored viewport on mount, so writing a
-  // stale snapshot value back would not move the camera — it would only corrupt
-  // the session cache and cause a jump when re-entering the view.
-  undo: () => {
-    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
-    const result = undoSnapshot(_undoRedo, { nodes, edges, viewport });
-    if (!result) {
-      return false;
-    }
-    set({
-      nodes: result.snapshot.nodes,
-      edges: result.snapshot.edges,
-      _undoRedo: result.state,
-    });
-    unifiedUndoHistory.observeCanvasTransition('undo', activeViewId);
-    return true;
-  },
-
-  redo: () => {
-    const { nodes, edges, viewport, _undoRedo, activeViewId } = get();
-    const result = redoSnapshot(_undoRedo, { nodes, edges, viewport });
-    if (!result) {
-      return false;
-    }
-    set({
-      nodes: result.snapshot.nodes,
-      edges: result.snapshot.edges,
-      _undoRedo: result.state,
-    });
-    unifiedUndoHistory.observeCanvasTransition('redo', activeViewId);
-    return true;
-  },
-
-  canUndo: () => get()._undoRedo.past.length > 0,
-  canRedo: () => get()._undoRedo.future.length > 0,
 }));

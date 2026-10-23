@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import { invalidateBlockNotePrefetch } from '@/lib/blockNotePrefetch';
 import {
   hasNoteMetadataConflict,
   subscribeNoteMetadataChanges,
@@ -277,13 +277,18 @@ export function useBlockNoteSaver({
         const payload = latestPayloadRef.current;
         const changeVersion = changeVersionRef.current;
         setStatus('saving');
+        // A prefetched body issued before (or during) this save may carry the
+        // pre-save revision; drop it on both edges so a reopen loads fresh.
+        invalidateBlockNotePrefetch(currentNoteId);
         const response = await rpcSaveBlockNote(
           currentNoteId,
           frontmatterRef.current,
           payload.blocks,
           payload.markdown,
           revisionRef.current
-        );
+        ).finally(() => {
+          invalidateBlockNotePrefetch(currentNoteId);
+        });
         if (currentNoteId !== noteIdRef.current) {
           return;
         }

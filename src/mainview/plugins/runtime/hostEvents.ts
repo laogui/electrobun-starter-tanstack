@@ -1,3 +1,4 @@
+import { clearBlockNotePrefetch } from '@/lib/blockNotePrefetch';
 import { createNoteBodySync } from '@/lib/noteBodySync';
 import {
   applyNoteMetadataChanges,
@@ -69,6 +70,7 @@ export function connectPluginHostEvents(
       workspaceId = current;
       revisions.clear();
       bodies.reset();
+      clearBlockNotePrefetch();
     }
     unifiedUndoHistory.setContext(
       current,

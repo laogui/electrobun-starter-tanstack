@@ -1,4 +1,5 @@
 import type { NoteMetadataChange } from '../../../packages/plugin-sdk';
+import { invalidateBlockNotePrefetch } from './blockNotePrefetch';
 import { applyNoteMetadataChanges } from './noteMetadataProjection';
 import { registerNoteReferences } from './noteReferences';
 import { rpcLoadBlockNote } from './rpc';
@@ -52,6 +53,8 @@ export function createNoteBodySync<S extends State>(
   const pending = new Map<string, NoteMetadataChange>();
   let epoch = 0;
   const refresh = (workspaceId: string, incoming: NoteMetadataChange) => {
+    // Any external revision makes a prefetched body stale.
+    invalidateBlockNotePrefetch(incoming.id);
     const previous = pending.get(incoming.id);
     if (incoming.metadataOnly && !previous) {
       return;

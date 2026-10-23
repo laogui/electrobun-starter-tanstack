@@ -1,5 +1,6 @@
 import { scaleMorph } from './scaleMorph';
 import type { FocusTransition } from './types';
+import { viewTransition } from './viewTransition';
 
 /**
  * ── Switch the focus animation here ──────────────────────────────────────
@@ -11,9 +12,10 @@ import type { FocusTransition } from './types';
  */
 export const FOCUS_TRANSITIONS: Readonly<Record<string, FocusTransition>> = {
   [scaleMorph.id]: scaleMorph,
+  [viewTransition.id]: viewTransition,
 };
 
-export const DEFAULT_FOCUS_TRANSITION: FocusTransition = scaleMorph;
+export const DEFAULT_FOCUS_TRANSITION: FocusTransition = viewTransition;
 
 export const FOCUS_TRANSITION_OVERRIDE_KEY = 'gb:focus-transition';
 

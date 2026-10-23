@@ -237,6 +237,7 @@ export const CardContent = ({
           'mb-4 flex items-center gap-2 font-bold text-xl',
           !data.title && 'opacity-55'
         )}
+        data-focus-title
       >
         {data.title || 'Untitled'}
         {isEmpty && !readOnly ? (

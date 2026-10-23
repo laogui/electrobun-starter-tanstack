@@ -979,6 +979,92 @@ body.resizing-nwse * {
   pointer-events: none;
 }
 
+/* ── Focus view: View Transitions variant (focusTransition/viewTransition.ts).
+   Scoped to `.gb-vt-focus` on <html>, set only while one of our transitions
+   runs. Open 280ms / close 220ms, ease-out-quint (mirrors lib/motion.ts). */
+:root.gb-vt-focus::view-transition-old(root),
+:root.gb-vt-focus::view-transition-new(root) {
+  mix-blend-mode: normal;
+  /* No page crossfade: only the card / title move. */
+  animation: none;
+}
+
+:root.gb-vt-focus::view-transition-group(gb-focus-card),
+:root.gb-vt-focus::view-transition-group(gb-focus-title) {
+  animation-duration: 280ms;
+  animation-timing-function: var(--motion-ease-out-quint);
+}
+
+:root.gb-vt-focus-close::view-transition-group(gb-focus-card),
+:root.gb-vt-focus-close::view-transition-group(gb-focus-title) {
+  animation-duration: 220ms;
+}
+
+/* The sheet is clipped by the moving box instead of being scaled, so text in
+   either snapshot never stretches. */
+:root.gb-vt-focus::view-transition-group(gb-focus-card) {
+  overflow: clip;
+}
+
+:root.gb-vt-focus::view-transition-image-pair(gb-focus-card) {
+  animation: gb-vt-card-radius 280ms var(--motion-ease-out-quint) both;
+}
+
+:root.gb-vt-focus-close::view-transition-image-pair(gb-focus-card) {
+  animation: gb-vt-card-radius 220ms var(--motion-ease-out-quint) reverse both;
+}
+
+:root.gb-vt-focus::view-transition-old(gb-focus-card),
+:root.gb-vt-focus::view-transition-new(gb-focus-card) {
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  /* Equal fade lengths keep the plus-lighter sum opaque. */
+  animation-duration: 180ms;
+  animation-timing-function: linear;
+}
+
+/* Card snapshot: pinned to the box's top-left, like the card's own layout. */
+:root.gb-vt-focus-open::view-transition-old(gb-focus-card),
+:root.gb-vt-focus-close::view-transition-new(gb-focus-card) {
+  object-position: left top;
+}
+
+/* Fullscreen snapshot: top-center, where the note column and title sit. */
+:root.gb-vt-focus-open::view-transition-new(gb-focus-card),
+:root.gb-vt-focus-close::view-transition-old(gb-focus-card) {
+  object-position: center top;
+}
+
+:root.gb-vt-focus-close::view-transition-old(gb-focus-card),
+:root.gb-vt-focus-close::view-transition-new(gb-focus-card) {
+  animation-duration: 150ms;
+}
+
+/* Titles keep their natural size (no scaling between text-xl and text-4xl):
+   they slide between positions and crossfade. */
+:root.gb-vt-focus::view-transition-old(gb-focus-title),
+:root.gb-vt-focus::view-transition-new(gb-focus-title) {
+  width: auto;
+  height: auto;
+  animation-duration: 180ms;
+  animation-timing-function: linear;
+}
+
+:root.gb-vt-focus-close::view-transition-old(gb-focus-title),
+:root.gb-vt-focus-close::view-transition-new(gb-focus-title) {
+  animation-duration: 150ms;
+}
+
+@keyframes gb-vt-card-radius {
+  from {
+    clip-path: inset(0 round 24px);
+  }
+  to {
+    clip-path: inset(0 round 0);
+  }
+}
+
 /* Keep the overview toggle visibly selected while the map is expanded. */
 .canvas-viewport-chrome .canvas-viewport-controls
   .canvas-minimap-toggle[aria-pressed="true"] {

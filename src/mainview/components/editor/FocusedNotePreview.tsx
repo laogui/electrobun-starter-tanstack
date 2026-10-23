@@ -41,6 +41,7 @@ export function FocusedNotePreview({
               'mb-2 block w-full whitespace-pre-wrap break-words pl-[54px] font-bold text-4xl leading-tight tracking-normal',
               !titleText && (isDark ? 'text-white/40' : 'text-gray-600/60')
             )}
+            data-focus-title
           >
             {titleText || m.editor_title_placeholder()}
           </h1>

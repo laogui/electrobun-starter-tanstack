@@ -27,6 +27,7 @@ import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfi
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import { FocusedViewHost } from '@/components/canvas/FocusedViewHost';
+import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
@@ -993,20 +994,35 @@ function CanvasComponent() {
           return;
         }
         prefetchBlockNoteForData(child.data);
-        setFocusedNode({
-          id: child.id,
-          folderId,
-          type: child.type,
-          data: child.data,
-          rect,
-        });
+        runFocusTransition(
+          () => {
+            setFocusedNode({
+              id: child.id,
+              folderId,
+              type: child.type,
+              data: child.data,
+              rect,
+            });
+          },
+          { direction: 'open', source: el }
+        );
       } else if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (
         isFocusableNode(node.type, node.data as Record<string, unknown>)
       ) {
         prefetchBlockNoteForData(node.data as Record<string, unknown>);
-        setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
+        runFocusTransition(
+          () => {
+            setFocusedNode({
+              id: node.id,
+              type: node.type,
+              data: node.data,
+              rect,
+            });
+          },
+          { direction: 'open', source: el }
+        );
       }
     },
     [setFocusedNode, setFocusedFolder]

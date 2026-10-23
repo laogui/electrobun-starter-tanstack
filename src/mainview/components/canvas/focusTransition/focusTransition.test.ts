@@ -8,6 +8,7 @@ import {
 } from './registry';
 import { scaleMorph } from './scaleMorph';
 import type { FocusTransition, FocusTransitionContext } from './types';
+import { viewTransition } from './viewTransition';
 
 const context = (
   overrides: Partial<FocusTransitionContext> = {}
@@ -28,19 +29,27 @@ const stub: FocusTransition = {
 };
 
 describe('focus transition selection', () => {
-  it('defaults to scaleMorph and registers it by id', () => {
-    expect(DEFAULT_FOCUS_TRANSITION).toBe(scaleMorph);
+  it('defaults to viewTransition and keeps scaleMorph registered', () => {
+    expect(DEFAULT_FOCUS_TRANSITION).toBe(viewTransition);
+    expect(FOCUS_TRANSITIONS[viewTransition.id]).toBe(viewTransition);
     expect(FOCUS_TRANSITIONS[scaleMorph.id]).toBe(scaleMorph);
   });
 
   it('resolves known ids and falls back for unknown / empty ones', () => {
     const registry = { [stub.id]: stub, [scaleMorph.id]: scaleMorph };
     expect(selectFocusTransition('stub', registry)).toBe(stub);
-    expect(selectFocusTransition('nope', registry)).toBe(scaleMorph);
-    expect(selectFocusTransition(null, registry)).toBe(scaleMorph);
-    expect(selectFocusTransition('', registry)).toBe(scaleMorph);
+    expect(selectFocusTransition('scaleMorph', registry)).toBe(scaleMorph);
+    expect(selectFocusTransition('nope', registry)).toBe(
+      DEFAULT_FOCUS_TRANSITION
+    );
+    expect(selectFocusTransition(null, registry)).toBe(
+      DEFAULT_FOCUS_TRANSITION
+    );
+    expect(selectFocusTransition('', registry)).toBe(DEFAULT_FOCUS_TRANSITION);
     // Prototype keys must not resolve to a non-transition.
-    expect(selectFocusTransition('toString', registry)).toBe(scaleMorph);
+    expect(selectFocusTransition('toString', registry)).toBe(
+      DEFAULT_FOCUS_TRANSITION
+    );
   });
 });
 

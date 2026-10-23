@@ -885,6 +885,7 @@ function BlockNoteSurface({
               'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
             )}
+            data-focus-title
             disabled={aiPending}
             maxLength={TITLE_MAX_LENGTH}
             maxRows={4}

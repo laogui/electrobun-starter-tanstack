@@ -515,9 +515,31 @@ export const FocusedView = ({
       planRef.current.onCloseStart?.();
     }
   }, [isPresent]);
-  // will-change only while a layer is actually animating.
-  const animating = !(openComplete && isPresent);
-  const completeOn = plan.completeOn ?? 'shell';
+  // Variants animated outside motion (View Transitions) signal the landing
+  // through a promise instead of a layer's onAnimationComplete.
+  const waitsForOpen = Boolean(plan.waitForOpen);
+  useEffect(() => {
+    const wait = planRef.current.waitForOpen;
+    if (!wait) {
+      return;
+    }
+    let cancelled = false;
+    wait().then(
+      () => {
+        if (!cancelled) {
+          handleLayerAnimationComplete();
+        }
+      },
+      () => undefined
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [handleLayerAnimationComplete]);
+  // will-change only while a layer is actually animating (never for
+  // promise-driven variants: motion does not move the layers).
+  const animating = !(waitsForOpen || (openComplete && isPresent));
+  const completeOn = waitsForOpen ? null : (plan.completeOn ?? 'shell');
 
   const handleSaveStatusChange = useCallback(
     (status: BlockNoteSaveStatus, savedAt: Date | null) => {

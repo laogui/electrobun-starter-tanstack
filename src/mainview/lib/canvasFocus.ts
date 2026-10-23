@@ -1,4 +1,5 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
+import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
@@ -130,12 +131,31 @@ export async function openFocusedById({
     if (!focusable) {
       return;
     }
-    setFocusedNode({
-      id: node.id,
-      type: node.type,
-      data: node.data as Record<string, unknown>,
-      rect: computeCenteredNodeRect(width, height, zoom, getFlowPaneRect()),
-    });
+    const rect = computeCenteredNodeRect(
+      width,
+      height,
+      zoom,
+      getFlowPaneRect()
+    );
+    runFocusTransition(
+      () => {
+        setFocusedNode({
+          id: node.id,
+          type: node.type,
+          data: node.data as Record<string, unknown>,
+          rect,
+        });
+      },
+      {
+        direction: 'open',
+        source:
+          typeof document === 'undefined'
+            ? null
+            : document.querySelector(
+                `.react-flow__node[data-id="${CSS.escape(node.id)}"]`
+              ),
+      }
+    );
     return;
   }
 

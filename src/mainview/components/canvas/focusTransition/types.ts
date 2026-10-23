@@ -63,6 +63,12 @@ export interface FocusTransitionPlan {
   overlay?: ReactNode;
   /** Shell layer: the full-bleed background behind the content. */
   shell: FocusLayerProps;
+  /**
+   * When set, the open is complete once this resolves (instead of a layer's
+   * `onAnimationComplete`). For variants animated outside motion, e.g. the
+   * View Transitions API.
+   */
+  waitForOpen?: () => Promise<void>;
 }
 
 /**

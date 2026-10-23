@@ -6,6 +6,12 @@ import { useCanvasStore } from '@/store/canvasStore';
 import { FocusedView } from './FocusedView';
 import { startFocusAnimProbe } from './focusTransition/focusAnimProbe';
 import { getActiveFocusTransition } from './focusTransition/registry';
+import { closeFocusedViewWithTransition } from './focusTransition/runFocusTransition';
+import {
+  isFocusViewTransitionRunning,
+  notifyFocusCleared,
+  notifyFocusOpened,
+} from './focusTransition/viewTransitionController';
 
 const CANVAS_HIDDEN_CLASS = 'focus-canvas-hidden';
 
@@ -22,11 +28,11 @@ interface FocusedViewHostProps {
  * - hides the canvas (visibility) once the open lands, restoring it
  *   synchronously when a close starts — before the exit animation's first
  *   frame,
- * - runs the dev-only `[focus-anim]` frame probe for open / close.
+ * - runs the dev-only `[focus-anim]` frame probe for open / close (the
+ *   View Transitions variant probes itself, from start to `finished`).
  */
 export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
-  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const stopOpenProbeRef = useRef<(() => void) | null>(null);
   const stopCloseProbeRef = useRef<(() => void) | null>(null);
 
@@ -48,21 +54,27 @@ export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
         // context menu, sibling navigation, extension host API).
         prefetchBlockNoteForData(next.data);
       }
+      // View transitions run their own probe (start → finished).
+      const selfProbed = isFocusViewTransitionRunning();
       if (next && !prev) {
+        notifyFocusOpened();
         stopCloseProbeRef.current?.();
         stopCloseProbeRef.current = null;
         stopOpenProbeRef.current?.();
-        stopOpenProbeRef.current = startFocusAnimProbe(`open ${transitionId}`);
+        stopOpenProbeRef.current = selfProbed
+          ? null
+          : startFocusAnimProbe(`open ${transitionId}`);
         return;
       }
       if (!next && prev) {
         showCanvas();
+        notifyFocusCleared();
         stopOpenProbeRef.current?.();
         stopOpenProbeRef.current = null;
         stopCloseProbeRef.current?.();
-        stopCloseProbeRef.current = startFocusAnimProbe(
-          `close ${transitionId}`
-        );
+        stopCloseProbeRef.current = selfProbed
+          ? null
+          : startFocusAnimProbe(`close ${transitionId}`);
       }
     });
     return () => {
@@ -87,8 +99,8 @@ export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
   }, []);
 
   const handleClose = useCallback(() => {
-    setFocusedNode(null);
-  }, [setFocusedNode]);
+    closeFocusedViewWithTransition();
+  }, []);
 
   return (
     <AnimatePresence onExitComplete={handleExitComplete}>

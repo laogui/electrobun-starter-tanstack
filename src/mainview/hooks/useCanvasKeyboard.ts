@@ -2,6 +2,10 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { type MutableRefObject, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
+import {
+  closeFocusedViewWithTransition,
+  runFocusTransition,
+} from '@/components/canvas/focusTransition/runFocusTransition';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
@@ -149,7 +153,7 @@ export function useCanvasKeyboard({
           return;
         }
         if (useCanvasStore.getState().focusedNode) {
-          setFocusedNode(null);
+          closeFocusedViewWithTransition();
           return;
         }
         if (focusedFolderRef.current) {
@@ -402,12 +406,17 @@ export function useCanvasKeyboard({
           setFocusedFolder({ id: node.id, data: node.data, rect });
         } else {
           prefetchBlockNoteForData(node.data as Record<string, unknown>);
-          setFocusedNode({
-            id: node.id,
-            type: node.type,
-            data: node.data,
-            rect,
-          });
+          runFocusTransition(
+            () => {
+              setFocusedNode({
+                id: node.id,
+                type: node.type,
+                data: node.data,
+                rect,
+              });
+            },
+            { direction: 'open', source: el }
+          );
         }
         return;
       }

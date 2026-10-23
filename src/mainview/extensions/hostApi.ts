@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { closeFocusedViewWithTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
 import { pickFile } from '@/lib/pickFile';
@@ -124,7 +125,7 @@ export function createExtensionHostApi(input: {
         });
       },
       closeDetail: async () => {
-        useCanvasStore.getState().setFocusedNode(null);
+        closeFocusedViewWithTransition();
       },
       requestTitleEdit: async () => {
         if (nodeId) {

@@ -1,4 +1,5 @@
 import { scaleMorph } from './scaleMorph';
+import { scaleTuned } from './scaleTuned';
 import type { FocusTransition } from './types';
 
 /**
@@ -11,9 +12,11 @@ import type { FocusTransition } from './types';
  */
 export const FOCUS_TRANSITIONS: Readonly<Record<string, FocusTransition>> = {
   [scaleMorph.id]: scaleMorph,
+  [scaleTuned.id]: scaleTuned,
 };
 
-export const DEFAULT_FOCUS_TRANSITION: FocusTransition = scaleMorph;
+/** Variant A branch: card-accurate scale (scaleMorph kept for comparison). */
+export const DEFAULT_FOCUS_TRANSITION: FocusTransition = scaleTuned;
 
 export const FOCUS_TRANSITION_OVERRIDE_KEY = 'gb:focus-transition';
 

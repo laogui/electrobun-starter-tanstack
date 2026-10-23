@@ -19,8 +19,20 @@ export interface FocusTransitionContext {
    * or undefined for non-note surfaces and uncolored cards.
    */
   cardColor: string | undefined;
+  /**
+   * Re-read the source card's live screen rect (null when it is not in the
+   * DOM). Call it lazily, e.g. from a variant resolver when the close starts,
+   * so the exit lands on where the card is *now* rather than where it was at
+   * open time. Optional: hosts that cannot provide it leave it undefined.
+   */
+  readSourceRect?: () => DOMRect | null;
   /** Honour `prefers-reduced-motion`: keep it to a short fade. */
   reducedMotion: boolean;
+  /**
+   * The card's on-screen corner radius in px (its CSS radius times the canvas
+   * zoom), when known, so a variant can start from the card's silhouette.
+   */
+  sourceRadius?: number;
   /**
    * Screen rect of the source card at open time (and of the currently
    * focused card after sibling navigation, so close returns to it).

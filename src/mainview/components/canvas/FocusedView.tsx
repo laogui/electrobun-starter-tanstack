@@ -145,6 +145,40 @@ function domRectForItem(item: FocusedItem): DOMRect {
   return el?.getBoundingClientRect() ?? item.rect;
 }
 
+function findNodeElement(id: string): HTMLElement | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+  return document.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`);
+}
+
+/** Live screen rect of a node's DOM element, or null when unavailable. */
+function readLiveRect(id: string): DOMRect | null {
+  const rect = findNodeElement(id)?.getBoundingClientRect();
+  return rect && rect.width > 0 && rect.height > 0 ? rect : null;
+}
+
+/**
+ * On-screen corner radius of a node's card: its computed CSS radius times the
+ * element's rendered / layout width ratio (the canvas zoom).
+ */
+function readCardRadius(id: string): number | undefined {
+  const el = findNodeElement(id);
+  if (!el || typeof getComputedStyle !== 'function') {
+    return;
+  }
+  const visual = el.querySelector<HTMLElement>('.node-visual') ?? el;
+  const radius = Number.parseFloat(
+    getComputedStyle(visual).borderTopLeftRadius
+  );
+  if (!Number.isFinite(radius)) {
+    return;
+  }
+  const zoom =
+    el.offsetWidth > 0 ? el.getBoundingClientRect().width / el.offsetWidth : 1;
+  return radius * zoom;
+}
+
 function generateChecklistWidgetItemId(): string {
   return `item_${crypto.randomUUID().slice(0, 8)}`;
 }
@@ -469,15 +503,19 @@ export const FocusedView = ({
     : isLightbox
       ? 'lightbox'
       : 'panel';
+  const nodeId = node.id;
+  const readSourceRect = useCallback(() => readLiveRect(nodeId), [nodeId]);
   const transitionContext = useMemo<FocusTransitionContext>(
     () => ({
       cardColor: color,
+      readSourceRect,
       reducedMotion: Boolean(shouldReduceMotion),
+      sourceRadius: readCardRadius(nodeId),
       sourceRect: node.rect,
       surface,
       viewport: getViewportSize(),
     }),
-    [color, node.rect, shouldReduceMotion, surface]
+    [color, node.rect, nodeId, readSourceRect, shouldReduceMotion, surface]
   );
   const plan = useMemo(
     () => transition.plan(transitionContext),

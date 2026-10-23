@@ -19,6 +19,13 @@ export interface FocusTransitionContext {
    * or undefined for non-note surfaces and uncolored cards.
    */
   cardColor: string | undefined;
+  /**
+   * Re-measure the source card's current screen rect (it may have moved since
+   * open: sibling navigation, a recentring pan). Call lazily — e.g. from a
+   * variant resolver when the close starts — never during `plan`. Returns
+   * undefined when the card is not in the DOM (folder child, culled node).
+   */
+  measureSourceRect?: () => DOMRect | undefined;
   /** Honour `prefers-reduced-motion`: keep it to a short fade. */
   reducedMotion: boolean;
   /**

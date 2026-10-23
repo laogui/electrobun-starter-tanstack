@@ -1,3 +1,4 @@
+import { flipShell } from './flipShell';
 import { scaleMorph } from './scaleMorph';
 import type { FocusTransition } from './types';
 
@@ -10,10 +11,12 @@ import type { FocusTransition } from './types';
  *   localStorage.setItem('gb:focus-transition', '<id>'); location.reload();
  */
 export const FOCUS_TRANSITIONS: Readonly<Record<string, FocusTransition>> = {
+  [flipShell.id]: flipShell,
   [scaleMorph.id]: scaleMorph,
 };
 
-export const DEFAULT_FOCUS_TRANSITION: FocusTransition = scaleMorph;
+/** Variant C branch default: FLIP shell + content fade. */
+export const DEFAULT_FOCUS_TRANSITION: FocusTransition = flipShell;
 
 export const FOCUS_TRANSITION_OVERRIDE_KEY = 'gb:focus-transition';
 

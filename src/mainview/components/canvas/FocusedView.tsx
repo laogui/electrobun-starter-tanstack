@@ -145,6 +145,18 @@ function domRectForItem(item: FocusedItem): DOMRect {
   return el?.getBoundingClientRect() ?? item.rect;
 }
 
+/** Live screen rect of a card, or undefined when it is not laid out. */
+function measureItemRect(id: string): DOMRect | undefined {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  const el = document.querySelector<HTMLElement>(
+    `[data-id="${CSS.escape(id)}"]`
+  );
+  const rect = el?.getBoundingClientRect();
+  return rect && rect.width > 0 && rect.height > 0 ? rect : undefined;
+}
+
 function generateChecklistWidgetItemId(): string {
   return `item_${crypto.randomUUID().slice(0, 8)}`;
 }
@@ -469,15 +481,20 @@ export const FocusedView = ({
     : isLightbox
       ? 'lightbox'
       : 'panel';
+  // Folder children are not on the canvas DOM; close falls back to the rect.
+  const measureNodeId = folderId ? undefined : node.id;
   const transitionContext = useMemo<FocusTransitionContext>(
     () => ({
       cardColor: color,
+      measureSourceRect: measureNodeId
+        ? () => measureItemRect(measureNodeId)
+        : undefined,
       reducedMotion: Boolean(shouldReduceMotion),
       sourceRect: node.rect,
       surface,
       viewport: getViewportSize(),
     }),
-    [color, node.rect, shouldReduceMotion, surface]
+    [color, measureNodeId, node.rect, shouldReduceMotion, surface]
   );
   const plan = useMemo(
     () => transition.plan(transitionContext),

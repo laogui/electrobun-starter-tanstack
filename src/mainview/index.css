@@ -972,6 +972,16 @@ body.resizing-nwse * {
   display: none;
 }
 
+/* Full-bleed focus shell surface (mirrors `bg-white dark:bg-zinc-950`), in
+   hex so the clipReveal transition can blend a card color into it. */
+:root {
+  --focus-shell-surface: #ffffff;
+}
+
+.dark {
+  --focus-shell-surface: #09090b;
+}
+
 /* Canvas is visibility-hidden while a focused view fully covers it, so React
    Flow stops painting behind the fullscreen note. Restored at close start. */
 .focus-canvas-hidden {

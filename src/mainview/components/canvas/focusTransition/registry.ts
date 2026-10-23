@@ -1,3 +1,4 @@
+import { clipReveal } from './clipReveal';
 import { scaleMorph } from './scaleMorph';
 import type { FocusTransition } from './types';
 
@@ -10,10 +11,11 @@ import type { FocusTransition } from './types';
  *   localStorage.setItem('gb:focus-transition', '<id>'); location.reload();
  */
 export const FOCUS_TRANSITIONS: Readonly<Record<string, FocusTransition>> = {
+  [clipReveal.id]: clipReveal,
   [scaleMorph.id]: scaleMorph,
 };
 
-export const DEFAULT_FOCUS_TRANSITION: FocusTransition = scaleMorph;
+export const DEFAULT_FOCUS_TRANSITION: FocusTransition = clipReveal;
 
 export const FOCUS_TRANSITION_OVERRIDE_KEY = 'gb:focus-transition';
 

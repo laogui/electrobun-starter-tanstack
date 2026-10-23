@@ -19,6 +19,13 @@ export interface FocusTransitionContext {
    * or undefined for non-note surfaces and uncolored cards.
    */
   cardColor: string | undefined;
+  /**
+   * Re-reads the source card's current screen rect from the DOM (null when
+   * it is not rendered). Call it lazily (e.g. from a variant resolved at
+   * close start), never during `plan`, so close can return to where the card
+   * is now even after the canvas panned or zoomed behind the focused view.
+   */
+  readSourceRect?: () => DOMRect | null;
   /** Honour `prefers-reduced-motion`: keep it to a short fade. */
   reducedMotion: boolean;
   /**

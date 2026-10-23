@@ -135,14 +135,19 @@ function rectForNode(node: NodeWithLayout): DOMRect {
   );
 }
 
-function domRectForItem(item: FocusedItem): DOMRect {
+function liveDomRectForItem(item: FocusedItem): DOMRect | null {
   const el =
     typeof document === 'undefined'
       ? null
       : (document.querySelector(
-          `[data-id="${item.id}"]`
+          `[data-id="${CSS.escape(item.id)}"]`
         ) as HTMLElement | null);
-  return el?.getBoundingClientRect() ?? item.rect;
+  const rect = el?.getBoundingClientRect();
+  return rect && rect.width > 0 && rect.height > 0 ? rect : null;
+}
+
+function domRectForItem(item: FocusedItem): DOMRect {
+  return liveDomRectForItem(item) ?? item.rect;
 }
 
 function generateChecklistWidgetItemId(): string {
@@ -472,12 +477,13 @@ export const FocusedView = ({
   const transitionContext = useMemo<FocusTransitionContext>(
     () => ({
       cardColor: color,
+      readSourceRect: () => liveDomRectForItem(node),
       reducedMotion: Boolean(shouldReduceMotion),
       sourceRect: node.rect,
       surface,
       viewport: getViewportSize(),
     }),
-    [color, node.rect, shouldReduceMotion, surface]
+    [color, node, shouldReduceMotion, surface]
   );
   const plan = useMemo(
     () => transition.plan(transitionContext),

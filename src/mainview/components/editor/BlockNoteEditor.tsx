@@ -30,13 +30,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 
 import { buildTextNoteFrontmatter } from '@/hooks/useNoteSaver';
+import { loadBlockNoteWithPrefetch } from '@/lib/blockNotePrefetch';
 import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { registerNoteBodyEditor } from '@/lib/noteBodySync';
 import {
   applyCanonicalNoteSnapshot,
   applyNoteMetadataChanges,
 } from '@/lib/noteMetadataProjection';
-import { rpcGetLocalHttpEndpoint, rpcLoadBlockNote } from '@/lib/rpc';
+import { rpcGetLocalHttpEndpoint } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -71,6 +72,12 @@ interface BlockNoteEditorProps {
   noteId?: unknown;
   onMarkdownChange: (markdown: string) => void;
   onPreviewUpdate?: (updates: Record<string, unknown>) => void;
+  /**
+   * Fires once, a frame after the editor surface has mounted with its initial
+   * content (including the one-time markdown import for legacy notes). The
+   * focused view keeps the editor hidden behind a static preview until then.
+   */
+  onReady?: () => void;
   onSaveStatusChange?: (
     status: BlockNoteSaveStatus,
     lastSavedAt: Date | null
@@ -114,6 +121,7 @@ export default function BlockNoteEditor({
   noteId,
   onMarkdownChange,
   onPreviewUpdate,
+  onReady,
   onSaveStatusChange,
   onTitleChange,
   title,
@@ -223,7 +231,9 @@ export default function BlockNoteEditor({
     }
     (async () => {
       try {
-        const response = await rpcLoadBlockNote(noteId);
+        // Consumes the request started when the open was initiated (if still
+        // fresh); otherwise loads now. Single-use, so revisions stay exact.
+        const response = await loadBlockNoteWithPrefetch(noteId);
         if (cancelled) {
           return;
         }
@@ -355,6 +365,7 @@ export default function BlockNoteEditor({
         });
       }}
       onMarkdownChange={onMarkdownChange}
+      onReady={onReady}
       onRetryConflictLoad={retryConflictLoad}
       onTitleBlur={() => {
         // flush latest payload — handled inside BlockNoteSurface after
@@ -394,6 +405,7 @@ interface BlockNoteSurfaceProps {
   onExternalTitle: (title: string) => void;
   onKeepLocal: () => void;
   onMarkdownChange: (markdown: string) => void;
+  onReady?: () => void;
   onRetryConflictLoad: () => void;
   onTitleBlur: () => void;
   onTitleChange: (next: string) => void;
@@ -425,6 +437,7 @@ function BlockNoteSurface({
   onExternalTitle,
   onKeepLocal,
   onMarkdownChange,
+  onReady,
   onRetryConflictLoad,
   onTitleBlur,
   onTitleChange,
@@ -556,6 +569,21 @@ function BlockNoteSurface({
     onExternalTitle,
   ]);
 
+  // Report readiness once, a frame after the content is in the DOM, so the
+  // focused view can crossfade from its static preview without a jump.
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const didSignalReadyRef = useRef(false);
+  const signalReady = useCallback(() => {
+    if (didSignalReadyRef.current) {
+      return;
+    }
+    didSignalReadyRef.current = true;
+    requestAnimationFrame(() => {
+      onReadyRef.current?.();
+    });
+  }, []);
+
   // If we recovered from markdown (no sidecar yet), import the markdown body
   // once the editor surface mounts.
   const didImportMarkdownRef = useRef(false);
@@ -565,10 +593,12 @@ function BlockNoteSurface({
     }
     if (!initial.recoveredFromMarkdown) {
       didImportMarkdownRef.current = true;
+      signalReady();
       return;
     }
     if (!effectiveMarkdown.trim()) {
       didImportMarkdownRef.current = true;
+      signalReady();
       return;
     }
     didImportMarkdownRef.current = true;
@@ -581,6 +611,8 @@ function BlockNoteSurface({
         }
       } catch (error) {
         console.error('[blocknote] Failed to import markdown:', error);
+      } finally {
+        signalReady();
       }
     })();
   }, [
@@ -588,6 +620,7 @@ function BlockNoteSurface({
     effectiveMarkdown,
     initial.recoveredFromMarkdown,
     latestBlocksRef,
+    signalReady,
   ]);
   const setEditorRoot = useCallback(
     (element: HTMLDivElement | null) => {

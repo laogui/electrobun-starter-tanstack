@@ -866,6 +866,119 @@ body.resizing-nwse * {
   background-color: transparent;
 }
 
+/* Static stand-in for the focused BlockNote editor while the open animation
+   runs (see FocusedNotePreview). Mirrors BlockNote's default typography —
+   16px Inter, 1.5 line height, 3px block padding, 54px inline gutter — so
+   the crossfade to the live editor does not shift text. */
+.note-preview-editor {
+  padding-inline: 54px;
+  font-family:
+    Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Open Sans",
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: style weight;
+  line-height: 1.5;
+}
+
+.note-preview-editor :where(p, li, blockquote, pre, h1, h2, h3, h4, h5, h6) {
+  padding-block: 3px;
+  margin: 0;
+}
+
+.note-preview-editor :where(h1, h2, h3, h4, h5, h6) {
+  padding-top: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.note-preview-editor :where(h1) {
+  font-size: 3em;
+}
+
+.note-preview-editor :where(h2) {
+  font-size: 2em;
+}
+
+.note-preview-editor :where(h3) {
+  font-size: 1.3em;
+}
+
+.note-preview-editor :where(h5) {
+  font-size: 0.9em;
+}
+
+.note-preview-editor :where(h6) {
+  font-size: 0.8em;
+}
+
+.note-preview-editor :where(ul, ol) {
+  padding-left: 28px;
+  margin: 0;
+}
+
+.note-preview-editor :where(ul ul, ul ol, ol ul, ol ol) {
+  padding-left: 28px;
+  margin-left: 24px;
+}
+
+.note-preview-editor :where(blockquote) {
+  padding-left: 1em;
+  color: #7d797a;
+  border-left: 2px solid #7d797a;
+}
+
+.note-preview-editor :where(pre) {
+  padding: 24px;
+  overflow: hidden;
+  color: #fff;
+  white-space: pre;
+  background-color: #161616;
+  border-radius: 8px;
+}
+
+.note-preview-editor :where(a) {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-preview-editor :where(img) {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.note-preview-editor :where(.note-checkbox) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.5rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -0.15rem;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.75;
+}
+
+.note-preview-editor :where(.note-badge) {
+  display: none;
+}
+
+/* Canvas is visibility-hidden while a focused view fully covers it, so React
+   Flow stops painting behind the fullscreen note. Restored at close start. */
+.focus-canvas-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Keep the overview toggle visibly selected while the map is expanded. */
 .canvas-viewport-chrome .canvas-viewport-controls
   .canvas-minimap-toggle[aria-pressed="true"] {

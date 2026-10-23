@@ -26,7 +26,7 @@ import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
-import { FocusedView } from '@/components/canvas/FocusedView';
+import { FocusedViewHost } from '@/components/canvas/FocusedViewHost';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
@@ -52,6 +52,7 @@ import {
   useSpacePanMode,
 } from '@/hooks/useSpacePanMode';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
+import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { resolveCanvasBackground } from '@/lib/canvasBackground';
 import { isFocusableNode, isLockedNode } from '@/lib/canvasNodePredicates';
 import {
@@ -282,7 +283,8 @@ function CanvasComponent() {
   // near the cursor, since paste events carry no coordinates of their own.
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const { theme, systemTheme } = useTheme();
-  const focusedNode = useCanvasStore((s) => s.focusedNode);
+  // `focusedNode` is deliberately NOT subscribed here: FocusedViewHost owns
+  // it so opening a note does not re-render the route shell.
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
   const focusedFolderId = focusedFolder?.id;
   const createMenuOpen = useCanvasStore((s) => s.createMenuOpen);
@@ -883,7 +885,11 @@ function CanvasComponent() {
   });
 
   const handleCanvasPaste = useEffectEvent((event: ClipboardEvent) => {
-    if (focusedNode || focusedFolder || isEditablePasteTarget(event.target)) {
+    if (
+      useCanvasStore.getState().focusedNode ||
+      focusedFolder ||
+      isEditablePasteTarget(event.target)
+    ) {
       return;
     }
     const clipboard = event.clipboardData;
@@ -986,6 +992,7 @@ function CanvasComponent() {
         if (!isFocusableNode(child.type, child.data)) {
           return;
         }
+        prefetchBlockNoteForData(child.data);
         setFocusedNode({
           id: child.id,
           folderId,
@@ -998,6 +1005,7 @@ function CanvasComponent() {
       } else if (
         isFocusableNode(node.type, node.data as Record<string, unknown>)
       ) {
+        prefetchBlockNoteForData(node.data as Record<string, unknown>);
         setFocusedNode({ id: node.id, type: node.type, data: node.data, rect });
       }
     },
@@ -1166,16 +1174,7 @@ function CanvasComponent() {
         />
       ) : null}
 
-      <AnimatePresence>
-        {focusedNode ? (
-          <FocusedView
-            node={focusedNode}
-            onClose={() => {
-              setFocusedNode(null);
-            }}
-          />
-        ) : null}
-      </AnimatePresence>
+      <FocusedViewHost canvasContainerRef={canvasContainerRef} />
 
       <AnimatePresence>
         {detachedSidebarOpen ? (

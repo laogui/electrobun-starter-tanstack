@@ -1,4 +1,5 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
+import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -47,10 +48,49 @@ function computeRectFromViewport(
   return new DOMRect(left, top, w, h);
 }
 
+/** Screen rect of the React Flow pane (setCenter centers within it). */
+function getFlowPaneRect(): DOMRect {
+  const pane =
+    typeof document === 'undefined'
+      ? null
+      : document.querySelector<HTMLElement>('.react-flow');
+  if (pane) {
+    return pane.getBoundingClientRect();
+  }
+  return new DOMRect(
+    0,
+    0,
+    typeof window === 'undefined' ? 1024 : window.innerWidth,
+    typeof window === 'undefined' ? 768 : window.innerHeight
+  );
+}
+
 /**
- * Center the canvas on `nodeId` then open the matching FocusedView (or
- * FolderView for folders). Awaits the flight animation before reading the DOM
- * so the focus enter animation starts from the correct rect.
+ * Where a node of `width`×`height` (flow units) lands on screen once
+ * `setCenter` has centered it in `pane` at `zoom`. Lets the focus open start
+ * from the pan's destination while the pan is still running.
+ */
+export function computeCenteredNodeRect(
+  width: number,
+  height: number,
+  zoom: number,
+  pane: { height: number; left: number; top: number; width: number }
+): DOMRect {
+  const w = width * zoom;
+  const h = height * zoom;
+  return new DOMRect(
+    pane.left + (pane.width - w) / 2,
+    pane.top + (pane.height - h) / 2,
+    w,
+    h
+  );
+}
+
+/**
+ * Center the canvas on `nodeId` and open the matching FocusedView (or
+ * FolderView for folders). Notes open in parallel with the pan, animating
+ * from the node's computed destination rect; folders still await the flight
+ * because their expansion reads the live canvas DOM.
  */
 export async function openFocusedById({
   nodeId,
@@ -64,6 +104,15 @@ export async function openFocusedById({
   }
 
   const { width, height } = getNodeBoxMetrics(node);
+  const isFolder = node.type === 'folder';
+  const focusable =
+    !isFolder &&
+    isFocusableNode(node.type, node.data as Record<string, unknown>);
+  if (focusable) {
+    // Start the body load before the pan so it is ready when the editor
+    // mounts at the end of the open animation.
+    prefetchBlockNoteForData(node.data as Record<string, unknown>);
+  }
 
   // 1. Trigger flight animation.
   const viewport = rfInstance?.getViewport?.();
@@ -76,7 +125,21 @@ export async function openFocusedById({
     { ...flight, zoom }
   );
 
-  // 2. Wait for the flight to settle + one extra frame for layout flush.
+  // 2a. Notes: open now, from where the pan will put the card.
+  if (!isFolder) {
+    if (!focusable) {
+      return;
+    }
+    setFocusedNode({
+      id: node.id,
+      type: node.type,
+      data: node.data as Record<string, unknown>,
+      rect: computeCenteredNodeRect(width, height, zoom, getFlowPaneRect()),
+    });
+    return;
+  }
+
+  // 2b. Folders: wait for the flight to settle + one frame for layout flush.
   await new Promise<void>((resolve) => {
     setTimeout(resolve, flight.duration + POST_CENTER_LAYOUT_FRAME_MS);
   });
@@ -91,22 +154,8 @@ export async function openFocusedById({
     el?.getBoundingClientRect() ??
     computeRectFromViewport(node, rfInstance, width, height);
 
-  if (node.type === 'folder') {
-    setFocusedFolder({
-      id: node.id,
-      data: node.data as Record<string, unknown>,
-      rect,
-    });
-    return;
-  }
-
-  if (!isFocusableNode(node.type, node.data as Record<string, unknown>)) {
-    return;
-  }
-
-  setFocusedNode({
+  setFocusedFolder({
     id: node.id,
-    type: node.type,
     data: node.data as Record<string, unknown>,
     rect,
   });

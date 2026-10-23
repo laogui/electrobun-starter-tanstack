@@ -17,6 +17,22 @@ export const POPOVER_SPRING = {
 /** Exits are quicker than entrances so dismissal never blocks the user. */
 export const POPOVER_EXIT = { duration: 0.12, ease: EASE_OUT } as const;
 
+/** Focus view (card → fullscreen) open: tween so every variant shares a
+ *  deterministic end time (the editor mounts when it lands). */
+export const FOCUS_OPEN_MS = 280;
+/** Focus view close: quicker than the open so dismissal never blocks. */
+export const FOCUS_CLOSE_MS = 220;
+export const FOCUS_OPEN_TRANSITION = {
+  duration: FOCUS_OPEN_MS / 1000,
+  ease: EASE_OUT_QUINT,
+} as const;
+export const FOCUS_CLOSE_TRANSITION = {
+  duration: FOCUS_CLOSE_MS / 1000,
+  ease: EASE_OUT_QUINT,
+} as const;
+/** Crossfade from the static note preview to the live editor. */
+export const FOCUS_EDITOR_SWAP_MS = 120;
+
 export const VIEWPORT_ZOOM_MS = 200;
 export const VIEWPORT_PAN_MS = 240;
 

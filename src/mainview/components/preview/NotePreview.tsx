@@ -22,6 +22,12 @@ interface NotePreviewProps {
   excerpt?: unknown;
   fallback?: unknown;
   html?: unknown;
+  /**
+   * `card` (default): compact, masked canvas-card preview.
+   * `editor`: unmasked, typeset to mirror the focused BlockNote editor so it
+   * can stand in for it during the open animation.
+   */
+  variant?: 'card' | 'editor';
 }
 
 const toText = (value: unknown): string =>
@@ -106,6 +112,7 @@ function NotePreviewComponent({
   excerpt,
   fallback,
   html,
+  variant = 'card',
 }: NotePreviewProps) {
   const rawHtml = toText(html);
   const fallbackMarkdown = toText(fallback);
@@ -141,6 +148,14 @@ function NotePreviewComponent({
     [renderedPreviewHtml]
   );
   const fallbackText = toText(excerpt) || fallbackMarkdown || 'Empty note';
+
+  if (variant === 'editor') {
+    return (
+      <div className={cn('note-preview-editor', className)}>
+        {renderedPreviewHtml ? renderedPreview : null}
+      </div>
+    );
+  }
 
   if (!renderedPreviewHtml) {
     return (

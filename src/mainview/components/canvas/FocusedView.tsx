@@ -1,10 +1,8 @@
 import { useReactFlow } from '@xyflow/react';
 import { ArrowLeft } from 'lucide-react';
-import { useReducedMotion } from 'motion/react';
+import { useIsPresent, useReducedMotion } from 'motion/react';
 import * as motion from 'motion/react-m';
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -13,7 +11,6 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { NoteEditorLoading } from '@/components/editor/NoteEditorLoading';
 import { SaveIndicator } from '@/components/editor/SaveIndicator';
 import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver';
 import { ExtensionFallback } from '@/extensions/ExtensionFallback';
@@ -44,6 +41,12 @@ import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../../paraglide/messages.js';
 import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
+import { FocusedNoteBody } from './FocusedNoteBody';
+import { getActiveFocusTransition } from './focusTransition/registry';
+import type {
+  FocusSurfaceKind,
+  FocusTransitionContext,
+} from './focusTransition/types';
 import { ImageZoomPan } from './ImageZoomPan';
 import { AssetContent } from './nodes/AssetNode';
 import type { CardContentData, ChecklistItem } from './nodes/CardNode';
@@ -52,18 +55,7 @@ import { ImageContent } from './nodes/ImageNode';
 import { LinkContent } from './nodes/LinkNode';
 import { toCardContentData, toImageData } from './nodes/nodeDataGuards';
 
-// Word/character counts derived from markdown body. Stripping fenced code,
-const BlockNoteEditor = lazy(
-  () => import('@/components/editor/BlockNoteEditor')
-);
-
-const CLOSE_DURATION_S = 0.26;
-/**
- * Floor for the expand morph's starting scale. A tiny floor makes the panel
- * grow from a blurry, reflowed thumbnail; a gentle floor keeps the content
- * crisp so the open reads as a smooth settle rather than a zoom pop.
- */
-const OPEN_MIN_SCALE = 0.86;
+const LAYER_WILL_CHANGE = 'transform, opacity';
 
 function getViewportSize() {
   return {
@@ -72,29 +64,11 @@ function getViewportSize() {
   };
 }
 
-/**
- * FLIP-style expand metrics: the full-bleed shell scales up from the card's
- * center so the open path reads as "this card grew into focus mode".
- */
-function getExpandFromRect(
-  rect: DOMRect,
-  viewport: { height: number; width: number }
-) {
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-  const transformOrigin = `${(centerX / viewport.width) * 100}% ${
-    (centerY / viewport.height) * 100
-  }%`;
-  const scale = Math.max(
-    OPEN_MIN_SCALE,
-    Math.min(rect.width / viewport.width, rect.height / viewport.height, 0.92)
-  );
-  return { scale, transformOrigin };
-}
-
 interface FocusedViewProps {
   node: FocusedItem;
   onClose: () => void;
+  /** Called once when the open animation lands (host hides the canvas). */
+  onOpenComplete?: () => void;
 }
 
 interface FolderChildEntry {
@@ -200,7 +174,11 @@ function normalizeChecklistWidgetItems(
 
 // This orchestrates focus navigation and delegates the per-kind editing UI below.
 // react-doctor-disable-next-line react-doctor/no-giant-component
-export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
+export const FocusedView = ({
+  node,
+  onClose,
+  onOpenComplete,
+}: FocusedViewProps) => {
   useCanvasTypeRegistryRevision();
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
@@ -480,13 +458,66 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const didToastOnErrorRef = useRef(false);
   const shouldReduceMotion = useReducedMotion();
+  const isPresent = useIsPresent();
 
-  // Origin for the expand/collapse morph. Recomputed when navigating to a
-  // sibling so close shrinks back toward the currently focused card.
-  const expandMetrics = useMemo(() => {
-    const viewport = getViewportSize();
-    return getExpandFromRect(node.rect, viewport);
-  }, [node.rect]);
+  // Open / close animation is pluggable (see focusTransition/registry.ts).
+  // The context is recomputed when navigating to a sibling so close returns
+  // toward the currently focused card.
+  const transition = getActiveFocusTransition();
+  const surface: FocusSurfaceKind = isText
+    ? 'note'
+    : isLightbox
+      ? 'lightbox'
+      : 'panel';
+  const transitionContext = useMemo<FocusTransitionContext>(
+    () => ({
+      cardColor: color,
+      reducedMotion: Boolean(shouldReduceMotion),
+      sourceRect: node.rect,
+      surface,
+      viewport: getViewportSize(),
+    }),
+    [color, node.rect, shouldReduceMotion, surface]
+  );
+  const plan = useMemo(
+    () => transition.plan(transitionContext),
+    [transition, transitionContext]
+  );
+  const [openComplete, setOpenComplete] = useState(false);
+  const openCompleteRef = useRef(false);
+  const planRef = useRef(plan);
+  planRef.current = plan;
+  const onOpenCompleteRef = useRef(onOpenComplete);
+  onOpenCompleteRef.current = onOpenComplete;
+  const isPresentRef = useRef(isPresent);
+  isPresentRef.current = isPresent;
+  const hostNotifiedRef = useRef(false);
+  const handleLayerAnimationComplete = useCallback(() => {
+    // Also fires after exit / unrelated animate changes: only the first
+    // landing while present counts as "open complete".
+    if (!isPresentRef.current) {
+      return;
+    }
+    if (!openCompleteRef.current) {
+      openCompleteRef.current = true;
+      setOpenComplete(true);
+      planRef.current.onOpenComplete?.();
+    }
+    if (!hostNotifiedRef.current) {
+      hostNotifiedRef.current = true;
+      onOpenCompleteRef.current?.();
+    }
+  }, []);
+  useEffect(() => {
+    if (!isPresent) {
+      // Re-opened during the exit? Notify the host again when it lands.
+      hostNotifiedRef.current = false;
+      planRef.current.onCloseStart?.();
+    }
+  }, [isPresent]);
+  // will-change only while a layer is actually animating.
+  const animating = !(openComplete && isPresent);
+  const completeOn = plan.completeOn ?? 'shell';
 
   const handleSaveStatusChange = useCallback(
     (status: BlockNoteSaveStatus, savedAt: Date | null) => {
@@ -593,218 +624,224 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
     };
   }, [handleClose]);
 
-  const openTransition = shouldReduceMotion
-    ? { duration: 0.1 }
-    : {
-        default: {
-          type: 'spring' as const,
-          stiffness: 240,
-          damping: 30,
-          mass: 0.9,
-        },
-        opacity: { duration: 0.18, ease: EASE_OUT_QUINT },
-      };
-  const closeTransition = {
-    duration: shouldReduceMotion ? 0.08 : CLOSE_DURATION_S,
-    ease: EASE_OUT_QUINT,
-  };
   const chromeTransition = {
     delay: shouldReduceMotion ? 0 : 0.16,
     duration: shouldReduceMotion ? 0.08 : 0.22,
     ease: EASE_OUT_QUINT,
   };
 
-  // Root must be a motion node so AnimatePresence can run the exit morph.
+  const { className: shellClassName, ...shellMotion } = plan.shell;
+  const { className: contentClassName, ...contentMotion } = plan.content;
+
+  // Two independently animated layers so transition variants can move the
+  // background (shell) and the note (content) separately. Their `exit`
+  // animations keep the subtree mounted inside AnimatePresence.
   return (
     <motion.div
-      animate={{ opacity: 1, scale: 1 }}
-      className={cn(
-        'fixed inset-0 z-60 flex overflow-hidden',
-        isLightbox ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950'
-      )}
-      exit={{
-        opacity: 0,
-        scale: shouldReduceMotion ? 1 : expandMetrics.scale,
-        transition: closeTransition,
-      }}
-      initial={
-        shouldReduceMotion
-          ? { opacity: 0, scale: 1 }
-          : { opacity: 0, scale: expandMetrics.scale }
-      }
-      style={{ transformOrigin: expandMetrics.transformOrigin }}
-      transition={openTransition}
+      className="fixed inset-0 z-60 overflow-hidden"
+      data-focus-transition={transition.id}
     >
-      {/* Floating Back Button (positioned below macOS traffic lights) */}
-      <motion.button
-        animate={{ opacity: 1 }}
-        aria-label={m.focused_close()}
+      <motion.div
+        aria-hidden
         className={cn(
-          'absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full transition-colors',
-          chromeButtonClass
+          'absolute inset-0',
+          isLightbox ? 'bg-zinc-950' : 'bg-white dark:bg-zinc-950',
+          shellClassName
         )}
-        initial={{ opacity: 0 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleClose();
+        {...shellMotion}
+        onAnimationComplete={
+          completeOn === 'shell' ? handleLayerAnimationComplete : undefined
+        }
+        style={{
+          ...shellMotion.style,
+          willChange: animating ? LAYER_WILL_CHANGE : 'auto',
         }}
-        transition={chromeTransition}
-        type="button"
+      />
+      {plan.overlay}
+      <motion.div
+        className={cn('absolute inset-0 flex', contentClassName)}
+        {...contentMotion}
+        onAnimationComplete={
+          completeOn === 'content' ? handleLayerAnimationComplete : undefined
+        }
+        style={{
+          ...contentMotion.style,
+          willChange: animating ? LAYER_WILL_CHANGE : 'auto',
+        }}
       >
-        <ArrowLeft size={16} />
-      </motion.button>
-
-      {/* Floating image caption (lightbox mode) */}
-      {isLightbox && title ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-70 flex justify-center">
-          <span className="max-w-[70vw] truncate rounded-full bg-white/10 px-4 py-1.5 text-sm text-white/90 backdrop-blur-md">
-            {title}
-          </span>
-        </div>
-      ) : null}
-
-      {/* Floating Save Status (bottom right) */}
-      {isText && saveStatus !== 'idle' ? (
-        <div className="absolute right-6 bottom-6 z-70 text-xs text-zinc-400">
-          <SaveIndicator lastSavedAt={lastSavedAt} status={saveStatus} />
-        </div>
-      ) : null}
-
-      {/* Content Area */}
-      <div
-        className="flex h-full w-full justify-center overflow-hidden"
-        onClick={handleClose}
-        role="presentation"
-      >
-        <div
+        {/* Floating Back Button (positioned below macOS traffic lights) */}
+        <motion.button
+          animate={{ opacity: 1 }}
+          aria-label={m.focused_close()}
           className={cn(
-            isFullBleed && 'h-full w-full',
-            !isFullBleed &&
-              (isWide
-                ? 'h-full w-full max-w-6xl p-4 pt-16 md:p-10 md:pt-16'
-                : 'h-full w-full max-w-4xl p-4 pt-16 md:p-12 md:pt-16')
+            'absolute top-12 left-6 z-70 flex size-8 items-center justify-center rounded-full transition-colors',
+            chromeButtonClass
           )}
-          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClose();
+          }}
+          transition={chromeTransition}
+          type="button"
+        >
+          <ArrowLeft size={16} />
+        </motion.button>
+
+        {/* Floating image caption (lightbox mode) */}
+        {isLightbox && title ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-6 z-70 flex justify-center">
+            <span className="max-w-[70vw] truncate rounded-full bg-white/10 px-4 py-1.5 text-sm text-white/90 backdrop-blur-md">
+              {title}
+            </span>
+          </div>
+        ) : null}
+
+        {/* Floating Save Status (bottom right) */}
+        {isText && saveStatus !== 'idle' ? (
+          <div className="absolute right-6 bottom-6 z-70 text-xs text-zinc-400">
+            <SaveIndicator lastSavedAt={lastSavedAt} status={saveStatus} />
+          </div>
+        ) : null}
+
+        {/* Content Area */}
+        <div
+          className="flex h-full w-full justify-center overflow-hidden"
+          onClick={handleClose}
+          role="presentation"
         >
           <div
-            className={
-              isFullBleed
-                ? 'h-full w-full'
-                : 'h-full w-full overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-2xl dark:border-white/5 dark:bg-zinc-900'
-            }
+            className={cn(
+              isFullBleed && 'h-full w-full',
+              !isFullBleed &&
+                (isWide
+                  ? 'h-full w-full max-w-6xl p-4 pt-16 md:p-10 md:pt-16'
+                  : 'h-full w-full max-w-4xl p-4 pt-16 md:p-12 md:pt-16')
+            )}
+            onClick={(e) => e.stopPropagation()}
           >
-            {node.type === 'extension' &&
-            extensionCanvasTypeId &&
-            extensionInstanceId ? (
-              <ExtensionHostShell
-                availability={
-                  !extensionRecord ||
-                  isExtensionInstanceLoadError(extensionRecord)
-                    ? 'unknown'
-                    : extensionAvailability !== 'available'
-                      ? extensionAvailability
-                      : extensionType && !extensionCompatible
-                        ? 'incompatible'
-                        : extensionAvailability
-                }
-                canvasTypeId={extensionCanvasTypeId}
-                instanceId={extensionInstanceId}
-                minHeight={0}
-                minWidth={0}
-                nodeId={node.id}
-                onEnable={() => {
-                  setExtensionEnabled(extensionCanvasTypeId, true).catch(
-                    () => undefined
-                  );
-                }}
-                presentation={
+            <div
+              className={
+                isFullBleed
+                  ? 'h-full w-full'
+                  : 'h-full w-full overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-2xl dark:border-white/5 dark:bg-zinc-900'
+              }
+            >
+              {node.type === 'extension' &&
+              extensionCanvasTypeId &&
+              extensionInstanceId ? (
+                <ExtensionHostShell
+                  availability={
+                    !extensionRecord ||
+                    isExtensionInstanceLoadError(extensionRecord)
+                      ? 'unknown'
+                      : extensionAvailability !== 'available'
+                        ? extensionAvailability
+                        : extensionType && !extensionCompatible
+                          ? 'incompatible'
+                          : extensionAvailability
+                  }
+                  canvasTypeId={extensionCanvasTypeId}
+                  instanceId={extensionInstanceId}
+                  minHeight={0}
+                  minWidth={0}
+                  nodeId={node.id}
+                  onEnable={() => {
+                    setExtensionEnabled(extensionCanvasTypeId, true).catch(
+                      () => undefined
+                    );
+                  }}
+                  presentation={
+                    extensionRecord &&
+                    !isExtensionInstanceLoadError(extensionRecord)
+                      ? extensionRecord.presentation
+                      : undefined
+                  }
+                  readOnly={
+                    extensionAvailability !== 'available' ||
+                    !extensionCompatible
+                  }
+                  resizable={false}
+                  selected
+                  surface="detail"
+                >
+                  {extensionType?.DetailSurface &&
+                  extensionHost &&
                   extensionRecord &&
-                  !isExtensionInstanceLoadError(extensionRecord)
-                    ? extensionRecord.presentation
-                    : undefined
-                }
-                readOnly={
-                  extensionAvailability !== 'available' || !extensionCompatible
-                }
-                resizable={false}
-                selected
-                surface="detail"
-              >
-                {extensionType?.DetailSurface &&
-                extensionHost &&
-                extensionRecord &&
-                !isExtensionInstanceLoadError(extensionRecord) &&
-                extensionCompatible &&
-                extensionAvailability === 'available' ? (
-                  <extensionType.DetailSurface
-                    context={{
-                      width: 0,
-                      height: 0,
-                      theme: document.documentElement.classList.contains('dark')
-                        ? 'dark'
-                        : 'light',
-                      locale,
-                      readOnly: false,
-                      selected: true,
-                      surface: 'detail',
-                    }}
-                    host={extensionHost}
-                    presentation={extensionRecord.presentation}
-                    state={extensionRecord.state}
+                  !isExtensionInstanceLoadError(extensionRecord) &&
+                  extensionCompatible &&
+                  extensionAvailability === 'available' ? (
+                    <extensionType.DetailSurface
+                      context={{
+                        width: 0,
+                        height: 0,
+                        theme: document.documentElement.classList.contains(
+                          'dark'
+                        )
+                          ? 'dark'
+                          : 'light',
+                        locale,
+                        readOnly: false,
+                        selected: true,
+                        surface: 'detail',
+                      }}
+                      host={extensionHost}
+                      presentation={extensionRecord.presentation}
+                      state={extensionRecord.state}
+                    />
+                  ) : (
+                    <ExtensionFallback
+                      availability={
+                        !extensionRecord ||
+                        isExtensionInstanceLoadError(extensionRecord)
+                          ? 'corrupted'
+                          : extensionAvailability !== 'available'
+                            ? extensionAvailability
+                            : extensionType && !extensionCompatible
+                              ? 'incompatible'
+                              : extensionAvailability
+                      }
+                      canvasTypeId={extensionCanvasTypeId}
+                      onEnable={() => {
+                        setExtensionEnabled(extensionCanvasTypeId, true).catch(
+                          () => undefined
+                        );
+                      }}
+                      presentation={
+                        extensionRecord &&
+                        !isExtensionInstanceLoadError(extensionRecord)
+                          ? extensionRecord.presentation
+                          : undefined
+                      }
+                    />
+                  )}
+                </ExtensionHostShell>
+              ) : node.type === 'image' ? (
+                <ImageZoomPan>
+                  <ImageContent
+                    data={toImageData(node.data)}
+                    isFocused={true}
                   />
-                ) : (
-                  <ExtensionFallback
-                    availability={
-                      !extensionRecord ||
-                      isExtensionInstanceLoadError(extensionRecord)
-                        ? 'corrupted'
-                        : extensionAvailability !== 'available'
-                          ? extensionAvailability
-                          : extensionType && !extensionCompatible
-                            ? 'incompatible'
-                            : extensionAvailability
-                    }
-                    canvasTypeId={extensionCanvasTypeId}
-                    onEnable={() => {
-                      setExtensionEnabled(extensionCanvasTypeId, true).catch(
-                        () => undefined
-                      );
-                    }}
-                    presentation={
-                      extensionRecord &&
-                      !isExtensionInstanceLoadError(extensionRecord)
-                        ? extensionRecord.presentation
-                        : undefined
-                    }
-                  />
-                )}
-              </ExtensionHostShell>
-            ) : node.type === 'image' ? (
-              <ImageZoomPan>
-                <ImageContent data={toImageData(node.data)} isFocused={true} />
-              </ImageZoomPan>
-            ) : node.type === 'asset' ? (
-              <AssetContent data={node.data} isFocused={true} />
-            ) : node.type === 'link' ? (
-              <LinkContent
-                data={node.data}
-                isFocused={true}
-                onUrlChange={handleLinkUrlChange}
-              />
-            ) : isChecklistWidget && checklistWidgetFocusedData ? (
-              <ChecklistFocusedView
-                data={checklistWidgetFocusedData}
-                onCommit={commitChecklistWidgetData}
-              />
-            ) : isText ? (
-              <Suspense
-                fallback={<NoteEditorLoading color={color} title={title} />}
-              >
-                <BlockNoteEditor
-                  color={color}
+                </ImageZoomPan>
+              ) : node.type === 'asset' ? (
+                <AssetContent data={node.data} isFocused={true} />
+              ) : node.type === 'link' ? (
+                <LinkContent
                   data={node.data}
-                  key={node.id}
-                  markdown={content}
+                  isFocused={true}
+                  onUrlChange={handleLinkUrlChange}
+                />
+              ) : isChecklistWidget && checklistWidgetFocusedData ? (
+                <ChecklistFocusedView
+                  data={checklistWidgetFocusedData}
+                  onCommit={commitChecklistWidgetData}
+                />
+              ) : isText ? (
+                <FocusedNoteBody
+                  color={color}
+                  content={content}
+                  data={node.data}
+                  editorEnabled={openComplete}
                   nodeId={node.id}
                   noteId={noteId}
                   onMarkdownChange={(markdown) => {
@@ -825,26 +862,26 @@ export const FocusedView = ({ node, onClose }: FocusedViewProps) => {
                   }}
                   title={title}
                 />
-              </Suspense>
-            ) : isChecklist ? (
-              <ChecklistFocusedView
-                data={toCardContentData(node.data)}
-                onCommit={(updates) => {
-                  commitFocusedData(updates);
-                }}
-              />
-            ) : (
-              <CardContent
-                data={toCardContentData(node.data)}
-                isFocused={true}
-                onChange={(newData) => {
-                  commitFocusedData(newData);
-                }}
-              />
-            )}
+              ) : isChecklist ? (
+                <ChecklistFocusedView
+                  data={toCardContentData(node.data)}
+                  onCommit={(updates) => {
+                    commitFocusedData(updates);
+                  }}
+                />
+              ) : (
+                <CardContent
+                  data={toCardContentData(node.data)}
+                  isFocused={true}
+                  onChange={(newData) => {
+                    commitFocusedData(newData);
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 };

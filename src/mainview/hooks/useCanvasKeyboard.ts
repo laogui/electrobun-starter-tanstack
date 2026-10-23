@@ -2,6 +2,7 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { type MutableRefObject, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
+import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
 import { VIEWPORT_ZOOM_MS, viewportMotion } from '@/lib/motion';
@@ -75,7 +76,8 @@ export function useCanvasKeyboard({
   onDeleteNodes,
   rfInstance,
 }: UseCanvasKeyboardOptions = {}) {
-  const focusedNode = useCanvasStore((s) => s.focusedNode);
+  // `focusedNode` is read from the store at event time (not subscribed) so
+  // opening a note does not re-render the canvas route that hosts this hook.
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
@@ -99,8 +101,6 @@ export function useCanvasKeyboard({
   // keydown handler only needs their *current* value at event time. Mirror them
   // into refs so the listener is wired up once instead of being torn down and
   // rebuilt on every navigation (which also raced the Escape handler).
-  const focusedNodeRef = useRef(focusedNode);
-  focusedNodeRef.current = focusedNode;
   const focusedFolderRef = useRef(focusedFolder);
   focusedFolderRef.current = focusedFolder;
   const searchOpenRef = useRef(searchOpen);
@@ -113,7 +113,8 @@ export function useCanvasKeyboard({
   rfInstanceRef.current = rfInstance;
 
   useEffect(() => {
-    const isModal = () => focusedNodeRef.current || focusedFolderRef.current;
+    const isModal = () =>
+      useCanvasStore.getState().focusedNode || focusedFolderRef.current;
     const isEditing = () => {
       const el = document.activeElement;
       return (
@@ -147,7 +148,7 @@ export function useCanvasKeyboard({
           // Let Dialog handle escape itself; do nothing here.
           return;
         }
-        if (focusedNodeRef.current) {
+        if (useCanvasStore.getState().focusedNode) {
           setFocusedNode(null);
           return;
         }
@@ -400,6 +401,7 @@ export function useCanvasKeyboard({
         if (node.type === 'folder') {
           setFocusedFolder({ id: node.id, data: node.data, rect });
         } else {
+          prefetchBlockNoteForData(node.data as Record<string, unknown>);
           setFocusedNode({
             id: node.id,
             type: node.type,

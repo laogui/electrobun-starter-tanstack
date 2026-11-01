@@ -110,7 +110,7 @@ export class ManifestCorruptError extends Error {
 
   constructor(viewFile: string, backupPath: string, cause: Error) {
     super(
-      `Canvas manifest ${viewFile} is unreadable; a copy was kept at ${backupPath}.`,
+      `Canvas manifest ${viewFile} is corrupt or unreadable; a copy was kept at ${backupPath}.`,
       { cause }
     );
     this.name = 'ManifestCorruptError';

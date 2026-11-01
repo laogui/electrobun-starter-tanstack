@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
-import { ApplicationMenu, Updater, Utils } from 'electrobun/bun';
+import Electrobun, { ApplicationMenu, Updater, Utils } from 'electrobun/bun';
+import { appState } from './appState';
 import type {
   AppInfoResponse,
   SwitchWorkspaceResponse,
@@ -86,6 +87,69 @@ export async function switchWorkspaceImpl(): Promise<SwitchWorkspaceResponse> {
   prefs.workspacePath = target;
   await saveUserPrefs(prefs);
   return { success: true, path: target };
+}
+
+const QUIT_FLUSH_TIMEOUT_MS = 2000;
+let quitFlushState: 'idle' | 'flushing' | 'done' = 'idle';
+
+/** True while a quit is being held back for the renderer's canvas flush. */
+export function isQuitDeferredForFlush(event: unknown): boolean {
+  return (
+    (event as { response?: { allow?: boolean } } | undefined)?.response
+      ?.allow === false
+  );
+}
+
+async function requestRendererFlush(): Promise<void> {
+  const rpc = appState.mainRpc as unknown as {
+    request?: Record<
+      string,
+      ((params: unknown) => Promise<unknown>) | undefined
+    >;
+  } | null;
+  const flush = rpc?.request?.flushCanvas;
+  if (!flush) {
+    return;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), QUIT_FLUSH_TIMEOUT_MS);
+  });
+  try {
+    const result = await Promise.race([flush({}), timeout]);
+    if (result === 'timeout') {
+      console.warn('[quit] Renderer canvas flush timed out');
+    } else if (!(result as { success?: boolean } | null)?.success) {
+      console.warn('[quit] Renderer canvas flush reported failure');
+    }
+  } catch (error) {
+    console.warn('[quit] Renderer canvas flush failed:', error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Before the app quits, ask the renderer to flush its debounced canvas save
+ * (bounded by a timeout), then quit for real. Register this BEFORE any other
+ * `before-quit` listener so they can skip the deferred first attempt via
+ * `isQuitDeferredForFlush`.
+ */
+export function installQuitFlush(): void {
+  Electrobun.events.on('before-quit', (event: unknown) => {
+    if (quitFlushState === 'done') {
+      return;
+    }
+    (event as { response: { allow: boolean } }).response = { allow: false };
+    if (quitFlushState === 'flushing') {
+      return;
+    }
+    quitFlushState = 'flushing';
+    requestRendererFlush().finally(() => {
+      quitFlushState = 'done';
+      Utils.quit();
+    });
+  });
 }
 
 export function setApplicationMenu() {

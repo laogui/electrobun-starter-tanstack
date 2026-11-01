@@ -10,6 +10,7 @@ import type {
  * `electrobun/view` is dynamically imported to avoid crashing Vite.
  */
 
+import { flushRegisteredCanvas } from '@/lib/canvasFlushRegistry';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import type {
   AICredentialStatus,
@@ -96,7 +97,13 @@ async function initElectrobun() {
     const rpc = Electroview.defineRPC({
       maxRequestTime: Number.POSITIVE_INFINITY,
       handlers: {
-        requests: {},
+        requests: {
+          // Sent by the main process right before quitting so the debounced
+          // manifest flush is not lost. Bounded by a timeout on the Bun side.
+          flushCanvas: async () => ({
+            success: await flushRegisteredCanvas(),
+          }),
+        },
         messages: {
           // Phase 8 broadcast: the settings window now ships the full
           // AppSettings (theme + locale + fontFamily + canvasBackground +
@@ -168,7 +175,23 @@ async function getElectrobun() {
   return await globalThis.__ghostboardInitPromise;
 }
 
-export async function loadCanvas(viewId: string) {
+export interface LoadCanvasResponse {
+  /** Optional: absolute path of the backup used for recovery, when any. */
+  backupPath?: string;
+  edges: any[];
+  extensionInstances?: Record<string, any>;
+  nodes: any[];
+  /**
+   * Optional: set by the main process when the manifest was unreadable and
+   * this payload came from a backup (e.g. `.bak`, `.pre-topic`).
+   */
+  recoveredFrom?: string;
+  widgets?: Record<string, any>;
+}
+
+export async function loadCanvas(
+  viewId: string
+): Promise<LoadCanvasResponse | null> {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return null;

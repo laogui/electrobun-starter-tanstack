@@ -883,5 +883,16 @@
   "extension_fallback_incompatible": "此卡片需要兼容的插件迁移，原始数据已保留。",
   "extension_fallback_disabled": "此画布类型已在当前工作区中停用。",
   "extension_fallback_unavailable": "此画布类型不可用，数据已保留。",
-  "asset_media_load_failed": "无法加载媒体文件。"
+  "asset_media_load_failed": "无法加载媒体文件。",
+  "toast_move_target_load_failed": "无法读取目标画布，未移动任何内容。",
+  "toast_move_canvas_changed": "移动期间画布发生了变化，未移动任何内容。",
+  "toast_canvas_recovered_from_backup": "此画布无法读取，已从备份（{source}）恢复。最近的修改可能丢失。",
+  "toast_view_delete_save_failed": "当前画布保存失败，已取消删除。",
+  "canvas_load_error_title": "画布加载失败",
+  "canvas_load_error_readonly": "画布加载失败，编辑不会保存。",
+  "canvas_load_error_corrupt": "画布文件已损坏，且没有可用的备份。原文件未被覆盖。",
+  "canvas_load_error_missing": "找不到此画布。",
+  "canvas_load_error_failed": "读取画布时出错：{message}",
+  "canvas_load_error_retry": "重试",
+  "canvas_load_error_switch": "打开其他画布"
 }

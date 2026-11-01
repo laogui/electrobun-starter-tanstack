@@ -38,6 +38,7 @@ import {
   buildImportedCardCreateOptions,
   handleMarkdownImportResult,
 } from '@/lib/importMarkdownCards';
+import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import {
   rpcCreateView,
   rpcCreateViewFromTemplate,
@@ -264,6 +265,7 @@ export function ViewSwitcher({
   const setViews = useCanvasStore((s) => s.setViews);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
   const switchView = useCanvasStore((s) => s.switchView);
+  const flushActiveView = useCanvasStore((s) => s.flushActiveView);
   // Load views list + persisted activeViewId on mount
   useEffect(() => {
     (async () => {
@@ -459,6 +461,13 @@ export function ViewSwitcher({
         return;
       }
       const previousActiveViewId = activeViewId;
+      const deletingActive = viewId === activeViewId;
+      // Flush the canvas being deleted first so its trash copy (what "Undo"
+      // restores) holds the latest edits. Abort the delete if that fails.
+      if (deletingActive && !(await flushActiveView())) {
+        toast.error(m.toast_view_delete_save_failed());
+        return;
+      }
       const result = (await rpcDeleteView(viewId)) as {
         success: boolean;
         activeViewId?: string;
@@ -471,8 +480,19 @@ export function ViewSwitcher({
       const newViews = views.filter((v) => v.id !== viewId);
       setViews(newViews);
 
-      if (viewId === activeViewId && result.activeViewId !== undefined) {
-        await handleSwitchView(result.activeViewId);
+      if (deletingActive) {
+        clearPendingFlushBackup(viewId);
+        if (result.activeViewId !== undefined) {
+          // The outgoing view no longer exists: never flush it again.
+          const switched = await switchView(result.activeViewId, {
+            skipFlush: true,
+          });
+          if (switched) {
+            setOpen(false);
+          } else {
+            toast.error(m.toast_view_switch_save_failed());
+          }
+        }
       }
 
       if (result.trashId !== undefined) {
@@ -491,7 +511,15 @@ export function ViewSwitcher({
         });
       }
     },
-    [views, activeViewId, setViews, handleSwitchView, handleRestore]
+    [
+      views,
+      activeViewId,
+      setViews,
+      switchView,
+      flushActiveView,
+      setOpen,
+      handleRestore,
+    ]
   );
 
   const handleDelete = useCallback(

@@ -170,6 +170,31 @@ describe('persistenceSlice', () => {
       expect(saveManifest).not.toHaveBeenCalled();
     });
 
+    it('re-flushes edits made while the switch flush was in flight', async () => {
+      state().hydrate([card('a')], []);
+      saveManifest.mockImplementationOnce(async () => {
+        // Simulate the user typing during the save RPC round-trip.
+        state().setNodes((nodes) => [...nodes, card('late')]);
+        return { success: true };
+      });
+
+      await expect(state().switchView('second')).resolves.toBe(true);
+
+      expect(saveManifest).toHaveBeenCalledTimes(2);
+      const [, lastNodes] = savedCall(1);
+      expect(lastNodes.map((n) => n.id)).toEqual(['a', 'late']);
+      expect(state().activeViewId).toBe('second');
+    });
+
+    it('skips the outgoing flush when asked (deleted view)', async () => {
+      state().hydrate([card('a')], []);
+      await expect(
+        state().switchView('second', { skipFlush: true })
+      ).resolves.toBe(true);
+      expect(saveManifest).not.toHaveBeenCalled();
+      expect(state().activeViewId).toBe('second');
+    });
+
     it('commits a typed Topic draft into the outgoing flush', async () => {
       state().hydrate([], []);
       state().beginTopicDraft(null, { anchor: { x: 0, y: 0 } });
@@ -215,6 +240,39 @@ describe('persistenceSlice', () => {
 
       expect(state().nodes.map((n) => n.id)).toEqual(['keep']);
       expect(state().edges).toEqual([]);
+    });
+
+    it('aborts without writing when the target canvas cannot be read', async () => {
+      loadCanvas.mockRejectedValueOnce(new Error('ManifestCorruptError'));
+
+      await expect(state().moveSelectedToView('other')).resolves.toBe(false);
+
+      expect(saveManifest).not.toHaveBeenCalled();
+      expect(state().nodes).toHaveLength(3);
+    });
+
+    it('aborts without writing when the target canvas is missing', async () => {
+      loadCanvas.mockResolvedValueOnce(null);
+
+      await expect(state().moveSelectedToView('other')).resolves.toBe(false);
+
+      expect(saveManifest).not.toHaveBeenCalled();
+      expect(state().nodes).toHaveLength(3);
+    });
+
+    it('keeps edits made during the move in the source canvas', async () => {
+      saveManifest.mockImplementationOnce(async () => {
+        // Target save in flight: the user adds a card to the source canvas.
+        state().setNodes((nodes) => [...nodes, card('late')]);
+        return { success: true };
+      });
+
+      await expect(state().moveSelectedToView('other')).resolves.toBe(true);
+
+      const [sourceView, sourceNodes] = savedCall(1);
+      expect(sourceView).toBe('default');
+      expect(sourceNodes.map((n) => n.id)).toEqual(['keep', 'late']);
+      expect(state().nodes.map((n) => n.id)).toEqual(['keep', 'late']);
     });
 
     it('rolls the target back when the source save fails', async () => {

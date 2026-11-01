@@ -21,6 +21,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { CanvasFlowLayer } from '@/components/canvas/CanvasFlowLayer';
+import { CanvasLoadErrorScreen } from '@/components/canvas/CanvasLoadErrorScreen';
 import { CanvasPanels } from '@/components/canvas/CanvasPanels';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
@@ -810,6 +811,7 @@ function CanvasComponent() {
   );
 
   const hydrated = useCanvasStore((s) => s._hydrated);
+  const canvasLoadError = useCanvasStore((s) => s.canvasLoadError);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
@@ -887,6 +889,7 @@ function CanvasComponent() {
 
   const handleCanvasPaste = useEffectEvent((event: ClipboardEvent) => {
     if (
+      !useCanvasStore.getState()._hydrated ||
       useCanvasStore.getState().focusedNode ||
       focusedFolder ||
       isEditablePasteTarget(event.target)
@@ -1123,6 +1126,10 @@ function CanvasComponent() {
     canvasBackground,
     rfInstance,
   });
+
+  if (!hydrated && canvasLoadError) {
+    return <CanvasLoadErrorScreen error={canvasLoadError} />;
+  }
 
   if (!hydrated) {
     return (

@@ -129,6 +129,11 @@ export function useCanvasKeyboard({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // An un-hydrated canvas (loading, or failed to load) is not persisted:
+      // never let shortcuts mutate it.
+      if (!useCanvasStore.getState()._hydrated) {
+        return;
+      }
       const target = e.target instanceof Element ? e.target : null;
       if (
         target?.closest('[data-canvas-learning][role="dialog"]') ||

@@ -38,6 +38,8 @@ interface WorkspaceState {
   entries: NodeMetadataMap;
   flushTimer: ReturnType<typeof setTimeout> | null;
   loaded: boolean;
+  /** Shared first load so concurrent callers never race to replace `entries`. */
+  loading: Promise<NodeMetadataMap> | null;
 }
 
 const states = new Map<string, WorkspaceState>();
@@ -49,7 +51,7 @@ function resolvePath(wsPath: string): string {
 function getState(wsPath: string): WorkspaceState {
   let s = states.get(wsPath);
   if (!s) {
-    s = { entries: {}, flushTimer: null, loaded: false };
+    s = { entries: {}, flushTimer: null, loaded: false, loading: null };
     states.set(wsPath, s);
   }
   return s;
@@ -240,16 +242,15 @@ function parseNodeMetadataDocument(value: unknown): NodeMetadataMap {
  * Damaged metadata still starts as an empty map (tags are recoverable
  * decoration, not content), but the original bytes are first copied to
  * `node-metadata.json.corrupt-<timestamp>` so the next flush cannot destroy
- * them.
+ * them. Any other read failure (EACCES, EIO, EISDIR, ...) is rethrown: the
+ * file may be intact, so treating it as empty would let the next flush wipe
+ * it without leaving a copy.
  */
 async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
   const read = await readJsonOrEmpty(
     resolvePath(wsPath),
     parseNodeMetadataDocument
-  ).catch((error: unknown) => {
-    console.warn('[nodeMetadata] Failed to read metadata:', error);
-    return { kind: 'empty' as const };
-  });
+  );
   if (read.kind === 'ok') {
     return read.value;
   }
@@ -263,6 +264,10 @@ async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
 
 async function writeToDisk(wsPath: string): Promise<void> {
   const s = getState(wsPath);
+  if (!s.loaded) {
+    // Never write a map that was not loaded from disk first.
+    return;
+  }
   const doc: NodeMetadataDocument = { schema: SCHEMA, entries: s.entries };
   await atomicWrite(resolvePath(wsPath), JSON.stringify(doc, null, 2));
 }
@@ -282,17 +287,36 @@ function scheduleFlush(wsPath: string): void {
 
 /**
  * Load the metadata map for a workspace, populating the in-memory cache on
- * first access. Subsequent calls return the cached map directly.
+ * first access. Subsequent calls return the cached map directly. Concurrent
+ * first calls share one load, so a later-finishing load can never replace
+ * entries an earlier caller already mutated. A failed load leaves the cache
+ * unloaded (nothing is flushed) and rejects; the next call retries.
  */
 export async function loadAllMetadata(
   wsPath: string
 ): Promise<NodeMetadataMap> {
   const s = getState(wsPath);
-  if (!s.loaded) {
-    s.entries = await loadFromDisk(wsPath);
-    s.loaded = true;
+  if (s.loaded) {
+    return s.entries;
   }
-  return s.entries;
+  if (!s.loading) {
+    const loading = loadFromDisk(wsPath).then(
+      (entries) => {
+        if (states.get(wsPath) === s) {
+          s.entries = entries;
+          s.loaded = true;
+        }
+        s.loading = null;
+        return s.entries;
+      },
+      (error: unknown) => {
+        s.loading = null;
+        throw error;
+      }
+    );
+    s.loading = loading;
+  }
+  return s.loading;
 }
 
 /** Read a single entry from the cache. Returns undefined if not present. */
@@ -522,7 +546,14 @@ export async function listAllTagsFromMetadata(
 export async function migrateLegacyTagsFromNotes(
   wsPath: string
 ): Promise<void> {
-  await loadAllMetadata(wsPath);
+  try {
+    await loadAllMetadata(wsPath);
+  } catch (error) {
+    // Startup must not fail on an unreadable sidecar; it stays unloaded, so
+    // nothing is written over it until a later load succeeds.
+    console.warn('[nodeMetadata] Skipping legacy tag migration:', error);
+    return;
+  }
   const s = getState(wsPath);
   const contentDir = join(wsPath, 'content');
   const files = listFilesRecursive(contentDir);

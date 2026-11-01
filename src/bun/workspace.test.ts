@@ -29,6 +29,12 @@ const {
   seedFirstRunIfNeeded,
   setActiveViewId,
 } = await import('./workspace');
+const {
+  flushNodeMetadata,
+  loadAllMetadata,
+  resetNodeMetadataCacheForTests,
+  setNodeMetadata,
+} = await import('./nodeMetadata');
 
 let ws: string;
 
@@ -46,6 +52,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  resetNodeMetadataCacheForTests();
   await rm(ws, { force: true, recursive: true });
 });
 
@@ -185,5 +192,37 @@ describe('missing workspace.json is not a first run', () => {
         },
       },
     ]);
+  });
+});
+
+describe('node metadata never overwrites what it could not read', () => {
+  const metadataPath = () => join(ghostDir(), 'node-metadata.json');
+
+  it('rejects and writes nothing when the file cannot be read', async () => {
+    // A directory makes readFile fail with EISDIR (not ENOENT, not corrupt).
+    await mkdir(metadataPath());
+    await expect(loadAllMetadata(ws)).rejects.toThrow();
+    await expect(setNodeMetadata(ws, 'n1', { tags: ['x'] })).rejects.toThrow();
+    await flushNodeMetadata(ws);
+    expect(await readdir(metadataPath())).toEqual([]);
+  });
+
+  it('keeps every entry when the first loads race', async () => {
+    await writeFile(
+      metadataPath(),
+      JSON.stringify({
+        schema: 'ghostboard-node-metadata/v1',
+        entries: { a: { tags: ['keep'] } },
+      })
+    );
+    await Promise.all([
+      setNodeMetadata(ws, 'b', { tags: ['one'] }),
+      setNodeMetadata(ws, 'c', { tags: ['two'] }),
+    ]);
+    await flushNodeMetadata(ws);
+    const stored = JSON.parse(await readFile(metadataPath(), 'utf8')) as {
+      entries: Record<string, unknown>;
+    };
+    expect(Object.keys(stored.entries).sort()).toEqual(['a', 'b', 'c']);
   });
 });

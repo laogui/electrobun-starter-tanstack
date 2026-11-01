@@ -7,7 +7,6 @@ import { isLockedNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import { collectNoteIdsFromCanvasNodes } from '@/lib/noteTitleProjection';
-import { rpcDeleteWidget } from '@/lib/rpc';
 import * as m from '../../../paraglide/messages.js';
 import {
   type FolderChildEntry,
@@ -271,19 +270,6 @@ export const createNodesSlice: StateCreator<CanvasState, [], [], NodesSlice> = (
     if (idSet.size === 0) {
       return 0;
     }
-    // Collect backing widget files for top-level widget nodes being removed.
-    // Folder children are detached (not deleted) when a folder is removed, so
-    // their widget files are intentionally left intact here.
-    const widgetIdsToDelete: string[] = [];
-    for (const node of get().nodes) {
-      if (idSet.has(node.id) && node.type === 'widget') {
-        const widgetId = (node.data as Record<string, unknown> | undefined)
-          ?.widgetId;
-        if (typeof widgetId === 'string' && widgetId) {
-          widgetIdsToDelete.push(widgetId);
-        }
-      }
-    }
     get().saveSnapshot();
     set((s) => {
       const usedNodeIds = new Set<string>();
@@ -323,13 +309,9 @@ export const createNodesSlice: StateCreator<CanvasState, [], [], NodesSlice> = (
         idSet
       );
     });
-    // Fire-and-forget widget file cleanup for removed top-level widget nodes.
-    for (const widgetId of widgetIdsToDelete) {
-      rpcDeleteWidget(widgetId).catch((error) => {
-        console.error('[canvasStore] Failed to delete widget file:', error);
-        toast.error(m.toast_delete_widget_file_failed());
-      });
-    }
+    // Backing widget/note files are intentionally kept so undo and cut-paste
+    // can restore them; unreferenced files are collected by the unlinked-files
+    // cleanup (src/bun/cleanup.ts).
     return idSet.size;
   },
 

@@ -1,7 +1,6 @@
 // Canvas store slice: Folder children and detached-note mutations.
 import type { Node } from '@xyflow/react';
 import { nanoid } from 'nanoid';
-import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import {
   isDetachableNode,
@@ -16,8 +15,6 @@ import {
 } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { getNodeSize } from '@/lib/collision';
-import { rpcDeleteNote, rpcDeleteWidget } from '@/lib/rpc';
-import * as m from '../../../paraglide/messages.js';
 import {
   type FolderChildEntry,
   resolveFolderChildSize,
@@ -118,12 +115,11 @@ export const createFolderSlice: StateCreator<
   deleteFolderChild: (folderId, childId) => {
     const folder = get().nodes.find((n) => n.id === folderId);
     const existingChildren = ((folder?.data as any)?.children ?? []) as Array<{
-      data?: Record<string, unknown>;
       id: string;
-      noteId?: string;
-      type?: string;
     }>;
-    const removed = existingChildren.find((c) => c.id === childId);
+    if (!existingChildren.some((c) => c.id === childId)) {
+      return;
+    }
     get().saveSnapshot();
     set((s) => ({
       nodes: s.nodes.map((n) => {
@@ -143,31 +139,9 @@ export const createFolderSlice: StateCreator<
         };
       }),
     }));
-    // Fire-and-forget .md cleanup. Images keep their attachment pattern, so we
-    // only delete notes for card children that actually had a noteId.
-    if (removed?.noteId && removed.type !== 'image') {
-      rpcDeleteNote(removed.noteId).catch((error) => {
-        console.error(
-          '[canvasStore] Failed to delete folder child note:',
-          error
-        );
-        toast.error(m.toast_delete_note_file_failed());
-      });
-    }
-    // Widget children own a backing JSON file; delete it so disk does not
-    // accumulate orphan widget files until the next unlinked-file sweep.
-    if (removed?.type === 'widget') {
-      const removedWidgetId = removed.data?.widgetId as string | undefined;
-      if (removedWidgetId) {
-        rpcDeleteWidget(removedWidgetId).catch((error) => {
-          console.error(
-            '[canvasStore] Failed to delete folder child widget:',
-            error
-          );
-          toast.error(m.toast_delete_widget_file_failed());
-        });
-      }
-    }
+    // Only the reference is removed: the backing note/widget file stays so
+    // undo, cut-paste and other canvases sharing it keep working. Orphans are
+    // collected by the unlinked-files cleanup (src/bun/cleanup.ts).
   },
 
   updateFolderChildData: (folderId, childId, updates) => {

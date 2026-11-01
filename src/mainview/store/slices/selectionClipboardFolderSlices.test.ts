@@ -17,7 +17,7 @@ vi.mock('@/lib/rpc', async (importOriginal) => ({
   rpcDeleteWidget: vi.fn(async () => ({ success: true })),
 }));
 
-const { rpcDeleteNote } = await import('@/lib/rpc');
+const { rpcDeleteNote, rpcDeleteWidget } = await import('@/lib/rpc');
 const { useCanvasStore } = await import('@/store/canvasStore');
 
 const NOTE_ID_RE = /^note_/;
@@ -152,8 +152,9 @@ describe('clipboardSlice', () => {
     expect(state().clipboard).toEqual([]);
   });
 
-  it('cut copies then deletes the selection', () => {
+  it('cut copies then deletes the selection without deleting backing files', () => {
     state().cutSelected();
+    expect(rpcDeleteWidget).not.toHaveBeenCalled();
     expect(state().nodes.map((n) => n.id)).toEqual(['c']);
     expect(state().clipboard.map((n) => n.id)).toEqual(['a', 'b']);
     expect(state().edges).toEqual([]);
@@ -205,14 +206,20 @@ describe('folderSlice', () => {
     });
   });
 
-  it('adds note-backed children and deletes their files on removal', () => {
+  it('adds note-backed children and keeps their files on removal for undo', () => {
     state().addFolderChild('folder');
     const [child] = children();
     expect(child?.noteId).toMatch(NOTE_ID_RE);
 
     state().deleteFolderChild('folder', child!.id);
     expect(children()).toEqual([]);
-    expect(rpcDeleteNote).toHaveBeenCalledWith(child?.noteId);
+    expect(rpcDeleteNote).not.toHaveBeenCalled();
+    expect(rpcDeleteWidget).not.toHaveBeenCalled();
+
+    state().undo();
+    expect(children()).toEqual([
+      expect.objectContaining({ id: child?.id, noteId: child?.noteId }),
+    ]);
   });
 
   it('commitFolderChildData snapshots and syncs the focused folder', () => {

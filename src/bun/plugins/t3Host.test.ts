@@ -7,6 +7,7 @@ import type { PluginManagementService } from './management';
 import { T3HostController } from './t3Host';
 
 vi.mock('../appPaths', () => ({
+  getAppChannel: () => 'canary',
   getAppDataRoot: () => {
     throw new Error('Tests must specify an application data root');
   },
@@ -32,6 +33,7 @@ const preview: PluginInstallPreview = {
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 't3-host-test-'));
+  vi.stubGlobal('__GHOSTBOARD_ENABLE_PLUGIN_PROBES__', true);
   vi.stubEnv('GHOSTBOARD_PLUGIN_T3_PHASE', 'local');
   vi.stubEnv(
     'GHOSTBOARD_PLUGIN_T3_URL',

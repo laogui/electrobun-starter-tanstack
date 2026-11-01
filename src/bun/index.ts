@@ -29,6 +29,11 @@ import { PluginHostController } from './plugins/hostController';
 import { PluginManagementService } from './plugins/management';
 import { NoteContentService } from './plugins/noteContent';
 import { createPluginPermissionGate } from './plugins/permissionPrompt';
+import {
+  probeEnv,
+  probeHostActive,
+  scriptedProbesActive,
+} from './plugins/probeGate';
 import { PluginStartupGuard } from './plugins/safeMode';
 import { PluginStorageHost } from './plugins/storage';
 import { T1HostController } from './plugins/t1Host';
@@ -156,16 +161,9 @@ async function main() {
   await seedFirstRunIfNeeded(wsPath);
   const pluginManagement = new PluginManagementService(wsPath);
   const pluginFiles = new PluginFileStore(pluginWorkspaceId(wsPath));
-  const pluginProbeActive = [
-    process.env.GHOSTBOARD_PLUGIN_T1_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-    process.env.GHOSTBOARD_PLUGIN_T3_DIR,
-  ].some(Boolean);
-  const pluginStartupGuard = pluginProbeActive
+  // T1–T5 probe variables are ignored unless probesAllowed() (never stable).
+  const probe = probeEnv();
+  const pluginStartupGuard = probeHostActive(probe)
     ? undefined
     : await PluginStartupGuard.start({
         appDataRoot: getAppDataRoot(),
@@ -175,12 +173,7 @@ async function main() {
   const pluginPermissions = createPluginPermissionGate({
     appDataRoot: getAppDataRoot(),
     listPlugins: () => pluginManagement.list(),
-    scriptedProbes:
-      pluginProbeActive ||
-      Boolean(
-        process.env.GHOSTBOARD_PLUGIN_T4_DIR ||
-          process.env.GHOSTBOARD_PLUGIN_T5_DIR
-      ),
+    scriptedProbes: scriptedProbesActive(probe),
   });
   pluginManagement.recover().catch((error) => {
     console.warn('[plugins] Failed to recover package transactions:', error);
@@ -219,22 +212,22 @@ async function main() {
       workspacePath: wsPath,
       workspaceId: pluginWorkspaceId(wsPath),
     }),
-    pluginRuntime: process.env.GHOSTBOARD_PLUGIN_T5_DIR
+    pluginRuntime: probe.GHOSTBOARD_PLUGIN_T5_DIR
       ? new T5HostController(
           pluginManagement,
           pluginWorkspaceId(wsPath),
-          process.env.GHOSTBOARD_PLUGIN_T5_DIR,
+          probe.GHOSTBOARD_PLUGIN_T5_DIR,
           {
             safeMode: pluginStartupGuard?.getState(),
             markStartupReady: () =>
               pluginStartupGuard?.markReady() ?? Promise.resolve(),
           }
         )
-      : process.env.GHOSTBOARD_PLUGIN_T4_DIR
+      : probe.GHOSTBOARD_PLUGIN_T4_DIR
         ? new T4HostController(
             pluginManagement,
             pluginWorkspaceId(wsPath),
-            process.env.GHOSTBOARD_PLUGIN_T4_DIR,
+            probe.GHOSTBOARD_PLUGIN_T4_DIR,
             wsPath,
             {
               safeMode: pluginStartupGuard?.getState(),
@@ -242,49 +235,49 @@ async function main() {
                 pluginStartupGuard?.markReady() ?? Promise.resolve(),
             }
           )
-        : process.env.GHOSTBOARD_PLUGIN_T3_DIR
+        : probe.GHOSTBOARD_PLUGIN_T3_DIR
           ? new T3HostController(
               pluginManagement,
               pluginWorkspaceId(wsPath),
-              process.env.GHOSTBOARD_PLUGIN_T3_DIR
+              probe.GHOSTBOARD_PLUGIN_T3_DIR
             )
-          : process.env.GHOSTBOARD_PLUGIN_T1_DIR
+          : probe.GHOSTBOARD_PLUGIN_T1_DIR
             ? new T1HostController(
                 pluginManagement,
                 pluginWorkspaceId(wsPath),
-                process.env.GHOSTBOARD_PLUGIN_T1_DIR
+                probe.GHOSTBOARD_PLUGIN_T1_DIR
               )
-            : process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+            : probe.GHOSTBOARD_PLUGIN_T2_A4_DIR
               ? new T2A4HostController(
                   pluginManagement,
                   pluginWorkspaceId(wsPath),
-                  process.env.GHOSTBOARD_PLUGIN_T2_A4_DIR
+                  probe.GHOSTBOARD_PLUGIN_T2_A4_DIR
                 )
-              : process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
+              : probe.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
                 ? new T2ContentHostController(
                     pluginManagement,
                     pluginWorkspaceId(wsPath),
-                    process.env.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
+                    probe.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
                   )
-                : process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
+                : probe.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
                   ? new T2ContentHostController(
                       pluginManagement,
                       pluginWorkspaceId(wsPath),
-                      process.env.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
+                      probe.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
                       'history'
                     )
-                  : process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
+                  : probe.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
                     ? new T2ContentHostController(
                         pluginManagement,
                         pluginWorkspaceId(wsPath),
-                        process.env.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
+                        probe.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
                         'canvas'
                       )
-                    : process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
+                    : probe.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
                       ? new T2ContentHostController(
                           pluginManagement,
                           pluginWorkspaceId(wsPath),
-                          process.env.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
+                          probe.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
                           'selection'
                         )
                       : new PluginHostController(

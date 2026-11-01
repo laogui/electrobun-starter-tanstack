@@ -15,6 +15,7 @@ const directory = await mkdtemp(
 const artifactFolder = 'build/plugin-t2-content-artifacts';
 const env = {
   ...process.env,
+  GHOSTBOARD_ENABLE_PLUGIN_PROBES: '1',
   VITE_PLUGIN_T2_CONTENT: '1',
   VITE_PLUGIN_T2_A4: '0',
   VITE_PLUGIN_T1: '0',

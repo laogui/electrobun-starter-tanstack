@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { atomicWrite } from '../atomicWrite';
 import { PluginHostController } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 export class T2ContentHostController extends PluginHostController {
   private readonly management: PluginManagementService;
@@ -30,7 +31,7 @@ export class T2ContentHostController extends PluginHostController {
     const headers = new Headers(cors);
     headers.set('Cache-Control', 'no-store');
     const phase =
-      process.env[`GHOSTBOARD_PLUGIN_T2_${this.scenario.toUpperCase()}_PHASE`];
+      probeEnv()[`GHOSTBOARD_PLUGIN_T2_${this.scenario.toUpperCase()}_PHASE`];
     if (!(phase && ['initial', 'restart'].includes(phase))) {
       return new Response('Invalid test phase', { status: 400, headers });
     }

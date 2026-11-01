@@ -6,6 +6,7 @@ import {
   type PluginHostControllerOptions,
 } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 export type T5Phase = 'install' | 'picker' | 'restart';
 export type T5PickerMode = 'manual' | 'scripted';
@@ -32,7 +33,7 @@ const SELECTED_FILE = 'selected.csv';
 const PICKER_LOG = 'picker-log.jsonl';
 
 export function t5Phase(
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = probeEnv()
 ): T5Phase | null {
   const phase = env.GHOSTBOARD_PLUGIN_T5_PHASE;
   return phase === 'install' || phase === 'picker' || phase === 'restart'
@@ -41,7 +42,7 @@ export function t5Phase(
 }
 
 export function t5PickerMode(
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = probeEnv()
 ): T5PickerMode {
   return env.GHOSTBOARD_PLUGIN_T5_PICKER === 'manual' ? 'manual' : 'scripted';
 }

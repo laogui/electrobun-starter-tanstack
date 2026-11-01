@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { atomicWrite } from '../atomicWrite';
 import { PluginHostController } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 // Packaged-app acceptance controls are only installed with an explicit test directory.
 export class T1HostController extends PluginHostController {
@@ -35,7 +36,7 @@ export class T1HostController extends PluginHostController {
       headers.set('Cache-Control', 'no-store');
       if (url.pathname === '/plugin-t1/config' && request.method === 'GET') {
         return Response.json(
-          { phase: process.env.GHOSTBOARD_PLUGIN_T1_PHASE ?? 'lifecycle' },
+          { phase: probeEnv().GHOSTBOARD_PLUGIN_T1_PHASE ?? 'lifecycle' },
           { headers }
         );
       }
@@ -110,7 +111,7 @@ export class T1HostController extends PluginHostController {
         return Response.json({ saved: true }, { headers });
       }
       if (url.pathname === '/plugin-t1/report') {
-        const phase = process.env.GHOSTBOARD_PLUGIN_T1_PHASE ?? 'lifecycle';
+        const phase = probeEnv().GHOSTBOARD_PLUGIN_T1_PHASE ?? 'lifecycle';
         const report = {
           ...body,
           host: {

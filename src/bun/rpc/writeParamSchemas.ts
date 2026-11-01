@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { AI_PROVIDERS } from '../../shared/ai/providerConfig';
+
 /**
  * Runtime shape checks for RPC handlers that write to disk. The renderer and
  * trusted plugins share one realm, so a renderer bug (or a plugin poking the
@@ -131,7 +133,7 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
   setAIApiKey: z
     .object({
       apiKey: z.string().nullable(),
-      provider: z.string().optional(),
+      provider: z.enum(AI_PROVIDERS).optional(),
     })
     .loose(),
   restoreTrash: z.object({ trashId: id }).loose(),

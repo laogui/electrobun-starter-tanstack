@@ -19,7 +19,8 @@ function isNotFound(error: unknown): boolean {
  */
 async function preserveCorruptFile(
   path: string,
-  contents: string
+  contents: string,
+  mode?: number
 ): Promise<string> {
   const dir = dirname(path);
   const prefix = `${basename(path)}${CORRUPT_SUFFIX}`;
@@ -37,7 +38,7 @@ async function preserveCorruptFile(
   const unique = crypto.randomUUID().slice(0, 8);
   const target = join(dir, `${prefix}${stamp}-${unique}`);
   const temporary = `${target}.tmp`;
-  await writeFile(temporary, contents);
+  await writeFile(temporary, contents, mode === undefined ? {} : { mode });
   await rename(temporary, target);
   return target;
 }
@@ -52,7 +53,11 @@ async function preserveCorruptFile(
  */
 export async function readJsonOrEmpty<T>(
   path: string,
-  parse: (value: unknown) => T
+  parse: (value: unknown) => T,
+  options: {
+    /** File mode for the preserved copy (e.g. 0o600 for secrets). */
+    corruptCopyMode?: number;
+  } = {}
 ): Promise<JsonFileRead<T>> {
   let contents: string;
   try {
@@ -68,7 +73,11 @@ export async function readJsonOrEmpty<T>(
   } catch (error) {
     return {
       kind: 'corrupt',
-      backupPath: await preserveCorruptFile(path, contents),
+      backupPath: await preserveCorruptFile(
+        path,
+        contents,
+        options.corruptCopyMode
+      ),
       error: error instanceof Error ? error : new Error(String(error)),
     };
   }

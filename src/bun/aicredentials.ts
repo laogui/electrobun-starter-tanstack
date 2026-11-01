@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { AI_PROVIDERS, type AIProvider } from '../shared/ai/providerConfig';
 import { getAppDataRoot } from './appPaths';
 import { atomicWrite } from './atomicWrite';
+import { readJsonOrEmpty } from './persistence/corruptFile';
 
 /**
  * The LLM API key lives OUTSIDE the workspace so it never lands in
@@ -21,31 +21,60 @@ function getAICredentialsPath(): string {
   return join(getAppDataRoot(), AI_CREDENTIALS_FILENAME);
 }
 
-/** Read ai-credentials.json. Returns an empty object when missing/unreadable. */
-export async function loadAICredentials(): Promise<AICredentials> {
-  let text: string;
-  try {
-    text = await readFile(getAICredentialsPath(), 'utf8');
-  } catch {
-    return {};
+function parseAICredentials(value: unknown): AICredentials {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('ai-credentials.json is not a JSON object.');
   }
-  try {
-    const parsed = JSON.parse(text) as Partial<AICredentials>;
-    const providers: Partial<Record<AIProvider, string>> = {};
-    for (const provider of AI_PROVIDERS) {
-      const key = parsed.providers?.[provider];
-      if (typeof key === 'string' && key.trim()) {
-        providers[provider] = key.trim();
-      }
+  const parsed = value as Partial<AICredentials>;
+  const providers: Partial<Record<AIProvider, string>> = {};
+  for (const provider of AI_PROVIDERS) {
+    const key = parsed.providers?.[provider];
+    if (typeof key === 'string' && key.trim()) {
+      providers[provider] = key.trim();
     }
-    return {
-      providers,
-      apiKey:
-        typeof parsed.apiKey === 'string' && parsed.apiKey.length
-          ? parsed.apiKey
-          : undefined,
-    };
-  } catch {
+  }
+  return {
+    providers,
+    apiKey:
+      typeof parsed.apiKey === 'string' && parsed.apiKey.length
+        ? parsed.apiKey
+        : undefined,
+  };
+}
+
+/**
+ * Read ai-credentials.json for a read-modify-write. Missing => empty. A
+ * damaged file is first copied aside (owner-only) and then treated as empty.
+ * Any other read error (EACCES, EIO, ...) is rethrown so the caller never
+ * replaces a file it could not read, which would wipe every other key.
+ */
+async function readAICredentialsStrict(): Promise<AICredentials> {
+  const read = await readJsonOrEmpty(
+    getAICredentialsPath(),
+    parseAICredentials,
+    { corruptCopyMode: 0o600 }
+  );
+  if (read.kind === 'ok') {
+    return read.value;
+  }
+  if (read.kind === 'corrupt') {
+    console.warn(
+      `[aicredentials] ai-credentials.json is corrupt (${read.error.message}); preserved at ${read.backupPath}`
+    );
+  }
+  return {};
+}
+
+/**
+ * Read ai-credentials.json. Returns an empty object when missing or
+ * unreadable (read-only callers degrade to "no key"); writes use the strict
+ * reader instead.
+ */
+export async function loadAICredentials(): Promise<AICredentials> {
+  try {
+    return await readAICredentialsStrict();
+  } catch (error) {
+    console.warn('[aicredentials] Failed to read credentials:', error);
     return {};
   }
 }
@@ -92,7 +121,7 @@ async function writeAIApiKey(
   apiKey: string | null,
   provider?: AIProvider
 ): Promise<void> {
-  const existing = await loadAICredentials();
+  const existing = await readAICredentialsStrict();
   const credentials = mergeAICredentials(existing, apiKey, provider);
   await atomicWrite(
     getAICredentialsPath(),
@@ -122,7 +151,7 @@ export function migrateLegacyAIApiKey(
   provider: AIProvider
 ): Promise<string | undefined> {
   const run = credentialWrites.then(async () => {
-    const existing = await loadAICredentials();
+    const existing = await readAICredentialsStrict();
     if (!existing.apiKey) {
       return existing.providers?.[provider];
     }

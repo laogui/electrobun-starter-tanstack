@@ -235,12 +235,16 @@ describe('nodesSlice', () => {
       ).toEqual(['folder', 'g', 'inner']);
     });
 
-    it('deletes the backing file of a removed top-level widget', () => {
+    it('keeps the backing file of a removed widget so undo can restore it', () => {
       useCanvasStore.setState({
         nodes: [node('w', { type: 'widget', data: { widgetId: 'widget_1' } })],
       });
       state().deleteNodes(['w']);
-      expect(rpcDeleteWidget).toHaveBeenCalledWith('widget_1');
+      expect(byId('w')).toBeUndefined();
+      expect(rpcDeleteWidget).not.toHaveBeenCalled();
+
+      state().undo();
+      expect(byId('w')?.data).toMatchObject({ widgetId: 'widget_1' });
     });
   });
 

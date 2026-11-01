@@ -119,6 +119,19 @@ export class ManifestCorruptError extends Error {
   }
 }
 
+/**
+ * Absolute manifest paths this process has read cleanly or recovered from a
+ * backup. `saveManifest` only replaces an unparseable on-disk manifest whose
+ * path is in here; otherwise the caller never saw that canvas's content and
+ * a write would destroy it (e.g. "move to canvas" onto a damaged target).
+ */
+const acknowledgedManifestPaths = new Set<string>();
+
+/** Test helper: forget which manifests were read or recovered. */
+export function resetManifestStateForTests(): void {
+  acknowledgedManifestPaths.clear();
+}
+
 /** Rolling copy of the previous on-disk manifest, refreshed on every save. */
 export function manifestBackupViewFile(viewFile: string): string {
   return `${viewFile}.bak`;
@@ -180,14 +193,17 @@ export function parseCanvasManifest(value: unknown): CanvasManifest {
   return manifest;
 }
 
+/**
+ * Only the rolling `.bak` takes part in automatic recovery. `.pre-topic` is a
+ * one-off snapshot that can be months old; silently loading it (and letting
+ * autosave cement it) would quietly roll the canvas back, so it is left for an
+ * explicit manual restore.
+ */
 async function readBackupManifest(
   wsPath: string,
   viewFile: string
 ): Promise<{ from: string; manifest: CanvasManifest } | undefined> {
-  for (const candidate of [
-    manifestBackupViewFile(viewFile),
-    preTopicBackupViewFile(viewFile),
-  ]) {
+  for (const candidate of [manifestBackupViewFile(viewFile)]) {
     let path: string;
     try {
       path = resolveWorkspaceManifestPath(wsPath, candidate);
@@ -209,7 +225,10 @@ async function readBackupManifest(
 /**
  * Read a canvas manifest and say exactly what happened. A damaged file is
  * copied aside to `<file>.corrupt-<timestamp>` (never overwritten) and the
- * rolling `.bak` / `.pre-topic` backups are tried for a usable copy.
+ * rolling `.bak` backup is tried for a usable copy.
+ *
+ * A path that read cleanly, or whose damage was answered with a usable
+ * backup, is remembered as acknowledged so `saveManifest` may replace it.
  */
 export async function readManifest(
   wsPath: string,
@@ -229,12 +248,16 @@ export async function readManifest(
     return { kind: 'missing' };
   }
   if (read.kind === 'ok') {
+    acknowledgedManifestPaths.add(filePath);
     return { kind: 'ok', manifest: read.value };
   }
   console.warn(
     `[manifest] ${viewFile} is corrupt (${read.error.message}); preserved at ${read.backupPath}`
   );
   const recovered = await readBackupManifest(wsPath, viewFile);
+  if (recovered) {
+    acknowledgedManifestPaths.add(filePath);
+  }
   return {
     kind: 'corrupt',
     backupPath: read.backupPath,
@@ -243,20 +266,30 @@ export async function readManifest(
   };
 }
 
+export interface LoadedManifest {
+  manifest: CanvasManifest;
+  /**
+   * Set when the manifest on disk was unreadable and this is the content of
+   * a backup. The damaged bytes are kept at `backupPath`.
+   */
+  recovered?: { backupPath: string; from: string };
+}
+
 /**
- * Load a canvas manifest for display. Returns null when the file doesn't
- * exist (or the path is refused). A corrupt manifest falls back to its newest
- * usable backup; with no usable backup it throws `ManifestCorruptError`
- * instead of pretending the canvas is empty, so nothing overwrites it.
+ * Load a canvas manifest for display, saying whether it came from a backup.
+ * Returns null when the file doesn't exist (or the path is refused). A
+ * corrupt manifest falls back to its `.bak`; with no usable backup it throws
+ * `ManifestCorruptError` instead of pretending the canvas is empty, so
+ * nothing overwrites it.
  */
-export async function loadManifest(
+export async function loadManifestDetailed(
   wsPath: string,
   viewFile: string
-): Promise<CanvasManifest | null> {
+): Promise<LoadedManifest | null> {
   const read = await readManifest(wsPath, viewFile);
   switch (read.kind) {
     case 'ok':
-      return read.manifest;
+      return { manifest: read.manifest };
     case 'missing':
       return null;
     case 'invalid-path':
@@ -269,10 +302,21 @@ export async function loadManifest(
         console.warn(
           `[manifest] Recovered ${viewFile} from ${read.recovered.from}`
         );
-        return read.recovered.manifest;
+        return {
+          manifest: read.recovered.manifest,
+          recovered: { backupPath: read.backupPath, from: read.recovered.from },
+        };
       }
       throw new ManifestCorruptError(viewFile, read.backupPath, read.error);
   }
+}
+
+/** `loadManifestDetailed` without the recovery details. */
+export async function loadManifest(
+  wsPath: string,
+  viewFile: string
+): Promise<CanvasManifest | null> {
+  return (await loadManifestDetailed(wsPath, viewFile))?.manifest ?? null;
 }
 
 /**
@@ -359,17 +403,50 @@ export async function backupManifestBeforeFirstTopics(
   return { backupFile, created: true };
 }
 
-/** Save a canvas manifest to disk (atomic write). */
+/**
+ * Throw `ManifestCorruptError` when the manifest on disk does not parse and
+ * this process never read it cleanly or recovered it from a backup, i.e. the
+ * caller cannot know what it would overwrite. Returns whether the on-disk
+ * file is currently damaged (but acknowledged). Callers that write other
+ * files before the manifest should call this first to fail before any write.
+ */
+export async function assertManifestWritable(
+  wsPath: string,
+  viewFile: string
+): Promise<{ onDiskCorrupt: boolean }> {
+  const filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
+  const current = await readJsonOrEmpty(filePath, parseCanvasManifest);
+  if (current.kind !== 'corrupt') {
+    return { onDiskCorrupt: false };
+  }
+  if (!acknowledgedManifestPaths.has(filePath)) {
+    throw new ManifestCorruptError(viewFile, current.backupPath, current.error);
+  }
+  return { onDiskCorrupt: true };
+}
+
+/**
+ * Save a canvas manifest to disk (atomic write).
+ *
+ * Refuses (via `assertManifestWritable`) to replace an unacknowledged damaged
+ * manifest. When the on-disk file is damaged the `.bak` rotation is skipped,
+ * so a good backup is never replaced by garbage; the damaged bytes are
+ * already kept as `.corrupt-*`.
+ */
 export async function saveManifest(
   wsPath: string,
   viewFile: string,
   manifest: CanvasManifest
 ): Promise<void> {
   const filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
-  await backupManifestBeforeFirstTopics(wsPath, viewFile, manifest.nodes);
-  await rotateBackup(
-    filePath,
-    resolveWorkspaceManifestPath(wsPath, manifestBackupViewFile(viewFile))
-  );
+  const { onDiskCorrupt } = await assertManifestWritable(wsPath, viewFile);
+  if (!onDiskCorrupt) {
+    await backupManifestBeforeFirstTopics(wsPath, viewFile, manifest.nodes);
+    await rotateBackup(
+      filePath,
+      resolveWorkspaceManifestPath(wsPath, manifestBackupViewFile(viewFile))
+    );
+  }
   await atomicWrite(filePath, JSON.stringify(manifest, null, 2));
+  acknowledgedManifestPaths.add(filePath);
 }

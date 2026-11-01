@@ -68,6 +68,14 @@ export interface CanvasRPC {
             string,
             ExtensionInstanceRecord | ExtensionInstanceLoadError
           >;
+          /**
+           * Set when the manifest on disk was unreadable and this content
+           * came from that backup (e.g. `views/x.canvas.json.bak`). The
+           * renderer should warn before autosave keeps it.
+           */
+          recoveredFrom?: string;
+          /** Where the unreadable manifest bytes were preserved. */
+          backupPath?: string;
         } | null;
       };
       saveManifest: {

@@ -20,6 +20,7 @@ vi.mock('electrobun/bun', () => ({
 
 const {
   loadManifest,
+  loadManifestDetailed,
   loadManifestsStrict,
   ManifestCorruptError,
   readManifest,
@@ -151,6 +152,55 @@ describe('manifest backup recovery', () => {
     await writeFile(join(viewsDir(), 'default.canvas.json'), '{broken');
     await expect(
       loadManifest(ws, 'views/default.canvas.json')
+    ).rejects.toBeInstanceOf(ManifestCorruptError);
+  });
+});
+
+describe('saveManifest never overwrites an unseen corrupt manifest', () => {
+  it('refuses to write over a damaged canvas that was never recovered', async () => {
+    const target = join(viewsDir(), 'default.canvas.json');
+    await writeFile(target, '{broken');
+    // e.g. "move to canvas" whose loadCanvas of the target rejected
+    await expect(
+      loadManifest(ws, 'views/default.canvas.json')
+    ).rejects.toBeInstanceOf(ManifestCorruptError);
+    await expect(
+      saveManifest(ws, 'views/default.canvas.json', manifestWith('note_moved'))
+    ).rejects.toBeInstanceOf(ManifestCorruptError);
+    expect(await readFile(target, 'utf8')).toBe('{broken');
+    expect(await readdir(viewsDir())).not.toContain('default.canvas.json.bak');
+  });
+
+  it('saves over a recovered canvas without rotating garbage into .bak', async () => {
+    await saveManifest(ws, 'views/default.canvas.json', manifestWith('note_a'));
+    await saveManifest(ws, 'views/default.canvas.json', manifestWith('note_b'));
+    await writeFile(join(viewsDir(), 'default.canvas.json'), '{broken');
+
+    const loaded = await loadManifestDetailed(ws, 'views/default.canvas.json');
+    expect(loaded?.recovered?.from).toBe('views/default.canvas.json.bak');
+    expect(loaded?.recovered?.backupPath).toContain(
+      'default.canvas.json.corrupt-'
+    );
+
+    await saveManifest(ws, 'views/default.canvas.json', manifestWith('note_c'));
+    const backup = JSON.parse(
+      await readFile(join(viewsDir(), 'default.canvas.json.bak'), 'utf8')
+    ) as { nodes: Array<{ data: { noteId?: string } }> };
+    expect(backup.nodes[0]?.data.noteId).toBe('note_a');
+    expect(
+      (await loadManifest(ws, 'views/default.canvas.json'))?.nodes[0]?.data
+        .noteId
+    ).toBe('note_c');
+  });
+
+  it('does not silently fall back to the .pre-topic snapshot', async () => {
+    await writeFile(
+      join(viewsDir(), 'default.canvas.json.pre-topic'),
+      JSON.stringify(manifestWith('note_old'))
+    );
+    await writeFile(join(viewsDir(), 'default.canvas.json'), '{broken');
+    await expect(
+      loadManifestDetailed(ws, 'views/default.canvas.json')
     ).rejects.toBeInstanceOf(ManifestCorruptError);
   });
 });

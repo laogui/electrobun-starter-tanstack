@@ -2,6 +2,7 @@ import { Utils } from 'electrobun/bun';
 import { pluginPickerFileTypes } from '../../plugins/files';
 import { pluginInstallErrorMessage } from '../../plugins/management';
 import { isPluginPermission } from '../../plugins/permissions';
+import { probeEnv } from '../../plugins/probeGate';
 import { scriptedProbeSelection } from '../../plugins/probeSelection';
 import type { RpcContext } from '../context';
 import type { RpcRequestHandlers } from '../types';
@@ -212,18 +213,17 @@ export function createPluginsHandlers(
             'Directory selection does not support multiple items.'
           );
         }
-        const scripted = scriptedProbeSelection(process.env, kind);
+        const scripted = scriptedProbeSelection(probeEnv(), kind);
         // Main-process consent before any native picker opens for a plugin.
         // Handles minted below are the only way to reach the plugin file
-        // read/write routes, so this gates them too.
+        // read/write routes, so this gates them too. A scripted selection
+        // (probe harness) never skips it: the gate itself auto-allows only
+        // the harness's fixture IDs.
         if (
-          !(
-            scripted ||
-            (await pluginPermissions.check(
-              request.pluginId,
-              kind === 'directory' ? 'files.directory' : 'files.read'
-            ))
-          )
+          !(await pluginPermissions.check(
+            request.pluginId,
+            kind === 'directory' ? 'files.directory' : 'files.read'
+          ))
         ) {
           return {
             success: false,

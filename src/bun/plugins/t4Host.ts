@@ -10,6 +10,7 @@ import {
   type PluginHostControllerOptions,
 } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 type T4Phase = 'migration' | 'safe-mode' | 'safe-recovery' | 'update';
 
@@ -28,7 +29,7 @@ const CANVAS_TYPE_ID = `${PLUGIN_ID}/counter`;
 const BAD_DESCRIPTOR_MARKER = 't4-bad-descriptor';
 
 function testPhase(): T4Phase | null {
-  const phase = process.env.GHOSTBOARD_PLUGIN_T4_PHASE;
+  const phase = probeEnv().GHOSTBOARD_PLUGIN_T4_PHASE;
   return phase === 'migration' ||
     phase === 'safe-mode' ||
     phase === 'safe-recovery' ||

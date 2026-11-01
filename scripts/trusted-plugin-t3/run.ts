@@ -20,6 +20,7 @@ const pluginArchive = join(directory, 't3-combined.ghostboard-plugin');
 const artifactFolder = 'build/plugin-t3-artifacts';
 const buildEnv = {
   ...process.env,
+  GHOSTBOARD_ENABLE_PLUGIN_PROBES: '1',
   VITE_PLUGIN_T3: '1',
   VITE_PLUGIN_T2_CONTENT: '0',
   VITE_PLUGIN_T2_A4: '0',

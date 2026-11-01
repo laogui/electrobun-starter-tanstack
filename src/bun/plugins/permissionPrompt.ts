@@ -7,6 +7,7 @@ import {
   type PluginPermissionPrompter,
   PluginPermissionStore,
 } from './permissions';
+import { isScriptedProbePlugin } from './probeGate';
 
 const BUTTONS = ['Allow Once', 'Always Allow', 'Deny'] as const;
 const DENY_INDEX = 2;
@@ -49,33 +50,39 @@ export const nativePluginPermissionPrompt: PluginPermissionPrompter = async ({
  * Wire the gate used by the app: grants in `<appDataRoot>`, the native
  * prompt, and installed + enabled plugins only.
  *
- * `scriptedProbes` is set only when a `GHOSTBOARD_PLUGIN_T*_DIR` harness
- * variable launched the app for automated probes. Those probe plugins are not
- * installed packages and nobody is present to answer a dialog, so requests are
- * allowed once. Whoever can set those variables already controls the process.
+ * `scriptedProbes` is true only when `probesAllowed()` (never in stable, never
+ * from an environment variable alone) and a T1–T5 harness launched the app.
+ * Nobody is present to answer a dialog then, so the harness's own fixture
+ * IDs (`isScriptedProbePlugin`) are allowed once. Any other plugin still gets
+ * the real native prompt.
  */
 export function createPluginPermissionGate(input: {
   appDataRoot: string;
+  isScriptedProbePlugin?: (pluginId: string) => boolean;
   listPlugins: () => Promise<
     readonly { enabled: boolean; name: string; pluginId: string }[]
   >;
+  prompt?: PluginPermissionPrompter;
   scriptedProbes: boolean;
 }): PluginPermissionGate {
-  if (input.scriptedProbes) {
-    return new PluginPermissionGate({
-      store: new PluginPermissionStore(input.appDataRoot),
-      describePlugin: async (pluginId) => pluginId,
-      prompt: async () => 'allow-once',
-    });
-  }
+  const realPrompt = input.prompt ?? nativePluginPermissionPrompt;
+  const isProbe = input.isScriptedProbePlugin ?? isScriptedProbePlugin;
+  const scripted = (pluginId: string) =>
+    input.scriptedProbes && isProbe(pluginId);
   return new PluginPermissionGate({
     store: new PluginPermissionStore(input.appDataRoot),
     describePlugin: async (pluginId) => {
+      if (scripted(pluginId)) {
+        return pluginId;
+      }
       const plugins = await input.listPlugins();
       return plugins.find(
         (plugin) => plugin.pluginId === pluginId && plugin.enabled
       )?.name;
     },
-    prompt: nativePluginPermissionPrompt,
+    prompt: (request) =>
+      scripted(request.pluginId)
+        ? Promise.resolve('allow-once')
+        : realPrompt(request),
   });
 }

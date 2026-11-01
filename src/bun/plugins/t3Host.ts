@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { atomicWrite } from '../atomicWrite';
 import { PluginHostController } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 type T3Phase = 'download' | 'local' | 'restart';
 
@@ -17,7 +18,7 @@ const PACKAGE_ARCHIVES = {
 type T3PackageName = keyof typeof PACKAGE_ARCHIVES;
 
 function testPhase(): T3Phase | null {
-  const phase = process.env.GHOSTBOARD_PLUGIN_T3_PHASE;
+  const phase = probeEnv().GHOSTBOARD_PLUGIN_T3_PHASE;
   return phase === 'download' || phase === 'local' || phase === 'restart'
     ? phase
     : null;
@@ -108,11 +109,11 @@ export class T3HostController extends PluginHostController {
         const packageName = await requestedPackage(request);
         const packageUrl =
           packageName === 'combined'
-            ? process.env.GHOSTBOARD_PLUGIN_T3_URL
-            : process.env.GHOSTBOARD_PLUGIN_T3_URL_BASE
+            ? probeEnv().GHOSTBOARD_PLUGIN_T3_URL
+            : probeEnv().GHOSTBOARD_PLUGIN_T3_URL_BASE
               ? new URL(
                   PACKAGE_ARCHIVES[packageName],
-                  process.env.GHOSTBOARD_PLUGIN_T3_URL_BASE
+                  probeEnv().GHOSTBOARD_PLUGIN_T3_URL_BASE
                 ).href
               : undefined;
         if (!packageUrl) {

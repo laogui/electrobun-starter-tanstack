@@ -23,6 +23,7 @@ const directory = await mkdtemp(join(tmpdir(), 'ghostboard-plugin-t4-'));
 const artifactFolder = 'build/plugin-t4-artifacts';
 const buildEnv = {
   ...process.env,
+  GHOSTBOARD_ENABLE_PLUGIN_PROBES: '1',
   VITE_PLUGIN_T4: '1',
   VITE_PLUGIN_T3: '0',
   VITE_PLUGIN_T2_HISTORY: '0',

@@ -391,6 +391,29 @@ export interface NoteContentServiceOptions {
   permissions?: Pick<PluginPermissionGate, 'check'>;
 }
 
+const PROMPT_LABEL_MAX = 80;
+const PROMPT_LABEL_UNSAFE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu;
+
+/**
+ * A plugin-chosen batch label is untrusted text headed for a native dialog:
+ * drop control/format characters and line breaks so it cannot fake host
+ * paragraphs, and cap its length. Callers still mark it as plugin-provided.
+ */
+export function promptSafePluginLabel(label: string): string {
+  const flat = label
+    .replace(PROMPT_LABEL_UNSAFE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const chars = Array.from(flat);
+  if (chars.length <= PROMPT_LABEL_MAX) {
+    return flat;
+  }
+  return `${chars
+    .slice(0, PROMPT_LABEL_MAX - 1)
+    .join('')
+    .trimEnd()}…`;
+}
+
 export class NoteContentService {
   readonly workspace: string;
   readonly workspaceId: string;
@@ -890,7 +913,7 @@ export class NoteContentService {
       const allowed = await this.permissions?.check(
         pluginId,
         'content.delete',
-        `Undoing “${batch.label}” would delete ${created.length} notes this plugin created.`
+        `Undoing this plugin batch would delete ${created.length} notes this plugin created.\nPlugin-provided name: “${promptSafePluginLabel(batch.label)}”`
       );
       if (!allowed) {
         throw new NoteTransactionError(

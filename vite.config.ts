@@ -7,12 +7,14 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import viteReact from '@vitejs/plugin-react';
 import { defineConfig, type PluginOption, type UserConfig } from 'vite';
 
+import { RENDERER_PROBE_FLAGS } from './scripts/plugin-probe-flags';
+
 const SHARED_REACT_MODULE = /\/node_modules\/(react|react-dom|scheduler)\//;
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 const pluginT0 = process.env.VITE_PLUGIN_T0 === '1';
-/** Any trusted-plugin harness flag (scripts/trusted-plugin-t*) is set. */
-const pluginProbeRequested = Object.entries(process.env).some(
-  ([key, value]) => key.startsWith('VITE_PLUGIN_T') && value === '1'
+/** A trusted-plugin harness flag (scripts/trusted-plugin-t*) is set. */
+const pluginProbeRequested = RENDERER_PROBE_FLAGS.some(
+  (name) => process.env[name] === '1'
 );
 const sharedEntries = {
   'host-react': 'shared/react.ts',

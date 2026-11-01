@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { atomicWrite } from '../atomicWrite';
 import { PluginHostController } from './hostController';
 import type { PluginManagementService } from './management';
+import { probeEnv } from './probeGate';
 
 // Acceptance controls are installed only when an isolated test directory is provided.
 export class T2A4HostController extends PluginHostController {
@@ -29,7 +30,7 @@ export class T2A4HostController extends PluginHostController {
     }
     const headers = new Headers(corsHeaders);
     headers.set('Cache-Control', 'no-store');
-    const phase = process.env.GHOSTBOARD_PLUGIN_T2_A4_PHASE;
+    const phase = probeEnv().GHOSTBOARD_PLUGIN_T2_A4_PHASE;
     if (
       !(phase && ['initial', 'restart', 'workspace', 'return'].includes(phase))
     ) {

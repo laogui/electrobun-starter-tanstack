@@ -15,6 +15,7 @@ const directory = await mkdtemp(
 const artifactFolder = 'build/plugin-t2-selection-artifacts';
 const env = {
   ...process.env,
+  GHOSTBOARD_ENABLE_PLUGIN_PROBES: '1',
   VITE_PLUGIN_T2_SELECTION: '1',
   VITE_PLUGIN_T2_CONTENT: '0',
   VITE_PLUGIN_T2_A4: '0',

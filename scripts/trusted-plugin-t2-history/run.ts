@@ -16,6 +16,7 @@ const directory = await mkdtemp(
 const artifactFolder = 'build/plugin-t2-history-artifacts';
 const env = {
   ...process.env,
+  GHOSTBOARD_ENABLE_PLUGIN_PROBES: '1',
   VITE_PLUGIN_T2_HISTORY: '1',
   VITE_PLUGIN_T2_CANVAS: '0',
   VITE_PLUGIN_T2_CONTENT: '0',

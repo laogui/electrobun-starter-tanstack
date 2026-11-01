@@ -8,7 +8,12 @@ import Electrobun, {
 } from 'electrobun/bun';
 import { buildAIConfig } from './aiConfig';
 import { loadAICredentials, migrateLegacyAIApiKey } from './aicredentials';
-import { getAppInfoData, setApplicationMenu } from './appLifecycle';
+import {
+  getAppInfoData,
+  installQuitFlush,
+  isQuitDeferredForFlush,
+  setApplicationMenu,
+} from './appLifecycle';
 import { getAppChannel, getAppDataRoot } from './appPaths';
 import { appState } from './appState';
 import {
@@ -62,6 +67,9 @@ import { initWorkspace, seedFirstRunIfNeeded } from './workspace';
 
 async function main() {
   if (!process.env.VITEST) {
+    installQuitFlush();
+  }
+  if (!process.env.VITEST) {
     try {
       appState.diagnostics = new DiagnosticsService(
         getAppDataRoot(),
@@ -69,7 +77,12 @@ async function main() {
       );
       installDiagnosticLogging(appState.diagnostics);
       const service = appState.diagnostics;
-      Electrobun.events.on('before-quit', () => service.shutdown());
+      Electrobun.events.on('before-quit', (event: unknown) => {
+        // The first quit attempt is deferred while the renderer flushes.
+        if (!isQuitDeferredForFlush(event)) {
+          service.shutdown();
+        }
+      });
       process.once('exit', (code) => {
         if (code === 0) {
           service.shutdown();

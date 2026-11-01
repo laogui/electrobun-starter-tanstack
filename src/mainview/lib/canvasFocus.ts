@@ -88,8 +88,8 @@ export function computeCenteredNodeRect(
 }
 
 /**
- * Center the canvas on `nodeId` and open the matching FocusedView (or
- * FolderView for folders). Notes open in parallel with the pan, animating
+ * Center the canvas on `nodeId` and open the matching FocusedView (or the
+ * focused folder view for folders). Notes open in parallel with the pan, animating
  * from the node's computed destination rect; folders still await the flight
  * because their expansion reads the live canvas DOM.
  */

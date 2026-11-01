@@ -4,6 +4,7 @@ import {
   readdir,
   readFile,
   rm,
+  utimes,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -25,6 +26,7 @@ const {
   parseWorkspaceConfig,
   removeView,
   renameView,
+  seedFirstRunIfNeeded,
   setActiveViewId,
 } = await import('./workspace');
 
@@ -128,5 +130,60 @@ describe('workspace.json validation and recovery', () => {
     expect(config.views.map((entry) => entry.id)).toContain(
       config.activeViewId
     );
+  });
+});
+
+describe('missing workspace.json is not a first run', () => {
+  const userCanvas = JSON.stringify({
+    schema: 'ghostboard-canvas/v1',
+    viewId: 'default',
+    nodes: [{ id: 'mine', type: 'card', position: { x: 0, y: 0 }, data: {} }],
+    edges: [],
+  });
+
+  it('keeps an existing default canvas instead of seeding the template', async () => {
+    const defaultPath = join(ghostDir(), 'views', 'default.canvas.json');
+    await writeFile(defaultPath, userCanvas);
+    await writeFile(join(ghostDir(), 'views', 'view_abc.canvas.json'), '{}');
+
+    await seedFirstRunIfNeeded(ws);
+
+    expect(await readFile(defaultPath, 'utf8')).toBe(userCanvas);
+    expect((await readConfigFromDisk()).views.map((v) => v.id).sort()).toEqual([
+      'default',
+      'view_abc',
+    ]);
+  });
+
+  it('rebuilds instead of defaulting when the config disappears later', async () => {
+    await writeFile(join(ghostDir(), 'views', 'view_abc.canvas.json'), '{}');
+    const config = await loadWorkspaceConfig(ws);
+    expect(config.views.map((v) => v.id)).toEqual(['view_abc']);
+  });
+
+  it('restores trash entries from trash/ with the file mtime', async () => {
+    await writeFile(join(ghostDir(), 'views', 'default.canvas.json'), '{}');
+    const trashPath = join(ghostDir(), 'trash', 'trash_1234abcd.canvas.json');
+    await writeFile(
+      trashPath,
+      JSON.stringify({ viewId: 'view_old', nodes: [], edges: [] })
+    );
+    const mtime = new Date('2026-01-02T03:04:05Z');
+    await utimes(trashPath, mtime, mtime);
+    await writeFile(configPath(), '{broken');
+
+    const config = await loadWorkspaceConfig(ws);
+    expect(config.trash).toEqual([
+      {
+        trashId: 'trash_1234abcd',
+        trashFile: 'trash/trash_1234abcd.canvas.json',
+        deletedAt: mtime.getTime(),
+        view: {
+          id: 'view_old',
+          name: 'view_old',
+          file: 'views/view_old.canvas.json',
+        },
+      },
+    ]);
   });
 });

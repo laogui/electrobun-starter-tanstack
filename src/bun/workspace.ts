@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { readdir, readFile, rename } from 'node:fs/promises';
+import { readdir, readFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
@@ -110,12 +110,26 @@ export function initWorkspace(workspacePath?: string): string {
  * config and seed the default canvas from the demo template so users land
  * in a populated workspace. Subsequent launches and explicit "New Canvas
  * → Blank Canvas" creations leave manifests untouched.
+ *
+ * A missing workspace.json is not proof of a first run: sync tools delete
+ * it, and users open folders created elsewhere. When `workspace.json.bak` or
+ * any canvas under `views/` / `trash/` exists, the config is recovered from
+ * those instead and nothing is seeded. An existing `views/default.canvas.json`
+ * is never replaced by the template.
  */
 export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
   const configPath = workspaceConfigPath(wsPath);
   // The default workspace config must be written even when template seeding is disabled.
   const created = await withWorkspaceConfig(wsPath, async () => {
     if (existsSync(configPath)) {
+      return false;
+    }
+    const recovered = await recoverMissingConfig(wsPath);
+    if (recovered) {
+      console.warn(
+        '[workspace] workspace.json is missing; recovered it from existing canvases instead of seeding.'
+      );
+      await atomicWrite(configPath, JSON.stringify(recovered, null, 2));
       return false;
     }
     await atomicWrite(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
@@ -131,6 +145,10 @@ export async function seedFirstRunIfNeeded(wsPath: string): Promise<void> {
   const template = loadTemplate(FIRST_RUN_SEED_TEMPLATE_ID);
   const defaultView = DEFAULT_CONFIG.views[0];
   if (!(template && defaultView)) {
+    return;
+  }
+  const defaultPath = resolveManagedManifestPath(wsPath, defaultView.file);
+  if (!defaultPath || existsSync(defaultPath)) {
     return;
   }
   try {
@@ -190,35 +208,119 @@ function cloneDefaultConfig(): WorkspaceConfig {
 }
 
 const CANVAS_FILE_SUFFIX = '.canvas.json';
+const SAFE_VIEW_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+async function listCanvasFiles(dir: string): Promise<string[]> {
+  const names = await readdir(dir).catch(() => [] as string[]);
+  return names.filter((name) => name.endsWith(CANVAS_FILE_SUFFIX)).toSorted();
+}
+
+/** Best-effort `viewId` from a trashed manifest, used to restore its id. */
+async function readTrashedViewId(path: string): Promise<string | undefined> {
+  try {
+    const value = JSON.parse(await readFile(path, 'utf8')) as unknown;
+    const viewId =
+      value && typeof value === 'object'
+        ? (value as { viewId?: unknown }).viewId
+        : undefined;
+    return typeof viewId === 'string' && SAFE_VIEW_ID_RE.test(viewId)
+      ? viewId
+      : undefined;
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Rebuild trash entries from `.ghostboard/trash/*.canvas.json` so a lost
+ * config does not orphan trashed canvases (cleanup would otherwise treat the
+ * notes they reference as unlinked). `deletedAt` is the file's mtime; the
+ * view id comes from the manifest when it is free, else the trash id.
+ */
+async function rebuildTrashEntries(
+  wsPath: string,
+  takenIds: Set<string>
+): Promise<TrashEntry[]> {
+  const trashDir = join(wsPath, '.ghostboard', 'trash');
+  const entries: TrashEntry[] = [];
+  for (const name of await listCanvasFiles(trashDir)) {
+    const trashId = name.slice(0, -CANVAS_FILE_SUFFIX.length);
+    const trashFile = `trash/${name}`;
+    const trashPath = resolveManagedManifestPath(wsPath, trashFile);
+    if (!(trashPath && SAFE_VIEW_ID_RE.test(trashId))) {
+      continue;
+    }
+    const info = await stat(trashPath).catch(() => null);
+    if (!info?.isFile()) {
+      continue;
+    }
+    const manifestViewId = await readTrashedViewId(trashPath);
+    const viewId =
+      manifestViewId && !takenIds.has(manifestViewId)
+        ? manifestViewId
+        : trashId;
+    if (takenIds.has(viewId)) {
+      continue;
+    }
+    takenIds.add(viewId);
+    entries.push({
+      trashId,
+      trashFile,
+      deletedAt: Math.floor(info.mtimeMs),
+      view: { id: viewId, name: viewId, file: `views/${viewId}.canvas.json` },
+    });
+  }
+  return entries;
+}
 
 /**
  * Last-resort recovery: rebuild the view list from the manifests that are
- * still in `.ghostboard/views/`. Names are lost (the id is used), but every
- * canvas stays reachable instead of the workspace collapsing to one default.
+ * still in `.ghostboard/views/`, plus trash entries from `.ghostboard/trash/`.
+ * Names are lost (the id is used), but every canvas stays reachable instead of
+ * the workspace collapsing to one default. Returns null when neither folder
+ * holds a canvas.
  */
 async function rebuildConfigFromViews(
   wsPath: string
 ): Promise<WorkspaceConfig | null> {
-  const names = await readdir(join(wsPath, '.ghostboard', 'views')).catch(
-    () => [] as string[]
-  );
-  const views: ViewEntry[] = names
-    .filter((name) => name.endsWith(CANVAS_FILE_SUFFIX))
-    .toSorted()
+  const views: ViewEntry[] = (
+    await listCanvasFiles(join(wsPath, '.ghostboard', 'views'))
+  )
     .map((name) => {
       const id = name.slice(0, -CANVAS_FILE_SUFFIX.length);
       return { id, name: id, file: `views/${name}` };
     })
     .filter((view) => resolveManagedManifestPath(wsPath, view.file) !== null);
-  const first = views[0];
+  const trash = await rebuildTrashEntries(
+    wsPath,
+    new Set(views.map((view) => view.id))
+  );
+  if (views.length === 0 && trash.length === 0) {
+    return null;
+  }
+  const liveViews = views.length > 0 ? views : cloneDefaultConfig().views;
+  const first = liveViews[0];
   if (!first) {
     return null;
   }
   return {
     schema: 'ghostboard-workspace/v1',
     activeViewId: first.id,
-    views,
+    views: liveViews,
+    ...(trash.length > 0 ? { trash } : {}),
   };
+}
+
+/**
+ * workspace.json is absent: prefer its `.bak`, then the canvases on disk.
+ * Null means the workspace really is new.
+ */
+async function recoverMissingConfig(
+  wsPath: string
+): Promise<WorkspaceConfig | null> {
+  return (
+    (await readBackupConfig(wsPath)) ?? (await rebuildConfigFromViews(wsPath))
+  );
 }
 
 async function readBackupConfig(
@@ -237,7 +339,7 @@ async function readBackupConfig(
 
 /**
  * Read and validate workspace.json without taking the queue. A missing file
- * is replaced by the default config. A damaged file is copied aside to
+ * is recovered from `.bak` or the canvases on disk, else the default config. A damaged file is copied aside to
  * `workspace.json.corrupt-<timestamp>`, then restored from `workspace.json.bak`
  * or rebuilt from the canvases on disk, and the recovered config is written
  * back so the app keeps working.
@@ -251,7 +353,8 @@ async function readWorkspaceConfigUnlocked(
     return read.value;
   }
   if (read.kind === 'empty') {
-    const config = cloneDefaultConfig();
+    // Missing is not "new": rebuild from what is on disk before defaulting.
+    const config = (await recoverMissingConfig(wsPath)) ?? cloneDefaultConfig();
     await atomicWrite(configPath, JSON.stringify(config, null, 2));
     return config;
   }

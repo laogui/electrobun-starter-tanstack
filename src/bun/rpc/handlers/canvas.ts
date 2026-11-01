@@ -18,8 +18,9 @@ import {
   migrateLegacyCanvasNodes,
 } from '../../extensions/migration';
 import {
+  assertManifestWritable,
   type CanvasManifest,
-  loadManifest,
+  loadManifestDetailed,
   saveManifest as writeManifest,
 } from '../../manifest';
 import { buildNoteIndex, type NoteLocation } from '../../noteStore';
@@ -42,10 +43,11 @@ export function createCanvasHandlers(
         return null;
       }
 
-      const manifest = await loadManifest(wsPath, viewEntry.file);
-      if (!manifest) {
+      const loaded = await loadManifestDetailed(wsPath, viewEntry.file);
+      if (!loaded) {
         return null;
       }
+      const { manifest, recovered } = loaded;
 
       const noteIndex = await buildNoteIndex(wsPath);
       const migratedWidgets: Record<string, WidgetRecord> = {};
@@ -233,8 +235,10 @@ export function createCanvasHandlers(
       // re-runs the migration on every load. Only rewrite when a migration
       // actually occurred — and only patch migrated refs so hydrated
       // runtime content never pollutes the canvas JSON.
+      // A canvas recovered from a backup is not rewritten here: the user has
+      // not seen it yet, and the renderer decides whether to keep it.
       let diskNodes = manifest.nodes;
-      if (Object.keys(migratedWidgets).length > 0) {
+      if (!recovered && Object.keys(migratedWidgets).length > 0) {
         try {
           const persistedNodes = buildManifestNodesAfterWidgetMigration(
             manifest.nodes,
@@ -262,6 +266,8 @@ export function createCanvasHandlers(
       );
       if (extensionMigration.changed) {
         hydratedNodes = extensionMigration.nodes;
+      }
+      if (extensionMigration.changed && !recovered) {
         try {
           await writeManifest(wsPath, viewEntry.file, {
             ...manifest,
@@ -298,6 +304,12 @@ export function createCanvasHandlers(
         edges: manifest.edges,
         widgets: hydratedWidgets,
         extensionInstances,
+        ...(recovered
+          ? {
+              recoveredFrom: recovered.from,
+              backupPath: recovered.backupPath,
+            }
+          : {}),
       };
     },
 
@@ -310,6 +322,9 @@ export function createCanvasHandlers(
           if (!viewEntry) {
             return { success: false };
           }
+          // Fail before touching any note if the target manifest is damaged
+          // and was never shown to the renderer (it would be overwritten).
+          await assertManifestWritable(workspace, viewEntry.file);
 
           // Build note index (sidecars + legacy markdown) so we can find
           // existing notes and decide sidecar vs legacy handling.

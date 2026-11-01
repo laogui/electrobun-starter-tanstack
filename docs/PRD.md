@@ -1068,3 +1068,86 @@ D0–D2 已验收，没有新的 D3 证据。下一步是 §2.14.6 的公开验�
 | Sticky 钉住（`data.pinned`）只固定当前位置；锁定（`data.locked`）才禁止编辑、缩放、连线和删除 | §2.2、§2.5.1、§2.6、§2.11、§5.4 |
 | Settings 从独立窗口入口收敛到主窗口内 `SettingsDialog`，workspace 指针拆到 app-level `userprefs.json` | §2.12、§5.2、§5.10 |
 | PNG / JSON 导出已落地；JSON 导入和 Markdown 覆盖重新导入仍待补 | §5.9、§7、§8.3 |
+
+### 8.5 代码评审遗留问题（2026-11-01）
+
+来源：对 main `4e89d36` 的代码评审（主进程、渲染层、插件三份报告），扣除 `fix/data-safety` 分支已修的部分。以下结论来自静态阅读，竞态类问题未全部运行复现。编号 `R-*` 仅用于本节回查，不并入 §8.3 的 TODO 编号。
+
+**`fix/data-safety` 已修复（供对照）**：损坏 manifest 不再被种子或"移动到画布"覆盖，`.bak` 不被坏数据轮转，自动恢复只用 `.bak` 并提示用户；workspace.json 丢失时按 `views/` + `trash/` 重建；node-metadata 与 AI 密钥读错误不再当空表覆盖；加载失败显示阻断式错误页；dirty 改为版本号，崩溃备份在 hydrate 后恢复；退出前请求渲染端 flush；删除当前画布、切换画布的 flush 顺序；删除 Folder 子项 / widget / 剪切只移除引用、不再硬删文件；插件探针改为编译期开关 + 非 stable，同意弹窗只对夹具 ID 自动放行；删除了 `FolderView.tsx`。
+
+#### 8.5.1 数据一致性
+
+| ID | 问题 | 位置 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| R-1 | 单张卡片 revision 冲突让整次画布保存失败，前面已写的笔记处于半提交状态，用户无提示。多实例共享 `noteId`、撤销还原旧 revision 时触发。 | `noteStore.ts:259-268`、`rpc/handlers/canvas.ts:598-600`、`useBlockNoteSaver.ts:334` | 按 note 收集冲突，布局照常保存；保存后按 `noteId` 把最新内容投影到所有实例；内容字段移出画布撤销快照。 | P0 |
+| R-2 | 写操作没有统一加锁：saveNote / createNote / deleteNote / 导入、打开画布时的迁移回写、cleanup 扫描与删除、`removeView` 的改名与保存。 | `rpc/handlers/notes.ts`、`rpc/handlers/canvas.ts:243,266`、`cleanup.ts:302`、`workspace.ts:441` | 所有写路径走同一工作区队列；cleanup 在锁内扫描和删除，并加修改时间宽限期。 | P0 |
+| R-3 | 保存画布时重写 legacy `.md`：`content` 缺失时正文被清空、未知 frontmatter 丢失、拖动布局也刷新 `updatedAt`。 | `canvasHydration.ts:198-204`、`notes.ts:451-478` | 只合并必要元数据；或一次性迁移到 sidecar 后不再回写 `.md`。 | P0 |
+| R-4 | 标签：清空主标签不生效（`undefined` 序列化后丢键，schema 又拒绝 `null`）；删掉的旧标签会从 frontmatter 复活；退出时主进程不 flush metadata 的 debounce。 | `TagEditor.tsx:257-262`、`writeParamSchemas.ts:49-56`、`nodeMetadata.ts:319-341,528-545` | schema 改 `.nullable().optional()`，null 表示删除；加一次性迁移标记；before-quit 时 flush。 | P1 |
+| R-5 | 剪贴板 slice 先 `saveSnapshot()` 再 await 克隆，没有视图守卫，切换视图时副本写进另一张画布。 | `clipboardSlice.ts:67-87,111-113` | 先克隆，再重读 state 校验 `activeViewId` / `_hydrated`，同步块内存快照并写入；失败时删掉已克隆记录。 | P1 |
+| R-6 | 统一撤销：上下文由插件运行时设置，激活时 `clear()` 清掉已有画布历史；插件运行时没起来时 widget 编辑进不了全局撤销；`push` 不清各来源的 future，之后 redo 会误删 widget 撤销条目；撤销不同步 `focusedNode` / `focusedFolder` / `topicWritePaused`。 | `plugins/runtime/hostEvents.ts:75`、`unifiedUndoHistory.ts:306-333,428-441`、`historySlice.ts:49-53` | 上下文改由 `persistenceSlice` 设置；激活时不清空；`push` 时通知各来源清 future；撤销后重算焦点与暂停状态。 | P1 |
+| R-7 | View Transitions：`setFocusedNode` 推迟到过渡回调执行，用的是点击时的旧闭包，可能打开已删除或其他视图的节点；update 抛错时焦点视图一直不可见；Esc 被两处处理，后者绕过冲突确认。 | `viewTransitionController.ts:299-303,389-391`、`canvasFocus.ts:141-147`、`useCanvasKeyboard.ts:155-157` | 回调内重读 store 校验，或给每次请求一个 epoch；cleanup 时恢复 visibility；焦点视图打开时画布键盘处理直接 return。 | P1 |
+| R-8 | BlockNote 预取缓存没有 generation：manifest 保存改了 revision 不会失效缓存；已被 take 的 promise 无法作废；未打开的条目不会过期清理。revision 校验会报冲突，不会静默覆盖。 | `lib/blockNotePrefetch.ts:53-72`、`lib/noteBodySync.ts:57` | 每个 noteId 维护 generation；load 前等待进行中的保存；TTL 主动清理。 | P2 |
+| R-9 | 从 `.bak` 恢复画布后只弹警告，自动保存照常进行，用户来不及确认。 | `useCanvasInit.ts`、`useCanvasPersistence.ts` | 有 `recoveredFrom` 时暂停自动保存，用户确认后再恢复。 | P2 |
+| R-10 | 孤儿笔记 / widget 只能靠手动"未链接笔记"清理回收，没有自动 GC。 | `cleanup.ts` | Bun 端定时 GC（fail-closed，进回收站，带宽限期）。 | P2 |
+| R-11 | 崩溃备份与 manifest 没有新旧比较（manifest 无时间戳），目前依赖"保存成功即清备份"。 | `useCanvasPersistence.ts` | manifest 加 `savedAt`，恢复前比较。 | P3 |
+
+#### 8.5.2 功能缺陷
+
+| ID | 问题 | 位置 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| R-12 | 拖进 Folder 不清理连线，留下悬挂边；多选只吸收锚点节点；`childEntry` 缺 `noteId/size`。功能完整的 `absorbCardIntoFolder` 仍只有测试在调用。 | `useNodeDrag.ts:584-616`、`folderSlice.ts:58-116` | 拖入改走 `absorbCardIntoFolder`；按 PRD，有连线时阻止或提示。 | P1 |
+| R-13 | Group 内节点的拖拽命中、搜索居中、`openFocusedById` 都用相对坐标；开启 `onlyRenderVisibleElements` 后会居中到被裁剪的位置。 | `useNodeDrag.ts:262-276`、`useCanvasSearchNavigation.ts:33,209`、`canvasFocus.ts:123-124` | 统一用 `positionAbsolute`。 | P1 |
+| R-14 | AI `update_node` 可把模型给的任意字段合并进 data（`noteId`、`children`、`locked`、revision 等）；全部跳过时留下空撤销步；不检查 `topicWritePaused`。 | `applyAIActions.ts:143,209-216`、`shared/ai/schema.ts:44` | 字段白名单；有实际变更才存快照；检查暂停状态。 | P1 |
+| R-15 | 缺 `data` 的节点让整张画布打不开；Folder `children` 未做 zod 校验，元素为 null 时整次保存失败；`saveBlockNote` 强制要求用不到的 `markdown` 字段。 | `manifest.ts:138-140`、`canvas.ts:75,448,484`、`writeParamSchemas.ts` | 解析时补 `data = {}`；补 children schema；去掉多余必填字段。 | P2 |
+| R-16 | zod 校验失败直接 reject，原来返回 `{success:false}` 的 RPC 调用方没写 `.catch` 会出现未处理错误。 | `writeParamSchemas.ts:203-209` | 这类 RPC 返回 `{success:false, error:'invalid-params'}`。 | P2 |
+| R-17 | 搜索时一条记录读失败，整次搜索失败。 | `search.ts:883` | `scanNotes` 逐条 catch 并跳过。 | P2 |
+| R-18 | 回收站里一张坏画布会让清理和扩展 GC 一直不可用，UI 没有脱困入口。 | `manifest.ts:296-298` | 用 `viewFile` / `backupPath` 提示用户清空该条目或修复文件。 | P2 |
+| R-19 | frontmatter 反斜杠转义往返错误（先替换 `\n` 再替换 `\\`）；CRLF 文件读不出 frontmatter。 | `notes.ts:29,75-78` | 调换替换顺序；解析时兼容 `\r\n`。 | P2 |
+
+#### 8.5.3 安全
+
+| ID | 问题 | 位置 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| R-20 | `saveAttachmentFile` 接受任意绝对路径作为源文件，webview 或插件受控时可读取本地敏感文件。 | `attachments.ts:391-421`、`writeParamSchemas.ts:122-129` | 源路径只接受主进程文件选择器签发的一次性 token。 | P0 |
+| R-21 | 插件 RPC 信任请求体里的 `pluginId`：插件 B 可借用 A 的"始终允许"，弹窗显示的也是 A 的名字。 | `rpc/handlers/plugins.ts:222-225`、`permissions.ts:197-199` | RPC 带 `hostToken` 反查身份；弹窗说明无法确认来源并去掉"始终允许"；长期按插件独立 origin 签发身份。 | P1 |
+| R-22 | `content.delete` 只对带插件 token 的请求弹窗，换 renderer token 即绕过；阈值为 1，拆批即可规避。 | `noteContent.ts:387,482,883-886` | 按插件累计删除数弹窗，不按 token 类型判断；或文档降级为"防误操作提示"。 | P2 |
+| R-23 | "始终允许"没有撤销入口，授权不绑定公钥或 digest，换包、换作者会继承授权。 | `permissionPrompt.ts:33`、`permissions.ts:67-71` | 设置页加授权列表与撤销；授权记录存公钥 / digest；卸载时撤销。 | P2 |
+| R-24 | `getAppChannel()` 解析不出 channel 时默认 dev，而 dev 下探针放行。 | `plugins/probeGate.ts` | 未知 channel 视为 stable；或去掉 dev 分支，严格要求编译期开关。 | P2 |
+| R-25 | zip 解析差异：不比较本地头与中央目录文件名；查重区分大小写、不做 NFC；不检查 localOffset 重叠。 | `zipInstall.ts:221-222,353` | 补齐三项检查。 | P2 |
+| R-26 | URL 安装先 DNS 检查再 `fetch`，存在 rebinding 时间窗口；tech-spec 写"拒绝私网解析"说得过满。 | `net/publicTarget.ts:63-71`、`urlInstall.ts:173-177` | 固定解析出的 IP 发起连接，或修正文档表述。 | P3 |
+| R-27 | 本地 HTTP CORS 白名单包含 `'null'`，任何 opaque origin 都会被放行。 | `localHttpServer.ts:59` | 确认 WebKit 是否上报 `null`，不需要就移除。 | P3 |
+| R-28 | 诊断崩溃报告默认自动上传，不符合 local-first 预期。 | `diagnostics.ts:107` | 默认关闭，首次崩溃时询问。 | P2 |
+
+#### 8.5.4 插件平台
+
+| ID | 问题 | 位置 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| R-29 | 签名打包器（UTF-16 路径排序）与宿主（`localeCompare` DFS）的 tree digest 算法不一致，含 README / LICENSE / 大小写差异路径的签名包装不上。 | `packages/plugin-sdk/package-plugin.js:30-31`、`plugins/directoryContents.ts:21-23` | 抽出共享 digest 实现，加跨实现 fixture 测试。 | P0 |
+| R-30 | 没有卸载，也不能断开开发目录，插件 ID 可能被永久占用。 | `management.ts:535`、`pluginInstall.ts:743`、`developmentDirectories.ts` | 实现带 journal 的卸载、启用状态清理、回收与 GC、开发目录 disconnect。 | P1 |
+| R-31 | 更新或回退后只清当前工作区的启用状态，其他工作区与磁盘不一致；旧版本没有 GC。 | `management.ts:395-396` | 跨工作区清理启用状态；旧版本进 GC。 | P2 |
+| R-32 | 运行时每秒对所有插件全量读取并 SHA-256。 | `startPluginRuntime.ts:208`、`hostController.ts:240,280` | 已安装插件只在安装 / 更新时校验；开发目录用 `fs.watch` + debounce。 | P1 |
+| R-33 | `contentBatch.ts`（558 行）是死代码。 | `src/bun/plugins/contentBatch.ts` | 删除。 | P3 |
+| R-34 | 文案与文档漂移：首次安装公钥来自包本身（TOFU），UI 却写"作者签名已验证"；`zh.json` 仍写 T4"待实现"；本 PRD §2.14 等处承诺的 `net` 服务 SDK 中不存在。 | `management.ts:121,616`、`messages/zh.json:433,632`、本文 `net` 相关段落 | 文案改为"首次安装已记录作者公钥"；删除过期文案；`net` 补实现或从 PRD 移除。 | P2 |
+
+#### 8.5.5 性能与架构
+
+| ID | 问题 | 位置 | 建议 | 优先级 |
+| --- | --- | --- | --- | --- |
+| R-35 | 每次保存 / 搜索全量读盘；全局锁连只读操作也排队；并发上限 16 对 sidecar 无效。 | `noteStore.ts:68-112`、`search.ts`、`blocknote.ts:100` | 常驻增量索引（可评估 SQLite FTS5）；只读不进写锁。 | P2 |
+| R-36 | 崩溃恢复在每次拿锁时执行且在操作 try 之外，一次恢复冲突后所有写入永久失败。 | `noteTransactions.ts:257` | 恢复只在启动时做一次；失败进入可见的恢复状态。 | P1 |
+| R-37 | RPC 超时为 Infinity；`qlmanage` 无超时；图片和附件以 base64 走 RPC（已有 `GET /attachment` 路由但打开画布未使用）。 | `index.ts:345`、`mainview/lib/rpc.ts:97`、`thumbnail.ts:420-434`、`canvasHydration.ts:141-147` | 设有限超时；子进程加超时；二进制改走本地 HTTP。 | P1 |
+| R-38 | 渲染端 RPC 无类型（`defineRPC` 无类型参数、`as any`、`nodes: any[]`），契约未放进 `src/shared`。 | `mainview/lib/rpc.ts:96-183`、`src/bun/rpc/types.ts` | 契约移到 `src/shared/rpc`，两端共用。 | P1 |
+| R-39 | `index.ts` 9 层嵌套三元选择宿主控制器；顶层节点与 Folder 子节点处理是两份复制代码。 | `index.ts:222-299`、`canvas.ts:53-196,414-587` | 改成查表；抽公共函数。 | P3 |
+| R-40 | I/O 仍写在 slice action 中；`useContextMenu.ts`（1092 行）分支重复。 | `persistenceSlice.ts`、`useContextMenu.ts` | 抽出持久化服务层；菜单按节点类型拆分。 | P3 |
+| R-41 | FocusedView 订阅整个 `nodes`，每次按键把全文写进 store，触发（隐藏中的）画布层重渲染。 | `FocusedView.tsx:187,869-877` | 编辑器内容不镜像进 `nodes`，只在保存后投影摘要。 | P2 |
+| R-42 | 附件 ID 只有 32 位（`randomUUID().slice(0,8)`）且写入前不检查是否存在；`saveAttachmentFile` 和覆盖写不是原子写。 | `attachments.ts:152-154,190,421` | 加长 ID 并用独占创建；统一走 `atomicWrite`。 | P2 |
+| R-43 | 诊断日志同步写盘；出错时 `process.exit(1)` 不经过 flush。 | `diagnostics.ts:248-263`、`index.ts:97-102` | 异步写；退出路径统一走 flush。 | P3 |
+
+#### 8.5.6 PRD 与代码不一致
+
+| ID | PRD 描述 | 代码现状 | 待决策 |
+| --- | --- | --- | --- |
+| R-44 | viewport 持久化已完成 | 只在会话内保存（`persistenceSlice.ts:66-67`） | 实现持久化，或改 PRD |
+| R-45 | 有显式 Extract 工具栏按钮 | 只有右键菜单的 move-out | 补按钮，或改 PRD |
+| R-46 | 带连线的节点拖入 Folder 时阻止或提示 | 不阻止、不提示，且留下悬挂边（见 R-12） | 随 R-12 修复 |
+| R-47 | 实时高亮 | 未实现 | 排期或移出 PRD |

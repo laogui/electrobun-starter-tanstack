@@ -9,7 +9,7 @@
     "dev:hmr": "vite build && concurrently \"bun run hmr\" \"electrobun dev\"",
     "hmr": "vite --port 5173",
     "build:canary": "vite build && electrobun build --env=canary",
-    "build:stable": "vite build && electrobun build --env=stable",
+    "build:stable": "bun scripts/plugin-probe-flags.ts && vite build && electrobun build --env=stable",
     "test:plugin-t0": "bun scripts/trusted-plugin-t0/run.ts",
     "test:plugin-t1": "bun scripts/trusted-plugin-t1/run.ts",
     "test:plugin-t2-a4": "bun scripts/trusted-plugin-t2-a4/run.ts",

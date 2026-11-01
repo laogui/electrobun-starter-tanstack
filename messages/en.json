@@ -883,5 +883,16 @@
   "extension_fallback_incompatible": "This card needs a compatible plugin migration. The original data is kept.",
   "extension_fallback_disabled": "This canvas type is disabled in the current workspace.",
   "extension_fallback_unavailable": "This canvas type is unavailable. Data is kept.",
-  "asset_media_load_failed": "Media file could not be loaded."
+  "asset_media_load_failed": "Media file could not be loaded.",
+  "toast_move_target_load_failed": "Could not read the target canvas — nothing was moved.",
+  "toast_move_canvas_changed": "The canvas changed during the move — nothing was moved.",
+  "toast_canvas_recovered_from_backup": "This canvas could not be read and was restored from a backup ({source}). Recent changes may be missing.",
+  "toast_view_delete_save_failed": "Could not save the current canvas — deletion canceled.",
+  "canvas_load_error_title": "Canvas failed to load",
+  "canvas_load_error_readonly": "Canvas failed to load. Edits will not be saved.",
+  "canvas_load_error_corrupt": "The canvas file is damaged and no usable backup was found. It has not been overwritten.",
+  "canvas_load_error_missing": "This canvas could not be found.",
+  "canvas_load_error_failed": "An error occurred while reading this canvas: {message}",
+  "canvas_load_error_retry": "Retry",
+  "canvas_load_error_switch": "Open another canvas"
 }

@@ -1,8 +1,20 @@
-import { link, mkdir, open, rename, rm, stat } from 'node:fs/promises';
+import {
+  link,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+} from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
-
 import { Utils } from 'electrobun/bun';
 import { fsyncDirectory } from './atomicWrite';
+import { withNoteWorkspace } from './noteTransactions';
+import {
+  hasWorkspaceFileTransaction,
+  journalWrite,
+} from './workspaceFileJournal';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
 const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)*;base64,(.+)$/i;
@@ -201,7 +213,7 @@ interface SaveAttachmentStreamInput {
  * Used by the localhost `/attachment/upload` route so drag-and-drop imports
  * can copy bytes straight from the renderer `File` body.
  */
-export async function saveAttachmentStream(
+async function saveAttachmentStreamUnlocked(
   wsPath: string,
   input: SaveAttachmentStreamInput
 ): Promise<{ filePath: string }> {
@@ -231,12 +243,30 @@ export async function saveAttachmentStream(
     }
     if (input.existingFile) {
       // Explicit replacement is atomic, so interruption preserves the old bytes.
-      await rename(tempPath, target.fullPath);
+      if (hasWorkspaceFileTransaction()) {
+        await journalWrite(
+          target.fullPath,
+          new Uint8Array(await readFile(tempPath)),
+          {},
+          () => rename(tempPath, target.fullPath)
+        );
+      } else {
+        await rename(tempPath, target.fullPath);
+      }
     } else {
       for (let attempt = 0; ; attempt += 1) {
         try {
           // A hard link publishes completed bytes without replacing a collision.
-          await link(tempPath, target.fullPath);
+          if (hasWorkspaceFileTransaction()) {
+            await journalWrite(
+              target.fullPath,
+              new Uint8Array(await readFile(tempPath)),
+              {},
+              () => link(tempPath, target.fullPath)
+            );
+          } else {
+            await link(tempPath, target.fullPath);
+          }
           break;
         } catch (error) {
           if (
@@ -261,7 +291,7 @@ export async function saveAttachmentStream(
   }
 }
 
-export async function loadAttachment(
+async function loadAttachmentUnlocked(
   wsPath: string,
   filePath: string
 ): Promise<{ dataUrl: string } | null> {
@@ -277,7 +307,7 @@ export async function loadAttachment(
   return { dataUrl: `data:${mimeType};base64,${base64}` };
 }
 
-export async function attachmentExists(
+async function attachmentExistsUnlocked(
   wsPath: string,
   filePath: string
 ): Promise<boolean> {
@@ -452,3 +482,15 @@ export async function saveAttachmentFile(
     suggestedName: input.suggestedName || input.sourcePath,
   });
 }
+
+export const saveAttachmentStream = (
+  ...args: Parameters<typeof saveAttachmentStreamUnlocked>
+) => withNoteWorkspace(args[0], () => saveAttachmentStreamUnlocked(...args));
+
+export const loadAttachment = (
+  ...args: Parameters<typeof loadAttachmentUnlocked>
+) => withNoteWorkspace(args[0], () => loadAttachmentUnlocked(...args));
+
+export const attachmentExists = (
+  ...args: Parameters<typeof attachmentExistsUnlocked>
+) => withNoteWorkspace(args[0], () => attachmentExistsUnlocked(...args));

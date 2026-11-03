@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
-
 import { atomicWrite } from './atomicWrite';
+import { withNoteWorkspace } from './noteTransactions';
 import { notifyContentChanged } from './plugins/contentEvents';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
@@ -272,11 +272,11 @@ function defaultTitleForKind(kind: WidgetKind): string {
 }
 
 function generateWidgetId(): string {
-  return `widget_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  return `widget_${crypto.randomUUID().replaceAll('-', '')}`;
 }
 
 /** Create a new widget file with default data for its kind and return the record. */
-export async function createWidget(
+async function createWidgetUnlocked(
   wsPath: string,
   kind: WidgetKind,
   title?: string,
@@ -301,7 +301,7 @@ export async function createWidget(
  * Load a single widget by id. Never throws: missing file or corrupted JSON
  * are reported as a {@link WidgetLoadError} instead.
  */
-export async function loadWidget(
+async function loadWidgetUnlocked(
   wsPath: string,
   widgetId: string
 ): Promise<WidgetRecord | WidgetLoadError> {
@@ -327,19 +327,26 @@ export async function loadWidget(
 }
 
 /** Batch-load widgets concurrently; a single corrupted/missing widget never fails the batch. */
-export async function loadWidgets(
+async function loadWidgetsUnlocked(
   wsPath: string,
   widgetIds: string[]
 ): Promise<Record<string, WidgetRecord | WidgetLoadError>> {
   const uniqueIds = [...new Set(widgetIds)];
   const results = await Promise.all(
-    uniqueIds.map(async (id) => [id, await loadWidget(wsPath, id)] as const)
+    uniqueIds.map(async (id) => {
+      try {
+        return [id, await loadWidget(wsPath, id)] as const;
+      } catch (error) {
+        console.warn(`[widgets] Failed to load ${id}:`, error);
+        return [id, { id, error: 'corrupted' as const }] as const;
+      }
+    })
   );
   return Object.fromEntries(results);
 }
 
 /** Atomically write the widget JSON file. Throws when the record is invalid. */
-export async function saveWidget(
+async function saveWidgetUnlocked(
   wsPath: string,
   widget: WidgetRecord
 ): Promise<void> {
@@ -361,7 +368,7 @@ export async function saveWidget(
 }
 
 /** Delete the widget file for a given id. Returns true if a file was removed. */
-export async function deleteWidget(
+async function deleteWidgetUnlocked(
   wsPath: string,
   widgetId: string
 ): Promise<boolean> {
@@ -383,7 +390,7 @@ export async function deleteWidget(
  * Clone an existing widget's content into a brand new widget file/id. Used by
  * duplicate/paste so cloned nodes never share the same underlying file.
  */
-export async function cloneWidget(
+async function cloneWidgetUnlocked(
   wsPath: string,
   widgetId: string
 ): Promise<WidgetRecord | null> {
@@ -398,6 +405,11 @@ export async function cloneWidget(
     createdAt: now,
     updatedAt: now,
   };
+  if (
+    existsSync(assertWorkspaceWidgetPath(wsPath, widgetRelativePath(cloned.id)))
+  ) {
+    throw new Error('Clone id already exists');
+  }
   await saveWidget(wsPath, cloned);
   return cloned;
 }
@@ -405,3 +417,23 @@ export async function cloneWidget(
 export function widgetDir(wsPath: string): string {
   return resolve(wsPath, '.ghostboard', 'widgets');
 }
+
+export const createWidget = (
+  ...args: Parameters<typeof createWidgetUnlocked>
+) => withNoteWorkspace(args[0], () => createWidgetUnlocked(...args));
+
+export const loadWidget = (...args: Parameters<typeof loadWidgetUnlocked>) =>
+  withNoteWorkspace(args[0], () => loadWidgetUnlocked(...args));
+
+export const saveWidget = (...args: Parameters<typeof saveWidgetUnlocked>) =>
+  withNoteWorkspace(args[0], () => saveWidgetUnlocked(...args));
+
+export const deleteWidget = (
+  ...args: Parameters<typeof deleteWidgetUnlocked>
+) => withNoteWorkspace(args[0], () => deleteWidgetUnlocked(...args));
+
+export const cloneWidget = (...args: Parameters<typeof cloneWidgetUnlocked>) =>
+  withNoteWorkspace(args[0], () => cloneWidgetUnlocked(...args));
+
+export const loadWidgets = (...args: Parameters<typeof loadWidgetsUnlocked>) =>
+  withNoteWorkspace(args[0], () => loadWidgetsUnlocked(...args));

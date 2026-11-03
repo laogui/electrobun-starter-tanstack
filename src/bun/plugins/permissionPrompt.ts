@@ -1,11 +1,11 @@
 import { Utils } from 'electrobun/bun';
 
 import {
+  getPluginPermissionStore,
   PLUGIN_PERMISSION_DESCRIPTIONS,
   type PluginPermissionDecision,
   PluginPermissionGate,
   type PluginPermissionPrompter,
-  PluginPermissionStore,
 } from './permissions';
 import { isScriptedProbePlugin } from './probeGate';
 
@@ -60,7 +60,13 @@ export function createPluginPermissionGate(input: {
   appDataRoot: string;
   isScriptedProbePlugin?: (pluginId: string) => boolean;
   listPlugins: () => Promise<
-    readonly { enabled: boolean; name: string; pluginId: string }[]
+    readonly {
+      enabled: boolean;
+      name: string;
+      pluginId: string;
+      permissionIdentity?: string;
+      status?: string;
+    }[]
   >;
   prompt?: PluginPermissionPrompter;
   scriptedProbes: boolean;
@@ -70,15 +76,24 @@ export function createPluginPermissionGate(input: {
   const scripted = (pluginId: string) =>
     input.scriptedProbes && isProbe(pluginId);
   return new PluginPermissionGate({
-    store: new PluginPermissionStore(input.appDataRoot),
+    store: getPluginPermissionStore(input.appDataRoot),
     describePlugin: async (pluginId) => {
       if (scripted(pluginId)) {
         return pluginId;
       }
       const plugins = await input.listPlugins();
-      return plugins.find(
-        (plugin) => plugin.pluginId === pluginId && plugin.enabled
-      )?.name;
+      const plugin = plugins.find(
+        (plugin) =>
+          plugin.pluginId === pluginId &&
+          plugin.enabled &&
+          (plugin.status === undefined || plugin.status === 'stored')
+      );
+      return plugin
+        ? {
+            name: plugin.name,
+            identity: plugin.permissionIdentity ?? `unbound:${plugin.pluginId}`,
+          }
+        : undefined;
     },
     prompt: (request) =>
       scripted(request.pluginId)

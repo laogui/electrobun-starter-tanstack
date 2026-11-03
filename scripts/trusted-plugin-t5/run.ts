@@ -8,7 +8,7 @@
  *
  * Unlike the T3 / T4 runners there is no loopback download server: the app
  * only talks to `--base-url` (default GHOSTBOARD_PLUGIN_EXAMPLES_BASE_URL or
- * https://dl.ghostboard.app/plugins/examples), the same URLs the docs link.
+ * https://ghostboard.21blog.com/plugins/examples), the same URLs the docs link.
  *
  * Usage: bun run test:plugin-t5 [--base-url=<https url>] [--manual-picker]
  *        [--skip-build] [--only=install,restart,picker]
@@ -43,7 +43,7 @@ const only = new Set(
 const baseUrl = (
   argument('base-url') ??
   process.env.GHOSTBOARD_PLUGIN_EXAMPLES_BASE_URL ??
-  'https://dl.ghostboard.app/plugins/examples'
+  'https://ghostboard.21blog.com/plugins/examples'
 ).replace(/\/+$/, '');
 if (!baseUrl.startsWith('https://')) {
   throw new Error('T5 requires a public https:// example base URL');

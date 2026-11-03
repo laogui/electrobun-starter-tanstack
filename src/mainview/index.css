@@ -533,6 +533,19 @@ body.resizing-nwse * {
   --connection-active: 255 60% 52%;
 }
 
+.dark {
+  --group-blue: 210 35% 19%;
+  --group-blue-border: 210 45% 39%;
+  --group-green: 145 25% 18%;
+  --group-green-border: 145 35% 37%;
+  --group-yellow: 45 30% 18%;
+  --group-yellow-border: 45 45% 38%;
+  --group-pink: 340 25% 20%;
+  --group-pink-border: 340 40% 40%;
+  --group-orange: 28 30% 19%;
+  --group-orange-border: 28 45% 39%;
+}
+
 /* ── Group styles ── */
 .canvas-group {
   border: 1.5px dashed transparent;
@@ -824,7 +837,12 @@ body.resizing-nwse * {
   }
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* An explicitly colored card uses its own fill's tone, including in previews
+   and focus. A white card must not inherit light text from the app's dark UI. */
+@custom-variant dark (&:where(.dark, .dark *):not(
+    :where([data-surface-theme="light"], [data-surface-theme="light"] *)
+  ),
+&:where([data-surface-theme="dark"], [data-surface-theme="dark"] *));
 
 /* ═══ Custom Marquee Selection Styles ═══ */
 

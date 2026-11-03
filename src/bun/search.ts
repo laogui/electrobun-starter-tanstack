@@ -241,7 +241,13 @@ export async function searchWorkspace(
   const views = params.viewId
     ? config.views.filter((v) => v.id === params.viewId)
     : config.views;
-  const metadata = await loadAllMetadata(wsPath);
+  const metadata = await loadAllMetadata(wsPath).catch((error) => {
+    console.warn(
+      '[search] Metadata unavailable; searching readable content:',
+      error
+    );
+    return {} as Record<string, NodeMetadata>;
+  });
 
   const results: SearchResult[] = [];
 
@@ -890,7 +896,12 @@ async function scanNotes(
     FS_CONCURRENCY,
     async ([noteId, refs]) => {
       const markdownFile = markdownFileFromRefs(refs);
-      const record = await loadNoteRecord(wsPath, noteId, markdownFile);
+      let record: NoteRecord | null = null;
+      try {
+        record = await loadNoteRecord(wsPath, noteId, markdownFile);
+      } catch (error) {
+        console.warn(`[search] Skipped unreadable note ${noteId}:`, error);
+      }
       return { noteId, record, refs };
     }
   );
@@ -903,7 +914,10 @@ async function scanNotes(
   }
 
   if (unresolved.length > 0) {
-    const noteIndex = await buildNoteIndex(wsPath);
+    const noteIndex = await buildNoteIndex(wsPath).catch((error) => {
+      console.warn('[search] Note index unavailable:', error);
+      return new Map<string, import('./noteStore').NoteLocation>();
+    });
     const resolvedRecords = await mapWithConcurrency(
       unresolved,
       FS_CONCURRENCY,
@@ -913,11 +927,12 @@ async function scanNotes(
           return null;
         }
         const location = noteIndex.get(noteId);
-        const record = await loadNoteRecord(
-          wsPath,
-          noteId,
-          location?.markdownFile
-        );
+        let record: NoteRecord | null = null;
+        try {
+          record = await loadNoteRecord(wsPath, noteId, location?.markdownFile);
+        } catch (error) {
+          console.warn(`[search] Skipped unreadable note ${noteId}:`, error);
+        }
         return record ? { record, refs } : null;
       }
     );

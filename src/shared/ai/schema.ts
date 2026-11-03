@@ -29,19 +29,29 @@ export const aiSizeSchema = z.object({
   height: z.number().positive(),
 });
 
+const aiEditableData = z
+  .object({
+    title: z.string().optional(),
+    content: z.string().optional(),
+    color: z.string().optional(),
+    label: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .strict();
+
 export const aiActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('create_node'),
     tempId: z.string().min(1),
     nodeKind: z.enum(AI_NODE_KINDS),
     position: aiPositionSchema,
-    data: z.record(z.string(), z.unknown()),
+    data: aiEditableData,
     size: aiSizeSchema.optional(),
   }),
   z.object({
     type: z.literal('update_node'),
     nodeId: z.string().min(1),
-    updates: z.record(z.string(), z.unknown()),
+    updates: aiEditableData,
   }),
   z.object({
     type: z.literal('move_node'),

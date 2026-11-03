@@ -145,8 +145,13 @@ export function useNodeMetadataEntry(
 export function useSetNodeMetadata() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { id: string; metadata: NodeMetadata }) =>
-      await rpcSetNodeMetadata(vars.id, vars.metadata),
+    mutationFn: async (vars: { id: string; metadata: NodeMetadata }) => {
+      const result = await rpcSetNodeMetadata(vars.id, vars.metadata);
+      if (!result?.success) {
+        throw new Error('Metadata update rejected');
+      }
+      return result;
+    },
     onMutate: ({ id, metadata }) => {
       const prev = queryClient.getQueryData<NodeMetadataMap>(QUERY_KEY);
       queryClient.setQueryData<NodeMetadataMap>(QUERY_KEY, (current) => {
@@ -194,6 +199,8 @@ export function useSetNodeMetadata() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) {
         queryClient.setQueryData(QUERY_KEY, ctx.prev);
+      } else {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       }
     },
     onSettled: () => {
@@ -206,7 +213,13 @@ export function useSetNodeMetadata() {
 export function useDeleteNodeMetadata() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => await rpcDeleteNodeMetadata(id),
+    mutationFn: async (id: string) => {
+      const result = await rpcDeleteNodeMetadata(id);
+      if (!result?.success) {
+        throw new Error('Metadata deletion rejected');
+      }
+      return result;
+    },
     onMutate: (id) => {
       const prev = queryClient.getQueryData<NodeMetadataMap>(QUERY_KEY);
       queryClient.setQueryData<NodeMetadataMap>(QUERY_KEY, (current) => {
@@ -222,6 +235,8 @@ export function useDeleteNodeMetadata() {
     onError: (_err, _id, ctx) => {
       if (ctx?.prev) {
         queryClient.setQueryData(QUERY_KEY, ctx.prev);
+      } else {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       }
     },
     onSettled: () => {

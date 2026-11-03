@@ -1,9 +1,11 @@
 // Canvas store slice: Copy / cut / paste / duplicate of canvas selections.
 import type { Edge, Node } from '@xyflow/react';
+import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { markNodesEntering } from '@/lib/motion';
 import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
+import * as m from '../../../paraglide/messages.js';
 import {
   buildPastedClipboard,
   cleanNodeForClipboard,
@@ -12,6 +14,7 @@ import {
 import {
   cloneExtensionReferences,
   cloneWidgetReferences,
+  finishCreatedClones,
   graphContainsExtensionReference,
   graphContainsWidgetReference,
 } from '../canvas/cloneReferences';
@@ -80,31 +83,50 @@ export const createClipboardSlice: StateCreator<
       latest.nodes,
       offset
     );
-    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-      ? await cloneWidgetReferences(pasted.nodes)
-      : pasted.nodes;
-    if (!isCurrent()) {
-      return;
+    const createdIds = new Set<string>();
+    try {
+      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
+        ? await cloneWidgetReferences(pasted.nodes, (id) => {
+            createdIds.add(id);
+            if (!isCurrent()) {
+              throw new DOMException('Canvas changed', 'AbortError');
+            }
+          })
+        : pasted.nodes;
+      if (!isCurrent()) {
+        return;
+      }
+      if (graphContainsExtensionReference(pastedNodes)) {
+        pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
+          createdIds.add(id);
+          if (!isCurrent()) {
+            throw new DOMException('Canvas changed', 'AbortError');
+          }
+        });
+      }
+      if (!isCurrent() || pastedNodes.length === 0) {
+        return;
+      }
+      get().saveSnapshot();
+      const pastedIds = new Set(pastedNodes.map((node) => node.id));
+      const pastedEdges = pasted.edges.filter(
+        (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
+      );
+      markNodesEntering(pastedNodes.map((n) => n.id));
+      set((s) => ({
+        edges: [...s.edges, ...pastedEdges],
+        nodes: sortNodesByParent([
+          ...s.nodes.map((n) => ({ ...n, selected: false })),
+          ...pastedNodes,
+        ]),
+      }));
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        toast.error(m.toast_clone_canvas_type_failed());
+      }
+    } finally {
+      await finishCreatedClones([...createdIds], get());
     }
-    if (graphContainsExtensionReference(pastedNodes)) {
-      pastedNodes = await cloneExtensionReferences(pastedNodes);
-    }
-    if (!isCurrent() || pastedNodes.length === 0) {
-      return;
-    }
-    get().saveSnapshot();
-    const pastedIds = new Set(pastedNodes.map((node) => node.id));
-    const pastedEdges = pasted.edges.filter(
-      (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
-    );
-    markNodesEntering(pastedNodes.map((n) => n.id));
-    set((s) => ({
-      edges: [...s.edges, ...pastedEdges],
-      nodes: sortNodesByParent([
-        ...s.nodes.map((n) => ({ ...n, selected: false })),
-        ...pastedNodes,
-      ]),
-    }));
   },
 
   duplicateSelected: async (offset = DUPLICATE_OFFSET) => {
@@ -131,31 +153,50 @@ export const createClipboardSlice: StateCreator<
       latest.nodes,
       offset
     );
-    let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-      ? await cloneWidgetReferences(pasted.nodes)
-      : pasted.nodes;
-    if (!isCurrent()) {
-      return;
+    const createdIds = new Set<string>();
+    try {
+      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
+        ? await cloneWidgetReferences(pasted.nodes, (id) => {
+            createdIds.add(id);
+            if (!isCurrent()) {
+              throw new DOMException('Canvas changed', 'AbortError');
+            }
+          })
+        : pasted.nodes;
+      if (!isCurrent()) {
+        return;
+      }
+      if (graphContainsExtensionReference(pastedNodes)) {
+        pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
+          createdIds.add(id);
+          if (!isCurrent()) {
+            throw new DOMException('Canvas changed', 'AbortError');
+          }
+        });
+      }
+      if (!isCurrent() || pastedNodes.length === 0) {
+        return;
+      }
+      get().saveSnapshot();
+      const pastedIds = new Set(pastedNodes.map((node) => node.id));
+      const pastedEdges = pasted.edges.filter(
+        (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
+      );
+      markNodesEntering(pastedNodes.map((node) => node.id));
+      set((s) => ({
+        edges: [...s.edges, ...pastedEdges],
+        nodes: sortNodesByParent([
+          ...s.nodes.map((node) => ({ ...node, selected: false })),
+          ...pastedNodes,
+        ]),
+      }));
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        toast.error(m.toast_clone_canvas_type_failed());
+      }
+    } finally {
+      await finishCreatedClones([...createdIds], get());
     }
-    if (graphContainsExtensionReference(pastedNodes)) {
-      pastedNodes = await cloneExtensionReferences(pastedNodes);
-    }
-    if (!isCurrent() || pastedNodes.length === 0) {
-      return;
-    }
-    get().saveSnapshot();
-    const pastedIds = new Set(pastedNodes.map((node) => node.id));
-    const pastedEdges = pasted.edges.filter(
-      (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
-    );
-    markNodesEntering(pastedNodes.map((node) => node.id));
-    set((s) => ({
-      edges: [...s.edges, ...pastedEdges],
-      nodes: sortNodesByParent([
-        ...s.nodes.map((node) => ({ ...node, selected: false })),
-        ...pastedNodes,
-      ]),
-    }));
   },
 
   cutSelected: () => {

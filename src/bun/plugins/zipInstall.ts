@@ -86,13 +86,20 @@ function hasBit(flags: number, bit: number): boolean {
 }
 
 function decodeName(bytes: Uint8Array): string {
-  return new TextDecoder('utf8', { fatal: false }).decode(bytes);
+  try {
+    return new TextDecoder('utf8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new PluginZipError('invalid-zip', 'zip filename is not valid UTF-8');
+  }
 }
 
 function findEocd(bytes: Uint8Array): number {
   const min = Math.max(0, bytes.length - 22 - 65_535);
   for (let offset = bytes.length - 22; offset >= min; offset -= 1) {
-    if (readU32(bytes, offset) === EOCD_SIG) {
+    if (
+      readU32(bytes, offset) === EOCD_SIG &&
+      offset + 22 + readU16(bytes, offset + 20) === bytes.length
+    ) {
       return offset;
     }
   }
@@ -157,7 +164,7 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
       `zip exceeds ${PLUGIN_ZIP_MAX_ENTRIES} entries`
     );
   }
-  if (cdOffset + cdSize > bytes.length) {
+  if (cdOffset + cdSize !== eocd) {
     throw new PluginZipError(
       'invalid-zip',
       'zip central directory is truncated'
@@ -165,10 +172,13 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
   }
 
   const entries: ZipEntry[] = [];
+  const ranges: Array<{ start: number; end: number }> = [];
+  const paths = new Map<string, boolean>();
+  let count = 0;
   let cursor = cdOffset;
   const cdEnd = cdOffset + cdSize;
   while (cursor < cdEnd) {
-    if (cursor + 46 > bytes.length || readU32(bytes, cursor) !== CENTRAL_SIG) {
+    if (cursor + 46 > cdEnd || readU32(bytes, cursor) !== CENTRAL_SIG) {
       throw new PluginZipError(
         'invalid-zip',
         'zip central directory is corrupt'
@@ -182,14 +192,29 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
     const nameLength = readU16(bytes, cursor + 28);
     const extraLength = readU16(bytes, cursor + 30);
     const commentLength = readU16(bytes, cursor + 32);
+    const startDisk = readU16(bytes, cursor + 34);
     const localOffset = readU32(bytes, cursor + 42);
     const nameStart = cursor + 46;
     const nameBytes = bytes.subarray(nameStart, nameStart + nameLength);
     cursor = nameStart + nameLength + extraLength + commentLength;
-    const rawName = decodeName(nameBytes);
-    if (rawName.endsWith('/') || isIgnoredName(rawName)) {
-      continue;
+    if (cursor > cdEnd || startDisk !== 0) {
+      throw new PluginZipError(
+        'invalid-zip',
+        'zip central entry exceeds directory bounds or uses another disk'
+      );
     }
+    count += 1;
+    const rawName = decodeName(nameBytes);
+    const directory = rawName.endsWith('/');
+    const safeName = assertSafeZipPath(rawName);
+    const portableName = safeName.normalize('NFC').toLowerCase();
+    if (paths.has(portableName)) {
+      throw new PluginZipError(
+        'invalid-zip',
+        `zip contains aliased or duplicate paths: ${rawName}`
+      );
+    }
+    paths.set(portableName, directory);
     if (hasBit(flags, 0)) {
       throw new PluginZipError(
         'encrypted',
@@ -209,7 +234,7 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
       );
     }
     if (
-      localOffset + 30 > bytes.length ||
+      localOffset + 30 > cdOffset ||
       readU32(bytes, localOffset) !== LOCAL_SIG
     ) {
       throw new PluginZipError(
@@ -218,8 +243,11 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
       );
     }
     if (
+      readU16(bytes, localOffset + 6) !== flags ||
       readU16(bytes, localOffset + 8) !== compression ||
-      readU32(bytes, localOffset + 18) !== compressedSize
+      readU32(bytes, localOffset + 14) !== declaredCrc ||
+      readU32(bytes, localOffset + 18) !== compressedSize ||
+      readU32(bytes, localOffset + 22) !== uncompressedSize
     ) {
       throw new PluginZipError(
         'invalid-zip',
@@ -230,19 +258,54 @@ function parseZipEntries(bytes: Uint8Array): ZipEntry[] {
     const localExtraLength = readU16(bytes, localOffset + 28);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const dataEnd = dataStart + compressedSize;
-    if (dataEnd > bytes.length) {
+    if (
+      dataEnd > cdOffset ||
+      localNameLength !== nameLength ||
+      !nameBytes.every(
+        (byte, index) => byte === bytes[localOffset + 30 + index]
+      )
+    ) {
       throw new PluginZipError(
         'invalid-zip',
         `zip entry data truncated: ${rawName}`
       );
     }
+    ranges.push({ start: localOffset, end: dataEnd });
+    if (directory || isIgnoredName(rawName)) {
+      continue;
+    }
     entries.push({
-      name: rawName,
+      name: safeName,
       compression,
       crc32: declaredCrc,
       uncompressedSize,
       compressed: bytes.subarray(dataStart, dataEnd),
     });
+  }
+  if (count !== totalEntries || cursor !== cdEnd) {
+    throw new PluginZipError(
+      'invalid-zip',
+      'zip entry count does not match central directory'
+    );
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  for (let index = 1; index < ranges.length; index += 1) {
+    if (ranges[index]!.start < ranges[index - 1]!.end) {
+      throw new PluginZipError('invalid-zip', 'zip local entry ranges overlap');
+    }
+  }
+  for (const path of paths.keys()) {
+    const segments = path.split('/');
+    segments.pop();
+    while (segments.length) {
+      if (paths.get(segments.join('/')) === false) {
+        throw new PluginZipError(
+          'invalid-zip',
+          'zip file path is also used as a directory'
+        );
+      }
+      segments.pop();
+    }
   }
   return entries;
 }

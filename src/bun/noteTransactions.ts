@@ -7,6 +7,7 @@ import {
 } from '../shared/plugins/contentHistory';
 import { atomicWrite } from './atomicWrite';
 import { notifyContentChanged } from './plugins/contentEvents';
+import { recoverWorkspaceFileJournal } from './workspaceFileJournal';
 
 export const NOTE_HISTORY_PATH =
   'content/.ghostboard/plugin-content-history.json';
@@ -19,10 +20,12 @@ const ownership = new AsyncLocalStorage<{ active: boolean; path: string }>();
 
 export class NoteTransactionError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) {
+  readonly noteIds?: string[];
+  constructor(code: string, message: string, noteIds?: string[]) {
     super(message);
     this.name = 'NoteTransactionError';
     this.code = code;
+    this.noteIds = noteIds;
   }
 }
 
@@ -241,7 +244,8 @@ async function recoverUnlocked(workspace: string): Promise<void> {
 /** Reentrant only while the owning operation still holds the workspace queue. */
 export async function withNoteWorkspace<T>(
   workspace: string,
-  work: () => Promise<T>
+  work: () => Promise<T>,
+  options?: { skipRecovery?: boolean }
 ): Promise<T> {
   const path = resolve(workspace);
   const owner = ownership.getStore();
@@ -254,7 +258,17 @@ export async function withNoteWorkspace<T>(
       const token = { active: true, path };
       return ownership.run(token, async () => {
         try {
-          await recoverUnlocked(path);
+          if (!options?.skipRecovery) {
+            try {
+              await recoverWorkspaceFileJournal(path);
+            } catch (error) {
+              throw new NoteTransactionError(
+                'recovery-required',
+                error instanceof Error ? error.message : String(error)
+              );
+            }
+            await recoverUnlocked(path);
+          }
           return await work();
         } finally {
           token.active = false;
@@ -298,5 +312,27 @@ export async function commitNoteFiles(
   await atomicWrite(join(workspace, NOTE_INTENT_PATH), text);
   // After intent publication, completion may require recovery. Never undo a
   // partial commit by restoring stale bytes over an independently changed file.
+  await recoverUnlocked(workspace);
+}
+
+export async function inspectNoteTransaction(
+  workspace: string,
+  text: string
+): Promise<string[]> {
+  const intent = parseIntent(text);
+  const conflicts: string[] = [];
+  for (const change of intent.changes) {
+    const current = await readOptionalText(noteFilePath(workspace, change.id));
+    if (current !== change.before && current !== change.after) {
+      conflicts.push(change.id);
+    }
+  }
+  const history = await readOptionalText(join(workspace, NOTE_HISTORY_PATH));
+  if (history !== intent.historyBefore && history !== intent.historyAfter) {
+    conflicts.push(NOTE_HISTORY_PATH);
+  }
+  return conflicts;
+}
+export async function retryNoteRecovery(workspace: string): Promise<void> {
   await recoverUnlocked(workspace);
 }

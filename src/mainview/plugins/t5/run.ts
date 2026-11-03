@@ -243,6 +243,11 @@ export async function runT5Probe(): Promise<void> {
       `${pluginId} panel open`
     );
     if (pluginId !== COMBINED) {
+      // A React panel mounts its contents after the host container appears.
+      await waitFor(
+        () => panelCounter(pluginId, panelId)?.textContent === 'Count: 0',
+        `${pluginId} initial panel content`
+      );
       const counter = panelCounter(pluginId, panelId);
       check(`panel-initial-${pluginId}`, counter?.textContent === 'Count: 0');
       counter?.click();
@@ -344,7 +349,8 @@ export async function runT5Probe(): Promise<void> {
     check(
       'importer-preview',
       session?.status === 'preview' &&
-        session.notes.length === 2 &&
+        session.notes.length === 101 &&
+        session.segments.length === 2 &&
         session.notes[0]?.title === 'Public example'
     );
     const operationId = session!.operationId;
@@ -356,7 +362,7 @@ export async function runT5Probe(): Promise<void> {
     session = pluginRuntime.getSnapshot().importSession;
     check(
       'importer-commits',
-      session?.completedNotes === 2 && session.canRollback === true
+      session?.completedNotes === 101 && session.canRollback === true
     );
     await pluginRuntime.rollbackImporterSession(operationId);
     await waitFor(

@@ -1044,6 +1044,7 @@ export const AssetContent = ({
     return (
       <div
         className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+        data-surface-theme={isColorDark(asset.color) ? 'dark' : 'light'}
         style={colorToStyle(asset.color)}
       >
         <div className="flex shrink-0 items-center justify-between gap-4 border-black/8 border-b px-6 py-4 dark:border-white/10">
@@ -1096,6 +1097,7 @@ export const AssetContent = ({
   return (
     <div
       className="relative size-full bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+      data-surface-theme={isColorDark(asset.color) ? 'dark' : 'light'}
       style={colorToStyle(asset.color)}
     >
       <TypeBadge

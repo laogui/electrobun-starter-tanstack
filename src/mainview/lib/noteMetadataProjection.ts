@@ -2,6 +2,7 @@ import type {
   NoteMetadata,
   NoteMetadataChange,
 } from '../../../packages/plugin-sdk';
+import { updateHistoryNoteMetadata } from './canvasNoteHistory';
 
 interface Item {
   data: Record<string, unknown>;
@@ -39,7 +40,9 @@ export function publishNoteMetadataChanges(
   }
   // An editor's title draft may not be in node.data yet. Do not push new props
   // that would cause its external-title synchronization to erase that draft.
-  return changes.filter((change) => !conflicts.has(change.id));
+  const projectable = changes.filter((change) => !conflicts.has(change.id));
+  updateHistoryNoteMetadata(projectable);
+  return projectable;
 }
 
 export function hasNoteMetadataConflict(

@@ -186,3 +186,18 @@ describe('view transition open / close', () => {
     expect(update).toHaveBeenCalledOnce();
   });
 });
+
+it('restores names, visibility and root classes when starting a transition throws', () => {
+  const { card } = mountCard();
+  vtDocument().startViewTransition = () => {
+    throw new Error('Native transition failed');
+  };
+  const update = vi.fn();
+  expect(() => openWithViewTransition(update, { source: card })).not.toThrow();
+  expect(update).toHaveBeenCalledOnce();
+  expect(card.style.visibility).toBe('');
+  expect(name(card)).toBe('');
+  expect(document.documentElement.classList.contains(VT_ROOT_CLASS)).toBe(
+    false
+  );
+});

@@ -4,7 +4,6 @@ import {
   openAttachment as openWorkspaceAttachment,
   revealAttachment as revealWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
-  saveAttachmentFile as saveWorkspaceAttachmentFile,
 } from '../../attachments';
 import { generateFileMetadata, generateVideoPosterFile } from '../../thumbnail';
 import type { RpcContext } from '../context';
@@ -14,7 +13,6 @@ export function createAttachmentsHandlers(
   ctx: RpcContext
 ): RpcRequestHandlers<
   | 'saveAttachment'
-  | 'saveAttachmentFile'
   | 'generateVideoThumbnail'
   | 'loadAttachment'
   | 'openAttachment'
@@ -27,19 +25,6 @@ export function createAttachmentsHandlers(
       // Generate any text excerpt / archive summary the renderer can show
       // on the canvas card. Failures are swallowed inside the helper so
       // the save itself never blocks on metadata.
-      const { fullPath } = assertWorkspaceAttachmentPath(
-        wsPath,
-        saved.filePath
-      );
-      const metadata = await generateFileMetadata(
-        fullPath,
-        params.mimeType ?? ''
-      );
-      return { ...saved, ...metadata };
-    },
-
-    saveAttachmentFile: async (params) => {
-      const saved = await saveWorkspaceAttachmentFile(wsPath, params);
       const { fullPath } = assertWorkspaceAttachmentPath(
         wsPath,
         saved.filePath

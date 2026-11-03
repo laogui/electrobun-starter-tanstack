@@ -5,7 +5,8 @@ import {
   saveBlockNoteSidecar,
 } from '../../blocknote';
 import { blocksToPlainText } from '../../blocknotePreview';
-import { buildNoteIndex } from '../../noteStore';
+import { buildNoteMarkdown } from '../../markdownExport';
+import { buildNoteIndex, loadNoteRecord } from '../../noteStore';
 import {
   createNote,
   deleteNoteFile,
@@ -55,7 +56,7 @@ export function createNotesHandlers(
         return { success: true, preview };
       }),
 
-    loadBlockNote: async ({ noteId, workspaceId }) => {
+    loadBlockNote: async ({ noteId, workspaceId, includeMarkdown }) => {
       const workspace = wsPath;
       const currentWorkspaceId = pluginWorkspaceId(workspace);
       if (workspaceId && workspaceId !== currentWorkspaceId) {
@@ -65,9 +66,19 @@ export function createNotesHandlers(
         // Sidecar JSON is the only source of truth — no Markdown reconcile.
         const sidecar = await loadBlockNoteSidecar(workspace, noteId);
         if (sidecar && !sidecar.corrupted) {
+          const exportRecord = includeMarkdown
+            ? await loadNoteRecord(workspace, noteId)
+            : null;
           return {
             success: true,
             blocks: sidecar.blocks,
+            ...(exportRecord
+              ? {
+                  markdown: buildNoteMarkdown(exportRecord, {
+                    includeFrontmatter: false,
+                  }).markdown,
+                }
+              : {}),
             preview: buildNotePreviewFromBlocks(sidecar.blocks),
             text: blocksToPlainText(sidecar.blocks),
             workspaceId: currentWorkspaceId,
@@ -100,6 +111,9 @@ export function createNotesHandlers(
           }
         }
 
+        if (sidecar?.corrupted) {
+          return { success: false, workspaceId: currentWorkspaceId };
+        }
         // Brand-new / empty note — start blank; first save creates a sidecar.
         return {
           success: true,

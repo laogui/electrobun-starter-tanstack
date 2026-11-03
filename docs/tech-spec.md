@@ -1084,19 +1084,6 @@ type CanvasRPC = {
           previewExcerpt?: string;
         };
       };
-      saveAttachmentFile: {
-        params: {
-          sourcePath: string;
-          kind?: 'audio' | 'file' | 'image' | 'video';
-          mimeType?: string;
-          suggestedName?: string;
-        };
-        response: {
-          archiveSummary?: ArchiveSummary;
-          filePath: string;
-          previewExcerpt?: string;
-        };
-      };
       generateVideoThumbnail: {
         params: { attachmentFile: string };
         response: { thumbnailFile?: string };
@@ -1555,7 +1542,7 @@ data 内丢弃：`isHidden`, `isDropTarget`, `missing`, `previewUrl`, `thumbnail
 
 ## 11. 技术待办与未决策
 
-> 产品层面的完整列表见 [PRD §8](./PRD.md#8-项目待办与未决策-backlog--open-decisions)。本节只保留会影响技术架构或数据模型的事项。
+> 产品层面的完整列表见 [PRD §8](./PRD.md#8-待核验候选与未决事项)。本节只保留会影响技术架构或数据模型的事项。
 
 | ID | 事项 | 技术影响 |
 | --- | --- | --- |
@@ -1623,23 +1610,24 @@ Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'top
 
 | 权限 | 触发点 | 归属依据 |
 | --- | --- | --- |
-| `files.read` | RPC `pluginFilesPick`（`kind: 'file'`），在原生文件选择器打开**之前** | 请求声明的 `pluginId`（渲染端 RPC，无调用者身份） |
+| `files.read` | RPC `pluginFilesPick`（`kind: 'file'`），在原生文件选择器打开**之前** | 宿主解析有效插件 `hostToken`，并验证与请求 `pluginId` 一致；不是独立 realm 的身份隔离 |
 | `files.directory` | RPC `pluginFilesPick`（`kind: 'directory'`），同上；目录句柄用于列目录与写入 | 同上 |
-| `content.delete` | `/plugins/content` 撤销「创建」批次且将删除 > 1 条（`BULK_DELETE_CONFIRM_THRESHOLD`）笔记时 | **插件作用域 token**（`scope.pluginId`）；主渲染端 token 发起的宿主撤销不弹窗 |
+| `content.delete` | `/plugins/content` 撤销「创建」批次且将删除至少 1 条笔记时，拆成单条也须授权 | **插件作用域 token**（`scope.pluginId`）；主渲染端 token 发起的宿主撤销不弹窗 |
 
 规则：
 
-- 授权按「插件 × 权限」存于应用数据根的 `plugin-permissions.json`（`atomicWrite`，0600，zod 校验；损坏时按无授权处理并保留副本）。只有 Always Allow 会持久化；Allow Once 只放行本次。
+- 授权按「插件 × 权限 × 来源身份」存于应用数据根的 `plugin-permissions.json`（`atomicWrite`，0600，zod 校验；损坏时按无授权处理并保留副本）。签名包绑定首次信任的公钥，未签名包绑定 digest，开发来源绑定连接及 manifest 作者字段；旧无绑定授权须重审。只有 Always Allow 会持久化；Allow Once 只放行本次。设置 → 插件可逐项撤销，文件句柄随撤销关闭；撤销或身份变化后，旧弹窗答案不得新增授权。
+- 普通附件导入只上传用户选择 / 拖入的 File 字节流；renderer 不再具有接受任意 `sourcePath` 的附件 RPC。插件 picker 的 `hostToken` 由宿主解析，必须与请求插件匹配，选择完成后再次检查凭据及启用状态；正常 SDK 调用不能只改 `pluginId` 冒领其他插件身份。
 - Deny 在本次启动内记住（防止插件刷弹窗），不落盘，下次启动会再问。同一插件同一权限的并发请求共享一个对话框，对话框串行显示。
 - 未安装或未启用的插件 ID 直接拒绝、不弹窗，避免调用方把任意名称放到用户面前。无原生对话框、对话框异常一律拒绝。
-- 只有原生对话框能写入授权。RPC 只提供 `pluginPermissionsList` 与 `pluginPermissionsRevoke`（只减不增），没有授予接口。设置页的授权管理 UI 尚未实现（渲染端未接这两个 RPC）。
+- 只有原生对话框能写入授权。RPC 只提供 `pluginPermissionsList` 与 `pluginPermissionsRevoke`（只减不增），没有授予接口。设置 → 插件展示权限及撤销入口，包括已移除插件遗留的旧授权。
 - 文件句柄只能由通过授权的 `pluginFilesPick` 签发，`/plugins/files/read|write` 与 `pluginFilesReadText` / `pluginFilesListDirectory` 依赖句柄归属，不再逐次弹窗。
 - 自动化探针（`GHOSTBOARD_PLUGIN_T*_DIR` 启动）使用自动 Allow Once 的门，因为探针插件不是已安装包且无人应答；能设置这些环境变量的人已控制进程。
 
 仍然存在的缺口（如实记录）：
 
 - AI 对话、附件读写/上传、`/unfurl`、打开外部 URL、导出、批量删除用户笔记：插件作用域 token **根本不能调用**（`isRouteAllowed` 403，Electrobun RPC 也不接受该 token），因此不需要授权——这比授权更严格。但同 realm 的恶意插件可以经 Electrobun RPC 桥调用 `getLocalHttpEndpoint` 取得主渲染端 token，或直接调用 `openExternalUrl`、`exportNotesMarkdown`、`deleteNote`、`aiRunTask` 等 RPC。Electrobun 的 webview RPC 不携带调用者身份，主进程无法区分这些调用来自宿主 UI 还是插件，所以无法在主进程对其做按插件的授权；给这些宿主自身操作统一加原生确认会打扰用户本人的正常操作，未采用。
-- `pluginFilesPick` 等 RPC 的 `pluginId` 是请求自报的：恶意插件可以冒用另一个已获 Always Allow 的插件 ID。原生选择器仍会弹出，用户仍需亲手选择文件。
+- `pluginFilesPick` 已核验插件作用域凭据，单改 `pluginId` 会拒绝；但同 realm 恶意代码仍可窃取其他实例的凭据。原生选择器仍要求用户选择文件，这不是恶意插件隔离保证。
 - 因此本授权层防的是「正常使用 SDK 的插件在未经用户同意时触达本机文件 / 批量删除」，不是对恶意同 realm 代码的隔离；后者仍由「是否安装该插件」决定。真正的隔离需要把插件移出渲染端 realm（独立 iframe/worker + 仅作用域 token 的消息通道），不在本次范围。
 
 ### 13.1 当前版本标识

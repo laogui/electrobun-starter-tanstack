@@ -190,6 +190,38 @@ export class DevelopmentDirectories {
     await this.write(state);
   }
 
+  async disconnect(input: { pluginId: string; digest: string }): Promise<void> {
+    const state = await this.read();
+    if (
+      !state.connections.some(
+        (entry) =>
+          entry.pluginId === input.pluginId && entry.digest === input.digest
+      )
+    ) {
+      throw new PluginInstallError(
+        'not-found',
+        'Development connection changed; refresh and try again.'
+      );
+    }
+    const entry = state.connections.find(
+      (candidate) => candidate.pluginId === input.pluginId
+    )!;
+    // Preserve the connection record; never remove files from the chosen source.
+    await mkdir(join(dirname(this.path), 'removed'), { recursive: true });
+    await writeFile(
+      join(dirname(this.path), 'removed', `directory-${randomUUID()}.json`),
+      JSON.stringify(entry),
+      { flag: 'wx' }
+    );
+    state.connections = state.connections.filter(
+      (candidate) => candidate !== entry
+    );
+    state.pending = state.pending.filter(
+      (candidate) => candidate.record.pluginId !== input.pluginId
+    );
+    await this.write(state);
+  }
+
   private assertAvailable(state: DirectoryRegistry, pluginId: string): void {
     if (state.connections.some((entry) => entry.pluginId === pluginId)) {
       throw new PluginInstallError(

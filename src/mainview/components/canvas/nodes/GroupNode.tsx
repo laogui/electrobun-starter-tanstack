@@ -67,7 +67,7 @@ export const GroupContent = ({
       <div
         className={cn(
           'nodrag nopan font-semibold text-xs tracking-wide outline-hidden',
-          'text-gray-600',
+          'text-gray-600 dark:text-gray-200',
           editingLabel && 'rounded-sm px-0.5 ring-1 ring-accent/40'
         )}
         contentEditable={editingLabel}
@@ -81,7 +81,7 @@ export const GroupContent = ({
       <span
         aria-hidden="true"
         className={cn(
-          'text-gray-300 text-xs transition-opacity duration-150',
+          'text-gray-300 text-xs transition-opacity duration-150 dark:text-gray-500',
           selected || editingLabel
             ? 'opacity-100'
             : 'opacity-0 group-hover/group-node:opacity-100'

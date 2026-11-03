@@ -27,7 +27,7 @@ export function getAppChannel(): string {
     }
   }
 
-  return 'dev';
+  return 'unknown';
 }
 
 /**

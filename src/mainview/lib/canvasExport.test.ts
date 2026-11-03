@@ -12,15 +12,38 @@ const RHF_CONTAINER_RE = /React Flow container/i;
 const rpcMocks = vi.hoisted(() => ({
   rpcExportJson: vi.fn(),
   rpcExportPng: vi.fn(),
+  rpcLoadBlockNote: vi.fn(),
 }));
 
 const htmlToImageMocks = vi.hoisted(() => ({
   toBlob: vi.fn(),
 }));
 
+it('JSON export refreshes a shared note once and never substitutes a stale display mirror', async () => {
+  const load = vi.fn(async () => ({
+    success: true,
+    markdown: 'Canonical current body',
+  }));
+  const nodes = [
+    createNode('one', { noteId: 'shared', content: 'Stale body' }),
+    createNode('two', { noteId: 'shared', content: 'Other stale body' }),
+  ];
+  const exported = await hydrateCanvasExportNotes(nodes, load);
+  expect(exported.map((node) => node.data.content)).toEqual([
+    'Canonical current body',
+    'Canonical current body',
+  ]);
+  expect(load).toHaveBeenCalledOnce();
+  expect(nodes[0]?.data.content).toBe('Stale body');
+  await expect(
+    hydrateCanvasExportNotes(nodes, async () => ({ success: false }))
+  ).rejects.toThrow('Could not read current note');
+});
+
 vi.mock('@/lib/rpc', () => ({
   rpcExportJson: rpcMocks.rpcExportJson,
   rpcExportPng: rpcMocks.rpcExportPng,
+  rpcLoadBlockNote: rpcMocks.rpcLoadBlockNote,
 }));
 
 vi.mock('html-to-image', () => ({
@@ -34,6 +57,7 @@ import {
   exportReactFlowCanvasToJson,
   exportReactFlowCanvasToPng,
   getVisibleExportNodes,
+  hydrateCanvasExportNotes,
   prepareCanvasExport,
   sanitizeExportFileName,
 } from '@/lib/canvasExport';

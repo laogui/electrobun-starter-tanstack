@@ -1,3 +1,5 @@
+import { requestRegisteredFocusClose } from '@/lib/focusedCloseRequest';
+import type { FolderChildEntry } from '@/store/canvas/folderChildren';
 import type { FocusedItem } from '@/store/canvasStore';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -20,6 +22,8 @@ export type FocusTransitionRequest =
       target?: () => Element | null | undefined;
     };
 
+let latestRequest = 0;
+
 /**
  * Single choke point for focus open / close state changes. For every variant
  * except `viewTransition` this just calls `update()`; for that variant it
@@ -29,15 +33,60 @@ export function runFocusTransition(
   update: () => void,
   request: FocusTransitionRequest
 ): void {
-  if (getActiveFocusTransition().id !== VIEW_TRANSITION_ID) {
+  const requestId = ++latestRequest;
+  const before = useCanvasStore.getState();
+  const guardedUpdate = () => {
+    const current = useCanvasStore.getState();
+    if (
+      requestId !== latestRequest ||
+      current._focusSession !== before._focusSession ||
+      current._canvasGeneration !== before._canvasGeneration ||
+      current.activeViewId !== before.activeViewId
+    ) {
+      return;
+    }
+    if (
+      request.direction === 'close' &&
+      (current._focusSession !== before._focusSession ||
+        current.focusedNode?.id !== before.focusedNode?.id ||
+        current.focusedNode?.folderId !== before.focusedNode?.folderId)
+    ) {
+      return;
+    }
     update();
+    if (request.direction === 'open') {
+      const next = useCanvasStore.getState();
+      const focused = next.focusedNode;
+      if (!focused) {
+        return;
+      }
+      const parent = focused.folderId
+        ? next.nodes.find((node) => node.id === focused.folderId)
+        : undefined;
+      const children = parent?.data.children;
+      const item = focused.folderId
+        ? Array.isArray(children)
+          ? (children as FolderChildEntry[]).find(
+              (child) => child?.id === focused.id
+            )
+          : undefined
+        : next.nodes.find((node) => node.id === focused.id);
+      if (!item) {
+        next.setFocusedNode(null);
+      } else if (item.data) {
+        next.setFocusedNode({ ...focused, data: item.data, type: item.type });
+      }
+    }
+  };
+  if (getActiveFocusTransition().id !== VIEW_TRANSITION_ID) {
+    guardedUpdate();
     return;
   }
   if (request.direction === 'open') {
-    openWithViewTransition(update, { source: request.source });
+    openWithViewTransition(guardedUpdate, { source: request.source });
     return;
   }
-  closeWithViewTransition(update, { target: request.target });
+  closeWithViewTransition(guardedUpdate, { target: request.target });
 }
 
 function canvasNodeElement(id: string): Element | null {
@@ -68,9 +117,12 @@ export function findFocusTargetElement(item: FocusedItem): Element | null {
 }
 
 /** Close the focused view (through the active transition). */
-export function closeFocusedViewWithTransition(): void {
+export function closeFocusedViewWithTransition(confirmed = false): void {
   const { focusedNode } = useCanvasStore.getState();
   if (!focusedNode) {
+    return;
+  }
+  if (!confirmed && requestRegisteredFocusClose(focusedNode.id)) {
     return;
   }
   runFocusTransition(

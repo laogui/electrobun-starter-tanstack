@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 
 import type {
@@ -21,6 +22,7 @@ import {
   selectCompatibleRelease,
 } from '../../shared/plugins/release';
 import { getAppDataRoot } from '../appPaths';
+import { atomicWrite } from '../atomicWrite';
 import {
   pluginMigrationBackupSummary,
   restorePluginMigrationBackups,
@@ -31,12 +33,19 @@ import {
   type DevelopmentDirectoryRecord,
   withPluginSourceLock,
 } from './developmentDirectories';
-import { readPluginContents } from './directoryContents';
 import {
   type LoadedPluginDirectory,
   loadPluginDirectory,
   PluginDirectoryError,
 } from './loadDirectory';
+import {
+  getPluginPermissionStore,
+  type PluginPermissionStore,
+} from './permissions';
+import {
+  PluginDirectoryCache,
+  type PluginDirectorySnapshot,
+} from './pluginDirectoryCache';
 import {
   type InstalledPluginPackage,
   PluginInstallError,
@@ -165,13 +174,17 @@ export class PluginManagementService {
   private readonly store: PluginInstallStore;
   private readonly legacyStore: PluginInstallStore;
   private readonly enablementPath: string;
+  private readonly permissionStore: PluginPermissionStore;
   /** Installed package directory → tree digest verified by this service. */
-  private readonly verifiedTrees = new Map<string, string>();
+  private readonly directoryCache = new PluginDirectoryCache();
 
   constructor(workspacePath: string, options?: { appDataRoot?: string }) {
     this.workspacePath = resolve(workspacePath);
     const root = resolve(pluginInstallRoot(options?.appDataRoot));
     this.root = root;
+    this.permissionStore = getPluginPermissionStore(
+      options?.appDataRoot ?? getAppDataRoot()
+    );
     this.directories = new DevelopmentDirectories(root);
     let store = stores.get(root);
     if (!store) {
@@ -391,10 +404,12 @@ export class PluginManagementService {
       if (journal?.pluginId) {
         await this.assertNoDirectorySource(journal.pluginId);
       }
-      const committed = await this.store.commit(transactionId);
-      if (previous && previous.digest !== committed.digest) {
-        await this.writeEnablement(committed.pluginId);
-      }
+      const committed =
+        previous && previous.digest !== journal?.digest
+          ? await this.withWorkspacesDisabled(previous, () =>
+              this.store.commit(transactionId)
+            )
+          : await this.store.commit(transactionId);
       return await this.installedSummary(committed);
     });
   }
@@ -415,9 +430,20 @@ export class PluginManagementService {
   }): Promise<InstalledPluginSummary> {
     return await withPluginSourceLock(this.root, async () => {
       await this.assertNoDirectorySource(input.pluginId);
-      await this.writeEnablement(input.pluginId);
-      const restored = await this.store.rollback(input);
-      this.verifiedTrees.delete(restored.directory);
+      const current = (await this.store.listInstalled()).find(
+        (entry) =>
+          entry.pluginId === input.pluginId && entry.digest === input.digest
+      );
+      if (!current) {
+        throw new PluginInstallError(
+          'not-found',
+          'Installed package changed; refresh and try again.'
+        );
+      }
+      const restored = await this.withWorkspacesDisabled(current, () =>
+        this.store.rollback(input)
+      );
+      this.directoryCache.invalidate(restored.directory);
       return await this.installedSummary(restored);
     });
   }
@@ -446,21 +472,33 @@ export class PluginManagementService {
     digest: string;
     pluginId: string;
   }): Promise<InstalledPluginSummary> {
+    return withPluginSourceLock(this.root, () => this.enableUnlocked(input));
+  }
+  private async enableUnlocked(input: {
+    digest: string;
+    pluginId: string;
+  }): Promise<InstalledPluginSummary> {
     const directory = (await this.directories.list()).find(
       (entry) =>
         entry.pluginId === input.pluginId && entry.digest === input.digest
     );
     if (directory) {
-      await this.resolveDevelopmentDirectory(directory);
+      await this.resolveDevelopmentDirectory(directory, true);
       await this.writeEnablement(input.pluginId, input.digest);
       return await this.directorySummary(directory);
     }
-    const { installed } = await this.resolveStoredPackage(input);
+    const { installed } = await this.resolveStoredPackage(input, true);
     await this.writeEnablement(input.pluginId, input.digest);
     return await this.installedSummary(installed);
   }
 
   async disable(input: {
+    digest: string;
+    pluginId: string;
+  }): Promise<InstalledPluginSummary> {
+    return withPluginSourceLock(this.root, () => this.disableUnlocked(input));
+  }
+  private async disableUnlocked(input: {
     digest: string;
     pluginId: string;
   }): Promise<InstalledPluginSummary> {
@@ -486,9 +524,125 @@ export class PluginManagementService {
     return await this.installedSummary(installed);
   }
 
+  /** Remove the code source in every workspace; content and plugin storage remain. */
+  async remove(input: { digest: string; pluginId: string }): Promise<void> {
+    return withPluginSourceLock(this.root, async () => {
+      const development = (await this.directories.list()).find(
+        (entry) =>
+          entry.pluginId === input.pluginId && entry.digest === input.digest
+      );
+      const installed = (await this.store.listInstalled()).find(
+        (entry) =>
+          entry.pluginId === input.pluginId && entry.digest === input.digest
+      );
+      if (!(development || installed)) {
+        throw new PluginInstallError(
+          'not-found',
+          'Plugin source changed; refresh and try again.'
+        );
+      }
+      await this.withWorkspacesDisabled(input, async () => {
+        await this.permissionStore.revoke(input.pluginId);
+        if (development) {
+          await this.directories.disconnect(input);
+        } else {
+          await this.store.remove(input);
+        }
+      });
+      this.directoryCache.invalidate();
+    });
+  }
+
+  /** Global code changes must clear every pinned workspace generation. */
+  private async withWorkspacesDisabled<T>(
+    input: { pluginId: string; digest: string },
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const directory = join(this.root, 'workspaces');
+    const entries = existsSync(directory) ? await readdir(directory) : [];
+    const snapshots: Array<{ path: string; enabled: Record<string, string> }> =
+      [];
+    // Preflight every state file before altering any of them.
+    for (const name of entries.filter((entry) => entry.endsWith('.json'))) {
+      const path = join(directory, name);
+      const read = await readJsonOrEmpty(path, parseEnablement);
+      if (read.kind === 'corrupt') {
+        throw new PluginInstallError(
+          'enablement-corrupt',
+          `Workspace plugin state is unreadable; original retained at ${read.backupPath}.`
+        );
+      }
+      if (read.kind === 'ok' && read.value[input.pluginId]) {
+        snapshots.push({ path, enabled: read.value });
+      }
+    }
+    const changed: typeof snapshots = [];
+    try {
+      for (const snapshot of snapshots) {
+        await this.writeWorkspaceEnablement(snapshot.path, input.pluginId);
+        changed.push(snapshot);
+      }
+      return await operation();
+    } catch (error) {
+      const current = (await this.store.listInstalled()).find(
+        (entry) => entry.pluginId === input.pluginId
+      );
+      const development = (await this.directories.list()).find(
+        (entry) => entry.pluginId === input.pluginId
+      );
+      if (
+        (current?.digest === input.digest && existsSync(current.directory)) ||
+        development?.digest === input.digest
+      ) {
+        for (const snapshot of changed) {
+          await this.writeWorkspaceEnablement(
+            snapshot.path,
+            input.pluginId,
+            snapshot.enabled[input.pluginId]
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async writeWorkspaceEnablement(
+    path: string,
+    pluginId: string,
+    digest?: string
+  ): Promise<void> {
+    const next = (enablementWrites.get(path) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        const read = await readJsonOrEmpty(path, parseEnablement);
+        if (read.kind === 'corrupt') {
+          throw new PluginInstallError(
+            'enablement-corrupt',
+            `Unreadable workspace state: ${read.backupPath}`
+          );
+        }
+        const enabled = read.kind === 'ok' ? read.value : {};
+        if (digest) {
+          enabled[pluginId] = digest;
+        } else {
+          delete enabled[pluginId];
+        }
+        await atomicWrite(path, JSON.stringify({ schema: 2, enabled }));
+      });
+    enablementWrites.set(path, next);
+    try {
+      await next;
+    } finally {
+      if (enablementWrites.get(path) === next) {
+        enablementWrites.delete(path);
+      }
+    }
+  }
+
   async resolveRuntimePackage(
-    summary: InstalledPluginSummary
-  ): Promise<LoadedPluginDirectory> {
+    summary: InstalledPluginSummary,
+    force = false
+  ): Promise<PluginDirectorySnapshot> {
     if ((await this.readEnablement())[summary.pluginId] !== summary.digest) {
       throw new PluginInstallError(
         'not-found',
@@ -506,9 +660,10 @@ export class PluginManagementService {
           'Development connection no longer exists.'
         );
       }
-      return await this.resolveDevelopmentDirectory(record);
+      await this.resolveDevelopmentDirectory(record, force);
+      return this.directoryCache.read(record.directory);
     }
-    return (await this.resolveStoredPackage(summary)).loaded;
+    return (await this.resolveStoredPackage(summary, force)).snapshot;
   }
 
   private async assertNoInstalledSource(pluginId: string): Promise<void> {
@@ -538,10 +693,13 @@ export class PluginManagementService {
   }
 
   private async resolveDevelopmentDirectory(
-    record: DevelopmentDirectoryRecord
+    record: DevelopmentDirectoryRecord,
+    force = false
   ): Promise<LoadedPluginDirectory> {
     await this.assertNoInstalledSource(record.pluginId);
-    const loaded = await loadPluginDirectory(record.directory);
+    const loaded = (
+      await this.directoryCache.read(record.directory, force)
+    ).load();
     if (loaded.manifest.id !== record.pluginId) {
       throw new PluginInstallError(
         'invalid-package',
@@ -575,6 +733,7 @@ export class PluginManagementService {
       return {
         ...base,
         name: loaded.manifest.name,
+        permissionIdentity: `directory:${record.digest}:${loaded.manifest.publicKey ?? ''}:${loaded.manifest.author ?? ''}`,
         version: loaded.manifest.version,
         plugin: packageSummary(loaded.manifest, 'unsigned'),
       };
@@ -603,12 +762,16 @@ export class PluginManagementService {
       ...(migration.count > 0 ? { migrationBackupCount: migration.count } : {}),
     };
     try {
-      const { loaded } = await this.resolveStoredPackage({
+      const { loaded, installed: verified } = await this.resolveStoredPackage({
         pluginId: installed.pluginId,
         digest: installed.digest,
       });
       return {
         ...base,
+        treeDigest: verified.treeDigest,
+        permissionIdentity: installed.signature
+          ? `key:${installed.signature.publicKey}`
+          : `package:${installed.digest}`,
         enabled: await this.isEnabled(installed),
         name: loaded.manifest.name,
         plugin: packageSummary(
@@ -697,12 +860,16 @@ export class PluginManagementService {
     }
   }
 
-  private async resolveStoredPackage(input: {
-    digest: string;
-    pluginId: string;
-  }): Promise<{
+  private async resolveStoredPackage(
+    input: {
+      digest: string;
+      pluginId: string;
+    },
+    force = false
+  ): Promise<{
     installed: InstalledPluginPackage;
     loaded: LoadedPluginDirectory;
+    snapshot: PluginDirectorySnapshot;
   }> {
     const installed = (await this.store.listInstalled()).find(
       (entry) =>
@@ -715,8 +882,8 @@ export class PluginManagementService {
       );
     }
     await this.assertNoDirectorySource(input.pluginId);
-    await this.verifyStoredTree(installed);
-    const loaded = await loadPluginDirectory(installed.directory);
+    const snapshot = await this.verifyStoredTree(installed, force);
+    const loaded = snapshot.load();
     if (
       loaded.manifest.id !== installed.pluginId ||
       loaded.manifest.version !== installed.version
@@ -726,31 +893,35 @@ export class PluginManagementService {
         `Stored plugin metadata does not match its package: ${input.pluginId}`
       );
     }
-    return { installed, loaded };
+    return { installed, loaded, snapshot };
   }
 
   /**
    * Installed packages are immutable once committed, so any change to their
    * files is tampering or corruption. Hashing the whole tree is too expensive
-   * to repeat on every settings read, so it happens once per directory per
-   * service; the host controller re-compares the digest on every runtime
-   * refresh using the tree it already reads to build a generation.
+   * to repeat on every settings read. Metadata changes, explicit activation
+   * and reload force fresh bytes; unchanged cache entries age out in 30s.
    */
   private async verifyStoredTree(
-    installed: InstalledPluginPackage
-  ): Promise<void> {
-    if (this.verifiedTrees.get(installed.directory) === installed.treeDigest) {
-      return;
-    }
-    const treeDigest = (await readPluginContents(installed.directory)).digest;
-    if (!installed.treeDigest) {
+    installed: InstalledPluginPackage,
+    force: boolean
+  ): Promise<PluginDirectorySnapshot> {
+    const snapshot = await this.directoryCache.read(installed.directory, force);
+    const contents = snapshot.contents;
+    const treeDigest = contents.digest;
+    if (
+      !installed.treeDigest ||
+      (installed.treeDigest !== treeDigest &&
+        installed.treeDigest === contents.legacyDigest)
+    ) {
       await this.store.adoptTreeDigest({
         digest: installed.digest,
+        previousTreeDigest: installed.treeDigest,
         pluginId: installed.pluginId,
         treeDigest,
       });
-      this.verifiedTrees.set(installed.directory, treeDigest);
-      return;
+      installed.treeDigest = treeDigest;
+      return snapshot;
     }
     if (treeDigest !== installed.treeDigest) {
       await this.quarantine(installed.pluginId);
@@ -759,19 +930,19 @@ export class PluginManagementService {
         `Installed files for ${installed.pluginId} no longer match the package recorded at install. The plugin was disabled; reinstall it to continue.`
       );
     }
-    this.verifiedTrees.set(installed.directory, treeDigest);
+    return snapshot;
   }
 
   /**
    * Called by the host controller when the tree it read to build a generation
-   * does not match the registry. That check runs on every refresh, so it sees
-   * edits made after this service already verified the directory.
+   * does not match the registry. Cached snapshots still check file metadata
+   * on each lookup and force full byte verification before activation.
    */
   async reportIntegrityMismatch(input: {
     directory: string;
     pluginId: string;
   }): Promise<void> {
-    this.verifiedTrees.delete(input.directory);
+    this.directoryCache.invalidate(input.directory);
     await this.quarantine(input.pluginId);
   }
 

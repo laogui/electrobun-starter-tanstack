@@ -317,6 +317,8 @@ async function main() {
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpcContext: RpcContext = {
+    resolvePluginCaller: (token) =>
+      appState.localHttpServer?.resolvePluginCaller(token) ?? null,
     wsPath,
     pluginManagement,
     pluginFiles,

@@ -2,7 +2,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { assertWorkspaceAttachmentPath } from './attachments';
+import { saveAttachmentFile } from './attachments';
 
 /**
  * Bun-side metadata extraction for attachment-backed canvas asset nodes.
@@ -429,10 +429,28 @@ export async function generateVideoPosterFile(
       ],
       { stderr: 'ignore', stdout: 'ignore' }
     );
-    // qlmanage exitCode is only reliable after the process exits.
-    // react-doctor-disable-next-line react-doctor/async-defer-await
-    await proc.exited;
-    if (proc.exitCode !== 0) {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const exited = await Promise.race([
+      proc.exited.then(
+        () => true,
+        () => false
+      ),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => {
+          try {
+            proc.kill('SIGKILL');
+          } catch (error) {
+            console.warn(
+              '[thumbnail] Could not stop timed-out preview:',
+              error
+            );
+          } finally {
+            resolve(false);
+          }
+        }, 10_000);
+      }),
+    ]).finally(() => clearTimeout(timeout));
+    if (!exited || proc.exitCode !== 0) {
       return;
     }
     const entries = await readdir(tempDir);
@@ -440,18 +458,20 @@ export async function generateVideoPosterFile(
     if (!posterName) {
       return;
     }
-    const posterFile = Bun.file(join(tempDir, posterName));
-    const targetPath = `attachments/img_${crypto.randomUUID().slice(0, 8)}.png`;
-    const { fullPath, relativePath } = assertWorkspaceAttachmentPath(
-      wsPath,
-      targetPath
-    );
-    await Bun.write(fullPath, posterFile);
-    return relativePath;
+    return (
+      await saveAttachmentFile(wsPath, {
+        sourcePath: join(tempDir, posterName),
+        kind: 'image',
+        mimeType: 'image/png',
+        suggestedName: 'video-poster.png',
+      })
+    ).filePath;
   } catch (error) {
     console.warn('[thumbnail] generateVideoPosterFile failed:', error);
     return;
   } finally {
-    await rm(tempDir, { force: true, recursive: true });
+    await rm(tempDir, { force: true, recursive: true }).catch((error) =>
+      console.warn('[thumbnail] Temporary preview cleanup failed:', error)
+    );
   }
 }

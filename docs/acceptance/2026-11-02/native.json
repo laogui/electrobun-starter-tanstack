@@ -1,0 +1,334 @@
+{
+  "sourceHead": "3cc757a0ed0821d90510e4d7a1e991cbbe3163ba",
+  "normalArchiveSha256": "976b205b715252125d4672be62dbebcd6ec8100dcf247b16152eaab128c24ae4",
+  "machine": {
+    "arch": "arm64",
+    "os": "macOS 27.0.1"
+  },
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "topic": {
+    "manifest": {
+      "schema": "ghostboard-canvas/v1",
+      "viewId": "topic",
+      "nodes": [
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Release Plan",
+            "topicVersion": 1
+          },
+          "id": "node-NhJxlVnB",
+          "position": {
+            "x": 370,
+            "y": 332
+          },
+          "style": {
+            "width": 108,
+            "height": 37
+          },
+          "type": "topic"
+        },
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Build verified",
+            "topicVersion": 1
+          },
+          "id": "node-4aCBNcBt",
+          "position": {
+            "x": 542,
+            "y": 305.5
+          },
+          "style": {
+            "width": 110,
+            "height": 37
+          },
+          "type": "topic"
+        },
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Ship",
+            "topicVersion": 1
+          },
+          "id": "node-NEUI4qgE",
+          "position": {
+            "x": 542,
+            "y": 358.5
+          },
+          "style": {
+            "width": 80,
+            "height": 37
+          },
+          "type": "topic"
+        },
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Release Plan",
+            "topicVersion": 1,
+            "locked": true
+          },
+          "id": "paste-IFZglsuD",
+          "position": {
+            "x": 400,
+            "y": 362
+          },
+          "style": {
+            "width": 108,
+            "height": 37
+          },
+          "type": "topic"
+        },
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Build verified",
+            "topicVersion": 1
+          },
+          "id": "paste-ms-BVnlw",
+          "position": {
+            "x": 572,
+            "y": 335.5
+          },
+          "style": {
+            "width": 110,
+            "height": 37
+          },
+          "type": "topic"
+        },
+        {
+          "data": {
+            "color": "neutral",
+            "title": "Ship",
+            "topicVersion": 1
+          },
+          "id": "paste-rpETI8rq",
+          "position": {
+            "x": 572,
+            "y": 388.5
+          },
+          "style": {
+            "width": 80,
+            "height": 37
+          },
+          "type": "topic"
+        }
+      ],
+      "edges": [
+        {
+          "data": {
+            "kind": "topic-child",
+            "order": 0,
+            "relationVersion": 1
+          },
+          "id": "edge-O_FPLMGf",
+          "markerEnd": "compact-arrow",
+          "source": "node-NhJxlVnB",
+          "target": "node-4aCBNcBt",
+          "type": "labeledEdge"
+        },
+        {
+          "data": {
+            "kind": "topic-child",
+            "order": 1,
+            "relationVersion": 1
+          },
+          "id": "edge-eCDbeQP9",
+          "markerEnd": "compact-arrow",
+          "source": "node-NhJxlVnB",
+          "target": "node-NEUI4qgE",
+          "type": "labeledEdge"
+        },
+        {
+          "data": {
+            "kind": "topic-child",
+            "order": 0,
+            "relationVersion": 1
+          },
+          "id": "paste-edge-YgSbiW3x",
+          "markerEnd": "compact-arrow",
+          "source": "paste-IFZglsuD",
+          "target": "paste-ms-BVnlw",
+          "type": "labeledEdge"
+        },
+        {
+          "data": {
+            "kind": "topic-child",
+            "order": 1,
+            "relationVersion": 1
+          },
+          "id": "paste-edge-k8Ul5mUS",
+          "markerEnd": "compact-arrow",
+          "source": "paste-IFZglsuD",
+          "target": "paste-rpETI8rq",
+          "type": "labeledEdge"
+        }
+      ]
+    },
+    "outline": "# Topic Acceptance\n\n- Release Plan\n    - Build verified\n    - Ship\n- Release Plan\n    - Build verified\n    - Ship\n",
+    "normalQuitRestartExactGraph": true,
+    "groupWorldCoordinatesPreserved": true,
+    "lockedMoveDeletePreserved": true,
+    "groupChildSearchLocated": true
+  },
+  "checklist": {
+    "manifest": {
+      "schema": "ghostboard-canvas/v1",
+      "viewId": "legacy",
+      "nodes": [
+        {
+          "id": "legacy-top",
+          "type": "extension",
+          "position": {
+            "x": 50,
+            "y": 70
+          },
+          "style": {
+            "width": 320,
+            "height": 300
+          },
+          "data": {
+            "canvasTypeId": "ghostboard.productivity/checklist",
+            "instanceId": "extinst_widget_acceptance_top"
+          }
+        },
+        {
+          "id": "legacy-folder",
+          "type": "folder",
+          "position": {
+            "x": 488.5254415281761,
+            "y": 37.28971945720892
+          },
+          "style": {
+            "width": 320,
+            "height": 260
+          },
+          "data": {
+            "label": "Legacy Folder",
+            "children": []
+          }
+        },
+        {
+          "type": "extension",
+          "style": {
+            "width": 350,
+            "height": 450
+          },
+          "data": {
+            "canvasTypeId": "ghostboard.productivity/checklist",
+            "instanceId": "extinst_widget_acceptance_folder"
+          },
+          "id": "legacy-child",
+          "position": {
+            "x": 435.00000694725145,
+            "y": -432.7102805427911
+          }
+        }
+      ],
+      "edges": []
+    },
+    "metadata": {
+      "schema": "ghostboard-node-metadata/v1",
+      "entries": {
+        "widget_acceptance_folder": {
+          "tags": ["Legacy", "Folder"]
+        },
+        "widget_acceptance_top": {
+          "tag": "Acceptance",
+          "tagColor": "#8B5CF6"
+        },
+        "legacy-top": {
+          "tag": "Acceptance",
+          "tagColor": "#8B5CF6"
+        },
+        "legacy-child": {
+          "tags": ["Legacy", "Folder"]
+        }
+      },
+      "legacyTagsMigrated": true,
+      "legacyWidgetTagCopies": [
+        "[\"widget_acceptance_top\",\"legacy-top\"]",
+        "[\"widget_acceptance_folder\",\"legacy-child\"]"
+      ]
+    },
+    "instances": [
+      {
+        "schema": "ghostboard-extension-instance/v1",
+        "id": "extinst_widget_acceptance_top",
+        "canvasTypeId": "ghostboard.productivity/checklist",
+        "appVersion": "1.0.0",
+        "dataVersion": 1,
+        "revision": 4,
+        "createdAt": "2026-11-02T14:53:39.845Z",
+        "updatedAt": "2026-11-02T14:59:04.723Z",
+        "state": {
+          "title": "Native Checklist verified",
+          "items": [
+            {
+              "id": "item_c2f0cd7d",
+              "text": "Preserve checked task",
+              "checked": true
+            },
+            {
+              "id": "item_062da0d0",
+              "text": "Edited in native detail",
+              "checked": true,
+              "completedAt": "2026-11-02T14:58:24.152Z"
+            }
+          ]
+        },
+        "presentation": {
+          "title": "Native Checklist verified",
+          "subtitle": "0 open",
+          "plainText": "[x] Preserve checked task\n[x] Edited in native detail",
+          "accessibilityLabel": "Native Checklist verified, 0 open"
+        }
+      },
+      {
+        "schema": "ghostboard-extension-instance/v1",
+        "id": "extinst_widget_acceptance_folder",
+        "canvasTypeId": "ghostboard.productivity/checklist",
+        "appVersion": "1.0.0",
+        "dataVersion": 1,
+        "revision": 1,
+        "createdAt": "2026-11-02T14:52:50.182Z",
+        "updatedAt": "2026-11-02T14:52:50.182Z",
+        "state": {
+          "title": "Legacy Folder Checklist",
+          "items": [
+            {
+              "id": "item_f5e883d7",
+              "text": "Preserve checked task",
+              "checked": true
+            },
+            {
+              "id": "item_d6940618",
+              "text": "Preserve unfinished task",
+              "checked": false
+            }
+          ]
+        },
+        "presentation": {
+          "title": "Legacy Folder Checklist",
+          "subtitle": "1 open",
+          "plainText": "[x] Preserve checked task\n[ ] Preserve unfinished task",
+          "accessibilityLabel": "Legacy Folder Checklist, 1 open"
+        }
+      }
+    ],
+    "normalQuitRestartExactStableGraphAndMetadata": true,
+    "failureRetainedAndRetryPassed": true,
+    "folderExtractRuntimeType": "extension"
+  },
+  "recovery": {
+    "declinePreservedBytes": true,
+    "staleConfirmationRejected": true,
+    "currentConfirmationRestoredAndRestarted": true,
+    "missingCorruptFallbackAndRetryPassed": true,
+    "rawExport": "{\"acceptanceEvidence\":\"preserve-exact-bytes\",",
+    "rawExportMatchesBytes": true,
+    "appUsableAfterExport": true
+  }
+}

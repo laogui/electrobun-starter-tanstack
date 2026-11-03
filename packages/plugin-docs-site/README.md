@@ -54,7 +54,7 @@ packages/core/messages/docs.{en,zh}.json  # message keys to merge into the site'
 6. `pages/sitemap.xml.ts`: include every `docs` entry (`/docs/<slug>/` and `/zh/docs/<slug>/`, use `toPages` + `buildSidebar` from `lib/docs.ts`) plus `/docs/llms.txt` and `/docs/llms-full.txt`.
 7. `worker.ts`: nothing to change as long as `/docs/*` is not routed to a service binding; `/zh/docs/*` is handled by the Paraglide middleware stripping the prefix before Astro routing.
 8. Root `vitest.config.ts`: add `apps/web/lib/**/*.test.ts` to the web project so `lib/docs.test.ts` runs in `bun test`.
-9. Run `bun run format`, `bun run check`, `bun test`, `astro check`, `bun run build` in `apps/web`, then deploy. Replace the placeholder `example.com`/`PUBLIC_APP_ORIGIN` values in `apps/web/wrangler.jsonc` and `.env` with the production domain; the docs assume `https://ghostboard.app/docs/`.
+9. Run `bun run format`, `bun run check`, `bun test`, `astro check`, `bun run build` in `apps/web`, then deploy. Replace the placeholder `example.com`/`PUBLIC_APP_ORIGIN` values in `apps/web/wrangler.jsonc` and `.env` with the production domain; the docs assume `https://ghostboard.21blog.com/docs/`.
 
 ## Behavior
 

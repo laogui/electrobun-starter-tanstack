@@ -148,7 +148,7 @@ export function normalizePluginFileFilters(
 }
 
 export function createPluginFiles(
-  context: PluginFileContext & { signal: AbortSignal },
+  context: PluginFileContext & { signal: AbortSignal; hostToken?: string },
   transport: PluginFilesTransport = defaultPluginFilesTransport
 ): PluginFiles {
   const handles = new Map<string, PluginFileSystemHandle>();
@@ -182,6 +182,7 @@ export function createPluginFiles(
         ...new Set(accept.flatMap((filter) => filter.extensions)),
       ];
       const request = transport.pick({
+        hostToken: context.hostToken,
         activationId: context.activationId,
         pluginId: context.pluginId,
         workspaceId: context.workspaceId,
@@ -286,6 +287,7 @@ export function createPluginFiles(
         throw abortError();
       }
       const request = transport.pick({
+        hostToken: context.hostToken,
         activationId: context.activationId,
         extensions: [],
         kind: 'directory',

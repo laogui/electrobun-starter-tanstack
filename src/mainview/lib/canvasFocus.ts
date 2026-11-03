@@ -13,6 +13,7 @@ const DEFAULT_NODE_HEIGHT = 160;
 /** Extra padding (ms) waited after setCenter resolves the flight animation,
  *  so React Flow's measured layout has a chance to flush before we read DOM. */
 const POST_CENTER_LAYOUT_FRAME_MS = 16;
+let navigationRequest = 0;
 
 export interface OpenFocusedOptions {
   /** Animation duration passed to `setCenter`. */
@@ -111,7 +112,12 @@ export async function openFocusedById({
   rfInstance,
   centerDurationMs = VIEWPORT_PAN_MS,
 }: OpenFocusedOptions): Promise<void> {
-  const { nodes, setFocusedNode, setFocusedFolder } = useCanvasStore.getState();
+  const request = ++navigationRequest;
+  const { nodes, setFocusedNode, setFocusedFolder, _canvasGeneration } =
+    useCanvasStore.getState();
+  const stillCurrent = () =>
+    request === navigationRequest &&
+    useCanvasStore.getState()._canvasGeneration === _canvasGeneration;
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) {
     return;
@@ -152,10 +158,16 @@ export async function openFocusedById({
     );
     runFocusTransition(
       () => {
+        const current = useCanvasStore
+          .getState()
+          .nodes.find((item) => item.id === node.id);
+        if (!(stillCurrent() && current)) {
+          return;
+        }
         setFocusedNode({
-          id: node.id,
-          type: node.type,
-          data: node.data as Record<string, unknown>,
+          id: current.id,
+          type: current.type,
+          data: current.data,
           rect,
         });
       },
@@ -177,19 +189,27 @@ export async function openFocusedById({
     setTimeout(resolve, flight.duration + POST_CENTER_LAYOUT_FRAME_MS);
   });
 
+  const current = useCanvasStore
+    .getState()
+    .nodes.find((item) => item.id === node.id);
+  if (!(stillCurrent() && current) || current.type !== 'folder') {
+    return;
+  }
   // 3. Prefer the real DOM rect (accurate). Fall back to viewport math when
   //    the node is still culled.
   const el =
     typeof document === 'undefined'
       ? null
-      : (document.querySelector(`[data-id="${nodeId}"]`) as HTMLElement | null);
+      : (document.querySelector(
+          `[data-id="${CSS.escape(nodeId)}"]`
+        ) as HTMLElement | null);
   const rect =
     el?.getBoundingClientRect() ??
-    computeRectFromViewport(node, rfInstance, width, height);
+    computeRectFromViewport(current, rfInstance, width, height);
 
   setFocusedFolder({
     id: node.id,
-    data: node.data as Record<string, unknown>,
+    data: current.data,
     rect,
   });
 }

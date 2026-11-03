@@ -33,6 +33,8 @@ interface FocusedViewHostProps {
  */
 export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
   const focusedNode = useCanvasStore((s) => s.focusedNode);
+  const focusSession = useCanvasStore((s) => s._focusSession);
+  const generation = useCanvasStore((s) => s._canvasGeneration);
   const stopOpenProbeRef = useRef<(() => void) | null>(null);
   const stopCloseProbeRef = useRef<(() => void) | null>(null);
 
@@ -88,10 +90,15 @@ export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
   const handleOpenComplete = useCallback(() => {
     stopOpenProbeRef.current?.();
     stopOpenProbeRef.current = null;
-    if (useCanvasStore.getState().focusedNode) {
+    const state = useCanvasStore.getState();
+    if (
+      state.focusedNode &&
+      state._focusSession === focusSession &&
+      state._canvasGeneration === generation
+    ) {
       canvasContainerRef.current?.classList.add(CANVAS_HIDDEN_CLASS);
     }
-  }, [canvasContainerRef]);
+  }, [canvasContainerRef, focusSession, generation]);
 
   const handleExitComplete = useCallback(() => {
     stopCloseProbeRef.current?.();
@@ -99,7 +106,7 @@ export function FocusedViewHost({ canvasContainerRef }: FocusedViewHostProps) {
   }, []);
 
   const handleClose = useCallback(() => {
-    closeFocusedViewWithTransition();
+    closeFocusedViewWithTransition(true);
   }, []);
 
   return (

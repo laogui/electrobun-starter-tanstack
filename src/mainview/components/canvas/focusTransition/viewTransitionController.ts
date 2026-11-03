@@ -190,8 +190,38 @@ function settleRunning(): void {
   if (!current) {
     return;
   }
-  current.transition.skipTransition();
-  current.cleanup();
+  try {
+    current.transition.skipTransition();
+  } finally {
+    current.cleanup();
+  }
+}
+
+function startSafely(
+  start: StartViewTransition,
+  update: () => void,
+  cleanup: () => void,
+  fallback: () => void
+): ViewTransitionLike | null {
+  let invoked = false;
+  try {
+    return start(() => {
+      invoked = true;
+      try {
+        update();
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    });
+  } catch (error) {
+    cleanup();
+    console.warn('[focus] View transition unavailable:', error);
+    if (!invoked) {
+      fallback();
+    }
+    return null;
+  }
 }
 
 function track(
@@ -251,10 +281,6 @@ export function openWithViewTransition(
     return;
   }
   if (running?.pending) {
-    if (running.direction === 'open') {
-      // Double click / repeated open before the first one landed.
-      return;
-    }
     const previous = running;
     previous.transition.updateCallbackDone
       .catch(() => undefined)
@@ -285,7 +311,7 @@ export function openWithViewTransition(
     clearName(focusRoot);
     clearName(focusTitle);
     card.style.visibility = '';
-    if (running?.cleanup === cleanup) {
+    if (!running || running.cleanup === cleanup) {
       running = null;
       setRootClasses(null);
     }
@@ -296,29 +322,40 @@ export function openWithViewTransition(
     resolveOpen();
   });
 
-  const transition = start(() => {
-    clearName(card);
-    clearName(sourceTitle);
-    session = true;
-    flushSync(update);
-    focusRoot = findFocusRoot();
-    if (!focusRoot) {
-      // The update did not open anything (guarded call site).
-      session = false;
-      return;
-    }
-    setName(focusRoot, VT_CARD_NAME);
-    focusTitle = sourceTitle ? findFocusTitle(focusRoot) : null;
-    setName(focusTitle, VT_TITLE_NAME);
-    // The card "moved" into the focused view: do not leave a copy behind.
-    card.style.visibility = 'hidden';
-  });
+  const transition = startSafely(
+    start,
+    () => {
+      clearName(card);
+      clearName(sourceTitle);
+      session = true;
+      flushSync(update);
+      focusRoot = findFocusRoot();
+      if (!focusRoot) {
+        // The update did not open anything (guarded call site).
+        session = false;
+        return;
+      }
+      setName(focusRoot, VT_CARD_NAME);
+      focusTitle = sourceTitle ? findFocusTitle(focusRoot) : null;
+      setName(focusTitle, VT_TITLE_NAME);
+      // The card "moved" into the focused view: do not leave a copy behind.
+      card.style.visibility = 'hidden';
+    },
+    cleanup,
+    update
+  );
+  if (!transition) {
+    return;
+  }
   running = track('open', transition, cleanup);
   transition.ready.then(
     () => logPhase(label, startedAt, 'ready'),
     () => logPhase(label, startedAt, 'skipped')
   );
-  transition.finished.then(() => logPhase(label, startedAt, 'finished'));
+  transition.finished.then(
+    () => logPhase(label, startedAt, 'finished'),
+    () => undefined
+  );
 }
 
 /**
@@ -373,7 +410,11 @@ export function closeWithViewTransition(
     clearName(focusTitle);
     clearName(card);
     clearName(cardTitle);
-    if (running?.cleanup === cleanup) {
+    focusRoot.style.visibility = '';
+    if (hiddenFocusRoot === focusRoot) {
+      hiddenFocusRoot = null;
+    }
+    if (!running || running.cleanup === cleanup) {
       running = null;
       setRootClasses(null);
       session = false;
@@ -381,29 +422,40 @@ export function closeWithViewTransition(
     stopProbe();
   });
 
-  const transition = start(() => {
-    clearName(focusRoot);
-    clearName(focusTitle);
-    // AnimatePresence may keep the exiting view mounted for a tick; it must
-    // not be part of the "new" snapshot.
-    focusRoot.style.visibility = 'hidden';
-    hiddenFocusRoot = focusRoot;
-    flushSync(update);
-    card = resolveCardSurface(target?.() ?? null);
-    if (card) {
-      setName(card, VT_CARD_NAME);
-      if (focusTitle) {
-        cardTitle = card.querySelector<HTMLElement>(FOCUS_TITLE_SELECTOR);
-        setName(cardTitle, VT_TITLE_NAME);
+  const transition = startSafely(
+    start,
+    () => {
+      clearName(focusRoot);
+      clearName(focusTitle);
+      // AnimatePresence may keep the exiting view mounted for a tick; it must
+      // not be part of the "new" snapshot.
+      focusRoot.style.visibility = 'hidden';
+      hiddenFocusRoot = focusRoot;
+      flushSync(update);
+      card = resolveCardSurface(target?.() ?? null);
+      if (card) {
+        setName(card, VT_CARD_NAME);
+        if (focusTitle) {
+          cardTitle = card.querySelector<HTMLElement>(FOCUS_TITLE_SELECTOR);
+          setName(cardTitle, VT_TITLE_NAME);
+        }
       }
-    }
-  });
+    },
+    cleanup,
+    update
+  );
+  if (!transition) {
+    return;
+  }
   running = track('close', transition, cleanup);
   transition.ready.then(
     () => logPhase(label, startedAt, 'ready'),
     () => logPhase(label, startedAt, 'skipped')
   );
-  transition.finished.then(() => logPhase(label, startedAt, 'finished'));
+  transition.finished.then(
+    () => logPhase(label, startedAt, 'finished'),
+    () => undefined
+  );
 }
 
 /** Test-only: reset module state. */

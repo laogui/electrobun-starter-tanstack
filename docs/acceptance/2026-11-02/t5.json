@@ -1,0 +1,188 @@
+{
+  "archiveSha256": "b93a27af79408d00a5b50b8aaa492c3cdf3bf5cb99a844bff7a31a72e6c149d5",
+  "machine": {
+    "arch": "arm64",
+    "hardwareModel": "MacBookPro18,3",
+    "macOSVersion": "27.0.1",
+    "nativeCpuBrand": "Apple M1 Pro",
+    "rosetta": false
+  },
+  "baseUrl": "https://ghostboard.21blog.com/plugins/examples",
+  "downloads": {
+    "example.hello@0.1.0": {
+      "bytes": 3123,
+      "sha256": "afd1c17c527c5fbff961a46459c21e5814b7f621e966f0ced50922fba9977fd5",
+      "status": 200,
+      "url": "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin"
+    },
+    "example.hello@0.1.1": {
+      "bytes": 3123,
+      "sha256": "5f1d5bfe00acac6be3c1d1b1b9caee7b3005946f86b7308e9600f3d310b95ac3",
+      "status": 200,
+      "url": "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.1/example.hello-0.1.1.ghostboard-plugin"
+    },
+    "example.react-hello@0.1.0": {
+      "bytes": 6343,
+      "sha256": "7e3ab262855b60a4a5c19194cc19aa2ab31bfddcef30ca0f8f2fb7293c5a2b9d",
+      "status": 200,
+      "url": "https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin"
+    },
+    "example.csv-importer@0.1.0": {
+      "bytes": 6318,
+      "sha256": "0fe0ce624ee090fcb9497b2f7c3def815c59040b2f99ea2f06aabc66a37ac133",
+      "status": 200,
+      "url": "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin"
+    },
+    "example.combined@0.1.0": {
+      "bytes": 7415,
+      "sha256": "351f5309bfc6fb6c9400adf5657648ffd53f0df404332b7374c78efd08e75a14",
+      "status": 200,
+      "url": "https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin"
+    }
+  },
+  "examples": [
+    {
+      "id": "example.hello",
+      "installSha256": "afd1c17c527c5fbff961a46459c21e5814b7f621e966f0ced50922fba9977fd5",
+      "installUrl": "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin",
+      "installVersion": "0.1.0",
+      "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.hello/releases.json",
+      "updateVersion": "0.1.1"
+    },
+    {
+      "id": "example.react-hello",
+      "installSha256": "7e3ab262855b60a4a5c19194cc19aa2ab31bfddcef30ca0f8f2fb7293c5a2b9d",
+      "installUrl": "https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin",
+      "installVersion": "0.1.0",
+      "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.react-hello/releases.json"
+    },
+    {
+      "id": "example.csv-importer",
+      "installSha256": "0fe0ce624ee090fcb9497b2f7c3def815c59040b2f99ea2f06aabc66a37ac133",
+      "installUrl": "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin",
+      "installVersion": "0.1.0",
+      "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/releases.json"
+    },
+    {
+      "id": "example.combined",
+      "installSha256": "351f5309bfc6fb6c9400adf5657648ffd53f0df404332b7374c78efd08e75a14",
+      "installUrl": "https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin",
+      "installVersion": "0.1.0",
+      "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.combined/releases.json"
+    }
+  ],
+  "indexUrl": "https://ghostboard.21blog.com/plugins/examples/index.json",
+  "manualPicker": true,
+  "phases": ["install", "restart", "picker"],
+  "publicKey": "ed25519-spki:MCowBQYDK2VwAyEA3/+iav0pnKwOWcUzWKCSeOo+N4yOFqqEzfQw8mYDKNg=",
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "results": [
+    {
+      "phase": "install",
+      "stage": "T5/public distribution and support platform",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "publicHttpsBase": true,
+        "public-install-preview-example.hello": true,
+        "public-install-commit-disabled-example.hello": true,
+        "public-install-preview-example.react-hello": true,
+        "public-install-commit-disabled-example.react-hello": true,
+        "public-install-preview-example.csv-importer": true,
+        "public-install-commit-disabled-example.csv-importer": true,
+        "public-install-preview-example.combined": true,
+        "public-install-commit-disabled-example.combined": true,
+        "four-public-examples-running": true,
+        "template-contributions-exact": true,
+        "panel-initial-example.hello": true,
+        "panel-open-example.hello": true,
+        "panel-close-example.hello": true,
+        "panel-initial-example.react-hello": true,
+        "panel-open-example.react-hello": true,
+        "panel-close-example.react-hello": true,
+        "panel-open-example.combined": true,
+        "panel-close-example.combined": true,
+        "canvas-instance": true,
+        "canvas-placement": true,
+        "canvas-persists": true,
+        "canvas-cleanup": true,
+        "importer-suggested-mapping": true,
+        "importer-preview": true,
+        "importer-commits": true,
+        "importer-rollback": true,
+        "public-update-preview": true,
+        "public-update-retains-previous": true,
+        "public-update-runtime-version": true,
+        "updated-command-still-runs": true
+      },
+      "startedAt": "2026-11-02T15:37:36.838Z",
+      "finishedAt": "2026-11-02T15:37:39.707Z",
+      "picker": "scripted",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    },
+    {
+      "phase": "restart",
+      "stage": "T5/public distribution and support platform",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "publicHttpsBase": true,
+        "restart-restores-four-examples": true,
+        "restart-contributions-exact": true,
+        "restart-signatures-verified": true,
+        "restart-update-history-kept": true,
+        "panel-initial-example.hello": true,
+        "panel-open-example.hello": true,
+        "panel-close-example.hello": true
+      },
+      "startedAt": "2026-11-02T15:37:40.682Z",
+      "finishedAt": "2026-11-02T15:37:40.905Z",
+      "picker": "scripted",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    },
+    {
+      "phase": "picker",
+      "stage": "T5/public distribution and support platform",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "publicHttpsBase": true,
+        "manual-picker-mode": true,
+        "manual-picker-selected": true,
+        "manual-picker-preview": true,
+        "manual-picker-cancelled": true,
+        "manual-picker-no-residual-session": true
+      },
+      "startedAt": "2026-11-02T15:37:41.910Z",
+      "finishedAt": "2026-11-02T15:42:22.088Z",
+      "picker": "manual",
+      "manualPicker": {
+        "select": {
+          "durationMs": 215948,
+          "fileName": "manual-picker-sample.csv",
+          "fileSize": 77,
+          "notes": 1,
+          "status": "preview"
+        },
+        "cancel": {
+          "durationMs": 63990,
+          "sessionCleared": true
+        }
+      },
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    }
+  ]
+}

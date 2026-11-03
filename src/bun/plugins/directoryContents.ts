@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { canonicalTreeDigest } from '../../../packages/plugin-sdk/canonicalDigest.js';
 
 export interface DirectoryContents {
   digest: string;
   files: Map<string, Uint8Array>;
+  /** Pre-canonical runtime checksum, only for verifying an existing install before migration. */
+  legacyDigest: string;
 }
 
 export async function readPluginContents(
@@ -12,7 +15,7 @@ export async function readPluginContents(
   options?: { excludePaths?: ReadonlySet<string> }
 ): Promise<DirectoryContents> {
   const files = new Map<string, Uint8Array>();
-  const hash = createHash('sha256');
+  const legacy = createHash('sha256');
   let bytes = 0;
   async function visit(relative: string): Promise<void> {
     const entries = await readdir(join(directory, relative), {
@@ -38,8 +41,8 @@ export async function readPluginContents(
           );
         }
         files.set(path, content);
-        hash.update(JSON.stringify([path, content.byteLength]));
-        hash.update(content);
+        legacy.update(JSON.stringify([path, content.byteLength]));
+        legacy.update(content);
       } else {
         throw new Error(
           `Unsupported plugin file (symlink or special file): ${path}`
@@ -48,5 +51,9 @@ export async function readPluginContents(
     }
   }
   await visit('');
-  return { files, digest: hash.digest('hex') };
+  return {
+    files,
+    digest: canonicalTreeDigest(files),
+    legacyDigest: legacy.digest('hex'),
+  };
 }

@@ -1,0 +1,130 @@
+{
+  "index": {
+    "baseUrl": "https://ghostboard.21blog.com/plugins/examples",
+    "ephemeralKey": false,
+    "generatedAt": "2026-11-02T15:11:45.475Z",
+    "hostRange": ">=1.0.0 <2.0.0",
+    "packages": {
+      "example.hello": {
+        "releases": [
+          {
+            "ghostboard": ">=1.0.0 <2.0.0",
+            "notes": "Example package built from the create-ghostboard-plugin template (0.1.0).",
+            "sha256": "afd1c17c527c5fbff961a46459c21e5814b7f621e966f0ced50922fba9977fd5",
+            "url": "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin",
+            "version": "0.1.0"
+          },
+          {
+            "ghostboard": ">=1.0.0 <2.0.0",
+            "notes": "Example package built from the create-ghostboard-plugin template (0.1.1).",
+            "sha256": "5f1d5bfe00acac6be3c1d1b1b9caee7b3005946f86b7308e9600f3d310b95ac3",
+            "url": "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.1/example.hello-0.1.1.ghostboard-plugin",
+            "version": "0.1.1"
+          }
+        ],
+        "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.hello/releases.json"
+      },
+      "example.react-hello": {
+        "releases": [
+          {
+            "ghostboard": ">=1.0.0 <2.0.0",
+            "notes": "Example package built from the create-ghostboard-plugin template (0.1.0).",
+            "sha256": "7e3ab262855b60a4a5c19194cc19aa2ab31bfddcef30ca0f8f2fb7293c5a2b9d",
+            "url": "https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin",
+            "version": "0.1.0"
+          }
+        ],
+        "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.react-hello/releases.json"
+      },
+      "example.csv-importer": {
+        "releases": [
+          {
+            "ghostboard": ">=1.0.0 <2.0.0",
+            "notes": "Example package built from the create-ghostboard-plugin template (0.1.0).",
+            "sha256": "0fe0ce624ee090fcb9497b2f7c3def815c59040b2f99ea2f06aabc66a37ac133",
+            "url": "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin",
+            "version": "0.1.0"
+          }
+        ],
+        "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/releases.json"
+      },
+      "example.combined": {
+        "releases": [
+          {
+            "ghostboard": ">=1.0.0 <2.0.0",
+            "notes": "Example package built from the create-ghostboard-plugin template (0.1.0).",
+            "sha256": "351f5309bfc6fb6c9400adf5657648ffd53f0df404332b7374c78efd08e75a14",
+            "url": "https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin",
+            "version": "0.1.0"
+          }
+        ],
+        "releasesUrl": "https://ghostboard.21blog.com/plugins/examples/example.combined/releases.json"
+      }
+    },
+    "publicKey": "ed25519-spki:MCowBQYDK2VwAyEA3/+iav0pnKwOWcUzWKCSeOo+N4yOFqqEzfQw8mYDKNg=",
+    "sdkVersion": "0.1.1"
+  },
+  "requests": {
+    "/docs/": {
+      "status": 200,
+      "bytes": 18396,
+      "type": "text/html",
+      "cache": null
+    },
+    "/zh/docs/": {
+      "status": 200,
+      "bytes": 18564,
+      "type": "text/html",
+      "cache": null
+    },
+    "/docs/reference/sdk/": {
+      "status": 200,
+      "bytes": 118355,
+      "type": "text/html",
+      "cache": null
+    },
+    "/docs/llms.txt": {
+      "status": 200,
+      "bytes": 4006,
+      "type": "text/plain; charset=utf-8",
+      "cache": "public, max-age=300"
+    },
+    "/docs/llms-full.txt": {
+      "status": 200,
+      "bytes": 91371,
+      "type": "text/plain; charset=utf-8",
+      "cache": "public, max-age=300"
+    },
+    "/plugins/examples/index.json": {
+      "status": 200,
+      "bytes": 2999,
+      "type": "application/json",
+      "cache": "no-cache"
+    },
+    "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin": {
+      "sha256": "afd1c17c527c5fbff961a46459c21e5814b7f621e966f0ced50922fba9977fd5",
+      "bytes": 3123,
+      "cache": "public, max-age=31536000, immutable"
+    },
+    "https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.1/example.hello-0.1.1.ghostboard-plugin": {
+      "sha256": "5f1d5bfe00acac6be3c1d1b1b9caee7b3005946f86b7308e9600f3d310b95ac3",
+      "bytes": 3123,
+      "cache": "public, max-age=31536000, immutable"
+    },
+    "https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin": {
+      "sha256": "7e3ab262855b60a4a5c19194cc19aa2ab31bfddcef30ca0f8f2fb7293c5a2b9d",
+      "bytes": 6343,
+      "cache": "public, max-age=31536000, immutable"
+    },
+    "https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin": {
+      "sha256": "0fe0ce624ee090fcb9497b2f7c3def815c59040b2f99ea2f06aabc66a37ac133",
+      "bytes": 6318,
+      "cache": "public, max-age=31536000, immutable"
+    },
+    "https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin": {
+      "sha256": "351f5309bfc6fb6c9400adf5657648ffd53f0df404332b7374c78efd08e75a14",
+      "bytes": 7415,
+      "cache": "public, max-age=31536000, immutable"
+    }
+  }
+}

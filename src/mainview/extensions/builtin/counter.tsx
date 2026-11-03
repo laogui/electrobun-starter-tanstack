@@ -29,7 +29,7 @@ function CounterCanvasSurface({
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-      <div className="font-semibold text-neutral-500 text-xs uppercase tracking-wide">
+      <div className="font-semibold text-neutral-500 text-xs uppercase tracking-wide dark:text-neutral-400">
         Counter
       </div>
       <div className="font-semibold text-4xl tabular-nums">{state.count}</div>
@@ -65,7 +65,7 @@ function CounterPreviewSurface({
 }: PreviewProps<CounterState>) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-1 p-3">
-      <div className="text-neutral-500 text-xs">
+      <div className="text-neutral-500 text-xs dark:text-neutral-400">
         {presentation.title || 'Counter'}
       </div>
       <div className="font-semibold text-2xl tabular-nums">{state.count}</div>

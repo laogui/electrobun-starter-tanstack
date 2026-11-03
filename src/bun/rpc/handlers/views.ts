@@ -2,6 +2,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { isRecoveryGraph } from '../../../shared/canvasRecovery';
 import { appState } from '../../appState';
 import {
+  listCanvasDataDiagnostics,
+  quarantineDamagedTrash,
+} from '../../dataDiagnostics';
+import {
   parseCanvasManifest,
   resolveWorkspaceManifestPath,
   saveManifest as writeManifest,
@@ -22,6 +26,8 @@ import type { RpcRequestHandlers } from '../types';
 export function createViewsHandlers(
   ctx: RpcContext
 ): RpcRequestHandlers<
+  | 'listCanvasDataDiagnostics'
+  | 'quarantineDamagedTrash'
   | 'readCanvasRecoveryGraph'
   | 'listCanvasRecoveryBackups'
   | 'restoreCanvasSnapshot'
@@ -34,6 +40,9 @@ export function createViewsHandlers(
 > {
   const { wsPath } = ctx;
   return {
+    listCanvasDataDiagnostics: async () => listCanvasDataDiagnostics(wsPath),
+    quarantineDamagedTrash: async ({ trashId, token }) =>
+      quarantineDamagedTrash(wsPath, trashId, token),
     readCanvasRecoveryGraph: async ({ viewId }) => {
       const config = await loadWorkspaceConfig(wsPath);
       const view = config.views.find((entry) => entry.id === viewId);

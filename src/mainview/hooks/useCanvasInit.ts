@@ -9,6 +9,7 @@ import {
 import { collectWidgetIdsFromNodes } from '@/lib/canvasExport';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { confirmCanvasRecovery } from '@/lib/confirmCanvasRecovery';
+import { queryClient } from '@/lib/queryClient';
 import {
   isRpcAvailable,
   loadCanvas,
@@ -245,6 +246,15 @@ export function useCanvasInit(): void {
           }
           // Viewport is session-only; loadCanvas no longer carries camera state.
           hydrate(data.nodes as Node[], data.edges as Edge[]);
+          if (data.loadIssues?.length) {
+            toast.warning(
+              m.canvas_isolated_records({ count: data.loadIssues.length }),
+              {
+                duration: Number.POSITIVE_INFINITY,
+                id: `canvas-isolated-${activeViewId}`,
+              }
+            );
+          }
           // Always hydrate (even when widgets is absent/empty) so switching to
           // a canvas with zero widgets still prunes records from the previous
           // view. Pass the referenced id set so unreferenced entries are dropped.
@@ -259,6 +269,10 @@ export function useCanvasInit(): void {
             data.extensionInstances ?? {},
             referencedExtensionIds
           );
+          // Lazy legacy migration can change tag keys after the workspace
+          // metadata query was cached on a different canvas.
+          queryClient.invalidateQueries({ queryKey: ['node-metadata'] });
+          queryClient.invalidateQueries({ queryKey: ['tags'] });
           if (typeof data.recoveredFrom === 'string' && data.recoveredFrom) {
             toast.warning(
               m.toast_canvas_recovered_from_backup({

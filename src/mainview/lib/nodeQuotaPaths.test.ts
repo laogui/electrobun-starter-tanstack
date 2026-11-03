@@ -39,6 +39,7 @@ const createCard = (tempId: string, x: number) => ({
 describe('free-tier quota is enforced on every bulk create path', () => {
   beforeEach(() => {
     useCanvasStore.getState().reset();
+    useCanvasStore.getState().hydrate([], []);
   });
 
   it('markdown import refuses a batch that would exceed the limit', async () => {

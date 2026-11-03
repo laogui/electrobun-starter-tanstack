@@ -62,6 +62,14 @@ import type { TrashEntry } from '../workspace';
 export interface CanvasRPC {
   bun: {
     requests: {
+      listCanvasDataDiagnostics: {
+        params: Record<string, never>;
+        response: import('../dataDiagnostics').CanvasDataDiagnostic[];
+      };
+      quarantineDamagedTrash: {
+        params: { trashId: string; token: string };
+        response: { success: boolean };
+      };
       readCanvasRecoveryGraph: {
         params: { viewId: string };
         response: import('../../shared/canvasRecovery').RecoveryGraph | null;
@@ -78,6 +86,22 @@ export interface CanvasRPC {
           workspacePath?: string;
         };
         response: { success: boolean; viewId?: string };
+      };
+      finishCanvasClones: {
+        params: { tokens: string[]; liveReferences: string[] };
+        response: { removed: string[]; retained: string[] };
+      };
+      listTransactionRecovery: {
+        params: Record<string, never>;
+        response: import('../../shared/transactionRecovery').TransactionRecoveryEntry[];
+      };
+      resolveTransactionRecovery: {
+        params: {
+          id: 'canvas' | 'notes';
+          token: string;
+          action: 'retry' | 'quarantine';
+        };
+        response: { success: boolean; archivedFile?: string };
       };
       confirmCanvasRecovery: {
         params: { viewId: string; token: string };
@@ -98,6 +122,7 @@ export interface CanvasRPC {
            * came from that backup (e.g. `views/x.canvas.json.bak`). The
            * renderer should warn before autosave keeps it.
            */
+          loadIssues?: string[];
           recoveredFrom?: string;
           recoveryToken?: string;
           /** Where the unreadable manifest bytes were preserved. */
@@ -118,7 +143,9 @@ export interface CanvasRPC {
       };
       cloneWidget: {
         params: { widgetId: string };
-        response: { success: true; widget: WidgetRecord } | { success: false };
+        response:
+          | { success: true; cloneToken?: string; widget: WidgetRecord }
+          | { success: false };
       };
       saveWidget: {
         params: { widget: WidgetRecord };
@@ -167,6 +194,10 @@ export interface CanvasRPC {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
       };
+      pluginRemove: {
+        params: { digest: string; pluginId: string };
+        response: { success: boolean; error?: string };
+      };
       pluginRollback: {
         params: { digest: string; pluginId: string };
         response: PluginInstallCommitResult;
@@ -181,6 +212,7 @@ export interface CanvasRPC {
       };
       pluginFilesPick: {
         params: {
+          hostToken?: string;
           activationId: string;
           extensions: string[];
           kind?: 'directory' | 'file';
@@ -277,7 +309,11 @@ export interface CanvasRPC {
       extensionInstanceClone: {
         params: { instanceId: string };
         response:
-          | { record: ExtensionInstanceRecord; success: true }
+          | {
+              record: ExtensionInstanceRecord;
+              cloneToken?: string;
+              success: true;
+            }
           | { success: false };
       };
       extensionInstanceClearType: {
@@ -326,7 +362,11 @@ export interface CanvasRPC {
         response: { preview?: PreviewArtifacts; success: boolean };
       };
       loadBlockNote: {
-        params: { noteId: string; workspaceId?: string };
+        params: {
+          noteId: string;
+          workspaceId?: string;
+          includeMarkdown?: boolean;
+        };
         response: {
           success: boolean;
           blocks?: unknown[];
@@ -344,7 +384,7 @@ export interface CanvasRPC {
           noteId: string;
           frontmatter: Record<string, unknown>;
           blocks: unknown[];
-          markdown: string;
+          markdown?: string;
           revision?: number;
         };
         response: BlockNoteSaveResult;
@@ -361,19 +401,6 @@ export interface CanvasRPC {
         params: {
           dataUrl: string;
           existingFile?: string;
-          kind?: 'audio' | 'file' | 'image' | 'video';
-          mimeType?: string;
-          suggestedName?: string;
-        };
-        response: {
-          archiveSummary?: { entryCount: number; topFiles: string[] };
-          filePath: string;
-          previewExcerpt?: string;
-        };
-      };
-      saveAttachmentFile: {
-        params: {
-          sourcePath: string;
           kind?: 'audio' | 'file' | 'image' | 'video';
           mimeType?: string;
           suggestedName?: string;

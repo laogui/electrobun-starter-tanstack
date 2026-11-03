@@ -5,6 +5,9 @@ import { rpcListViews } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 import type { CanvasLoadError } from '@/store/slices/persistenceSlice';
 import * as m from '../../../paraglide/messages.js';
+import { CanvasDataDiagnostics } from '../settings/panels/CanvasDataDiagnostics';
+import { RecoverySection } from '../settings/panels/RecoverySection';
+import { TransactionRecoverySection } from '../settings/panels/TransactionRecoverySection';
 
 const FOCUS_RING =
   'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900';
@@ -54,7 +57,7 @@ export function CanvasLoadErrorScreen({ error }: { error: CanvasLoadError }) {
       className="flex h-screen w-screen items-center justify-center bg-[#EFF3F4] px-6 font-sans dark:bg-[#141414]"
       role="alert"
     >
-      <div className="w-full max-w-[520px] rounded-lg border border-red-500/30 bg-white/90 p-6 shadow-black/10 shadow-xl dark:bg-neutral-900/90 dark:shadow-black/30">
+      <div className="max-h-[85vh] w-full max-w-[620px] overflow-y-auto rounded-lg border border-red-500/30 bg-white/90 p-6 shadow-black/10 shadow-xl dark:bg-neutral-900/90 dark:shadow-black/30">
         <div className="mb-4 flex items-start gap-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={22} />
@@ -82,6 +85,19 @@ export function CanvasLoadErrorScreen({ error }: { error: CanvasLoadError }) {
           <RotateCw size={14} />
           {m.canvas_load_error_retry()}
         </button>
+
+        <div className="mt-5 space-y-4">
+          <TransactionRecoverySection />
+          <CanvasDataDiagnostics />
+          <details>
+            <summary className="cursor-pointer font-medium text-sm">
+              {m.recovery_title()}
+            </summary>
+            <div className="mt-3">
+              <RecoverySection />
+            </div>
+          </details>
+        </div>
 
         {otherViews.length > 0 ? (
           <div className="mt-5">

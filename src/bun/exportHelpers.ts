@@ -1,11 +1,14 @@
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { Utils } from 'electrobun/bun';
+import { assertWorkspaceAttachmentPath } from './attachments';
 import type { CanvasManifest } from './manifest';
 import type { ExportedNote } from './markdownExport';
 import { serializeChecklistItems } from './notes';
 import type { ExportArchiveResponse } from './rpc/types';
 import type { ChecklistWidgetData, WidgetRecord } from './widgets';
+import { assertInside } from './workspacePaths';
 
 export const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
 
@@ -63,6 +66,22 @@ export function resolveExportPath(
 export const EXPORT_ATTACHMENT_RE = /^attachments\/[^/\\]+$/;
 
 export const EXPORT_DIR_NAME = 'GhostBoard Markdown Export';
+export async function createMarkdownExportDirectory(
+  folder: string
+): Promise<string> {
+  const first = join(folder, EXPORT_DIR_NAME);
+  try {
+    await mkdir(first);
+    return first;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw error;
+    }
+  }
+  const next = join(folder, `${EXPORT_DIR_NAME} ${crypto.randomUUID()}`);
+  await mkdir(next);
+  return next;
+}
 
 /** Copy referenced workspace attachments into an export directory (flat). */
 export async function copyExportAttachments(
@@ -70,22 +89,27 @@ export async function copyExportAttachments(
   attachments: Iterable<string>,
   destDir: string
 ): Promise<void> {
-  await Promise.all(
+  const results = await Promise.allSettled(
     Array.from(attachments, async (rel) => {
       // react-doctor-disable-next-line react-doctor/js-set-map-lookups
       if (!EXPORT_ATTACHMENT_RE.test(rel) || rel.includes('..')) {
-        return;
+        throw new Error(`Invalid export attachment reference: ${rel}`);
       }
-      try {
-        await Bun.write(
-          join(destDir, basename(rel)),
-          Bun.file(resolve(wsPath, rel))
-        );
-      } catch (error) {
-        console.warn(`[export] Failed to copy attachment ${rel}:`, error);
-      }
+      const { fullPath } = assertWorkspaceAttachmentPath(wsPath, rel);
+      assertInside(
+        wsPath,
+        fullPath,
+        'Export attachment escapes the workspace.'
+      );
+      await Bun.write(join(destDir, basename(rel)), Bun.file(fullPath));
     })
   );
+  const failures = results.filter((result) => result.status === 'rejected');
+  if (failures.length) {
+    throw new Error(
+      `Could not copy ${failures.length} attachment(s): ${failures.map((result) => String(result.reason)).join('; ')}`
+    );
+  }
 }
 
 export interface ViewExportRefs {

@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
 
 import { atomicWrite } from '../atomicWrite';
@@ -61,10 +61,24 @@ export class PluginPermissionDeniedError extends Error {
 
 const PERMISSIONS_FILE_SCHEMA = 'ghostboard-plugin-permissions/v1';
 const PERMISSIONS_FILE_NAME = 'plugin-permissions.json';
+const sharedStores = new Map<string, PluginPermissionStore>();
+/** App services share cached grants so revocation is immediately visible. */
+export function getPluginPermissionStore(
+  appDataRoot: string
+): PluginPermissionStore {
+  const root = resolve(appDataRoot);
+  let store = sharedStores.get(root);
+  if (!store) {
+    store = new PluginPermissionStore(root);
+    sharedStores.set(root, store);
+  }
+  return store;
+}
 
 const permissionSchema = z.enum(PLUGIN_PERMISSIONS);
 
 const grantSchema = z.object({
+  identity: z.string().optional(),
   grantedAt: z.string(),
   permission: permissionSchema,
   pluginId: z.string().min(1).max(200),
@@ -85,55 +99,113 @@ function emptyFile(): z.infer<typeof permissionsFileSchema> {
 export class PluginPermissionStore {
   private readonly filePath: string;
   private grants: PluginPermissionGrant[] | null = null;
+  private loading: Promise<PluginPermissionGrant[]> | null = null;
+  private mutations: Promise<void> = Promise.resolve();
   private writeChain: Promise<void> = Promise.resolve();
+  private readonly revocations = new Map<string, number>();
+
+  version(pluginId: string): number {
+    return this.revocations.get(pluginId) ?? 0;
+  }
 
   constructor(appDataRoot: string) {
     this.filePath = join(appDataRoot, PERMISSIONS_FILE_NAME);
   }
 
   async list(): Promise<PluginPermissionGrant[]> {
+    await this.mutations.catch(() => undefined);
     return [...(await this.load())];
   }
 
-  async has(pluginId: string, permission: PluginPermission): Promise<boolean> {
+  async has(
+    pluginId: string,
+    permission: PluginPermission,
+    identity?: string
+  ): Promise<boolean> {
+    await this.mutations.catch(() => undefined);
     return (await this.load()).some(
-      (grant) => grant.pluginId === pluginId && grant.permission === permission
+      (grant) =>
+        grant.pluginId === pluginId &&
+        grant.permission === permission &&
+        grant.identity === identity
     );
   }
 
-  async grant(pluginId: string, permission: PluginPermission): Promise<void> {
-    const grants = await this.load();
-    if (
-      grants.some(
+  async grant(
+    pluginId: string,
+    permission: PluginPermission,
+    identity?: string,
+    expectedVersion?: number
+  ): Promise<void> {
+    return this.mutate(async () => {
+      const grants = await this.load();
+      if (
+        expectedVersion !== undefined &&
+        this.version(pluginId) !== expectedVersion
+      ) {
+        return;
+      }
+      if (
+        grants.some(
+          (grant) =>
+            grant.pluginId === pluginId &&
+            grant.permission === permission &&
+            grant.identity === identity
+        )
+      ) {
+        return;
+      }
+      this.grants = grants.filter(
         (grant) =>
-          grant.pluginId === pluginId && grant.permission === permission
-      )
-    ) {
-      return;
-    }
-    grants.push({ pluginId, permission, grantedAt: new Date().toISOString() });
-    await this.persist();
+          grant.pluginId !== pluginId || grant.permission !== permission
+      );
+      this.grants.push({
+        pluginId,
+        permission,
+        ...(identity ? { identity } : {}),
+        grantedAt: new Date().toISOString(),
+      });
+      await this.persist();
+    });
   }
 
   /** Remove one permission, or every permission when none is given. */
   async revoke(pluginId: string, permission?: PluginPermission): Promise<void> {
-    const grants = await this.load();
-    const kept = grants.filter(
-      (grant) =>
-        grant.pluginId !== pluginId ||
-        (permission !== undefined && grant.permission !== permission)
-    );
-    if (kept.length === grants.length) {
-      return;
-    }
-    this.grants = kept;
-    await this.persist();
+    this.revocations.set(pluginId, this.version(pluginId) + 1);
+    return this.mutate(async () => {
+      const grants = await this.load();
+      const kept = grants.filter(
+        (grant) =>
+          grant.pluginId !== pluginId ||
+          (permission !== undefined && grant.permission !== permission)
+      );
+      if (kept.length === grants.length) {
+        return;
+      }
+      this.grants = kept;
+      await this.persist();
+    });
+  }
+
+  private mutate(operation: () => Promise<void>): Promise<void> {
+    const next = this.mutations.catch(() => undefined).then(operation);
+    this.mutations = next;
+    return next;
   }
 
   private async load(): Promise<PluginPermissionGrant[]> {
     if (this.grants) {
       return this.grants;
     }
+    if (!this.loading) {
+      this.loading = this.readGrants().finally(() => {
+        this.loading = null;
+      });
+    }
+    return this.loading;
+  }
+
+  private async readGrants(): Promise<PluginPermissionGrant[]> {
     // A damaged file is kept aside by readJsonOrEmpty and treated as "no
     // grants": failing closed only means the user is asked again.
     const read = await readJsonOrEmpty(this.filePath, (value) =>
@@ -162,7 +234,9 @@ export interface PluginPermissionGateOptions {
    * installed plugin. Unknown ids are denied without prompting so a caller
    * cannot put an arbitrary name in front of the user.
    */
-  describePlugin: (pluginId: string) => Promise<string | undefined>;
+  describePlugin: (
+    pluginId: string
+  ) => Promise<string | { name: string; identity: string } | undefined>;
   /** Undefined when no native dialog is available: requests are denied. */
   prompt?: PluginPermissionPrompter;
   store: PluginPermissionStore;
@@ -194,10 +268,15 @@ export class PluginPermissionGate {
     permission: PluginPermission,
     detail?: string
   ): Promise<boolean> {
-    if (await this.hasGrant(pluginId, permission)) {
-      return true;
+    const description = await this.describe(pluginId);
+    if (!description) {
+      return false;
     }
-    const key = `${pluginId}\u0000${permission}`;
+    const version = this.options.store.version(pluginId);
+    if (await this.hasGrant(pluginId, permission, description.identity)) {
+      return this.isCurrent(pluginId, description, version);
+    }
+    const key = `${pluginId}\u0000${permission}\u0000${description.identity ?? ''}\u0000${version}`;
     if (this.sessionDenied.has(key)) {
       return false;
     }
@@ -205,7 +284,14 @@ export class PluginPermissionGate {
     if (existing) {
       return existing;
     }
-    const decision = this.ask(pluginId, permission, key, detail).finally(() => {
+    const decision = this.ask(
+      pluginId,
+      permission,
+      key,
+      detail,
+      description,
+      version
+    ).finally(() => {
       this.pending.delete(key);
     });
     this.pending.set(key, decision);
@@ -233,10 +319,11 @@ export class PluginPermissionGate {
 
   private async hasGrant(
     pluginId: string,
-    permission: PluginPermission
+    permission: PluginPermission,
+    identity?: string
   ): Promise<boolean> {
     try {
-      return await this.options.store.has(pluginId, permission);
+      return await this.options.store.has(pluginId, permission, identity);
     } catch (error) {
       // Unreadable store: fall through to asking rather than allowing.
       console.warn('[plugins] Could not read permission grants:', error);
@@ -248,28 +335,47 @@ export class PluginPermissionGate {
     await this.options.store.revoke(pluginId, permission);
   }
 
+  private async describe(
+    pluginId: string
+  ): Promise<{ name: string; identity?: string } | undefined> {
+    try {
+      const value = await this.options.describePlugin(pluginId);
+      return typeof value === 'string' ? { name: value } : value;
+    } catch {
+      return;
+    }
+  }
+
+  private async isCurrent(
+    pluginId: string,
+    description: { identity?: string },
+    version: number
+  ): Promise<boolean> {
+    const value = await this.describe(pluginId);
+    return (
+      Boolean(value) &&
+      value?.identity === description.identity &&
+      this.options.store.version(pluginId) === version
+    );
+  }
+
   private async ask(
     pluginId: string,
     permission: PluginPermission,
     key: string,
-    detail: string | undefined
+    detail: string | undefined,
+    description: { name: string; identity?: string },
+    version: number
   ): Promise<boolean> {
-    const { prompt, describePlugin, store } = this.options;
+    const { prompt, store } = this.options;
     if (!prompt) {
       return false;
     }
-    let pluginName: string | undefined;
-    try {
-      pluginName = await describePlugin(pluginId);
-    } catch {
-      pluginName = undefined;
-    }
-    if (!pluginName) {
-      return false;
-    }
-    const name = pluginName;
-    const run = this.promptChain.then(() =>
-      prompt({ pluginId, pluginName: name, permission, detail })
+    const current = () => this.isCurrent(pluginId, description, version);
+    const run = this.promptChain.then(async () =>
+      (await current())
+        ? prompt({ pluginId, pluginName: description.name, permission, detail })
+        : 'deny'
     );
     this.promptChain = run.catch(() => undefined);
     let decision: PluginPermissionDecision;
@@ -279,19 +385,22 @@ export class PluginPermissionGate {
       console.warn('[plugins] Permission prompt failed:', error);
       return false;
     }
+    if (!(await current())) {
+      return false;
+    }
     if (decision === 'deny') {
       this.sessionDenied.add(key);
       return false;
     }
     if (decision === 'always-allow') {
       try {
-        await store.grant(pluginId, permission);
+        await store.grant(pluginId, permission, description.identity, version);
       } catch (error) {
         // The user allowed it; failing to remember only means asking again.
         console.warn('[plugins] Could not persist permission grant:', error);
       }
     }
-    return true;
+    return store.version(pluginId) === version;
   }
 }
 

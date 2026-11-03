@@ -294,3 +294,131 @@ it('revokes an approved recovery when the backup changes before saving', async (
   ).rejects.toBeInstanceOf(ManifestCorruptError);
   expect(await readFile(path, 'utf8')).toBe('{broken');
 });
+
+it('isolates invalid entries while preserving original bytes and refuses incomplete GC reference sets', async () => {
+  const original = manifestWith('note_a');
+  const raw = JSON.stringify({
+    ...original,
+    nodes: [
+      ...original.nodes,
+      { id: 'broken', data: null },
+      {
+        id: 'folder',
+        type: 'folder',
+        position: { x: 1, y: 2 },
+        data: {
+          children: [
+            null,
+            { id: 'child', type: 'card', data: { noteId: 'inside' } },
+          ],
+        },
+      },
+    ],
+    edges: [{ id: 'bad', source: 'n1', target: 'missing' }],
+  });
+  await writeFile(join(viewsDir(), 'default.canvas.json'), raw);
+  const loaded = await loadManifest(ws, 'views/default.canvas.json');
+  expect(loaded?.nodes.map((node) => node.id)).toEqual(['n1', 'n2', 'folder']);
+  expect(loaded?.edges).toEqual([]);
+  expect(loaded?.nodes[2]?.data.children).toHaveLength(1);
+  const evidence = (await readdir(viewsDir())).find((name) =>
+    name.includes('.damaged-')
+  )!;
+  expect(await readFile(join(viewsDir(), evidence), 'utf8')).toBe(raw);
+  expect(await readFile(join(viewsDir(), 'default.canvas.json'), 'utf8')).toBe(
+    raw
+  );
+  await expect(
+    loadManifestsStrict(ws, ['views/default.canvas.json'])
+  ).rejects.toBeInstanceOf(ManifestCorruptError);
+});
+it('normalizes legacy folder children without losing legacy note references or text', async () => {
+  const original = {
+    ...manifestWith('a'),
+    nodes: [
+      {
+        id: 'folder',
+        type: 'folder',
+        position: { x: 0, y: 0 },
+        data: {
+          children: [
+            {
+              id: 'legacy',
+              noteId: 'old-note',
+              title: 'Old title',
+              content: 'Old body',
+            },
+          ],
+        },
+      },
+    ],
+  };
+  await writeFile(
+    join(viewsDir(), 'default.canvas.json'),
+    JSON.stringify(original)
+  );
+  const loaded = await loadManifest(ws, 'views/default.canvas.json');
+  expect(loaded?.nodes[0]?.data.children).toEqual([
+    {
+      id: 'legacy',
+      noteId: 'old-note',
+      title: 'Old title',
+      content: 'Old body',
+      type: 'card',
+      data: { noteId: 'old-note', title: 'Old title', content: 'Old body' },
+    },
+  ]);
+});
+
+it('allows explicit quarantine of a damaged Trash entry without deleting its content or overwriting evidence', async () => {
+  const { listCanvasDataDiagnostics, quarantineDamagedTrash } = await import(
+    './dataDiagnostics'
+  );
+  const { loadWorkspaceConfig, saveWorkspaceConfig } = await import(
+    './workspace'
+  );
+  await mkdir(join(ws, '.ghostboard/trash'), { recursive: true });
+  await writeFile(
+    join(viewsDir(), 'default.canvas.json'),
+    JSON.stringify(manifestWith('a'))
+  );
+  await writeFile(join(ws, '.ghostboard/trash/broken.json'), '{broken');
+  await writeFile(join(ws, 'content/keep.md'), 'Keep this content');
+  const config = await loadWorkspaceConfig(ws);
+  config.trash = [
+    {
+      trashId: 'bad-trash',
+      trashFile: 'trash/broken.json',
+      deletedAt: Date.now(),
+      view: { id: 'bad', name: 'Broken', file: 'views/bad.canvas.json' },
+    },
+  ];
+  await saveWorkspaceConfig(ws, config);
+  await expect(collectReferencedInstanceIds(ws)).rejects.toBeInstanceOf(
+    ManifestCorruptError
+  );
+  const entry = (await listCanvasDataDiagnostics(ws)).find(
+    (item) => item.trashId === 'bad-trash'
+  )!;
+  expect((await quarantineDamagedTrash(ws, 'bad-trash', 'stale')).success).toBe(
+    false
+  );
+  expect(
+    (await quarantineDamagedTrash(ws, 'bad-trash', entry.token)).success
+  ).toBe(true);
+  expect(await readFile(join(ws, 'content/keep.md'), 'utf8')).toBe(
+    'Keep this content'
+  );
+  const archived = await readdir(
+    join(ws, '.ghostboard/recovery/damaged-canvases')
+  );
+  expect(
+    await readFile(
+      join(ws, '.ghostboard/recovery/damaged-canvases', archived[0]!),
+      'utf8'
+    )
+  ).toBe('{broken');
+  await expect(collectReferencedInstanceIds(ws)).resolves.toContain(
+    'extinst_live'
+  );
+});

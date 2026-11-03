@@ -15,5 +15,6 @@ export interface RpcContext {
   pluginManagement: PluginManagementService;
   pluginPermissions: PluginPermissionGate;
   pluginStartupGuard: PluginStartupGuard | undefined;
+  resolvePluginCaller: (token: string) => string | null;
   wsPath: string;
 }

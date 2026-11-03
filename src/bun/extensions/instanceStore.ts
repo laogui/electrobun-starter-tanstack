@@ -19,6 +19,7 @@ import {
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import { isPluginId } from '../../shared/plugins/ids';
 import { atomicWrite } from '../atomicWrite';
+import { withNoteWorkspace } from '../noteTransactions';
 import { notifyContentChanged } from '../plugins/contentEvents';
 import { resolveWorkspaceSubpath } from '../workspacePaths';
 
@@ -184,7 +185,7 @@ function parsedToError(
   return 'error' in parsed;
 }
 
-export async function createExtensionInstance(
+async function createExtensionInstanceUnlocked(
   wsPath: string,
   input: {
     appVersion: string;
@@ -223,7 +224,7 @@ export async function createExtensionInstance(
   return record;
 }
 
-export async function loadExtensionInstance(
+async function loadExtensionInstanceUnlocked(
   wsPath: string,
   instanceId: string
 ): Promise<ParsedExtensionInstance | ExtensionInstanceLoadError> {
@@ -249,7 +250,7 @@ export async function loadExtensionInstance(
   }
 }
 
-export async function loadExtensionInstances(
+async function loadExtensionInstancesUnlocked(
   wsPath: string,
   instanceIds: string[]
 ): Promise<
@@ -258,11 +259,16 @@ export async function loadExtensionInstances(
   const uniqueIds = [...new Set(instanceIds)];
   const results = await Promise.all(
     uniqueIds.map(async (id) => {
-      const loaded = await loadExtensionInstance(wsPath, id);
-      if (parsedToError(loaded)) {
-        return [id, loaded] as const;
+      try {
+        const loaded = await loadExtensionInstance(wsPath, id);
+        if (parsedToError(loaded)) {
+          return [id, loaded] as const;
+        }
+        return [id, loaded.record] as const;
+      } catch (error) {
+        console.warn(`[extensions] Failed to load ${id}:`, error);
+        return [id, { id, error: 'corrupted' as const }] as const;
       }
-      return [id, loaded.record] as const;
     })
   );
   return Object.fromEntries(results);
@@ -288,7 +294,7 @@ function newestMigrationByInstance(
   return [...newest.values()];
 }
 
-export async function pluginMigrationBackupSummary(
+async function pluginMigrationBackupSummaryUnlocked(
   wsPath: string,
   pluginId: string
 ): Promise<PluginMigrationBackupSummary> {
@@ -318,7 +324,7 @@ export async function pluginMigrationBackupSummary(
   };
 }
 
-export async function restorePluginMigrationBackups(
+async function restorePluginMigrationBackupsUnlocked(
   wsPath: string,
   pluginId: string
 ): Promise<{ restored: number; skipped: number }> {
@@ -355,7 +361,7 @@ export async function restorePluginMigrationBackups(
   return { restored, skipped };
 }
 
-export async function saveExtensionInstance(
+async function saveExtensionInstanceUnlocked(
   wsPath: string,
   parsed: ParsedExtensionInstance
 ): Promise<void> {
@@ -383,7 +389,7 @@ export async function saveExtensionInstance(
   });
 }
 
-export async function updateExtensionInstance(
+async function updateExtensionInstanceUnlocked(
   wsPath: string,
   input: {
     appVersion: string;
@@ -433,7 +439,7 @@ export async function updateExtensionInstance(
   return next;
 }
 
-export async function cloneExtensionInstance(
+async function cloneExtensionInstanceUnlocked(
   wsPath: string,
   instanceId: string
 ): Promise<ExtensionInstanceRecord | null> {
@@ -452,11 +458,21 @@ export async function cloneExtensionInstance(
       updatedAt: now,
     },
   };
+  if (
+    existsSync(
+      assertWorkspaceInstancePath(
+        wsPath,
+        instanceRelativePath(cloned.record.id)
+      )
+    )
+  ) {
+    throw new Error('Clone id already exists');
+  }
   await saveExtensionInstance(wsPath, cloned);
   return cloned.record;
 }
 
-export async function deleteExtensionInstance(
+async function deleteExtensionInstanceUnlocked(
   wsPath: string,
   instanceId: string
 ): Promise<boolean> {
@@ -480,7 +496,7 @@ export function instanceDir(wsPath: string): string {
   return resolve(wsPath, '.ghostboard', 'extension-instances');
 }
 
-export async function deleteInstancesByCanvasType(
+async function deleteInstancesByCanvasTypeUnlocked(
   wsPath: string,
   canvasTypeId: string
 ): Promise<string[]> {
@@ -509,7 +525,7 @@ export async function deleteInstancesByCanvasType(
   return deleted;
 }
 
-export async function countInstancesByCanvasType(
+async function countInstancesByCanvasTypeUnlocked(
   wsPath: string
 ): Promise<Record<string, number>> {
   const dir = instanceDir(wsPath);
@@ -531,3 +547,57 @@ export async function countInstancesByCanvasType(
   }
   return counts;
 }
+
+export const createExtensionInstance = (
+  ...args: Parameters<typeof createExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => createExtensionInstanceUnlocked(...args));
+
+export const loadExtensionInstance = (
+  ...args: Parameters<typeof loadExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => loadExtensionInstanceUnlocked(...args));
+
+export const saveExtensionInstance = (
+  ...args: Parameters<typeof saveExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => saveExtensionInstanceUnlocked(...args));
+
+export const updateExtensionInstance = (
+  ...args: Parameters<typeof updateExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => updateExtensionInstanceUnlocked(...args));
+
+export const cloneExtensionInstance = (
+  ...args: Parameters<typeof cloneExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => cloneExtensionInstanceUnlocked(...args));
+
+export const deleteExtensionInstance = (
+  ...args: Parameters<typeof deleteExtensionInstanceUnlocked>
+) => withNoteWorkspace(args[0], () => deleteExtensionInstanceUnlocked(...args));
+
+export const loadExtensionInstances = (
+  ...args: Parameters<typeof loadExtensionInstancesUnlocked>
+) => withNoteWorkspace(args[0], () => loadExtensionInstancesUnlocked(...args));
+
+export const pluginMigrationBackupSummary = (
+  ...args: Parameters<typeof pluginMigrationBackupSummaryUnlocked>
+) =>
+  withNoteWorkspace(args[0], () =>
+    pluginMigrationBackupSummaryUnlocked(...args)
+  );
+
+export const restorePluginMigrationBackups = (
+  ...args: Parameters<typeof restorePluginMigrationBackupsUnlocked>
+) =>
+  withNoteWorkspace(args[0], () =>
+    restorePluginMigrationBackupsUnlocked(...args)
+  );
+
+export const deleteInstancesByCanvasType = (
+  ...args: Parameters<typeof deleteInstancesByCanvasTypeUnlocked>
+) =>
+  withNoteWorkspace(args[0], () =>
+    deleteInstancesByCanvasTypeUnlocked(...args)
+  );
+
+export const countInstancesByCanvasType = (
+  ...args: Parameters<typeof countInstancesByCanvasTypeUnlocked>
+) =>
+  withNoteWorkspace(args[0], () => countInstancesByCanvasTypeUnlocked(...args));

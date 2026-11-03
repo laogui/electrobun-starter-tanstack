@@ -172,6 +172,7 @@ export async function validateManifestNoteWrites(
   index: Map<string, NoteLocation>
 ): Promise<NoteMetadataChange[]> {
   const changes: NoteMetadataChange[] = [];
+  const conflicts = new Set<string>();
   const candidates = new Map<string, Record<string, unknown>[]>();
   const add = (id: unknown, data: Record<string, unknown>) => {
     if (typeof id !== 'string') {
@@ -226,10 +227,7 @@ export async function validateManifestNoteWrites(
           ]);
         });
         if (new Set(proposals).size > 1) {
-          throw new NoteTransactionError(
-            'revision-conflict',
-            `Conflicting legacy projections for ${id}`
-          );
+          conflicts.add(id);
         }
       }
       continue;
@@ -258,10 +256,8 @@ export async function validateManifestNoteWrites(
             !Number.isSafeInteger(current.revision) ||
             current.revision >= Number.MAX_SAFE_INTEGER))
       ) {
-        throw new NoteTransactionError(
-          'revision-conflict',
-          `Conflicting canvas metadata for ${id}`
-        );
+        conflicts.add(id);
+        continue;
       }
       if (changed && proposed === undefined) {
         changes.push({
@@ -277,6 +273,13 @@ export async function validateManifestNoteWrites(
       }
       proposed = value;
     }
+  }
+  if (conflicts.size) {
+    throw new NoteTransactionError(
+      'revision-conflict',
+      'Canvas note projections conflict',
+      [...conflicts]
+    );
   }
   return changes;
 }

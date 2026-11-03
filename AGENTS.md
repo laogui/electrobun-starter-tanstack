@@ -4,6 +4,14 @@
 
 GhostBoard is a Bun/Electrobun desktop app with a React renderer. Main-process code lives in `src/bun/`, including workspace, search, preview, cleanup, attachments, and built-in templates under `src/bun/templates/<id>/`. Renderer code lives in `src/mainview/`: routes in `routes/`, UI in `components/`, hooks in `hooks/`, state in `store/`, and utilities in `lib/`. Shared markdown helpers are in `src/shared/markdown/`. Test helpers are in `src/test/`, planning docs in `docs/`, and localization files in `messages/`.
 
+## Companion checkout
+
+GhostBoard's backend and official website live in `/Users/laogui/Projects/react-starter-kit/`. Edit that checkout when a change touches the API, database, accounts, billing, licensing server, marketing pages, or the docs site. Read its `AGENTS.md` before editing, and run its own commands from that root.
+
+- `apps/api/` and `db/` are the backend.
+- `apps/web/` is the official site (Astro marketing and docs, served at `https://ghostboard.app`). It is the source of truth for site code. `packages/plugin-docs-site/` in this repo is only the authoring copy of the docs Markdown.
+- `apps/app/` is the signed-in web app in the same checkout.
+
 ## Build, Test, and Development Commands
 
 - `bun install` installs dependencies.

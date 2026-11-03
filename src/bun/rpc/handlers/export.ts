@@ -3,7 +3,7 @@ import {
   buildChecklistWidgetMarkdown,
   collectViewExportRefs,
   copyExportAttachments,
-  EXPORT_DIR_NAME,
+  createMarkdownExportDirectory,
   exportWorkspaceArchiveImpl,
   PNG_DATA_URL_RE,
   pickExportFolder,
@@ -136,7 +136,10 @@ export function createExportHandlers(
       if (scope === 'selected') {
         ids = Array.isArray(noteIds) ? noteIds : [];
         source = `${ids.length} selected note(s)`;
-      } else if (scope === 'view' && viewId) {
+      } else if (scope === 'view') {
+        if (!viewId) {
+          return { success: false, exported: 0, failed: 0 };
+        }
         const config = await loadWorkspaceConfig(wsPath);
         const view = config.views.find((v) => v.id === viewId);
         if (view) {
@@ -146,10 +149,18 @@ export function createExportHandlers(
           ids = refs.noteIds;
           widgetIds = refs.widgetIds;
           source = `Canvas: ${view.name}`;
+        } else {
+          return { success: false, exported: 0, failed: 0 };
         }
-      } else {
+      } else if (scope === 'all') {
         const records = await listNoteRecords(wsPath);
         ids = records.map((record) => record.noteId);
+      } else {
+        return { success: false, exported: 0, failed: 0 };
+      }
+      ids = [...new Set(ids)];
+      if (ids.length === 0 && widgetIds.length === 0) {
+        return { success: false, exported: 0, failed: 0 };
       }
 
       const folder = await pickExportFolder();
@@ -157,7 +168,7 @@ export function createExportHandlers(
         return { canceled: true, exported: 0, failed: 0, success: false };
       }
 
-      const exportDir = resolve(folder, EXPORT_DIR_NAME);
+      const exportDir = await createMarkdownExportDirectory(folder);
       const notesDir = join(exportDir, 'notes');
       const attachmentsDir = join(exportDir, 'attachments');
       const exportedAt = new Date().toISOString();
@@ -309,7 +320,7 @@ export function createExportHandlers(
         filePath: exportDir,
         exported: exportedNotes.length,
         failed: failures.length,
-        success: true,
+        success: failures.length === 0 || exportedNotes.length > 0,
       };
     },
 

@@ -238,6 +238,7 @@ export function ViewSwitcher({
   onCreateNode,
   onExportCanvas,
   onExportCanvasJson,
+  onExportMarkdown,
   onOpenNoteLibrary,
   createMenuOpen,
   setCreateMenuOpen,
@@ -250,6 +251,7 @@ export function ViewSwitcher({
   ) => void;
   onExportCanvas?: () => void;
   onExportCanvasJson?: () => void;
+  onExportMarkdown?: (scope: 'all' | 'selected' | 'view') => void;
   onOpenNoteLibrary?: () => void;
   setCreateMenuOpen: (v: boolean) => void;
 }) {
@@ -703,7 +705,7 @@ export function ViewSwitcher({
             </motion.span>
           </Menu.Trigger>
 
-          {onExportCanvas || onExportCanvasJson ? (
+          {onExportCanvas || onExportCanvasJson || onExportMarkdown ? (
             <Menu.Root>
               <Menu.Trigger
                 aria-label={m.a11y_export_canvas()}
@@ -732,6 +734,28 @@ export function ViewSwitcher({
                         />
                         <span>{m.a11y_export_png()}</span>
                       </Menu.Item>
+                    ) : null}
+                    {onExportMarkdown ? (
+                      <>
+                        <Menu.Item
+                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                          onClick={() => onExportMarkdown('view')}
+                        >
+                          {m.menu_export_canvas_markdown()}
+                        </Menu.Item>
+                        <Menu.Item
+                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                          onClick={() => onExportMarkdown('selected')}
+                        >
+                          {m.menu_export_selected_markdown()}
+                        </Menu.Item>
+                        <Menu.Item
+                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                          onClick={() => onExportMarkdown('all')}
+                        >
+                          {m.menu_export_all_markdown()}
+                        </Menu.Item>
+                      </>
                     ) : null}
                     {onExportCanvasJson ? (
                       <Menu.Item

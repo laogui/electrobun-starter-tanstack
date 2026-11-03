@@ -191,7 +191,15 @@ export class T5HostController extends PluginHostController {
         } else if (body.scenario === 'valid') {
           await writeFile(
             path,
-            'title,text,color\nPublic example,Installed from public HTTPS,blue\nSecond note,Signed and verified,\n'
+            [
+              'title,text,color',
+              'Public example,Installed from public HTTPS,blue',
+              ...Array.from(
+                { length: 100 },
+                (_, index) => `Public note ${index + 2},Signed and verified,`
+              ),
+              '',
+            ].join('\n')
           );
         } else {
           throw new Error('Unknown T5 selection scenario');

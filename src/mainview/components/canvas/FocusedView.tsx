@@ -25,6 +25,7 @@ import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { findSpecByNodeType } from '@/lib/canvasNodeRegistry';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
+import { registerFocusedClose } from '@/lib/focusedCloseRequest';
 import { EASE_OUT_QUINT } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
@@ -39,6 +40,7 @@ import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../../paraglide/messages.js';
+import { absoluteNodeCenter } from '../../../shared/canvasGeometry';
 import { isExtensionInstanceLoadError } from '../../../shared/extensions/instance';
 import { ChecklistFocusedView } from './ChecklistFocusedView';
 import { FocusedNoteBody } from './FocusedNoteBody';
@@ -140,7 +142,7 @@ function domRectForItem(item: FocusedItem): DOMRect {
     typeof document === 'undefined'
       ? null
       : (document.querySelector(
-          `[data-id="${item.id}"]`
+          `[data-id="${CSS.escape(item.id)}"]`
         ) as HTMLElement | null);
   return el?.getBoundingClientRect() ?? item.rect;
 }
@@ -186,6 +188,34 @@ export const FocusedView = ({
   const commitFolderChildData = useCanvasStore((s) => s.commitFolderChildData);
   const nodes = useCanvasStore((s) => s.nodes);
   const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
+  const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
+  const requestDeparture = useCallback(
+    (leave: () => void) => {
+      const before = useCanvasStore.getState();
+      const leaveIfCurrent = () => {
+        const current = useCanvasStore.getState();
+        if (
+          current._canvasGeneration === before._canvasGeneration &&
+          current._focusSession === before._focusSession
+        ) {
+          leave();
+        }
+      };
+      if (saveStatus === 'conflict') {
+        toast.warning(m.note_conflict_close_warning(), {
+          action: {
+            label: m.note_conflict_close_anyway(),
+            onClick: leaveIfCurrent,
+          },
+          duration: 10_000,
+          id: `note-conflict-close-${node.id}`,
+        });
+        return;
+      }
+      leaveIfCurrent();
+    },
+    [node.id, saveStatus]
+  );
   const folderId =
     typeof node.folderId === 'string' ? node.folderId : undefined;
   const noteIdRaw = node.data.noteId;
@@ -348,23 +378,34 @@ export const FocusedView = ({
       if (item.id === node.id && item.folderId === folderId) {
         return;
       }
-      const latestNode = item.folderId
-        ? null
-        : nodes.find((candidate) => candidate.id === item.id);
-      const latestItem = latestNode
-        ? {
-            id: latestNode.id,
-            type: latestNode.type,
-            data: latestNode.data as Record<string, unknown>,
-            rect: rectForNode(latestNode as NodeWithLayout),
-          }
-        : item;
-      setFocusedNode({
-        ...latestItem,
-        rect: domRectForItem(latestItem),
+      requestDeparture(() => {
+        const liveNodes = useCanvasStore.getState().nodes;
+        const parent = item.folderId
+          ? liveNodes.find((candidate) => candidate.id === item.folderId)
+          : undefined;
+        const children = parent?.data.children;
+        const target = item.folderId
+          ? Array.isArray(children)
+            ? (children as FolderChildEntry[]).find(
+                (child) => child.id === item.id
+              )
+            : undefined
+          : liveNodes.find((candidate) => candidate.id === item.id);
+        if (!(target && isFocusableNode(target.type, target.data))) {
+          return;
+        }
+        const latestItem = {
+          ...item,
+          type: target.type,
+          data: target.data,
+          rect: item.folderId
+            ? item.rect
+            : rectForNode(target as NodeWithLayout),
+        };
+        setFocusedNode({ ...latestItem, rect: domRectForItem(latestItem) });
       });
     },
-    [nodes, setFocusedNode, node.id, folderId]
+    [requestDeparture, setFocusedNode, node.id, folderId]
   );
 
   const isText =
@@ -454,7 +495,6 @@ export const FocusedView = ({
     ? 'bg-white/10 text-zinc-300 hover:bg-white/20'
     : 'bg-black/5 text-zinc-600 hover:bg-black/10 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20';
 
-  const [saveStatus, setSaveStatus] = useState<BlockNoteSaveStatus>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const didToastOnErrorRef = useRef(false);
   const shouldReduceMotion = useReducedMotion();
@@ -574,8 +614,10 @@ export const FocusedView = ({
         rfNode.height ??
         numericSize(rfNode.style?.height) ??
         DEFAULT_NAV_RECT_HEIGHT;
-      const cx = rfNode.position.x + w / 2;
-      const cy = rfNode.position.y + h / 2;
+      const { x: cx, y: cy } = absoluteNodeCenter(
+        { ...rfNode, position: rfNode.position, width: w, height: h },
+        getNodes()
+      );
       const vp = getViewport();
       const screenL = -vp.x / vp.zoom;
       const screenT = -vp.y / vp.zoom;
@@ -590,19 +632,13 @@ export const FocusedView = ({
   }, [getNodes, getViewport, setCenter, folderId, node.id, onClose]);
 
   const handleClose = useCallback(() => {
-    if (saveStatus === 'conflict') {
-      toast.warning(m.note_conflict_close_warning(), {
-        action: {
-          label: m.note_conflict_close_anyway(),
-          onClick: finishClose,
-        },
-        duration: 10_000,
-        id: `note-conflict-close-${node.id}`,
-      });
-      return;
-    }
-    finishClose();
-  }, [finishClose, node.id, saveStatus]);
+    requestDeparture(finishClose);
+  }, [finishClose, requestDeparture]);
+
+  useEffect(
+    () => registerFocusedClose(node.id, handleClose),
+    [node.id, handleClose]
+  );
 
   useBodyScrollLock();
 
@@ -637,6 +673,7 @@ export const FocusedView = ({
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopImmediatePropagation();
         handleClose();
       }
     };

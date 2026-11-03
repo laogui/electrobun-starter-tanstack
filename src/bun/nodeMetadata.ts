@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-
 import { atomicWrite } from './atomicWrite';
 import { listFilesRecursive, loadNote } from './notes';
+import { withNoteWorkspace } from './noteTransactions';
 import { readJsonOrEmpty } from './persistence/corruptFile';
 
 export interface NodeMetadata {
@@ -20,6 +20,7 @@ export type NodeMetadataMap = Record<string, NodeMetadata>;
 export interface NodeMetadataDocument {
   entries: NodeMetadataMap;
   legacyTagsMigrated?: boolean;
+  legacyWidgetTagCopies?: string[];
   schema: 'ghostboard-node-metadata/v1';
 }
 
@@ -43,6 +44,7 @@ interface WorkspaceState {
   entries: NodeMetadataMap;
   flushTimer: ReturnType<typeof setTimeout> | null;
   legacyTagsMigrated: boolean;
+  legacyWidgetTagCopies: Set<string>;
   loaded: boolean;
   /** Shared first load so concurrent callers never race to replace `entries`. */
   loading: Promise<NodeMetadataMap> | null;
@@ -64,6 +66,7 @@ function getState(wsPath: string): WorkspaceState {
       loaded: false,
       loading: null,
       legacyTagsMigrated: false,
+      legacyWidgetTagCopies: new Set(),
       writing: Promise.resolve(),
     };
     states.set(wsPath, s);
@@ -236,10 +239,16 @@ function parseNodeMetadataDocument(value: unknown): NodeMetadataDocument {
     throw new Error('node-metadata.json is not a JSON object.');
   }
   const entries = (value as Partial<NodeMetadataDocument>).entries;
+  const rawCopies = (value as Partial<NodeMetadataDocument>)
+    .legacyWidgetTagCopies;
+  const legacyWidgetTagCopies = Array.isArray(rawCopies)
+    ? rawCopies.filter((key): key is string => typeof key === 'string')
+    : [];
   if (entries === undefined) {
     return {
       schema: SCHEMA,
       entries: {},
+      legacyWidgetTagCopies,
       legacyTagsMigrated:
         (value as Partial<NodeMetadataDocument>).legacyTagsMigrated === true,
     };
@@ -257,6 +266,7 @@ function parseNodeMetadataDocument(value: unknown): NodeMetadataDocument {
   return {
     schema: SCHEMA,
     entries: cleaned,
+    legacyWidgetTagCopies,
     legacyTagsMigrated:
       (value as Partial<NodeMetadataDocument>).legacyTagsMigrated === true,
   };
@@ -276,6 +286,9 @@ async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
     parseNodeMetadataDocument
   );
   if (read.kind === 'ok') {
+    getState(wsPath).legacyWidgetTagCopies = new Set(
+      read.value.legacyWidgetTagCopies
+    );
     getState(wsPath).legacyTagsMigrated =
       read.value.legacyTagsMigrated === true;
     return read.value.entries;
@@ -288,7 +301,7 @@ async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
   return {};
 }
 
-async function writeToDisk(wsPath: string): Promise<void> {
+async function writeToDiskUnlocked(wsPath: string): Promise<void> {
   const s = getState(wsPath);
   if (!s.loaded) {
     // Never write a map that was not loaded from disk first.
@@ -301,6 +314,7 @@ async function writeToDisk(wsPath: string): Promise<void> {
         schema: SCHEMA,
         entries: s.entries,
         legacyTagsMigrated: s.legacyTagsMigrated,
+        legacyWidgetTagCopies: [...s.legacyWidgetTagCopies],
       };
       await atomicWrite(resolvePath(wsPath), JSON.stringify(doc, null, 2));
     });
@@ -500,6 +514,30 @@ export async function moveNodeMetadataKey(
   delete entries[fromId];
   scheduleFlush(wsPath);
   return { updated: 1 };
+}
+
+/** A widget may have several placements. Retain its source for all of them,
+ * and remember each copy so clearing a migrated tag stays cleared on reload. */
+export async function copyLegacyWidgetTagsOnce(
+  wsPath: string,
+  widgetId: string,
+  nodeId: string
+): Promise<void> {
+  if (!(widgetId && nodeId) || widgetId === nodeId) {
+    return;
+  }
+  const entries = await loadAllMetadata(wsPath);
+  const state = getState(wsPath);
+  const key = JSON.stringify([widgetId, nodeId]);
+  if (state.legacyWidgetTagCopies.has(key) || !entries[widgetId]) {
+    return;
+  }
+  entries[nodeId] = mergeMetadataForMovedKey(
+    entries[widgetId],
+    entries[nodeId]
+  );
+  state.legacyWidgetTagCopies.add(key);
+  scheduleFlush(wsPath);
 }
 
 /** Cancel pending flush and write immediately. Use on shutdown / in tests. */
@@ -828,3 +866,6 @@ export async function deleteTagEverywhere(
   }
   return { updated };
 }
+
+const writeToDisk = (wsPath: string) =>
+  withNoteWorkspace(wsPath, () => writeToDiskUnlocked(wsPath));

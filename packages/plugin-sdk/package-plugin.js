@@ -17,6 +17,10 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import {
+  canonicalTreeDigest,
+  comparePluginPaths as comparePaths,
+} from './canonicalDigest.js';
 
 const MAX_ENTRIES = 256;
 const MAX_UNCOMPRESSED_BYTES = 8 * 1024 * 1024;
@@ -26,10 +30,6 @@ const PUBLIC_KEY_PREFIX = 'ed25519-spki:';
 const SIGNATURE_FILE = 'ghostboard-signature.json';
 const SIGNATURE_SCHEMA = 'ghostboard-plugin-signature/v1';
 const SIGNATURE_PAYLOAD_SCHEMA = 'ghostboard-plugin-signature-payload/v1';
-
-function comparePaths(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
 
 function usage() {
   return [
@@ -142,6 +142,9 @@ async function collectPath(root, absolute, files) {
   if (metadata.isDirectory()) {
     const children = (await readdir(absolute)).sort(comparePaths);
     for (const child of children) {
+      if (child === '.git') {
+        continue;
+      }
       await collectPath(root, resolve(absolute, child), files);
     }
     return;
@@ -246,15 +249,9 @@ function authorPublicKey(key) {
 }
 
 function signingTreeDigest(files) {
-  const hash = createHash('sha256');
-  for (const [name, bytes] of files) {
-    if (name === SIGNATURE_FILE) {
-      continue;
-    }
-    hash.update(JSON.stringify([name, bytes.byteLength]));
-    hash.update(bytes);
-  }
-  return hash.digest('hex');
+  return canonicalTreeDigest(
+    new Map([...files].filter(([name]) => name !== SIGNATURE_FILE))
+  );
 }
 
 function signaturePayload(manifest, treeSha256) {

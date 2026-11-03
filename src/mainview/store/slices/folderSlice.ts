@@ -14,6 +14,7 @@ import {
   FOLDER_W,
   findSpecByNodeType,
 } from '@/lib/canvasNodeRegistry';
+import { NOTE_CONTENT_KEYS } from '@/lib/canvasNoteHistory';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { getNodeSize } from '@/lib/collision';
 import * as m from '../../../paraglide/messages.js';
@@ -198,7 +199,19 @@ export const createFolderSlice: StateCreator<
   },
 
   commitFolderChildData: (folderId, childId, updates) => {
-    get().saveSnapshot();
+    const children = get().nodes.find((node) => node.id === folderId)?.data
+      .children as FolderChildEntry[] | undefined;
+    const child = children?.find((item) => item.id === childId);
+    if (
+      !(
+        (child?.noteId || child?.data.noteId) &&
+        Object.keys(updates).every((key) =>
+          (NOTE_CONTENT_KEYS as readonly string[]).includes(key)
+        )
+      )
+    ) {
+      get().saveSnapshot();
+    }
     get().updateFolderChildData(folderId, childId, updates);
   },
 

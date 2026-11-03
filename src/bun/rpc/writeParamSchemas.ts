@@ -16,6 +16,21 @@ import { AI_PROVIDERS } from '../../shared/ai/providerConfig';
 const id = z.string().min(1).max(512);
 const record = z.record(z.string(), z.unknown());
 const finite = z.number();
+const folderChildren = z
+  .array(z.object({ id, type: id.optional(), data: record }).loose())
+  .superRefine((children, ctx) => {
+    const ids = new Set<string>();
+    for (const [index, child] of children.entries()) {
+      if (ids.has(child.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index, 'id'],
+          message: 'Duplicate folder child',
+        });
+      }
+      ids.add(child.id);
+    }
+  });
 
 const manifestNode = z
   .object({
@@ -25,7 +40,18 @@ const manifestNode = z
     position: z.object({ x: finite, y: finite }).loose(),
     type: z.string().optional(),
   })
-  .loose();
+  .loose()
+  .superRefine((node, ctx) => {
+    if (node.type !== 'folder' || node.data.children === undefined) {
+      return;
+    }
+    const parsed = folderChildren.safeParse(node.data.children);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        ctx.addIssue({ ...issue, path: ['data', 'children', ...issue.path] });
+      }
+    }
+  });
 
 const manifestEdge = z
   .object({
@@ -60,11 +86,25 @@ const nodeMetadata = z
 const presentation = record;
 
 export const RPC_WRITE_PARAM_SCHEMAS = {
+  pluginRemove: z.object({
+    pluginId: id,
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
+  quarantineDamagedTrash: z.object({ trashId: id, token: id }),
   restoreCanvasSnapshot: z.object({
     name: id,
-    nodes: z.array(manifestNode.extend({ type: id })),
+    nodes: z.array(manifestNode.safeExtend({ type: id })),
     edges: z.array(manifestEdge),
     workspacePath: z.string().optional(),
+  }),
+  finishCanvasClones: z.object({
+    tokens: z.array(id).max(1000),
+    liveReferences: z.array(id),
+  }),
+  resolveTransactionRecovery: z.object({
+    id: z.enum(['canvas', 'notes']),
+    token: id,
+    action: z.enum(['retry', 'quarantine']),
   }),
   confirmCanvasRecovery: z.object({ viewId: id, token: id }),
   saveManifest: z
@@ -110,7 +150,7 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
     .object({
       blocks: z.array(z.unknown()),
       frontmatter: record,
-      markdown: z.string(),
+      markdown: z.string().optional(),
       noteId: id,
       revision: z.number().int().optional(),
     })
@@ -125,14 +165,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
       existingFile: z.string().optional(),
       kind: attachmentKind.optional(),
       mimeType: z.string().optional(),
-      suggestedName: z.string().optional(),
-    })
-    .loose(),
-  saveAttachmentFile: z
-    .object({
-      kind: attachmentKind.optional(),
-      mimeType: z.string().optional(),
-      sourcePath: z.string().min(1),
       suggestedName: z.string().optional(),
     })
     .loose(),
@@ -214,7 +246,32 @@ export function withRpcWriteValidation<T extends HandlerMap>(handlers: T): T {
         assertRpcWriteParams(method, params);
       } catch (error) {
         console.warn(`[rpc] ${(error as Error).message}`);
-        return Promise.reject(error);
+        const failure = {
+          success: false,
+          error: 'invalid-params',
+          method,
+          message: (error as Error).message,
+        };
+        // Methods with collection/count replies still return their normal empty shape.
+        if (method === 'finishCanvasClones') {
+          return Promise.resolve({ ...failure, removed: [], retained: [] });
+        }
+        if (method === 'deleteUnlinkedNotes') {
+          return Promise.resolve({
+            ...failure,
+            deleted: [],
+            skipped: Array.isArray((params as { files?: unknown })?.files)
+              ? (params as { files: string[] }).files
+              : [],
+          });
+        }
+        if (method === 'renameTag' || method === 'deleteTag') {
+          return Promise.resolve({ ...failure, updated: 0 });
+        }
+        if (method === 'extensionInstanceClearType') {
+          return Promise.resolve({ ...failure, deleted: 0 });
+        }
+        return Promise.resolve(failure);
       }
       return handler(params, ...rest);
     };

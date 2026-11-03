@@ -164,6 +164,7 @@ export const LinkContent = ({
     return (
       <div
         className="size-full overflow-y-auto bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+        data-surface-theme={isColorDark(link.color) ? 'dark' : 'light'}
         style={colorToStyle(link.color)}
       >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-8 pt-10 pb-12">
@@ -278,6 +279,7 @@ export const LinkContent = ({
   return (
     <div
       className="flex size-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
+      data-surface-theme={isColorDark(link.color) ? 'dark' : 'light'}
       style={colorToStyle(link.color)}
     >
       {youtubeVideo ? (
@@ -331,7 +333,7 @@ export const LinkContent = ({
         >
           <LinkFaviconBadge faviconUrl={link.faviconUrl} />
           {link.unfurlStatus === 'loading' ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-400 text-sm">
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-500 text-sm dark:text-neutral-400">
               <Loader2 className="shrink-0 animate-spin" size={16} />
               <span>{m.link_preview_loading()}</span>
             </div>

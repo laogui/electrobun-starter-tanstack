@@ -262,3 +262,48 @@ describe('unified undo across canvas, widget and extension stores', () => {
     expect(widgetTitle()).toBe('from-disk');
   });
 });
+
+it('canvas undo preserves current shared note body and revision outside snapshots', () => {
+  useCanvasStore.getState().reset();
+  useCanvasStore.getState().hydrate([card('a', 'Initial')], []);
+  useCanvasStore.setState({
+    nodes: [
+      {
+        ...card('a', 'Initial'),
+        data: {
+          noteId: 'shared',
+          title: 'Initial',
+          content: 'Original',
+          blocknoteRevision: 1,
+        },
+      },
+    ],
+  });
+  useCanvasStore.getState().saveSnapshot();
+  useCanvasStore.setState({
+    nodes: [
+      {
+        ...card('a', 'Current'),
+        position: { x: 100, y: 100 },
+        data: {
+          noteId: 'shared',
+          title: 'Current',
+          content: 'New body',
+          blocknoteRevision: 2,
+        },
+      },
+    ],
+  });
+  expect(
+    useCanvasStore.getState()._undoRedo.past[0]?.nodes[0]?.data
+  ).not.toHaveProperty('content');
+  useCanvasStore.getState().undo();
+  expect(useCanvasStore.getState().nodes[0]?.position).toEqual({ x: 0, y: 0 });
+  expect(useCanvasStore.getState().nodes[0]?.data).toMatchObject({
+    title: 'Current',
+    content: 'New body',
+    blocknoteRevision: 2,
+  });
+  useCanvasStore.getState().redo();
+  expect(useCanvasStore.getState().nodes[0]?.data.content).toBe('New body');
+});

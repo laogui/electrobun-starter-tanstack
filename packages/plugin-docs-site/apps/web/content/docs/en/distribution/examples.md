@@ -9,12 +9,12 @@ The same four templates that `create-ghostboard-plugin` generates are also publi
 
 | Example | Contributes | Package URL |
 | --- | --- | --- |
-| Hello (JavaScript) | Command + DOM panel | `https://dl.ghostboard.app/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin` |
-| React Hello | Command + React panel | `https://dl.ghostboard.app/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin` |
-| CSV Importer | Mapped and segmented importer | `https://dl.ghostboard.app/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin` |
-| Combined | Command, panel, canvas type and importer | `https://dl.ghostboard.app/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin` |
+| Hello (JavaScript) | Command + DOM panel | `https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin` |
+| React Hello | Command + React panel | `https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin` |
+| CSV Importer | Mapped and segmented importer | `https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin` |
+| Combined | Command, panel, canvas type and importer | `https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin` |
 
-Each example's release document is at `https://dl.ghostboard.app/plugins/examples/<id>/releases.json`, and the manifest `update.url` points there. `example.hello` publishes both `0.1.0` and `0.1.1` so that installing the first URL and checking for updates exercises a real signed update. Digests are listed in `https://dl.ghostboard.app/plugins/examples/index.json` and match the archives you get from running `bun run package` on an unmodified template of the same SDK version.
+Each example's release document is at `https://ghostboard.21blog.com/plugins/examples/<id>/releases.json`, and the manifest `update.url` points there. `example.hello` publishes both `0.1.0` and `0.1.1` so that installing the first URL and checking for updates exercises a real signed update. The SHA-256 values in `https://ghostboard.21blog.com/plugins/examples/index.json` identify the exact published signed archives. Changes to author keys, manifest metadata or build inputs produce different package digests.
 
 ## Try the update flow
 

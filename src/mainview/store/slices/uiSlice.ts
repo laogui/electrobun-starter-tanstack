@@ -7,6 +7,8 @@ import type {
 } from '../canvasStore';
 
 export interface UiSlice {
+  /** Changes on focus identity transitions, including close and reopen. */
+  _focusSession: number;
   /**
    * Active tag filters (OR semantics, case-insensitive). When non-empty,
    * cards that do not carry at least one of these tags are dimmed on the
@@ -69,6 +71,7 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   set,
   get
 ) => ({
+  _focusSession: 0,
   focusedNode: null,
   focusedFolder: null,
   createMenuOpen: false,
@@ -153,7 +156,15 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   },
 
   setFocusedNode: (v) => {
-    set({ focusedNode: v });
+    set((s) => ({
+      focusedNode: v,
+      _focusSession:
+        s.focusedNode?.id !== v?.id ||
+        s.focusedNode?.folderId !== v?.folderId ||
+        Boolean(s.focusedNode) !== Boolean(v)
+          ? s._focusSession + 1
+          : s._focusSession,
+    }));
   },
 
   setFocusedFolder: (v) => {

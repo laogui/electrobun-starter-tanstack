@@ -19,6 +19,7 @@ export function createPluginsHandlers(
   | 'pluginCancelInstall'
   | 'pluginEnable'
   | 'pluginDisable'
+  | 'pluginRemove'
   | 'pluginRollback'
   | 'pluginRestoreMigrationBackup'
   | 'pluginSafeModePrepareNormalStart'
@@ -170,6 +171,16 @@ export function createPluginsHandlers(
       }
     },
 
+    pluginRemove: async ({ digest, pluginId }) => {
+      try {
+        await pluginManagement.remove({ digest, pluginId });
+        pluginFiles.revokePlugin(pluginId);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: pluginInstallErrorMessage(error) };
+      }
+    },
+
     pluginRestoreMigrationBackup: async ({ pluginId }) => {
       try {
         return {
@@ -206,6 +217,14 @@ export function createPluginsHandlers(
 
     pluginFilesPick: async (request) => {
       try {
+        const validCaller = () =>
+          typeof request.hostToken === 'string' &&
+          ctx.resolvePluginCaller?.(request.hostToken) === request.pluginId;
+        if (!validCaller()) {
+          throw new Error(
+            'File picker caller credential does not match this plugin.'
+          );
+        }
         pluginFiles.validateContext(request);
         const kind = request.kind ?? 'file';
         if (kind === 'directory' && request.multiple) {
@@ -244,6 +263,19 @@ export function createPluginsHandlers(
         const paths = selected.filter(Boolean);
         if (paths.length === 0) {
           return { success: false, cancelled: true };
+        }
+        if (
+          !(
+            validCaller() &&
+            (await pluginManagement.list()).some(
+              (plugin) =>
+                plugin.pluginId === request.pluginId &&
+                plugin.enabled &&
+                plugin.status === 'stored'
+            )
+          )
+        ) {
+          throw new Error('Plugin was disabled while choosing files.');
         }
         return {
           success: true,
@@ -302,6 +334,9 @@ export function createPluginsHandlers(
         return { success: false };
       }
       await pluginPermissions.revoke(pluginId, permission);
+      if (permission === undefined || permission.startsWith('files.')) {
+        pluginFiles.revokePlugin(pluginId);
+      }
       return { success: true };
     },
   };

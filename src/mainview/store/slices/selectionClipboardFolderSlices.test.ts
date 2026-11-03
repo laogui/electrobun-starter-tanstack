@@ -24,8 +24,11 @@ vi.mock('@/lib/rpc', async (importOriginal) => ({
 vi.mock('../canvas/cloneReferences', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../canvas/cloneReferences')>()),
   cloneWidgetReferences: vi.fn(async (nodes: Node[]) => nodes),
+  finishCreatedClones: vi.fn(async () => undefined),
 }));
-const { cloneWidgetReferences } = await import('../canvas/cloneReferences');
+const { cloneWidgetReferences, finishCreatedClones } = await import(
+  '../canvas/cloneReferences'
+);
 
 const { rpcDeleteNote, rpcDeleteWidget } = await import('@/lib/rpc');
 const { useCanvasStore } = await import('@/store/canvasStore');
@@ -368,6 +371,33 @@ describe('asynchronous clipboard integrity', () => {
     finish([card('late', 0, 0)]);
     await pending;
     expect(state().nodes.map((node) => node.id)).toEqual(['replacement']);
+    expect(state().canUndo()).toBe(false);
+  });
+
+  it('settles clones created before a canceled paste without inserting them or reserving history', async () => {
+    let finish!: (nodes: Node[]) => void;
+    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+      (_nodes, onCreated) => {
+        onCreated?.('owned-clone');
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      }
+    );
+    state().copySelected();
+    const pending = state().pasteClipboard();
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    state().setActiveView('other');
+    state().hydrate([], []);
+    finish([
+      card('copy', 0, 0, { type: 'widget', data: { widgetId: 'owned-clone' } }),
+    ]);
+    await pending;
+    expect(finishCreatedClones).toHaveBeenCalledWith(
+      ['owned-clone'],
+      expect.objectContaining({ activeViewId: 'other' })
+    );
+    expect(state().nodes).toEqual([]);
     expect(state().canUndo()).toBe(false);
   });
 

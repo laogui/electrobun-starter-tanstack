@@ -261,7 +261,13 @@ export async function runT2HistoryProbe() {
       );
       const conflictNote = await app.content.get(NOTE_ID);
       const loaded = await rpcLoadBlockNote(NOTE_ID);
-      if (!(conflictNote?.revision && loaded.success)) {
+      if (
+        !(
+          conflictNote?.revision &&
+          loaded.success &&
+          Array.isArray(loaded.blocks)
+        )
+      ) {
         throw new Error('History note missing before outside edit');
       }
       const outside = await rpcSaveBlockNote(

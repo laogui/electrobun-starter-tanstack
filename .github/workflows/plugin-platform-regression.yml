@@ -23,7 +23,7 @@ on:
       examples_base_url:
         description: Public HTTPS base of the published example packages (T5)
         type: string
-        default: https://dl.ghostboard.app/plugins/examples
+        default: https://ghostboard.21blog.com/plugins/examples
       run_t5:
         description: Run the T5 public-HTTPS probe (requires published examples)
         type: boolean

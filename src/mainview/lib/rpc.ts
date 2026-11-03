@@ -1,3 +1,7 @@
+import type { Electroview } from 'electrobun/view';
+import { toast } from 'sonner';
+import type { CanvasRPC } from '../../bun/rpc/types';
+import * as m from '../../paraglide/messages.js';
 import type {
   AIConnectionSettings,
   AIProvider,
@@ -8,6 +12,11 @@ import type {
   BlockNoteSaveResult,
   CanvasSaveResult,
 } from '../../shared/persistence';
+import {
+  RPC_MAX_WAIT_MS,
+  withRpcErrorFeedback,
+  withRpcRequestTimeouts,
+} from './rpcErrorFeedback';
 /**
  * RPC client for communicating with the Bun main process.
  * Returns null when running outside Electrobun (e.g., Vite dev server only).
@@ -64,6 +73,11 @@ import type {
 } from '../../shared/support/reports';
 import type { YouTubeVideo } from '../../shared/youtube';
 
+type RendererRPC = ReturnType<typeof Electroview.defineRPC<CanvasRPC>>;
+interface ElectrobunClient {
+  rpc?: RendererRPC;
+}
+
 // Persist the init promise on `globalThis` so Vite HMR re-evaluating this
 // module does NOT spawn a second Electroview. A duplicate Electroview opens
 // a second WebSocket to Bun; Bun's socketMap[webviewId] then points at the
@@ -73,7 +87,10 @@ import type { YouTubeVideo } from '../../shared/youtube';
 // dangling forever.
 declare global {
   // eslint-disable-next-line no-var
-  var __ghostboardInitPromise: Promise<any> | null | undefined;
+  var __ghostboardInitPromise:
+    | Promise<ElectrobunClient | null>
+    | null
+    | undefined;
   // eslint-disable-next-line no-var
   var __ghostboardNotElectrobun: boolean | undefined;
 }
@@ -87,7 +104,7 @@ export interface LicenseInfo {
   key?: string;
 }
 
-async function initElectrobun() {
+async function initElectrobun(): Promise<ElectrobunClient | null> {
   if ((globalThis as any).__electrobunWebviewId === undefined) {
     console.warn(
       '[persistence] Not running inside Electrobun — persistence disabled'
@@ -100,8 +117,8 @@ async function initElectrobun() {
     const Electrobun = mod.default;
     const { Electroview } = mod;
 
-    const rpc = Electroview.defineRPC({
-      maxRequestTime: Number.POSITIVE_INFINITY,
+    const rpc = Electroview.defineRPC<CanvasRPC>({
+      maxRequestTime: RPC_MAX_WAIT_MS,
       handlers: {
         requests: {
           // Sent by the main process right before quitting so the debounced
@@ -116,7 +133,7 @@ async function initElectrobun() {
           // canvasShowMinimap + canvasSnapToGrid + autoSaveInterval). Forward everything so
           // listeners can react without a second round-trip through
           // `rpcGetSettings`.
-          settingsUpdated: (settings: Record<string, unknown>) => {
+          settingsUpdated: (settings) => {
             globalThis.dispatchEvent(
               new CustomEvent('settings-updated', {
                 detail: settings,
@@ -148,11 +165,26 @@ async function initElectrobun() {
           trashUpdated: () => {
             globalThis.dispatchEvent(new CustomEvent('trash-updated'));
           },
-        } as any,
+        },
       },
     });
 
-    return new Electrobun.Electroview({ rpc });
+    const instance = new Electrobun.Electroview({ rpc });
+    if (instance.rpc?.request) {
+      instance.rpc.request = withRpcErrorFeedback(
+        withRpcRequestTimeouts(instance.rpc.request, () =>
+          toast.error(m.toast_rpc_timeout(), {
+            id: 'rpc-timeout',
+            duration: 10_000,
+          })
+        ),
+        (method) =>
+          toast.error(m.toast_rpc_invalid_params({ method }), {
+            id: `rpc-invalid-${method}`,
+          })
+      );
+    }
+    return instance;
   } catch (error) {
     console.warn('[persistence] Failed to initialize Electrobun RPC:', error);
     return null;
@@ -186,16 +218,48 @@ export interface LoadCanvasResponse {
   backupPath?: string;
   edges: any[];
   extensionInstances?: Record<string, any>;
-  nodes: any[];
   /**
    * Optional: set by the main process when the manifest was unreadable and
    * this payload came from a backup (e.g. `.bak`, `.pre-topic`).
    */
+  loadIssues?: string[];
+  nodes: any[];
   recoveredFrom?: string;
   recoveryToken?: string;
   widgets?: Record<string, any>;
 }
 
+export async function rpcListCanvasDataDiagnostics(): Promise<
+  import('../../bun/dataDiagnostics').CanvasDataDiagnostic[]
+> {
+  const eb = await getElectrobun();
+  return eb?.rpc ? eb.rpc.request.listCanvasDataDiagnostics({}) : [];
+}
+export async function rpcQuarantineDamagedTrash(
+  trashId: string,
+  token: string
+) {
+  const eb = await getElectrobun();
+  return eb?.rpc
+    ? eb.rpc.request.quarantineDamagedTrash({ trashId, token })
+    : { success: false };
+}
+export async function rpcListTransactionRecovery(): Promise<
+  import('../../shared/transactionRecovery').TransactionRecoveryEntry[]
+> {
+  const eb = await getElectrobun();
+  return eb?.rpc ? eb.rpc.request.listTransactionRecovery({}) : [];
+}
+export async function rpcResolveTransactionRecovery(
+  id: 'canvas' | 'notes',
+  token: string,
+  action: 'retry' | 'quarantine'
+): Promise<{ success: boolean; archivedFile?: string }> {
+  const eb = await getElectrobun();
+  return eb?.rpc
+    ? eb.rpc.request.resolveTransactionRecovery({ id, token, action })
+    : { success: false };
+}
 export async function rpcReadCanvasRecoveryGraph(viewId: string) {
   const eb = await getElectrobun();
   return eb?.rpc ? eb.rpc.request.readCanvasRecoveryGraph({ viewId }) : null;
@@ -243,11 +307,12 @@ export async function rpcSaveManifest(
   if (!eb?.rpc) {
     return { success: false };
   }
+  const requests = eb.rpc.request;
   // Prefetch uses this RPC loader; defer the reverse dependency until a write.
   const { withBlockNoteSave } = await import('./blockNotePrefetch');
   const result = await withBlockNoteSave<CanvasSaveResult>(
     collectNoteReferences(nodes),
-    () => eb.rpc.request.saveManifest({ viewId, nodes, edges })
+    () => requests.saveManifest({ viewId, nodes, edges })
   );
   if (result.success && result.noteChanges?.length) {
     const [
@@ -288,12 +353,35 @@ export async function rpcCreateWidget(kind: WidgetKind, title?: string) {
   return eb.rpc.request.createWidget({ kind, title });
 }
 
+const pendingCloneTokens = new Map<string, string>();
+export async function rpcFinishCanvasClones(
+  ids: string[],
+  liveReferences: string[]
+) {
+  const eb = await getElectrobun();
+  const tokens = ids.flatMap((id) => pendingCloneTokens.get(id) ?? []);
+  if (!eb?.rpc || tokens.length === 0) {
+    return { removed: [], retained: [] };
+  }
+  const result = await eb.rpc.request.finishCanvasClones({
+    tokens,
+    liveReferences,
+  });
+  for (const id of ids) {
+    pendingCloneTokens.delete(id);
+  }
+  return result;
+}
 export async function rpcCloneWidget(widgetId: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false as const };
   }
-  return eb.rpc.request.cloneWidget({ widgetId });
+  const result = await eb.rpc.request.cloneWidget({ widgetId });
+  if (result.success && result.cloneToken) {
+    pendingCloneTokens.set(result.widget.id, result.cloneToken);
+  }
+  return result;
 }
 
 export async function rpcSaveWidget(widget: WidgetRecord) {
@@ -427,6 +515,21 @@ export async function rpcDisablePlugin(input: {
   return result;
 }
 
+export async function rpcRemovePlugin(input: {
+  digest: string;
+  pluginId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false, error: 'Plugin management is unavailable.' };
+  }
+  const result = await eb.rpc.request.pluginRemove(input);
+  if (result?.success) {
+    globalThis.dispatchEvent(new Event('plugins-changed'));
+  }
+  return result;
+}
+
 export async function rpcRollbackPlugin(input: {
   digest: string;
   pluginId: string;
@@ -466,6 +569,26 @@ export async function rpcPickPluginFiles(
     return { success: false, error: 'Plugin file service is unavailable.' };
   }
   return eb.rpc.request.pluginFilesPick(request);
+}
+
+export async function rpcListPluginPermissions(): Promise<
+  import('../../bun/plugins/permissions').PluginPermissionGrant[]
+> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return [];
+  }
+  return (await eb.rpc.request.pluginPermissionsList({})).grants ?? [];
+}
+export async function rpcRevokePluginPermission(
+  pluginId: string,
+  permission?: string
+): Promise<{ success: boolean }> {
+  const eb = await getElectrobun();
+  if (!eb?.rpc) {
+    return { success: false };
+  }
+  return eb.rpc.request.pluginPermissionsRevoke({ pluginId, permission });
 }
 
 export async function rpcReadPluginFileText(
@@ -592,7 +715,11 @@ export async function rpcCloneExtensionInstance(
   if (!eb?.rpc) {
     return { success: false };
   }
-  return eb.rpc.request.extensionInstanceClone({ instanceId });
+  const result = await eb.rpc.request.extensionInstanceClone({ instanceId });
+  if (result.success && result.cloneToken) {
+    pendingCloneTokens.set(result.record.id, result.cloneToken);
+  }
+  return result;
 }
 
 export async function rpcScheduleExtensionTask(task: {
@@ -648,7 +775,11 @@ export async function rpcListExtensionTasks(instanceId?: string): Promise<{
   return eb.rpc.request.extensionSchedulerList({ instanceId });
 }
 
-export async function rpcLoadBlockNote(noteId: string, workspaceId?: string) {
+export async function rpcLoadBlockNote(
+  noteId: string,
+  workspaceId?: string,
+  includeMarkdown = false
+) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false } as {
@@ -668,24 +799,29 @@ export async function rpcLoadBlockNote(noteId: string, workspaceId?: string) {
       };
     };
   }
-  return eb.rpc.request.loadBlockNote({ noteId, workspaceId });
+  return eb.rpc.request.loadBlockNote({
+    noteId,
+    workspaceId,
+    ...(includeMarkdown ? { includeMarkdown: true } : {}),
+  });
 }
 
 export async function rpcSaveBlockNote(
   noteId: string,
   frontmatter: Record<string, unknown>,
   blocks: unknown[],
-  markdown: string,
+  markdown?: string,
   revision?: number
 ) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false } as BlockNoteSaveResult;
   }
+  const requests = eb.rpc.request;
   // Prefetch uses this RPC loader; defer the reverse dependency until a write.
   const { withBlockNoteSave } = await import('./blockNotePrefetch');
   return withBlockNoteSave<BlockNoteSaveResult>([noteId], () =>
-    eb.rpc.request.saveBlockNote({
+    requests.saveBlockNote({
       noteId,
       frontmatter,
       blocks,
@@ -735,27 +871,6 @@ export async function rpcSaveAttachment(
     return null;
   }
   return eb.rpc.request.saveAttachment({ dataUrl, existingFile, ...options });
-}
-
-/**
- * Copy a file from an absolute OS path into the workspace `attachments/`
- * folder via the Bun main process. Use this for imports whose bytes are
- * already on disk (e.g. via a native file picker) so the renderer never
- * holds the full payload in memory — the data URL path has a 25 MB cap.
- */
-export async function rpcSaveAttachmentFile(
-  sourcePath: string,
-  options?: {
-    kind?: 'audio' | 'file' | 'image' | 'video';
-    mimeType?: string;
-    suggestedName?: string;
-  }
-): Promise<SaveAttachmentResult | null> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.saveAttachmentFile({ sourcePath, ...options });
 }
 
 export async function rpcGenerateVideoThumbnail(
@@ -1034,11 +1149,32 @@ export async function rpcExportTopicOutline(
   return eb.rpc.request.exportTopicOutline({ fileName, markdown });
 }
 
+async function prepareNoteExport(
+  expectedGeneration?: number,
+  expectedViewId?: string
+) {
+  const { useCanvasStore } = await import('@/store/canvasStore');
+  const generation =
+    expectedGeneration ?? useCanvasStore.getState()._canvasGeneration;
+  if (!(await flushRegisteredCanvas())) {
+    throw new Error(m.toast_export_unsaved());
+  }
+  const eb = await getElectrobun();
+  const state = useCanvasStore.getState();
+  if (
+    state._canvasGeneration !== generation ||
+    (expectedViewId && state.activeViewId !== expectedViewId)
+  ) {
+    throw new Error(m.toast_export_failed());
+  }
+  return eb;
+}
+
 export async function rpcExportNoteMarkdown(
   noteId: string,
   options?: { includeFrontmatter?: boolean }
 ) {
-  const eb = await getElectrobun();
+  const eb = await prepareNoteExport();
   if (!eb?.rpc) {
     return null;
   }
@@ -1051,12 +1187,16 @@ export async function rpcExportNoteMarkdown(
 export async function rpcExportNotesMarkdown(
   scope: 'all' | 'selected' | 'view',
   options?: {
+    canvasGeneration?: number;
     viewId?: string;
     noteIds?: string[];
     includeFrontmatter?: boolean;
   }
 ) {
-  const eb = await getElectrobun();
+  const eb = await prepareNoteExport(
+    options?.canvasGeneration,
+    options?.viewId
+  );
   if (!eb?.rpc) {
     return null;
   }
@@ -1205,6 +1345,9 @@ export async function rpcSwitchWorkspace(): Promise<SwitchWorkspaceResult> {
 }
 
 export async function rpcExportWorkspaceArchive(): Promise<ExportArchiveResult> {
+  if (!(await flushRegisteredCanvas())) {
+    throw new Error(m.toast_export_unsaved());
+  }
   const eb = await getElectrobun();
   if (!eb?.rpc) {
     return { success: false };

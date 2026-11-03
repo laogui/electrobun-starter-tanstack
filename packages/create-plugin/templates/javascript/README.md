@@ -22,4 +22,4 @@ The host import map provides `@ghostboard/sdk`. `manifest.json` must remain v2. 
 
 `@ghostboard/sdk/testing` is an in-memory fake host for author unit tests. It does not reproduce GhostBoard layout or CSS, persistence, real RPC, multi-plugin arbitration, package-signature verification, or platform behavior; use a packaged GhostBoard build for those checks.
 
-For coding agents, `AGENTS.md` points to the complete single-file `node_modules/@ghostboard/sdk/AI_REFERENCE.md`; no host-repository source is required. The same file is published at https://ghostboard.app/docs/reference/sdk/.
+For coding agents, `AGENTS.md` points to the complete single-file `node_modules/@ghostboard/sdk/AI_REFERENCE.md`; no host-repository source is required. The same file is published at https://ghostboard.21blog.com/docs/reference/sdk/.

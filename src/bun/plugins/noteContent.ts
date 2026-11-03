@@ -381,10 +381,9 @@ function snapshot(note: NoteRecord): NoteContentSnapshot {
 }
 
 /**
- * Plugin-initiated creation undo that would delete more than this many notes
- * needs main-process consent (`content.delete`).
+ * Every plugin-initiated deletion needs consent, including a split batch.
  */
-export const BULK_DELETE_CONFIRM_THRESHOLD = 1;
+export const BULK_DELETE_CONFIRM_THRESHOLD = 0;
 
 export interface NoteContentServiceOptions {
   /** Main-process consent gate for plugin-token callers. */

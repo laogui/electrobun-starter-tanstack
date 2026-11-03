@@ -168,12 +168,7 @@ export function useTemplate(id: string) {
       // Backend returns the raw meta; localize before handing to consumers.
       // Preserve all other fields (nodes / edges / noteContents) untouched
       // so the consumer types continue to match the pre-localization shape.
-      const raw = result as Record<string, unknown> & { meta: TemplateMeta };
-      const localized: Record<string, unknown> & { meta: TemplateMeta } = {
-        ...raw,
-        meta: localizeMeta(raw.meta),
-      };
-      return localized;
+      return { ...result, meta: localizeMeta(result.meta) };
     },
     enabled: id.length > 0,
     staleTime: 1000 * 60 * 5,

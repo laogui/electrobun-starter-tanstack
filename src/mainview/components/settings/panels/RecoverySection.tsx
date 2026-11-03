@@ -75,6 +75,12 @@ export function RecoverySection() {
   }, []);
   useEffect(() => {
     reload().catch(() => undefined);
+    const refresh = () => {
+      reload().catch(() => undefined);
+    };
+    globalThis.addEventListener('workspace-recovery-updated', refresh);
+    return () =>
+      globalThis.removeEventListener('workspace-recovery-updated', refresh);
   }, [reload]);
 
   const preview = async (entry: Entry) => {

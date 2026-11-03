@@ -263,7 +263,8 @@ export async function mergeNoteMeta(
     ) {
       throw new NoteTransactionError(
         'revision-conflict',
-        `Stale manifest metadata for ${noteId}`
+        `Stale manifest metadata for ${noteId}`,
+        [noteId]
       );
     }
     await saveBlockNoteSidecar(wsPath, noteId, {

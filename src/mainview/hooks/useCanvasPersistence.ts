@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { registerCanvasFlusher } from '@/lib/canvasFlushRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+import { replaceNoteSources } from '@/lib/canvasNoteHistory';
 import { confirmCanvasRecovery } from '@/lib/confirmCanvasRecovery';
 import {
   archivePendingFlushBackup,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/pendingFlushBackup';
 import {
   isRpcAvailable,
+  loadCanvas,
   rpcGetWorkspaceInfo,
   rpcSaveManifest,
 } from '@/lib/rpc';
@@ -49,10 +51,55 @@ async function saveManifestNow(viewId: string): Promise<boolean> {
       return true;
     }
     toast.error(
-      result?.error === 'revision-conflict'
-        ? m.toast_canvas_save_conflict()
-        : m.toast_canvas_save_failed(),
-      { id: `canvas-save-${viewId}`, duration: Number.POSITIVE_INFINITY }
+      result?.layoutSaved
+        ? m.toast_canvas_layout_saved_conflict()
+        : result?.error === 'revision-conflict'
+          ? m.toast_canvas_save_conflict()
+          : m.toast_canvas_save_failed(),
+      {
+        id: `canvas-save-${viewId}`,
+        duration: Number.POSITIVE_INFINITY,
+        ...(result?.conflictNoteIds?.length
+          ? {
+              action: {
+                label: m.canvas_use_saved_notes(),
+                onClick: () => {
+                  const before = useCanvasStore.getState();
+                  loadCanvas(viewId)
+                    .then((loaded) => {
+                      const current = useCanvasStore.getState();
+                      if (
+                        !loaded ||
+                        current._canvasGeneration !==
+                          before._canvasGeneration ||
+                        current.nodes !== before.nodes ||
+                        current.edges !== before.edges
+                      ) {
+                        return;
+                      }
+                      writePendingFlushBackup(viewId, {
+                        nodes: before.nodes,
+                        edges: before.edges,
+                      });
+                      const backup = readPendingFlushBackup(viewId);
+                      if (!backup) {
+                        return;
+                      }
+                      archivePendingFlushBackup(viewId, backup);
+                      useCanvasStore.setState({
+                        nodes: replaceNoteSources(
+                          before.nodes,
+                          loaded.nodes as Node[],
+                          result.conflictNoteIds!
+                        ),
+                      });
+                    })
+                    .catch(() => toast.error(m.toast_canvas_save_failed()));
+                },
+              },
+            }
+          : {}),
+      }
     );
     return false;
   } catch (error) {

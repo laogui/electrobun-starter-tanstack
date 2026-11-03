@@ -26,7 +26,9 @@ import {
   type WorkspaceInfo,
 } from '@/settingsClient';
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
+import { CanvasDataDiagnostics } from './CanvasDataDiagnostics';
 import { RecoverySection } from './RecoverySection';
+import { TransactionRecoverySection } from './TransactionRecoverySection';
 
 interface WorkspacePanelProps {
   client: SettingsClient;
@@ -43,6 +45,8 @@ export function WorkspacePanel({
     <div className="space-y-8">
       <PanelHeading>{strings.workspaceTitle}</PanelHeading>
       <WorkspacePathSection client={client} strings={strings} />
+      <TransactionRecoverySection />
+      <CanvasDataDiagnostics />
       <RecoverySection />
       <TrashSection client={client} locale={locale} strings={strings} />
       <ContentCleanupSection
@@ -205,6 +209,9 @@ function WorkspacePathSection({ client, strings }: WorkspacePathSectionProps) {
             : strings.workspaceExportArchive}
         </SecondaryButton>
       </div>
+      <p className="text-neutral-600 text-xs leading-relaxed dark:text-neutral-300">
+        {strings.workspaceExportHelp}
+      </p>
       {feedback ? (
         <p
           className={

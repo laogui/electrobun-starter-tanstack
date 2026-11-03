@@ -95,16 +95,20 @@ export function ChecklistWidgetBody({
               className={cn(
                 'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
                 item.checked
-                  ? 'border-neutral-950 bg-neutral-950'
-                  : 'border-gray-400 group-hover:border-black'
+                  ? 'border-neutral-950 bg-neutral-950 dark:border-neutral-200 dark:bg-neutral-200'
+                  : 'border-gray-400 group-hover:border-black dark:border-gray-500 dark:group-hover:border-white'
               )}
             >
-              {item.checked ? <Check className="text-white" size={12} /> : null}
+              {item.checked ? (
+                <Check className="text-white dark:text-neutral-950" size={12} />
+              ) : null}
             </div>
             <span
               className={cn(
                 'text-sm/tight transition-colors',
-                item.checked ? 'text-gray-400 line-through' : 'text-gray-800'
+                item.checked
+                  ? 'text-gray-500 line-through dark:text-gray-400'
+                  : 'text-gray-800 dark:text-gray-200'
               )}
             >
               {item.text}

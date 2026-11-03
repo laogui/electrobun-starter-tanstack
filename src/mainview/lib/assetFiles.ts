@@ -7,7 +7,6 @@ import {
 import {
   resolveAttachmentStreamUrl,
   rpcGenerateVideoThumbnail,
-  rpcSaveAttachmentFile,
   uploadAttachmentBlob,
 } from '@/lib/rpc';
 import {
@@ -62,28 +61,6 @@ function createProgressReporter(
 }
 
 const FILE_EXT_RE = /\.[^.]+$/;
-const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:[\\/]/;
-
-/**
- * Desktop webviews may expose the dropped file's absolute OS path on the File
- * object. When present the Bun process can copy bytes without streaming them
- * through the renderer.
- */
-export function getDesktopFilePath(file: File): string | undefined {
-  const candidate = (file as File & { path?: unknown }).path;
-  if (typeof candidate !== 'string') {
-    return;
-  }
-  const trimmed = candidate.trim();
-  if (!trimmed) {
-    return;
-  }
-  if (trimmed.startsWith('/') || WINDOWS_ABSOLUTE_PATH_RE.test(trimmed)) {
-    return trimmed;
-  }
-  return;
-}
-
 function assertAttachmentSaved(
   result: SaveAttachmentRpcResult | null | undefined,
   fileName: string
@@ -228,17 +205,7 @@ async function copyFileIntoWorkspace(
   classified: ReturnType<typeof classifyFile>,
   reportProgress: ProgressReporter
 ): Promise<SaveAttachmentRpcResult> {
-  const sourcePath = getDesktopFilePath(file);
   reportProgress(0.84, m.asset_progress_copying());
-  if (sourcePath) {
-    const result = await rpcSaveAttachmentFile(sourcePath, {
-      kind: classified.kind,
-      mimeType: classified.mimeType,
-      suggestedName: file.name,
-    });
-    reportProgress(0.96, m.asset_progress_copying());
-    return result ?? {};
-  }
   const result = await uploadAttachmentBlob(file, {
     fileName: file.name,
     kind: classified.kind,
@@ -289,57 +256,4 @@ export async function saveAssetFile(
 
   reportProgress(1, m.asset_progress_added());
   return buildAssetNodePayload(file, attachmentFile, result, media);
-}
-
-export interface SaveAssetFromPathInput {
-  file?: File;
-  fileName: string;
-  mimeType?: string;
-  size?: number;
-  sourcePath: string;
-}
-
-/**
- * Save an asset whose bytes already live at a known OS path. When a matching
- * `File` is available, media metadata and thumbnails are extracted in the
- * renderer before the Bun process copies the bytes.
- */
-export async function saveAssetFromPath(
-  input: SaveAssetFromPathInput,
-  options?: SaveAssetFileOptions
-): Promise<AssetNodeData> {
-  const classified = classifyFile({
-    name: input.fileName,
-    type: input.mimeType,
-    size: input.size,
-  });
-  const fileLike = input.file ?? {
-    name: input.fileName,
-    type: input.mimeType,
-    size: input.size,
-  };
-
-  let media: MediaMetadata = {};
-  if (input.file) {
-    const reportProgress = createProgressReporter(input.file, options);
-    reportProgress(0.08, m.asset_progress_reading_metadata());
-    media = await extractMediaMetadata(
-      input.file,
-      classified.kind,
-      reportProgress
-    );
-  }
-
-  const result = await rpcSaveAttachmentFile(input.sourcePath, {
-    kind: classified.kind,
-    mimeType: classified.mimeType,
-    suggestedName: input.fileName,
-  });
-  const attachmentFile = assertAttachmentSaved(result, input.fileName);
-
-  if (classified.kind === 'video') {
-    media = await ensureVideoThumbnail(attachmentFile, media);
-  }
-
-  return buildAssetNodePayload(fileLike, attachmentFile, result, media);
 }

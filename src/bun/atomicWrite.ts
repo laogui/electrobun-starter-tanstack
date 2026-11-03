@@ -1,5 +1,6 @@
 import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { journalWrite } from './workspaceFileJournal';
 
 export interface AtomicWriteOptions {
   /**
@@ -34,7 +35,7 @@ export async function fsyncDirectory(dir: string): Promise<void> {
  * Missing parent directories are created. The temporary file is removed when any step fails so no `.tmp` debris is
  * left next to the target.
  */
-export async function atomicWrite(
+export async function atomicWriteRaw(
   filePath: string,
   data: string | Uint8Array,
   options: AtomicWriteOptions = {}
@@ -65,4 +66,14 @@ export async function atomicWrite(
     }
   }
   await fsyncDirectory(dirname(filePath));
+}
+
+export async function atomicWrite(
+  filePath: string,
+  data: string | Uint8Array,
+  options: AtomicWriteOptions = {}
+): Promise<void> {
+  await journalWrite(filePath, data, options, () =>
+    atomicWriteRaw(filePath, data, options)
+  );
 }

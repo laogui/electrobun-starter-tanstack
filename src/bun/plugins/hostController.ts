@@ -236,8 +236,12 @@ export class PluginHostController {
   private async generation(
     summary: InstalledPluginSummary
   ): Promise<RuntimeGeneration> {
-    const loaded = await this.service.resolveRuntimePackage(summary);
-    const contents = await readPluginContents(loaded.directory);
+    const snapshot = await this.service.resolveRuntimePackage(
+      summary,
+      this.reloads.has(summary.pluginId) || !this.latest.has(summary.pluginId)
+    );
+    const loaded = snapshot.load();
+    const contents = snapshot.contents;
     if (
       summary.development !== true &&
       summary.treeDigest &&
@@ -343,7 +347,9 @@ export class PluginHostController {
     }
     const summaries = await this.service.list();
     const active = new Set(
-      summaries.filter((entry) => entry.enabled).map((entry) => entry.pluginId)
+      summaries
+        .filter((entry) => entry.enabled && entry.status === 'stored')
+        .map((entry) => entry.pluginId)
     );
     for (const pluginId of this.latest.keys()) {
       if (!active.has(pluginId)) {
@@ -357,7 +363,7 @@ export class PluginHostController {
           message: summary.validationError,
         });
       }
-      if (!summary.enabled) {
+      if (!summary.enabled || summary.status !== 'stored') {
         continue;
       }
       let current = this.latest.get(summary.pluginId);

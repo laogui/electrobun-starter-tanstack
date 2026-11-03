@@ -206,19 +206,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Load-time trust boundary for persisted nodes/edges. Loading is deliberately
- * lenient — only "is an object" is enforced, so a node with an odd field still
- * loads instead of sending the whole canvas to corruption recovery. Field
- * shapes are enforced on the write path (`rpc/writeParamSchemas.ts`) and by
- * renderer normalization.
- */
-function isPersistedManifestNode(value: unknown): value is ManifestNode {
-  return isRecord(value);
+const manifestIssues = new WeakMap<CanvasManifest, string[]>();
+export function getManifestIssues(manifest: CanvasManifest): string[] {
+  return manifestIssues.get(manifest) ?? [];
 }
-
+function isPersistedManifestNode(value: unknown): value is ManifestNode {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    !value.id ||
+    typeof value.type !== 'string' ||
+    !value.type ||
+    !isRecord(value.data) ||
+    !isRecord(value.position)
+  ) {
+    return false;
+  }
+  return (
+    typeof value.position.x === 'number' &&
+    Number.isFinite(value.position.x) &&
+    typeof value.position.y === 'number' &&
+    Number.isFinite(value.position.y)
+  );
+}
 function isPersistedManifestEdge(value: unknown): value is ManifestEdge {
-  return isRecord(value);
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    Boolean(value.id) &&
+    typeof value.source === 'string' &&
+    typeof value.target === 'string'
+  );
+}
+async function preserveManifestIssues(
+  wsPath: string,
+  viewFile: string,
+  manifest: CanvasManifest
+): Promise<string | undefined> {
+  if (!getManifestIssues(manifest).length) {
+    return;
+  }
+  const path = resolveWorkspaceManifestPath(wsPath, viewFile);
+  const raw = await readFile(path, 'utf8');
+  const evidence = `${path}.damaged-${createHash('sha256').update(raw).digest('hex').slice(0, 16)}.json`;
+  if (!existsSync(evidence)) {
+    await atomicWrite(evidence, raw);
+  }
+  return evidence;
 }
 
 /**
@@ -245,16 +279,76 @@ export function parseCanvasManifest(value: unknown): CanvasManifest {
   if (!(Array.isArray(nodes) && Array.isArray(edges))) {
     throw new Error('Manifest nodes/edges must be arrays.');
   }
-  if (!nodes.every(isPersistedManifestNode)) {
-    throw new Error('Manifest contains a non-object node.');
+  const issues: string[] = [];
+  const ids = new Set<string>();
+  const cleanedNodes: ManifestNode[] = [];
+  for (const [index, node] of nodes.entries()) {
+    if (!isPersistedManifestNode(node) || ids.has(node.id)) {
+      issues.push(`nodes[${index}]: invalid or duplicate node`);
+      continue;
+    }
+    ids.add(node.id);
+    let next = node;
+    if (node.type === 'folder' && node.data.children !== undefined) {
+      const raw = node.data.children;
+      const childIds = new Set<string>();
+      const children: unknown[] = [];
+      if (Array.isArray(raw)) {
+        for (const [childIndex, child] of raw.entries()) {
+          if (
+            !isRecord(child) ||
+            typeof child.id !== 'string' ||
+            !child.id ||
+            childIds.has(child.id) ||
+            (child.type !== undefined && typeof child.type !== 'string') ||
+            (child.data !== undefined && !isRecord(child.data))
+          ) {
+            issues.push(
+              `nodes[${index}].children[${childIndex}]: invalid or duplicate child`
+            );
+            continue;
+          }
+          childIds.add(child.id);
+          if (child.data === undefined || !child.type) {
+            issues.push(
+              `nodes[${index}].children[${childIndex}]: normalized legacy child`
+            );
+            const { id: _id, type: _type, size: _size, ...legacyData } = child;
+            children.push({
+              ...child,
+              type: child.type || 'card',
+              data: child.data ?? legacyData,
+            });
+          } else {
+            children.push(child);
+          }
+        }
+      } else {
+        issues.push(`nodes[${index}].children: expected array`);
+      }
+      next = { ...node, data: { ...node.data, children } };
+    }
+    cleanedNodes.push(next);
   }
-  if (!edges.every(isPersistedManifestEdge)) {
-    throw new Error('Manifest contains a non-object edge.');
-  }
-  const manifest = { ...value, nodes, edges };
+  const edgeIds = new Set<string>();
+  const cleanedEdges = edges.filter((edge, index): edge is ManifestEdge => {
+    if (
+      !isPersistedManifestEdge(edge) ||
+      edgeIds.has(edge.id) ||
+      !ids.has(edge.source) ||
+      !ids.has(edge.target)
+    ) {
+      issues.push(`edges[${index}]: invalid, duplicate or missing endpoint`);
+      return false;
+    }
+    edgeIds.add(edge.id);
+    return true;
+  });
+  const manifest = { ...value, nodes: cleanedNodes, edges: cleanedEdges };
   if (!hasManifestArrays(manifest)) {
     throw new Error('Manifest nodes/edges must be arrays.');
   }
+  manifestIssues.set(manifest, issues);
   return manifest;
 }
 
@@ -312,6 +406,7 @@ export async function readManifest(
     return { kind: 'missing' };
   }
   if (read.kind === 'ok') {
+    await preserveManifestIssues(wsPath, viewFile, read.value);
     recoveryTickets.delete(filePath);
     return { kind: 'ok', manifest: read.value };
   }
@@ -417,6 +512,15 @@ export async function loadManifestsStrict(
       );
     }
     if (read.kind === 'ok') {
+      if (getManifestIssues(read.manifest).length) {
+        throw new ManifestCorruptError(
+          file,
+          (await preserveManifestIssues(wsPath, file, read.manifest)) ?? file,
+          new Error(
+            'Manifest has isolated invalid records; repair before collecting references'
+          )
+        );
+      }
       manifests.push(read.manifest);
     }
   }
@@ -487,6 +591,9 @@ export async function assertManifestWritable(
   const filePath = resolveWorkspaceManifestPath(wsPath, viewFile);
   const current = await readJsonOrEmpty(filePath, parseCanvasManifest);
   if (current.kind !== 'corrupt') {
+    if (current.kind === 'ok') {
+      await preserveManifestIssues(wsPath, viewFile, current.value);
+    }
     return { onDiskCorrupt: false };
   }
   const ticket = recoveryTickets.get(filePath);

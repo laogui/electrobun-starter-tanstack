@@ -1,7 +1,6 @@
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { addEdge } from '@xyflow/react';
 import { nanoid } from 'nanoid';
-
 import { isGroupChildNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, getNodeSpec } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
@@ -12,10 +11,11 @@ import {
   hasNodeQuota,
 } from '@/lib/nodeQuota';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
+import { topicCanvasWritePaused } from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
-
 import { filterValidAIActions } from '../../../shared/ai/schema';
 import type { AIAction } from '../../../shared/ai/types';
+import { isTopicNodeType } from '../../../shared/topic';
 
 /**
  * Renderer-side apply pipeline for AI-proposed actions
@@ -23,9 +23,8 @@ import type { AIAction } from '../../../shared/ai/types';
  *
  * Guarantees:
  * - Every action is re-validated with zod before touching the store.
- * - One apply = exactly one undo snapshot (the batch path saves a single
- *   snapshot up front; the single-create fast path reuses `createNode`,
- *   which snapshots internally).
+ * - A mutating batch records one snapshot immediately before committing;
+ *   a fully skipped batch does not add history.
  * - Malformed or unresolvable actions are skipped with a warning instead of
  *   aborting the whole batch.
  */
@@ -47,37 +46,12 @@ export interface ApplyAIActionsResult {
  * Safe to call with untrusted (model-produced) input.
  */
 export async function applyAIActions(
-  rfInstance: ReactFlowInstance<any, any> | null,
+  _rfInstance: ReactFlowInstance<any, any> | null,
   rawActions: unknown[]
 ): Promise<ApplyAIActionsResult> {
   const { actions, warnings } = filterValidAIActions(rawActions);
   if (actions.length === 0) {
     return { applied: 0, createdNodeIds: [], warnings };
-  }
-
-  const store = useCanvasStore.getState();
-  const first = actions[0];
-
-  // Fast path: a single create_node can reuse the store's full creation flow
-  // (license gate, collision-aware placement, snapshot, viewport focus).
-  if (actions.length === 1 && first?.type === 'create_node') {
-    const id = await store.createNode(first.nodeKind, rfInstance, {
-      anchor: first.position,
-      data: first.data,
-      focusViewport: true,
-      size: first.size,
-    });
-    if (!id) {
-      return {
-        applied: 0,
-        createdNodeIds: [],
-        warnings: [
-          ...warnings,
-          'Node was not created (card limit reached or no free position)',
-        ],
-      };
-    }
-    return { applied: 1, createdNodeIds: [id], warnings };
   }
 
   return applyActionBatch(actions, warnings);
@@ -102,6 +76,18 @@ async function applyActionBatch(
 ): Promise<ApplyAIActionsResult> {
   // License gate for batch creation, shared with every other create path
   // (nodeQuota.ts): existing notes/stickies/topics all count.
+  const initial = useCanvasStore.getState();
+  if (!initial._hydrated || initial.topicWritePaused) {
+    return {
+      applied: 0,
+      createdNodeIds: [],
+      warnings: [
+        ...warnings,
+        'Canvas writes are paused; resolve the Topic structure before applying AI actions.',
+      ],
+    };
+  }
+  const generation = initial._canvasGeneration;
   const quotaCreates = countQuotaCountedCreates(actions);
   if (
     quotaCreates > 0 &&
@@ -120,6 +106,34 @@ async function applyActionBatch(
   // Re-read after the (possibly async) license check: the graph may have
   // changed while it ran.
   const store = useCanvasStore.getState();
+  if (
+    store._canvasGeneration !== generation ||
+    store.nodes !== initial.nodes ||
+    store.edges !== initial.edges ||
+    store.topicWritePaused ||
+    topicCanvasWritePaused(store.nodes, store.edges)
+  ) {
+    return {
+      applied: 0,
+      createdNodeIds: [],
+      warnings: [
+        ...warnings,
+        'Canvas changed while preparing AI actions. Review and apply again.',
+      ],
+    };
+  }
+  const isLocked = (node: Node) => {
+    const seen = new Set<string>();
+    let current: Node | undefined = node;
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      if (current.data.locked) {
+        return true;
+      }
+      current = workingNodes.find((item) => item.id === current?.parentId);
+    }
+    return false;
+  };
 
   // Allocate real ids for every tempId up front so later actions can
   // reference nodes created earlier in the same batch.
@@ -139,14 +153,11 @@ async function applyActionBatch(
   const createdNodeIds: string[] = [];
   let applied = 0;
 
-  // One snapshot for the whole batch → one undo step.
-  store.saveSnapshot();
-
   for (const action of actions) {
     switch (action.type) {
       case 'create_node': {
         const id = tempIds.get(action.tempId);
-        if (!id) {
+        if (!id || createdNodeIds.includes(id)) {
           break;
         }
         const spec = buildNewNodeSpec(action.nodeKind);
@@ -188,7 +199,13 @@ async function applyActionBatch(
             : {}),
           data: {
             ...(spec.base.data as Record<string, unknown>),
-            ...action.data,
+            ...Object.fromEntries(
+              Object.entries(action.data).filter(([key]) =>
+                action.nodeKind === 'group'
+                  ? ['label', 'description', 'color'].includes(key)
+                  : ['title', 'content', 'color'].includes(key)
+              )
+            ),
           },
           ...(parentId ? { parentId, extent: 'parent' as const } : {}),
         };
@@ -200,10 +217,43 @@ async function applyActionBatch(
 
       case 'update_node': {
         const nodeId = resolveId(action.nodeId);
-        if (!workingNodes.some((n) => n.id === nodeId)) {
+        const node = workingNodes.find((n) => n.id === nodeId);
+        if (!node) {
           warnings.push(
             `Skipped update_node "${action.nodeId}": node not found on canvas`
           );
+          break;
+        }
+        if (
+          isLocked(node) ||
+          isTopicNodeType(node.type) ||
+          !['card', 'group', 'sticky'].includes(node.type ?? '')
+        ) {
+          warnings.push(
+            `Skipped update_node "${action.nodeId}": protected or unsupported node`
+          );
+          break;
+        }
+        const allowed =
+          node.type === 'group'
+            ? ['label', 'description', 'color']
+            : ['title', 'content', 'color'];
+        const updates = Object.fromEntries(
+          Object.entries(action.updates).filter(
+            ([key, value]) =>
+              allowed.includes(key) &&
+              !(key === 'content' && node.data.editor === 'blocknote') &&
+              node.data[key] !== value
+          )
+        );
+        if (
+          Object.keys(updates).length !== Object.keys(action.updates).length
+        ) {
+          warnings.push(
+            `Skipped protected or unchanged fields for "${action.nodeId}"`
+          );
+        }
+        if (Object.keys(updates).length === 0) {
           break;
         }
         workingNodes = workingNodes.map((n) =>
@@ -212,7 +262,7 @@ async function applyActionBatch(
                 ...n,
                 data: {
                   ...(n.data as Record<string, unknown>),
-                  ...action.updates,
+                  ...updates,
                 },
               }
             : n
@@ -230,7 +280,7 @@ async function applyActionBatch(
           );
           break;
         }
-        if ((node.data as { locked?: unknown }).locked) {
+        if (isLocked(node) || isTopicNodeType(node.type)) {
           warnings.push(`Skipped move_node "${action.nodeId}": node is locked`);
           break;
         }
@@ -246,6 +296,12 @@ async function applyActionBatch(
           );
           break;
         }
+        if (
+          node.position.x === action.position.x &&
+          node.position.y === action.position.y
+        ) {
+          break;
+        }
         workingNodes = workingNodes.map((n) =>
           n.id === nodeId ? { ...n, position: action.position } : n
         );
@@ -255,7 +311,7 @@ async function applyActionBatch(
 
       case 'create_group': {
         const groupId = tempIds.get(action.tempId);
-        if (!groupId) {
+        if (!groupId || createdNodeIds.includes(groupId)) {
           break;
         }
         const seen = new Set<string>();
@@ -267,7 +323,13 @@ async function applyActionBatch(
           }
           seen.add(childId);
           const child = workingNodes.find((n) => n.id === childId);
-          if (child && isGroupChildNode(child.type)) {
+          if (
+            child &&
+            isGroupChildNode(child.type) &&
+            !isLocked(child) &&
+            !isPinnedSticky(child) &&
+            !isTopicNodeType(child.type)
+          ) {
             childIds.push(childId);
           }
         }
@@ -313,6 +375,12 @@ async function applyActionBatch(
             ...(action.color ? { color: action.color } : {}),
           },
         };
+        if (childIds.length !== seen.size) {
+          warnings.push(
+            `Skipped create_group "${action.label}": selection includes protected or unavailable nodes`
+          );
+          break;
+        }
         const childIdSet = new Set(childIds);
         workingNodes = [
           ...workingNodes.map((node) => {
@@ -358,6 +426,21 @@ async function applyActionBatch(
           );
           break;
         }
+        const endpoints = workingNodes.filter(
+          (node) => node.id === source || node.id === target
+        );
+        if (endpoints.some(isLocked)) {
+          warnings.push('Skipped create_edge: endpoint is locked');
+          break;
+        }
+        if (
+          workingEdges.some(
+            (edge) => edge.source === source && edge.target === target
+          )
+        ) {
+          warnings.push('Skipped duplicate connection');
+          break;
+        }
         workingEdges = addEdge(
           {
             id: `edge-${nanoid(8)}`,
@@ -380,7 +463,16 @@ async function applyActionBatch(
   }
 
   if (applied > 0) {
+    store.saveSnapshot();
     useCanvasStore.setState({
+      focusedNode: store.focusedNode
+        ? {
+            ...store.focusedNode,
+            data:
+              workingNodes.find((node) => node.id === store.focusedNode?.id)
+                ?.data ?? store.focusedNode.data,
+          }
+        : null,
       nodes: sortNodesByParent(workingNodes),
       edges: workingEdges,
     });

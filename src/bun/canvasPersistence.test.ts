@@ -13,10 +13,12 @@ vi.mock('./appLifecycle', () => ({
 }));
 const hydration = await import('./canvasHydration');
 const { createCanvasHandlers } = await import('./rpc/handlers/canvas');
+const { createNotesHandlers } = await import('./rpc/handlers/notes');
 const { saveBlockNoteSidecar, loadBlockNoteSidecar } = await import(
   './blocknote'
 );
 const { loadNote } = await import('./notes');
+const metadata = await import('./nodeMetadata');
 let ws: string;
 const card = (id: string, data: Record<string, unknown>) => ({
   id,
@@ -53,7 +55,112 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  metadata.resetNodeMetadataCacheForTests(ws);
   await rm(ws, { recursive: true, force: true });
+});
+
+it('preserves legacy checklist tags on every migrated placement and after explicit clearing', async () => {
+  await writeFile(
+    join(ws, 'content/legacy.md'),
+    '---\nid: note_legacy\ntitle: Tasks\ndisplayHint: checklist\n---\n- [x] Keep checked\n- [ ] Keep open'
+  );
+  await metadata.setNodeMetadata(ws, 'note_legacy', {
+    tag: 'Acceptance',
+    tags: ['Legacy'],
+  });
+  await writeFile(
+    join(ws, '.ghostboard/views/default.canvas.json'),
+    JSON.stringify({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        card('top', { noteId: 'note_legacy', type: 'checklist' }),
+        {
+          id: 'folder',
+          type: 'folder',
+          position: { x: 400, y: 0 },
+          data: {
+            children: [
+              { id: 'child', type: 'card', data: { noteId: 'note_legacy' } },
+            ],
+          },
+        },
+      ],
+      edges: [],
+    })
+  );
+  await handlers().loadCanvas({ viewId: 'default' });
+  expect(metadata.getNodeMetadata(ws, 'top')).toEqual({
+    tag: 'Acceptance',
+    tags: ['Legacy'],
+  });
+  expect(metadata.getNodeMetadata(ws, 'child')).toEqual(
+    metadata.getNodeMetadata(ws, 'top')
+  );
+  await metadata.setNodeMetadata(ws, 'top', { tag: null, tags: null });
+  await metadata.flushNodeMetadata(ws);
+  metadata.resetNodeMetadataCacheForTests(ws);
+  await handlers().loadCanvas({ viewId: 'default' });
+  expect(metadata.getNodeMetadata(ws, 'top')).toBeUndefined();
+  expect(metadata.getNodeMetadata(ws, 'child')?.tag).toBe('Acceptance');
+});
+
+it('repairs stranded widget tags on existing extension references without replacing newer placement tags', async () => {
+  await metadata.setNodeMetadata(ws, 'widget_legacy', { tag: 'Old' });
+  await metadata.setNodeMetadata(ws, 'existing', { tag: 'New' });
+  await writeFile(
+    join(ws, '.ghostboard/views/default.canvas.json'),
+    JSON.stringify({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: ['existing', 'missing'].map((id) => ({
+        id,
+        type: 'extension',
+        position: { x: 0, y: 0 },
+        data: {
+          canvasTypeId: 'ghostboard.productivity/checklist',
+          instanceId: 'extinst_widget_legacy',
+        },
+      })),
+      edges: [],
+    })
+  );
+  await handlers().loadCanvas({ viewId: 'default' });
+  expect(metadata.getNodeMetadata(ws, 'existing')?.tag).toBe('New');
+  expect(metadata.getNodeMetadata(ws, 'missing')?.tag).toBe('Old');
+});
+
+it('prepares current JSON-backed Markdown only on an export read', async () => {
+  await saveBlockNoteSidecar(ws, 'export-note', {
+    title: 'Structured',
+    revision: 3,
+    blocks: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Newest JSON body', styles: {} }],
+      },
+    ],
+  });
+  const notes = createNotesHandlers({ wsPath: ws } as RpcContext);
+  const editorRead = await notes.loadBlockNote({ noteId: 'export-note' });
+  expect(editorRead.success).toBe(true);
+  expect(editorRead).not.toHaveProperty('markdown');
+  const exportRead = await notes.loadBlockNote({
+    noteId: 'export-note',
+    includeMarkdown: true,
+  });
+  expect(exportRead.success).toBe(true);
+  expect(exportRead.markdown).toContain('Newest JSON body');
+});
+it('does not offer a corrupt JSON note as an empty successful document', async () => {
+  await writeFile(
+    join(ws, 'content/.ghostboard/blocknote/broken.json'),
+    '{broken'
+  );
+  const notes = createNotesHandlers({ wsPath: ws } as RpcContext);
+  expect(
+    await notes.loadBlockNote({ noteId: 'broken', includeMarkdown: true })
+  ).toMatchObject({ success: false });
 });
 
 it('does not erase legacy content or change timestamps when saving only layout', async () => {
@@ -110,7 +217,16 @@ it('rejects a stale metadata batch before changing any other note', async () => 
       card('stale', { title: 'Old draft', blocknoteRevision: 1 }),
     ],
   });
-  expect(result).toMatchObject({ success: false });
+  expect(result).toMatchObject({
+    success: false,
+    layoutSaved: true,
+    conflictNoteIds: ['stale'],
+  });
+  const savedLayout = JSON.parse(
+    await readFile(join(ws, '.ghostboard/views/default.canvas.json'), 'utf8')
+  ) as { nodes: Array<{ data: Record<string, unknown> }> };
+  expect(savedLayout.nodes).toHaveLength(2);
+  expect(savedLayout.nodes[1]?.data).not.toHaveProperty('title');
   await Promise.allSettled(pending);
   expect(
     await readFile(join(ws, 'content/.ghostboard/blocknote/first.json'), 'utf8')
@@ -391,4 +507,43 @@ it('restores a snapshot as a new canvas without changing the source or shared no
       })
     ).success
   ).toBe(false);
+});
+
+it('rolls back earlier note writes when a later canvas write fails', async () => {
+  const one = '---\nid: a\ntitle: A\n---\nBody A';
+  const two = '---\nid: b\ntitle: B\n---\nBody B';
+  await writeFile(join(ws, 'content/a.md'), one);
+  await writeFile(join(ws, 'content/b.md'), two);
+  const original = JSON.stringify({
+    schema: 'ghostboard-canvas/v1',
+    viewId: 'default',
+    nodes: [],
+    edges: [],
+  });
+  const manifestPath = join(ws, '.ghostboard/views/default.canvas.json');
+  await writeFile(manifestPath, original);
+  const persist = hydration.persistManifestCardNote;
+  vi.spyOn(hydration, 'persistManifestCardNote').mockImplementation(
+    async (...args) => {
+      if (args[2] === 'b') {
+        throw new Error('Injected second-note failure');
+      }
+      return persist(...args);
+    }
+  );
+  const result = await handlers().saveManifest({
+    viewId: 'default',
+    edges: [],
+    nodes: [
+      card('a', { title: 'Changed A', content: 'New A' }),
+      card('b', { title: 'Changed B', content: 'New B' }),
+    ],
+  });
+  expect(result.success).toBe(false);
+  expect(await readFile(join(ws, 'content/a.md'), 'utf8')).toBe(one);
+  expect(await readFile(join(ws, 'content/b.md'), 'utf8')).toBe(two);
+  expect(await readFile(manifestPath, 'utf8')).toBe(original);
+  expect(existsSync(join(ws, '.ghostboard/canvas-write-intent.json'))).toBe(
+    false
+  );
 });

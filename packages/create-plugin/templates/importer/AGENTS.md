@@ -3,8 +3,8 @@
 Use `node_modules/@ghostboard/sdk/AI_REFERENCE.md` (installed by `bun install`)
 as the self-contained GhostBoard SDK and packaging reference. The adjacent
 `node_modules/@ghostboard/sdk/*.d.ts` files are the exact type source of truth;
-the same reference is published at https://ghostboard.app/docs/reference/sdk/ and
-as `https://ghostboard.app/docs/llms-full.txt`. Do not import host-private files
+the same reference is published at https://ghostboard.21blog.com/docs/reference/sdk/ and
+as `https://ghostboard.21blog.com/docs/llms-full.txt`. Do not import host-private files
 or write workspace content during importer inspection/parsing.
 
 Runtime files are `manifest.json`, `app.js`, `csv.js`, and any relative

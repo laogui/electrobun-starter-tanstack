@@ -1,0 +1,98 @@
+{
+  "arch": "arm64",
+  "archiveSha256": "2c838d8a11ddeed288462eef82ad244dc34dad9bb8df14238869ddeeed74ce5f",
+  "signingRequested": false,
+  "notarizationRequested": false,
+  "results": [
+    {
+      "phase": "safe-mode",
+      "stage": "T4/trusted plugin recovery and migration",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "safeModeActive-true": true,
+        "safeModeNextStart-true": true,
+        "runtimeEmpty-true": true,
+        "explicitSafeModeReason": true,
+        "safeModeRecoveryPrepared": true
+      },
+      "startedAt": "2026-11-02T15:50:57.965Z",
+      "finishedAt": "2026-11-02T15:50:58.102Z",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    },
+    {
+      "phase": "safe-recovery",
+      "stage": "T4/trusted plugin recovery and migration",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "safeModeActive-false": true,
+        "safeModeNextStart-false": true,
+        "runtimeEmpty-false": true,
+        "safeModeRecovered": true,
+        "safeModeRecoveryReasonCleared": true
+      },
+      "startedAt": "2026-11-02T15:50:59.458Z",
+      "finishedAt": "2026-11-02T15:50:59.509Z",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    },
+    {
+      "phase": "update",
+      "stage": "T4/trusted plugin recovery and migration",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "signedInitialPreview": true,
+        "commitStartsDisabled": true,
+        "initialRuntimeVersion": true,
+        "updatePreviewBindsSource": true,
+        "updateRetainsPreviousVersion": true,
+        "updatedRuntimeVersion": true,
+        "rejectsAuthorKeyChange": true,
+        "keyChangeKeepsCurrent": true,
+        "rollbackRestoresPreviousCode": true,
+        "rejectsBadReleaseDigest": true,
+        "badDigestKeepsRollbackTarget": true
+      },
+      "startedAt": "2026-11-02T15:51:00.763Z",
+      "finishedAt": "2026-11-02T15:51:01.250Z",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    },
+    {
+      "phase": "migration",
+      "stage": "T4/trusted plugin recovery and migration",
+      "passed": true,
+      "checks": {
+        "releaseScheme": true,
+        "migrationSeed": true,
+        "failedMigrationPreservesLiveData": true,
+        "migrationUpgrade": true,
+        "migrationBackupVisible": true,
+        "migrationPluginDisabledBeforeRestore": true,
+        "migrationRestore": true,
+        "migrationDataRestored": true,
+        "migrationBackupConsumed": true,
+        "migrationPluginRemainsDisabled": true
+      },
+      "startedAt": "2026-11-02T15:51:02.333Z",
+      "finishedAt": "2026-11-02T15:51:02.603Z",
+      "host": {
+        "arch": "arm64",
+        "bun": "1.3.13",
+        "platform": "darwin"
+      }
+    }
+  ]
+}

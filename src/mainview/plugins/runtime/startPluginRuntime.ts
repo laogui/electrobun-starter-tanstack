@@ -52,6 +52,7 @@ export function startPluginRuntime(
   let stopped = false;
   let inFlight = false;
   let refreshQueued = false;
+  let developmentActive = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
   let startupReadyController: AbortController | undefined;
@@ -155,6 +156,9 @@ export function startPluginRuntime(
         throw new Error('Invalid plugin runtime snapshot');
       }
       if (!(stopped || request.signal.aborted)) {
+        developmentActive = snapshot.plugins.some(
+          (plugin) => plugin.development
+        );
         // Imports/setup may never settle; polling must still observe a later disable.
         const syncing = runtime.sync(snapshot);
         syncing.catch((error) => runtime.report('host', 'sync', error));
@@ -203,9 +207,12 @@ export function startPluginRuntime(
           refreshQueued = false;
           refresh();
         } else {
-          timer = setTimeout(() => {
-            refresh();
-          }, options.intervalMs ?? 1000);
+          timer = setTimeout(
+            () => {
+              refresh();
+            },
+            options.intervalMs ?? (developmentActive ? 1000 : 10_000)
+          );
         }
       }
     }
@@ -224,6 +231,7 @@ export function startPluginRuntime(
     detachShortcuts();
     target.removeEventListener('plugins-changed', changed);
     target.removeEventListener('pagehide', onPageHide);
+    target.removeEventListener('focus', changed);
     stopping = runtime.dispose();
     return stopping;
   };
@@ -232,6 +240,7 @@ export function startPluginRuntime(
   };
   target.addEventListener('plugins-changed', changed);
   target.addEventListener('pagehide', onPageHide);
+  target.addEventListener('focus', changed);
   refresh();
   return stop;
 }

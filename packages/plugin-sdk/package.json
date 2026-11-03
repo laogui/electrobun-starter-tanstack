@@ -8,7 +8,7 @@
     "url": "git+https://github.com/laogui/electrobun-starter-tanstack.git",
     "directory": "packages/plugin-sdk"
   },
-  "homepage": "https://ghostboard.app/docs/reference/sdk/",
+  "homepage": "https://ghostboard.21blog.com/docs/reference/sdk/",
   "keywords": [
     "ghostboard",
     "plugin",
@@ -53,6 +53,8 @@
     "AI_REFERENCE.md",
     "package-plugin.js",
     "package-plugin.d.ts",
+    "canonicalDigest.js",
+    "canonicalDigest.d.ts",
     "README.md"
   ],
   "peerDependencies": {

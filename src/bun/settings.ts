@@ -55,8 +55,8 @@ export interface AppSettings {
   canvasShowMinimap: boolean;
   canvasSnapToGrid: boolean;
   fontFamily: FontFamilySetting;
-  locale: string;
-  theme: string;
+  locale: 'en' | 'zh';
+  theme: 'dark' | 'light' | 'system';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -82,9 +82,14 @@ export function includes<T extends string | number>(
 
 export function normalizeAppSettings(raw: Partial<AppSettings>): AppSettings {
   return {
-    theme: typeof raw.theme === 'string' ? raw.theme : DEFAULT_SETTINGS.theme,
+    theme:
+      raw.theme === 'dark' || raw.theme === 'light' || raw.theme === 'system'
+        ? raw.theme
+        : DEFAULT_SETTINGS.theme,
     locale:
-      typeof raw.locale === 'string' ? raw.locale : DEFAULT_SETTINGS.locale,
+      raw.locale === 'en' || raw.locale === 'zh'
+        ? raw.locale
+        : DEFAULT_SETTINGS.locale,
     fontFamily: includes(FONT_FAMILY_VALUES, raw.fontFamily)
       ? raw.fontFamily
       : DEFAULT_SETTINGS.fontFamily,

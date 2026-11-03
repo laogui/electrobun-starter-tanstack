@@ -13,6 +13,8 @@ import {
   stripAttachmentRuntimeData,
   validateManifestNoteWrites,
 } from '../../canvasHydration';
+import { layoutOnlyNodes } from '../../canvasLayout';
+import { finishClones } from '../../cloneReceipts';
 import { loadExtensionInstances } from '../../extensions/instanceStore';
 import {
   buildManifestNodesAfterExtensionMigration,
@@ -22,6 +24,7 @@ import {
   assertManifestWritable,
   authorizeManifestRecovery,
   type CanvasManifest,
+  getManifestIssues,
   loadManifestDetailed,
   ManifestCorruptError,
   saveManifest as writeManifest,
@@ -32,8 +35,13 @@ import {
   NoteTransactionError,
   withNoteWorkspace,
 } from '../../noteTransactions';
+import {
+  listTransactionRecovery,
+  resolveTransactionRecovery,
+} from '../../transactionRecovery';
 import { loadWidgets, type WidgetRecord } from '../../widgets';
 import { loadWorkspaceConfig } from '../../workspace';
+import { withWorkspaceFileTransaction } from '../../workspaceFileJournal';
 import type { RpcContext } from '../context';
 import type { RpcRequestHandlers } from '../types';
 
@@ -72,9 +80,21 @@ async function mapSerial<T, R>(
 
 export function createCanvasHandlers(
   ctx: RpcContext
-): RpcRequestHandlers<'loadCanvas' | 'saveManifest' | 'confirmCanvasRecovery'> {
+): RpcRequestHandlers<
+  | 'loadCanvas'
+  | 'saveManifest'
+  | 'confirmCanvasRecovery'
+  | 'finishCanvasClones'
+  | 'listTransactionRecovery'
+  | 'resolveTransactionRecovery'
+> {
   const { wsPath, extensionScheduler } = ctx;
   return {
+    finishCanvasClones: async ({ tokens, liveReferences }) =>
+      finishClones(wsPath, tokens, liveReferences),
+    listTransactionRecovery: async () => listTransactionRecovery(wsPath),
+    resolveTransactionRecovery: async ({ id, token, action }) =>
+      resolveTransactionRecovery(wsPath, id, token, action),
     confirmCanvasRecovery: async ({ viewId, token }) =>
       withNoteWorkspace(wsPath, async () => {
         const config = await loadWorkspaceConfig(wsPath);
@@ -355,6 +375,7 @@ export function createCanvasHandlers(
         return {
           nodes: hydratedNodes,
           edges: manifest.edges,
+          loadIssues: getManifestIssues(manifest),
           widgets: hydratedWidgets,
           extensionInstances,
           ...(recovered
@@ -369,8 +390,8 @@ export function createCanvasHandlers(
 
     saveManifest: async ({ viewId, nodes, edges }) => {
       const workspace = wsPath;
-      return withNoteWorkspace(workspace, async () => {
-        try {
+      return withNoteWorkspace(workspace, () =>
+        withWorkspaceFileTransaction(workspace, async () => {
           const config = await loadWorkspaceConfig(workspace);
           const viewEntry = config.views.find((v) => v.id === viewId);
           if (!viewEntry) {
@@ -666,11 +687,39 @@ export function createCanvasHandlers(
           };
           await writeManifest(workspace, viewEntry.file, manifest);
           return { success: true, noteChanges };
-        } catch (error) {
-          console.warn('[persistence] Manifest save rejected:', error);
-          return saveFailure(error);
+        })
+      ).catch(async (error) => {
+        if (
+          error instanceof NoteTransactionError &&
+          error.code === 'revision-conflict'
+        ) {
+          try {
+            await withNoteWorkspace(workspace, () =>
+              withWorkspaceFileTransaction(workspace, async () => {
+                const config = await loadWorkspaceConfig(workspace);
+                const view = config.views.find((entry) => entry.id === viewId);
+                if (!view) {
+                  throw new Error('Canvas no longer exists');
+                }
+                await writeManifest(workspace, view.file, {
+                  schema: 'ghostboard-canvas/v1',
+                  viewId,
+                  nodes: await layoutOnlyNodes(workspace, nodes),
+                  edges,
+                });
+              })
+            );
+            return {
+              ...saveFailure(error),
+              layoutSaved: true,
+              conflictNoteIds: error.noteIds,
+            };
+          } catch (layoutError) {
+            return saveFailure(layoutError);
+          }
         }
-      }).catch(saveFailure);
+        return saveFailure(error);
+      });
     },
   };
 }

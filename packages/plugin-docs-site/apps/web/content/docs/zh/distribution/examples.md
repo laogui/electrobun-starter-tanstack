@@ -9,12 +9,12 @@ order: 40
 
 | 示例 | 贡献 | 安装包 URL |
 | --- | --- | --- |
-| Hello（JavaScript） | 命令 + DOM 面板 | `https://dl.ghostboard.app/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin` |
-| React Hello | 命令 + React 面板 | `https://dl.ghostboard.app/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin` |
-| CSV Importer | 字段映射 + 分段导入器 | `https://dl.ghostboard.app/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin` |
-| Combined | 命令、面板、画布类型与导入器 | `https://dl.ghostboard.app/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin` |
+| Hello（JavaScript） | 命令 + DOM 面板 | `https://ghostboard.21blog.com/plugins/examples/example.hello/0.1.0/example.hello-0.1.0.ghostboard-plugin` |
+| React Hello | 命令 + React 面板 | `https://ghostboard.21blog.com/plugins/examples/example.react-hello/0.1.0/example.react-hello-0.1.0.ghostboard-plugin` |
+| CSV Importer | 字段映射 + 分段导入器 | `https://ghostboard.21blog.com/plugins/examples/example.csv-importer/0.1.0/example.csv-importer-0.1.0.ghostboard-plugin` |
+| Combined | 命令、面板、画布类型与导入器 | `https://ghostboard.21blog.com/plugins/examples/example.combined/0.1.0/example.combined-0.1.0.ghostboard-plugin` |
 
-每个示例的 release 文档位于 `https://dl.ghostboard.app/plugins/examples/<id>/releases.json`，manifest 的 `update.url` 指向那里。`example.hello` 同时发布了 `0.1.0` 与 `0.1.1`，因此安装第一个 URL 后点击检查更新即可走一次真实的签名更新。摘要列在 `https://dl.ghostboard.app/plugins/examples/index.json` 中，并与对同一 SDK 版本的未修改模板运行 `bun run package` 得到的归档一致。
+每个示例的 release 文档位于 `https://ghostboard.21blog.com/plugins/examples/<id>/releases.json`，manifest 的 `update.url` 指向那里。`example.hello` 同时发布了 `0.1.0` 与 `0.1.1`，因此安装第一个 URL 后点击检查更新即可走一次真实的签名更新。`https://ghostboard.21blog.com/plugins/examples/index.json` 中的 SHA-256 标识实际发布的签名归档。作者密钥、manifest 元数据或构建输入变化时，包摘要也会变化。
 
 ## 试一试更新流程
 

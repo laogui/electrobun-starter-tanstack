@@ -409,7 +409,7 @@ interface BlockNoteSurfaceProps {
   onRetryConflictLoad: () => void;
   onTitleBlur: () => void;
   onTitleChange: (next: string) => void;
-  saveDebounced: (payload: { blocks: unknown[]; markdown: string }) => void;
+  saveDebounced: (payload: { blocks: unknown[]; markdown?: string }) => void;
   setInitialRevision: (
     revision: number | undefined,
     metadata?: Record<string, unknown>,
@@ -634,6 +634,9 @@ function BlockNoteSurface({
 
   const serializeCurrentDocument = useCallback(async () => {
     const blocks = editor.document as Block[];
+    if (noteId) {
+      return { blocks, markdown: undefined };
+    }
     let markdown = '';
     try {
       markdown = await editor.blocksToMarkdownLossy(blocks);
@@ -642,7 +645,7 @@ function BlockNoteSurface({
     }
     const serializedBlocks: unknown[] = blocks;
     return { blocks: serializedBlocks, markdown };
-  }, [editor]);
+  }, [editor, noteId]);
 
   const handleChange = useCallback(async () => {
     if (
@@ -657,14 +660,25 @@ function BlockNoteSurface({
     externalDocumentRef.current = null;
     markDirty();
     const version = ++serializationRef.current;
+    if (noteId) {
+      const blocks = editor.document as Block[];
+      latestBlocksRef.current = blocks;
+      titleDirtyRef.current = false;
+      saveDebounced({ blocks });
+      return;
+    }
     const payload = await serializeCurrentDocument();
     if (version !== serializationRef.current) {
       return;
     }
-    latestMarkdownRef.current = payload.markdown;
+    if (payload.markdown !== undefined) {
+      latestMarkdownRef.current = payload.markdown;
+    }
     latestBlocksRef.current = payload.blocks as PartialBlock[];
     titleDirtyRef.current = false;
-    onMarkdownChange(payload.markdown);
+    if (payload.markdown !== undefined) {
+      onMarkdownChange(payload.markdown);
+    }
     saveDebounced(payload);
   }, [
     editor,
@@ -672,6 +686,7 @@ function BlockNoteSurface({
     latestBlocksRef,
     latestMarkdownRef,
     onMarkdownChange,
+    noteId,
     saveDebounced,
     serializeCurrentDocument,
   ]);
@@ -782,14 +797,25 @@ function BlockNoteSurface({
 
     titleDirtyRef.current = false;
     const version = ++serializationRef.current;
+    if (noteId) {
+      const blocks = editor.document as Block[];
+      latestBlocksRef.current = blocks;
+      saveDebounced({ blocks });
+      flushNow();
+      return;
+    }
     serializeCurrentDocument()
       .then((payload) => {
         if (version !== serializationRef.current) {
           return;
         }
-        latestMarkdownRef.current = payload.markdown;
+        if (payload.markdown !== undefined) {
+          latestMarkdownRef.current = payload.markdown;
+        }
         latestBlocksRef.current = payload.blocks as PartialBlock[];
-        onMarkdownChange(payload.markdown);
+        if (payload.markdown !== undefined) {
+          onMarkdownChange(payload.markdown);
+        }
         saveDebounced(payload);
         flushNow();
       })
@@ -801,6 +827,7 @@ function BlockNoteSurface({
     flushNow,
     onMarkdownChange,
     onTitleBlur,
+    noteId,
     latestBlocksRef,
     latestMarkdownRef,
     saveDebounced,
@@ -863,7 +890,11 @@ function BlockNoteSurface({
           canKeepLocal={conflictDraftReady && !aiPending}
           conflict={conflict}
           isDark={isDark}
-          localText={latestMarkdownRef.current}
+          localText={
+            noteId
+              ? editor.prosemirrorState.doc.textContent
+              : latestMarkdownRef.current
+          }
           localTitle={title}
           onKeepLocal={onKeepLocal}
           onRetryLoad={onRetryConflictLoad}

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
+import { deferWorkspaceEffect } from '../workspaceFileJournal';
 
 const listeners = new Map<
   string,
@@ -31,6 +32,9 @@ export function notifyContentChanged(
   workspacePath: string,
   change: Omit<HostContentChangedEvent, 'workspaceId'>
 ): void {
+  if (deferWorkspaceEffect(() => notifyContentChanged(workspacePath, change))) {
+    return;
+  }
   const workspaceId = pluginWorkspaceId(workspacePath);
   for (const listener of listeners.get(workspaceId) ?? []) {
     try {

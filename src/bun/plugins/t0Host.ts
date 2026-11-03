@@ -22,7 +22,7 @@ export function isT0HostAllowed(
   if (channel === 'dev') {
     return true;
   }
-  return compiledIn && channel !== 'stable';
+  return compiledIn && channel === 'canary';
 }
 
 // Opt-in packaged-app experiment; no T0 services exist in a normal launch.

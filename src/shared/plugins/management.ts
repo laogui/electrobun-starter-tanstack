@@ -47,6 +47,8 @@ export interface InstalledPluginSummary {
   /** Restorable instance preimages created before dataVersion migrations. */
   migrationBackupCount?: number;
   name: string;
+  /** Binding for remembered permissions; does not authenticate a real-world author. */
+  permissionIdentity?: string;
   plugin?: PluginPackageSummary;
   pluginId: string;
   /** The one retained, verified code version available for explicit rollback. */

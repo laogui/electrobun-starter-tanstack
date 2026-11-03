@@ -27,7 +27,7 @@ export interface NoteDocument {
   frontmatter: NoteFrontmatter;
 }
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?([\s\S]*)$/;
 const NUMERIC_FRONTMATTER_KEYS = new Set(['previewBlocks', 'previewVersion']);
 
 function assertWorkspaceNotePath(
@@ -69,25 +69,28 @@ export function parseFrontmatter(content: string): {
 
     // Remove surrounding quotes and unescape
     if (typeof value === 'string') {
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value
-          .slice(1, -1)
-          .replaceAll(String.raw`\n`, '\n')
-          .replaceAll(String.raw`\"`, '"')
-          .replaceAll('\\\\', '\\');
-      }
-      // Parse arrays like ["Inbox", "Work"]
-      if (
-        (value as string).startsWith('[') &&
-        (value as string).endsWith(']')
-      ) {
+      if (value.startsWith('"') && value.endsWith('"')) {
+        const quoted = value;
         try {
-          value = JSON.parse(value as string);
+          value = JSON.parse(quoted);
         } catch {
-          // keep as string
+          value = quoted
+            .slice(1, -1)
+            .replace(
+              /\\([\\"nrt])/g,
+              (_match: string, escapedCode: string) =>
+                ({ n: '\n', r: '\r', t: '\t', '"': '"', '\\': '\\' })[
+                  escapedCode
+                ] ?? escapedCode
+            );
+        }
+      } else if (value.startsWith("'") && value.endsWith("'")) {
+        value = value.slice(1, -1).replaceAll("''", "'");
+      } else if (value.startsWith('[') && value.endsWith(']')) {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          /* Legacy non-JSON scalar remains literal. */
         }
       }
       if (
@@ -116,17 +119,8 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
     }
     if (Array.isArray(value)) {
       lines.push(`${key}: ${JSON.stringify(value)}`);
-    } else if (
-      typeof value === 'string' &&
-      // react-doctor-disable-next-line react-doctor/js-set-map-lookups
-      (value.includes(':') || value.includes('\n') || value.includes('"'))
-    ) {
-      lines.push(
-        `${key}: "${value
-          .replaceAll('\\', '\\\\')
-          .replaceAll('"', String.raw`\"`)
-          .replaceAll('\n', String.raw`\n`)}"`
-      );
+    } else if (typeof value === 'string') {
+      lines.push(`${key}: ${JSON.stringify(value)}`);
     } else {
       lines.push(`${key}: ${value}`);
     }

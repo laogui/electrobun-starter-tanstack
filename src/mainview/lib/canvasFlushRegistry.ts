@@ -6,6 +6,13 @@
 type CanvasFlusher = () => Promise<boolean>;
 
 let activeFlusher: CanvasFlusher | null = null;
+const noteFlushers = new Set<CanvasFlusher>();
+export function registerNoteFlusher(flusher: CanvasFlusher): () => void {
+  noteFlushers.add(flusher);
+  return () => {
+    noteFlushers.delete(flusher);
+  };
+}
 
 export function registerCanvasFlusher(flusher: CanvasFlusher): () => void {
   activeFlusher = flusher;
@@ -18,11 +25,12 @@ export function registerCanvasFlusher(flusher: CanvasFlusher): () => void {
 
 /** Flush pending canvas edits. Resolves `true` when nothing was left unsaved. */
 export async function flushRegisteredCanvas(): Promise<boolean> {
-  if (!activeFlusher) {
-    return true;
-  }
   try {
-    return await activeFlusher();
+    const notes = await Promise.all([...noteFlushers].map((flush) => flush()));
+    if (notes.some((saved) => !saved)) {
+      return false;
+    }
+    return activeFlusher ? await activeFlusher() : true;
   } catch (error) {
     console.error('[persistence] Quit flush failed:', error);
     return false;

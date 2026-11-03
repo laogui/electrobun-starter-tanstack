@@ -45,4 +45,4 @@ For a React root you create yourself, or standalone author tests, wrap the compo
 
 The template test uses `@ghostboard/sdk/testing` to run setup and command behavior without GhostBoard. The fake host does not reproduce GhostBoard layout or CSS, persistence, real RPC, multi-plugin arbitration, package-signature verification, or platform behavior. Use a packaged GhostBoard build for those checks. Native backends and permission sandboxes are not part of this slice.
 
-For coding agents, `AGENTS.md` points to the complete single-file `node_modules/@ghostboard/sdk/AI_REFERENCE.md`; no host-repository source is required. The same file is published at https://ghostboard.app/docs/reference/sdk/.
+For coding agents, `AGENTS.md` points to the complete single-file `node_modules/@ghostboard/sdk/AI_REFERENCE.md`; no host-repository source is required. The same file is published at https://ghostboard.21blog.com/docs/reference/sdk/.

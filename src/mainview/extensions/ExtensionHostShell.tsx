@@ -205,7 +205,7 @@ export function ExtensionHostShell({
           isDetail
             ? 'relative size-full overflow-hidden'
             : cn(
-                'node-visual relative size-full overflow-hidden bg-white shadow-card dark:bg-neutral-900',
+                'node-visual relative size-full overflow-hidden bg-white text-neutral-900 shadow-card dark:bg-neutral-900 dark:text-neutral-50',
                 canvasTypeId === RECORDING_CANVAS_TYPE_ID
                   ? 'rounded-2xl'
                   : 'rounded-3xl'

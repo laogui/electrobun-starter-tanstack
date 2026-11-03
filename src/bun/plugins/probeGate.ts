@@ -37,10 +37,7 @@ export function probesAllowed(
   channel: string = getAppChannel(),
   compiledIn: boolean = probesCompiledIn()
 ): boolean {
-  if (channel === 'stable') {
-    return false;
-  }
-  return compiledIn || channel === 'dev';
+  return channel === 'dev' || (channel === 'canary' && compiledIn);
 }
 
 /**

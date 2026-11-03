@@ -1,4 +1,5 @@
 import { getAppInfoData } from '../../appLifecycle';
+import { trackedClone } from '../../cloneReceipts';
 import {
   loadExtensionEnablement,
   setCanvasTypeEnabled,
@@ -118,11 +119,17 @@ export function createExtensionsHandlers(
 
     extensionInstanceClone: async ({ instanceId }) => {
       try {
-        const record = await cloneExtensionInstance(wsPath, instanceId);
-        if (!record) {
+        const cloned = await trackedClone(wsPath, 'extension', () =>
+          cloneExtensionInstance(wsPath, instanceId)
+        );
+        if (!cloned) {
           return { success: false };
         }
-        return { success: true, record };
+        return {
+          success: true,
+          record: cloned.record,
+          cloneToken: cloned.token,
+        };
       } catch (error) {
         console.error('[extensions] clone instance failed', error);
         return { success: false };

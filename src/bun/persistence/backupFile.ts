@@ -1,4 +1,6 @@
-import { copyFile, link, rename, unlink } from 'node:fs/promises';
+import { copyFile, link, readFile, rename, unlink } from 'node:fs/promises';
+import { atomicWrite } from '../atomicWrite';
+import { hasWorkspaceFileTransaction } from '../workspaceFileJournal';
 
 function errorCode(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException | null)?.code;
@@ -15,6 +17,16 @@ export async function rotateBackup(
   filePath: string,
   backupPath: string
 ): Promise<void> {
+  if (hasWorkspaceFileTransaction()) {
+    try {
+      await atomicWrite(backupPath, new Uint8Array(await readFile(filePath)));
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') {
+        throw error;
+      }
+    }
+    return;
+  }
   const staging = `${backupPath}.${crypto.randomUUID().slice(0, 8)}.tmp`;
   try {
     try {

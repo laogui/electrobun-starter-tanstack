@@ -52,6 +52,59 @@ function gateWith(
 const PLUGIN = 'com.example.plugin';
 
 describe('PluginPermissionGate', () => {
+  it('serializes concurrent grant changes without losing permissions', async () => {
+    const store = new PluginPermissionStore(directory);
+    await Promise.all([
+      store.grant(PLUGIN, 'files.read'),
+      store.grant(PLUGIN, 'files.directory'),
+    ]);
+    expect(
+      (await store.list()).map((grant) => grant.permission).toSorted()
+    ).toEqual(['files.directory', 'files.read']);
+  });
+  it('does not reuse a grant after author identity changes or the plugin is disabled', async () => {
+    const store = new PluginPermissionStore(directory);
+    let identity: { name: string; identity: string } | undefined = {
+      name: 'Plugin',
+      identity: 'key-a',
+    };
+    const prompt = vi
+      .fn<PluginPermissionPrompter>()
+      .mockResolvedValueOnce('always-allow')
+      .mockResolvedValue('deny');
+    const gate = new PluginPermissionGate({
+      store,
+      describePlugin: async () => identity,
+      prompt,
+    });
+    expect(await gate.check(PLUGIN, 'files.read')).toBe(true);
+    identity = { name: 'Plugin', identity: 'key-b' };
+    expect(await gate.check(PLUGIN, 'files.read')).toBe(false);
+    identity = undefined;
+    expect(await gate.check(PLUGIN, 'files.read')).toBe(false);
+    expect(prompt).toHaveBeenCalledTimes(2);
+  });
+  it('a revocation while a native prompt is open invalidates that pending answer', async () => {
+    const store = new PluginPermissionStore(directory);
+    let answer: (decision: PluginPermissionDecision) => void = () => undefined;
+    const prompt = vi.fn<PluginPermissionPrompter>(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        })
+    );
+    const gate = new PluginPermissionGate({
+      store,
+      describePlugin: async () => 'Plugin',
+      prompt,
+    });
+    const pending = gate.check(PLUGIN, 'files.read');
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledOnce());
+    await gate.revoke(PLUGIN);
+    answer('always-allow');
+    expect(await pending).toBe(false);
+    expect(await store.list()).toEqual([]);
+  });
   it('allows once without persisting, so the next request asks again', async () => {
     const { gate, prompt, store } = gateWith(['allow-once', 'allow-once']);
     expect(await gate.check(PLUGIN, 'files.read')).toBe(true);
@@ -171,7 +224,10 @@ describe('PluginPermissionGate', () => {
 });
 
 describe('NoteContentService bulk delete consent', () => {
-  async function setup(check: (pluginId: string) => Promise<boolean>) {
+  async function setup(
+    check: (pluginId: string) => Promise<boolean>,
+    count = 2
+  ) {
     // Same layout `initWorkspace` creates (not imported: it pulls in Electrobun).
     const workspace = join(directory, 'ws');
     for (const dir of ['.ghostboard/views', '.ghostboard/trash', 'content']) {
@@ -196,7 +252,9 @@ describe('NoteContentService bulk delete consent', () => {
         action: 'create',
         operationId: 'create-1',
         label: 'Import',
-        notes: [{ title: 'One' }, { title: 'Two' }],
+        notes: Array.from({ length: count }, (_, index) => ({
+          title: `Note ${index}`,
+        })),
       },
       true
     );
@@ -219,6 +277,15 @@ describe('NoteContentService bulk delete consent', () => {
       'content.delete',
       expect.stringContaining('2 notes')
     );
+  });
+  it('also asks for one-note deletions so splitting a batch cannot bypass consent', async () => {
+    const { call, permissions } = await setup(async () => false, 1);
+    const result = await call(
+      { action: 'undo', operationId: 'undo-one', batchId: 'create-1' },
+      true
+    );
+    expect(result?.status).toBe(403);
+    expect(permissions.check).toHaveBeenCalledOnce();
   });
 
   it('proceeds when allowed', async () => {

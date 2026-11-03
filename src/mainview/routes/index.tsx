@@ -1120,12 +1120,13 @@ function CanvasComponent() {
   const activeViewName =
     views.find((view) => view.id === activeViewId)?.name ?? 'Canvas';
 
-  const { onExportCanvas, onExportCanvasJson } = useCanvasExport({
-    activeViewId,
-    activeViewName,
-    canvasBackground,
-    rfInstance,
-  });
+  const { onExportCanvas, onExportCanvasJson, onExportMarkdown } =
+    useCanvasExport({
+      activeViewId,
+      activeViewName,
+      canvasBackground,
+      rfInstance,
+    });
 
   if (!hydrated && canvasLoadError) {
     return <CanvasLoadErrorScreen error={canvasLoadError} />;
@@ -1236,6 +1237,7 @@ function CanvasComponent() {
         onCreateNode={createFromBottomMenu}
         onExportCanvas={onExportCanvas}
         onExportCanvasJson={onExportCanvasJson}
+        onExportMarkdown={onExportMarkdown}
         onOpenNoteLibrary={onOpenNoteLibrary}
         setCreateMenuOpen={setCreateMenuOpen}
       />

@@ -21,7 +21,7 @@
     "url": "git+https://github.com/laogui/electrobun-starter-tanstack.git",
     "directory": "packages/create-plugin"
   },
-  "homepage": "https://ghostboard.app/docs/",
+  "homepage": "https://ghostboard.21blog.com/docs/",
   "keywords": [
     "ghostboard",
     "plugin",

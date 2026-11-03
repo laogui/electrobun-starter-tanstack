@@ -33,6 +33,7 @@ import {
   normalizeLinkState,
 } from '../../shared/extensions/web/link';
 import type { ManifestNode } from '../manifest';
+import { copyLegacyWidgetTagsOnce } from '../nodeMetadata';
 import {
   loadWidget,
   type WidgetLoadError,
@@ -173,6 +174,9 @@ async function migrateWidgetLike(
   if (!ok) {
     return null;
   }
+  if (typeof node.id === 'string') {
+    await copyLegacyWidgetTagsOnce(wsPath, widgetId, node.id);
+  }
   return persistableExtensionNode(
     node,
     canvasTypeId,
@@ -262,6 +266,26 @@ async function migrateOneNode(
   node: Record<string, unknown>,
   childPath?: string
 ): Promise<{ changed: boolean; node: Record<string, unknown> }> {
+  // Repair references migrated by older hosts, including Folder children.
+  // Only built-in widget migrations use this deterministic instance prefix.
+  if (node.type === 'extension') {
+    const data = nodeData(node);
+    if (
+      typeof node.id === 'string' &&
+      typeof data.instanceId === 'string' &&
+      data.instanceId.startsWith('extinst_widget_') &&
+      ['checklist', 'pomodoro', 'reminder'].some(
+        (kind) => data.canvasTypeId === canvasTypeIdForWidgetKind(kind)
+      )
+    ) {
+      await copyLegacyWidgetTagsOnce(
+        wsPath,
+        data.instanceId.slice('extinst_'.length),
+        node.id
+      );
+    }
+    return { changed: false, node };
+  }
   if (node.type === 'widget') {
     const migrated = await migrateWidgetLike(wsPath, appVersion, node);
     return migrated

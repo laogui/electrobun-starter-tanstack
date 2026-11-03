@@ -65,6 +65,10 @@ export class LocalHttpCredentials implements PluginHostCredentials {
     }
   }
 
+  resolvePluginToken(token: string): string | null {
+    return this.pluginsByToken.get(token) ?? null;
+  }
+
   revokeAllPlugins(): void {
     this.tokensByPlugin.clear();
     this.pluginsByToken.clear();

@@ -1,3 +1,4 @@
+import { trackedClone } from '../../cloneReceipts';
 import {
   cloneWidget,
   createWidget,
@@ -26,11 +27,17 @@ export function createWidgetsHandlers(
 
     cloneWidget: async ({ widgetId }) => {
       try {
-        const widget = await cloneWidget(wsPath, widgetId);
-        if (!widget) {
+        const cloned = await trackedClone(wsPath, 'widget', () =>
+          cloneWidget(wsPath, widgetId)
+        );
+        if (!cloned) {
           return { success: false };
         }
-        return { success: true, widget };
+        return {
+          success: true,
+          widget: cloned.record,
+          cloneToken: cloned.token,
+        };
       } catch (error) {
         console.error('[widgets] cloneWidget failed', error);
         return { success: false };

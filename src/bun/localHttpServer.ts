@@ -21,6 +21,7 @@ export interface LocalHttpServerHandle {
    * `src`). Only accepted for GET/HEAD on `/attachment` and `/youtube`.
    */
   mediaToken: string;
+  resolvePluginCaller: (token: string) => string | null;
   stop: () => void;
   /** Main renderer token. Accepted only as an `Authorization` header. */
   token: string;
@@ -437,6 +438,8 @@ export function startLocalHttpServer(
   const diagnostics = t0?.diagnose(`http://127.0.0.1:${server.port}`, token);
   return {
     baseUrl: `http://127.0.0.1:${server.port}`,
+    resolvePluginCaller: (callerToken) =>
+      credentials.resolvePluginToken(callerToken),
     mediaToken: credentials.mediaToken,
     token,
     stop: () => {

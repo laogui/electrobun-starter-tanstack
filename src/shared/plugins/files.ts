@@ -31,6 +31,8 @@ export type PluginFileSystemHandleData =
 
 export interface PluginFilePickRequest extends PluginFileContext {
   extensions: string[];
+  /** Scoped host credential; never substitute the main renderer token. */
+  hostToken?: string;
   kind?: 'directory' | 'file';
   multiple?: boolean;
 }

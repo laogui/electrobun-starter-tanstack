@@ -753,6 +753,14 @@ export class PluginFileStore {
     }
   }
 
+  revokePlugin(pluginId: string): void {
+    for (const handle of this.handles.values()) {
+      if (handle.context.pluginId === pluginId) {
+        this.releaseHandle(handle.id);
+      }
+    }
+  }
+
   private releaseHandle(id: string): void {
     this.handles.delete(id);
     for (const [uploadId, write] of this.writes) {

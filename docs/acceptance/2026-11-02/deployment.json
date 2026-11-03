@@ -1,0 +1,15 @@
+{
+  "domain": "ghostboard.21blog.com",
+  "worker": "ghostboard-docs",
+  "versionId": "31a380ad-5c58-481b-b65e-196139d82341",
+  "siteRepo": "/Users/laogui/Projects/react-starter-kit",
+  "siteWorkingTreeUncommitted": true,
+  "generatedConfig": "apps/web/dist/server/wrangler.json",
+  "publicObjects": 10,
+  "privateKeyIncluded": false,
+  "npmPublication": "user-deferred",
+  "intel": "user-deferred",
+  "outsideAuthors": "user-deferred",
+  "previousVersionId": "8cfbf3cb-0813-47c1-a5ab-8650517a967e",
+  "completedAtLocal": "2026-11-03"
+}

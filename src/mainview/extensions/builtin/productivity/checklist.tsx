@@ -122,6 +122,7 @@ export const checklistCanvasType: BuiltinCanvasType<ChecklistState> = {
   category: 'productivity',
   dataVersion: 1,
   createFlow: 'immediate',
+  interactions: { supportsTags: true },
   surface: {
     defaultSize: { width: 320, height: 380 },
     minSize: { width: 220, height: 220 },

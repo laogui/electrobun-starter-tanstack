@@ -8,7 +8,8 @@ import type {
 import { getViewportForBounds } from '@xyflow/react';
 import { toBlob } from 'html-to-image';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
-import { rpcExportJson, rpcExportPng } from '@/lib/rpc';
+import { collectNoteReferences } from '@/lib/noteReferences';
+import { rpcExportJson, rpcExportPng, rpcLoadBlockNote } from '@/lib/rpc';
 import type { WidgetLoadError, WidgetRecord } from '@/lib/widgetTypes';
 import type { ExtensionInstanceRecord } from '../../shared/extensions/instance';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
@@ -514,9 +515,8 @@ export function collectWidgetIdsFromNodes(nodes: readonly unknown[]): string[] {
 
 /**
  * Build a serializable canvas export document from the live in-memory
- * nodes/edges. Card / folder nodes already carry hydrated content (title,
- * body, color, children) in `data`, so the export is self-contained — no need
- * to roundtrip through the .md files on disk.
+ * nodes/edges. The async exporter refreshes note bodies from canonical JSON
+ * before calling this pure builder; canvas content is a display cache.
  */
 export function buildCanvasExportJson({
   edges,
@@ -632,6 +632,50 @@ interface ExportCanvasJsonOptions {
  *
  * Returns `true` when a file was written, `false` when the user canceled.
  */
+/** Refresh export bodies once from canonical JSON, rather than a typing-time mirror. */
+export async function hydrateCanvasExportNotes(
+  nodes: Node[],
+  loadNote: typeof rpcLoadBlockNote = rpcLoadBlockNote
+): Promise<Node[]> {
+  const bodies = new Map<string, string>();
+  for (const id of collectNoteReferences(nodes)) {
+    const note = await loadNote(id, undefined, true);
+    if (!note.success || typeof note.markdown !== 'string') {
+      throw new Error(`Could not read current note for export: ${id}`);
+    }
+    bodies.set(id, note.markdown);
+  }
+  const project = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(project);
+    }
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+    if (!isPlainRecord(value.data)) {
+      return value;
+    }
+    const data = value.data;
+    const id =
+      typeof data.noteId === 'string'
+        ? data.noteId
+        : typeof value.noteId === 'string'
+          ? value.noteId
+          : undefined;
+    return {
+      ...value,
+      data: {
+        ...data,
+        ...(Array.isArray(data.children)
+          ? { children: project(data.children) }
+          : {}),
+        ...(id && bodies.has(id) ? { content: bodies.get(id) } : {}),
+      },
+    };
+  };
+  return project(nodes) as Node[];
+}
+
 export async function exportReactFlowCanvasToJson({
   edges,
   fileName,
@@ -644,7 +688,9 @@ export async function exportReactFlowCanvasToJson({
 }: ExportCanvasJsonOptions) {
   const document_ = buildCanvasExportJson({
     edges,
-    nodes,
+    nodes: await hydrateCanvasExportNotes(
+      nodes.filter((node) => !(node.data?.detached || node.data?.isHidden))
+    ),
     viewId,
     viewName,
     viewport,

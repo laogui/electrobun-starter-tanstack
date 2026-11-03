@@ -44,6 +44,14 @@ describe('public plugin packer signing', () => {
     expect(keyResult.publicKey).toMatch(PUBLIC_KEY_RE);
     expect(await readFile(privateKey, 'utf8')).toContain('PRIVATE KEY');
     await writeRuntime(runtime, keyResult.publicKey);
+    // Global path order differs from directory DFS and locale collation.
+    await mkdir(join(runtime, 'a'));
+    for (const name of ['Z.js', 'a.js', 'a/nested.js', 'é.js', '资料.js']) {
+      await writeFile(
+        join(runtime, name),
+        `export const value = ${JSON.stringify(name)};\n`
+      );
+    }
 
     const first = join(root, 'first.ghostboard-plugin');
     const second = join(root, 'second.ghostboard-plugin');

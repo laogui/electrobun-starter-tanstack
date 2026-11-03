@@ -14,6 +14,7 @@ import {
   scriptedProbesActive,
 } from './probeGate';
 import { scriptedProbeSelection } from './probeSelection';
+import { isT0HostAllowed } from './t0Host';
 
 const channel = vi.hoisted(() => ({ value: 'stable' }));
 
@@ -62,6 +63,17 @@ function gate(prompt: PluginPermissionPrompter) {
 }
 
 describe('plugin probe gate', () => {
+  it('does not classify an unrecognized user-data path as dev', async () => {
+    const paths =
+      await vi.importActual<typeof import('../appPaths')>('../appPaths');
+    expect(paths.getAppChannel()).toBe('unknown');
+  });
+  it('fails closed for unknown channels, including probe builds', () => {
+    for (const value of ['unknown', 'preview', '', 'STABLE']) {
+      expect(probesAllowed(value, true)).toBe(false);
+      expect(isT0HostAllowed(value, true)).toBe(false);
+    }
+  });
   it('ignores probe variables in stable even when compiled in', async () => {
     vi.stubGlobal('__GHOSTBOARD_ENABLE_PLUGIN_PROBES__', true);
     expect(probesAllowed()).toBe(false);

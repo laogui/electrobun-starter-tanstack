@@ -17,7 +17,7 @@
  *                                   Required unless --dry-run (an ephemeral key is
  *                                   generated and reported as such).
  *   GHOSTBOARD_PLUGIN_EXAMPLES_BASE_URL  Public HTTPS base (default
- *                                   https://dl.ghostboard.app/plugins/examples).
+ *                                   https://ghostboard.21blog.com/plugins/examples).
  *   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET,
  *   R2_EXAMPLES_KEY_PREFIX (default plugins/examples/)  as in upload-r2.ts.
  */
@@ -41,7 +41,7 @@ const baseUrlArgument = process.argv
 const baseUrl = (
   baseUrlArgument ??
   process.env.GHOSTBOARD_PLUGIN_EXAMPLES_BASE_URL ??
-  'https://dl.ghostboard.app/plugins/examples'
+  'https://ghostboard.21blog.com/plugins/examples'
 ).replace(/\/+$/, '');
 if (!baseUrl.startsWith('https://')) {
   throw new Error('Example base URL must be https://');

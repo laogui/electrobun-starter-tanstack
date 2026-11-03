@@ -11,6 +11,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import {
   generatePluginInstallId,
+  isPluginId,
   PLUGIN_INSTALL_ID_RE,
 } from '../../shared/plugins/ids';
 import {
@@ -18,6 +19,7 @@ import {
   isPluginPublicKey,
   type PluginManifest,
 } from '../../shared/plugins/manifest';
+import { atomicWrite } from '../atomicWrite';
 import { readJsonOrEmpty } from '../persistence/corruptFile';
 import { readPluginContents } from './directoryContents';
 import {
@@ -490,6 +492,100 @@ export class PluginInstallStore {
     return this.enqueue(async () => this.cancelLocked(transactionId));
   }
 
+  remove(input: { pluginId: string; digest: string }): Promise<void> {
+    return this.enqueue(async () => {
+      const registry = await this.readRegistry();
+      const current = registry.packages.find(
+        (entry) =>
+          entry.pluginId === input.pluginId && entry.digest === input.digest
+      );
+      if (!(current && isPluginId(current.pluginId))) {
+        throw new PluginInstallError(
+          'not-found',
+          'Installed package changed; refresh and try again.'
+        );
+      }
+      const archive = join(this.rootDir, 'removed', crypto.randomUUID());
+      await mkdir(archive, { recursive: true });
+      await atomicWrite(
+        join(archive, 'receipt.json'),
+        JSON.stringify({
+          schema: 'ghostboard-plugin-removal/v1',
+          pluginId: current.pluginId,
+          digest: current.digest,
+          record: current,
+          complete: false,
+        })
+      );
+      for (const journal of await this.listJournals()) {
+        if (
+          journal.pluginId === input.pluginId &&
+          PENDING_STAGES.has(journal.stage)
+        ) {
+          await this.writeJournal({ ...journal, stage: 'cancelled' });
+          await this.removeStaging(journal.transactionId);
+        }
+      }
+      await this.finishRemoval(archive);
+    });
+  }
+
+  private async finishRemoval(archive: string): Promise<void> {
+    const receipt = JSON.parse(
+      await readFile(join(archive, 'receipt.json'), 'utf8')
+    );
+    if (
+      !isRecord(receipt) ||
+      receipt.schema !== 'ghostboard-plugin-removal/v1' ||
+      typeof receipt.pluginId !== 'string' ||
+      !isPluginId(receipt.pluginId) ||
+      typeof receipt.digest !== 'string' ||
+      !PLUGIN_PACKAGE_DIGEST_RE.test(receipt.digest) ||
+      typeof receipt.complete !== 'boolean'
+    ) {
+      throw new PluginInstallError(
+        'invalid-state',
+        'Invalid removal receipt; original files were retained.'
+      );
+    }
+    if (receipt.complete) {
+      return;
+    }
+    const record = parseStoredPackage(receipt.record);
+    if (
+      !record ||
+      record.pluginId !== receipt.pluginId ||
+      record.digest !== receipt.digest
+    ) {
+      throw new PluginInstallError(
+        'invalid-state',
+        'Invalid removal preimage; files were retained.'
+      );
+    }
+    const registry = await this.readRegistry();
+    const current = registry.packages.find(
+      (entry) =>
+        entry.pluginId === receipt.pluginId &&
+        entry.digest === receipt.digest &&
+        entry.installedAt === record.installedAt
+    );
+    if (current) {
+      const source = join(this.rootDir, PACKAGES_DIR, receipt.pluginId);
+      const destination = join(archive, 'code');
+      if (!existsSync(destination) && existsSync(source)) {
+        await rename(source, destination);
+      }
+      await this.writeRegistry({
+        ...registry,
+        packages: registry.packages.filter((entry) => entry !== current),
+      });
+    }
+    await atomicWrite(
+      join(archive, 'receipt.json'),
+      JSON.stringify({ ...receipt, complete: true })
+    );
+  }
+
   rollback(input: {
     digest: string;
     pluginId: string;
@@ -656,7 +752,7 @@ export class PluginInstallStore {
   }
 
   private async writeRegistry(registry: PluginRegistryFile): Promise<void> {
-    await writeJsonAtomic(this.registryPath(), registry);
+    await atomicWrite(this.registryPath(), JSON.stringify(registry));
   }
 
   private async readJournal(
@@ -1088,6 +1184,7 @@ export class PluginInstallStore {
    */
   adoptTreeDigest(input: {
     digest: string;
+    previousTreeDigest?: string;
     pluginId: string;
     treeDigest: string;
   }): Promise<void> {
@@ -1098,7 +1195,7 @@ export class PluginInstallStore {
         if (
           entry.pluginId !== input.pluginId ||
           entry.digest !== input.digest ||
-          entry.treeDigest
+          (entry.treeDigest && entry.treeDigest !== input.previousTreeDigest)
         ) {
           return entry;
         }
@@ -1181,8 +1278,13 @@ export class PluginInstallStore {
         `The retained version of ${input.pluginId} no longer matches its recorded identity.`
       );
     }
-    const treeDigest = (await readPluginContents(previous.directory)).digest;
-    if (previous.treeDigest && previous.treeDigest !== treeDigest) {
+    const contents = await readPluginContents(previous.directory);
+    const treeDigest = contents.digest;
+    if (
+      previous.treeDigest &&
+      previous.treeDigest !== treeDigest &&
+      previous.treeDigest !== contents.legacyDigest
+    ) {
       throw new PluginInstallError(
         'integrity',
         `The retained version of ${input.pluginId} was changed after installation.`
@@ -1229,6 +1331,17 @@ export class PluginInstallStore {
   }
 
   private async recoverLocked(): Promise<PluginInstallJournal[]> {
+    const removals = join(this.rootDir, 'removed');
+    if (existsSync(removals)) {
+      for (const entry of await readdir(removals, { withFileTypes: true })) {
+        if (
+          entry.isDirectory() &&
+          existsSync(join(removals, entry.name, 'receipt.json'))
+        ) {
+          await this.finishRemoval(join(removals, entry.name));
+        }
+      }
+    }
     await mkdir(this.journalsDir(), { recursive: true });
     await mkdir(join(this.rootDir, PACKAGES_DIR), { recursive: true });
     await mkdir(join(this.rootDir, STAGING_DIR), { recursive: true });

@@ -91,3 +91,34 @@ it('imports a native file through the same durable publication path', async () =
   });
   expect(await readFile(join(ws, saved.filePath), 'utf8')).toBe('Native bytes');
 });
+it.skipIf(process.platform !== 'darwin')(
+  'a timed-out video preview kills its process and never publishes a partial image',
+  async () => {
+    const { generateVideoPosterFile } = await import('./thumbnail');
+    await mkdir(join(ws, 'attachments'));
+    const source = join(ws, 'attachments/source.mp4');
+    await writeFile(source, 'Original video');
+    const kill = vi.fn();
+    const spawn = vi.fn((_args: string[]) => ({
+      exited: new Promise<number>(() => undefined),
+      exitCode: null,
+      kill,
+    }));
+    vi.stubGlobal('Bun', { spawn });
+    vi.useFakeTimers();
+    try {
+      const pending = generateVideoPosterFile(ws, source);
+      await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+      const temp = spawn.mock.calls[0]![0][5]!;
+      await writeFile(join(temp, 'partial.png'), 'Partial preview');
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(await pending).toBeUndefined();
+      expect(kill).toHaveBeenCalledWith('SIGKILL');
+      await expect(readdir(temp)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readdir(join(ws, 'attachments'))).toEqual(['source.mp4']);
+      expect(await readFile(source, 'utf8')).toBe('Original video');
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+);

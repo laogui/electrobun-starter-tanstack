@@ -17,12 +17,15 @@ import {
   rpcDisablePlugin,
   rpcEnablePlugin,
   rpcListPluginPackages,
+  rpcListPluginPermissions,
   rpcPrepareNormalPluginStart,
   rpcPreparePluginDevelopmentDirectory,
   rpcPreparePluginInstallFromFile,
   rpcPreparePluginInstallFromUrl,
   rpcPreparePluginUpdate,
+  rpcRemovePlugin,
   rpcRestorePluginMigrationBackup,
+  rpcRevokePluginPermission,
   rpcRollbackPlugin,
 } from '@/lib/rpc';
 import type {
@@ -52,6 +55,8 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     | 'commit'
     | 'directory'
     | 'disable'
+    | 'remove'
+    | 'revoke'
     | 'enable'
     | 'file'
     | 'rollback'
@@ -62,7 +67,12 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
     | null
   >(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [removeCandidate, setRemoveCandidate] =
+    useState<InstalledPluginSummary | null>(null);
   const [plugins, setPlugins] = useState<InstalledPluginSummary[]>([]);
+  const [grants, setGrants] = useState<
+    Awaited<ReturnType<typeof rpcListPluginPermissions>>
+  >([]);
   const [preview, setPreview] = useState<PluginInstallPreview | null>(null);
   const [restoreCandidate, setRestoreCandidate] =
     useState<InstalledPluginSummary | null>(null);
@@ -73,11 +83,58 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
   const [url, setUrl] = useState('');
 
   const refresh = useCallback(async () => {
-    const result = await rpcListPluginPackages();
+    const [result, permissions] = await Promise.all([
+      rpcListPluginPackages(),
+      rpcListPluginPermissions(),
+    ]);
     setAvailable(result.available);
     setPlugins(result.plugins);
+    setGrants(permissions);
     setSafeMode(result.safeMode ?? { active: false, nextStart: 'normal' });
   }, []);
+
+  const revokePermission = async (pluginId: string, permission: string) => {
+    setBusy('revoke');
+    try {
+      if (!(await rpcRevokePluginPermission(pluginId, permission)).success) {
+        throw new Error(strings.pluginsUnknownError);
+      }
+      await refresh();
+    } catch (error) {
+      setFeedback({
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : strings.pluginsUnknownError,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removePlugin = async () => {
+    if (!removeCandidate) {
+      return;
+    }
+    setBusy('remove');
+    try {
+      const result = await rpcRemovePlugin(removeCandidate);
+      if (!result.success) {
+        throw new Error(result.error ?? strings.pluginsUnknownError);
+      }
+      setRemoveCandidate(null);
+      setActivationCandidate(null);
+      await refresh();
+      setFeedback({ kind: 'success', message: strings.pluginsRemoveSuccess });
+    } catch (error) {
+      setFeedback({
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : strings.pluginsUnknownError,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -671,6 +728,99 @@ export function PluginsPanel({ strings }: PluginsPanelProps) {
                         ) : null}
                       </div>
                     )}
+                    {plugin.digest && plugin.status !== 'legacy' ? (
+                      <div className="space-y-2">
+                        {removeCandidate?.pluginId === plugin.pluginId ? (
+                          <div className="space-y-2 rounded-lg border border-amber-300 p-3 text-xs dark:border-amber-700">
+                            <p>{strings.pluginsRemoveWarning}</p>
+                            <div className="flex gap-2">
+                              <button
+                                className="rounded-md border border-red-400 px-3 py-1.5 text-red-700 dark:text-red-300"
+                                disabled={busy !== null}
+                                onClick={removePlugin}
+                                type="button"
+                              >
+                                {busy === 'remove'
+                                  ? strings.pluginsRemoving
+                                  : strings.pluginsRemoveConfirm}
+                              </button>
+                              <button
+                                className="px-3 py-1.5"
+                                disabled={busy !== null}
+                                onClick={() => setRemoveCandidate(null)}
+                                type="button"
+                              >
+                                {strings.pluginsCancelEnable}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            className="text-red-700 text-xs dark:text-red-300"
+                            disabled={busy !== null || preview !== null}
+                            onClick={() => setRemoveCandidate(plugin)}
+                            type="button"
+                          >
+                            {plugin.development
+                              ? strings.pluginsDisconnect
+                              : strings.pluginsRemove}
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section
+            aria-labelledby="plugin-permissions-heading"
+            className="space-y-3"
+          >
+            <h3
+              className="font-medium text-[13px]"
+              id="plugin-permissions-heading"
+            >
+              {strings.pluginsPermissionsTitle}
+            </h3>
+            <p className="text-neutral-500 text-xs dark:text-neutral-400">
+              {strings.pluginsPermissionsDescription}
+            </p>
+            {grants.length === 0 ? (
+              <p className="text-neutral-500 text-xs">
+                {strings.pluginsPermissionsEmpty}
+              </p>
+            ) : (
+              <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-700 dark:border-neutral-700">
+                {grants.map((grant) => (
+                  <li
+                    className="flex items-center justify-between gap-3 p-3 text-xs"
+                    key={`${grant.pluginId}:${grant.permission}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="break-all font-medium">
+                        {plugins.find(
+                          (plugin) => plugin.pluginId === grant.pluginId
+                        )?.name ?? grant.pluginId}
+                      </p>
+                      <p>
+                        {grant.permission === 'files.read'
+                          ? strings.pluginsPermissionFiles
+                          : grant.permission === 'files.directory'
+                            ? strings.pluginsPermissionDirectory
+                            : strings.pluginsPermissionDelete}
+                      </p>
+                    </div>
+                    <button
+                      className="shrink-0 rounded-md border px-3 py-1.5"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        revokePermission(grant.pluginId, grant.permission)
+                      }
+                      type="button"
+                    >
+                      {strings.pluginsRevoke}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -702,6 +852,8 @@ function PluginEnablementControls({
     | 'commit'
     | 'directory'
     | 'disable'
+    | 'remove'
+    | 'revoke'
     | 'enable'
     | 'file'
     | 'rollback'

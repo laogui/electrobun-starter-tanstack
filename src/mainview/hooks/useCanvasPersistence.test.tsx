@@ -15,6 +15,7 @@ vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   isRpcAvailable: vi.fn(async () => true),
   rpcSaveManifest: vi.fn(async () => ({ success: true })),
+  loadCanvas: vi.fn(),
 }));
 
 const rpc = await import('@/lib/rpc');
@@ -174,6 +175,73 @@ describe('useCanvasPersistence (debounced manifest flush)', () => {
     expect(saveManifest).toHaveBeenCalledTimes(2);
     expect(readPendingFlushBackup('view-1')).toBeNull();
     expect(dismiss).toHaveBeenCalledWith('canvas-save-view-1');
+  });
+
+  it('reloads only conflicting notes while preserving layout and unrelated local drafts', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('conflict');
+    useCanvasStore.setState({
+      nodes: [
+        card('stale', {
+          data: {
+            noteId: 'stale',
+            title: 'Stale local draft',
+            blocknoteRevision: 1,
+          },
+        }),
+        card('other', {
+          data: {
+            noteId: 'other',
+            title: 'Keep local draft',
+            blocknoteRevision: 2,
+          },
+        }),
+      ],
+    });
+    vi.mocked(rpc.loadCanvas).mockResolvedValueOnce({
+      nodes: [
+        card('stale', {
+          data: { noteId: 'stale', title: 'Disk title', blocknoteRevision: 2 },
+        }),
+        card('other', {
+          data: {
+            noteId: 'other',
+            title: 'Unedited disk title',
+            blocknoteRevision: 2,
+          },
+        }),
+      ],
+      edges: [],
+    });
+    saveManifest.mockResolvedValueOnce({
+      success: false,
+      error: 'revision-conflict',
+      layoutSaved: true,
+      conflictNoteIds: ['stale'],
+    });
+    await mount();
+    await moveNode(123);
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS);
+    });
+    const options = error.mock.calls.at(-1)?.[1];
+    expect(options?.action).toBeDefined();
+    await act(async () => {
+      if (
+        options?.action &&
+        typeof options.action === 'object' &&
+        'onClick' in options.action
+      ) {
+        options.action.onClick({} as React.MouseEvent<HTMLButtonElement>);
+      }
+    });
+    expect(useCanvasStore.getState().nodes[0]?.data.title).toBe('Disk title');
+    expect(useCanvasStore.getState().nodes[1]?.data.title).toBe(
+      'Keep local draft'
+    );
+    expect(useCanvasStore.getState().nodes[0]?.position.x).toBe(123);
+    expect(
+      Object.keys(localStorage).some((key) => key.includes('archive.'))
+    ).toBe(true);
   });
 
   it('requires confirmation before a pending backup replaces the loaded disk graph', async () => {

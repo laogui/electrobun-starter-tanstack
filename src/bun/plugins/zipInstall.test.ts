@@ -17,6 +17,70 @@ import {
 } from './zipInstall';
 
 describe('plugin zip unpack', () => {
+  it('rejects a valid local record embedded inside another entry payload', async () => {
+    const innerZip = createStoredZip({ 'inner.js': 'export default 1' });
+    const innerView = new DataView(innerZip.buffer);
+    const innerEnd = innerView.getUint32(innerZip.length - 22 + 16, true);
+    const zip = createZip([
+      { name: 'outer.js', data: innerZip.slice(0, innerEnd) },
+      { name: 'inner.js', data: 'export default 1' },
+    ]);
+    const view = new DataView(zip.buffer);
+    const central = view.getUint32(zip.length - 22 + 16, true);
+    const secondCentral = central + 46 + view.getUint16(central + 28, true);
+    view.setUint32(secondCentral + 42, 30 + 'outer.js'.length, true);
+    await expect(
+      unpackPluginZip(zip, await mkdtemp(join(tmpdir(), 'plugin-overlap-')))
+    ).rejects.toThrow('overlap');
+  });
+  it('rejects mismatched local filenames and flags', async () => {
+    for (const offset of [6, 30]) {
+      const zip = createStoredZip(pluginFiles());
+      zip[offset] = zip[offset]! + 1;
+      await expect(
+        unpackPluginZip(zip, await mkdtemp(join(tmpdir(), 'plugin-header-')))
+      ).rejects.toMatchObject({ code: 'invalid-zip' });
+    }
+  });
+  it('rejects portable normalized filename aliases before extraction', async () => {
+    for (const names of [
+      ['main.js', 'MAIN.js'],
+      ['é.js', 'e\u0301.js'],
+      ['a/b.js', 'a\\b.js'],
+    ]) {
+      const entries = names.map((name) => ({
+        name,
+        data: 'export default 1;',
+      }));
+      await expect(
+        unpackPluginZip(
+          createZip(entries),
+          await mkdtemp(join(tmpdir(), 'plugin-alias-'))
+        )
+      ).rejects.toMatchObject({ code: 'invalid-zip' });
+    }
+  });
+  it('rejects overlapping local offsets, wrong entry counts and central bounds', async () => {
+    const original = createStoredZip(pluginFiles());
+    const eocd = original.length - 22;
+    const view = new DataView(original.buffer);
+    const central = view.getUint32(eocd + 16, true);
+    const second = central + 46 + view.getUint16(central + 28, true);
+    for (const mutate of [
+      (v: DataView) => v.setUint32(second + 42, 0, true),
+      (v: DataView) => {
+        v.setUint16(eocd + 8, 1, true);
+        v.setUint16(eocd + 10, 1, true);
+      },
+      (v: DataView) => v.setUint32(eocd + 12, eocd - central - 1, true),
+    ]) {
+      const zip = original.slice();
+      mutate(new DataView(zip.buffer));
+      await expect(
+        unpackPluginZip(zip, await mkdtemp(join(tmpdir(), 'plugin-layout-')))
+      ).rejects.toMatchObject({ code: 'invalid-zip' });
+    }
+  });
   it('inspects a root-level v2 package without executing its app', async () => {
     const dest = await mkdtemp(join(tmpdir(), 'plugin-zip-root-'));
     const loaded = await loadPluginFromZip(

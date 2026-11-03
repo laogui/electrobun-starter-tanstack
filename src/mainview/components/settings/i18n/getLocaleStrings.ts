@@ -130,6 +130,7 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     aiReloadHint: t('settings_ai_reload_hint'),
 
     workspaceTitle: t('settings_workspace_title'),
+    workspaceExportHelp: t('settings_workspace_export_help'),
     workspacePathLabel: t('settings_workspace_path_label'),
     workspaceDefaultIndicator: t('settings_workspace_default_indicator'),
     workspaceOpenInFinder: t('settings_workspace_open_in_finder'),
@@ -236,6 +237,21 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     pluginsEnabled: t('settings_plugins_enabled'),
     pluginsEnable: t('settings_plugins_enable'),
     pluginsDisable: t('settings_plugins_disable'),
+    pluginsRemove: t('settings_plugins_remove'),
+    pluginsPermissionsTitle: t('settings_plugins_permissions_title'),
+    pluginsPermissionsDescription: t(
+      'settings_plugins_permissions_description'
+    ),
+    pluginsPermissionsEmpty: t('settings_plugins_permissions_empty'),
+    pluginsPermissionFiles: t('settings_plugins_permission_files'),
+    pluginsPermissionDirectory: t('settings_plugins_permission_directory'),
+    pluginsPermissionDelete: t('settings_plugins_permission_delete'),
+    pluginsRevoke: t('settings_plugins_revoke'),
+    pluginsDisconnect: t('settings_plugins_disconnect'),
+    pluginsRemoveWarning: t('settings_plugins_remove_warning'),
+    pluginsRemoveConfirm: t('settings_plugins_remove_confirm'),
+    pluginsRemoveSuccess: t('settings_plugins_remove_success'),
+    pluginsRemoving: t('settings_plugins_removing'),
     pluginsEnableReviewTitle: (name: string) =>
       f('settings_plugins_enable_review_title', { name }),
     pluginsEnableReviewDescription: t(

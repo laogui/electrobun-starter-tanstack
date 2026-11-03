@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
 import { isLockedNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
+import { NOTE_CONTENT_KEYS } from '@/lib/canvasNoteHistory';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import { collectNoteIdsFromCanvasNodes } from '@/lib/noteTitleProjection';
@@ -146,7 +147,17 @@ export const createNodesSlice: StateCreator<CanvasState, [], [], NodesSlice> = (
   },
 
   commitNodeData: (nodeId, updates) => {
-    get().saveSnapshot();
+    const node = get().nodes.find((item) => item.id === nodeId);
+    if (
+      !(
+        node?.data.noteId &&
+        Object.keys(updates).every((key) =>
+          (NOTE_CONTENT_KEYS as readonly string[]).includes(key)
+        )
+      )
+    ) {
+      get().saveSnapshot();
+    }
     get().updateNodeData(nodeId, updates);
   },
 

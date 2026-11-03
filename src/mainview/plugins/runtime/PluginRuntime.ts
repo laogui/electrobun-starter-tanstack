@@ -656,6 +656,7 @@ export class PluginRuntime {
     instance.content = content;
     const files = createPluginFiles(
       {
+        hostToken,
         activationId: instance.activationId,
         pluginId,
         workspaceId: instance.workspaceId,

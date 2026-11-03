@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invalidateBlockNotePrefetch } from '@/lib/blockNotePrefetch';
+import { registerNoteFlusher } from '@/lib/canvasFlushRegistry';
 import {
   hasNoteMetadataConflict,
   subscribeNoteMetadataChanges,
@@ -68,12 +69,12 @@ const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
 const previewToUpdates = (
-  markdown: string,
+  markdown: string | undefined,
   blocknoteFile: string | undefined,
   revision: number | undefined,
   preview: PreviewResponse | undefined
 ) => ({
-  content: markdown,
+  ...(markdown === undefined ? {} : { content: markdown }),
   blocknoteFile,
   blocknoteRevision: revision,
   editor: 'blocknote',
@@ -85,7 +86,7 @@ const previewToUpdates = (
 
 export interface BlockNoteSavePayload {
   blocks: unknown[];
-  markdown: string;
+  markdown?: string;
 }
 
 /**
@@ -115,6 +116,11 @@ export function useBlockNoteSaver({
   const dirtyRef = useRef(false);
   const changeVersionRef = useRef(0);
   const savingRef = useRef(false);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const canvasContextRef = useRef({
+    generation: useCanvasStore.getState()._canvasGeneration,
+    viewId: useCanvasStore.getState().activeViewId,
+  });
   const revisionRef = useRef<number | undefined>(undefined);
   const workspaceIdRef = useRef<string | undefined>(undefined);
   const conflictLoadVersionRef = useRef(0);
@@ -263,7 +269,7 @@ export function useBlockNoteSaver({
     [setConflict]
   );
 
-  const saveNow = useCallback(async () => {
+  const performSave = useCallback(async () => {
     if (savingRef.current) {
       return;
     }
@@ -275,6 +281,7 @@ export function useBlockNoteSaver({
           return;
         }
         const payload = latestPayloadRef.current;
+        const canvasContext = canvasContextRef.current;
         const changeVersion = changeVersionRef.current;
         setStatus('saving');
         // A prefetched body issued before (or during) this save may carry the
@@ -328,9 +335,18 @@ export function useBlockNoteSaver({
           response.preview
         );
         try {
-          if (onPreviewUpdateRef.current) {
+          const state = useCanvasStore.getState();
+          const currentCanvas =
+            state._canvasGeneration === canvasContext.generation &&
+            state.activeViewId === canvasContext.viewId;
+          if (currentCanvas && onPreviewUpdateRef.current) {
             onPreviewUpdateRef.current(updates);
-          } else {
+          } else if (
+            currentCanvas &&
+            state.nodes.some(
+              (node) => node.id === nodeId && node.data.noteId === currentNoteId
+            )
+          ) {
             updateNodeDataRef.current(nodeId, updates);
           }
         } catch (updateError) {
@@ -349,6 +365,33 @@ export function useBlockNoteSaver({
       savingRef.current = false;
     }
   }, [clearTimer, loadConflictSnapshot, nodeId, setStatus]);
+
+  const saveNow = useCallback(() => {
+    if (saveInFlightRef.current) {
+      return saveInFlightRef.current;
+    }
+    const pending = performSave().finally(() => {
+      if (saveInFlightRef.current === pending) {
+        saveInFlightRef.current = null;
+      }
+    });
+    saveInFlightRef.current = pending;
+    return pending;
+  }, [performSave]);
+
+  useEffect(() => {
+    if (!(enabled && noteId)) {
+      return;
+    }
+    return registerNoteFlusher(async () => {
+      clearTimer();
+      if (conflictRef.current) {
+        return false;
+      }
+      await saveNow();
+      return !dirtyRef.current;
+    });
+  }, [enabled, noteId, clearTimer, saveNow]);
 
   const flushNow = useCallback(
     (payload?: BlockNoteSavePayload) => {
@@ -383,6 +426,10 @@ export function useBlockNoteSaver({
     latestPayloadRef.current = null;
     dirtyRef.current = false;
     noteIdRef.current = noteId;
+    canvasContextRef.current = {
+      generation: useCanvasStore.getState()._canvasGeneration,
+      viewId: useCanvasStore.getState().activeViewId,
+    };
     revisionRef.current = undefined;
     workspaceIdRef.current = undefined;
     setConflict(null);

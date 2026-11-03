@@ -4,7 +4,11 @@ import type { Node } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => {
-  const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
+  const toast = Object.assign(vi.fn(), {
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  });
   return { toast };
 });
 vi.mock('@/lib/rpc-license', () => ({
@@ -16,6 +20,12 @@ vi.mock('@/lib/rpc', async (importOriginal) => ({
   rpcDeleteNote: vi.fn(async () => ({ success: true })),
   rpcDeleteWidget: vi.fn(async () => ({ success: true })),
 }));
+
+vi.mock('../canvas/cloneReferences', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../canvas/cloneReferences')>()),
+  cloneWidgetReferences: vi.fn(async (nodes: Node[]) => nodes),
+}));
+const { cloneWidgetReferences } = await import('../canvas/cloneReferences');
 
 const { rpcDeleteNote, rpcDeleteWidget } = await import('@/lib/rpc');
 const { useCanvasStore } = await import('@/store/canvasStore');
@@ -106,6 +116,7 @@ describe('clipboardSlice', () => {
   beforeEach(() => {
     state().reset();
     useCanvasStore.setState({
+      _hydrated: true,
       edges: [
         { id: 'inner', source: 'a', target: 'b' },
         { id: 'outer', source: 'b', target: 'c' },
@@ -180,20 +191,90 @@ describe('folderSlice', () => {
       noteId?: string;
     }>;
 
-  it('absorbs a card into a folder, keeping its note and dropping its edges', () => {
+  it('refuses to absorb a connected card without changing graph or history', () => {
+    const before = state().nodes;
+    state().absorbCardIntoFolder('note', 'folder');
+    expect(state().nodes).toBe(before);
+    expect(state().edges).toHaveLength(1);
+    expect(state().canUndo()).toBe(false);
+  });
+
+  it('absorbs a disconnected card with its note and dimensions and supports undo', () => {
+    useCanvasStore.setState({ edges: [] });
     state().absorbCardIntoFolder('note', 'folder');
     expect(byId('note')).toBeUndefined();
-    expect(state().edges).toEqual([]);
     expect(children()).toEqual([
-      expect.objectContaining({ id: 'note', noteId: 'note_1' }),
+      expect.objectContaining({
+        id: 'note',
+        noteId: 'note_1',
+        size: { width: 100, height: 100 },
+      }),
     ]);
-
     state().undo();
     expect(byId('note')).toBeDefined();
     expect(children()).toEqual([]);
   });
 
+  it('absorbs multi-selection atomically and undoes the whole batch', () => {
+    useCanvasStore.setState({
+      edges: [],
+      nodes: [
+        ...state().nodes,
+        card('second', 20, 30, {
+          data: { isHidden: true, title: 'Second' },
+          style: { width: 240, height: 180 },
+        }),
+      ],
+    });
+    expect(state().absorbNodesIntoFolder(['note', 'second'], 'folder')).toBe(
+      true
+    );
+    expect(children()).toHaveLength(2);
+    expect(children()[0]?.noteId).toBe('note_1');
+    expect(children()[1]?.noteId).toMatch(NOTE_ID_RE);
+    expect(children()[1]?.data).not.toHaveProperty('isHidden');
+    state().undo();
+    expect(byId('note')).toBeDefined();
+    expect(byId('second')).toBeDefined();
+    expect(children()).toEqual([]);
+    expect(state().canUndo()).toBe(false);
+  });
+
+  it('rejects the entire selection if any selected node is connected', () => {
+    useCanvasStore.setState({
+      nodes: [...state().nodes, card('second', 20, 30)],
+    });
+    const before = state().nodes;
+    expect(state().absorbNodesIntoFolder(['note', 'second'], 'folder')).toBe(
+      false
+    );
+    expect(state().nodes).toBe(before);
+    expect(state().edges).toHaveLength(1);
+    expect(children()).toEqual([]);
+  });
+
+  it('extracts a folder child at an absolute canvas position while retaining its backing note', () => {
+    useCanvasStore.setState({
+      edges: [],
+      nodes: [
+        ...state().nodes.map((node) =>
+          node.id === 'folder'
+            ? { ...node, parentId: 'g', position: { x: 40, y: 50 } }
+            : node
+        ),
+        card('g', 1000, 2000, { type: 'group' }),
+      ],
+    });
+    state().absorbCardIntoFolder('note', 'folder');
+    state().moveFolderChildToCanvas('folder', 'note');
+    expect(byId('note')?.data.noteId).toBe('note_1');
+    expect(byId('note')?.position.x).toBeGreaterThan(1000);
+    expect(byId('note')?.position.y).toBeGreaterThan(2000);
+    expect(byId('note')?.parentId).toBeUndefined();
+  });
+
   it('moves a folder child back onto the canvas', () => {
+    useCanvasStore.setState({ edges: [] });
     state().absorbCardIntoFolder('note', 'folder');
     state().moveFolderChildToCanvas('folder', 'note', {
       anchor: { x: 900, y: 900 },
@@ -248,5 +329,70 @@ describe('folderSlice', () => {
     state().pinNoteToCanvas('note', { x: 30, y: 40 });
     expect(byId('note')?.data.detached).toBeUndefined();
     expect(byId('note')?.position).toEqual({ x: 30, y: 40 });
+  });
+});
+
+describe('asynchronous clipboard integrity', () => {
+  beforeEach(() => {
+    state().reset();
+    state().setActiveView('source');
+    state().hydrate(
+      [
+        card('w', 0, 0, {
+          type: 'widget',
+          data: { widgetId: 'widget_1' },
+          selected: true,
+        }),
+      ],
+      []
+    );
+  });
+
+  it.each([
+    'pasteClipboard',
+    'duplicateSelected',
+  ] as const)('cancels %s after leaving and returning to the same view', async (operation) => {
+    let finish!: (nodes: Node[]) => void;
+    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    state().copySelected();
+    const pending = state()[operation]();
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    state().setActiveView('other');
+    state().setActiveView('source');
+    state().hydrate([card('replacement', 0, 0)], []);
+    finish([card('late', 0, 0)]);
+    await pending;
+    expect(state().nodes.map((node) => node.id)).toEqual(['replacement']);
+    expect(state().canUndo()).toBe(false);
+  });
+
+  it('does not paste into a view that is still loading', async () => {
+    state().copySelected();
+    state().setActiveView('loading');
+    await state().pasteClipboard();
+    expect(state().nodes).toEqual([]);
+    expect(state().canUndo()).toBe(false);
+    expect(cloneWidgetReferences).not.toHaveBeenCalled();
+  });
+
+  it('does not reserve an undo entry while cloning', async () => {
+    let finish!: (nodes: Node[]) => void;
+    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const pending = state().duplicateSelected();
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    expect(state().canUndo()).toBe(false);
+    finish([]);
+    await pending;
+    expect(state().canUndo()).toBe(false);
   });
 });

@@ -410,3 +410,19 @@ export const useExtensionInstanceStore = create<ExtensionInstanceStoreState>(
     },
   })
 );
+
+// Branching in any history source invalidates local redo as well.
+unifiedUndoHistory.onBranch(() => {
+  const { history } = useExtensionInstanceStore.getState();
+  if (!Object.values(history).some((stack) => stack.future.length > 0)) {
+    return;
+  }
+  useExtensionInstanceStore.setState({
+    history: Object.fromEntries(
+      Object.entries(history).map(([id, stack]) => [
+        id,
+        { ...stack, future: [] },
+      ])
+    ),
+  });
+});

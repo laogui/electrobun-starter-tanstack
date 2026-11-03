@@ -16,7 +16,7 @@ const DEFAULT_MODE = 0o666;
  * Some platforms/filesystems refuse to open or fsync a directory; that is not
  * worth failing the write over because the file data is already durable.
  */
-async function fsyncDirectory(dir: string): Promise<void> {
+export async function fsyncDirectory(dir: string): Promise<void> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(dir, 'r');

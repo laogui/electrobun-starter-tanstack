@@ -3,6 +3,11 @@ import type {
   AIProvider,
   AITestResult,
 } from '../../shared/ai/providerConfig';
+import { encodeNodeMetadataPatch } from '../../shared/nodeMetadataPatch';
+import type {
+  BlockNoteSaveResult,
+  CanvasSaveResult,
+} from '../../shared/persistence';
 /**
  * RPC client for communicating with the Bun main process.
  * Returns null when running outside Electrobun (e.g., Vite dev server only).
@@ -11,6 +16,7 @@ import type {
  */
 
 import { flushRegisteredCanvas } from '@/lib/canvasFlushRegistry';
+import { collectNoteReferences } from '@/lib/noteReferences';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import type {
   AICredentialStatus,
@@ -186,7 +192,36 @@ export interface LoadCanvasResponse {
    * this payload came from a backup (e.g. `.bak`, `.pre-topic`).
    */
   recoveredFrom?: string;
+  recoveryToken?: string;
   widgets?: Record<string, any>;
+}
+
+export async function rpcReadCanvasRecoveryGraph(viewId: string) {
+  const eb = await getElectrobun();
+  return eb?.rpc ? eb.rpc.request.readCanvasRecoveryGraph({ viewId }) : null;
+}
+export async function rpcListCanvasRecoveryBackups(): Promise<
+  import('../../shared/canvasRecovery').DiskRecoveryBackup[]
+> {
+  const eb = await getElectrobun();
+  return eb?.rpc ? eb.rpc.request.listCanvasRecoveryBackups({}) : [];
+}
+export async function rpcRestoreCanvasSnapshot(
+  name: string,
+  graph: import('../../shared/canvasRecovery').RecoveryGraph,
+  workspacePath?: string
+) {
+  const eb = await getElectrobun();
+  return eb?.rpc
+    ? eb.rpc.request.restoreCanvasSnapshot({ name, ...graph, workspacePath })
+    : { success: false };
+}
+
+export async function rpcConfirmCanvasRecovery(viewId: string, token: string) {
+  const eb = await getElectrobun();
+  return eb?.rpc
+    ? eb.rpc.request.confirmCanvasRecovery({ viewId, token })
+    : { success: false };
 }
 
 export async function loadCanvas(
@@ -208,7 +243,29 @@ export async function rpcSaveManifest(
   if (!eb?.rpc) {
     return { success: false };
   }
-  return eb.rpc.request.saveManifest({ viewId, nodes, edges });
+  // Prefetch uses this RPC loader; defer the reverse dependency until a write.
+  const { withBlockNoteSave } = await import('./blockNotePrefetch');
+  const result = await withBlockNoteSave<CanvasSaveResult>(
+    collectNoteReferences(nodes),
+    () => eb.rpc.request.saveManifest({ viewId, nodes, edges })
+  );
+  if (result.success && result.noteChanges?.length) {
+    const [
+      { useCanvasStore },
+      { applyNoteMetadataChanges, publishNoteMetadataChanges },
+    ] = await Promise.all([
+      import('@/store/canvasStore'),
+      import('./noteMetadataProjection'),
+    ]);
+    const current = useCanvasStore.getState();
+    if (current.activeViewId === viewId && current._hydrated) {
+      const changes = publishNoteMetadataChanges(result.noteChanges);
+      useCanvasStore.setState((state) =>
+        applyNoteMetadataChanges(state, changes)
+      );
+    }
+  }
+  return result;
 }
 
 export async function rpcSaveNote(
@@ -623,26 +680,19 @@ export async function rpcSaveBlockNote(
 ) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {
-    return { success: false } as {
-      success: boolean;
-      conflict?: boolean;
-      revision?: number;
-      preview?: {
-        blocks: number;
-        excerpt: string;
-        html: string;
-        version: number;
-      };
-      blocknoteFile?: string;
-    };
+    return { success: false } as BlockNoteSaveResult;
   }
-  return eb.rpc.request.saveBlockNote({
-    noteId,
-    frontmatter,
-    blocks,
-    markdown,
-    revision,
-  });
+  // Prefetch uses this RPC loader; defer the reverse dependency until a write.
+  const { withBlockNoteSave } = await import('./blockNotePrefetch');
+  return withBlockNoteSave<BlockNoteSaveResult>([noteId], () =>
+    eb.rpc.request.saveBlockNote({
+      noteId,
+      frontmatter,
+      blocks,
+      markdown,
+      revision,
+    })
+  );
 }
 
 export async function rpcCreateNote(
@@ -1394,7 +1444,10 @@ export async function rpcSetNodeMetadata(id: string, metadata: NodeMetadata) {
   if (!eb?.rpc) {
     return null;
   }
-  return eb.rpc.request.setNodeMetadata({ id, metadata });
+  return eb.rpc.request.setNodeMetadata({
+    id,
+    metadata: encodeNodeMetadataPatch(metadata),
+  });
 }
 
 export async function rpcDeleteNodeMetadata(id: string) {

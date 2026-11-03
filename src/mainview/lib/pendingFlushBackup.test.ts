@@ -2,7 +2,10 @@ import type { Edge, Node } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PendingFlushBackup } from './pendingFlushBackup';
 import {
+  archivePendingFlushBackup,
   clearPendingFlushBackup,
+  deleteRecoveryArchive,
+  listRecoveryArchives,
   readPendingFlushBackup,
   writePendingFlushBackup,
 } from './pendingFlushBackup';
@@ -14,6 +17,10 @@ describe('pendingFlushBackup', () => {
     // Mock localStorage for Node.js test environment
     const store: Record<string, string> = {};
     vi.stubGlobal('localStorage', {
+      get length() {
+        return Object.keys(store).length;
+      },
+      key: (index: number) => Object.keys(store)[index] ?? null,
       getItem: (key: string) => store[key] ?? null,
       setItem: (key: string, value: string) => {
         store[key] = value;
@@ -225,6 +232,37 @@ describe('pendingFlushBackup', () => {
       vi.unstubAllGlobals();
       vi.stubGlobal('localStorage', originalLocalStorage);
     });
+  });
+
+  it('keeps distinct recovery copies with the same timestamp and can manage them', () => {
+    const backup = {
+      nodes: [{ id: 'a', type: 'card', position: { x: 0, y: 0 }, data: {} }],
+      edges: [],
+      savedAt: 42,
+    };
+    archivePendingFlushBackup('view.with.dots', backup);
+    archivePendingFlushBackup('view.with.dots', {
+      ...backup,
+      nodes: [{ ...backup.nodes[0]!, data: { title: 'Different' } }],
+    });
+    const entries = listRecoveryArchives();
+    expect(entries).toHaveLength(2);
+    expect(entries.every((entry) => entry.viewId === 'view.with.dots')).toBe(
+      true
+    );
+    expect(deleteRecoveryArchive(entries[0]!)).toBe(true);
+    expect(listRecoveryArchives()).toHaveLength(1);
+  });
+
+  it('preserves damaged recovery evidence for export and refuses stale deletion', () => {
+    const key = 'ghostboard.v1.pendingFlush.archive.view.42';
+    localStorage.setItem(key, '{broken');
+    const entry = listRecoveryArchives()[0]!;
+    expect(entry.raw).toBe('{broken');
+    expect(entry.backup).toBeNull();
+    localStorage.setItem(key, 'new evidence');
+    expect(deleteRecoveryArchive(entry)).toBe(false);
+    expect(localStorage.getItem(key)).toBe('new evidence');
   });
 
   describe('round-trip', () => {

@@ -17,7 +17,6 @@ import {
   useReducer,
   useState,
 } from 'react';
-
 import {
   type LocaleSetting,
   type SettingsClient,
@@ -26,8 +25,8 @@ import {
   type UnlinkedFileEntry,
   type WorkspaceInfo,
 } from '@/settingsClient';
-
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
+import { RecoverySection } from './RecoverySection';
 
 interface WorkspacePanelProps {
   client: SettingsClient;
@@ -44,6 +43,7 @@ export function WorkspacePanel({
     <div className="space-y-8">
       <PanelHeading>{strings.workspaceTitle}</PanelHeading>
       <WorkspacePathSection client={client} strings={strings} />
+      <RecoverySection />
       <TrashSection client={client} locale={locale} strings={strings} />
       <ContentCleanupSection
         client={client}

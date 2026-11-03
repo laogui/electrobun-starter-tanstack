@@ -98,3 +98,68 @@ describe('blockNotePrefetch cache', () => {
     expect(load).not.toHaveBeenCalled();
   });
 });
+
+it('reloads a consumed prefetch when a save invalidates it before it resolves', async () => {
+  let resolveOld!: (value: BlockNoteLoadResult) => void;
+  const load = vi
+    .fn<(id: string) => Promise<BlockNoteLoadResult>>()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+    )
+    .mockResolvedValue(ok(2));
+  const cache = createBlockNotePrefetchCache({ load });
+  cache.prefetch('a');
+  const opening = cache.load('a');
+  cache.invalidate('a');
+  resolveOld(ok(1));
+  await expect(opening).resolves.toEqual(ok(2));
+});
+
+it('rejects an in-flight read when the workspace cache is cleared', async () => {
+  let resolveOld!: (value: BlockNoteLoadResult) => void;
+  const load = vi
+    .fn<(id: string) => Promise<BlockNoteLoadResult>>()
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+    );
+  const cache = createBlockNotePrefetchCache({ load });
+  const opening = cache.load('a');
+  const rejected = expect(opening).rejects.toThrow('workspace');
+  cache.clear();
+  resolveOld(ok(1));
+  await rejected;
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+it('waits for overlapping saves before reading the note again', async () => {
+  const { cache, load } = setup();
+  const finishFirst = cache.beginSave('a');
+  const finishSecond = cache.beginSave('a');
+  const opening = cache.load('a');
+  expect(load).not.toHaveBeenCalled();
+  finishFirst();
+  await Promise.resolve();
+  expect(load).not.toHaveBeenCalled();
+  finishSecond();
+  const result = await opening;
+  expect(result.success).toBe(true);
+});
+
+it('expires an unused prefetch without another access', async () => {
+  vi.useFakeTimers();
+  try {
+    const { cache } = setup();
+    cache.prefetch('a');
+    expect(cache.has('a')).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(cache.has('a')).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});

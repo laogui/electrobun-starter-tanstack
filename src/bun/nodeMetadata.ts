@@ -11,10 +11,15 @@ export interface NodeMetadata {
   tags?: string[];
 }
 
+export type NodeMetadataPatch = {
+  [K in keyof NodeMetadata]?: NodeMetadata[K] | null;
+};
+
 export type NodeMetadataMap = Record<string, NodeMetadata>;
 
 export interface NodeMetadataDocument {
   entries: NodeMetadataMap;
+  legacyTagsMigrated?: boolean;
   schema: 'ghostboard-node-metadata/v1';
 }
 
@@ -37,9 +42,11 @@ const MAX_TAG_LENGTH = 32;
 interface WorkspaceState {
   entries: NodeMetadataMap;
   flushTimer: ReturnType<typeof setTimeout> | null;
+  legacyTagsMigrated: boolean;
   loaded: boolean;
   /** Shared first load so concurrent callers never race to replace `entries`. */
   loading: Promise<NodeMetadataMap> | null;
+  writing: Promise<void>;
 }
 
 const states = new Map<string, WorkspaceState>();
@@ -51,7 +58,14 @@ function resolvePath(wsPath: string): string {
 function getState(wsPath: string): WorkspaceState {
   let s = states.get(wsPath);
   if (!s) {
-    s = { entries: {}, flushTimer: null, loaded: false, loading: null };
+    s = {
+      entries: {},
+      flushTimer: null,
+      loaded: false,
+      loading: null,
+      legacyTagsMigrated: false,
+      writing: Promise.resolve(),
+    };
     states.set(wsPath, s);
   }
   return s;
@@ -217,13 +231,18 @@ export function sanitizeTagList(input: unknown): string[] {
   return out;
 }
 
-function parseNodeMetadataDocument(value: unknown): NodeMetadataMap {
+function parseNodeMetadataDocument(value: unknown): NodeMetadataDocument {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('node-metadata.json is not a JSON object.');
   }
   const entries = (value as Partial<NodeMetadataDocument>).entries;
   if (entries === undefined) {
-    return {};
+    return {
+      schema: SCHEMA,
+      entries: {},
+      legacyTagsMigrated:
+        (value as Partial<NodeMetadataDocument>).legacyTagsMigrated === true,
+    };
   }
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
     throw new Error('node-metadata.json entries must be an object.');
@@ -235,7 +254,12 @@ function parseNodeMetadataDocument(value: unknown): NodeMetadataMap {
       cleaned[id] = norm;
     }
   }
-  return cleaned;
+  return {
+    schema: SCHEMA,
+    entries: cleaned,
+    legacyTagsMigrated:
+      (value as Partial<NodeMetadataDocument>).legacyTagsMigrated === true,
+  };
 }
 
 /**
@@ -252,7 +276,9 @@ async function loadFromDisk(wsPath: string): Promise<NodeMetadataMap> {
     parseNodeMetadataDocument
   );
   if (read.kind === 'ok') {
-    return read.value;
+    getState(wsPath).legacyTagsMigrated =
+      read.value.legacyTagsMigrated === true;
+    return read.value.entries;
   }
   if (read.kind === 'corrupt') {
     console.warn(
@@ -268,8 +294,18 @@ async function writeToDisk(wsPath: string): Promise<void> {
     // Never write a map that was not loaded from disk first.
     return;
   }
-  const doc: NodeMetadataDocument = { schema: SCHEMA, entries: s.entries };
-  await atomicWrite(resolvePath(wsPath), JSON.stringify(doc, null, 2));
+  const write = s.writing
+    .catch(() => undefined)
+    .then(async () => {
+      const doc: NodeMetadataDocument = {
+        schema: SCHEMA,
+        entries: s.entries,
+        legacyTagsMigrated: s.legacyTagsMigrated,
+      };
+      await atomicWrite(resolvePath(wsPath), JSON.stringify(doc, null, 2));
+    });
+  s.writing = write;
+  await write;
 }
 
 function scheduleFlush(wsPath: string): void {
@@ -328,14 +364,14 @@ export function getNodeMetadata(
 }
 
 /**
- * Merge a partial update into the entry for `id`. Fields set to `undefined`
+ * Merge a partial update into the entry for `id`. Fields set to `null` (or local `undefined`)
  * are removed. If the resulting entry has no fields the entry is dropped.
  * The change is scheduled for a debounced disk flush.
  */
 export async function setNodeMetadata(
   wsPath: string,
   id: string,
-  partial: Partial<NodeMetadata>
+  partial: NodeMetadataPatch
 ): Promise<void> {
   await loadAllMetadata(wsPath);
   const s = getState(wsPath);
@@ -473,13 +509,29 @@ export async function flushNodeMetadata(wsPath: string): Promise<void> {
     clearTimeout(s.flushTimer);
     s.flushTimer = null;
   }
+  await s.loading;
   if (s.loaded) {
     await writeToDisk(wsPath);
   }
 }
 
+export async function flushAllNodeMetadata(): Promise<void> {
+  const results = await Promise.allSettled(
+    [...states.keys()].map(flushNodeMetadata)
+  );
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed?.status === 'rejected') {
+    throw failed.reason;
+  }
+}
+
 /** Test helper — reset cache for a workspace. Not exported via index. */
 export function resetNodeMetadataCacheForTests(wsPath?: string): void {
+  for (const [path, state] of states) {
+    if ((!wsPath || path === wsPath) && state.flushTimer) {
+      clearTimeout(state.flushTimer);
+    }
+  }
   if (wsPath) {
     states.delete(wsPath);
     return;
@@ -555,6 +607,9 @@ export async function migrateLegacyTagsFromNotes(
     return;
   }
   const s = getState(wsPath);
+  if (s.legacyTagsMigrated) {
+    return;
+  }
   const contentDir = join(wsPath, 'content');
   const files = listFilesRecursive(contentDir);
   const markdownFiles: string[] = [];
@@ -566,7 +621,6 @@ export async function migrateLegacyTagsFromNotes(
   const markdownDocs = await Promise.all(
     markdownFiles.map((rel) => loadNote(wsPath, `content/${rel}`))
   );
-  let dirty = false;
 
   for (const doc of markdownDocs) {
     if (!doc?.frontmatter?.id) {
@@ -617,12 +671,10 @@ export async function migrateLegacyTagsFromNotes(
     }
 
     s.entries[noteId] = meta;
-    dirty = true;
   }
 
-  if (dirty) {
-    scheduleFlush(wsPath);
-  }
+  s.legacyTagsMigrated = true;
+  await flushNodeMetadata(wsPath);
 }
 
 /**

@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react';
-
 import { toast } from 'sonner';
 import { useSearch } from '@/hooks/useSearch';
 import { isCanvasContentNode } from '@/lib/canvasNodePredicates';
@@ -18,8 +17,11 @@ import type { SearchResult, SearchResultKind } from '@/lib/searchTypes';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-
 import * as m from '../../../paraglide/messages.js';
+import {
+  absoluteNodeCenter,
+  absoluteNodePosition,
+} from '../../../shared/canvasGeometry';
 import {
   FILE_CANVAS_TYPE_ID,
   IMAGE_CANVAS_TYPE_ID,
@@ -492,11 +494,15 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
         setNodes((prev) =>
           prev.map((n) => ({ ...n, selected: n.id === nodeId }))
         );
-        if (inst && result.position) {
+        if (inst) {
           const node = inst
             .getNodes?.()
             ?.find((n: { id: string }) => n.id === nodeId);
-          const center = nodeCenter(node, result.position);
+          const center = node
+            ? absoluteNodeCenter(node, inst.getNodes())
+            : result.position
+              ? { x: result.position.x + 120, y: result.position.y + 80 }
+              : null;
           if (center) {
             const zoom = inst.getViewport?.()?.zoom ?? 1;
             suppressViewportPersist(300);
@@ -592,7 +598,7 @@ export function SearchDialog({ rfInstance }: SearchDialogProps) {
         excerpt: '',
         matchField: 'title',
         score: 0,
-        position: node?.position,
+        position: node ? absoluteNodePosition(node, nodes) : undefined,
       });
     },
     [nodes, activeViewId, currentViewName, handleSelect]
@@ -937,26 +943,6 @@ function ResultRow({
   );
 }
 
-interface NodeLike {
-  height?: number;
-  measured?: { width?: number; height?: number };
-  position?: { x: number; y: number };
-  width?: number;
-}
-
-function nodeCenter(
-  node: NodeLike | undefined,
-  fallbackPosition?: { x: number; y: number }
-): { x: number; y: number } | null {
-  const position = node?.position ?? fallbackPosition;
-  if (!position) {
-    return null;
-  }
-  const w = node?.measured?.width ?? node?.width ?? 240;
-  const h = node?.measured?.height ?? node?.height ?? 160;
-  return { x: position.x + w / 2, y: position.y + h / 2 };
-}
-
 function edgeMidpoint(
   inst: ReactFlowInstance<any, any>,
   edgeId: string
@@ -969,11 +955,11 @@ function edgeMidpoint(
   if (!(edge?.source && edge.target)) {
     return null;
   }
-  const nodes = (inst.getNodes?.() ?? []) as Array<NodeLike & { id: string }>;
+  const nodes = inst.getNodes?.() ?? [];
   const src = nodes.find((n) => n.id === edge.source);
   const tgt = nodes.find((n) => n.id === edge.target);
-  const srcCenter = nodeCenter(src);
-  const tgtCenter = nodeCenter(tgt);
+  const srcCenter = src ? absoluteNodeCenter(src, nodes) : null;
+  const tgtCenter = tgt ? absoluteNodeCenter(tgt, nodes) : null;
   if (!(srcCenter && tgtCenter)) {
     return null;
   }

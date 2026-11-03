@@ -1,5 +1,8 @@
 // Canvas store slice: Canvas snapshot history (undo/redo), registered with the unified undo timeline.
+
+import type { Edge, Node } from '@xyflow/react';
 import type { StateCreator } from 'zustand';
+import { topicCanvasWritePaused } from '@/lib/topicTree';
 import type { UndoRedoState } from '@/lib/undoRedo';
 import {
   createUndoRedoState,
@@ -8,7 +11,42 @@ import {
   undo as undoSnapshot,
 } from '@/lib/undoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
-import type { CanvasState } from '../canvasStore';
+import type { FolderChildEntry } from '../canvas/folderChildren';
+import type { CanvasState, FocusedItem } from '../canvasStore';
+
+function reconcileFocus(
+  item: FocusedItem | null,
+  nodes: Node[]
+): FocusedItem | null {
+  if (!item) {
+    return null;
+  }
+  if (item.folderId) {
+    const children = nodes.find((node) => node.id === item.folderId)?.data
+      .children;
+    if (!Array.isArray(children)) {
+      return null;
+    }
+    const child = (children as FolderChildEntry[]).find(
+      (value) => value?.id === item.id
+    );
+    return child ? { ...item, data: child.data, type: child.type } : null;
+  }
+  const node = nodes.find((candidate) => candidate.id === item.id);
+  return node ? { ...item, data: node.data, type: node.type } : null;
+}
+
+function restoredUi(state: CanvasState, nodes: Node[], edges: Edge[]) {
+  return {
+    focusedNode: reconcileFocus(state.focusedNode, nodes),
+    focusedFolder: reconcileFocus(state.focusedFolder, nodes),
+    topicWritePaused: topicCanvasWritePaused(nodes, edges),
+    editingTopicId: null,
+    topicCommandContextId: null,
+    topicDraft: null,
+    topicEditPreviews: {},
+  };
+}
 
 export interface HistorySlice {
   // Undo / Redo
@@ -47,6 +85,7 @@ export const createHistorySlice: StateCreator<
       return false;
     }
     set({
+      ...restoredUi(get(), result.snapshot.nodes, result.snapshot.edges),
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
       _undoRedo: result.state,
@@ -62,6 +101,7 @@ export const createHistorySlice: StateCreator<
       return false;
     }
     set({
+      ...restoredUi(get(), result.snapshot.nodes, result.snapshot.edges),
       nodes: result.snapshot.nodes,
       edges: result.snapshot.edges,
       _undoRedo: result.state,

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -11,11 +12,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeNodeMetadataPatch } from '../shared/nodeMetadataPatch';
+import { RPC_WRITE_PARAM_SCHEMAS } from './rpc/writeParamSchemas';
 import type { WorkspaceConfig } from './workspace';
 
 vi.mock('electrobun/bun', () => ({
+  default: { events: { on: vi.fn() } },
+  ApplicationMenu: {},
+  Updater: {},
   Utils: {
     moveToTrash: vi.fn(() => true),
+    quit: vi.fn(),
     paths: { userData: '/mock-user-data' },
   },
 }));
@@ -30,6 +37,9 @@ const {
   setActiveViewId,
 } = await import('./workspace');
 const {
+  deleteTagEverywhere,
+  migrateLegacyTagsFromNotes,
+  flushAllNodeMetadata,
   flushNodeMetadata,
   loadAllMetadata,
   resetNodeMetadataCacheForTests,
@@ -224,5 +234,90 @@ describe('node metadata never overwrites what it could not read', () => {
       entries: Record<string, unknown>;
     };
     expect(Object.keys(stored.entries).sort()).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('legacy tags stay deleted after restart', () => {
+  it('does not repeat a completed migration after the last tag is removed', async () => {
+    vi.stubGlobal('Bun', {
+      file: (path: string) => ({
+        exists: async () => existsSync(path),
+        text: () => readFile(path, 'utf8'),
+      }),
+    });
+    await mkdir(join(ws, 'content'));
+    await writeFile(
+      join(ws, 'content', 'legacy.md'),
+      '---\nid: note_legacy\ntag: Old\n---\nBody'
+    );
+    await migrateLegacyTagsFromNotes(ws);
+    expect((await loadAllMetadata(ws)).note_legacy?.tag).toBe('Old');
+    await deleteTagEverywhere(ws, 'Old');
+    await flushNodeMetadata(ws);
+    resetNodeMetadataCacheForTests(ws);
+    await migrateLegacyTagsFromNotes(ws);
+    expect(await loadAllMetadata(ws)).toEqual({});
+  });
+});
+
+describe('metadata durability at RPC and shutdown boundaries', () => {
+  it('preserves explicit deletion through JSON and the write schema without clearing omitted fields', async () => {
+    await setNodeMetadata(ws, 'note', {
+      tag: 'Old',
+      tagColor: 'red',
+      tags: ['Keep'],
+    });
+    const wire = JSON.parse(
+      JSON.stringify({
+        id: 'note',
+        metadata: encodeNodeMetadataPatch({
+          tag: undefined,
+          tagColor: undefined,
+        }),
+      })
+    );
+    const params = RPC_WRITE_PARAM_SCHEMAS.setNodeMetadata.parse(wire);
+    await setNodeMetadata(ws, params.id, params.metadata);
+    await flushAllNodeMetadata();
+    resetNodeMetadataCacheForTests();
+    expect((await loadAllMetadata(ws)).note).toEqual({ tags: ['Keep'] });
+  });
+
+  it('shutdown flush reports failures and can retry the in-memory data', async () => {
+    await setNodeMetadata(ws, 'note', { tags: ['Latest'] });
+    const path = join(ghostDir(), 'node-metadata.json');
+    await mkdir(path);
+    await expect(flushAllNodeMetadata()).rejects.toThrow();
+    await rm(path, { recursive: true });
+    await flushAllNodeMetadata();
+    resetNodeMetadataCacheForTests();
+    expect((await loadAllMetadata(ws)).note).toEqual({ tags: ['Latest'] });
+  });
+});
+
+it('holds application quit until metadata is durable and allows retry after failure', async () => {
+  const { default: Electrobun, Utils } = await import('electrobun/bun');
+  const { installQuitFlush } = await import('./appLifecycle');
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  installQuitFlush();
+  const onQuit = vi
+    .mocked(Electrobun.events.on)
+    .mock.calls.find(([name]) => name === 'before-quit')?.[1];
+  expect(onQuit).toBeDefined();
+  await setNodeMetadata(ws, 'quit-note', { tags: ['Saved at quit'] });
+  const path = join(ghostDir(), 'node-metadata.json');
+  await mkdir(path);
+  const event = { response: { allow: true } };
+  // Electrobun supplies its native event wrapper; only the response is used here.
+  (onQuit as (event: unknown) => void)(event);
+  expect(event.response.allow).toBe(false);
+  await vi.waitFor(() => expect(errors).toHaveBeenCalled());
+  expect(Utils.quit).not.toHaveBeenCalled();
+  await rm(path, { recursive: true });
+  (onQuit as (event: unknown) => void)({ response: { allow: true } });
+  await vi.waitFor(() => expect(Utils.quit).toHaveBeenCalledOnce());
+  resetNodeMetadataCacheForTests();
+  expect((await loadAllMetadata(ws))['quit-note']).toEqual({
+    tags: ['Saved at quit'],
   });
 });

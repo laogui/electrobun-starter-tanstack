@@ -10,6 +10,10 @@ import {
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import {
+  absoluteNodeCenter,
+  absoluteNodePosition,
+} from '../../shared/canvasGeometry';
 
 const FALLBACK_NODE_WIDTH = 240;
 const FALLBACK_NODE_HEIGHT = 160;
@@ -30,7 +34,8 @@ function centerCulledNode(
   const height = node.measured?.height ?? node.height ?? FALLBACK_NODE_HEIGHT;
   const zoom = inst.getViewport().zoom || 1;
   suppressViewportPersist(300);
-  inst.setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+  const position = absoluteNodePosition(node, useCanvasStore.getState().nodes);
+  inst.setCenter(position.x + width / 2, position.y + height / 2, {
     duration: 0,
     zoom,
   });
@@ -190,23 +195,14 @@ export function useCanvasSearchNavigation({
       setNodes((prev) =>
         prev.map((n) => ({ ...n, selected: n.id === nodeId }))
       );
-      const target = inst
-        ?.getNodes?.()
-        ?.find((n: { id: string }) => n.id === nodeId) as
-        | {
-            position?: { x: number; y: number };
-            measured?: { width?: number; height?: number };
-            width?: number;
-            height?: number;
-          }
-        | undefined;
+      const navigationNodes = nodes;
+      const target = navigationNodes.find((node: Node) => node.id === nodeId);
       if (inst && target?.position) {
-        const w = target.measured?.width ?? target.width ?? 240;
-        const h = target.measured?.height ?? target.height ?? 160;
+        const center = absoluteNodeCenter(target, navigationNodes);
         const viewport = inst.getViewport?.();
         const zoom = viewport?.zoom ?? 1;
         suppressViewportPersist(300);
-        inst.setCenter?.(target.position.x + w / 2, target.position.y + h / 2, {
+        inst.setCenter?.(center.x, center.y, {
           ...viewportMotion(VIEWPORT_PAN_MS),
           zoom,
         });
@@ -216,28 +212,19 @@ export function useCanvasSearchNavigation({
       setEdges((prev) =>
         prev.map((e) => ({ ...e, selected: e.id === edgeId }))
       );
-      const edge = inst
-        ?.getEdges?.()
-        ?.find((e: { id: string }) => e.id === edgeId) as
+      const edge = useCanvasStore
+        .getState()
+        .edges.find((e) => e.id === edgeId) as
         | { source?: string; target?: string }
         | undefined;
       if (inst && edge?.source && edge.target) {
-        const nodes = (inst.getNodes?.() ?? []) as Array<{
-          id: string;
-          position?: { x: number; y: number };
-          measured?: { width?: number; height?: number };
-          width?: number;
-          height?: number;
-        }>;
         const src = nodes.find((n) => n.id === edge.source);
         const tgt = nodes.find((n) => n.id === edge.target);
         if (src?.position && tgt?.position) {
-          const sw = src.measured?.width ?? src.width ?? 240;
-          const sh = src.measured?.height ?? src.height ?? 160;
-          const tw = tgt.measured?.width ?? tgt.width ?? 240;
-          const th = tgt.measured?.height ?? tgt.height ?? 160;
-          const cx = (src.position.x + sw / 2 + (tgt.position.x + tw / 2)) / 2;
-          const cy = (src.position.y + sh / 2 + (tgt.position.y + th / 2)) / 2;
+          const source = absoluteNodeCenter(src, nodes);
+          const target = absoluteNodeCenter(tgt, nodes);
+          const cx = (source.x + target.x) / 2;
+          const cy = (source.y + target.y) / 2;
           const zoom = inst.getViewport?.()?.zoom ?? 1;
           suppressViewportPersist(300);
           inst.setCenter?.(cx, cy, {

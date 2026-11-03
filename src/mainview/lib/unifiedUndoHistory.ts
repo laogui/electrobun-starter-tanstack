@@ -160,6 +160,21 @@ export class UnifiedUndoHistory {
   private pending: PendingTransition | null = null;
   private viewId = '';
   private workspaceId = '';
+  private nativeContext = false;
+  private readonly branchListeners = new Set<() => void>();
+
+  onBranch(listener: () => void): () => void {
+    this.branchListeners.add(listener);
+    return () => this.branchListeners.delete(listener);
+  }
+
+  setNativeView(viewId: string): void {
+    if (this.viewId !== viewId) {
+      this.clear();
+    }
+    this.viewId = viewId;
+    this.nativeContext = true;
+  }
 
   clear(): void {
     this.completedOperationIds = [];
@@ -180,7 +195,7 @@ export class UnifiedUndoHistory {
   }
 
   isActive(): boolean {
-    return Boolean(this.workspaceId && this.viewId);
+    return Boolean((this.workspaceId || this.nativeContext) && this.viewId);
   }
 
   // -- recording ------------------------------------------------------------
@@ -321,13 +336,25 @@ export class UnifiedUndoHistory {
     this.clear();
     this.viewId = '';
     this.workspaceId = '';
+    this.nativeContext = false;
   }
 
   setContext(workspaceId: string, viewId: string): void {
     if (workspaceId === this.workspaceId && viewId === this.viewId) {
       return;
     }
-    this.clear();
+    if (
+      this.nativeContext &&
+      !this.workspaceId &&
+      workspaceId &&
+      viewId === this.viewId
+    ) {
+      this.past = this.past.map((entry) => ({ ...entry, workspaceId }));
+      this.future = this.future.map((entry) => ({ ...entry, workspaceId }));
+    } else {
+      this.clear();
+    }
+    this.nativeContext = false;
     this.workspaceId = workspaceId;
     this.viewId = viewId;
   }
@@ -436,6 +463,9 @@ export class UnifiedUndoHistory {
   }
 
   private push(entry: UnifiedHistoryEntry): void {
+    for (const listener of this.branchListeners) {
+      listener();
+    }
     this.past = [...this.past, entry].slice(-MAX_HISTORY);
     this.future = [];
   }

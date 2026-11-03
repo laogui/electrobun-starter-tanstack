@@ -1,4 +1,5 @@
 import type { Node } from '@xyflow/react';
+import { absoluteNodePosition } from '../../shared/canvasGeometry';
 
 import { isFolderChildNode, isGroupChildNode } from './canvasNodePredicates';
 
@@ -34,12 +35,12 @@ export function normalizeCanvasParenting(nodes: Node[]): Node[] {
     // Groups must always be top-level
     if (n.type === 'group') {
       const { parentId, extent, ...rest } = n as any;
-      return rest as Node;
+      return { ...rest, position: absoluteNodePosition(n, nodes) } as Node;
     }
     const parent = byId.get(n.parentId);
     if (!(parent && canBeChildOf(parent, n))) {
       const { parentId, extent, ...rest } = n as any;
-      return rest as Node;
+      return { ...rest, position: absoluteNodePosition(n, nodes) } as Node;
     }
     return n;
   });

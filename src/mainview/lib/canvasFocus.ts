@@ -4,6 +4,7 @@ import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
+import { absoluteNodePosition } from '../../shared/canvasGeometry';
 
 import { isFocusableNode } from './canvasNodePredicates';
 
@@ -27,8 +28,18 @@ interface NodeBoxMetrics {
 
 function getNodeBoxMetrics(node: Node): NodeBoxMetrics {
   return {
-    width: node.measured?.width ?? node.width ?? DEFAULT_NODE_WIDTH,
-    height: node.measured?.height ?? node.height ?? DEFAULT_NODE_HEIGHT,
+    width:
+      node.measured?.width ??
+      node.width ??
+      (typeof node.style?.width === 'number'
+        ? node.style.width
+        : DEFAULT_NODE_WIDTH),
+    height:
+      node.measured?.height ??
+      node.height ??
+      (typeof node.style?.height === 'number'
+        ? node.style.height
+        : DEFAULT_NODE_HEIGHT),
   };
 }
 
@@ -42,8 +53,10 @@ function computeRectFromViewport(
 ): DOMRect {
   const viewport = rfInstance?.getViewport?.() ?? { x: 0, y: 0, zoom: 1 };
   const zoom = viewport.zoom || 1;
-  const left = node.position.x * zoom + viewport.x;
-  const top = node.position.y * zoom + viewport.y;
+  const position = absoluteNodePosition(node, useCanvasStore.getState().nodes);
+  const pane = getFlowPaneRect();
+  const left = position.x * zoom + viewport.x + pane.left;
+  const top = position.y * zoom + viewport.y + pane.top;
   const w = width * zoom;
   const h = height * zoom;
   return new DOMRect(left, top, w, h);
@@ -120,11 +133,11 @@ export async function openFocusedById({
   const zoom = viewport?.zoom ?? 1;
   const flight = viewportMotion(centerDurationMs);
   suppressViewportPersist(flight.duration + 50);
-  rfInstance?.setCenter?.(
-    node.position.x + width / 2,
-    node.position.y + height / 2,
-    { ...flight, zoom }
-  );
+  const position = absoluteNodePosition(node, nodes);
+  rfInstance?.setCenter?.(position.x + width / 2, position.y + height / 2, {
+    ...flight,
+    zoom,
+  });
 
   // 2a. Notes: open now, from where the pan will put the card.
   if (!isFolder) {

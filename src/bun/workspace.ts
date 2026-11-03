@@ -18,6 +18,7 @@ import {
 
 import { flushNodeMetadata, setNodeMetadata } from './nodeMetadata';
 import { createNote, saveNote } from './notes';
+import { withNoteWorkspace } from './noteTransactions';
 import { rotateBackup } from './persistence/backupFile';
 import { readJsonOrEmpty } from './persistence/corruptFile';
 import { withFileQueue } from './persistence/fileQueue';
@@ -404,8 +405,10 @@ export function saveWorkspaceConfig(
   wsPath: string,
   config: WorkspaceConfig
 ): Promise<void> {
-  return withWorkspaceConfig(wsPath, () =>
-    writeWorkspaceConfigUnlocked(wsPath, config)
+  return withNoteWorkspace(wsPath, () =>
+    withWorkspaceConfig(wsPath, () =>
+      writeWorkspaceConfigUnlocked(wsPath, config)
+    )
   );
 }
 
@@ -418,14 +421,18 @@ function updateWorkspaceConfig<T>(
   wsPath: string,
   mutate: (config: WorkspaceConfig) => Promise<{ result: T; save: boolean }>
 ): Promise<T> {
-  return withWorkspaceConfig(wsPath, async () => {
-    const config = await readWorkspaceConfigUnlocked(wsPath);
-    const { result, save } = await mutate(config);
-    if (save) {
-      await writeWorkspaceConfigUnlocked(wsPath, config);
-    }
-    return result;
-  });
+  // Mutations take the workspace lock before the config lock. Reads stay
+  // available even when note transaction recovery needs user intervention.
+  return withNoteWorkspace(wsPath, () =>
+    withWorkspaceConfig(wsPath, async () => {
+      const config = await readWorkspaceConfigUnlocked(wsPath);
+      const { result, save } = await mutate(config);
+      if (save) {
+        await writeWorkspaceConfigUnlocked(wsPath, config);
+      }
+      return result;
+    })
+  );
 }
 
 /** Persist the active view selection so it survives app restarts. */
@@ -451,6 +458,25 @@ export function addView(wsPath: string, name: string): Promise<ViewEntry> {
     const entry: ViewEntry = { id, name, file };
     config.views.push(entry);
     config.activeViewId = id;
+    return { result: entry, save: true };
+  });
+}
+
+/** Publish the recovered manifest before registering it; never rewrite note bodies. */
+export function addRecoveredView(
+  wsPath: string,
+  name: string,
+  graph: Pick<CanvasManifest, 'nodes' | 'edges'>
+): Promise<ViewEntry> {
+  return updateWorkspaceConfig(wsPath, async (config) => {
+    const id = `view_${crypto.randomUUID()}`;
+    const entry = { id, name, file: `views/${id}.canvas.json` };
+    await saveManifest(wsPath, entry.file, {
+      ...graph,
+      schema: 'ghostboard-canvas/v1',
+      viewId: id,
+    });
+    config.views.push(entry);
     return { result: entry, save: true };
   });
 }
@@ -774,6 +800,16 @@ function rewriteTemplateAssetValue(
   return value;
 }
 
+async function finishTemplateWrites(writes: Promise<unknown>[]): Promise<void> {
+  // A first failure must not release workspace ownership while sibling
+  // writes are still running. Retain partial files for explicit recovery.
+  const results = await Promise.allSettled(writes);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed?.status === 'rejected') {
+    throw failed.reason;
+  }
+}
+
 /**
  * Populate an existing view's manifest from a template:
  *   1. Generate a real noteId for every placeholder in `template.noteContents`
@@ -789,192 +825,198 @@ export async function populateViewFromTemplate(
   view: ViewEntry,
   template: TemplateManifest
 ): Promise<void> {
-  const noteIdMap = new Map<string, string>();
-  const noteContents = template.noteContents ?? {};
-  const widgetIdMap = new Map<string, string>();
-  const widgetSeeds = template.widgets ?? {};
-  const extensionSeeds = template.extensionInstances ?? {};
-  const instanceIdMap = new Map<string, string>();
-  const assetPaths: Record<string, string> = {};
-  const assetDataUrls: Record<string, string> = {};
+  return withNoteWorkspace(wsPath, async () => {
+    const noteIdMap = new Map<string, string>();
+    const noteContents = template.noteContents ?? {};
+    const widgetIdMap = new Map<string, string>();
+    const widgetSeeds = template.widgets ?? {};
+    const extensionSeeds = template.extensionInstances ?? {};
+    const instanceIdMap = new Map<string, string>();
+    const assetPaths: Record<string, string> = {};
+    const assetDataUrls: Record<string, string> = {};
 
-  for (const placeholderId of Object.keys(noteContents)) {
-    const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
-    noteIdMap.set(placeholderId, realId);
-  }
-  for (const placeholderId of Object.keys(widgetSeeds)) {
-    const realId = `widget_${crypto.randomUUID().slice(0, 8)}`;
-    widgetIdMap.set(placeholderId, realId);
-  }
+    for (const placeholderId of Object.keys(noteContents)) {
+      const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
+      noteIdMap.set(placeholderId, realId);
+    }
+    for (const placeholderId of Object.keys(widgetSeeds)) {
+      const realId = `widget_${crypto.randomUUID().slice(0, 8)}`;
+      widgetIdMap.set(placeholderId, realId);
+    }
 
-  await Promise.all(
-    Array.from(noteIdMap, async ([placeholderId, realId]) => {
-      const content = noteContents[placeholderId];
-      if (!content) {
-        return;
-      }
-      const filePath = await createNote(
-        wsPath,
-        realId,
-        content.title,
-        content.displayHint
-      );
-      if (content.body) {
-        const now = new Date().toISOString();
-        await saveNote(
+    await finishTemplateWrites(
+      Array.from(noteIdMap, async ([placeholderId, realId]) => {
+        const content = noteContents[placeholderId];
+        if (!content) {
+          return;
+        }
+        const filePath = await createNote(
           wsPath,
-          filePath,
-          {
-            id: realId,
-            title: content.title,
-            displayHint: content.displayHint,
-            ...(content.color ? { color: content.color } : {}),
-            createdAt: now,
-            updatedAt: now,
-          },
-          content.body
+          realId,
+          content.title,
+          content.displayHint
         );
-      }
-    })
-  );
-  await Promise.all(
-    Array.from(widgetIdMap, async ([placeholderId, realId]) => {
-      const seed = widgetSeeds[placeholderId];
-      if (!seed) {
-        return;
-      }
-      const now = new Date().toISOString();
-      await saveWidget(wsPath, {
-        ...seed,
-        id: realId,
-        createdAt: now,
-        updatedAt: now,
-      });
-    })
-  );
-
-  await Promise.all(
-    Object.entries(template.assets ?? {}).map(async ([name, base64]) => {
-      const dataUrl = `data:image/jpeg;base64,${base64}`;
-      assetDataUrls[name] = dataUrl;
-      const saved = await saveAttachment(wsPath, {
-        dataUrl,
-        kind: 'image',
-        mimeType: 'image/jpeg',
-        suggestedName: name,
-      });
-      assetPaths[name] = saved.filePath;
-    })
-  );
-  mkdirSync(join(wsPath, '.ghostboard', 'extension-instances'), {
-    recursive: true,
-  });
-  for (const placeholderId of Object.keys(extensionSeeds)) {
-    instanceIdMap.set(
-      placeholderId,
-      `extinst_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
-    );
-  }
-  await Promise.all(
-    Array.from(instanceIdMap, async ([placeholderId, realId]) => {
-      const seed = extensionSeeds[placeholderId];
-      if (!seed) {
-        return;
-      }
-      await createExtensionInstance(wsPath, {
-        appVersion: '0.0.0',
-        canvasTypeId: seed.canvasTypeId,
-        dataVersion: seed.dataVersion,
-        id: realId,
-        presentation: seed.presentation,
-        state: rewriteTemplateAssetValue(seed.state, assetPaths, assetDataUrls),
-      });
-    })
-  );
-
-  const nodes = template.nodes.map((node) => {
-    const noteId = node.data.noteId as string | undefined;
-    const widgetId = node.data.widgetId as string | undefined;
-    const nextData = { ...node.data };
-    if (noteId && noteIdMap.has(noteId)) {
-      nextData.noteId = noteIdMap.get(noteId);
-    }
-    if (widgetId && widgetIdMap.has(widgetId)) {
-      nextData.widgetId = widgetIdMap.get(widgetId);
-    }
-    if (
-      typeof nextData.instanceId === 'string' &&
-      instanceIdMap.has(nextData.instanceId)
-    ) {
-      nextData.instanceId = instanceIdMap.get(nextData.instanceId);
-    }
-    if (node.type !== 'folder') {
-      return { ...node, data: nextData };
-    }
-    const children = Array.isArray(nextData.children)
-      ? nextData.children.map((rawChild) => {
-          if (!rawChild || typeof rawChild !== 'object') {
-            return rawChild;
-          }
-          const child = rawChild as {
-            data?: Record<string, unknown>;
-            noteId?: string;
-            type?: string;
-          };
-          const childData = { ...(child.data ?? {}) };
-          const childNoteId =
-            child.noteId ?? (childData.noteId as string | undefined);
-          const childWidgetId = childData.widgetId as string | undefined;
-          if (childNoteId && noteIdMap.has(childNoteId)) {
-            childData.noteId = noteIdMap.get(childNoteId);
-          }
-          if (childWidgetId && widgetIdMap.has(childWidgetId)) {
-            childData.widgetId = widgetIdMap.get(childWidgetId);
-          }
-          if (
-            typeof childData.instanceId === 'string' &&
-            instanceIdMap.has(childData.instanceId)
-          ) {
-            childData.instanceId = instanceIdMap.get(childData.instanceId);
-          }
-          return {
-            ...child,
-            ...(childNoteId && noteIdMap.has(childNoteId)
-              ? { noteId: noteIdMap.get(childNoteId) }
-              : {}),
-            data: childData,
-          };
-        })
-      : nextData.children;
-    return {
-      ...node,
-      data: { ...nextData, children },
-    };
-  });
-
-  // Write per-node tag metadata to the workspace sidecar. Card placeholders
-  // are remapped to their real noteIds; non-card keys (node.id) flow through
-  // unchanged.
-  if (template.nodeMetadata) {
-    await Promise.all(
-      Object.entries(template.nodeMetadata).map(([placeholderKey, meta]) => {
-        const realKey =
-          noteIdMap.get(placeholderKey) ??
-          widgetIdMap.get(placeholderKey) ??
-          placeholderKey;
-        return setNodeMetadata(wsPath, realKey, meta);
+        if (content.body) {
+          const now = new Date().toISOString();
+          await saveNote(
+            wsPath,
+            filePath,
+            {
+              id: realId,
+              title: content.title,
+              displayHint: content.displayHint,
+              ...(content.color ? { color: content.color } : {}),
+              createdAt: now,
+              updatedAt: now,
+            },
+            content.body
+          );
+        }
       })
     );
-    await flushNodeMetadata(wsPath);
-  }
+    await finishTemplateWrites(
+      Array.from(widgetIdMap, async ([placeholderId, realId]) => {
+        const seed = widgetSeeds[placeholderId];
+        if (!seed) {
+          return;
+        }
+        const now = new Date().toISOString();
+        await saveWidget(wsPath, {
+          ...seed,
+          id: realId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      })
+    );
 
-  const manifest: CanvasManifest = {
-    schema: 'ghostboard-canvas/v1',
-    viewId: view.id,
-    nodes,
-    edges: template.edges,
-  };
-  await saveManifest(wsPath, view.file, manifest);
+    await finishTemplateWrites(
+      Object.entries(template.assets ?? {}).map(async ([name, base64]) => {
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        assetDataUrls[name] = dataUrl;
+        const saved = await saveAttachment(wsPath, {
+          dataUrl,
+          kind: 'image',
+          mimeType: 'image/jpeg',
+          suggestedName: name,
+        });
+        assetPaths[name] = saved.filePath;
+      })
+    );
+    mkdirSync(join(wsPath, '.ghostboard', 'extension-instances'), {
+      recursive: true,
+    });
+    for (const placeholderId of Object.keys(extensionSeeds)) {
+      instanceIdMap.set(
+        placeholderId,
+        `extinst_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
+      );
+    }
+    await finishTemplateWrites(
+      Array.from(instanceIdMap, async ([placeholderId, realId]) => {
+        const seed = extensionSeeds[placeholderId];
+        if (!seed) {
+          return;
+        }
+        await createExtensionInstance(wsPath, {
+          appVersion: '0.0.0',
+          canvasTypeId: seed.canvasTypeId,
+          dataVersion: seed.dataVersion,
+          id: realId,
+          presentation: seed.presentation,
+          state: rewriteTemplateAssetValue(
+            seed.state,
+            assetPaths,
+            assetDataUrls
+          ),
+        });
+      })
+    );
+
+    const nodes = template.nodes.map((node) => {
+      const noteId = node.data.noteId as string | undefined;
+      const widgetId = node.data.widgetId as string | undefined;
+      const nextData = { ...node.data };
+      if (noteId && noteIdMap.has(noteId)) {
+        nextData.noteId = noteIdMap.get(noteId);
+      }
+      if (widgetId && widgetIdMap.has(widgetId)) {
+        nextData.widgetId = widgetIdMap.get(widgetId);
+      }
+      if (
+        typeof nextData.instanceId === 'string' &&
+        instanceIdMap.has(nextData.instanceId)
+      ) {
+        nextData.instanceId = instanceIdMap.get(nextData.instanceId);
+      }
+      if (node.type !== 'folder') {
+        return { ...node, data: nextData };
+      }
+      const children = Array.isArray(nextData.children)
+        ? nextData.children.map((rawChild) => {
+            if (!rawChild || typeof rawChild !== 'object') {
+              return rawChild;
+            }
+            const child = rawChild as {
+              data?: Record<string, unknown>;
+              noteId?: string;
+              type?: string;
+            };
+            const childData = { ...(child.data ?? {}) };
+            const childNoteId =
+              child.noteId ?? (childData.noteId as string | undefined);
+            const childWidgetId = childData.widgetId as string | undefined;
+            if (childNoteId && noteIdMap.has(childNoteId)) {
+              childData.noteId = noteIdMap.get(childNoteId);
+            }
+            if (childWidgetId && widgetIdMap.has(childWidgetId)) {
+              childData.widgetId = widgetIdMap.get(childWidgetId);
+            }
+            if (
+              typeof childData.instanceId === 'string' &&
+              instanceIdMap.has(childData.instanceId)
+            ) {
+              childData.instanceId = instanceIdMap.get(childData.instanceId);
+            }
+            return {
+              ...child,
+              ...(childNoteId && noteIdMap.has(childNoteId)
+                ? { noteId: noteIdMap.get(childNoteId) }
+                : {}),
+              data: childData,
+            };
+          })
+        : nextData.children;
+      return {
+        ...node,
+        data: { ...nextData, children },
+      };
+    });
+
+    // Write per-node tag metadata to the workspace sidecar. Card placeholders
+    // are remapped to their real noteIds; non-card keys (node.id) flow through
+    // unchanged.
+    if (template.nodeMetadata) {
+      await finishTemplateWrites(
+        Object.entries(template.nodeMetadata).map(([placeholderKey, meta]) => {
+          const realKey =
+            noteIdMap.get(placeholderKey) ??
+            widgetIdMap.get(placeholderKey) ??
+            placeholderKey;
+          return setNodeMetadata(wsPath, realKey, meta);
+        })
+      );
+      await flushNodeMetadata(wsPath);
+    }
+
+    const manifest: CanvasManifest = {
+      schema: 'ghostboard-canvas/v1',
+      viewId: view.id,
+      nodes,
+      edges: template.edges,
+    };
+    await saveManifest(wsPath, view.file, manifest);
+  });
 }
 
 /**
@@ -985,12 +1027,14 @@ export async function addViewFromTemplate(
   name: string,
   templateId: string
 ): Promise<AddViewFromTemplateResult> {
-  const template = loadTemplate(templateId);
-  if (!template) {
-    throw new Error(`Template not found: ${templateId}`);
-  }
+  return withNoteWorkspace(wsPath, async () => {
+    const template = loadTemplate(templateId);
+    if (!template) {
+      throw new Error(`Template not found: ${templateId}`);
+    }
 
-  const entry = await addView(wsPath, name);
-  await populateViewFromTemplate(wsPath, entry, template);
-  return { success: true, entry };
+    const entry = await addView(wsPath, name);
+    await populateViewFromTemplate(wsPath, entry, template);
+    return { success: true, entry };
+  });
 }

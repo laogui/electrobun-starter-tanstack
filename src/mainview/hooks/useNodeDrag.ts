@@ -25,6 +25,7 @@ import {
 } from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../paraglide/messages.js';
+import { absoluteNodePosition } from '../../shared/canvasGeometry';
 import { isTopicNodeType } from '../../shared/topic';
 
 /**
@@ -72,8 +73,8 @@ export function pushDraggedNodesOutOfFolder(
   }
   const folderSize = nodeSize(folder);
   const obstacle = {
-    x: folder.position.x,
-    y: folder.position.y,
+    x: absoluteNodePosition(folder, nodes).x,
+    y: absoluteNodePosition(folder, nodes).y,
     width: folderSize.width,
     height: folderSize.height,
   };
@@ -82,19 +83,26 @@ export function pushDraggedNodesOutOfFolder(
       return n;
     }
     const size = nodeSize(n);
+    const absolute = absoluteNodePosition(n, nodes);
     const pos = pushNodeAwayFromObstacle(
       {
-        x: n.position.x,
-        y: n.position.y,
+        x: absolute.x,
+        y: absolute.y,
         width: size.width,
         height: size.height,
       },
       obstacle
     );
-    if (pos.x === n.position.x && pos.y === n.position.y) {
+    if (pos.x === absolute.x && pos.y === absolute.y) {
       return n;
     }
-    return { ...n, position: pos };
+    return {
+      ...n,
+      position: {
+        x: n.position.x + pos.x - absolute.x,
+        y: n.position.y + pos.y - absolute.y,
+      },
+    };
   });
 }
 
@@ -259,20 +267,21 @@ export function useNodeDrag() {
         (draggedNode.measured?.height ??
           (draggedNode.style?.height as number)) ||
         CARD_H;
-      const dx = draggedNode.position.x + nodeW / 2;
-      const dy = draggedNode.position.y + nodeH / 2;
+      const absolute = absoluteNodePosition(draggedNode, allNodes);
+      const dx = absolute.x + nodeW / 2;
+      const dy = absolute.y + nodeH / 2;
       return (
         allNodes.find(
           (n) =>
             n.type === 'folder' &&
             n.id !== draggedNode.id &&
-            dx >= n.position.x &&
+            dx >= absoluteNodePosition(n, allNodes).x &&
             dx <=
-              n.position.x +
+              absoluteNodePosition(n, allNodes).x +
                 (n.measured?.width ?? (n.style?.width as number) ?? FOLDER_W) &&
-            dy >= n.position.y &&
+            dy >= absoluteNodePosition(n, allNodes).y &&
             dy <=
-              n.position.y +
+              absoluteNodePosition(n, allNodes).y +
                 (n.measured?.height ?? (n.style?.height as number) ?? FOLDER_H)
         ) || null
       );
@@ -579,46 +588,27 @@ export function useNodeDrag() {
           : nds;
 
       if (isContentNode(node)) {
+        const folder = findOverlappingFolder(
+          node,
+          useCanvasStore.getState().nodes
+        );
+        if (folder) {
+          const absorbed = useCanvasStore
+            .getState()
+            .absorbNodesIntoFolder([...draggingIds], folder.id, {
+              recordHistory: false,
+            });
+          setNodes((nds) =>
+            (absorbed
+              ? restorePushedNodes(nds, draggingIds)
+              : pushDraggedNodesOutOfFolder(nds, draggingIds, folder.id)
+            ).map(deactivateGroupHighlight)
+          );
+          setActiveGroupId(null);
+          originsRef.current = null;
+          return;
+        }
         setNodes((nds) => {
-          // Check folder drop first
-          const folder = findOverlappingFolder(node, nds);
-          if (folder) {
-            const cardNode = nds.find((n) => n.id === node.id);
-            if (!cardNode) {
-              return nds.map(deactivateGroupHighlight);
-            }
-            const {
-              isHidden: _,
-              isDropTarget: __,
-              ...cleanData
-            } = cardNode.data as any;
-            const childEntry = {
-              id: cardNode.id,
-              type: cardNode.type ?? 'card',
-              data: cleanData,
-            };
-            const nextNodes: Node[] = [];
-            for (const n of restorePushedNodes(nds, draggingIds)) {
-              if (n.id === node.id) {
-                continue;
-              }
-              if (n.id !== folder.id) {
-                nextNodes.push(deactivateGroupHighlight(n));
-                continue;
-              }
-              const d = n.data as any;
-              const children = [...(d.children || []), childEntry];
-              nextNodes.push({
-                ...n,
-                data: {
-                  ...n.data,
-                  children,
-                },
-              });
-            }
-            return nextNodes;
-          }
-
           // Check group drop
           const liveNode = nds.find((n) => n.id === node.id) ?? node;
           const targetGroup = findOverlappingGroup(liveNode);

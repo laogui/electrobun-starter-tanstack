@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
@@ -120,16 +121,80 @@ export class ManifestCorruptError extends Error {
 }
 
 /**
- * Absolute manifest paths this process has read cleanly or recovered from a
- * backup. `saveManifest` only replaces an unparseable on-disk manifest whose
- * path is in here; otherwise the caller never saw that canvas's content and
- * a write would destroy it (e.g. "move to canvas" onto a damaged target).
+ * Recovery approvals are bound to the exact damaged bytes and backup shown.
+ * Merely reading a canvas never grants permission to replace damaged data.
  */
-const acknowledgedManifestPaths = new Set<string>();
+const recoveryTickets = new Map<
+  string,
+  { token: string; fingerprint: string; authorized: boolean }
+>();
+async function recoveryFingerprint(
+  wsPath: string,
+  viewFile: string
+): Promise<string> {
+  const damaged = await readFile(
+    resolveWorkspaceManifestPath(wsPath, viewFile)
+  );
+  const backup = await readFile(
+    resolveWorkspaceManifestPath(wsPath, manifestBackupViewFile(viewFile))
+  );
+  return createHash('sha256')
+    .update(damaged.toString('base64'))
+    .update('\0')
+    .update(backup.toString('base64'))
+    .digest('hex');
+}
+async function issueRecoveryTicket(
+  wsPath: string,
+  viewFile: string,
+  originalPath: string,
+  expectedBackup: CanvasManifest
+): Promise<string> {
+  const path = resolveWorkspaceManifestPath(wsPath, viewFile);
+  const damaged = await readFile(originalPath);
+  const backup = await readFile(
+    resolveWorkspaceManifestPath(wsPath, manifestBackupViewFile(viewFile))
+  );
+  if (
+    JSON.stringify(parseCanvasManifest(JSON.parse(backup.toString('utf8')))) !==
+    JSON.stringify(expectedBackup)
+  ) {
+    throw new Error('Recovery backup changed while loading.');
+  }
+  const fingerprint = createHash('sha256')
+    .update(damaged.toString('base64'))
+    .update('\0')
+    .update(backup.toString('base64'))
+    .digest('hex');
+  let ticket = recoveryTickets.get(path);
+  if (!ticket || ticket.fingerprint !== fingerprint) {
+    ticket = { token: randomUUID(), fingerprint, authorized: false };
+    recoveryTickets.set(path, ticket);
+  }
+  return ticket.token;
+}
+export async function authorizeManifestRecovery(
+  wsPath: string,
+  viewFile: string,
+  token: string
+): Promise<void> {
+  const path = resolveWorkspaceManifestPath(wsPath, viewFile);
+  const ticket = recoveryTickets.get(path);
+  if (
+    !ticket ||
+    ticket.token !== token ||
+    ticket.fingerprint !== (await recoveryFingerprint(wsPath, viewFile))
+  ) {
+    throw new Error(
+      'Recovery source changed; reload and review the backup again.'
+    );
+  }
+  ticket.authorized = true;
+}
 
 /** Test helper: forget which manifests were read or recovered. */
 export function resetManifestStateForTests(): void {
-  acknowledgedManifestPaths.clear();
+  recoveryTickets.clear();
 }
 
 /** Rolling copy of the previous on-disk manifest, refreshed on every save. */
@@ -227,8 +292,7 @@ async function readBackupManifest(
  * copied aside to `<file>.corrupt-<timestamp>` (never overwritten) and the
  * rolling `.bak` backup is tried for a usable copy.
  *
- * A path that read cleanly, or whose damage was answered with a usable
- * backup, is remembered as acknowledged so `saveManifest` may replace it.
+ * Reading a usable backup does not authorize replacement; approval is explicit.
  */
 export async function readManifest(
   wsPath: string,
@@ -248,16 +312,14 @@ export async function readManifest(
     return { kind: 'missing' };
   }
   if (read.kind === 'ok') {
-    acknowledgedManifestPaths.add(filePath);
+    recoveryTickets.delete(filePath);
     return { kind: 'ok', manifest: read.value };
   }
   console.warn(
     `[manifest] ${viewFile} is corrupt (${read.error.message}); preserved at ${read.backupPath}`
   );
   const recovered = await readBackupManifest(wsPath, viewFile);
-  if (recovered) {
-    acknowledgedManifestPaths.add(filePath);
-  }
+
   return {
     kind: 'corrupt',
     backupPath: read.backupPath,
@@ -272,7 +334,7 @@ export interface LoadedManifest {
    * Set when the manifest on disk was unreadable and this is the content of
    * a backup. The damaged bytes are kept at `backupPath`.
    */
-  recovered?: { backupPath: string; from: string };
+  recovered?: { backupPath: string; from: string; token: string };
 }
 
 /**
@@ -304,7 +366,16 @@ export async function loadManifestDetailed(
         );
         return {
           manifest: read.recovered.manifest,
-          recovered: { backupPath: read.backupPath, from: read.recovered.from },
+          recovered: {
+            backupPath: read.backupPath,
+            from: read.recovered.from,
+            token: await issueRecoveryTicket(
+              wsPath,
+              viewFile,
+              read.backupPath,
+              read.recovered.manifest
+            ),
+          },
         };
       }
       throw new ManifestCorruptError(viewFile, read.backupPath, read.error);
@@ -405,8 +476,7 @@ export async function backupManifestBeforeFirstTopics(
 
 /**
  * Throw `ManifestCorruptError` when the manifest on disk does not parse and
- * this process never read it cleanly or recovered it from a backup, i.e. the
- * caller cannot know what it would overwrite. Returns whether the on-disk
+ * the exact damaged file and backup have not been explicitly approved. Returns whether the on-disk
  * file is currently damaged (but acknowledged). Callers that write other
  * files before the manifest should call this first to fail before any write.
  */
@@ -419,7 +489,12 @@ export async function assertManifestWritable(
   if (current.kind !== 'corrupt') {
     return { onDiskCorrupt: false };
   }
-  if (!acknowledgedManifestPaths.has(filePath)) {
+  const ticket = recoveryTickets.get(filePath);
+  if (
+    !ticket?.authorized ||
+    ticket.fingerprint !==
+      (await recoveryFingerprint(wsPath, viewFile).catch(() => ''))
+  ) {
     throw new ManifestCorruptError(viewFile, current.backupPath, current.error);
   }
   return { onDiskCorrupt: true };
@@ -448,5 +523,5 @@ export async function saveManifest(
     );
   }
   await atomicWrite(filePath, JSON.stringify(manifest, null, 2));
-  acknowledgedManifestPaths.add(filePath);
+  recoveryTickets.delete(filePath);
 }

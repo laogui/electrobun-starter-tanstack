@@ -163,6 +163,75 @@ describe('unified undo across canvas, widget and extension stores', () => {
     expect(widgetTitle()).toBe('w0');
   });
 
+  it('a canvas edit discards widget and extension redo branches', async () => {
+    renameWidget('w1');
+    useWidgetStore.getState().undoWidget('w-1');
+    await useExtensionInstanceStore
+      .getState()
+      .updateState('inst-1', { history: 'record', state: { count: 1 } });
+    useExtensionInstanceStore.getState().undoInstance('inst-1');
+    useCanvasStore.getState().commitNodeData('a', { title: 'branch' });
+    expect(useWidgetStore.getState().redoWidget('w-1')).toBe(false);
+    expect(useExtensionInstanceStore.getState().redoInstance('inst-1')).toBe(
+      false
+    );
+    expect(
+      unifiedUndoHistory.getSnapshot().past.map((entry) => entry.kind)
+    ).toEqual(['canvas']);
+  });
+
+  it('a widget edit discards the canvas redo branch', () => {
+    useCanvasStore.getState().commitNodeData('a', { title: 'c1' });
+    useCanvasStore.getState().undo();
+    renameWidget('branch');
+    expect(useCanvasStore.getState().redo()).toBe(false);
+    expect(cardTitle()).toBe('c0');
+  });
+
+  it('undo refreshes focused data and clears focus when its node disappears', () => {
+    useCanvasStore.setState({
+      focusedNode: {
+        id: 'a',
+        type: 'card',
+        data: { title: 'c0' },
+        rect: new DOMRect(),
+      },
+    });
+    useCanvasStore.getState().commitNodeData('a', { title: 'c1' });
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().focusedNode?.data.title).toBe('c0');
+    useCanvasStore.getState().saveSnapshot();
+    useCanvasStore.setState({
+      nodes: [card('new', 'new')],
+      focusedNode: {
+        id: 'new',
+        type: 'card',
+        data: { title: 'new' },
+        rect: new DOMRect(),
+      },
+    });
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().focusedNode).toBeNull();
+  });
+
+  it('keeps native history when the plugin workspace first becomes available', () => {
+    unifiedUndoHistory.reset();
+    useCanvasStore.getState().reset();
+    useCanvasStore.getState().hydrate([card('a', 'c0')], []);
+    renameWidget('w1');
+    useCanvasStore.getState().commitNodeData('a', { title: 'c1' });
+    expect(unifiedUndoHistory.getSnapshot().past).toHaveLength(2);
+    unifiedUndoHistory.setContext('ws', 'view-1');
+    expect(
+      unifiedUndoHistory.getSnapshot().past.map((entry) => entry.kind)
+    ).toEqual(['widget', 'canvas']);
+    expect(
+      unifiedUndoHistory
+        .getSnapshot()
+        .past.every((entry) => entry.workspaceId === 'ws')
+    ).toBe(true);
+  });
+
   it('leaves keyboard undo to a focused text editor', () => {
     useCanvasStore.getState().commitNodeData('a', { title: 'c1' });
     document.body.innerHTML = '<div contenteditable="true" id="editor"></div>';

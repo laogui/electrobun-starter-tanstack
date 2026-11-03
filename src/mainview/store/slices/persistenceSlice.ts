@@ -47,6 +47,8 @@ export interface SwitchViewOptions {
 const MAX_SWITCH_FLUSH_PASSES = 3;
 
 export interface PersistenceSlice {
+  /** Invalidates asynchronous work even when a view is left and reopened. */
+  _canvasGeneration: number;
   _hydrated: boolean;
 
   // Multi-view
@@ -132,6 +134,7 @@ export const createPersistenceSlice: StateCreator<
   PersistenceSlice
 > = (set, get) => ({
   _hydrated: false,
+  _canvasGeneration: 0,
   activeViewId: 'default',
   canvasLoadError: null,
   views: [{ id: 'default', name: 'Default Canvas' }],
@@ -148,6 +151,7 @@ export const createPersistenceSlice: StateCreator<
       edges,
       viewport: restored,
       sessionViewport: restored,
+      _canvasGeneration: get()._canvasGeneration + 1,
       _hydrated: true,
       canvasLoadError: null,
       topicWritePaused,
@@ -165,6 +169,7 @@ export const createPersistenceSlice: StateCreator<
       viewport: null,
       sessionViewport: null,
       _sessionViewports: {},
+      _canvasGeneration: get()._canvasGeneration + 1,
       _hydrated: false,
       canvasLoadError: null,
       focusedNode: null,
@@ -188,7 +193,10 @@ export const createPersistenceSlice: StateCreator<
   },
 
   setActiveViewId: (viewId) => {
-    set({ activeViewId: viewId });
+    set({
+      activeViewId: viewId,
+      _canvasGeneration: get()._canvasGeneration + 1,
+    });
   },
 
   setCanvasLoadError: (error) => {
@@ -248,6 +256,7 @@ export const createPersistenceSlice: StateCreator<
       focusedNode: null,
       focusedFolder: null,
       _undoRedo: createUndoRedoState(),
+      _canvasGeneration: get()._canvasGeneration + 1,
       _hydrated: false,
       canvasLoadError: null,
       editingTopicId: null,

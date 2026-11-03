@@ -8,6 +8,7 @@ import { blocknoteSidecarDir } from './blocknote';
 import { cancelExtensionTasksByInstance } from './extensions/scheduler';
 import { loadManifestsStrict, type ManifestNode } from './manifest';
 import { listFilesRecursiveAsync, parseFrontmatter } from './notes';
+import { withNoteWorkspace } from './noteTransactions';
 import { loadWorkspaceConfig } from './workspace';
 
 export interface UnlinkedFileEntry {
@@ -31,6 +32,8 @@ const WIDGET_PATH_RE = /^\.ghostboard\/widgets\/[A-Za-z0-9_-]+\.json$/;
 const INSTANCE_PATH_RE =
   /^\.ghostboard\/extension-instances\/[A-Za-z0-9_-]+\.json$/;
 const JSON_EXT_RE = /\.json$/;
+
+export const UNLINKED_FILE_GRACE_MS = 60_000;
 
 function collectNoteIdsFromNode(node: ManifestNode, out: Set<string>): void {
   const data = (node.data ?? {}) as Record<string, unknown>;
@@ -299,61 +302,67 @@ export async function deleteUnlinkedNotes(
   wsPath: string,
   files: string[]
 ): Promise<DeleteUnlinkedResult> {
-  const referenced = await collectReferencedIds(wsPath);
-  const deleted: string[] = [];
-  const skipped: string[] = [];
+  return withNoteWorkspace(wsPath, async () => {
+    const referenced = await collectReferencedIds(wsPath);
+    const deleted: string[] = [];
+    const skipped: string[] = [];
 
-  const results = await Promise.all(
-    files.map(async (rel) => {
-      const isAllowed =
-        CONTENT_PATH_RE.test(rel) ||
-        SIDECAR_PATH_RE.test(rel) ||
-        WIDGET_PATH_RE.test(rel) ||
-        INSTANCE_PATH_RE.test(rel);
-      if (!isAllowed || rel.includes('..')) {
-        return { rel, status: 'skipped' as const };
+    const results = await Promise.all(
+      files.map(async (rel) => {
+        const isAllowed =
+          CONTENT_PATH_RE.test(rel) ||
+          SIDECAR_PATH_RE.test(rel) ||
+          WIDGET_PATH_RE.test(rel) ||
+          INSTANCE_PATH_RE.test(rel);
+        if (!isAllowed || rel.includes('..')) {
+          return { rel, status: 'skipped' as const };
+        }
+        const fullPath = join(wsPath, rel);
+        if (!existsSync(fullPath)) {
+          return { rel, status: 'skipped' as const };
+        }
+        try {
+          const info = await stat(fullPath);
+          if (Date.now() - info.mtimeMs < UNLINKED_FILE_GRACE_MS) {
+            return { rel, status: 'skipped' as const };
+          }
+          const noteId = await noteIdForCleanupPath(fullPath, rel);
+          if (noteId && referenced.has(noteId)) {
+            return { rel, status: 'skipped' as const };
+          }
+          const ok = Utils.moveToTrash(fullPath);
+          return {
+            rel,
+            status: ok ? ('deleted' as const) : ('skipped' as const),
+          };
+        } catch (error) {
+          console.warn(`[cleanup] Failed to move ${rel} to Trash:`, error);
+          return { rel, status: 'skipped' as const };
+        }
+      })
+    );
+    for (const result of results) {
+      if (result.status === 'deleted') {
+        deleted.push(result.rel);
+      } else {
+        skipped.push(result.rel);
       }
-      const fullPath = join(wsPath, rel);
-      if (!existsSync(fullPath)) {
-        return { rel, status: 'skipped' as const };
-      }
-      const noteId = await noteIdForCleanupPath(fullPath, rel);
-      if (noteId && referenced.has(noteId)) {
-        return { rel, status: 'skipped' as const };
-      }
+    }
+
+    // Deleting an instance file orphans its scheduled tasks; without this they
+    // keep firing at a record that no longer exists until MAX_TASKS is hit.
+    const deletedInstanceIds = deleted
+      .filter((rel) => INSTANCE_PATH_RE.test(rel))
+      .map((rel) => rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? '')
+      .filter(Boolean);
+    if (deletedInstanceIds.length > 0) {
       try {
-        const ok = Utils.moveToTrash(fullPath);
-        return {
-          rel,
-          status: ok ? ('deleted' as const) : ('skipped' as const),
-        };
+        await cancelExtensionTasksByInstance(wsPath, deletedInstanceIds);
       } catch (error) {
-        console.warn(`[cleanup] Failed to move ${rel} to Trash:`, error);
-        return { rel, status: 'skipped' as const };
+        console.warn('[cleanup] Failed to cancel scheduled tasks:', error);
       }
-    })
-  );
-  for (const result of results) {
-    if (result.status === 'deleted') {
-      deleted.push(result.rel);
-    } else {
-      skipped.push(result.rel);
     }
-  }
 
-  // Deleting an instance file orphans its scheduled tasks; without this they
-  // keep firing at a record that no longer exists until MAX_TASKS is hit.
-  const deletedInstanceIds = deleted
-    .filter((rel) => INSTANCE_PATH_RE.test(rel))
-    .map((rel) => rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? '')
-    .filter(Boolean);
-  if (deletedInstanceIds.length > 0) {
-    try {
-      await cancelExtensionTasksByInstance(wsPath, deletedInstanceIds);
-    } catch (error) {
-      console.warn('[cleanup] Failed to cancel scheduled tasks:', error);
-    }
-  }
-
-  return { deleted, skipped };
+    return { deleted, skipped };
+  });
 }

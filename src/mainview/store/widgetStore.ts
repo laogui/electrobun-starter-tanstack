@@ -357,3 +357,19 @@ export const useWidgetStore = create<WidgetStoreState>((set, get) => ({
     await chained;
   },
 }));
+
+// Branching in any history source invalidates local redo as well.
+unifiedUndoHistory.onBranch(() => {
+  const { history } = useWidgetStore.getState();
+  if (!Object.values(history).some((stack) => stack.future.length > 0)) {
+    return;
+  }
+  useWidgetStore.setState({
+    history: Object.fromEntries(
+      Object.entries(history).map(([id, stack]) => [
+        id,
+        { ...stack, future: [] },
+      ])
+    ),
+  });
+});

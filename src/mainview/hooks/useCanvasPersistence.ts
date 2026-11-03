@@ -1,13 +1,22 @@
+import type { Edge, Node } from '@xyflow/react';
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { registerCanvasFlusher } from '@/lib/canvasFlushRegistry';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+import { confirmCanvasRecovery } from '@/lib/confirmCanvasRecovery';
 import {
+  archivePendingFlushBackup,
   clearPendingFlushBackup,
   readPendingFlushBackup,
   writePendingFlushBackup,
 } from '@/lib/pendingFlushBackup';
-import { isRpcAvailable, rpcSaveManifest } from '@/lib/rpc';
+import {
+  isRpcAvailable,
+  rpcGetWorkspaceInfo,
+  rpcSaveManifest,
+} from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
+import * as m from '../../paraglide/messages.js';
 
 const LAYOUT_DEBOUNCE_MS = 2500;
 
@@ -28,12 +37,30 @@ async function saveManifestNow(viewId: string): Promise<boolean> {
       sanitized.edges
     );
     if (result?.success) {
-      clearPendingFlushBackup(viewId);
+      const current = useCanvasStore.getState();
+      if (
+        current.activeViewId === viewId &&
+        current.nodes === nodes &&
+        current.edges === edges
+      ) {
+        clearPendingFlushBackup(viewId);
+      }
+      toast.dismiss(`canvas-save-${viewId}`);
       return true;
     }
+    toast.error(
+      result?.error === 'revision-conflict'
+        ? m.toast_canvas_save_conflict()
+        : m.toast_canvas_save_failed(),
+      { id: `canvas-save-${viewId}`, duration: Number.POSITIVE_INFINITY }
+    );
     return false;
   } catch (error) {
     console.error('[persistence] Failed to flush manifest:', error);
+    toast.error(m.toast_canvas_save_failed(), {
+      id: `canvas-save-${viewId}`,
+      duration: Number.POSITIVE_INFINITY,
+    });
     return false;
   }
 }
@@ -73,6 +100,15 @@ export function useCanvasPersistence() {
 
   useEffect(() => {
     let rpcReady = false;
+    let workspacePath = '';
+    let baseGraph: string | undefined;
+    const graphOf = (nodes: Node[], edges: Edge[]) =>
+      JSON.stringify(sanitizeForPersistence(nodes, edges));
+    const workspaceReady = rpcGetWorkspaceInfo()
+      .then((info) => {
+        workspacePath = info.path;
+      })
+      .catch(() => undefined);
     let earlyDirty = false;
     let disposed = false;
     let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
@@ -132,10 +168,11 @@ export function useCanvasPersistence() {
      * Apply a crash/quit backup for `viewId` on top of the freshly hydrated
      * manifest. Runs strictly after hydrate (a restore before it would be
      * overwritten by the load) and only while the same view is still loaded.
-     * A backup exists only when the last session ended dirty, because every
-     * successful flush clears it, so it is newer than the manifest on disk.
+     * A backup may belong to an older or different session. Preserve it and
+     * compare its source/base before asking to replace the disk graph.
      */
-    const restorePendingBackup = (viewId: string) => {
+    const restorePendingBackup = async (viewId: string) => {
+      await workspaceReady;
       const state = useCanvasStore.getState();
       if (
         disposed ||
@@ -150,16 +187,60 @@ export function useCanvasPersistence() {
       if (!backup) {
         return;
       }
-      console.log('[persistence] Restoring from pending flush backup:', viewId);
+      try {
+        archivePendingFlushBackup(viewId, backup);
+      } catch {
+        toast.error(m.toast_canvas_save_failed());
+        return;
+      }
+      if (backup.workspacePath && backup.workspacePath !== workspacePath) {
+        return;
+      }
+      const diskGraph = graphOf(state.nodes, state.edges);
+      if (
+        !(await confirmCanvasRecovery(
+          m.canvas_pending_recovery_confirm({
+            source: backup.workspacePath || m.canvas_recovery_unknown_source(),
+            time: new Date(backup.savedAt).toLocaleString(),
+            status:
+              backup.baseGraph === diskGraph
+                ? m.canvas_recovery_base_matches()
+                : m.canvas_recovery_base_unknown(),
+          })
+        ))
+      ) {
+        return;
+      }
+      const latest = useCanvasStore.getState();
+      if (
+        disposed ||
+        latest.topicWritePaused ||
+        latest._canvasGeneration !== state._canvasGeneration ||
+        latest.nodes !== state.nodes ||
+        latest.edges !== state.edges
+      ) {
+        return;
+      }
+      baseGraph = diskGraph;
       // Nodes/edges only — viewport is session-memory and not disk-backed.
       // The resulting store change is picked up by the subscriber, which
       // marks the canvas dirty and schedules a save of the restored graph.
+      latest.saveSnapshot();
       useCanvasStore.setState({
-        nodes: backup.nodes,
-        edges: backup.edges,
+        focusedNode: null,
+        focusedFolder: null,
+        topicDraft: null,
+        editingTopicId: null,
+        topicCommandContextId: null,
+        topicEditPreviews: {},
       });
+      latest.hydrate(backup.nodes, backup.edges);
     };
 
+    if (useCanvasStore.getState()._hydrated) {
+      const current = useCanvasStore.getState();
+      baseGraph = graphOf(current.nodes, current.edges);
+    }
     isRpcAvailable().then((available) => {
       if (disposed) {
         return;
@@ -181,12 +262,13 @@ export function useCanvasPersistence() {
         // This change IS the hydration: it mirrors disk and is not dirty.
         // Restore a pending crash backup afterwards (outside this listener
         // so other subscribers observe the hydrate first).
+        baseGraph = graphOf(state.nodes, state.edges);
         const viewId = state.activeViewId;
         queueMicrotask(() => {
           isRpcAvailable()
             .then((available) => {
               if (available) {
-                restorePendingBackup(viewId);
+                return restorePendingBackup(viewId);
               }
             })
             .catch(() => undefined);
@@ -217,6 +299,8 @@ export function useCanvasPersistence() {
         writePendingFlushBackup(viewIdRef.current, {
           nodes,
           edges,
+          baseGraph,
+          workspacePath,
         });
       }
     };

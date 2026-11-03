@@ -36,23 +36,24 @@ export function createNotesHandlers(
 > {
   const { wsPath } = ctx;
   return {
-    saveNote: async ({ noteId, frontmatter, body }) => {
-      // Legacy markdown save path (checklist / plain-text cards). JSON
-      // notes go through saveBlockNote; this only writes to an existing
-      // `.md` and never creates one.
-      const noteIndex = await buildNoteIndex(wsPath);
-      const markdownFile = noteIndex.get(noteId)?.markdownFile;
-      if (!markdownFile) {
-        return { success: false };
-      }
-      const preview = await writeNoteWithPreview(
-        wsPath,
-        markdownFile,
-        { ...frontmatter, updatedAt: new Date().toISOString() },
-        body
-      );
-      return { success: true, preview };
-    },
+    saveNote: async ({ noteId, frontmatter, body }) =>
+      withNoteWorkspace(wsPath, async () => {
+        // Legacy markdown save path (checklist / plain-text cards). JSON
+        // notes go through saveBlockNote; this only writes to an existing
+        // `.md` and never creates one.
+        const noteIndex = await buildNoteIndex(wsPath);
+        const markdownFile = noteIndex.get(noteId)?.markdownFile;
+        if (!markdownFile) {
+          return { success: false };
+        }
+        const preview = await writeNoteWithPreview(
+          wsPath,
+          markdownFile,
+          { ...frontmatter, updatedAt: new Date().toISOString() },
+          body
+        );
+        return { success: true, preview };
+      }),
 
     loadBlockNote: async ({ noteId, workspaceId }) => {
       const workspace = wsPath;
@@ -203,25 +204,26 @@ export function createNotesHandlers(
       return { noteId: id, file: filePath };
     },
 
-    deleteNote: async ({ noteId }) => {
-      const noteIndex = await buildNoteIndex(wsPath);
-      const location = noteIndex.get(noteId);
+    deleteNote: async ({ noteId }) =>
+      withNoteWorkspace(wsPath, async () => {
+        const noteIndex = await buildNoteIndex(wsPath);
+        const location = noteIndex.get(noteId);
 
-      let deleted = false;
-      if (location?.markdownFile) {
-        deleted = await deleteNoteFile(wsPath, location.markdownFile);
-      }
-      // Best-effort sidecar cleanup; ignore failures so we never block
-      // deletion on a stale or read-only sidecar.
-      try {
-        if (await deleteBlockNoteSidecar(wsPath, noteId)) {
-          deleted = true;
+        let deleted = false;
+        if (location?.markdownFile) {
+          deleted = await deleteNoteFile(wsPath, location.markdownFile);
         }
-      } catch {
-        // ignore
-      }
-      return { success: deleted };
-    },
+        // Best-effort sidecar cleanup; ignore failures so we never block
+        // deletion on a stale or read-only sidecar.
+        try {
+          if (await deleteBlockNoteSidecar(wsPath, noteId)) {
+            deleted = true;
+          }
+        } catch {
+          // ignore
+        }
+        return { success: deleted };
+      }),
 
     importMarkdownFiles: async () => {
       const selected = await Utils.openFileDialog({
@@ -235,63 +237,65 @@ export function createNotesHandlers(
       if (paths.length === 0) {
         return { canceled: true, failedCount: 0, notes: [] };
       }
-      const importedNotes = await Promise.all(
-        paths.map(async (path) => {
-          try {
-            const file = Bun.file(path);
-            if (!(await file.exists())) {
+      return withNoteWorkspace(wsPath, async () => {
+        const importedNotes = await Promise.all(
+          paths.map(async (path) => {
+            try {
+              const file = Bun.file(path);
+              if (!(await file.exists())) {
+                return null;
+              }
+              const raw = await file.text();
+              const { frontmatter, body: rawBody } = parseFrontmatter(raw);
+              const title = deriveMarkdownTitle(frontmatter, rawBody, path);
+              const body = prepareImportedMarkdownBody(
+                frontmatter,
+                rawBody,
+                path
+              );
+              const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
+              const now = new Date().toISOString();
+              const createdAt =
+                typeof frontmatter.createdAt === 'string' &&
+                frontmatter.createdAt.trim()
+                  ? frontmatter.createdAt.trim()
+                  : now;
+              const filePath = await createNote(wsPath, noteId, title, 'text');
+              await saveNote(
+                wsPath,
+                filePath,
+                {
+                  ...frontmatter,
+                  id: noteId,
+                  title,
+                  displayHint: 'text',
+                  createdAt,
+                  updatedAt: now,
+                },
+                body
+              );
+              return { noteId, title, content: body };
+            } catch (error) {
+              console.warn(
+                `[import] Failed to import markdown file ${path}:`,
+                error
+              );
               return null;
             }
-            const raw = await file.text();
-            const { frontmatter, body: rawBody } = parseFrontmatter(raw);
-            const title = deriveMarkdownTitle(frontmatter, rawBody, path);
-            const body = prepareImportedMarkdownBody(
-              frontmatter,
-              rawBody,
-              path
-            );
-            const noteId = `note_${crypto.randomUUID().slice(0, 8)}`;
-            const now = new Date().toISOString();
-            const createdAt =
-              typeof frontmatter.createdAt === 'string' &&
-              frontmatter.createdAt.trim()
-                ? frontmatter.createdAt.trim()
-                : now;
-            const filePath = await createNote(wsPath, noteId, title, 'text');
-            await saveNote(
-              wsPath,
-              filePath,
-              {
-                ...frontmatter,
-                id: noteId,
-                title,
-                displayHint: 'text',
-                createdAt,
-                updatedAt: now,
-              },
-              body
-            );
-            return { noteId, title, content: body };
-          } catch (error) {
-            console.warn(
-              `[import] Failed to import markdown file ${path}:`,
-              error
-            );
-            return null;
+          })
+        );
+        const notes: Array<{
+          noteId: string;
+          title: string;
+          content?: string;
+        }> = [];
+        for (const note of importedNotes) {
+          if (note) {
+            notes.push(note);
           }
-        })
-      );
-      const notes: Array<{
-        noteId: string;
-        title: string;
-        content?: string;
-      }> = [];
-      for (const note of importedNotes) {
-        if (note) {
-          notes.push(note);
         }
-      }
-      return { failedCount: paths.length - notes.length, notes };
+        return { failedCount: paths.length - notes.length, notes };
+      });
     },
   };
 }

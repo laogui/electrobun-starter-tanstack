@@ -1,5 +1,4 @@
 import type { Edge, Node } from '@xyflow/react';
-
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import {
@@ -9,9 +8,11 @@ import {
 } from '@/data/initialNodes';
 import { collectWidgetIdsFromNodes } from '@/lib/canvasExport';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
+import { confirmCanvasRecovery } from '@/lib/confirmCanvasRecovery';
 import {
   isRpcAvailable,
   loadCanvas,
+  rpcConfirmCanvasRecovery,
   rpcListExtensionEnablement,
   rpcListViews,
   rpcSaveManifest,
@@ -210,6 +211,37 @@ export function useCanvasInit(): void {
           if (!(Array.isArray(data.nodes) && Array.isArray(data.edges))) {
             fail('corrupt');
             return;
+          }
+          if (
+            data.recoveredFrom &&
+            !(await confirmCanvasRecovery(
+              m.canvas_disk_recovery_confirm({ source: data.recoveredFrom })
+            ))
+          ) {
+            fail('corrupt');
+            return;
+          }
+          if (cancelled) {
+            return;
+          }
+          if (data.recoveredFrom) {
+            if (
+              !(
+                data.recoveryToken &&
+                (
+                  await rpcConfirmCanvasRecovery(
+                    activeViewId,
+                    data.recoveryToken
+                  )
+                ).success
+              )
+            ) {
+              fail('corrupt');
+              return;
+            }
+            if (cancelled) {
+              return;
+            }
           }
           // Viewport is session-only; loadCanvas no longer carries camera state.
           hydrate(data.nodes as Node[], data.edges as Edge[]);

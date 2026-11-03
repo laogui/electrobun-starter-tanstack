@@ -1,6 +1,7 @@
 // Canvas store slice: Folder children and detached-note mutations.
 import type { Node } from '@xyflow/react';
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import {
   isDetachableNode,
@@ -15,6 +16,8 @@ import {
 } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { getNodeSize } from '@/lib/collision';
+import * as m from '../../../paraglide/messages.js';
+import { absoluteNodePosition } from '../../../shared/canvasGeometry';
 import {
   type FolderChildEntry,
   resolveFolderChildSize,
@@ -23,8 +26,13 @@ import {
 import type { CanvasState, CreateNodeOptions } from '../canvasStore';
 
 export interface FolderSlice {
-  // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
   absorbCardIntoFolder: (cardId: string, folderId: string) => void;
+  // Folder-child mutations shared by canvas context menu / FocusedView / Sidebar
+  absorbNodesIntoFolder: (
+    nodeIds: string[],
+    folderId: string,
+    options?: { recordHistory?: boolean }
+  ) => boolean;
   addFolderChild: (folderId: string) => void;
   commitFolderChildData: (
     folderId: string,
@@ -53,63 +61,78 @@ export const createFolderSlice: StateCreator<
   FolderSlice
 > = (set, get) => ({
   absorbCardIntoFolder: (cardId, folderId) => {
-    const { nodes } = get();
-    const card = nodes.find((n) => n.id === cardId);
-    const folder = nodes.find((n) => n.id === folderId);
-    if (!(card && folder) || folder.type !== 'folder') {
-      return;
+    get().absorbNodesIntoFolder([cardId], folderId);
+  },
+
+  absorbNodesIntoFolder: (nodeIds, folderId, options) => {
+    const { nodes, edges } = get();
+    const ids = new Set(nodeIds);
+    const folder = nodes.find((node) => node.id === folderId);
+    const cards = nodes.filter((node) => ids.has(node.id));
+    if (
+      !folder ||
+      folder.type !== 'folder' ||
+      ids.size === 0 ||
+      cards.length !== ids.size ||
+      ids.has(folderId)
+    ) {
+      return false;
     }
-    if (!isFolderChildNode(card.type, card.data as Record<string, unknown>)) {
-      return;
+    if (edges.some((edge) => ids.has(edge.source) || ids.has(edge.target))) {
+      toast.warning(m.toast_folder_connected_nodes());
+      return false;
     }
-    // Preserve / synthesize noteId for card children so they map 1:1 to .md files
-    // (images continue to use the imageFile attachment pattern).
-    const isNoteBackedCard = card.type === 'card';
-    const cardData = card.data as Record<string, unknown>;
-    const existingNoteId = cardData.noteId as string | undefined;
-    const childNoteId = isNoteBackedCard
-      ? (existingNoteId ?? `note_${nanoid(8)}`)
-      : undefined;
-    const childData: Record<string, unknown> = isNoteBackedCard
-      ? { ...cardData, noteId: childNoteId }
-      : cardData;
-    get().saveSnapshot();
-    set((s) => ({
-      nodes: s.nodes.flatMap((n) => {
-        if (n.id === cardId) {
-          return [];
-        }
-        if (n.id !== folderId) {
-          return [n];
-        }
-        const existing = ((n.data as any).children ?? []) as Array<{
-          data: Record<string, unknown>;
-          id: string;
-          noteId?: string;
-          type?: string;
-        }>;
-        const children = [
-          ...existing,
-          {
-            id: card.id,
-            ...(childNoteId ? { noteId: childNoteId } : {}),
-            type: card.type,
-            data: childData,
-            size: getNodeSize(card),
-          },
-        ];
-        return [
-          {
-            ...n,
-            data: {
-              ...n.data,
-              children,
-            },
-          },
-        ];
-      }),
-      edges: s.edges.filter((e) => e.source !== cardId && e.target !== cardId),
+    if (
+      folder.data.locked ||
+      cards.some(
+        (card) => card.data.locked || !isFolderChildNode(card.type, card.data)
+      )
+    ) {
+      toast.warning(m.toast_folder_selection_rejected());
+      return false;
+    }
+    const existing = Array.isArray(folder.data.children)
+      ? (folder.data.children as FolderChildEntry[])
+      : [];
+    if (existing.some((child) => ids.has(child.id))) {
+      return false;
+    }
+    const children = cards.map((card) => {
+      const { isHidden: _hidden, isDropTarget: _target, ...data } = card.data;
+      const noteId =
+        card.type === 'card'
+          ? typeof data.noteId === 'string' && data.noteId
+            ? data.noteId
+            : `note_${nanoid(8)}`
+          : undefined;
+      return {
+        id: card.id,
+        type: card.type,
+        ...(noteId ? { noteId } : {}),
+        data: { ...data, ...(noteId ? { noteId } : {}) },
+        size: getNodeSize(card),
+      };
+    });
+    if (options?.recordHistory !== false) {
+      get().saveSnapshot();
+    }
+    const nextData = { ...folder.data, children: [...existing, ...children] };
+    set((state) => ({
+      nodes: state.nodes
+        .filter((node) => !ids.has(node.id))
+        .map((node) =>
+          node.id === folderId ? { ...node, data: nextData } : node
+        ),
+      focusedFolder:
+        state.focusedFolder?.id === folderId
+          ? { ...state.focusedFolder, data: nextData }
+          : state.focusedFolder,
+      focusedNode:
+        state.focusedNode && ids.has(state.focusedNode.id)
+          ? null
+          : state.focusedNode,
     }));
+    return true;
   },
 
   deleteFolderChild: (folderId, childId) => {
@@ -226,6 +249,7 @@ export const createFolderSlice: StateCreator<
 
     const spec = resolveFolderChildSpec(child);
     const childSize = resolveFolderChildSize(child, spec.size);
+    const folderPosition = absoluteNodePosition(folder, nodes);
     const anchor =
       options?.anchor ??
       (options?.anchorCenter
@@ -234,8 +258,8 @@ export const createFolderSlice: StateCreator<
             y: options.anchorCenter.y - childSize.height / 2,
           }
         : {
-            x: folder.position.x + (FOLDER_W - childSize.width) / 2,
-            y: folder.position.y + FOLDER_H + 32,
+            x: folderPosition.x + (FOLDER_W - childSize.width) / 2,
+            y: folderPosition.y + FOLDER_H + 32,
           });
 
     get().saveSnapshot();

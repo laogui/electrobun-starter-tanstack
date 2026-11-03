@@ -3,6 +3,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { withNoteWorkspace } from './noteTransactions';
 import { notifyContentChanged } from './plugins/contentEvents';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
@@ -201,16 +202,18 @@ export async function saveNote(
   frontmatter: Record<string, unknown>,
   body: string
 ): Promise<void> {
-  const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
-  const content = `---\n${serializeFrontmatter(frontmatter)}\n---\n${body}`;
-  await atomicWrite(fullPath, content);
-  if (typeof frontmatter.id === 'string' && frontmatter.id) {
-    notifyContentChanged(wsPath, {
-      kind: 'note',
-      ids: [frontmatter.id],
-      operation: 'upsert',
-    });
-  }
+  return withNoteWorkspace(wsPath, async () => {
+    const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
+    const content = `---\n${serializeFrontmatter(frontmatter)}\n---\n${body}`;
+    await atomicWrite(fullPath, content);
+    if (typeof frontmatter.id === 'string' && frontmatter.id) {
+      notifyContentChanged(wsPath, {
+        kind: 'note',
+        ids: [frontmatter.id],
+        operation: 'upsert',
+      });
+    }
+  });
 }
 
 const HEADING_RE = /^#\s+(.+)$/m;
@@ -271,27 +274,29 @@ export async function createNote(
   title: string,
   displayHint: string
 ): Promise<string> {
-  const slug = title
-    ? title
-        .toLowerCase()
-        .replaceAll(/[^a-z\d]+/g, '-')
-        .replaceAll(/^-|-$/g, '')
-        .slice(0, 50) || noteId
-    : noteId;
-  // Include noteId suffix to guarantee uniqueness across notes with the same title
-  const idSuffix = noteId.slice(-8);
-  const fileName = `${slug}-${idSuffix}.md`;
-  const filePath = `content/${fileName}`;
-  const now = new Date().toISOString();
-  const frontmatter: NoteFrontmatter = {
-    id: noteId,
-    title,
-    displayHint,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await saveNote(wsPath, filePath, frontmatter, '');
-  return filePath;
+  return withNoteWorkspace(wsPath, async () => {
+    const slug = title
+      ? title
+          .toLowerCase()
+          .replaceAll(/[^a-z\d]+/g, '-')
+          .replaceAll(/^-|-$/g, '')
+          .slice(0, 50) || noteId
+      : noteId;
+    // Include noteId suffix to guarantee uniqueness across notes with the same title
+    const idSuffix = noteId.slice(-8);
+    const fileName = `${slug}-${idSuffix}.md`;
+    const filePath = `content/${fileName}`;
+    const now = new Date().toISOString();
+    const frontmatter: NoteFrontmatter = {
+      id: noteId,
+      title,
+      displayHint,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await saveNote(wsPath, filePath, frontmatter, '');
+    return filePath;
+  });
 }
 
 /** Delete a note file. Uses Bun.file to check existence. */
@@ -299,21 +304,23 @@ export async function deleteNoteFile(
   wsPath: string,
   filePath: string
 ): Promise<boolean> {
-  const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
-  const file = Bun.file(fullPath);
-  if (!(await file.exists())) {
-    return false;
-  }
-  const note = await loadNote(wsPath, filePath).catch(() => null);
-  await unlink(fullPath);
-  if (note?.frontmatter.id) {
-    notifyContentChanged(wsPath, {
-      kind: 'note',
-      ids: [note.frontmatter.id],
-      operation: 'delete',
-    });
-  }
-  return true;
+  return withNoteWorkspace(wsPath, async () => {
+    const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
+    const file = Bun.file(fullPath);
+    if (!(await file.exists())) {
+      return false;
+    }
+    const note = await loadNote(wsPath, filePath).catch(() => null);
+    await unlink(fullPath);
+    if (note?.frontmatter.id) {
+      notifyContentChanged(wsPath, {
+        kind: 'note',
+        ids: [note.frontmatter.id],
+        operation: 'delete',
+      });
+    }
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -445,14 +452,19 @@ function normalizeOptionalNumber(
 export function cardDataToNote(
   noteId: string,
   data: Record<string, unknown>,
-  existingFm?: Record<string, unknown>
+  existingFm?: Record<string, unknown>,
+  existingBody = ''
 ): { frontmatter: Record<string, unknown>; body: string } {
   const now = new Date().toISOString();
   const frontmatter: Record<string, unknown> = {
+    ...existingFm,
     id: noteId,
-    title: data.title ?? '',
-    displayHint: typeToDisplayHint(data.type as string | undefined),
-    color: data.color ?? '',
+    title: data.title ?? existingFm?.title ?? '',
+    displayHint:
+      data.type === undefined
+        ? (existingFm?.displayHint ?? 'note')
+        : typeToDisplayHint(data.type as string | undefined),
+    color: data.color ?? existingFm?.color ?? '',
     createdAt: existingFm?.createdAt ?? data.createdAt ?? now,
     updatedAt: now,
   };
@@ -464,7 +476,7 @@ export function cardDataToNote(
   }
 
   // Body
-  let body = '';
+  let body = existingBody;
   if (data.type === 'checklist' && Array.isArray(data.items)) {
     body = serializeChecklistItems(
       data.items as Array<{

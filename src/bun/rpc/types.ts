@@ -12,6 +12,10 @@ import type {
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
+import type {
+  BlockNoteSaveResult,
+  CanvasSaveResult,
+} from '../../shared/persistence';
 import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
 import type {
   PluginDirectoryListResult,
@@ -38,8 +42,8 @@ import type { UnlinkedFileEntry } from '../cleanup';
 import type { LicenseInfo } from '../license';
 import type { ManifestEdge, ManifestNode } from '../manifest';
 import type {
-  NodeMetadata,
   NodeMetadataMap,
+  NodeMetadataPatch,
   TagMutationResult,
   TagSummary,
 } from '../nodeMetadata';
@@ -58,6 +62,27 @@ import type { TrashEntry } from '../workspace';
 export interface CanvasRPC {
   bun: {
     requests: {
+      readCanvasRecoveryGraph: {
+        params: { viewId: string };
+        response: import('../../shared/canvasRecovery').RecoveryGraph | null;
+      };
+      listCanvasRecoveryBackups: {
+        params: Record<string, never>;
+        response: import('../../shared/canvasRecovery').DiskRecoveryBackup[];
+      };
+      restoreCanvasSnapshot: {
+        params: {
+          name: string;
+          nodes: ManifestNode[];
+          edges: ManifestEdge[];
+          workspacePath?: string;
+        };
+        response: { success: boolean; viewId?: string };
+      };
+      confirmCanvasRecovery: {
+        params: { viewId: string; token: string };
+        response: { success: boolean };
+      };
       loadCanvas: {
         params: { viewId: string };
         response: {
@@ -74,6 +99,7 @@ export interface CanvasRPC {
            * renderer should warn before autosave keeps it.
            */
           recoveredFrom?: string;
+          recoveryToken?: string;
           /** Where the unreadable manifest bytes were preserved. */
           backupPath?: string;
         } | null;
@@ -84,7 +110,7 @@ export interface CanvasRPC {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
         };
-        response: { success: boolean };
+        response: CanvasSaveResult;
       };
       createWidget: {
         params: { kind: WidgetKind; title?: string };
@@ -321,13 +347,7 @@ export interface CanvasRPC {
           markdown: string;
           revision?: number;
         };
-        response: {
-          success: boolean;
-          conflict?: boolean;
-          revision?: number;
-          preview?: PreviewArtifacts;
-          blocknoteFile?: string;
-        };
+        response: BlockNoteSaveResult;
       };
       createNote: {
         params: { id: string; title: string; displayHint: string };
@@ -606,7 +626,7 @@ export interface CanvasRPC {
         response: NodeMetadataMap;
       };
       setNodeMetadata: {
-        params: { id: string; metadata: NodeMetadata };
+        params: { id: string; metadata: NodeMetadataPatch };
         response: { success: boolean };
       };
       deleteNodeMetadata: {

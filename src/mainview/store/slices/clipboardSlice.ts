@@ -53,33 +53,53 @@ export const createClipboardSlice: StateCreator<
   },
 
   pasteClipboard: async (offset = 30) => {
-    const { clipboard, nodes: currentNodes } = get();
-    if (clipboard.length === 0) {
+    const {
+      clipboard,
+      clipboardEdges,
+      nodes: currentNodes,
+      activeViewId,
+      _canvasGeneration,
+    } = get();
+    const isCurrent = () =>
+      get()._hydrated &&
+      get().activeViewId === activeViewId &&
+      get()._canvasGeneration === _canvasGeneration;
+    if (!isCurrent() || clipboard.length === 0) {
       return;
     }
     if (!(await hasNodeQuota(currentNodes, countCountedNodes(clipboard)))) {
       return;
     }
     const latest = get();
-    if (latest.clipboard.length === 0) {
+    if (!isCurrent()) {
       return;
     }
-    get().saveSnapshot();
     const pasted = buildPastedClipboard(
-      latest.clipboard,
-      latest.clipboardEdges,
+      clipboard,
+      clipboardEdges,
       latest.nodes,
       offset
     );
     let pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
+    if (!isCurrent()) {
+      return;
+    }
     if (graphContainsExtensionReference(pastedNodes)) {
       pastedNodes = await cloneExtensionReferences(pastedNodes);
     }
+    if (!isCurrent() || pastedNodes.length === 0) {
+      return;
+    }
+    get().saveSnapshot();
+    const pastedIds = new Set(pastedNodes.map((node) => node.id));
+    const pastedEdges = pasted.edges.filter(
+      (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
+    );
     markNodesEntering(pastedNodes.map((n) => n.id));
     set((s) => ({
-      edges: [...s.edges, ...pasted.edges],
+      edges: [...s.edges, ...pastedEdges],
       nodes: sortNodesByParent([
         ...s.nodes.map((n) => ({ ...n, selected: false })),
         ...pastedNodes,
@@ -88,36 +108,49 @@ export const createClipboardSlice: StateCreator<
   },
 
   duplicateSelected: async (offset = DUPLICATE_OFFSET) => {
-    const { nodes } = get();
+    const { nodes, edges, activeViewId, _canvasGeneration } = get();
+    const isCurrent = () =>
+      get()._hydrated &&
+      get().activeViewId === activeViewId &&
+      get()._canvasGeneration === _canvasGeneration;
     const selected = nodes.filter((node) => node.selected);
-    if (selected.length === 0) {
+    if (!isCurrent() || selected.length === 0) {
       return;
     }
     if (!(await hasNodeQuota(nodes, countCountedNodes(selected)))) {
       return;
     }
     const latest = get();
-    const selectedLatest = latest.nodes.filter((node) => node.selected);
-    if (selectedLatest.length === 0) {
+    if (!isCurrent()) {
       return;
     }
-    const selectedIds = new Set(selectedLatest.map((node) => node.id));
+    const selectedIds = new Set(selected.map((node) => node.id));
     const pasted = buildPastedClipboard(
-      selectedLatest.map(cleanNodeForClipboard),
-      getInternalEdgesForNodes(latest.edges, selectedIds),
+      selected.map(cleanNodeForClipboard),
+      getInternalEdgesForNodes(edges, selectedIds),
       latest.nodes,
       offset
     );
-    get().saveSnapshot();
     let pastedNodes = graphContainsWidgetReference(pasted.nodes)
       ? await cloneWidgetReferences(pasted.nodes)
       : pasted.nodes;
+    if (!isCurrent()) {
+      return;
+    }
     if (graphContainsExtensionReference(pastedNodes)) {
       pastedNodes = await cloneExtensionReferences(pastedNodes);
     }
+    if (!isCurrent() || pastedNodes.length === 0) {
+      return;
+    }
+    get().saveSnapshot();
+    const pastedIds = new Set(pastedNodes.map((node) => node.id));
+    const pastedEdges = pasted.edges.filter(
+      (edge) => pastedIds.has(edge.source) && pastedIds.has(edge.target)
+    );
     markNodesEntering(pastedNodes.map((node) => node.id));
     set((s) => ({
-      edges: [...s.edges, ...pasted.edges],
+      edges: [...s.edges, ...pastedEdges],
       nodes: sortNodesByParent([
         ...s.nodes.map((node) => ({ ...node, selected: false })),
         ...pastedNodes,

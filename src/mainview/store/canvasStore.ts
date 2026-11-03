@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import type { SearchResultTarget } from '../../shared/searchTypes';
 import {
   type ClipboardSlice,
@@ -144,3 +145,19 @@ export const useCanvasStore = create<CanvasState>()((...args) => ({
   ...createNodeCreationSlice(...args),
   ...createFolderSlice(...args),
 }));
+
+unifiedUndoHistory.setNativeView(useCanvasStore.getState().activeViewId);
+useCanvasStore.subscribe((state, previous) => {
+  if (
+    state.activeViewId !== previous.activeViewId ||
+    (state._hydrated && !previous._hydrated)
+  ) {
+    unifiedUndoHistory.setNativeView(state.activeViewId);
+  }
+});
+unifiedUndoHistory.onBranch(() => {
+  const { _undoRedo } = useCanvasStore.getState();
+  if (_undoRedo.future.length > 0) {
+    useCanvasStore.setState({ _undoRedo: { ..._undoRedo, future: [] } });
+  }
+});

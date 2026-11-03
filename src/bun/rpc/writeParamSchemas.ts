@@ -50,16 +50,23 @@ const widgetRecord = z
 
 const nodeMetadata = z
   .object({
-    tag: z.string().optional(),
-    tagColor: z.string().optional(),
-    tagColors: z.record(z.string(), z.string()).optional(),
-    tags: z.array(z.string()).optional(),
+    tag: z.string().nullish(),
+    tagColor: z.string().nullish(),
+    tagColors: z.record(z.string(), z.string()).nullish(),
+    tags: z.array(z.string()).nullish(),
   })
   .loose();
 
 const presentation = record;
 
 export const RPC_WRITE_PARAM_SCHEMAS = {
+  restoreCanvasSnapshot: z.object({
+    name: id,
+    nodes: z.array(manifestNode.extend({ type: id })),
+    edges: z.array(manifestEdge),
+    workspacePath: z.string().optional(),
+  }),
+  confirmCanvasRecovery: z.object({ viewId: id, token: id }),
   saveManifest: z
     .object({
       edges: z.array(manifestEdge),

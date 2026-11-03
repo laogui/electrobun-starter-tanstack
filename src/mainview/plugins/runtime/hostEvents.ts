@@ -72,10 +72,12 @@ export function connectPluginHostEvents(
       bodies.reset();
       clearBlockNotePrefetch();
     }
-    unifiedUndoHistory.setContext(
-      current,
-      current ? useCanvasStore.getState().activeViewId : ''
-    );
+    if (current) {
+      unifiedUndoHistory.setContext(
+        current,
+        useCanvasStore.getState().activeViewId
+      );
+    }
   };
   const contentChanged = (event: Event) => {
     syncWorkspace();
@@ -165,6 +167,6 @@ export function connectPluginHostEvents(
     target.removeEventListener('plugin-content-changed', contentChanged);
     unsubscribeCanvas();
     unsubscribeRuntime();
-    unifiedUndoHistory.reset();
+    // Native history belongs to the canvas session, not this subscription.
   };
 }

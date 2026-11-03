@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import Electrobun, { ApplicationMenu, Updater, Utils } from 'electrobun/bun';
 import { appState } from './appState';
+import { flushAllNodeMetadata } from './nodeMetadata';
 import type {
   AppInfoResponse,
   SwitchWorkspaceResponse,
@@ -145,10 +146,16 @@ export function installQuitFlush(): void {
       return;
     }
     quitFlushState = 'flushing';
-    requestRendererFlush().finally(() => {
-      quitFlushState = 'done';
-      Utils.quit();
-    });
+    requestRendererFlush()
+      .then(flushAllNodeMetadata)
+      .then(() => {
+        quitFlushState = 'done';
+        Utils.quit();
+      })
+      .catch((error) => {
+        quitFlushState = 'idle';
+        console.error('[quit] Metadata flush failed; quit canceled:', error);
+      });
   });
 }
 

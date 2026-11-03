@@ -1,9 +1,11 @@
+import type { NoteMetadataChange } from '../../packages/plugin-sdk';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,
   loadAttachment as loadWorkspaceAttachment,
   saveAttachment as saveWorkspaceAttachment,
 } from './attachments';
+import { loadBlockNoteSidecar } from './blocknote';
 import type { ManifestNode } from './manifest';
 import { moveNodeMetadataKey } from './nodeMetadata';
 import {
@@ -13,6 +15,7 @@ import {
   noteRecordToCardData,
 } from './noteStore';
 import { cardDataToNote, loadNote } from './notes';
+import { NoteTransactionError } from './noteTransactions';
 import { writeNoteWithPreview } from './preview';
 import {
   type ChecklistWidgetItem,
@@ -162,6 +165,122 @@ export function hasAttachmentRuntimeData(type: string | undefined): boolean {
 export const asNoteString = (value: unknown, fallback: string): string =>
   typeof value === 'string' ? value : fallback;
 
+/** Validate the whole snapshot before allocating or writing any note files. */
+export async function validateManifestNoteWrites(
+  workspace: string,
+  nodes: ManifestNode[],
+  index: Map<string, NoteLocation>
+): Promise<NoteMetadataChange[]> {
+  const changes: NoteMetadataChange[] = [];
+  const candidates = new Map<string, Record<string, unknown>[]>();
+  const add = (id: unknown, data: Record<string, unknown>) => {
+    if (typeof id !== 'string') {
+      return;
+    }
+    const items = candidates.get(id) ?? [];
+    items.push(data);
+    candidates.set(id, items);
+  };
+  for (const node of nodes) {
+    if (node.type === 'card') {
+      add(node.data.noteId, node.data);
+    }
+    if (node.type === 'folder' && Array.isArray(node.data.children)) {
+      for (const child of node.data.children) {
+        if (
+          !child ||
+          typeof child !== 'object' ||
+          !('type' in child) ||
+          child.type !== 'card'
+        ) {
+          continue;
+        }
+        const card = child as FolderChildNode;
+        add(card.noteId ?? card.data?.noteId, card.data ?? {});
+      }
+    }
+  }
+  for (const [id, items] of candidates) {
+    const location = index.get(id);
+    if (!location?.hasSidecar) {
+      if (items.length > 1) {
+        // Legacy notes have no revision: refuse divergent projections rather
+        // than silently allowing the last placement to overwrite the first.
+        const current = location?.markdownFile
+          ? // react-doctor-disable-next-line react-doctor/async-await-in-loop
+            await loadNote(workspace, location.markdownFile)
+          : null;
+        const proposals = items.map((data) => {
+          const { body, frontmatter } = cardDataToNote(
+            id,
+            data,
+            current?.frontmatter,
+            current?.body
+          );
+          return JSON.stringify([
+            body,
+            frontmatter.title,
+            frontmatter.color,
+            frontmatter.displayHint,
+            frontmatter.pieData,
+          ]);
+        });
+        if (new Set(proposals).size > 1) {
+          throw new NoteTransactionError(
+            'revision-conflict',
+            `Conflicting legacy projections for ${id}`
+          );
+        }
+      }
+      continue;
+    }
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const current = await loadBlockNoteSidecar(workspace, id);
+    if (!current || current.corrupted) {
+      throw new NoteTransactionError(
+        'recovery-required',
+        `Note needs recovery: ${id}`
+      );
+    }
+    let proposed: string | undefined;
+    for (const data of items) {
+      const title =
+        typeof data.title === 'string' ? data.title : (current.title ?? '');
+      const color =
+        typeof data.color === 'string' ? data.color : (current.color ?? '');
+      const value = JSON.stringify([title, color]);
+      const changed =
+        title !== (current.title ?? '') || color !== (current.color ?? '');
+      if (
+        (proposed !== undefined && proposed !== value) ||
+        (changed &&
+          (data.blocknoteRevision !== current.revision ||
+            !Number.isSafeInteger(current.revision) ||
+            current.revision >= Number.MAX_SAFE_INTEGER))
+      ) {
+        throw new NoteTransactionError(
+          'revision-conflict',
+          `Conflicting canvas metadata for ${id}`
+        );
+      }
+      if (changed && proposed === undefined) {
+        changes.push({
+          id,
+          before: {
+            title: current.title ?? '',
+            color: current.color ?? '',
+            revision: current.revision,
+          },
+          after: { title, color, revision: current.revision + 1 },
+          metadataOnly: true,
+        });
+      }
+      proposed = value;
+    }
+  }
+  return changes;
+}
+
 /**
  * Persist a manifest card's note during `saveManifest`.
  *
@@ -196,11 +315,29 @@ export async function persistManifestCardNote(
     return;
   }
   const existingDoc = await loadNote(wsPath, location.markdownFile);
+  if (!existingDoc) {
+    throw new Error(`Legacy note is missing: ${noteId}`);
+  }
   const { frontmatter, body } = cardDataToNote(
     noteId,
     cardData,
-    existingDoc?.frontmatter
+    existingDoc.frontmatter,
+    existingDoc.body
   );
+  // Layout saves carry hydrated content too. Do not rewrite unchanged notes
+  // (including their timestamps, formatting and unknown frontmatter).
+  const changed =
+    body !== existingDoc.body ||
+    ['title', 'color', 'displayHint', 'pieData'].some((key) => {
+      const fallback = key === 'displayHint' ? 'note' : '';
+      return (
+        JSON.stringify(frontmatter[key] ?? fallback) !==
+        JSON.stringify(existingDoc.frontmatter[key] ?? fallback)
+      );
+    });
+  if (!changed) {
+    return;
+  }
   await writeNoteWithPreview(wsPath, location.markdownFile, frontmatter, body);
 }
 

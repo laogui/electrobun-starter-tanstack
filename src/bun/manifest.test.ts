@@ -19,6 +19,7 @@ vi.mock('electrobun/bun', () => ({
 }));
 
 const {
+  authorizeManifestRecovery,
   loadManifest,
   loadManifestDetailed,
   loadManifestsStrict,
@@ -182,6 +183,14 @@ describe('saveManifest never overwrites an unseen corrupt manifest', () => {
       'default.canvas.json.corrupt-'
     );
 
+    await expect(
+      saveManifest(ws, 'views/default.canvas.json', manifestWith('note_c'))
+    ).rejects.toBeInstanceOf(ManifestCorruptError);
+    await authorizeManifestRecovery(
+      ws,
+      'views/default.canvas.json',
+      loaded!.recovered!.token
+    );
     await saveManifest(ws, 'views/default.canvas.json', manifestWith('note_c'));
     const backup = JSON.parse(
       await readFile(join(viewsDir(), 'default.canvas.json.bak'), 'utf8')
@@ -249,4 +258,39 @@ describe('reference scans fail closed on corrupt manifests', () => {
       ManifestCorruptError
     );
   });
+});
+
+it('rejects a recovery approval if the damaged file or backup changed', async () => {
+  await saveManifest(ws, 'views/default.canvas.json', manifestWith('a'));
+  await saveManifest(ws, 'views/default.canvas.json', manifestWith('b'));
+  const path = join(viewsDir(), 'default.canvas.json');
+  await writeFile(path, '{broken');
+  const loaded = await loadManifestDetailed(ws, 'views/default.canvas.json');
+  await writeFile(path, '{different damage');
+  await expect(
+    authorizeManifestRecovery(
+      ws,
+      'views/default.canvas.json',
+      loaded!.recovered!.token
+    )
+  ).rejects.toThrow();
+  expect(await readFile(path, 'utf8')).toBe('{different damage');
+});
+
+it('revokes an approved recovery when the backup changes before saving', async () => {
+  await saveManifest(ws, 'views/default.canvas.json', manifestWith('a'));
+  await saveManifest(ws, 'views/default.canvas.json', manifestWith('b'));
+  const path = join(viewsDir(), 'default.canvas.json');
+  await writeFile(path, '{broken');
+  const loaded = await loadManifestDetailed(ws, 'views/default.canvas.json');
+  await authorizeManifestRecovery(
+    ws,
+    'views/default.canvas.json',
+    loaded!.recovered!.token
+  );
+  await writeFile(`${path}.bak`, JSON.stringify(manifestWith('new-backup')));
+  await expect(
+    saveManifest(ws, 'views/default.canvas.json', manifestWith('stale'))
+  ).rejects.toBeInstanceOf(ManifestCorruptError);
+  expect(await readFile(path, 'utf8')).toBe('{broken');
 });

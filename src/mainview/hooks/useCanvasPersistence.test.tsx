@@ -3,7 +3,13 @@
 import type { Node } from '@xyflow/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/confirmCanvasRecovery', () => ({
+  confirmCanvasRecovery: vi.fn(async () => false),
+}));
+const { confirmCanvasRecovery } = await import('@/lib/confirmCanvasRecovery');
 
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
@@ -142,7 +148,36 @@ describe('useCanvasPersistence (debounced manifest flush)', () => {
     expect(readPendingFlushBackup('view-1')).toBeNull();
   });
 
-  it('restores a pending backup only after hydrate, then persists it', async () => {
+  it('keeps a failed save dirty, reports the conflict and clears the warning after retry', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('save-error');
+    const dismiss = vi.spyOn(toast, 'dismiss');
+    saveManifest.mockResolvedValueOnce({
+      success: false,
+      error: 'revision-conflict',
+    });
+    await mount();
+    await moveNode(12);
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS);
+    });
+    expect(error).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'canvas-save-view-1' })
+    );
+    act(() => {
+      window.dispatchEvent(new Event('beforeunload'));
+    });
+    expect(readPendingFlushBackup('view-1')?.nodes[0]?.position.x).toBe(12);
+    await act(async () => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    expect(saveManifest).toHaveBeenCalledTimes(2);
+    expect(readPendingFlushBackup('view-1')).toBeNull();
+    expect(dismiss).toHaveBeenCalledWith('canvas-save-view-1');
+  });
+
+  it('requires confirmation before a pending backup replaces the loaded disk graph', async () => {
+    const confirm = vi.mocked(confirmCanvasRecovery).mockResolvedValue(false);
     writePendingFlushBackup('view-1', {
       edges: [],
       nodes: [card('restored', { position: { x: 3, y: 4 } })],
@@ -159,19 +194,58 @@ describe('useCanvasPersistence (debounced manifest flush)', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    expect(confirm).toHaveBeenCalledOnce();
     expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual([
-      'restored',
+      'from-disk',
     ]);
-
     await act(async () => {
       vi.advanceTimersByTime(DEBOUNCE_MS);
-      await Promise.resolve();
     });
-    expect(saveManifest).toHaveBeenCalledTimes(1);
-    expect(saveManifest.mock.calls[0]?.[1]).toEqual([
-      expect.objectContaining({ id: 'restored' }),
-    ]);
+    expect(saveManifest).not.toHaveBeenCalled();
+    expect(readPendingFlushBackup('view-1')?.nodes[0]?.id).toBe('restored');
+  });
+
+  it('restores a confirmed backup but retains independent recovery evidence', async () => {
+    vi.mocked(confirmCanvasRecovery).mockResolvedValueOnce(true);
+    writePendingFlushBackup('view-1', {
+      nodes: [card('recovered')],
+      edges: [],
+    });
+    useCanvasStore.getState().reset();
+    await mount();
+    await act(async () => {
+      useCanvasStore.getState().hydrate([card('disk')], []);
+    });
+    expect(useCanvasStore.getState().nodes[0]?.id).toBe('recovered');
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS);
+    });
     expect(readPendingFlushBackup('view-1')).toBeNull();
+    expect(
+      Object.keys(localStorage).some((key) => key.includes('archive.view-1.'))
+    ).toBe(true);
+  });
+
+  it('cannot apply an old recovery choice after the canvas changes', async () => {
+    let choose!: (value: boolean) => void;
+    vi.mocked(confirmCanvasRecovery).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          choose = resolve;
+        })
+    );
+    writePendingFlushBackup('view-1', { nodes: [card('old')], edges: [] });
+    useCanvasStore.getState().reset();
+    await mount();
+    await act(async () => {
+      useCanvasStore.getState().hydrate([card('disk')], []);
+    });
+    await moveNode(42);
+    await act(async () => {
+      choose(true);
+    });
+    expect(useCanvasStore.getState().nodes[0]?.id).toBe('disk');
+    expect(useCanvasStore.getState().nodes[0]?.position.x).toBe(42);
   });
 
   it('keeps edits made during an in-flight save dirty', async () => {

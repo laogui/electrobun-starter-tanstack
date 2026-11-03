@@ -1,4 +1,5 @@
 import { getEdgeLabelText } from '../shared/canvasEdgeFields';
+import { absoluteNodePosition } from '../shared/canvasGeometry';
 import {
   searchKindForCanvasType,
   widgetKindForCanvasType,
@@ -284,7 +285,11 @@ export async function searchWorkspace(
       });
     }
 
-    for (const node of manifest.nodes) {
+    for (const storedNode of manifest.nodes) {
+      const node = {
+        ...storedNode,
+        position: absoluteNodePosition(storedNode, manifest.nodes),
+      };
       const ref: NodeRef = {
         ...nodeRefContainer(node),
         viewId: view.id,

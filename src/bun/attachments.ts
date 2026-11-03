@@ -1,7 +1,8 @@
-import { rename, rm, stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { link, mkdir, open, rename, rm, stat } from 'node:fs/promises';
+import { dirname, isAbsolute } from 'node:path';
 
 import { Utils } from 'electrobun/bun';
+import { fsyncDirectory } from './atomicWrite';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
 const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)*;base64,(.+)$/i;
@@ -149,9 +150,7 @@ function resolveAttachmentTarget(
   const prefix = prefixForAttachment(input.kind, mimeType);
   const extension =
     extensionFromName(input.suggestedName) || extensionForMime(mimeType);
-  const filePath = `attachments/${prefix}_${crypto
-    .randomUUID()
-    .slice(0, 8)}.${extension}`;
+  const filePath = `attachments/${prefix}_${crypto.randomUUID()}.${extension}`;
   return assertWorkspaceAttachmentPath(wsPath, filePath);
 }
 
@@ -181,14 +180,12 @@ export async function saveAttachment(
   }
 
   const kind = input.kind ?? inferAttachmentKind(mimeType);
-  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
-    existingFile: input.existingFile,
+  return await saveAttachmentStream(wsPath, {
+    ...input,
+    body: new Uint8Array(buffer),
     kind,
     mimeType,
-    suggestedName: input.suggestedName,
   });
-  await Bun.write(fullPath, new Uint8Array(buffer));
-  return { filePath: relativePath };
 }
 
 interface SaveAttachmentStreamInput {
@@ -210,22 +207,58 @@ export async function saveAttachmentStream(
 ): Promise<{ filePath: string }> {
   const mimeType = (input.mimeType ?? 'application/octet-stream').toLowerCase();
   const kind = input.kind ?? inferAttachmentKind(mimeType);
-  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
-    existingFile: input.existingFile,
-    kind,
-    mimeType,
-    suggestedName: input.suggestedName,
-  });
-  const tempPath = `${fullPath}.upload-${crypto.randomUUID()}.tmp`;
-  const writeBody = new Response(input.body);
+  let target = resolveAttachmentTarget(wsPath, { ...input, kind, mimeType });
+  await mkdir(dirname(target.fullPath), { recursive: true });
+  const tempPath = `${target.fullPath}.upload-${crypto.randomUUID()}.tmp`;
+  // Exclusive staging creation prevents collisions from touching any existing file.
+  const file = await open(tempPath, 'wx');
   try {
-    await Bun.write(tempPath, writeBody);
-    await rename(tempPath, fullPath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
+    const reader = new Response(input.body).body?.getReader();
+    try {
+      if (reader) {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            break;
+          }
+          await file.writeFile(chunk.value);
+        }
+      }
+      await file.sync();
+    } finally {
+      await reader?.cancel().catch(() => undefined);
+      await file.close();
+    }
+    if (input.existingFile) {
+      // Explicit replacement is atomic, so interruption preserves the old bytes.
+      await rename(tempPath, target.fullPath);
+    } else {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          // A hard link publishes completed bytes without replacing a collision.
+          await link(tempPath, target.fullPath);
+          break;
+        } catch (error) {
+          if (
+            (error as NodeJS.ErrnoException).code !== 'EEXIST' ||
+            attempt >= 7
+          ) {
+            throw error;
+          }
+          target = resolveAttachmentTarget(wsPath, {
+            ...input,
+            kind,
+            mimeType,
+          });
+        }
+      }
+    }
+    await fsyncDirectory(dirname(target.fullPath));
+    return { filePath: target.relativePath };
+  } finally {
+    await file.close().catch(() => undefined);
+    await rm(tempPath, { force: true });
   }
-  return { filePath: relativePath };
 }
 
 export async function loadAttachment(
@@ -410,14 +443,12 @@ export async function saveAttachmentFile(
     'application/octet-stream'
   ).toLowerCase();
   const kind = input.kind ?? inferAttachmentKind(mimeType);
-  const { fullPath, relativePath } = resolveAttachmentTarget(wsPath, {
+  return await saveAttachmentStream(wsPath, {
+    // BunFile implements Blob at runtime; Bun's published stream types differ
+    // from the DOM Blob interface used by Response in this mixed TS project.
+    body: sourceFile as unknown as Blob,
     kind,
     mimeType,
     suggestedName: input.suggestedName || input.sourcePath,
   });
-
-  // Stream the bytes through Bun.write to avoid loading the whole file into
-  // memory; Bun handles BunFile -> path copies as a streamed operation.
-  await Bun.write(fullPath, sourceFile);
-  return { filePath: relativePath };
 }

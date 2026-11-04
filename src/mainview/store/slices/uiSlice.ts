@@ -1,5 +1,6 @@
 // Canvas store slice: Transient UI state: dialogs, sidebars, focus targets, tag filters, search.
 import type { StateCreator } from 'zustand';
+import { markOpenRequested } from '@/lib/perfMarks';
 import type {
   CanvasState,
   FocusedItem,
@@ -156,6 +157,9 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   },
 
   setFocusedNode: (v) => {
+    if (v) {
+      markOpenRequested();
+    }
     set((s) => ({
       focusedNode: v,
       _focusSession:

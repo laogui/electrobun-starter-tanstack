@@ -9,6 +9,7 @@ import {
   reportRendererError,
   startRendererDiagnostics,
 } from '@/lib/diagnostics';
+import { startPerfMarks } from '@/lib/perfMarks';
 import { router } from '@/router';
 import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
 import { connectPluginHostEvents } from './plugins/runtime/hostEvents';
@@ -17,6 +18,8 @@ import { pluginRuntime } from './plugins/runtime/PluginRuntime';
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
+
+startPerfMarks();
 
 const stopDiagnostics = startRendererDiagnostics();
 import.meta.hot?.dispose(stopDiagnostics);

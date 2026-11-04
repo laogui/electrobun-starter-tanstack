@@ -2,6 +2,7 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
+import { markOpenRequested } from '@/lib/perfMarks';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 import { absoluteNodePosition } from '../../shared/canvasGeometry';
@@ -112,6 +113,7 @@ export async function openFocusedById({
   rfInstance,
   centerDurationMs = VIEWPORT_PAN_MS,
 }: OpenFocusedOptions): Promise<void> {
+  markOpenRequested();
   const request = ++navigationRequest;
   const { nodes, setFocusedNode, setFocusedFolder, _canvasGeneration } =
     useCanvasStore.getState();

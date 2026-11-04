@@ -46,6 +46,8 @@
 
 **验收**：基线文档和 bug 清单都已提交。
 
+**进度（2026-11-05）**：样本脚本（`bun run perf:fixture`）、打点（`src/mainview/lib/perfMarks.ts`）、[perf-baseline.md](./quality/perf-baseline.md) 和 [bugs.md](./quality/bugs.md) 已提交。**剩下的是在 Mac 上实测并填表。**
+
 ---
 
 ## 阶段 1：卡片改在右侧边栏打开，删除转场体系（第 2～6 天）

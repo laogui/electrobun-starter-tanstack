@@ -28,6 +28,7 @@
     "plugin:create": "bun scripts/create-plugin.ts",
     "plugin:pack": "bun packages/plugin-sdk/package-plugin.js",
     "upload:r2": "bun scripts/upload-r2.ts",
+    "perf:fixture": "bun scripts/perf/make-fixture.ts",
     "release:canary": "bun run build:canary && bun scripts/upload-r2.ts --env=canary",
     "release:stable": "bun run build:stable && bun scripts/upload-r2.ts --env=stable",
     "type-check": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && bun scripts/type-check.ts",

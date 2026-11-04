@@ -22,6 +22,12 @@ export const VT_CLOSE_CLASS = 'gb-vt-focus-close';
 export const FOCUS_TITLE_SELECTOR = '[data-focus-title]';
 /** The focused view's root (`FocusedView` sets `data-focus-transition`). */
 export const FOCUS_ROOT_SELECTOR = '[data-focus-transition]';
+/**
+ * Note reading column. The card morphs into this instead of the fullscreen
+ * root: the root's box is the viewport, and WebKit then stretches the text
+ * snapshot to the screen before the centered column settles.
+ */
+export const FOCUS_SURFACE_SELECTOR = '[data-focus-surface]';
 
 export type FocusTransitionDirection = 'open' | 'close';
 
@@ -109,6 +115,15 @@ function clearName(element: Element | null | undefined): void {
   }
 }
 
+/** Keep a nested title group inside the card snapshot, not on the viewport. */
+function containGroup(element: HTMLElement | null | undefined): void {
+  element?.style.setProperty('view-transition-group', 'contain');
+}
+
+function clearGroup(element: HTMLElement | null | undefined): void {
+  element?.style.removeProperty('view-transition-group');
+}
+
 /** The newest visible focused view root, if any. */
 export function findFocusRoot(): HTMLElement | null {
   if (typeof document === 'undefined') {
@@ -118,6 +133,33 @@ export function findFocusRoot(): HTMLElement | null {
     document.querySelectorAll<HTMLElement>(FOCUS_ROOT_SELECTOR)
   ).filter((element) => element.style.visibility !== 'hidden');
   return roots.at(-1) ?? null;
+}
+
+/**
+ * Element the card morphs into. Notes mark their reading column with
+ * `[data-focus-surface]`; everything else morphs the fullscreen root.
+ * Prefer the live editor's column once it has been revealed.
+ */
+export function findFocusCard(root: Element | null): HTMLElement | null {
+  if (!(root instanceof HTMLElement)) {
+    return null;
+  }
+  const surfaces = Array.from(
+    root.querySelectorAll<HTMLElement>(FOCUS_SURFACE_SELECTOR)
+  );
+  const inReadyEditor = surfaces.find(
+    (surface) =>
+      surface.closest<HTMLElement>('[data-focus-editor-ready]')?.dataset
+        .focusEditorReady === 'true'
+  );
+  if (inReadyEditor) {
+    return inReadyEditor;
+  }
+  return (
+    surfaces.find((surface) => !surface.closest('[data-focus-editor-ready]')) ??
+    surfaces[0] ??
+    root
+  );
 }
 
 /**
@@ -294,10 +336,12 @@ export function openWithViewTransition(
   const stopProbe = startFocusAnimProbe(label);
   const sourceTitle = card.querySelector<HTMLElement>(FOCUS_TITLE_SELECTOR);
   setName(card, VT_CARD_NAME);
+  containGroup(card);
   setName(sourceTitle, VT_TITLE_NAME);
   setRootClasses('open');
 
   let focusRoot: HTMLElement | null = null;
+  let focusCard: HTMLElement | null = null;
   let focusTitle: HTMLElement | null = null;
   let resolveOpen: () => void = () => undefined;
   const finishedPromise = new Promise<void>((resolve) => {
@@ -307,8 +351,11 @@ export function openWithViewTransition(
 
   const cleanup = once(() => {
     clearName(card);
+    clearGroup(card);
     clearName(sourceTitle);
     clearName(focusRoot);
+    clearName(focusCard);
+    clearGroup(focusCard);
     clearName(focusTitle);
     card.style.visibility = '';
     if (!running || running.cleanup === cleanup) {
@@ -326,6 +373,7 @@ export function openWithViewTransition(
     start,
     () => {
       clearName(card);
+      clearGroup(card);
       clearName(sourceTitle);
       session = true;
       flushSync(update);
@@ -335,7 +383,9 @@ export function openWithViewTransition(
         session = false;
         return;
       }
-      setName(focusRoot, VT_CARD_NAME);
+      focusCard = findFocusCard(focusRoot);
+      setName(focusCard, VT_CARD_NAME);
+      containGroup(focusCard);
       focusTitle = sourceTitle ? findFocusTitle(focusRoot) : null;
       setName(focusTitle, VT_TITLE_NAME);
       // The card "moved" into the focused view: do not leave a copy behind.
@@ -395,10 +445,12 @@ export function closeWithViewTransition(
   const label = 'close viewTransition';
   const startedAt = performance.now();
   const stopProbe = startFocusAnimProbe(label);
+  const focusCard = findFocusCard(focusRoot);
   const rootTitle = findFocusTitle(focusRoot);
   // A title scrolled out of view would morph in from off screen.
   const focusTitle = rootTitle && isOnScreen(rootTitle) ? rootTitle : null;
-  setName(focusRoot, VT_CARD_NAME);
+  setName(focusCard, VT_CARD_NAME);
+  containGroup(focusCard);
   setName(focusTitle, VT_TITLE_NAME);
   setRootClasses('close');
 
@@ -407,8 +459,11 @@ export function closeWithViewTransition(
 
   const cleanup = once(() => {
     clearName(focusRoot);
+    clearName(focusCard);
+    clearGroup(focusCard);
     clearName(focusTitle);
     clearName(card);
+    clearGroup(card);
     clearName(cardTitle);
     focusRoot.style.visibility = '';
     if (hiddenFocusRoot === focusRoot) {
@@ -426,6 +481,8 @@ export function closeWithViewTransition(
     start,
     () => {
       clearName(focusRoot);
+      clearName(focusCard);
+      clearGroup(focusCard);
       clearName(focusTitle);
       // AnimatePresence may keep the exiting view mounted for a tick; it must
       // not be part of the "new" snapshot.
@@ -435,6 +492,7 @@ export function closeWithViewTransition(
       card = resolveCardSurface(target?.() ?? null);
       if (card) {
         setName(card, VT_CARD_NAME);
+        containGroup(card);
         if (focusTitle) {
           cardTitle = card.querySelector<HTMLElement>(FOCUS_TITLE_SELECTOR);
           setName(cardTitle, VT_TITLE_NAME);

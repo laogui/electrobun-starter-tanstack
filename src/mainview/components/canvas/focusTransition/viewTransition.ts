@@ -9,7 +9,8 @@ export const VIEW_TRANSITION_ID = 'viewTransition';
 
 /**
  * Variant D: the browser's View Transitions API morphs the canvas card into
- * the focused view (`view-transition-name: gb-focus-card`, title as
+ * the focused view (`view-transition-name: gb-focus-card` on the note column
+ * `[data-focus-surface]`, otherwise the fullscreen root; title as
  * `gb-focus-title`). The open / close state change is wrapped by
  * `runFocusTransition` (see `viewTransitionController.ts`); the pseudo-element
  * animation lives in index.css (`.gb-vt-focus`).

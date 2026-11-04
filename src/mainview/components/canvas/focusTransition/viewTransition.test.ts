@@ -179,6 +179,38 @@ describe('view transition open / close', () => {
     expect(isViewTransitionSession()).toBe(false);
   });
 
+  it('morphs a note into its reading column, not the fullscreen root', async () => {
+    const started = installFakeViewTransitions();
+    const { card } = mountCard();
+    const mounted: { root: HTMLElement | null } = { root: null };
+
+    openWithViewTransition(
+      () => {
+        const root = document.createElement('div');
+        root.dataset.focusTransition = 'viewTransition';
+        root.innerHTML =
+          '<div data-focus-surface><h1 data-focus-title>Title</h1></div>';
+        document.body.append(root);
+        mounted.root = root;
+      },
+      { source: card }
+    );
+
+    const surface = mounted.root?.querySelector<HTMLElement>(
+      '[data-focus-surface]'
+    );
+    expect(name(mounted.root)).toBe('');
+    expect(name(surface)).toBe(VT_CARD_NAME);
+    expect(surface?.style.getPropertyValue('view-transition-group')).toBe(
+      'contain'
+    );
+    expect(name(surface?.querySelector('h1'))).toBe(VT_TITLE_NAME);
+    started[0]?.finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(name(surface)).toBe('');
+    expect(surface?.style.getPropertyValue('view-transition-group')).toBe('');
+  });
+
   it('closes without a transition when the session was not opened by one', () => {
     installFakeViewTransitions();
     const update = vi.fn();

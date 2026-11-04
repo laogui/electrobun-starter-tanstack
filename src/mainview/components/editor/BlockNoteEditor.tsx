@@ -909,7 +909,11 @@ function BlockNoteSurface({
           overflow: { x: 'hidden' },
         }}
       >
-        <div className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12">
+        <div
+          className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12"
+          data-focus-surface
+          style={colorToStyle(color)}
+        >
           <TextareaAutosize
             aria-label={m.a11y_note_title()}
             className={cn(

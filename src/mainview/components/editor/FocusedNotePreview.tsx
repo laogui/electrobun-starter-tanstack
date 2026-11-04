@@ -35,7 +35,11 @@ export function FocusedNotePreview({
       style={colorToStyle(colorValue)}
     >
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12">
+        <div
+          className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12"
+          data-focus-surface
+          style={colorToStyle(colorValue)}
+        >
           <h1
             className={cn(
               'mb-2 block w-full whitespace-pre-wrap break-words pl-[54px] font-bold text-4xl leading-tight tracking-normal',

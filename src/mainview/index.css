@@ -1036,6 +1036,7 @@ body.resizing-nwse * {
 :root.gb-vt-focus::view-transition-new(gb-focus-card) {
   width: 100%;
   height: 100%;
+  overflow: clip;
   object-fit: none;
   /* Equal fade lengths keep the plus-lighter sum opaque. */
   animation-duration: 180ms;
@@ -1059,12 +1060,21 @@ body.resizing-nwse * {
   animation-duration: 150ms;
 }
 
-/* Titles keep their natural size (no scaling between text-xl and text-4xl):
-   they slide between positions and crossfade. */
+/* Titles must not use width/height: auto. WebKit resolves that against the
+   snapshot containing block (the viewport), so the glyphs stretch to the
+   screen and then snap back to the centered column. Clip the bitmap instead
+   of scaling it between text-xl and text-4xl. */
+:root.gb-vt-focus::view-transition-group(gb-focus-title) {
+  overflow: clip;
+}
+
 :root.gb-vt-focus::view-transition-old(gb-focus-title),
 :root.gb-vt-focus::view-transition-new(gb-focus-title) {
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
+  overflow: clip;
+  object-fit: none;
+  object-position: left top;
   animation-duration: 180ms;
   animation-timing-function: linear;
 }

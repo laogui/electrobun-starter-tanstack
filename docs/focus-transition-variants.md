@@ -14,10 +14,12 @@ localStorage.setItem('gb:focus-transition', '<id>'); location.reload();
 the canvas card's rounded surface (`.node-visual`) gets
 `view-transition-name: gb-focus-card` and its title `gb-focus-title`; inside
 the transition's update callback the focus state is set with `flushSync`, the
-names move to the focused view root (`[data-focus-transition]`) and to the
-static preview title (`[data-focus-title]`), and the source card is hidden so
-it does not stay behind. WebKit then morphs the card box into the fullscreen
-sheet. Close is the reverse (sheet → card, editor title → card title), wrapped
+names move to the note's reading column (`[data-focus-surface]`, or the
+fullscreen root when a surface has no column) and to the static preview title
+(`[data-focus-title]`), and the source card is hidden so it does not stay
+behind. WebKit then morphs the card into that column. Targeting the viewport
+stretches the text snapshot to the screen, then the centered column snaps
+back. Close is the reverse (column → card, editor title → card title), wrapped
 around `setFocusedNode(null)`.
 
 - Pseudo-element styling lives in `index.css` under `.gb-vt-focus` (a class on

@@ -10,14 +10,16 @@ import {
 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import {
+  SHOW_CANVAS_TYPES_SETTINGS,
+  SHOW_PLUGINS_SETTINGS,
+} from '@/lib/productScope';
 import { cn } from '@/lib/utils';
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
   type SettingsClient,
 } from '@/settingsClient';
-
 import {
   getLocaleStrings,
   type SettingsLocaleStrings,
@@ -58,7 +60,7 @@ interface NavItem {
   >;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const ALL_NAV_ITEMS: NavItem[] = [
   { id: 'general', icon: SettingsIcon, labelKey: 'navGeneral' },
   { id: 'workspace', icon: Wrench, labelKey: 'navWorkspace' },
   { id: 'canvasTypes', icon: Puzzle, labelKey: 'navCanvasTypes' },
@@ -68,6 +70,12 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'feedback', icon: MessageSquare, labelKey: 'navFeedback' },
   { id: 'about', icon: Info, labelKey: 'navAbout' },
 ];
+
+const NAV_ITEMS: NavItem[] = ALL_NAV_ITEMS.filter(
+  (item) =>
+    (item.id !== 'plugins' || SHOW_PLUGINS_SETTINGS) &&
+    (item.id !== 'canvasTypes' || SHOW_CANVAS_TYPES_SETTINGS)
+);
 
 const SETTINGS_SCROLLBAR_OPTIONS = {
   overflow: { x: 'hidden' },

@@ -237,11 +237,26 @@ function templateBody(id: string, source: TemplateSource): TemplateBody {
   return body;
 }
 
-/** List all built-in templates. */
+/**
+ * Planning / productivity templates are hidden from the gallery in the slim
+ * release (docs/PRD-slim.md). They stay bundled and loadable by id, so
+ * nothing that already references them breaks.
+ */
+export const HIDDEN_TEMPLATE_IDS: ReadonlySet<string> = new Set([
+  'kanban',
+  'sprint-retro',
+  'weekly-planner',
+  'eisenhower-matrix',
+  'cafe',
+]);
+
+/** List the built-in templates shown in the gallery. */
 export function listAllTemplates(): TemplateMeta[] {
-  return Object.entries(TEMPLATE_SOURCES).map(([id, source]) => ({
-    ...templateMeta(id, source),
-  }));
+  return Object.entries(TEMPLATE_SOURCES)
+    .filter(([id]) => !HIDDEN_TEMPLATE_IDS.has(id))
+    .map(([id, source]) => ({
+      ...templateMeta(id, source),
+    }));
 }
 
 /** Load a single template by id. Returns null if not found. */

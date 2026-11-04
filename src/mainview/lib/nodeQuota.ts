@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { getCachedLicense, refreshLicense } from '@/lib/rpc-license';
 import * as m from '../../paraglide/messages.js';
 import { TOPIC_NODE_TYPE } from '../../shared/topic';
+import { LICENSE_QUOTA_ENABLED } from './productScope';
 
 /** Free-tier cap shared by create / branch / paste / duplicate / import. */
 export const FREE_NODE_LIMIT = 100;
@@ -35,6 +36,9 @@ export async function hasNodeQuota(
   nodes: Node[],
   additionalCounted = 1
 ): Promise<boolean> {
+  if (!LICENSE_QUOTA_ENABLED) {
+    return true;
+  }
   if (countCountedNodes(nodes) + additionalCounted <= FREE_NODE_LIMIT) {
     return true;
   }

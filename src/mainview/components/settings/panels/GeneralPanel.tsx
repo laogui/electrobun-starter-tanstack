@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
+import { LICENSE_QUOTA_ENABLED } from '@/lib/productScope';
 import {
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
@@ -154,12 +155,16 @@ export function GeneralPanel({
       <PanelHeading>{strings.generalTitle}</PanelHeading>
 
       {/* License Status */}
-      <div className="space-y-2">
-        <h3 className="font-medium text-gray-700 text-sm dark:text-gray-300">
-          {m.settings_license_heading()}
-        </h3>
-        <LicenseStatusCard onActivateClick={() => setShowLicenseDialog(true)} />
-      </div>
+      {LICENSE_QUOTA_ENABLED ? (
+        <div className="space-y-2">
+          <h3 className="font-medium text-gray-700 text-sm dark:text-gray-300">
+            {m.settings_license_heading()}
+          </h3>
+          <LicenseStatusCard
+            onActivateClick={() => setShowLicenseDialog(true)}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         <SettingsSelect

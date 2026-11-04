@@ -5,6 +5,11 @@ vi.mock('sonner', () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast };
 });
+// These suites exercise the free-tier gate, which the slim release turns off.
+vi.mock('@/lib/productScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/productScope')>()),
+  LICENSE_QUOTA_ENABLED: true,
+}));
 vi.mock('@/lib/rpc-license', () => ({
   getCachedLicense: vi.fn(() => ({ activated: false })),
   refreshLicense: vi.fn(async () => ({ activated: false })),

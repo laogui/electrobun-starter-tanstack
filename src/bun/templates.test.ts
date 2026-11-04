@@ -1,25 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
-import { listAllTemplates, loadTemplate } from './templates';
+import {
+  HIDDEN_TEMPLATE_IDS,
+  listAllTemplates,
+  loadTemplate,
+} from './templates';
 import { parseWidgetRecord, WIDGET_SCHEMA } from './widgets';
 
 describe('built-in templates', () => {
   it('parses every bundled template meta and manifest', () => {
     const metas = listAllTemplates();
     expect(metas.length).toBeGreaterThan(0);
-    for (const meta of metas) {
-      const template = loadTemplate(meta.id);
-      expect(template?.meta.id).toBe(meta.id);
+    const ids = [...metas.map((meta) => meta.id), ...HIDDEN_TEMPLATE_IDS];
+    for (const id of ids) {
+      const template = loadTemplate(id);
+      expect(template?.meta.id).toBe(id);
       expect(Array.isArray(template?.nodes)).toBe(true);
       expect(Array.isArray(template?.edges)).toBe(true);
     }
   });
 
   it('keeps fields the template types do not name', () => {
-    const edges = listAllTemplates().flatMap(
-      (meta) => loadTemplate(meta.id)?.edges ?? []
-    );
+    const ids = [
+      ...listAllTemplates().map((meta) => meta.id),
+      ...HIDDEN_TEMPLATE_IDS,
+    ];
+    const edges = ids.flatMap((id) => loadTemplate(id)?.edges ?? []);
     expect(edges.some((edge) => 'markerEnd' in edge)).toBe(true);
+  });
+
+  it('hides planning templates from the gallery but keeps them loadable', () => {
+    const listed = new Set(listAllTemplates().map((meta) => meta.id));
+    for (const id of HIDDEN_TEMPLATE_IDS) {
+      expect(listed.has(id)).toBe(false);
+      expect(loadTemplate(id)).not.toBeNull();
+    }
   });
 
   it('returns null for unknown ids', () => {

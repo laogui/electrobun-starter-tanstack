@@ -1,0 +1,903 @@
+diff --git a/docs/PRD-slim.md b/docs/PRD-slim.md
+index 7640bee..a6a48a0 100644
+--- a/docs/PRD-slim.md
++++ b/docs/PRD-slim.md
+@@ -10,11 +10,11 @@
+ 
+ ## 2. 先服务谁
+ 
+-**第一类用户：要写东西的学生和中文创作者。** 例如写时评、读书报告、小论文、选题策划、视频脚本前的资料准备。
++**第一类用户：中文文字工作者。** 记者、特稿与非虚构作者、公众号 / 专栏作者、书评人、小说作者。共同点是动笔前要摊开大量资料：选题、采访、引述、事实核查、结构。（2026-11-04 修订，原为“学生和创作者”。）
+ 
+ - 第一号用户是开发者本人：下一次写作任务从头到尾只用 GhostBoard 完成，记录每个卡住的地方。
+ - 暂不同时服务：时间管理用户、插件开发者、团队协作用户。
+-- 获客渠道（验证用）：小红书 / B 站的“用画布写时评”演示、少数派、Obsidian 中文社区。
++- 获客渠道（验证用）：一篇稿子从选题到成稿的画布录屏（小红书 / B 站 / 即刻）、少数派、Obsidian 中文社区、写作者社群。
+ - 对标 Heptabase。差异只有一句：本地、免费、中文友好、专注“写作前”。
+ 
+ ## 3. 唯一的核心流程
+@@ -33,8 +33,7 @@
+ | 整理 | 连线、Group、Folder、标签、多画布、撤销重做 |
+ | 找回 | `Cmd/Ctrl+K` 搜索、笔记库 |
+ | 产出 | 聚焦编辑、AI 把选中资料总结进一张 Note、Markdown 导出 |
+-| 模板 | 空白、Quick Start、读书笔记、头脑风暴导图、Demo |
+-| 过渡保留 | Checklist（Quick Start 和读书笔记模板在用，下一步并入 Note 的任务列表） |
++| 模板 | 深度稿素材板（首次打开即为它）、选题库、采访整理、拆书笔记、小说设定板、文章结构图、空白。源文件由 `scripts/templates/build_writer_templates.py` 生成 |
+ 
+ ### 隐藏入口（代码与旧数据都在，开关在 `src/mainview/lib/productScope.ts`）
+ 
+@@ -44,7 +43,8 @@
+ | 录音 | 写作场景很少用，多一套麦克风权限与状态 | 照常播放 |
+ | 设置 → 插件、设置 → 画布类型 | 见下方“冻结” | 已装插件不受影响 |
+ | 许可证卡片与 100 张免费额度 | 还没有用户，额度只会挡住试用 | 不改动许可证数据 |
+-| 看板、周计划、冲刺复盘、四象限、咖啡馆模板 | 规划类，不在写作流程上（`HIDDEN_TEMPLATE_IDS`） | 仍可按 id 加载 |
++| 看板、周计划、冲刺复盘、四象限、咖啡馆、Quick Start、Demo 模板 | 不在写作流程上（`HIDDEN_TEMPLATE_IDS`） | 仍可按 id 加载 |
++| 新建 Checklist | 由 Note 内任务列表替代（BlockNote 输入 `[]`） | 旧 Checklist 照常显示、编辑 |
+ 
+ ### 冻结（不删代码，停止新开发，不对外宣传）
+ 
+@@ -58,7 +58,7 @@
+ 
+ 1. **自己用一周**：用 slim/v1 完成一次真实写作，按 PRD §1.3 记录阻断点。
+ 2. ~~**合并找回入口**~~（已完成）：游离笔记侧栏已删除，创建菜单的“文库笔记”和工具栏都打开同一个笔记库；游离笔记点一下即放回画布中央并打开，Unlinked Files 留在笔记库底部。找回入口只剩搜索和笔记库两个。
+-3. **Checklist 并入 Note**：模板改用 Note 内任务列表；旧 Checklist 只读兼容。
++3. ~~**Checklist 并入 Note**~~（已完成）：可见模板全部改用 Note 内任务列表，新建入口隐藏；旧 Checklist 照常可用。
+ 4. **标签简化**：主标签 + 次要标签改成一种标签。
+ 5. **评估 Group / Folder 合一**：Folder 作为 Group 的“折叠”状态，用户只需学一个分组概念。先写方案，验证后再动代码。
+ 6. **写一个对外演示**：用一篇时评的完整过程录屏，作为第一条获客内容。
+diff --git a/src/bun/templates.test.ts b/src/bun/templates.test.ts
+index 9604412..8b6cacf 100644
+--- a/src/bun/templates.test.ts
++++ b/src/bun/templates.test.ts
+@@ -37,6 +37,25 @@ describe('built-in templates', () => {
+     }
+   });
+ 
++  it('lists the writer templates and keeps checklists out of them', () => {
++    const listed = listAllTemplates().map((meta) => meta.id);
++    expect(listed[0]).toBe('feature-story');
++    for (const id of listed) {
++      const template = loadTemplate(id);
++      const kinds = (template?.nodes ?? []).map(
++        (node) => node.data.canvasTypeId ?? node.data.kind
++      );
++      expect(kinds).not.toContain('ghostboard.productivity/checklist');
++      expect(kinds).not.toContain('checklist');
++      for (const node of template?.nodes ?? []) {
++        const noteId = node.data.noteId as string | undefined;
++        if (noteId) {
++          expect(template?.noteContents?.[noteId]).toBeDefined();
++        }
++      }
++    }
++  });
++
+   it('returns null for unknown ids', () => {
+     expect(loadTemplate('does-not-exist')).toBeNull();
+   });
+diff --git a/src/bun/templates.ts b/src/bun/templates.ts
+index af5ce7e..2dc3613 100644
+--- a/src/bun/templates.ts
++++ b/src/bun/templates.ts
+@@ -24,14 +24,27 @@ import demoManifest from './templates/demo/manifest.canvas.json';
+ import demoMeta from './templates/demo/meta.json';
+ import eisenhowerMatrixManifest from './templates/eisenhower-matrix/manifest.canvas.json';
+ import eisenhowerMatrixMeta from './templates/eisenhower-matrix/meta.json';
++import featureStoryAssets from './templates/feature-story/assets.json';
++import featureStoryManifest from './templates/feature-story/manifest.canvas.json';
++import featureStoryMeta from './templates/feature-story/meta.json';
++import interviewNotesAssets from './templates/interview-notes/assets.json';
++import interviewNotesManifest from './templates/interview-notes/manifest.canvas.json';
++import interviewNotesMeta from './templates/interview-notes/meta.json';
+ import kanbanManifest from './templates/kanban/manifest.canvas.json';
+ import kanbanMeta from './templates/kanban/meta.json';
++import novelBibleAssets from './templates/novel-bible/assets.json';
++import novelBibleManifest from './templates/novel-bible/manifest.canvas.json';
++import novelBibleMeta from './templates/novel-bible/meta.json';
+ import quickStartManifest from './templates/quick-start/manifest.canvas.json';
+ import quickStartMeta from './templates/quick-start/meta.json';
++import readingNotesAssets from './templates/reading-notes/assets.json';
+ import readingNotesManifest from './templates/reading-notes/manifest.canvas.json';
+ import readingNotesMeta from './templates/reading-notes/meta.json';
+ import sprintRetroManifest from './templates/sprint-retro/manifest.canvas.json';
+ import sprintRetroMeta from './templates/sprint-retro/meta.json';
++import topicPoolAssets from './templates/topic-pool/assets.json';
++import topicPoolManifest from './templates/topic-pool/manifest.canvas.json';
++import topicPoolMeta from './templates/topic-pool/meta.json';
+ import weeklyPlannerManifest from './templates/weekly-planner/manifest.canvas.json';
+ import weeklyPlannerMeta from './templates/weekly-planner/meta.json';
+ 
+@@ -190,25 +203,47 @@ interface TemplateSource {
+   meta: unknown;
+ }
+ 
++// Gallery order: writer templates first (docs/PRD-slim.md §2). The hero
++// `feature-story` also seeds the first-run canvas (workspace.ts).
+ const TEMPLATE_SOURCES: Record<string, TemplateSource> = {
+-  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
++  'feature-story': {
++    meta: featureStoryMeta,
++    manifest: { ...featureStoryManifest, assets: featureStoryAssets },
++  },
+   blank: { meta: blankMeta, manifest: blankManifest },
++  'topic-pool': {
++    meta: topicPoolMeta,
++    manifest: { ...topicPoolManifest, assets: topicPoolAssets },
++  },
++  'interview-notes': {
++    meta: interviewNotesMeta,
++    manifest: { ...interviewNotesManifest, assets: interviewNotesAssets },
++  },
++  'reading-notes': {
++    meta: readingNotesMeta,
++    manifest: { ...readingNotesManifest, assets: readingNotesAssets },
++  },
++  'novel-bible': {
++    meta: novelBibleMeta,
++    manifest: { ...novelBibleManifest, assets: novelBibleAssets },
++  },
++  'brainstorm-mindmap': {
++    meta: brainstormMindmapMeta,
++    manifest: brainstormMindmapManifest,
++  },
++  // Hidden from the gallery (HIDDEN_TEMPLATE_IDS), still loadable by id.
++  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
++  demo: { meta: demoMeta, manifest: demoManifest },
+   'weekly-planner': {
+     meta: weeklyPlannerMeta,
+     manifest: weeklyPlannerManifest,
+   },
+   kanban: { meta: kanbanMeta, manifest: kanbanManifest },
+   'sprint-retro': { meta: sprintRetroMeta, manifest: sprintRetroManifest },
+-  'brainstorm-mindmap': {
+-    meta: brainstormMindmapMeta,
+-    manifest: brainstormMindmapManifest,
+-  },
+   'eisenhower-matrix': {
+     meta: eisenhowerMatrixMeta,
+     manifest: eisenhowerMatrixManifest,
+   },
+-  'reading-notes': { meta: readingNotesMeta, manifest: readingNotesManifest },
+-  demo: { meta: demoMeta, manifest: demoManifest },
+   cafe: { meta: cafeMeta, manifest: { ...cafeManifest, assets: cafeAssets } },
+ };
+ 
+@@ -238,11 +273,14 @@ function templateBody(id: string, source: TemplateSource): TemplateBody {
+ }
+ 
+ /**
+- * Planning / productivity templates are hidden from the gallery in the slim
+- * release (docs/PRD-slim.md). They stay bundled and loadable by id, so
++ * Templates that don't serve the writer workflow are hidden from the gallery
++ * in the slim release (docs/PRD-slim.md): the old tutorial / demo canvases
++ * and the planning templates. They stay bundled and loadable by id, so
+  * nothing that already references them breaks.
+  */
+ export const HIDDEN_TEMPLATE_IDS: ReadonlySet<string> = new Set([
++  'quick-start',
++  'demo',
+   'kanban',
+   'sprint-retro',
+   'weekly-planner',
+diff --git a/src/bun/workspace.ts b/src/bun/workspace.ts
+index 19d2047..8ab3388 100644
+--- a/src/bun/workspace.ts
++++ b/src/bun/workspace.ts
+@@ -79,11 +79,11 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
+  * (when `workspace.json` does not yet exist). Setting this to `null` skips
+  * first-run seeding entirely so the default canvas opens blank.
+  *
+- * Defaults to `quick-start` so newcomers land on an interactive 5-minute
+- * tutorial that demonstrates pan/zoom, focused mode, edges, and folder
+- * stacking on a single canvas.
++ * Defaults to `feature-story`: newcomers land on a finished research board
++ * for one article (pitch, sources, interviews, draft) with three small hint
++ * stickies, instead of a feature tutorial (docs/PRD-slim.md §2).
+  */
+-const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'quick-start';
++const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'feature-story';
+ 
+ /** Ensure workspace directory structure exists. Returns workspace path. */
+ export function initWorkspace(workspacePath?: string): string {
+diff --git a/src/mainview/components/canvas/ViewSwitcher.tsx b/src/mainview/components/canvas/ViewSwitcher.tsx
+index 415816b..0f29501 100644
+--- a/src/mainview/components/canvas/ViewSwitcher.tsx
++++ b/src/mainview/components/canvas/ViewSwitcher.tsx
+@@ -2,23 +2,21 @@ import { Menu } from '@base-ui/react/menu';
+ import { Link as RouterLink } from '@tanstack/react-router';
+ import {
+   BookOpen,
+-  Brain,
+-  CalendarDays,
+   Check,
+   ChevronRight,
+   ChevronUp,
+-  Coffee,
+   Download,
++  Feather,
+   FileImage,
+   FileJson,
+   FilePlus,
+-  Grid2X2,
+-  Kanban,
+   Layers,
++  Lightbulb,
++  Mic,
++  Network,
++  Newspaper,
+   Pencil,
+   Plus,
+-  Rocket,
+-  RotateCcw,
+   Trash2,
+   X,
+ } from 'lucide-react';
+@@ -185,29 +183,19 @@ function renderCreateMenuItem(
+ 
+ const getQuickTemplateItems = () => [
+   {
+-    id: 'cafe',
+-    label: m.template_cafe_name(),
+-    icon: Coffee,
++    id: 'feature-story',
++    label: m.template_feature_story_name(),
++    icon: Newspaper,
+   },
+   {
+-    id: 'quick-start',
+-    label: m.template_quick_start_name(),
+-    icon: Rocket,
++    id: 'topic-pool',
++    label: m.template_topic_pool_name(),
++    icon: Lightbulb,
+   },
+   {
+-    id: 'weekly-planner',
+-    label: m.template_weekly_planner_name(),
+-    icon: CalendarDays,
+-  },
+-  {
+-    id: 'kanban',
+-    label: m.template_kanban_name(),
+-    icon: Kanban,
+-  },
+-  {
+-    id: 'brainstorm-mindmap',
+-    label: m.template_brainstorm_mindmap_name(),
+-    icon: Brain,
++    id: 'interview-notes',
++    label: m.template_interview_notes_name(),
++    icon: Mic,
+   },
+   {
+     id: 'reading-notes',
+@@ -215,19 +203,14 @@ const getQuickTemplateItems = () => [
+     icon: BookOpen,
+   },
+   {
+-    id: 'sprint-retro',
+-    label: m.template_sprint_retro_name(),
+-    icon: RotateCcw,
+-  },
+-  {
+-    id: 'eisenhower-matrix',
+-    label: m.template_eisenhower_matrix_name(),
+-    icon: Grid2X2,
++    id: 'novel-bible',
++    label: m.template_novel_bible_name(),
++    icon: Feather,
+   },
+   {
+-    id: 'demo',
+-    label: m.template_demo_name(),
+-    icon: Layers,
++    id: 'brainstorm-mindmap',
++    label: m.template_brainstorm_mindmap_name(),
++    icon: Network,
+   },
+ ];
+ 
+diff --git a/src/mainview/data/initialNodes.ts b/src/mainview/data/initialNodes.ts
+index 1b5b264..ecc6b73 100644
+--- a/src/mainview/data/initialNodes.ts
++++ b/src/mainview/data/initialNodes.ts
+@@ -1,277 +1,32 @@
+ import type { Edge, Node } from '@xyflow/react';
+ import type { ChecklistWidgetData } from '@/lib/widgetTypes';
+ 
++/**
++ * Renderer-side fallback for the default canvas when the backend did not
++ * seed it (the real first-run board is the `feature-story` template, seeded
++ * in `src/bun/workspace.ts`). Kept deliberately small: one welcome sticky
++ * that points at the template gallery.
++ */
++
+ export interface InitialWidgetSeed {
+   data: ChecklistWidgetData;
+   kind: 'checklist';
+   title: string;
+ }
+ 
+-export const initialWidgetSeeds: Record<string, InitialWidgetSeed> = {
+-  'node-init0003': {
+-    kind: 'checklist',
+-    title: 'Prio before launch',
+-    data: {
+-      items: [
+-        {
+-          id: 'item_seed_prio_1',
+-          text: 'Lingering bugs',
+-          checked: false,
+-          isHeader: true,
+-        },
+-        {
+-          id: 'item_seed_prio_2',
+-          text: 'Dragging should not let stickies become too small',
+-          checked: true,
+-        },
+-        {
+-          id: 'item_seed_prio_3',
+-          text: 'when pasting images/webclips',
+-          checked: true,
+-        },
+-        {
+-          id: 'item_seed_prio_4',
+-          text: 'Drop area on desktop reported by some',
+-          checked: false,
+-        },
+-        {
+-          id: 'item_seed_prio_5',
+-          text: "Sometimes, the highlight border around webclips isn't being removed after undoing a resize",
+-          checked: false,
+-        },
+-      ],
+-    },
+-  },
+-  'node-init0008': {
+-    kind: 'checklist',
+-    title: 'Bugs',
+-    data: {
+-      items: [
+-        {
+-          id: 'item_seed_bugs_1',
+-          text: 'Alpha feedback',
+-          checked: false,
+-          isHeader: true,
+-        },
+-        {
+-          id: 'item_seed_bugs_2',
+-          text: 'Reply to all emails from Feb 14, to get their feedback',
+-          checked: true,
+-        },
+-        {
+-          id: 'item_seed_bugs_3',
+-          text: 'Click picture to dismiss context',
+-          checked: true,
+-        },
+-        {
+-          id: 'item_seed_bugs_4',
+-          text: 'Resize handles overlaps tags, and dismisses context',
+-          checked: true,
+-        },
+-        {
+-          id: 'item_seed_bugs_5',
+-          text: 'Back button padding is funky',
+-          checked: true,
+-        },
+-      ],
+-    },
+-  },
+-};
++export const initialWidgetSeeds: Record<string, InitialWidgetSeed> = {};
+ 
+ export const initialNodes: Node[] = [
+   {
+-    id: 'node-init0001',
++    id: 'node-init-welcome',
+     position: { x: 100, y: 100 },
+     data: {
+-      type: 'image',
+-      title: 'Alpha feedback\nTarget audience',
+-      color: '#1A1A1A',
+-      pieData: [
+-        { label: 'Designers', color: '#555' },
+-        { label: 'Thinkers', color: '#888' },
+-        { label: 'Academics', color: '#BBB' },
+-        { label: 'Creatives', color: '#EEE' },
+-      ],
+-    },
+-    type: 'card',
+-    style: { height: 450, width: 350 },
+-  },
+-  {
+-    id: 'node-init0002',
+-    position: { x: 500, y: 100 },
+-    data: {
+-      type: 'text',
+-      title: 'Who GhostBoard is for',
+       content:
+-        "1. The Designer\nProduct designers, graphic designers, UX designers, brand designers, creative directors. They need to collect visual references, build moodboards, and organize project materials. They're currently cobbling together Figma, Pinterest, Milanote, and mymind — and none of it feels right. They're also the most opinionated about aesthetics and interaction quality, which is partly why they're drawn to GhostBoard in the first place.\n\n2. The Thinker\nProduct managers, researchers, writers, strategists, consultants. They're dealing with complex problems and oceans of information. They often feel overwhelmed by the sheer volume of data they need to process. GhostBoard helps them map out relationships and see the big picture.\n\n3. The Academics\nUniversity students, PhD researchers, MBA students, architecture students. They're reading dense academic journals, writing papers, and studying for exams. They use GhostBoard to visually organize their research and connect concepts.",
+-      color: '#FFFFFF',
+-    },
+-    type: 'card',
+-    style: { height: 450, width: 350 },
+-  },
+-  {
+-    id: 'node-init0003',
+-    position: { x: 900, y: 100 },
+-    data: {
+-      kind: 'checklist',
+-      widgetId: '',
+-    },
+-    type: 'widget',
+-    style: { height: 450, width: 350 },
+-  },
+-  {
+-    id: 'node-init0004',
+-    position: { x: 900, y: 600 },
+-    data: {
+-      title: 'Ideas',
+-      subtitle: 'The really great ideas to implement',
+-      children: [
+-        {
+-          id: 'child-init0001',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content:
+-              'Notes should have a "floating-on-top" option so people can write while still flying around in space.',
+-            color: '#A3E635',
+-          },
+-        },
+-        {
+-          id: 'child-init0002',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content:
+-              'Being able to drop in almost anything. From pdf to audio.',
+-            color: '#ECFCCB',
+-          },
+-        },
+-        {
+-          id: 'child-init0003',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content:
+-              'Connecting things and concepts visually through arrows and lines.',
+-            color: '#FFFFFF',
+-          },
+-        },
+-      ],
+-    },
+-    type: 'folder',
+-    style: { height: 280, width: 280 },
+-  },
+-  {
+-    id: 'node-init0007',
+-    position: { x: 100, y: 600 },
+-    data: {
+-      label: 'Design Research',
+-      color: 'blue',
+-    },
+-    type: 'group',
+-    style: { height: 400, width: 800 },
+-  },
+-  {
+-    id: 'node-init0005',
+-    position: { x: 380, y: 20 },
+-    parentId: 'node-init0007',
+-    extent: 'parent',
+-    data: {
+-      content: 'Remember to review the onboarding flow before next sprint!',
++        '👋 欢迎来到 GhostBoard\n\n把写作要用的网页、截图、文件和笔记摊在这里对照。\n\n不知道从哪开始？底部画布切换器 → 「+」→ 选一个模板。',
+       color: '#FEF08A',
+     },
+     type: 'sticky',
+-    style: { height: 200, width: 200 },
+-  },
+-  {
+-    id: 'node-init0006',
+-    position: { x: 600, y: 20 },
+-    parentId: 'node-init0007',
+-    extent: 'parent',
+-    data: {
+-      content: 'Ask design team about new color palette 🎨',
+-      color: '#BBF7D0',
+-    },
+-    type: 'sticky',
+-    style: { height: 200, width: 200 },
+-  },
+-  {
+-    id: 'node-init0008',
+-    position: { x: 1300, y: 100 },
+-    data: {
+-      kind: 'checklist',
+-      widgetId: '',
+-    },
+-    type: 'widget',
+-    style: { height: 450, width: 350 },
+-  },
+-  {
+-    id: 'node-init0009',
+-    position: { x: 1300, y: 600 },
+-    data: {
+-      title: 'Bug reports',
+-      subtitle: 'The critical bug reports to fix asap',
+-      children: [
+-        {
+-          id: 'child-init0004',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content: 'Crash on load for some users',
+-            color: '#FEE2E2',
+-          },
+-        },
+-        {
+-          id: 'child-init0005',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content: 'Sync conflicts when offline',
+-            color: '#FFEDD5',
+-          },
+-        },
+-        {
+-          id: 'child-init0006',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content: 'Images not loading in specific regions',
+-            color: '#FFFFFF',
+-          },
+-        },
+-        {
+-          id: 'child-init0007',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content: 'Memory leak after 1 hour of usage',
+-            color: '#FFFFFF',
+-          },
+-        },
+-        {
+-          id: 'child-init0008',
+-          type: 'card',
+-          data: {
+-            type: 'text',
+-            content: 'Missing translations in settings',
+-            color: '#FFFFFF',
+-          },
+-        },
+-      ],
+-    },
+-    type: 'folder',
+-    style: { height: 280, width: 280 },
+-  },
+-  {
+-    id: 'node-init0010',
+-    position: { x: 100, y: 1100 },
+-    data: {
+-      imageUrl: '',
+-      title: 'Drop an image here',
+-      color: '#FFFFFF',
+-    },
+-    type: 'image',
+-    style: { height: 350, width: 350 },
++    style: { height: 220, width: 320 },
+   },
+ ];
+ 
+diff --git a/src/mainview/hooks/useTemplates.ts b/src/mainview/hooks/useTemplates.ts
+index 935a5f8..a5e9c7e 100644
+--- a/src/mainview/hooks/useTemplates.ts
++++ b/src/mainview/hooks/useTemplates.ts
+@@ -24,6 +24,22 @@ const TEMPLATE_I18N: Record<
+   string,
+   { name: () => string; description: () => string }
+ > = {
++  'feature-story': {
++    name: () => m.template_feature_story_name(),
++    description: () => m.template_feature_story_description(),
++  },
++  'topic-pool': {
++    name: () => m.template_topic_pool_name(),
++    description: () => m.template_topic_pool_description(),
++  },
++  'interview-notes': {
++    name: () => m.template_interview_notes_name(),
++    description: () => m.template_interview_notes_description(),
++  },
++  'novel-bible': {
++    name: () => m.template_novel_bible_name(),
++    description: () => m.template_novel_bible_description(),
++  },
+   'quick-start': {
+     name: () => m.template_quick_start_name(),
+     description: () => m.template_quick_start_description(),
+diff --git a/src/mainview/lib/productScope.ts b/src/mainview/lib/productScope.ts
+index 42c4820..fbdf70a 100644
+--- a/src/mainview/lib/productScope.ts
++++ b/src/mainview/lib/productScope.ts
+@@ -1,4 +1,5 @@
+ import {
++  CHECKLIST_CANVAS_TYPE_ID,
+   POMODORO_CANVAS_TYPE_ID,
+   RECORDING_CANVAS_TYPE_ID,
+   REMINDER_CANVAS_TYPE_ID,
+@@ -15,10 +16,11 @@ import {
+ 
+ /**
+  * Canvas types that can no longer be created from the + menu or right-click.
+- * Checklist stays for now: Quick Start and Reading Notes seed it. Folding it
+- * into BlockNote task lists is a later step (PRD-slim §4).
++ * Checklist is replaced by task lists inside a Note (type `[]` in BlockNote);
++ * no visible template seeds it any more. Existing checklists keep working.
+  */
+ export const HIDDEN_CREATE_CANVAS_TYPE_IDS: ReadonlySet<string> = new Set([
++  CHECKLIST_CANVAS_TYPE_ID,
+   POMODORO_CANVAS_TYPE_ID,
+   REMINDER_CANVAS_TYPE_ID,
+   RECORDING_CANVAS_TYPE_ID,
+diff --git a/src/mainview/lib/templatePreview.test.ts b/src/mainview/lib/templatePreview.test.ts
+new file mode 100644
+index 0000000..bdc896e
+--- /dev/null
++++ b/src/mainview/lib/templatePreview.test.ts
+@@ -0,0 +1,79 @@
++import { describe, expect, it } from 'vitest';
++
++import { templatePreviewNodes } from './templatePreview';
++
++describe('templatePreviewNodes', () => {
++  it('fills cards from noteContents and tags from nodeMetadata', () => {
++    const [card] = templatePreviewNodes({
++      nodes: [
++        {
++          id: 'c',
++          type: 'card',
++          position: { x: 0, y: 0 },
++          data: { noteId: 'tpl-n', color: '#FFFFFF' },
++        },
++      ],
++      noteContents: {
++        'tpl-n': { title: '选题卡', body: '## 标题', color: '#FFFBEB' },
++      },
++      nodeMetadata: { 'tpl-n': { tags: ['选题'] } },
++    });
++    expect(card?.data).toMatchObject({
++      title: '选题卡',
++      content: '## 标题',
++      color: '#FFFFFF',
++      tags: ['选题'],
++    });
++  });
++
++  it('turns image and link extension seeds into self-contained nodes', () => {
++    const [image, link] = templatePreviewNodes({
++      nodes: [
++        {
++          id: 'i',
++          type: 'extension',
++          position: { x: 0, y: 0 },
++          data: { canvasTypeId: 'ghostboard.media/image', instanceId: 'x1' },
++        },
++        {
++          id: 'l',
++          type: 'extension',
++          position: { x: 0, y: 0 },
++          data: { canvasTypeId: 'ghostboard.web/link', instanceId: 'x2' },
++        },
++      ],
++      assets: { 'a.jpg': 'QUJD' },
++      extensionInstances: {
++        x1: {
++          canvasTypeId: 'ghostboard.media/image',
++          state: { title: '现场', imageFile: 'tpl-asset:a.jpg' },
++        },
++        x2: {
++          canvasTypeId: 'ghostboard.web/link',
++          state: { title: '咖啡', url: 'https://example.com' },
++        },
++      },
++    });
++    expect(image?.type).toBe('image');
++    expect(image?.data).toMatchObject({
++      title: '现场',
++      imageUrl: 'data:image/jpeg;base64,QUJD',
++    });
++    expect(link?.type).toBe('link');
++    expect(link?.data).toMatchObject({
++      title: '咖啡',
++      url: 'https://example.com',
++      unfurlStatus: 'ready',
++    });
++  });
++
++  it('leaves nodes it cannot resolve untouched', () => {
++    const node = {
++      id: 's',
++      type: 'sticky',
++      position: { x: 0, y: 0 },
++      data: { content: 'hi' },
++    };
++    expect(templatePreviewNodes({ nodes: [node] })).toEqual([node]);
++  });
++});
+diff --git a/src/mainview/lib/templatePreview.ts b/src/mainview/lib/templatePreview.ts
+new file mode 100644
+index 0000000..6d7fd77
+--- /dev/null
++++ b/src/mainview/lib/templatePreview.ts
+@@ -0,0 +1,136 @@
++import type { Node } from '@xyflow/react';
++
++/**
++ * The template gallery renders a template's raw manifest with read-only node
++ * types. Raw manifests only carry placeholders: cards point at `noteContents`
++ * by id, and image / link nodes point at extension instances that do not
++ * exist until the template is instantiated. Without this step the preview
++ * (and the exported thumbnail) shows "Untitled / Empty note" cards and
++ * "Preview is not available." tiles.
++ *
++ * This resolves those placeholders into self-contained node data for the
++ * preview only. Instantiation (`populateViewFromTemplate`) is unchanged.
++ */
++
++const TEMPLATE_ASSET_PREFIX = 'tpl-asset:';
++const IMAGE_CANVAS_TYPE_ID = 'ghostboard.media/image';
++const LINK_CANVAS_TYPE_ID = 'ghostboard.web/link';
++
++interface PreviewNoteContent {
++  body: string;
++  color?: string;
++  title: string;
++}
++
++interface PreviewNodeMetadata {
++  tag?: string;
++  tagColor?: string;
++  tagColors?: Record<string, string>;
++  tags?: string[];
++}
++
++interface PreviewExtensionSeed {
++  canvasTypeId: string;
++  state: unknown;
++}
++
++export interface TemplatePreviewSource {
++  assets?: Record<string, string>;
++  extensionInstances?: Record<string, PreviewExtensionSeed>;
++  nodeMetadata?: Record<string, PreviewNodeMetadata>;
++  nodes?: unknown[];
++  noteContents?: Record<string, PreviewNoteContent>;
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null && !Array.isArray(value);
++}
++
++function resolveAsset(
++  value: unknown,
++  assets: Record<string, string>
++): string | undefined {
++  if (typeof value !== 'string') {
++    return;
++  }
++  if (!value.startsWith(TEMPLATE_ASSET_PREFIX)) {
++    return value;
++  }
++  const base64 = assets[value.slice(TEMPLATE_ASSET_PREFIX.length)];
++  return base64 ? `data:image/jpeg;base64,${base64}` : undefined;
++}
++
++function previewCard(
++  node: Node,
++  source: TemplatePreviewSource
++): Node | undefined {
++  const data = node.data as Record<string, unknown>;
++  const noteId = typeof data.noteId === 'string' ? data.noteId : undefined;
++  const note = noteId ? source.noteContents?.[noteId] : undefined;
++  if (!(noteId && note)) {
++    return;
++  }
++  const meta = source.nodeMetadata?.[noteId] ?? {};
++  return {
++    ...node,
++    data: {
++      ...data,
++      ...meta,
++      title: note.title,
++      content: note.body,
++      color: data.color ?? note.color,
++    },
++  };
++}
++
++function previewExtension(
++  node: Node,
++  source: TemplatePreviewSource
++): Node | undefined {
++  const data = node.data as Record<string, unknown>;
++  const instanceId =
++    typeof data.instanceId === 'string' ? data.instanceId : undefined;
++  const seed = instanceId ? source.extensionInstances?.[instanceId] : undefined;
++  if (!(seed && isRecord(seed.state))) {
++    return;
++  }
++  const assets = source.assets ?? {};
++  const state = seed.state;
++  if (seed.canvasTypeId === IMAGE_CANVAS_TYPE_ID) {
++    return {
++      ...node,
++      type: 'image',
++      data: {
++        color: state.color,
++        title: state.title,
++        imageUrl: resolveAsset(state.imageFile ?? state.imageUrl, assets),
++      },
++    };
++  }
++  if (seed.canvasTypeId === LINK_CANVAS_TYPE_ID) {
++    return {
++      ...node,
++      type: 'link',
++      data: {
++        ...state,
++        imageUrl: resolveAsset(state.imageUrl, assets),
++        unfurlStatus: 'ready',
++      },
++    };
++  }
++  return;
++}
++
++/** Nodes ready for a read-only preview of a bundled template. */
++export function templatePreviewNodes(source: TemplatePreviewSource): Node[] {
++  const nodes = (source.nodes ?? []) as Node[];
++  return nodes.map((node) => {
++    if (node.type === 'card') {
++      return previewCard(node, source) ?? node;
++    }
++    if (node.type === 'extension') {
++      return previewExtension(node, source) ?? node;
++    }
++    return node;
++  });
++}
+diff --git a/src/mainview/routes/templates/$templateId.tsx b/src/mainview/routes/templates/$templateId.tsx
+index 29e1dd1..cbcd62f 100644
+--- a/src/mainview/routes/templates/$templateId.tsx
++++ b/src/mainview/routes/templates/$templateId.tsx
+@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css';
+ 
+ import { useQueryClient } from '@tanstack/react-query';
+ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+-import type { Edge, Node } from '@xyflow/react';
++import type { Edge } from '@xyflow/react';
+ import {
+   Background,
+   BackgroundVariant,
+@@ -28,6 +28,10 @@ import {
+ import { captureCanvasThumbnailDataUrl } from '@/lib/canvasExport';
+ import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
+ import { rpcCreateViewFromTemplate, rpcSaveTemplateThumbnail } from '@/lib/rpc';
++import {
++  type TemplatePreviewSource,
++  templatePreviewNodes,
++} from '@/lib/templatePreview';
+ import { useCanvasStore } from '@/store/canvasStore';
+ 
+ import * as m from '../../../paraglide/messages.js';
+@@ -187,7 +191,7 @@ function TemplatePreviewContent() {
+     category: string;
+     tags: string[];
+   };
+-  const nodes = (template.nodes ?? []) as Node[];
++  const nodes = templatePreviewNodes(template as TemplatePreviewSource);
+   const edges = resolveEdgeMarkers((template.edges ?? []) as Edge[], nodes);
+ 
+   return (

@@ -110,7 +110,7 @@
       "extent": "parent"
     },
     {
-      "id": "p-chen",
+      "id": "p-xu",
       "type": "sticky",
       "position": {
         "x": 20,
@@ -121,14 +121,14 @@
         "height": 160
       },
       "data": {
-        "color": "#BFDBFE",
-        "content": "陈伯，70 岁\n摆渡人\n知道真相，但不说"
+        "color": "#BBF7D0",
+        "content": "许安，36 岁\n林晚的旧同学\n现在是镇长"
       },
       "parentId": "g-people",
       "extent": "parent"
     },
     {
-      "id": "p-xu",
+      "id": "p-chen",
       "type": "sticky",
       "position": {
         "x": 290,
@@ -139,8 +139,8 @@
         "height": 160
       },
       "data": {
-        "color": "#BBF7D0",
-        "content": "许安，36 岁\n林晚的旧同学\n现在是镇长"
+        "color": "#BFDBFE",
+        "content": "陈伯，70 岁\n摆渡人\n知道真相，但不说"
       },
       "parentId": "g-people",
       "extent": "parent"

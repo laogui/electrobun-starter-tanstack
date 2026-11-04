@@ -606,8 +606,8 @@ def novel_bible() -> None:
     people = [
         ("p-lin", "林晚，34 岁\n想要：弄清母亲的死\n害怕：自己也忘了什么", PINK),
         ("p-mother", "母亲（已故）\n镇上唯一的裁缝\n留下一只上锁的木箱", YELLOW),
-        ("p-chen", "陈伯，70 岁\n摆渡人\n知道真相，但不说", BLUE),
         ("p-xu", "许安，36 岁\n林晚的旧同学\n现在是镇长", GREEN),
+        ("p-chen", "陈伯，70 岁\n摆渡人\n知道真相，但不说", BLUE),
     ]
     for i, (pid, text, color) in enumerate(people):
         b.sticky(pid, 20 + (i % 2) * 270, 52 + (i // 2) * 180, 250, 160, text, color, parent="g-people")

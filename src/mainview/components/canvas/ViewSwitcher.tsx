@@ -2,23 +2,21 @@ import { Menu } from '@base-ui/react/menu';
 import { Link as RouterLink } from '@tanstack/react-router';
 import {
   BookOpen,
-  Brain,
-  CalendarDays,
   Check,
   ChevronRight,
   ChevronUp,
-  Coffee,
   Download,
+  Feather,
   FileImage,
   FileJson,
   FilePlus,
-  Grid2X2,
-  Kanban,
   Layers,
+  Lightbulb,
+  Mic,
+  Network,
+  Newspaper,
   Pencil,
   Plus,
-  Rocket,
-  RotateCcw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -185,29 +183,19 @@ function renderCreateMenuItem(
 
 const getQuickTemplateItems = () => [
   {
-    id: 'cafe',
-    label: m.template_cafe_name(),
-    icon: Coffee,
+    id: 'feature-story',
+    label: m.template_feature_story_name(),
+    icon: Newspaper,
   },
   {
-    id: 'quick-start',
-    label: m.template_quick_start_name(),
-    icon: Rocket,
+    id: 'topic-pool',
+    label: m.template_topic_pool_name(),
+    icon: Lightbulb,
   },
   {
-    id: 'weekly-planner',
-    label: m.template_weekly_planner_name(),
-    icon: CalendarDays,
-  },
-  {
-    id: 'kanban',
-    label: m.template_kanban_name(),
-    icon: Kanban,
-  },
-  {
-    id: 'brainstorm-mindmap',
-    label: m.template_brainstorm_mindmap_name(),
-    icon: Brain,
+    id: 'interview-notes',
+    label: m.template_interview_notes_name(),
+    icon: Mic,
   },
   {
     id: 'reading-notes',
@@ -215,19 +203,14 @@ const getQuickTemplateItems = () => [
     icon: BookOpen,
   },
   {
-    id: 'sprint-retro',
-    label: m.template_sprint_retro_name(),
-    icon: RotateCcw,
+    id: 'novel-bible',
+    label: m.template_novel_bible_name(),
+    icon: Feather,
   },
   {
-    id: 'eisenhower-matrix',
-    label: m.template_eisenhower_matrix_name(),
-    icon: Grid2X2,
-  },
-  {
-    id: 'demo',
-    label: m.template_demo_name(),
-    icon: Layers,
+    id: 'brainstorm-mindmap',
+    label: m.template_brainstorm_mindmap_name(),
+    icon: Network,
   },
 ];
 

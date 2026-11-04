@@ -2,245 +2,303 @@
   "viewport": {
     "x": 40,
     "y": 40,
-    "zoom": 0.8
+    "zoom": 0.7
   },
   "nodeMetadata": {
-    "tpl-rn-summary": {
-      "tag": "要点",
-      "tagColor": "#FCD34D"
+    "tpl-reading-notes-core": {
+      "tags": [
+        "要点"
+      ],
+      "tagColors": {
+        "要点": "#F59E0B"
+      }
     },
-    "widget_tpl-rn-action": {
-      "tag": "待实践",
-      "tagColor": "#A7F3D0"
+    "tpl-reading-notes-review": {
+      "tags": [
+        "草稿"
+      ],
+      "tagColors": {
+        "草稿": "#2563EB"
+      }
     }
   },
   "nodes": [
     {
-      "id": "rn-image-cover",
-      "type": "image",
+      "id": "cover",
+      "type": "extension",
       "position": {
-        "x": 60,
-        "y": 20
-      },
-      "style": {
-        "width": 240,
-        "height": 320
-      },
-      "data": {
-        "title": "📖 拖入书封图片",
-        "color": "#FFFFFF"
-      }
-    },
-    {
-      "id": "rn-card-summary",
-      "type": "card",
-      "position": {
-        "x": 320,
-        "y": 20
-      },
-      "style": {
-        "width": 580,
-        "height": 320
-      },
-      "data": {
-        "noteId": "tpl-rn-summary",
-        "type": "text",
-        "color": "#FFFBEB"
-      }
-    },
-    {
-      "id": "rn-folder-chapters",
-      "type": "folder",
-      "position": {
-        "x": 60,
-        "y": 380
-      },
-      "style": {
-        "width": 280,
-        "height": 280
-      },
-      "data": {
-        "title": "4 章",
-        "subtitle": "📚 章节笔记",
-        "children": [
-          {
-            "id": "rn-folder-chapters-c1",
-            "type": "card",
-            "data": {
-              "type": "text",
-              "content": "## 第一章 · 引言\n\n核心论点：……\n关键例子：……\n个人感受：……",
-              "color": "#FEF9C3"
-            }
-          },
-          {
-            "id": "rn-folder-chapters-c2",
-            "type": "card",
-            "data": {
-              "type": "text",
-              "content": "## 第二章 · 概念框架\n\n本章定义了三个关键概念：A / B / C。",
-              "color": "#FEF3C7"
-            }
-          },
-          {
-            "id": "rn-folder-chapters-c3",
-            "type": "card",
-            "data": {
-              "type": "text",
-              "content": "## 第三章 · 案例与方法\n\n作者用三个案例展示如何应用框架。",
-              "color": "#FFFBEB"
-            }
-          },
-          {
-            "id": "rn-folder-chapters-c4",
-            "type": "card",
-            "data": {
-              "type": "text",
-              "content": "## 第四章 · 反思与延伸\n\n对应到我自己的工作场景，可以做的迁移：……",
-              "color": "#FEF3C7"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "rn-sticky-quote-1",
-      "type": "sticky",
-      "position": {
-        "x": 360,
-        "y": 380
-      },
-      "style": {
-        "width": 240,
-        "height": 130
-      },
-      "data": {
-        "content": "💬 \"打动我的一句话写在这里。\" — p.42",
-        "color": "#FBCFE8"
-      }
-    },
-    {
-      "id": "rn-sticky-quote-2",
-      "type": "sticky",
-      "position": {
-        "x": 620,
-        "y": 380
-      },
-      "style": {
-        "width": 240,
-        "height": 130
-      },
-      "data": {
-        "content": "💬 \"另一段精彩论述，写在这里。\" — p.103",
-        "color": "#DDD6FE"
-      }
-    },
-    {
-      "id": "rn-sticky-quote-3",
-      "type": "sticky",
-      "position": {
-        "x": 360,
-        "y": 530
-      },
-      "style": {
-        "width": 240,
-        "height": 130
-      },
-      "data": {
-        "content": "💬 \"让我犹豫的一句话——为什么我不同意？\" — p.158",
-        "color": "#FED7AA"
-      }
-    },
-    {
-      "id": "rn-card-action",
-      "type": "widget",
-      "position": {
-        "x": 880,
-        "y": 380
+        "x": 40,
+        "y": 40
       },
       "style": {
         "width": 320,
-        "height": 280
+        "height": 400
       },
       "data": {
-        "widgetId": "widget_tpl-rn-action",
-        "kind": "checklist"
+        "canvasTypeId": "ghostboard.media/image",
+        "instanceId": "extinst_reading_notes_cover"
       }
     },
     {
-      "id": "rn-link-recommend",
-      "type": "link",
-      "position": {
-        "x": 60,
-        "y": 680
-      },
-      "style": {
-        "width": 320,
-        "height": 160
-      },
-      "data": {
-        "url": "",
-        "title": "作者主页 / 书评 / 延伸阅读",
-        "description": "粘贴一条 URL，会自动抓取标题、描述和封面图。",
-        "color": "#EFF6FF"
-      }
-    },
-    {
-      "id": "rn-card-rating",
+      "id": "core",
       "type": "card",
       "position": {
         "x": 400,
-        "y": 680
+        "y": 40
       },
       "style": {
-        "width": 380,
-        "height": 160
+        "width": 460,
+        "height": 400
       },
       "data": {
-        "noteId": "tpl-rn-rating",
-        "type": "text",
-        "color": "#FAFAF9"
+        "color": "#FFFBEB",
+        "editor": "blocknote",
+        "noteId": "tpl-reading-notes-core",
+        "title": "这本书在说什么"
+      }
+    },
+    {
+      "id": "g-quotes",
+      "type": "group",
+      "position": {
+        "x": 900,
+        "y": 40
+      },
+      "style": {
+        "width": 520,
+        "height": 400
+      },
+      "data": {
+        "label": "划线",
+        "color": "pink"
+      }
+    },
+    {
+      "id": "q1",
+      "type": "sticky",
+      "position": {
+        "x": 20,
+        "y": 52
+      },
+      "style": {
+        "width": 230,
+        "height": 150
+      },
+      "data": {
+        "color": "#FBCFE8",
+        "content": "“打动我的一句话。”\n—— p.42"
+      },
+      "parentId": "g-quotes",
+      "extent": "parent"
+    },
+    {
+      "id": "q2",
+      "type": "sticky",
+      "position": {
+        "x": 270,
+        "y": 52
+      },
+      "style": {
+        "width": 230,
+        "height": 150
+      },
+      "data": {
+        "color": "#FEF08A",
+        "content": "“一段能直接引用的论述。”\n—— p.103"
+      },
+      "parentId": "g-quotes",
+      "extent": "parent"
+    },
+    {
+      "id": "q3",
+      "type": "sticky",
+      "position": {
+        "x": 20,
+        "y": 222
+      },
+      "style": {
+        "width": 230,
+        "height": 150
+      },
+      "data": {
+        "color": "#FED7AA",
+        "content": "“我不同意的一句话：为什么？”\n—— p.158"
+      },
+      "parentId": "g-quotes",
+      "extent": "parent"
+    },
+    {
+      "id": "q4",
+      "type": "sticky",
+      "position": {
+        "x": 270,
+        "y": 222
+      },
+      "style": {
+        "width": 230,
+        "height": 150
+      },
+      "data": {
+        "color": "#E9D5FF",
+        "content": "“可以做标题的一句。”\n—— p.211"
+      },
+      "parentId": "g-quotes",
+      "extent": "parent"
+    },
+    {
+      "id": "chapters",
+      "type": "folder",
+      "position": {
+        "x": 40,
+        "y": 480
+      },
+      "style": {
+        "width": 280,
+        "height": 220
+      },
+      "data": {
+        "color": "#F6F0E4",
+        "title": "章节笔记",
+        "subtitle": "一章一张卡",
+        "children": [
+          {
+            "id": "chapters-c1",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "核心论点：……\n关键例子：……",
+              "title": "第一章"
+            }
+          },
+          {
+            "id": "chapters-c2",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "作者定义了三个概念：……",
+              "title": "第二章"
+            }
+          },
+          {
+            "id": "chapters-c3",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "三个案例，最有说服力的是……",
+              "title": "第三章"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "review",
+      "type": "card",
+      "position": {
+        "x": 400,
+        "y": 480
+      },
+      "style": {
+        "width": 460,
+        "height": 360
+      },
+      "data": {
+        "color": "#FFFFFF",
+        "editor": "blocknote",
+        "noteId": "tpl-reading-notes-review",
+        "title": "书评草稿"
+      }
+    },
+    {
+      "id": "douban",
+      "type": "extension",
+      "position": {
+        "x": 900,
+        "y": 480
+      },
+      "style": {
+        "width": 320,
+        "height": 240
+      },
+      "data": {
+        "canvasTypeId": "ghostboard.web/link",
+        "instanceId": "extinst_reading_notes_douban"
       }
     }
   ],
-  "edges": [],
-  "noteContents": {
-    "tpl-rn-summary": {
-      "title": "本书要点",
-      "displayHint": "note",
-      "body": "## 一句话总结\n\n_用一句话概括本书的核心主张。_\n\n## 三个关键观点\n\n1. **观点一**：\n2. **观点二**：\n3. **观点三**：\n\n## 谁适合读\n\n- "
+  "edges": [
+    {
+      "id": "e-q3-review",
+      "type": "labeledEdge",
+      "source": "q3",
+      "target": "review",
+      "markerEnd": "compact-arrow",
+      "data": {
+        "label": "开头"
+      }
     },
-    "tpl-rn-rating": {
-      "title": "我的评分",
+    {
+      "id": "e-core-review",
+      "type": "labeledEdge",
+      "source": "core",
+      "target": "review",
+      "markerEnd": "compact-arrow"
+    }
+  ],
+  "noteContents": {
+    "tpl-reading-notes-core": {
+      "title": "这本书在说什么",
       "displayHint": "note",
-      "body": "## 我的评分：⭐⭐⭐⭐ / 5\n\n**最值得读的部分**：\n\n**没必要读的部分**：\n\n**重读时机**："
+      "color": "#FFFBEB",
+      "body": "## 一句话\n\n_用自己的话写，不抄简介。_\n\n## 三个论点\n\n1. **论点一**：\n2. **论点二**：\n3. **论点三**：\n\n## 我同意吗\n\n同意第一点，第三点证据不够。"
+    },
+    "tpl-reading-notes-review": {
+      "title": "书评草稿",
+      "displayHint": "note",
+      "color": "#FFFFFF",
+      "body": "## 标题先空着\n\n**开头**：用划线里那句我不同意的话开场。\n\n**中段**：三个论点逐个说，第三个拿自己的经历反驳。\n\n**结尾**：这本书适合谁，不适合谁。\n\n- [ ] 补一个同主题的对照书\n- [ ] 查作者的其他访谈"
     }
   },
-  "widgets": {
-    "widget_tpl-rn-action": {
-      "schema": "ghostboard-widget/v1",
-      "id": "widget_tpl-rn-action",
-      "kind": "checklist",
-      "title": "待实践",
-      "createdAt": "2026-07-08T00:00:00.000Z",
-      "updatedAt": "2026-07-08T00:00:00.000Z",
-      "data": {
-        "items": [
-          {
-            "id": "item_widget_tpl-rn-action_1",
-            "text": "把第一个核心方法在本周试用一次",
-            "checked": false
-          },
-          {
-            "id": "item_widget_tpl-rn-action_2",
-            "text": "推荐给一位需要的同事 / 朋友",
-            "checked": false
-          },
-          {
-            "id": "item_widget_tpl-rn-action_3",
-            "text": "在月底回看：哪些观点真的影响了我的决定？",
-            "checked": false
-          }
-        ]
+  "extensionInstances": {
+    "extinst_reading_notes_cover": {
+      "canvasTypeId": "ghostboard.media/image",
+      "dataVersion": 1,
+      "presentation": {
+        "title": "这本书"
+      },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "这本书",
+        "imageFile": "tpl-asset:book-desk.jpg"
+      }
+    },
+    "extinst_reading_notes_douban": {
+      "canvasTypeId": "ghostboard.web/link",
+      "dataVersion": 1,
+      "presentation": {
+        "title": "豆瓣读书",
+        "subtitle": "豆瓣",
+        "plainText": "豆瓣读书 豆瓣"
+      },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "豆瓣读书",
+        "siteName": "豆瓣",
+        "unfurlStatus": "ready",
+        "url": "https://book.douban.com/",
+        "description": "看看别人怎么评，找出和你不一样的观点。"
       }
     }
   }

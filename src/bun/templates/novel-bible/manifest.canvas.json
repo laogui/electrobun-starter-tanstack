@@ -1,0 +1,384 @@
+{
+  "viewport": {
+    "x": 40,
+    "y": 40,
+    "zoom": 0.65
+  },
+  "nodeMetadata": {
+    "tpl-novel-bible-premise": {
+      "tags": [
+        "设定"
+      ],
+      "tagColors": {
+        "设定": "#7C3AED"
+      }
+    },
+    "tpl-novel-bible-foreshadow": {
+      "tags": [
+        "伏笔"
+      ],
+      "tagColors": {
+        "伏笔": "#DB2777"
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "mood",
+      "type": "extension",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "style": {
+        "width": 480,
+        "height": 300
+      },
+      "data": {
+        "canvasTypeId": "ghostboard.media/image",
+        "instanceId": "extinst_novel_bible_mood"
+      }
+    },
+    {
+      "id": "premise",
+      "type": "card",
+      "position": {
+        "x": 40,
+        "y": 380
+      },
+      "style": {
+        "width": 480,
+        "height": 300
+      },
+      "data": {
+        "color": "#FFFBEB",
+        "editor": "blocknote",
+        "noteId": "tpl-novel-bible-premise",
+        "title": "故事核"
+      }
+    },
+    {
+      "id": "g-people",
+      "type": "group",
+      "position": {
+        "x": 560,
+        "y": 40
+      },
+      "style": {
+        "width": 560,
+        "height": 420
+      },
+      "data": {
+        "label": "人物",
+        "color": "pink"
+      }
+    },
+    {
+      "id": "p-lin",
+      "type": "sticky",
+      "position": {
+        "x": 20,
+        "y": 52
+      },
+      "style": {
+        "width": 250,
+        "height": 160
+      },
+      "data": {
+        "color": "#FBCFE8",
+        "content": "林晚，34 岁\n想要：弄清母亲的死\n害怕：自己也忘了什么"
+      },
+      "parentId": "g-people",
+      "extent": "parent"
+    },
+    {
+      "id": "p-mother",
+      "type": "sticky",
+      "position": {
+        "x": 290,
+        "y": 52
+      },
+      "style": {
+        "width": 250,
+        "height": 160
+      },
+      "data": {
+        "color": "#FEF08A",
+        "content": "母亲（已故）\n镇上唯一的裁缝\n留下一只上锁的木箱"
+      },
+      "parentId": "g-people",
+      "extent": "parent"
+    },
+    {
+      "id": "p-chen",
+      "type": "sticky",
+      "position": {
+        "x": 20,
+        "y": 232
+      },
+      "style": {
+        "width": 250,
+        "height": 160
+      },
+      "data": {
+        "color": "#BFDBFE",
+        "content": "陈伯，70 岁\n摆渡人\n知道真相，但不说"
+      },
+      "parentId": "g-people",
+      "extent": "parent"
+    },
+    {
+      "id": "p-xu",
+      "type": "sticky",
+      "position": {
+        "x": 290,
+        "y": 232
+      },
+      "style": {
+        "width": 250,
+        "height": 160
+      },
+      "data": {
+        "color": "#BBF7D0",
+        "content": "许安，36 岁\n林晚的旧同学\n现在是镇长"
+      },
+      "parentId": "g-people",
+      "extent": "parent"
+    },
+    {
+      "id": "g-time",
+      "type": "group",
+      "position": {
+        "x": 560,
+        "y": 500
+      },
+      "style": {
+        "width": 760,
+        "height": 200
+      },
+      "data": {
+        "label": "时间线",
+        "color": "blue"
+      }
+    },
+    {
+      "id": "t1",
+      "type": "sticky",
+      "position": {
+        "x": 20,
+        "y": 52
+      },
+      "style": {
+        "width": 165,
+        "height": 128
+      },
+      "data": {
+        "color": "#F8FAFC",
+        "content": "1998\n大火"
+      },
+      "parentId": "g-time",
+      "extent": "parent"
+    },
+    {
+      "id": "t2",
+      "type": "sticky",
+      "position": {
+        "x": 205,
+        "y": 52
+      },
+      "style": {
+        "width": 165,
+        "height": 128
+      },
+      "data": {
+        "color": "#F8FAFC",
+        "content": "2010\n林晚离镇"
+      },
+      "parentId": "g-time",
+      "extent": "parent"
+    },
+    {
+      "id": "t3",
+      "type": "sticky",
+      "position": {
+        "x": 390,
+        "y": 52
+      },
+      "style": {
+        "width": 165,
+        "height": 128
+      },
+      "data": {
+        "color": "#F8FAFC",
+        "content": "2024 冬\n母亲去世"
+      },
+      "parentId": "g-time",
+      "extent": "parent"
+    },
+    {
+      "id": "t4",
+      "type": "sticky",
+      "position": {
+        "x": 575,
+        "y": 52
+      },
+      "style": {
+        "width": 165,
+        "height": 128
+      },
+      "data": {
+        "color": "#F8FAFC",
+        "content": "第 7 天\n木箱打开"
+      },
+      "parentId": "g-time",
+      "extent": "parent"
+    },
+    {
+      "id": "foreshadow",
+      "type": "card",
+      "position": {
+        "x": 1160,
+        "y": 40
+      },
+      "style": {
+        "width": 340,
+        "height": 420
+      },
+      "data": {
+        "color": "#FFFFFF",
+        "editor": "blocknote",
+        "noteId": "tpl-novel-bible-foreshadow",
+        "title": "伏笔"
+      }
+    },
+    {
+      "id": "places",
+      "type": "folder",
+      "position": {
+        "x": 40,
+        "y": 720
+      },
+      "style": {
+        "width": 280,
+        "height": 220
+      },
+      "data": {
+        "color": "#F6F0E4",
+        "title": "地点",
+        "subtitle": "每个地点一张卡",
+        "children": [
+          {
+            "id": "places-c1",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "雾大时听不见对岸。陈伯的船灯是绿色的。",
+              "title": "渡口"
+            }
+          },
+          {
+            "id": "places-c2",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "门槛被踩出一道凹痕。母亲的缝纫机还在。",
+              "title": "裁缝铺"
+            }
+          },
+          {
+            "id": "places-c3",
+            "type": "card",
+            "size": {
+              "width": 280,
+              "height": 180
+            },
+            "data": {
+              "color": "#FFFFFF",
+              "content": "大火的地方，现在是停车场。",
+              "title": "旧粮站"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-p-chen-p-mother",
+      "type": "labeledEdge",
+      "source": "p-chen",
+      "target": "p-mother",
+      "markerEnd": "compact-arrow",
+      "data": {
+        "label": "欠她一个人情"
+      }
+    },
+    {
+      "id": "e-p-xu-p-lin",
+      "type": "labeledEdge",
+      "source": "p-xu",
+      "target": "p-lin",
+      "markerEnd": "compact-arrow",
+      "data": {
+        "label": "旧情"
+      }
+    },
+    {
+      "id": "e-t1-t2",
+      "type": "labeledEdge",
+      "source": "t1",
+      "target": "t2",
+      "markerEnd": "compact-arrow"
+    },
+    {
+      "id": "e-t2-t3",
+      "type": "labeledEdge",
+      "source": "t2",
+      "target": "t3",
+      "markerEnd": "compact-arrow"
+    },
+    {
+      "id": "e-t3-t4",
+      "type": "labeledEdge",
+      "source": "t3",
+      "target": "t4",
+      "markerEnd": "compact-arrow"
+    }
+  ],
+  "noteContents": {
+    "tpl-novel-bible-premise": {
+      "title": "故事核",
+      "displayHint": "note",
+      "color": "#FFFBEB",
+      "body": "## 一句话\n\n一个回乡奔丧的女人，发现镇上每个人都记得一场她不记得的大火。\n\n**基调**：慢、潮湿、克制\n\n**篇幅**：中篇，约 6 万字"
+    },
+    "tpl-novel-bible-foreshadow": {
+      "title": "伏笔",
+      "displayHint": "note",
+      "color": "#FFFFFF",
+      "body": "- [x] 第 1 章：渡船上陈伯不收她的钱\n- [ ] 第 3 章：木箱钥匙在裁缝剪刀柄里\n- [ ] 第 5 章：许安办公室墙上的旧照片\n- [ ] 第 9 章：回收所有伏笔\n\n**规则**：埋下的每一条，都要在正文里写回来。"
+    }
+  },
+  "extensionInstances": {
+    "extinst_novel_bible_mood": {
+      "canvasTypeId": "ghostboard.media/image",
+      "dataVersion": 1,
+      "presentation": {
+        "title": "气氛：雾里的河镇"
+      },
+      "state": {
+        "color": "#FFFFFF",
+        "title": "气氛：雾里的河镇",
+        "imageFile": "tpl-asset:river-town.jpg"
+      }
+    }
+  }
+}

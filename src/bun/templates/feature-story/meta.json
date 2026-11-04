@@ -1,0 +1,13 @@
+{
+  "id": "feature-story",
+  "thumbnail": "",
+  "name": "深度稿素材板",
+  "description": "一篇稿子从选题、资料、采访到成稿的完整样子：左边收集，右边落笔，最后导出 Markdown。",
+  "category": "knowledge",
+  "tags": [
+    "writing",
+    "feature",
+    "research",
+    "showcase"
+  ]
+}

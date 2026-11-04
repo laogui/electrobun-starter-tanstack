@@ -1,8 +1,13 @@
 {
   "id": "reading-notes",
-  "name": "Reading Notes",
-  "description": "读书笔记一站式：书封 + 要点长文 + 章节收纳 + 金句便签 + 待实践 + 推荐链接。",
+  "thumbnail": "",
+  "name": "拆书笔记",
+  "description": "论点、划线、章节和一篇书评草稿放在一起，读完就能写。",
   "category": "knowledge",
-  "tags": ["reading", "book", "notes", "learning"],
-  "thumbnail": ""
+  "tags": [
+    "reading",
+    "book",
+    "review",
+    "writing"
+  ]
 }

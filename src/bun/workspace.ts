@@ -79,11 +79,11 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
  * (when `workspace.json` does not yet exist). Setting this to `null` skips
  * first-run seeding entirely so the default canvas opens blank.
  *
- * Defaults to `quick-start` so newcomers land on an interactive 5-minute
- * tutorial that demonstrates pan/zoom, focused mode, edges, and folder
- * stacking on a single canvas.
+ * Defaults to `feature-story`: newcomers land on a finished research board
+ * for one article (pitch, sources, interviews, draft) with three small hint
+ * stickies, instead of a feature tutorial (docs/PRD-slim.md §2).
  */
-const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'quick-start';
+const FIRST_RUN_SEED_TEMPLATE_ID: string | null = 'feature-story';
 
 /** Ensure workspace directory structure exists. Returns workspace path. */
 export function initWorkspace(workspacePath?: string): string {

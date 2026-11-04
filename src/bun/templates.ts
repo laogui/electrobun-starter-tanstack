@@ -24,14 +24,27 @@ import demoManifest from './templates/demo/manifest.canvas.json';
 import demoMeta from './templates/demo/meta.json';
 import eisenhowerMatrixManifest from './templates/eisenhower-matrix/manifest.canvas.json';
 import eisenhowerMatrixMeta from './templates/eisenhower-matrix/meta.json';
+import featureStoryAssets from './templates/feature-story/assets.json';
+import featureStoryManifest from './templates/feature-story/manifest.canvas.json';
+import featureStoryMeta from './templates/feature-story/meta.json';
+import interviewNotesAssets from './templates/interview-notes/assets.json';
+import interviewNotesManifest from './templates/interview-notes/manifest.canvas.json';
+import interviewNotesMeta from './templates/interview-notes/meta.json';
 import kanbanManifest from './templates/kanban/manifest.canvas.json';
 import kanbanMeta from './templates/kanban/meta.json';
+import novelBibleAssets from './templates/novel-bible/assets.json';
+import novelBibleManifest from './templates/novel-bible/manifest.canvas.json';
+import novelBibleMeta from './templates/novel-bible/meta.json';
 import quickStartManifest from './templates/quick-start/manifest.canvas.json';
 import quickStartMeta from './templates/quick-start/meta.json';
+import readingNotesAssets from './templates/reading-notes/assets.json';
 import readingNotesManifest from './templates/reading-notes/manifest.canvas.json';
 import readingNotesMeta from './templates/reading-notes/meta.json';
 import sprintRetroManifest from './templates/sprint-retro/manifest.canvas.json';
 import sprintRetroMeta from './templates/sprint-retro/meta.json';
+import topicPoolAssets from './templates/topic-pool/assets.json';
+import topicPoolManifest from './templates/topic-pool/manifest.canvas.json';
+import topicPoolMeta from './templates/topic-pool/meta.json';
 import weeklyPlannerManifest from './templates/weekly-planner/manifest.canvas.json';
 import weeklyPlannerMeta from './templates/weekly-planner/meta.json';
 
@@ -190,25 +203,47 @@ interface TemplateSource {
   meta: unknown;
 }
 
+// Gallery order: writer templates first (docs/PRD-slim.md §2). The hero
+// `feature-story` also seeds the first-run canvas (workspace.ts).
 const TEMPLATE_SOURCES: Record<string, TemplateSource> = {
-  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
+  'feature-story': {
+    meta: featureStoryMeta,
+    manifest: { ...featureStoryManifest, assets: featureStoryAssets },
+  },
   blank: { meta: blankMeta, manifest: blankManifest },
+  'topic-pool': {
+    meta: topicPoolMeta,
+    manifest: { ...topicPoolManifest, assets: topicPoolAssets },
+  },
+  'interview-notes': {
+    meta: interviewNotesMeta,
+    manifest: { ...interviewNotesManifest, assets: interviewNotesAssets },
+  },
+  'reading-notes': {
+    meta: readingNotesMeta,
+    manifest: { ...readingNotesManifest, assets: readingNotesAssets },
+  },
+  'novel-bible': {
+    meta: novelBibleMeta,
+    manifest: { ...novelBibleManifest, assets: novelBibleAssets },
+  },
+  'brainstorm-mindmap': {
+    meta: brainstormMindmapMeta,
+    manifest: brainstormMindmapManifest,
+  },
+  // Hidden from the gallery (HIDDEN_TEMPLATE_IDS), still loadable by id.
+  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
+  demo: { meta: demoMeta, manifest: demoManifest },
   'weekly-planner': {
     meta: weeklyPlannerMeta,
     manifest: weeklyPlannerManifest,
   },
   kanban: { meta: kanbanMeta, manifest: kanbanManifest },
   'sprint-retro': { meta: sprintRetroMeta, manifest: sprintRetroManifest },
-  'brainstorm-mindmap': {
-    meta: brainstormMindmapMeta,
-    manifest: brainstormMindmapManifest,
-  },
   'eisenhower-matrix': {
     meta: eisenhowerMatrixMeta,
     manifest: eisenhowerMatrixManifest,
   },
-  'reading-notes': { meta: readingNotesMeta, manifest: readingNotesManifest },
-  demo: { meta: demoMeta, manifest: demoManifest },
   cafe: { meta: cafeMeta, manifest: { ...cafeManifest, assets: cafeAssets } },
 };
 
@@ -238,11 +273,14 @@ function templateBody(id: string, source: TemplateSource): TemplateBody {
 }
 
 /**
- * Planning / productivity templates are hidden from the gallery in the slim
- * release (docs/PRD-slim.md). They stay bundled and loadable by id, so
+ * Templates that don't serve the writer workflow are hidden from the gallery
+ * in the slim release (docs/PRD-slim.md): the old tutorial / demo canvases
+ * and the planning templates. They stay bundled and loadable by id, so
  * nothing that already references them breaks.
  */
 export const HIDDEN_TEMPLATE_IDS: ReadonlySet<string> = new Set([
+  'quick-start',
+  'demo',
   'kanban',
   'sprint-retro',
   'weekly-planner',

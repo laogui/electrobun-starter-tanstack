@@ -37,6 +37,25 @@ describe('built-in templates', () => {
     }
   });
 
+  it('lists the writer templates and keeps checklists out of them', () => {
+    const listed = listAllTemplates().map((meta) => meta.id);
+    expect(listed[0]).toBe('feature-story');
+    for (const id of listed) {
+      const template = loadTemplate(id);
+      const kinds = (template?.nodes ?? []).map(
+        (node) => node.data.canvasTypeId ?? node.data.kind
+      );
+      expect(kinds).not.toContain('ghostboard.productivity/checklist');
+      expect(kinds).not.toContain('checklist');
+      for (const node of template?.nodes ?? []) {
+        const noteId = node.data.noteId as string | undefined;
+        if (noteId) {
+          expect(template?.noteContents?.[noteId]).toBeDefined();
+        }
+      }
+    }
+  });
+
   it('returns null for unknown ids', () => {
     expect(loadTemplate('does-not-exist')).toBeNull();
   });

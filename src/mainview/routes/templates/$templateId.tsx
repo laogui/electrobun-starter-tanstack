@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge } from '@xyflow/react';
 import {
   Background,
   BackgroundVariant,
@@ -28,6 +28,10 @@ import {
 import { captureCanvasThumbnailDataUrl } from '@/lib/canvasExport';
 import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import { rpcCreateViewFromTemplate, rpcSaveTemplateThumbnail } from '@/lib/rpc';
+import {
+  type TemplatePreviewSource,
+  templatePreviewNodes,
+} from '@/lib/templatePreview';
 import { useCanvasStore } from '@/store/canvasStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -187,7 +191,7 @@ function TemplatePreviewContent() {
     category: string;
     tags: string[];
   };
-  const nodes = (template.nodes ?? []) as Node[];
+  const nodes = templatePreviewNodes(template as TemplatePreviewSource);
   const edges = resolveEdgeMarkers((template.edges ?? []) as Edge[], nodes);
 
   return (

@@ -1,4 +1,5 @@
 import {
+  CHECKLIST_CANVAS_TYPE_ID,
   POMODORO_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
   REMINDER_CANVAS_TYPE_ID,
@@ -15,10 +16,11 @@ import {
 
 /**
  * Canvas types that can no longer be created from the + menu or right-click.
- * Checklist stays for now: Quick Start and Reading Notes seed it. Folding it
- * into BlockNote task lists is a later step (PRD-slim §4).
+ * Checklist is replaced by task lists inside a Note (type `[]` in BlockNote);
+ * no visible template seeds it any more. Existing checklists keep working.
  */
 export const HIDDEN_CREATE_CANVAS_TYPE_IDS: ReadonlySet<string> = new Set([
+  CHECKLIST_CANVAS_TYPE_ID,
   POMODORO_CANVAS_TYPE_ID,
   REMINDER_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,

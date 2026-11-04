@@ -24,6 +24,22 @@ const TEMPLATE_I18N: Record<
   string,
   { name: () => string; description: () => string }
 > = {
+  'feature-story': {
+    name: () => m.template_feature_story_name(),
+    description: () => m.template_feature_story_description(),
+  },
+  'topic-pool': {
+    name: () => m.template_topic_pool_name(),
+    description: () => m.template_topic_pool_description(),
+  },
+  'interview-notes': {
+    name: () => m.template_interview_notes_name(),
+    description: () => m.template_interview_notes_description(),
+  },
+  'novel-bible': {
+    name: () => m.template_novel_bible_name(),
+    description: () => m.template_novel_bible_description(),
+  },
   'quick-start': {
     name: () => m.template_quick_start_name(),
     description: () => m.template_quick_start_description(),

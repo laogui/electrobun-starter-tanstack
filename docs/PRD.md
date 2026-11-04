@@ -300,14 +300,14 @@ Topic 是用于思路展开的轻量主题节点，标题为纯文本。支持 T
 
 - **功能描述**：为卡片、图片、附件、链接等节点提供标签标注能力，通过标签对画布内容进行分类和快速筛选。
 - **标签模型**：
-  - 每个节点有一个**主标签（Primary Tag）**：带颜色背景的标签，一个节点最多一个。
-  - 每个节点可有**多个次要标签（Secondary Tags）**：灰色/半透明标签，用于补充分类。
+  - **只有一种标签**（slim/v1 起）：每个节点一个有序标签列表 `tags[]`，每个标签可单独设颜色（`tagColors`），不设颜色时显示为灰色。不再区分主标签与次要标签。
+  - 旧数据里的主标签 `tag` / `tagColor` 在读入时并入 `tags[]` 的第一位和 `tagColors`，之后不再写回；模板、frontmatter 和旧版 sidecar 里的这两个字段仍可读。
   - 标签数据存储在 `.ghostboard/node-metadata.json` 中，以 `noteId`（Card）或 `nodeId`（非 Card 节点）为键。Card 节点的标签通过 `noteId` 跨画布共享；Image/Asset/Link/Sticky 节点的标签与画布实例绑定。
   - **约束**：每节点最多 8 个标签，单个标签最长 32 字符。
 - **标签编辑**：
   - **右键菜单入口**：在 Card/Image/Asset/Link/Sticky 节点上右键 → `Edit Tags`，弹出 `TagEditor` 弹窗。
   - **TagEditor**：基于 `@base-ui/react` Popover 实现，提供标签输入框、颜色选择器、自动补全（基于 workspace 已有标签列表）、添加/删除/修改标签。
-  - **CardNode 画布态**：卡片标题下方渲染 `NodeTagChips`，展示主标签（带颜色）和次要标签（灰色）。
+  - **CardNode 画布态**：卡片标题下方渲染 `NodeTagChips`，按列表顺序展示标签，有颜色的显示颜色，没有的显示灰色。
   - **Image/Asset/Link/Sticky/Recording 节点**：标题区域或卡片底部同样展示 `NodeTagChips`。
   - 标签修改通过 `useSetNodeMetadata` mutation 乐观更新 React Query 缓存，失败时回滚。清空标签会显式持久化删除；旧 frontmatter 标签只迁移一次，不因再次加载或重启复活。退出等待标签落盘，失败保留修改并取消退出以便重试。
 - **标签侧边栏 (TagSidebar)**：

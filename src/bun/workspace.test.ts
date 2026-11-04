@@ -251,7 +251,7 @@ describe('legacy tags stay deleted after restart', () => {
       '---\nid: note_legacy\ntag: Old\n---\nBody'
     );
     await migrateLegacyTagsFromNotes(ws);
-    expect((await loadAllMetadata(ws)).note_legacy?.tag).toBe('Old');
+    expect((await loadAllMetadata(ws)).note_legacy).toEqual({ tags: ['Old'] });
     await deleteTagEverywhere(ws, 'Old');
     await flushNodeMetadata(ws);
     resetNodeMetadataCacheForTests(ws);
@@ -263,16 +263,14 @@ describe('legacy tags stay deleted after restart', () => {
 describe('metadata durability at RPC and shutdown boundaries', () => {
   it('preserves explicit deletion through JSON and the write schema without clearing omitted fields', async () => {
     await setNodeMetadata(ws, 'note', {
-      tag: 'Old',
-      tagColor: 'red',
-      tags: ['Keep'],
+      tags: ['Old', 'Keep'],
+      tagColors: { Old: 'red' },
     });
     const wire = JSON.parse(
       JSON.stringify({
         id: 'note',
         metadata: encodeNodeMetadataPatch({
-          tag: undefined,
-          tagColor: undefined,
+          tagColors: undefined,
         }),
       })
     );
@@ -280,7 +278,46 @@ describe('metadata durability at RPC and shutdown boundaries', () => {
     await setNodeMetadata(ws, params.id, params.metadata);
     await flushAllNodeMetadata();
     resetNodeMetadataCacheForTests();
-    expect((await loadAllMetadata(ws)).note).toEqual({ tags: ['Keep'] });
+    expect((await loadAllMetadata(ws)).note).toEqual({
+      tags: ['Old', 'Keep'],
+    });
+  });
+
+  it('folds a legacy primary tag into the single tag list', async () => {
+    await setNodeMetadata(ws, 'note', {
+      tag: 'Old',
+      tagColor: 'red',
+      tags: ['Keep', 'old'],
+      tagColors: { Keep: 'blue' },
+    });
+    await flushAllNodeMetadata();
+    resetNodeMetadataCacheForTests();
+    expect((await loadAllMetadata(ws)).note).toEqual({
+      tags: ['Old', 'Keep'],
+      tagColors: { Keep: 'blue', Old: 'red' },
+    });
+  });
+
+  it('folds legacy primary tags already on disk and never writes them back', async () => {
+    await mkdir(ghostDir(), { recursive: true });
+    await writeFile(
+      join(ghostDir(), 'node-metadata.json'),
+      JSON.stringify({
+        schema: 'ghostboard-node-metadata/v1',
+        entries: {
+          a: { tag: 'Lead', tagColor: 'yellow', tags: ['Quote'] },
+          b: { tagColor: 'red' },
+        },
+      })
+    );
+    expect(await loadAllMetadata(ws)).toEqual({
+      a: { tags: ['Lead', 'Quote'], tagColors: { Lead: 'yellow' } },
+    });
+    await setNodeMetadata(ws, 'c', { tags: ['New'] });
+    await flushAllNodeMetadata();
+    const raw = await readFile(join(ghostDir(), 'node-metadata.json'), 'utf8');
+    expect(raw).not.toContain('"tag"');
+    expect(raw).not.toContain('"tagColor"');
   });
 
   it('shutdown flush reports failures and can retry the in-memory data', async () => {

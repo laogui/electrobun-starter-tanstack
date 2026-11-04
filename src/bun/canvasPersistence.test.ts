@@ -90,9 +90,9 @@ it('preserves legacy checklist tags on every migrated placement and after explic
     })
   );
   await handlers().loadCanvas({ viewId: 'default' });
+  // The legacy primary tag folds into the single tag list, first position.
   expect(metadata.getNodeMetadata(ws, 'top')).toEqual({
-    tag: 'Acceptance',
-    tags: ['Legacy'],
+    tags: ['Acceptance', 'Legacy'],
   });
   expect(metadata.getNodeMetadata(ws, 'child')).toEqual(
     metadata.getNodeMetadata(ws, 'top')
@@ -102,7 +102,10 @@ it('preserves legacy checklist tags on every migrated placement and after explic
   metadata.resetNodeMetadataCacheForTests(ws);
   await handlers().loadCanvas({ viewId: 'default' });
   expect(metadata.getNodeMetadata(ws, 'top')).toBeUndefined();
-  expect(metadata.getNodeMetadata(ws, 'child')?.tag).toBe('Acceptance');
+  expect(metadata.getNodeMetadata(ws, 'child')?.tags).toEqual([
+    'Acceptance',
+    'Legacy',
+  ]);
 });
 
 it('repairs stranded widget tags on existing extension references without replacing newer placement tags', async () => {
@@ -126,8 +129,12 @@ it('repairs stranded widget tags on existing extension references without replac
     })
   );
   await handlers().loadCanvas({ viewId: 'default' });
-  expect(metadata.getNodeMetadata(ws, 'existing')?.tag).toBe('New');
-  expect(metadata.getNodeMetadata(ws, 'missing')?.tag).toBe('Old');
+  // The placement's own tag stays first; the stranded one is appended.
+  expect(metadata.getNodeMetadata(ws, 'existing')?.tags).toEqual([
+    'New',
+    'Old',
+  ]);
+  expect(metadata.getNodeMetadata(ws, 'missing')?.tags).toEqual(['Old']);
 });
 
 it('prepares current JSON-backed Markdown only on an export read', async () => {

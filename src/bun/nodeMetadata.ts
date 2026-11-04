@@ -110,19 +110,47 @@ function normalizeTagColorMap(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * One tag system: the legacy primary `tag` / `tagColor` pair is folded into
+ * `tags[]` (first position, as the editor always showed it) and `tagColors`.
+ * Existing per-tag colors win. A `tagColor` with no `tag` names nothing and is
+ * dropped. The legacy fields are still accepted on input so old sidecars,
+ * templates and frontmatter keep loading; they are never written back.
+ */
+function foldLegacyTag(entry: NodeMetadata): NodeMetadata {
+  const { tag, tagColor, ...rest } = entry;
+  if (!tag) {
+    return rest;
+  }
+  const tags = sanitizeTagList([tag, ...(rest.tags ?? [])]);
+  const canonical = tags.find(
+    (name) => name.toLowerCase() === tag.toLowerCase()
+  );
+  const hasColor =
+    canonical !== undefined &&
+    Object.keys(rest.tagColors ?? {}).some(
+      (name) => name.toLowerCase() === canonical.toLowerCase()
+    );
+  const tagColors =
+    canonical && tagColor && !hasColor
+      ? { ...(rest.tagColors ?? {}), [canonical]: tagColor }
+      : rest.tagColors;
+  return {
+    ...rest,
+    tags: tags.length > 0 ? tags : undefined,
+    tagColors,
+  };
+}
+
 function compactEntry(entry: NodeMetadata): NodeMetadata | null {
+  const folded = foldLegacyTag(entry);
   const out: NodeMetadata = {};
-  if (entry.tag !== undefined) {
-    out.tag = entry.tag;
+  if (folded.tags !== undefined && folded.tags.length > 0) {
+    out.tags = folded.tags;
   }
-  if (entry.tagColor !== undefined) {
-    out.tagColor = entry.tagColor;
-  }
-  if (entry.tagColors !== undefined) {
-    out.tagColors = entry.tagColors;
-  }
-  if (entry.tags !== undefined) {
-    out.tags = entry.tags;
+  const tagColors = normalizeTagColorMap(folded.tagColors, out.tags ?? []);
+  if (tagColors) {
+    out.tagColors = tagColors;
   }
   return Object.keys(out).length === 0 ? null : out;
 }
@@ -492,8 +520,8 @@ function mergeMetadataForMovedKey(
 /**
  * Move metadata from one backing object id to another. Used by checklist card
  * lazy migration, where legacy tags keyed by `note_xxx` must follow the new
- * `widget_xxx` record. Existing target metadata wins for primary tag/color,
- * while secondary tags and per-tag colors are merged.
+ * `widget_xxx` record. Target tags come first, source tags are appended, and
+ * the target's color wins when both colored the same tag.
  */
 export async function moveNodeMetadataKey(
   wsPath: string,
@@ -708,7 +736,10 @@ export async function migrateLegacyTagsFromNotes(
       }
     }
 
-    s.entries[noteId] = meta;
+    const compacted = compactEntry(meta);
+    if (compacted) {
+      s.entries[noteId] = compacted;
+    }
   }
 
   s.legacyTagsMigrated = true;
@@ -718,9 +749,8 @@ export async function migrateLegacyTagsFromNotes(
 /**
  * Rename `oldName` to `newName` across every metadata entry. Matching is
  * case-insensitive. If the new name already appears alongside the old one on
- * the same entry, the duplicate is collapsed. When the primary `tag` matches
- * old name it is rewritten in place (preserving `tagColor`). Returns the
- * number of metadata entries that were rewritten.
+ * the same entry, the duplicate is collapsed and the tag's color follows the
+ * rename. Returns the number of metadata entries that were rewritten.
  */
 export async function renameTagEverywhere(
   wsPath: string,
@@ -799,9 +829,8 @@ export async function renameTagEverywhere(
 }
 
 /**
- * Remove `name` from every entry's primary `tag` and `tags[]`. Matching is
- * case-insensitive. Removing the primary tag also clears `tagColor`. Returns
- * the number of metadata entries rewritten.
+ * Remove `name` from every entry's `tags[]` and its color. Matching is
+ * case-insensitive. Returns the number of metadata entries rewritten.
  */
 export async function deleteTagEverywhere(
   wsPath: string,

@@ -25,7 +25,6 @@ import { CanvasLoadErrorScreen } from '@/components/canvas/CanvasLoadErrorScreen
 import { CanvasPanels } from '@/components/canvas/CanvasPanels';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
-import { DetachedNotesSidebar } from '@/components/canvas/DetachedNotesSidebar';
 import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import { FocusedViewHost } from '@/components/canvas/FocusedViewHost';
 import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
@@ -204,7 +203,6 @@ function maxRecordingNumberFromNodes(nodes: Node[]): number {
 }
 
 interface CanvasUiState {
-  detachedSidebarOpen: boolean;
   dragPos: { x: number; y: number } | null;
   isDraggingFile: boolean;
   linkPrompt: {
@@ -216,7 +214,6 @@ interface CanvasUiState {
 }
 
 const initialCanvasUiState: CanvasUiState = {
-  detachedSidebarOpen: false,
   dragPos: null,
   isDraggingFile: false,
   linkPrompt: null,
@@ -405,7 +402,6 @@ function CanvasComponent() {
     initialCanvasUiState
   );
   const {
-    detachedSidebarOpen,
     dragPos,
     isDraggingFile,
     linkPrompt,
@@ -420,9 +416,6 @@ function CanvasComponent() {
   );
   const setRecorderNumber = useCallback((recorderNumber: number | null) => {
     setCanvasUi({ recorderNumber });
-  }, []);
-  const setDetachedSidebarOpen = useCallback((detachedSidebarOpen: boolean) => {
-    setCanvasUi({ detachedSidebarOpen });
   }, []);
   const setPendingFolderDeleteIds = useCallback(
     (pendingFolderDeleteIds: string[] | null) => {
@@ -816,9 +809,12 @@ function CanvasComponent() {
   const activeViewId = useCanvasStore((s) => s.activeViewId);
   const views = useCanvasStore((s) => s.views);
 
+  // One library: the "Library note" entries open the same Library popup as
+  // the toolbar, where detached notes are placed back with one click.
+  const setLibraryOpen = useCanvasStore((s) => s.setLibraryOpen);
   const onOpenNoteLibrary = useCallback(() => {
-    setDetachedSidebarOpen(true);
-  }, [setDetachedSidebarOpen]);
+    setLibraryOpen(true);
+  }, [setLibraryOpen]);
 
   const deleteNodesWithToast = useCallback(
     (ids: string[]) => {
@@ -1199,16 +1195,6 @@ function CanvasComponent() {
       ) : null}
 
       <FocusedViewHost canvasContainerRef={canvasContainerRef} />
-
-      <AnimatePresence>
-        {detachedSidebarOpen ? (
-          <DetachedNotesSidebar
-            onClose={() => {
-              setDetachedSidebarOpen(false);
-            }}
-          />
-        ) : null}
-      </AnimatePresence>
 
       {pendingFolderDeleteIds ? (
         <DeleteFolderConfirmDialog

@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toast } from 'sonner';
 
 import {
   Select,
@@ -184,27 +183,20 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
   const handleItemClick = useCallback(
     (item: LibraryItem) => {
       if (item.data.detached) {
-        // Detached notes don't have a canvas position. Offer a quick "place"
-        // action via toast; keep the popup itself closed for consistency with
-        // the canvas-focus path below.
+        // Detached notes have no canvas position: place them back at the
+        // viewport center and open them in one step (this replaces the
+        // separate detached-notes sidebar and its toast confirmation).
         close();
-        toast(m.library_detached_toast(), {
-          action: {
-            label: m.library_detached_pin_action(),
-            onClick: () => {
-              const center = {
-                x: window.innerWidth / 2 - 175,
-                y: window.innerHeight / 2 - 225,
-              };
-              pinNoteToCanvas(item.nodeId, center);
-              openFocusedById({
-                nodeId: item.nodeId,
-                rfInstance: rfInstance.current,
-              }).catch(() => {
-                /* swallow — the toast is the user-facing entry point */
-              });
-            },
-          },
+        const center = {
+          x: window.innerWidth / 2 - 175,
+          y: window.innerHeight / 2 - 225,
+        };
+        pinNoteToCanvas(item.nodeId, center);
+        openFocusedById({
+          nodeId: item.nodeId,
+          rfInstance: rfInstance.current,
+        }).catch(() => {
+          /* swallow — opening focus is best-effort */
         });
         return;
       }

@@ -7,8 +7,9 @@
 | 1 | `fceed6f` | 隐藏不在写作流程上的入口，加 PRD-slim | [`01-scope-fceed6f.diff`](01-scope-fceed6f.diff)（不含 PRD 正文） |
 | 2 | `128301b` | 资料库合并：删掉游离笔记侧栏 | [`02-library-128301b.diff`](02-library-128301b.diff) |
 | 3 | `3f9000d` + `9229296` | 写作模板、首次打开成品板、Checklist 并入 Note | 见 [`../template-redesign/`](../template-redesign/README.md) |
+| 4 | `dbc1468` | 标签只剩一种 | [`03-tags-dbc1468.diff`](03-tags-dbc1468.diff) |
 
-原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。唯一真正删掉的代码是第 2 步的游离笔记侧栏。
+原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 
 ## 1. 隐藏入口（`fceed6f`）
 
@@ -42,11 +43,28 @@
 
 详见 [`../template-redesign/README.md`](../template-redesign/README.md)。涉及的开关：`HIDDEN_CREATE_CANVAS_TYPE_IDS` 加入 Checklist；`HIDDEN_TEMPLATE_IDS` 加入 quick-start、demo；`workspace.ts` 的 `FIRST_RUN_SEED_TEMPLATE_ID` 改为 `feature-story`。
 
+## 4. 标签只剩一种（`dbc1468`）
+
+界面其实早已合并：编辑器和卡片上只有一排标签，每个都能单独设颜色，编辑过的节点也已经只存 `tags[]`。剩下的是数据层：没编辑过的旧节点、隐藏模板和旧 frontmatter 里还留着“主标签” `tag` / `tagColor`，搜索、重命名、删除、迁移都要为它多写一条分支。
+
+| 改动 | 文件 |
+| --- | --- |
+| `compactEntry` 先把 `tag` 放到 `tags[]` 第一位、`tagColor` 写进 `tagColors[tag]`（已有颜色优先），再只保留 `tags` 和 `tagColors`。读盘、写入、重命名、删除、移动、模板实例化都经过它 | `src/bun/nodeMetadata.ts` |
+| frontmatter 迁移也走同一个合并 | 同上 |
+| 测试改为断言单一列表；新增“合并旧主标签”“磁盘上的旧字段读入即合并、写回时消失”两项 | `workspace.test.ts`、`canvasPersistence.test.ts` |
+| PRD §2.13 标签模型改为一种标签 | `docs/PRD.md` |
+
+数据影响：旧数据下次保存时，`.ghostboard/node-metadata.json` 里的 `tag` / `tagColor` 会变成 `tags[]` 第一项和对应颜色，显示顺序和颜色与之前一致。旧版本 App 读新文件没问题（它本来就读 `tags[]`）。超过 8 个标签时，与之前界面一样只保留前 8 个。
+
+行为变化：一张卡片从旧的 Checklist 迁移到新位置时，原来“目标的主标签优先、来源的主标签丢弃”，现在两边标签都保留，目标在前。
+
+恢复：`git revert dbc1468`。已经改写的 sidecar 不会变回主标签，但旧代码同样能读。
+
 ## 冻结（未改代码，只是停止开发）
 
 公开插件平台；网站 App、API 与登录；付费与订阅。解冻条件见 PRD-slim。
 
 ## 验证状态
 
-- 每一步都过了 tsc（无项目内报错）、biome 和相关测试。
+- 每一步都过了 tsc（无项目内报错）、biome 和相关测试。第 4 步：workspace、canvasPersistence、templates、searchIntegrity 共 41 项通过。
 - 都**没有在 Mac 上实际运行过**，全量测试也没跑（沙箱太慢）。

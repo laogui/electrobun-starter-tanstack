@@ -1,0 +1,245 @@
+commit dbc1468c5d8bdbe3a8ee57d2c36214e79a3fd509
+Author: laogui <laogui@users.noreply.github.com>
+Date:   Wed Nov 4 13:05:17 2026 +0000
+
+    feat(tags): one tag system — fold legacy primary tag into tags[]
+    
+    - nodeMetadata: compactEntry folds tag/tagColor into tags[0]/tagColors;
+      legacy fields still accepted on input, never written back
+    - frontmatter migration goes through the same fold
+    - tests updated for the single list; new fold + on-disk tests
+    - PRD §2.13 and PRD-slim §5 step 4 updated
+
+diff --git a/src/bun/canvasPersistence.test.ts b/src/bun/canvasPersistence.test.ts
+index 21ae588..801b6a6 100644
+--- a/src/bun/canvasPersistence.test.ts
++++ b/src/bun/canvasPersistence.test.ts
+@@ -90,9 +90,9 @@ it('preserves legacy checklist tags on every migrated placement and after explic
+     })
+   );
+   await handlers().loadCanvas({ viewId: 'default' });
++  // The legacy primary tag folds into the single tag list, first position.
+   expect(metadata.getNodeMetadata(ws, 'top')).toEqual({
+-    tag: 'Acceptance',
+-    tags: ['Legacy'],
++    tags: ['Acceptance', 'Legacy'],
+   });
+   expect(metadata.getNodeMetadata(ws, 'child')).toEqual(
+     metadata.getNodeMetadata(ws, 'top')
+@@ -102,7 +102,10 @@ it('preserves legacy checklist tags on every migrated placement and after explic
+   metadata.resetNodeMetadataCacheForTests(ws);
+   await handlers().loadCanvas({ viewId: 'default' });
+   expect(metadata.getNodeMetadata(ws, 'top')).toBeUndefined();
+-  expect(metadata.getNodeMetadata(ws, 'child')?.tag).toBe('Acceptance');
++  expect(metadata.getNodeMetadata(ws, 'child')?.tags).toEqual([
++    'Acceptance',
++    'Legacy',
++  ]);
+ });
+ 
+ it('repairs stranded widget tags on existing extension references without replacing newer placement tags', async () => {
+@@ -126,8 +129,12 @@ it('repairs stranded widget tags on existing extension references without replac
+     })
+   );
+   await handlers().loadCanvas({ viewId: 'default' });
+-  expect(metadata.getNodeMetadata(ws, 'existing')?.tag).toBe('New');
+-  expect(metadata.getNodeMetadata(ws, 'missing')?.tag).toBe('Old');
++  // The placement's own tag stays first; the stranded one is appended.
++  expect(metadata.getNodeMetadata(ws, 'existing')?.tags).toEqual([
++    'New',
++    'Old',
++  ]);
++  expect(metadata.getNodeMetadata(ws, 'missing')?.tags).toEqual(['Old']);
+ });
+ 
+ it('prepares current JSON-backed Markdown only on an export read', async () => {
+diff --git a/src/bun/nodeMetadata.ts b/src/bun/nodeMetadata.ts
+index f68d023..deea2fd 100644
+--- a/src/bun/nodeMetadata.ts
++++ b/src/bun/nodeMetadata.ts
+@@ -110,19 +110,47 @@ function normalizeTagColorMap(
+   return Object.keys(out).length > 0 ? out : undefined;
+ }
+ 
++/**
++ * One tag system: the legacy primary `tag` / `tagColor` pair is folded into
++ * `tags[]` (first position, as the editor always showed it) and `tagColors`.
++ * Existing per-tag colors win. A `tagColor` with no `tag` names nothing and is
++ * dropped. The legacy fields are still accepted on input so old sidecars,
++ * templates and frontmatter keep loading; they are never written back.
++ */
++function foldLegacyTag(entry: NodeMetadata): NodeMetadata {
++  const { tag, tagColor, ...rest } = entry;
++  if (!tag) {
++    return rest;
++  }
++  const tags = sanitizeTagList([tag, ...(rest.tags ?? [])]);
++  const canonical = tags.find(
++    (name) => name.toLowerCase() === tag.toLowerCase()
++  );
++  const hasColor =
++    canonical !== undefined &&
++    Object.keys(rest.tagColors ?? {}).some(
++      (name) => name.toLowerCase() === canonical.toLowerCase()
++    );
++  const tagColors =
++    canonical && tagColor && !hasColor
++      ? { ...(rest.tagColors ?? {}), [canonical]: tagColor }
++      : rest.tagColors;
++  return {
++    ...rest,
++    tags: tags.length > 0 ? tags : undefined,
++    tagColors,
++  };
++}
++
+ function compactEntry(entry: NodeMetadata): NodeMetadata | null {
++  const folded = foldLegacyTag(entry);
+   const out: NodeMetadata = {};
+-  if (entry.tag !== undefined) {
+-    out.tag = entry.tag;
+-  }
+-  if (entry.tagColor !== undefined) {
+-    out.tagColor = entry.tagColor;
+-  }
+-  if (entry.tagColors !== undefined) {
+-    out.tagColors = entry.tagColors;
++  if (folded.tags !== undefined && folded.tags.length > 0) {
++    out.tags = folded.tags;
+   }
+-  if (entry.tags !== undefined) {
+-    out.tags = entry.tags;
++  const tagColors = normalizeTagColorMap(folded.tagColors, out.tags ?? []);
++  if (tagColors) {
++    out.tagColors = tagColors;
+   }
+   return Object.keys(out).length === 0 ? null : out;
+ }
+@@ -492,8 +520,8 @@ function mergeMetadataForMovedKey(
+ /**
+  * Move metadata from one backing object id to another. Used by checklist card
+  * lazy migration, where legacy tags keyed by `note_xxx` must follow the new
+- * `widget_xxx` record. Existing target metadata wins for primary tag/color,
+- * while secondary tags and per-tag colors are merged.
++ * `widget_xxx` record. Target tags come first, source tags are appended, and
++ * the target's color wins when both colored the same tag.
+  */
+ export async function moveNodeMetadataKey(
+   wsPath: string,
+@@ -708,7 +736,10 @@ export async function migrateLegacyTagsFromNotes(
+       }
+     }
+ 
+-    s.entries[noteId] = meta;
++    const compacted = compactEntry(meta);
++    if (compacted) {
++      s.entries[noteId] = compacted;
++    }
+   }
+ 
+   s.legacyTagsMigrated = true;
+@@ -718,9 +749,8 @@ export async function migrateLegacyTagsFromNotes(
+ /**
+  * Rename `oldName` to `newName` across every metadata entry. Matching is
+  * case-insensitive. If the new name already appears alongside the old one on
+- * the same entry, the duplicate is collapsed. When the primary `tag` matches
+- * old name it is rewritten in place (preserving `tagColor`). Returns the
+- * number of metadata entries that were rewritten.
++ * the same entry, the duplicate is collapsed and the tag's color follows the
++ * rename. Returns the number of metadata entries that were rewritten.
+  */
+ export async function renameTagEverywhere(
+   wsPath: string,
+@@ -799,9 +829,8 @@ export async function renameTagEverywhere(
+ }
+ 
+ /**
+- * Remove `name` from every entry's primary `tag` and `tags[]`. Matching is
+- * case-insensitive. Removing the primary tag also clears `tagColor`. Returns
+- * the number of metadata entries rewritten.
++ * Remove `name` from every entry's `tags[]` and its color. Matching is
++ * case-insensitive. Returns the number of metadata entries rewritten.
+  */
+ export async function deleteTagEverywhere(
+   wsPath: string,
+diff --git a/src/bun/workspace.test.ts b/src/bun/workspace.test.ts
+index c92b70d..56fcba8 100644
+--- a/src/bun/workspace.test.ts
++++ b/src/bun/workspace.test.ts
+@@ -251,7 +251,7 @@ describe('legacy tags stay deleted after restart', () => {
+       '---\nid: note_legacy\ntag: Old\n---\nBody'
+     );
+     await migrateLegacyTagsFromNotes(ws);
+-    expect((await loadAllMetadata(ws)).note_legacy?.tag).toBe('Old');
++    expect((await loadAllMetadata(ws)).note_legacy).toEqual({ tags: ['Old'] });
+     await deleteTagEverywhere(ws, 'Old');
+     await flushNodeMetadata(ws);
+     resetNodeMetadataCacheForTests(ws);
+@@ -263,16 +263,14 @@ describe('legacy tags stay deleted after restart', () => {
+ describe('metadata durability at RPC and shutdown boundaries', () => {
+   it('preserves explicit deletion through JSON and the write schema without clearing omitted fields', async () => {
+     await setNodeMetadata(ws, 'note', {
+-      tag: 'Old',
+-      tagColor: 'red',
+-      tags: ['Keep'],
++      tags: ['Old', 'Keep'],
++      tagColors: { Old: 'red' },
+     });
+     const wire = JSON.parse(
+       JSON.stringify({
+         id: 'note',
+         metadata: encodeNodeMetadataPatch({
+-          tag: undefined,
+-          tagColor: undefined,
++          tagColors: undefined,
+         }),
+       })
+     );
+@@ -280,7 +278,46 @@ describe('metadata durability at RPC and shutdown boundaries', () => {
+     await setNodeMetadata(ws, params.id, params.metadata);
+     await flushAllNodeMetadata();
+     resetNodeMetadataCacheForTests();
+-    expect((await loadAllMetadata(ws)).note).toEqual({ tags: ['Keep'] });
++    expect((await loadAllMetadata(ws)).note).toEqual({
++      tags: ['Old', 'Keep'],
++    });
++  });
++
++  it('folds a legacy primary tag into the single tag list', async () => {
++    await setNodeMetadata(ws, 'note', {
++      tag: 'Old',
++      tagColor: 'red',
++      tags: ['Keep', 'old'],
++      tagColors: { Keep: 'blue' },
++    });
++    await flushAllNodeMetadata();
++    resetNodeMetadataCacheForTests();
++    expect((await loadAllMetadata(ws)).note).toEqual({
++      tags: ['Old', 'Keep'],
++      tagColors: { Keep: 'blue', Old: 'red' },
++    });
++  });
++
++  it('folds legacy primary tags already on disk and never writes them back', async () => {
++    await mkdir(ghostDir(), { recursive: true });
++    await writeFile(
++      join(ghostDir(), 'node-metadata.json'),
++      JSON.stringify({
++        schema: 'ghostboard-node-metadata/v1',
++        entries: {
++          a: { tag: 'Lead', tagColor: 'yellow', tags: ['Quote'] },
++          b: { tagColor: 'red' },
++        },
++      })
++    );
++    expect(await loadAllMetadata(ws)).toEqual({
++      a: { tags: ['Lead', 'Quote'], tagColors: { Lead: 'yellow' } },
++    });
++    await setNodeMetadata(ws, 'c', { tags: ['New'] });
++    await flushAllNodeMetadata();
++    const raw = await readFile(join(ghostDir(), 'node-metadata.json'), 'utf8');
++    expect(raw).not.toContain('"tag"');
++    expect(raw).not.toContain('"tagColor"');
+   });
+ 
+   it('shutdown flush reports failures and can retry the in-memory data', async () => {

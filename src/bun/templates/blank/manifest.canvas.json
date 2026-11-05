@@ -1,6 +1,36 @@
 {
-  "viewport": { "x": 0, "y": 0, "zoom": 1 },
-  "nodes": [],
+  "viewport": {
+    "x": 360,
+    "y": 180,
+    "zoom": 1
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "type": "card",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "style": {
+        "width": 340,
+        "height": 320
+      },
+      "data": {
+        "color": "#FFFFFF",
+        "editor": "blocknote",
+        "noteId": "tpl-blank-start",
+        "title": "从这里开始"
+      }
+    }
+  ],
   "edges": [],
-  "noteContents": {}
+  "noteContents": {
+    "tpl-blank-start": {
+      "title": "从这里开始",
+      "displayHint": "note",
+      "color": "#FFFFFF",
+      "body": "从这张卡开始，写下这篇稿子想讲什么。\n\n## 接下来\n\n- 点这张卡就能编辑，内容自动保存\n- 把网页链接、图片、PDF 直接拖进画布\n- 按 Cmd+N 新建笔记、便签、文件夹\n- 卡片之间可以拉线，把思路连起来\n\n用不上了，删掉这张卡就行。"
+    }
+  }
 }

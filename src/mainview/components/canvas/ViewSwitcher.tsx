@@ -38,7 +38,6 @@ import {
 } from '@/lib/importMarkdownCards';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import {
-  rpcCreateView,
   rpcCreateViewFromTemplate,
   rpcDeleteView,
   rpcImportMarkdownFiles,
@@ -365,21 +364,6 @@ export function ViewSwitcher({
     },
     [setViews]
   );
-
-  const handleCreate = useCallback(async () => {
-    const name = `Canvas ${String(useCanvasStore.getState().views.length + 1)}`;
-    const result = (await rpcCreateView(name)) as {
-      id: string;
-      name: string;
-    } | null;
-    if (result === null) {
-      return;
-    }
-
-    appendCreatedView({ id: result.id, name: result.name });
-    await handleSwitchView(result.id, { keepOpen: true });
-    beginInlineRename(result);
-  }, [appendCreatedView, handleSwitchView, beginInlineRename]);
 
   const handleCreateFromTemplate = useCallback(
     async (templateId: string) => {
@@ -959,7 +943,7 @@ export function ViewSwitcher({
                       <Menu.Item
                         className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
                         closeOnClick={false}
-                        onClick={handleCreate}
+                        onClick={() => handleCreateFromTemplate('blank')}
                       >
                         <Plus size={16} />
                         {m.view_blank_canvas()}

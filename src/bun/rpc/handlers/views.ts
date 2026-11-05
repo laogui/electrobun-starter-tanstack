@@ -8,12 +8,10 @@ import {
 import {
   parseCanvasManifest,
   resolveWorkspaceManifestPath,
-  saveManifest as writeManifest,
 } from '../../manifest';
 import { withNoteWorkspace } from '../../noteTransactions';
 import {
   addRecoveredView,
-  addView,
   loadWorkspaceConfig,
   removeView,
   renameView,
@@ -32,7 +30,6 @@ export function createViewsHandlers(
   | 'listCanvasRecoveryBackups'
   | 'restoreCanvasSnapshot'
   | 'listViews'
-  | 'createView'
   | 'deleteView'
   | 'restoreView'
   | 'renameView'
@@ -106,19 +103,6 @@ export function createViewsHandlers(
       const config = await loadWorkspaceConfig(wsPath);
       return { views: config.views, activeViewId: config.activeViewId };
     },
-
-    createView: async ({ name }) =>
-      withNoteWorkspace(wsPath, async () => {
-        const entry = await addView(wsPath, name);
-        // Write an empty manifest for the new view
-        await writeManifest(wsPath, entry.file, {
-          schema: 'ghostboard-canvas/v1',
-          viewId: entry.id,
-          nodes: [],
-          edges: [],
-        });
-        return entry;
-      }),
 
     deleteView: async ({ viewId }) => {
       const result = await removeView(wsPath, viewId);

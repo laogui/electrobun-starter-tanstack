@@ -120,6 +120,22 @@ function nodeZIndex(node: Node): number {
  * drags or edits the graph.
  */
 // react-doctor-disable-next-line react-doctor/no-giant-component
+
+/** Drop the click that follows the current pointerup, before React sees it. */
+function swallowNextClick() {
+  const swallow = (event: MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+  };
+  window.addEventListener('click', swallow, { capture: true, once: true });
+  // A pointerup without a click (e.g. released off-window) must not leave the
+  // trap armed for a later, unrelated click. The click normally lands in the
+  // same task as pointerup; the short grace covers engines that queue it.
+  setTimeout(() => {
+    window.removeEventListener('click', swallow, { capture: true });
+  }, 100);
+}
+
 function CanvasFlowLayerComponent({
   canvasBackground,
   closeFolderWithTransition,
@@ -207,7 +223,8 @@ function CanvasFlowLayerComponent({
   // An expanded folder collapses on any click outside its child cards: the
   // blank canvas, another card, or an edge. A drag (marquee, pan, moving a
   // card) is not a click and leaves the folder open. The folder card itself
-  // keeps its own toggle in onNodeClick.
+  // keeps its own toggle in onNodeClick. The collapsing click does nothing
+  // else: it never opens the card it happened to land on.
   const armFolderOutsideClose = useCallback(
     (event: React.PointerEvent, nodeElement: Element | null) => {
       const folderId = useCanvasStore.getState().focusedFolder?.id;
@@ -229,9 +246,13 @@ function CanvasFlowLayerComponent({
           if (Math.hypot(up.clientX - startX, up.clientY - startY) > 4) {
             return;
           }
-          if (useCanvasStore.getState().focusedFolder?.id === folderId) {
-            closeFolderWithTransition();
+          if (useCanvasStore.getState().focusedFolder?.id !== folderId) {
+            return;
           }
+          closeFolderWithTransition();
+          // The click that collapses the folder is used up: it must not fall
+          // through and open (or select) the card or edge under the pointer.
+          swallowNextClick();
         },
         { once: true }
       );

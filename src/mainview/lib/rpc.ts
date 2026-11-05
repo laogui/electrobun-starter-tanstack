@@ -1086,14 +1086,6 @@ export async function rpcListViews() {
   return eb.rpc.request.listViews({});
 }
 
-export async function rpcCreateView(name: string) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.createView({ name });
-}
-
 export async function rpcDeleteView(viewId: string) {
   const eb = await getElectrobun();
   if (!eb?.rpc) {

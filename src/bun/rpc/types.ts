@@ -395,10 +395,6 @@ export interface CanvasRPC {
           activeViewId: string;
         };
       };
-      createView: {
-        params: { name: string };
-        response: { id: string; name: string; file: string };
-      };
       deleteView: {
         params: { viewId: string };
         response: {

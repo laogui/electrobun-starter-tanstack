@@ -149,7 +149,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
   restoreTrash: z.object({ trashId: id }).loose(),
   purgeTrash: z.object({ trashId: id }).loose(),
   deleteUnlinkedNotes: z.object({ files: z.array(z.string()) }).loose(),
-  createView: z.object({ name: z.string().max(512) }).loose(),
   deleteView: z.object({ viewId: id }).loose(),
   restoreView: z.object({ trashId: id }).loose(),
   renameView: z.object({ name: z.string().max(512), viewId: id }).loose(),

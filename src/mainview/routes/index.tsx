@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { CanvasFlowLayer } from '@/components/canvas/CanvasFlowLayer';
 import { CanvasLoadErrorScreen } from '@/components/canvas/CanvasLoadErrorScreen';
 import { CanvasPanels } from '@/components/canvas/CanvasPanels';
+import { CardColorPopover } from '@/components/canvas/CardColorPopover';
 import { CardSidePanelHost } from '@/components/canvas/CardSidePanel';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
@@ -1151,6 +1152,7 @@ function CanvasComponent() {
       ) : null}
 
       <CardSidePanelHost />
+      <CardColorPopover />
 
       {pendingFolderDeleteIds ? (
         <DeleteFolderConfirmDialog

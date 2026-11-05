@@ -1,9 +1,8 @@
 import { Popover } from '@base-ui/react/popover';
 import { useTheme } from 'better-themes';
-import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { ColorPicker } from '@/components/ui/ColorPicker';
+import { ColorSwatchPanel } from '@/components/ui/ColorSwatchPanel';
 import {
   CANVAS_BG_PRESET_ORDER,
   type CanvasBackgroundPreset,
@@ -16,7 +15,6 @@ import {
   saveCanvasBackgroundCustoms,
 } from '@/lib/canvasBackgroundCustoms';
 import { persistAppSettingsPatch } from '@/lib/persistAppSettings';
-import { cn } from '@/lib/utils';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -118,43 +116,25 @@ export function CanvasBackgroundToolbarButton() {
               </Popover.Description>
             </div>
 
-            <div className="grid grid-cols-5 place-items-center gap-2">
-              <ColorPicker
-                addLabel={m.canvas_bg_add_color()}
-                handleAdd={handleAddCustom}
-                onChange={handlePickerChange}
-                title={m.canvas_bg_color_picker_title()}
-                value={pickerValue}
-              />
-
-              {CANVAS_BG_PRESET_ORDER.map((preset) => (
-                <BackgroundSwatch
-                  color={resolveCanvasBackground(preset, isDark)}
-                  key={preset}
-                  label={presetLabel(preset)}
-                  onSelect={() => {
-                    selectBackground(preset);
-                  }}
-                  selected={isSwatchSelected(preset, canvasBackground, isDark)}
-                />
-              ))}
-
-              {customs.map((color) => (
-                <BackgroundSwatch
-                  color={color}
-                  key={color}
-                  label={color}
-                  onRemove={() => {
-                    handleRemoveCustom(color);
-                  }}
-                  onSelect={() => {
-                    selectBackground(color);
-                  }}
-                  removeLabel={m.canvas_bg_remove_color()}
-                  selected={isSwatchSelected(color, canvasBackground, isDark)}
-                />
-              ))}
-            </div>
+            <ColorSwatchPanel
+              addLabel={m.canvas_bg_add_color()}
+              customs={customs}
+              isSelected={(value) =>
+                isSwatchSelected(value, canvasBackground, isDark)
+              }
+              onAddCustom={handleAddCustom}
+              onPickerChange={handlePickerChange}
+              onRemoveCustom={handleRemoveCustom}
+              onSelect={selectBackground}
+              pickerTitle={m.canvas_bg_color_picker_title()}
+              pickerValue={pickerValue}
+              presets={CANVAS_BG_PRESET_ORDER.map((preset) => ({
+                color: resolveCanvasBackground(preset, isDark),
+                label: presetLabel(preset),
+                value: preset,
+              }))}
+              removeLabel={m.canvas_bg_remove_color()}
+            />
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
@@ -191,62 +171,4 @@ function presetLabel(preset: CanvasBackgroundPreset): string {
       return _exhaustive;
     }
   }
-}
-
-function BackgroundSwatch({
-  color,
-  label,
-  onRemove,
-  onSelect,
-  removeLabel,
-  selected,
-}: {
-  color: string;
-  label: string;
-  onRemove?: () => void;
-  onSelect: () => void;
-  removeLabel?: string;
-  selected: boolean;
-}) {
-  return (
-    <div className="group relative flex aspect-square size-fit items-center justify-center">
-      <button
-        aria-label={label}
-        className="flex aspect-square size-fit items-center justify-center rounded-full bg-white/10 p-0.5 outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60"
-        onClick={onSelect}
-        title={label}
-        type="button"
-      >
-        <span
-          className={cn(
-            'relative flex size-8 items-center justify-center rounded-full border border-black/10 dark:border-white/15'
-          )}
-          style={{ backgroundColor: color }}
-        >
-          {selected ? (
-            <Check
-              aria-hidden
-              className="size-4 text-neutral-800 drop-shadow-sm dark:text-white"
-              strokeWidth={2.5}
-            />
-          ) : null}
-        </span>
-      </button>
-      {onRemove && removeLabel ? (
-        <button
-          aria-label={removeLabel}
-          className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-neutral-800 text-white opacity-0 shadow-sm transition-opacity hover:bg-neutral-700 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accent/60 group-hover:opacity-100 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-white"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onRemove();
-          }}
-          title={removeLabel}
-          type="button"
-        >
-          <X aria-hidden className="size-2.5" strokeWidth={3} />
-        </button>
-      ) : null}
-    </div>
-  );
 }

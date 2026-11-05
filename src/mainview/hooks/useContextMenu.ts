@@ -11,7 +11,6 @@ import { runAISummarize } from '@/lib/ai/runAISummarize';
 import { revealNodeBesidePanel } from '@/lib/canvasFocus';
 import { isFocusableNode, isLockedNode } from '@/lib/canvasNodePredicates';
 import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
-import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import {
   type CreatableCanvasNodeKind,
   normalizeLinkUrl,
@@ -42,6 +41,7 @@ import {
   topicOutlineExportProblems,
 } from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useColorPickerStore } from '@/store/colorPickerStore';
 import * as m from '../../paraglide/messages.js';
 import { parseCanvasTypeMenuActionId } from '../../shared/extensions/ids';
 import { buildTopicOutlineMarkdown } from '../../shared/topicMarkdownExport';
@@ -335,15 +335,12 @@ export function useContextMenu({
               cycleExtensionColor(childData);
               return;
             }
-            const palette =
-              folderChild.type === 'sticky' ? STICKY_COLORS : CARD_COLORS;
-            const current =
-              typeof childData.color === 'string'
-                ? childData.color
-                : palette[0];
-            const index = palette.indexOf(current);
-            commitFolderChildData(folderId, folderChild.id, {
-              color: palette[(index + 1) % palette.length],
+            useColorPickerStore.getState().open({
+              anchor: { x: contextMenu.x, y: contextMenu.y },
+              palette: folderChild.type === 'sticky' ? 'sticky' : 'card',
+              targets: [
+                { kind: 'folder-child', folderId, childId: folderChild.id },
+              ],
             });
             return;
           }
@@ -703,18 +700,34 @@ export function useContextMenu({
               selected.length > 1 && selected.some((n) => n.id === nodeId)
                 ? selected.map((n) => n.id)
                 : [nodeId];
+            const pickerTargets: string[] = [];
+            let palette: 'card' | 'sticky' | null = null;
             for (const id of ids) {
               const node = nodes.find((entry) => entry.id === id);
-              if (node && isLockedNode(node)) {
+              if (!node || isLockedNode(node)) {
                 continue;
               }
-              if (node?.type === 'extension') {
+              if (node.type === 'extension') {
                 cycleExtensionColor(
                   (node.data ?? {}) as Record<string, unknown>
                 );
-              } else {
+              } else if (node.type === 'group') {
+                // Groups use named tints, not card colours; keep cycling.
                 changeNodeColor(id);
+              } else {
+                palette ??= node.type === 'sticky' ? 'sticky' : 'card';
+                pickerTargets.push(id);
               }
+            }
+            if (palette && pickerTargets.length > 0) {
+              useColorPickerStore.getState().open({
+                anchor: { x: contextMenu?.x ?? 0, y: contextMenu?.y ?? 0 },
+                palette,
+                targets: pickerTargets.map((targetId) => ({
+                  kind: 'node' as const,
+                  nodeId: targetId,
+                })),
+              });
             }
           }
           break;

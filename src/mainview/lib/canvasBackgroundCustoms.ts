@@ -3,9 +3,20 @@ import { isHexColor } from '@/lib/hexColor';
 const STORAGE_KEY = 'ghostboard.canvas-bg-customs';
 const MAX_CUSTOM_COLORS = 12;
 
+export const CARD_COLOR_CUSTOMS_KEY = 'ghostboard.card-color-customs';
+
 export function loadCanvasBackgroundCustoms(): string[] {
+  return loadColorCustoms(STORAGE_KEY);
+}
+
+export function saveCanvasBackgroundCustoms(colors: string[]): void {
+  saveColorCustoms(STORAGE_KEY, colors);
+}
+
+/** Saved custom swatches under `key` (canvas background, card colour). */
+export function loadColorCustoms(key: string): string[] {
   try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+    const raw = globalThis.localStorage?.getItem(key);
     if (!raw) {
       return [];
     }
@@ -22,10 +33,10 @@ export function loadCanvasBackgroundCustoms(): string[] {
   }
 }
 
-export function saveCanvasBackgroundCustoms(colors: string[]): void {
+export function saveColorCustoms(key: string, colors: string[]): void {
   try {
     const next = colors.filter(isHexColor).slice(0, MAX_CUSTOM_COLORS);
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(next));
+    globalThis.localStorage?.setItem(key, JSON.stringify(next));
   } catch {
     // Ignore quota / private-mode failures; in-session state still works.
   }

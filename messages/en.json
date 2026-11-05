@@ -977,5 +977,7 @@
   "panel_exit_fullscreen": "Back to side panel",
   "panel_previous": "Previous card",
   "panel_next": "Next card",
-  "panel_view_large": "View large"
+  "panel_view_large": "View large",
+  "card_color_picker_title": "Card color",
+  "card_color_swatch_label": "Color {index}"
 }

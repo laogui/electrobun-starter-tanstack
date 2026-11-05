@@ -19,10 +19,15 @@
 | 11 | `dabfe46` | 分组改颜色也改为弹出取色器：5 种原色调作预设，支持自定义色值 | `GroupNode.tsx` 支持 hex（`group-custom` 类 + `--group-custom`）；`index.css` 新增 `.canvas-group.group-custom`；`CardColorPopover` 新增 group 色板；`useContextMenu` 混选时只改与首项同色板的卡 |
 | 12 | `22ff5c3` | 删除插件系统（用户 2026-11-05 决定）：运行时、主进程宿主、SDK、脚手架、文档站副本、签名与授权、T0–T5 探针、插件 CI、设置页 | 323 个文件，+364 / −39213。笔记保存同步画布改由 `lib/noteChangeSync.ts`（主进程只推 `noteChanged`）；统一撤销只留画布、小组件、扩展实例；删掉笔记意图事务、扩展迁移备份、`createNote` 等只给插件用的 RPC 与 HTTP 路由。恢复：`git revert 22ff5c3` |
 | 13 | `96aca60` | 单击打开卡片，单击/拖拽不再选中，选中只靠框选（用户 2026-11-05 改回 73ac03d 的点击模型） | 单击（双击同效）打开侧边栏、编辑便签、进入文件夹，文件夹子卡也单击打开；`Shift/Cmd+Click` 不再选中；框选后 `Enter` 打开、Delete 删除。新手提示与 PRD 同步。恢复：`git revert 96aca60` |
+| 14 | `0f8f89f` | 删除许可证额度与“画布类型”设置页（含按类型启用/停用机制） | 47 个文件，−1951。删 `nodeQuota`、`license.ts` 与激活 RPC、`extensionEnablementStore`、`enablement.ts`；扩展可用性只剩 available / unknown。恢复：`git revert 0f8f89f` |
+| 15 | `9747a50` | 删除 7 个隐藏模板（快速上手、演示、看板、冲刺复盘、周计划、四象限、开一家店） | 模板文件、注册、`HIDDEN_TEMPLATE_IDS`、文案。已建画布不受影响。恢复：`git revert 9747a50` |
+| 16 | `44e1379` | 删除番茄钟、提醒、录音、Checklist 与旧小组件体系（原计划第 3、4 步，因共用 widget 体系合成一个提交） | 98 个文件，+661 / −8868。旧数据在打开画布时转换并写回：清单 → 笔记（GFM 任务列表）、录音 → 音频文件卡、番茄钟/提醒 → “已移除”占位。`productScope.ts` 已删。恢复：`git revert 44e1379`（已转换的画布不会自动转回） |
 
-原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、Checklist 照常显示、搜索、打开。真正删掉的代码是第 2 步的游离笔记侧栏和第 12 步的插件系统（用户 2026-11-05 决定）；第 4 步会把旧的主标签字段改写进标签列表（无损）。
+原则：最初是**只关入口，不删数据**；2026-11-05 起用户要求无用代码直接删（第 12、14–16 步）。删代码时旧数据一律转换或保留，不丢内容：第 16 步把旧清单转成笔记、旧录音转成音频文件卡，番茄钟和提醒显示占位并保留原数据；第 4 步把旧的主标签字段改写进标签列表（无损）。
 
 ## 1. 隐藏入口（`fceed6f`）
+
+> 第 14–16 步之后，本节的开关已全部删除，`productScope.ts` 不再存在；下表仅作历史记录。
 
 所有开关集中在 `src/mainview/lib/productScope.ts`，改回 `true` 或从集合里移除即可恢复，不涉及数据迁移。
 
@@ -79,4 +84,5 @@
 
 - 每一步都过了 tsc（无项目内报错）、biome 和相关测试。第 4 步：workspace、canvasPersistence、templates、searchIntegrity 共 41 项通过。
 - 第 12 步：tsc 无报错、vite build 通过、全量 vitest 46 个文件 444 项通过（1 项跳过）。
+- 第 14–16 步：tsc 无报错、biome 通过、vite build 通过、全量 vitest 45 个文件 431 项通过（1 项跳过）。
 - 都**没有在 Mac 上实际运行过**。

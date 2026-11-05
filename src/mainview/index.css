@@ -573,6 +573,12 @@ body.resizing-nwse * {
   background: hsl(var(--group-orange));
   border-color: hsl(var(--group-orange-border));
 }
+/* Custom colour from the picker: a hex in `--group-custom`, tinted so cards
+   on top stay readable in light and dark themes. */
+.canvas-group.group-custom {
+  background: color-mix(in srgb, var(--group-custom) 22%, transparent);
+  border-color: color-mix(in srgb, var(--group-custom) 70%, transparent);
+}
 
 /* ── Node highlight (selection + drop target) ──
    One rule for every node kind: a 2px accent stroke drawn ON the node's own

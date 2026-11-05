@@ -9,7 +9,7 @@ export interface ColorPickerRequest {
   /** Screen point the popover opens from (the context-menu position). */
   anchor: { x: number; y: number };
   /** Which palette to offer. */
-  palette: 'card' | 'sticky';
+  palette: 'card' | 'group' | 'sticky';
   targets: ColorPickerTarget[];
 }
 

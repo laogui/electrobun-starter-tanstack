@@ -172,7 +172,7 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
 2. **（新增，必须先做）卡片上的改标题、改颜色改为直接写笔记**。
    > **核对（2026-11-05）**：笔记卡在画布上没有改标题的入口。标题只在编辑器里改，已经通过 `saveBlockNote` 直接写笔记；画布上的“重命名”只对素材、图片、录音生效，这几类不是笔记。所以这一步实际只剩颜色：`changeNodeColor` 先写节点，再由 `saveManifest` 调 `mergeNoteMeta` 写回笔记。按 4.3，颜色算画布操作，第 5 步之前要先定颜色放哪：继续存在笔记里（改成直接调 RPC），还是改成每张画布各自记录的放置属性（同一篇笔记在两张画布上可以不同色）。不做第 5 步，现在这条路就能用。
    >
-   > **决定（2026-11-05，用户）**：颜色继续存在笔记里，不改成放置属性，旧数据不用迁移。同时把“改颜色”从点一下换下一种，改成弹出和画布背景同一套取色器（预设色 + 自定义色 + 取色器）；一次弹出算一步撤销。分组（命名色调）和扩展卡仍按原来轮换。
+   > **决定（2026-11-05，用户）**：颜色继续存在笔记里，不改成放置属性，旧数据不用迁移。同时把“改颜色”从点一下换下一种，改成弹出和画布背景同一套取色器（预设色 + 自定义色 + 取色器）；一次弹出算一步撤销。扩展卡仍按原来轮换。分组随后也改成同一弹窗：5 种原有色调作预设，另支持自定义色值（`group-custom`，按 22% 半透明铺底）。
 现在这两项是先改节点 data，再由 `saveManifest` → [persistManifestCardNote](../src/bun/canvasHydration.ts) 写回笔记 sidecar。第 5 步停止往节点写笔记字段后，这条路会断，改标题会悄悄失效。改成调用笔记的 RPC，并补测试。
 3. **新增 `store/noteRecordStore.ts`**。`loadCanvas` 的返回值从"把笔记数据合并进节点 data"（[noteRecordToCardData](../src/bun/noteStore.ts#L208-L240)）改成"节点 + 另附一份 `notes` 表"。保存结果、`noteBodySync`、插件 `hostEvents` 都改为更新这个 store。
 4. **读取方改成按 `noteId` 读**：`CardNode`、`NotePreview`、笔记库、搜索结果、导出、AI 总结。过渡期保留"读不到就回退到 `node.data`"的兜底。

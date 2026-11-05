@@ -979,5 +979,6 @@
   "panel_next": "下一张卡片",
   "panel_view_large": "看大图",
   "card_color_picker_title": "卡片颜色",
-  "card_color_swatch_label": "颜色 {index}"
+  "card_color_swatch_label": "颜色 {index}",
+  "group_color_picker_title": "分组颜色"
 }

@@ -979,5 +979,6 @@
   "panel_next": "Next card",
   "panel_view_large": "View large",
   "card_color_picker_title": "Card color",
-  "card_color_swatch_label": "Color {index}"
+  "card_color_swatch_label": "Color {index}",
+  "group_color_picker_title": "Group color"
 }

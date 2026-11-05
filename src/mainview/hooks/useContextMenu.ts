@@ -123,7 +123,6 @@ export function useContextMenu({
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
   const setEditingFolderId = useCanvasStore((s) => s.setEditingFolderId);
   const setRenamingNodeId = useCanvasStore((s) => s.setRenamingNodeId);
-  const changeNodeColor = useCanvasStore((s) => s.changeNodeColor);
   const duplicateSelected = useCanvasStore((s) => s.duplicateSelected);
   const groupSelected = useCanvasStore((s) => s.groupSelected);
   const addFolderChild = useCanvasStore((s) => s.addFolderChild);
@@ -701,7 +700,7 @@ export function useContextMenu({
                 ? selected.map((n) => n.id)
                 : [nodeId];
             const pickerTargets: string[] = [];
-            let palette: 'card' | 'sticky' | null = null;
+            let palette: 'card' | 'group' | 'sticky' | null = null;
             for (const id of ids) {
               const node = nodes.find((entry) => entry.id === id);
               if (!node || isLockedNode(node)) {
@@ -711,12 +710,19 @@ export function useContextMenu({
                 cycleExtensionColor(
                   (node.data ?? {}) as Record<string, unknown>
                 );
-              } else if (node.type === 'group') {
-                // Groups use named tints, not card colours; keep cycling.
-                changeNodeColor(id);
               } else {
-                palette ??= node.type === 'sticky' ? 'sticky' : 'card';
-                pickerTargets.push(id);
+                const kind =
+                  node.type === 'sticky'
+                    ? 'sticky'
+                    : node.type === 'group'
+                      ? 'group'
+                      : 'card';
+                // One palette per popover: a mixed selection recolours only
+                // the items that share the first item's palette.
+                palette ??= kind;
+                if (kind === palette) {
+                  pickerTargets.push(id);
+                }
               }
             }
             if (palette && pickerTargets.length > 0) {
@@ -1071,7 +1077,6 @@ export function useContextMenu({
       setEditingTagNodeId,
       setEditingFolderId,
       setRenamingNodeId,
-      changeNodeColor,
       duplicateSelected,
       groupSelected,
       addFolderChild,

@@ -9,7 +9,7 @@ import {
   removeCanvasBackgroundCustom,
   saveColorCustoms,
 } from '@/lib/canvasBackgroundCustoms';
-import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
+import { CARD_COLORS, GROUP_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
 import type { FolderChildEntry } from '@/store/canvas/folderChildren';
 import { useCanvasStore } from '@/store/canvasStore';
 import {
@@ -32,6 +32,30 @@ function currentColor(target: ColorPickerTarget): string | undefined {
   return typeof color === 'string' ? color : undefined;
 }
 
+/** Picker start colour when the current value is a named group tint. */
+const GROUP_PICKER_FALLBACK = '#60A5FA';
+
+function swatchLabel(index: number): string {
+  return m.card_color_swatch_label({ index: String(index + 1) });
+}
+
+function presetsFor(palette: 'card' | 'group' | 'sticky') {
+  if (palette === 'group') {
+    // Groups store a tint name; the swatch paints the theme's own fill.
+    return GROUP_COLORS.map((name, index) => ({
+      color: `hsl(var(--group-${name}-border))`,
+      label: swatchLabel(index),
+      value: name as string,
+    }));
+  }
+  const colors = palette === 'sticky' ? STICKY_COLORS : CARD_COLORS;
+  return colors.map((color, index) => ({
+    color: color as string,
+    label: swatchLabel(index),
+    value: color as string,
+  }));
+}
+
 /**
  * Card colour chooser, the same palette as the canvas background. Opened from
  * the context menu's "Change colour". One popover session is one undo step:
@@ -45,8 +69,8 @@ export function CardColorPopover() {
   const [selected, setSelected] = useState<string>('');
   const snapshotTakenRef = useRef(false);
 
-  const palette = request?.palette === 'sticky' ? STICKY_COLORS : CARD_COLORS;
-  const fallback = palette[0];
+  const presets = presetsFor(request?.palette ?? 'card');
+  const fallback = presets[0]?.value ?? '#FFFFFF';
 
   useEffect(() => {
     if (!request) {
@@ -87,11 +111,6 @@ export function CardColorPopover() {
     setSelected(color);
   };
 
-  const presets = palette.map((color, index) => ({
-    color,
-    label: m.card_color_swatch_label({ index: String(index + 1) }),
-  }));
-
   return (
     <Popover.Root
       onOpenChange={(open) => {
@@ -112,7 +131,9 @@ export function CardColorPopover() {
           <Popover.Popup className="floating-menu-popup z-50 w-[23rem] rounded-3xl border border-black/5 bg-white/90 p-4 shadow-xl outline-hidden backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
             <div className="mb-3 text-center">
               <Popover.Title className="font-medium text-lg">
-                {m.card_color_picker_title()}
+                {request?.palette === 'group'
+                  ? m.group_color_picker_title()
+                  : m.card_color_picker_title()}
               </Popover.Title>
               <Popover.Description className="mt-0.5 text-neutral-500 text-sm dark:text-neutral-400">
                 {m.canvas_bg_picker_description()}
@@ -142,7 +163,9 @@ export function CardColorPopover() {
               }}
               onSelect={apply}
               pickerTitle={m.canvas_bg_color_picker_title()}
-              pickerValue={selected || fallback}
+              pickerValue={
+                selected.startsWith('#') ? selected : GROUP_PICKER_FALLBACK
+              }
               presets={presets}
               removeLabel={m.canvas_bg_remove_color()}
             />

@@ -1,5 +1,12 @@
 import { useUpdateNodeInternals } from '@xyflow/react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 
 import { cn } from '@/lib/utils';
@@ -34,6 +41,23 @@ export interface GroupContentProps {
   selected?: boolean;
 }
 
+function isCustomGroupColor(color: string | undefined): color is string {
+  return typeof color === 'string' && color.startsWith('#');
+}
+
+/** Named tints map to CSS classes; a hex from the picker uses `group-custom`. */
+function groupColorClass(color: string | undefined): string {
+  return isCustomGroupColor(color)
+    ? 'group-custom'
+    : `group-${color || 'blue'}`;
+}
+
+function groupColorStyle(color: string | undefined): CSSProperties | undefined {
+  return isCustomGroupColor(color)
+    ? ({ '--group-custom': color } as CSSProperties)
+    : undefined;
+}
+
 /**
  * Pure presentational group container: the translucent colored panel plus the
  * label in the top-left. No store / RPC coupling — reusable for template
@@ -55,11 +79,12 @@ export const GroupContent = ({
 }: GroupContentProps) => (
   <div
     className={cn(
-      `group/group-node node-visual canvas-group group-${data.color || 'blue'} size-full transition-opacity duration-200 ease-out`,
+      `group/group-node node-visual canvas-group ${groupColorClass(data.color)} size-full transition-opacity duration-200 ease-out`,
       dragging ? 'cursor-grabbing' : 'cursor-grab',
       data.active && 'node-drop-target',
       data.isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
     )}
+    style={groupColorStyle(data.color)}
   >
     {children}
 

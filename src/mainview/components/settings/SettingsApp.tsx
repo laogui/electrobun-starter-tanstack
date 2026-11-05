@@ -2,14 +2,12 @@ import {
   Info,
   Keyboard,
   MessageSquare,
-  Puzzle,
   Settings as SettingsIcon,
   Sparkles,
   Wrench,
 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SHOW_CANVAS_TYPES_SETTINGS } from '@/lib/productScope';
 import { cn } from '@/lib/utils';
 import {
   type AppSettings,
@@ -22,7 +20,6 @@ import {
 } from './i18n/getLocaleStrings';
 import { AboutPanel } from './panels/AboutPanel';
 import { AIPanel } from './panels/AIPanel';
-import { CanvasTypesPanel } from './panels/CanvasTypesPanel';
 import { FeedbackPanel } from './panels/FeedbackPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
@@ -32,7 +29,6 @@ import { applyTheme, normalizeSettings } from './settingsState';
 type SettingsSection =
   | 'about'
   | 'ai'
-  | 'canvasTypes'
   | 'feedback'
   | 'general'
   | 'shortcuts'
@@ -45,7 +41,6 @@ interface NavItem {
     SettingsLocaleStrings,
     | 'navAbout'
     | 'navAi'
-    | 'navCanvasTypes'
     | 'navFeedback'
     | 'navGeneral'
     | 'navShortcuts'
@@ -53,19 +48,14 @@ interface NavItem {
   >;
 }
 
-const ALL_NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItem[] = [
   { id: 'general', icon: SettingsIcon, labelKey: 'navGeneral' },
   { id: 'workspace', icon: Wrench, labelKey: 'navWorkspace' },
-  { id: 'canvasTypes', icon: Puzzle, labelKey: 'navCanvasTypes' },
   { id: 'ai', icon: Sparkles, labelKey: 'navAi' },
   { id: 'shortcuts', icon: Keyboard, labelKey: 'navShortcuts' },
   { id: 'feedback', icon: MessageSquare, labelKey: 'navFeedback' },
   { id: 'about', icon: Info, labelKey: 'navAbout' },
 ];
-
-const NAV_ITEMS: NavItem[] = ALL_NAV_ITEMS.filter(
-  (item) => item.id !== 'canvasTypes' || SHOW_CANVAS_TYPES_SETTINGS
-);
 
 const SETTINGS_SCROLLBAR_OPTIONS = {
   overflow: { x: 'hidden' },
@@ -330,9 +320,6 @@ function SettingsContent({
       ) : null}
       {activeSection === 'workspace' ? (
         <WorkspacePanel client={client} locale={locale} strings={strings} />
-      ) : null}
-      {activeSection === 'canvasTypes' ? (
-        <CanvasTypesPanel locale={locale} strings={strings} />
       ) : null}
       {activeSection === 'ai' ? (
         <AIPanel

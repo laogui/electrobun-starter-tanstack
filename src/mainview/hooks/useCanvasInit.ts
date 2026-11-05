@@ -14,13 +14,11 @@ import {
   isRpcAvailable,
   loadCanvas,
   rpcConfirmCanvasRecovery,
-  rpcListExtensionEnablement,
   rpcListViews,
   rpcSaveManifest,
 } from '@/lib/rpc';
 import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import { useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import type { CanvasLoadError } from '@/store/slices/persistenceSlice';
 import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
@@ -99,7 +97,7 @@ function errorMessage(error: unknown): string {
 /**
  * Load (or first-run seed) the active view's canvas into the stores whenever
  * the canvas is not hydrated: nodes/edges, widget records, extension
- * instances and canvas-type enablement. Stale loads are discarded when the
+ * instances. Stale loads are discarded when the
  * active view changes mid-flight.
  *
  * A load that fails (corrupt manifest, RPC error, unknown view) sets
@@ -120,9 +118,6 @@ export function useCanvasInit(): void {
   const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
   const saveWidgetNow = useWidgetStore((s) => s.saveWidgetNow);
   const hydrateExtensionInstances = useExtensionInstanceStore((s) => s.hydrate);
-  const hydrateExtensionEnablement = useExtensionEnablementStore(
-    (s) => s.hydrate
-  );
 
   useEffect(() => {
     if (hydrated || canvasLoadError) {
@@ -203,11 +198,6 @@ export function useCanvasInit(): void {
         if (cancelled) {
           return;
         }
-        const enablement = await rpcListExtensionEnablement();
-        if (cancelled) {
-          return;
-        }
-        hydrateExtensionEnablement(enablement.disabledCanvasTypes);
         if (data) {
           if (!(Array.isArray(data.nodes) && Array.isArray(data.edges))) {
             fail('corrupt');
@@ -305,7 +295,6 @@ export function useCanvasInit(): void {
   }, [
     hydrate,
     hydrateWidgets,
-    hydrateExtensionEnablement,
     hydrateExtensionInstances,
     hydrated,
     activeViewId,

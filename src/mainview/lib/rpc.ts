@@ -43,7 +43,6 @@ import {
   NOTE_CHANGED_EVENT,
   type NoteChangedEvent,
 } from '../../shared/contentEvents';
-import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
   ExtensionInstanceLoadError,
   ExtensionInstanceRecord,
@@ -81,13 +80,6 @@ declare global {
 }
 const MAX_INIT_RETRIES = 3;
 let initRetries = 0;
-
-export interface LicenseInfo {
-  activated: boolean;
-  activatedAt?: number;
-  fingerprint?: string;
-  key?: string;
-}
 
 async function initElectrobun(): Promise<ElectrobunClient | null> {
   if ((globalThis as any).__electrobunWebviewId === undefined) {
@@ -383,44 +375,6 @@ export async function rpcDeleteWidget(widgetId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteWidget({ widgetId });
-}
-
-export async function rpcListExtensionEnablement(): Promise<{
-  disabledCanvasTypes: string[];
-  instanceCounts: Record<string, number>;
-}> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { disabledCanvasTypes: [], instanceCounts: {} };
-  }
-  return eb.rpc.request.extensionEnablementList({});
-}
-
-export async function rpcClearExtensionTypeData(
-  canvasTypeId: string
-): Promise<{ deleted: number; success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, deleted: 0 };
-  }
-  return eb.rpc.request.extensionInstanceClearType({ canvasTypeId });
-}
-
-export async function rpcSetExtensionEnabled(
-  canvasTypeId: string,
-  enabled: boolean
-): Promise<{
-  enablement?: ExtensionEnablementFile;
-  success: boolean;
-}> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.extensionEnablementSetEnabled({
-    canvasTypeId,
-    enabled,
-  });
 }
 
 export async function rpcCreateExtensionInstance(input: {
@@ -1166,24 +1120,6 @@ export async function rpcRunAITask(
     return null;
   }
   return eb.rpc.request.aiRunTask(params);
-}
-
-export async function rpcCheckLicense(): Promise<LicenseInfo | null> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.checkLicense({});
-}
-
-export async function rpcActivateLicense(
-  key: string
-): Promise<{ success: boolean; error?: string } | null> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.activateLicense({ key });
 }
 
 /**

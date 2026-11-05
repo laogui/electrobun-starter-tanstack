@@ -34,7 +34,6 @@ import { createCanvasHandlers } from './rpc/handlers/canvas';
 import { createDiagnosticsHandlers } from './rpc/handlers/diagnostics';
 import { createExportHandlers } from './rpc/handlers/export';
 import { createExtensionsHandlers } from './rpc/handlers/extensions';
-import { createLicenseHandlers } from './rpc/handlers/license';
 import { createMetadataHandlers } from './rpc/handlers/metadata';
 import { createNotesHandlers } from './rpc/handlers/notes';
 import { createSettingsHandlers } from './rpc/handlers/settings';
@@ -212,7 +211,6 @@ async function main() {
     ...createViewsHandlers(rpcContext),
     ...createMetadataHandlers(rpcContext),
     ...createTemplatesHandlers(rpcContext),
-    ...createLicenseHandlers(rpcContext),
   };
   const rpc = (appState.mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: Number.POSITIVE_INFINITY,

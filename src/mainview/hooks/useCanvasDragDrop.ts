@@ -23,7 +23,6 @@ import {
   readImageNaturalSize,
   revokeImageDropPreview,
 } from '@/lib/importCanvasFiles';
-import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
@@ -207,12 +206,6 @@ export function useCanvasDragDrop({
         toast.error(m.toast_canvas_json_empty());
         return;
       }
-      if (
-        !(await hasNodeQuota(state.nodes, countCountedNodes(imported.nodes)))
-      ) {
-        return;
-      }
-
       const latest = useCanvasStore.getState();
       latest.saveSnapshot();
       latest.setNodes((prev) =>

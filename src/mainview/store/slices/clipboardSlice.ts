@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { markNodesEntering } from '@/lib/motion';
-import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import * as m from '../../../paraglide/messages.js';
 import {
   buildPastedClipboard,
@@ -56,13 +55,8 @@ export const createClipboardSlice: StateCreator<
   },
 
   pasteClipboard: async (offset = 30) => {
-    const {
-      clipboard,
-      clipboardEdges,
-      nodes: currentNodes,
-      activeViewId,
-      _canvasGeneration,
-    } = get();
+    const { clipboard, clipboardEdges, activeViewId, _canvasGeneration } =
+      get();
     const isCurrent = () =>
       get()._hydrated &&
       get().activeViewId === activeViewId &&
@@ -70,13 +64,7 @@ export const createClipboardSlice: StateCreator<
     if (!isCurrent() || clipboard.length === 0) {
       return;
     }
-    if (!(await hasNodeQuota(currentNodes, countCountedNodes(clipboard)))) {
-      return;
-    }
     const latest = get();
-    if (!isCurrent()) {
-      return;
-    }
     const pasted = buildPastedClipboard(
       clipboard,
       clipboardEdges,
@@ -137,9 +125,6 @@ export const createClipboardSlice: StateCreator<
       get()._canvasGeneration === _canvasGeneration;
     const selected = nodes.filter((node) => node.selected);
     if (!isCurrent() || selected.length === 0) {
-      return;
-    }
-    if (!(await hasNodeQuota(nodes, countCountedNodes(selected)))) {
       return;
     }
     const latest = get();

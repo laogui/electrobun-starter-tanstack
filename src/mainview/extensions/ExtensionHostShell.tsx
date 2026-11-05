@@ -109,7 +109,6 @@ export function ExtensionHostShell({
   minHeight,
   minWidth,
   nodeId,
-  onEnable,
   presentation,
   readOnly,
   resizable,
@@ -125,7 +124,6 @@ export function ExtensionHostShell({
   minHeight: number;
   minWidth: number;
   nodeId: string;
-  onEnable?: () => void;
   presentation?: ExtensionPresentation;
   readOnly: boolean;
   resizable: boolean;
@@ -216,7 +214,6 @@ export function ExtensionHostShell({
           <ExtensionFallback
             availability={availability}
             canvasTypeId={canvasTypeId}
-            onEnable={onEnable}
             presentation={presentation}
           />
         ) : (

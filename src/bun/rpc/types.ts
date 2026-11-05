@@ -6,7 +6,6 @@ import type {
 } from '../../shared/ai/providerConfig';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
 import type { NoteChangedEvent } from '../../shared/contentEvents';
-import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
   ExtensionInstanceLoadError,
   ExtensionInstanceRecord,
@@ -25,7 +24,6 @@ import type {
 } from '../../shared/support/reports';
 import type { OpenAttachmentResult } from '../attachments';
 import type { UnlinkedFileEntry } from '../cleanup';
-import type { LicenseInfo } from '../license';
 import type { ManifestEdge, ManifestNode } from '../manifest';
 import type {
   NodeMetadataMap,
@@ -140,20 +138,6 @@ export interface CanvasRPC {
         params: { widgetId: string };
         response: { success: boolean };
       };
-      extensionEnablementList: {
-        params: Record<string, unknown>;
-        response: {
-          disabledCanvasTypes: string[];
-          instanceCounts: Record<string, number>;
-        };
-      };
-      extensionEnablementSetEnabled: {
-        params: { canvasTypeId: string; enabled: boolean };
-        response: {
-          enablement?: ExtensionEnablementFile;
-          success: boolean;
-        };
-      };
       extensionInstanceCreate: {
         params: {
           canvasTypeId: string;
@@ -196,10 +180,6 @@ export interface CanvasRPC {
               success: true;
             }
           | { success: false };
-      };
-      extensionInstanceClearType: {
-        params: { canvasTypeId: string };
-        response: { deleted: number; success: boolean };
       };
       extensionSchedulerSchedule: {
         params: {
@@ -452,14 +432,6 @@ export interface CanvasRPC {
       checkForUpdate: {
         params: Record<string, unknown>;
         response: UpdateCheckResponse;
-      };
-      checkLicense: {
-        params: Record<string, unknown>;
-        response: LicenseInfo;
-      };
-      activateLicense: {
-        params: { key: string };
-        response: { success: boolean; error?: string };
       };
       getLocalHttpEndpoint: {
         params: Record<string, unknown>;

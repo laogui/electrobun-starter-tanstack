@@ -2,7 +2,6 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { memo, useEffect, useMemo } from 'react';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type { ExtensionNodeData } from '../../shared/extensions/protocol';
@@ -27,16 +26,9 @@ function ExtensionNodeComponent({
   const canvasTypeId = data.canvasTypeId;
   const instanceId = data.instanceId;
   const record = useExtensionInstanceStore((s) => s.records[instanceId]);
-  const disabledCanvasTypes = useExtensionEnablementStore(
-    (s) => s.disabledCanvasTypes
-  );
-  const setEnabled = useExtensionEnablementStore((s) => s.setEnabled);
   const locale = useAppSettingsStore((s) => s.locale);
   const canvasType = canvasTypeRegistry.get(canvasTypeId);
-  const availability = canvasTypeRegistry.availability(
-    canvasTypeId,
-    disabledCanvasTypes
-  );
+  const availability = canvasTypeRegistry.availability(canvasTypeId);
 
   const host = useMemo(
     () => createExtensionHostApi({ canvasTypeId, instanceId, nodeId: id }),
@@ -90,9 +82,6 @@ function ExtensionNodeComponent({
       minHeight={minHeight}
       minWidth={minWidth}
       nodeId={id}
-      onEnable={() => {
-        setEnabled(canvasTypeId, true).catch(() => undefined);
-      }}
       presentation={presentation}
       readOnly={availability !== 'available'}
       resizable={canvasType?.surface.resizable ?? true}

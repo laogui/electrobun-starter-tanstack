@@ -4,7 +4,6 @@ import {
   searchKindForCanvasType,
   widgetKindForCanvasType,
 } from '../shared/extensions/builtinIds';
-import { isCanvasTypeEnabled } from '../shared/extensions/enablement';
 import { isExtensionInstanceLoadError } from '../shared/extensions/instance';
 import type {
   SearchContentReference,
@@ -15,7 +14,6 @@ import type {
 } from '../shared/searchTypes';
 import { blocksToPlainText } from './blocknotePreview';
 import { FS_CONCURRENCY, mapWithConcurrency } from './concurrency';
-import { loadExtensionEnablement } from './extensions/enablement';
 import { loadExtensionInstances } from './extensions/instanceStore';
 import { loadManifest, type ManifestEdge, type ManifestNode } from './manifest';
 import { loadAllMetadata, type NodeMetadata } from './nodeMetadata';
@@ -823,7 +821,6 @@ async function scanExtensionInstances(
   if (instanceIdToNodes.size === 0) {
     return;
   }
-  const enablement = await loadExtensionEnablement(wsPath);
   const records = await loadExtensionInstances(wsPath, [
     ...instanceIdToNodes.keys(),
   ]);
@@ -837,12 +834,6 @@ async function scanExtensionInstances(
       { field: 'subtitle', value: presentation.subtitle ?? '' },
       { field: 'content', value: presentation.plainText ?? '' },
     ];
-    const availability = isCanvasTypeEnabled(
-      record.canvasTypeId,
-      enablement.disabledCanvasTypes
-    )
-      ? 'available'
-      : 'disabled';
     const kind = searchKindForCanvasType(record.canvasTypeId);
     const widgetKind = widgetKindForCanvasType(record.canvasTypeId);
     for (const { field, value } of candidates) {
@@ -873,7 +864,6 @@ async function scanExtensionInstances(
           extension: {
             canvasTypeId: record.canvasTypeId,
             instanceId,
-            availability,
           },
         });
       }

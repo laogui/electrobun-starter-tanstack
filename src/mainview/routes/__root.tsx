@@ -1,6 +1,6 @@
 import { TanStackDevtools } from '@tanstack/react-devtools';
 import { formDevtoolsPlugin } from '@tanstack/react-form-devtools';
-import { type QueryClient, useQuery } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import {
   createRootRouteWithContext,
@@ -16,7 +16,6 @@ import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTitlebarDragReleaseFix } from '@/hooks/useTitlebarDragReleaseFix';
 import { rpcGetSettings, rpcToggleWindowMaximize } from '@/lib/rpc';
-import { refreshLicense } from '@/lib/rpc-license';
 import type { AppSettings, FontFamilySetting } from '@/settingsClient';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -84,11 +83,6 @@ function RootDocument() {
     },
     []
   );
-  useQuery({
-    queryKey: ['license-status'],
-    queryFn: refreshLicense,
-  });
-
   // Centralized settings application: theme via better-themes, locale via
   // paraglide, fontFamily via inline style on <html>, and the rest stored
   // in `useAppSettingsStore` so nested components (FocusedView,

@@ -25,9 +25,3 @@ export const HIDDEN_CREATE_CANVAS_TYPE_IDS: ReadonlySet<string> = new Set([
   REMINDER_CANVAS_TYPE_ID,
   RECORDING_CANVAS_TYPE_ID,
 ]);
-
-/** Settings → Canvas types (per-type enable toggles). */
-export const SHOW_CANVAS_TYPES_SETTINGS = false;
-
-/** Free-tier node cap and license UI. Off: everything is free. */
-export const LICENSE_QUOTA_ENABLED = false;

@@ -55,7 +55,6 @@ import { POPOVER_EXIT, POPOVER_SPRING } from '@/lib/motion';
 import { buildTopicIndex } from '@/lib/topicTree';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -125,12 +124,7 @@ const getCanvasItems = (
     icon: Plus,
     submenu: getCreatableMenuItems(
       'short',
-      getCanvasTypeMenuItems(
-        canvasTypeRegistry.listEnabled(
-          useExtensionEnablementStore.getState().disabledCanvasTypes
-        ),
-        resolveExtensionMessage
-      )
+      getCanvasTypeMenuItems(canvasTypeRegistry.list(), resolveExtensionMessage)
     ).map((item) => ({
       id: `new-${item.id}`,
       label: item.label,

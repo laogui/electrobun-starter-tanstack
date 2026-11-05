@@ -16,7 +16,6 @@ import type {
 import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 import { isExtensionInstanceLoadError } from '../../../../shared/extensions/instance';
@@ -241,16 +240,9 @@ export function FocusedItemBody({
   const extensionRecord = useExtensionInstanceStore((s) =>
     extensionInstanceId ? s.records[extensionInstanceId] : undefined
   );
-  const disabledCanvasTypes = useExtensionEnablementStore(
-    (s) => s.disabledCanvasTypes
-  );
-  const setExtensionEnabled = useExtensionEnablementStore((s) => s.setEnabled);
   const locale = useAppSettingsStore((s) => s.locale);
   const extensionAvailability = extensionCanvasTypeId
-    ? canvasTypeRegistry.availability(
-        extensionCanvasTypeId,
-        disabledCanvasTypes
-      )
+    ? canvasTypeRegistry.availability(extensionCanvasTypeId)
     : 'unknown';
   const extensionLoaded = Boolean(
     extensionRecord && !isExtensionInstanceLoadError(extensionRecord)
@@ -309,9 +301,6 @@ export function FocusedItemBody({
     const fallbackAvailability = extensionLoaded
       ? shellAvailability
       : 'corrupted';
-    const enable = () => {
-      setExtensionEnabled(extensionCanvasTypeId, true).catch(() => undefined);
-    };
     return (
       <ExtensionHostShell
         availability={shellAvailability}
@@ -320,7 +309,6 @@ export function FocusedItemBody({
         minHeight={0}
         minWidth={0}
         nodeId={node.id}
-        onEnable={enable}
         presentation={presentation}
         readOnly={extensionAvailability !== 'available' || !extensionCompatible}
         resizable={false}
@@ -353,7 +341,6 @@ export function FocusedItemBody({
           <ExtensionFallback
             availability={fallbackAvailability}
             canvasTypeId={extensionCanvasTypeId}
-            onEnable={enable}
             presentation={presentation}
           />
         )}

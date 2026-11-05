@@ -1,6 +1,3 @@
-import { useState } from 'react';
-import { LicenseActivationDialog } from '@/components/LicenseActivationDialog';
-import { LicenseStatusCard } from '@/components/LicenseStatusCard';
 import {
   Select,
   SelectContent,
@@ -9,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { LICENSE_QUOTA_ENABLED } from '@/lib/productScope';
 import {
   type AppSettings,
   AUTO_SAVE_INTERVAL_OPTIONS,
@@ -18,7 +14,6 @@ import {
   type LocaleSetting,
   type ThemeSetting,
 } from '@/settingsClient';
-import * as m from '../../../../paraglide/messages.js';
 import type { SettingsLocaleStrings } from '../i18n/getLocaleStrings';
 
 interface SelectOption<TValue extends string> {
@@ -118,8 +113,6 @@ export function GeneralPanel({
   settings,
   strings,
 }: GeneralPanelProps) {
-  const [showLicenseDialog, setShowLicenseDialog] = useState(false);
-
   const themeOptions: SelectOption<ThemeSetting>[] = [
     { label: strings.system, value: 'system' },
     { label: strings.light, value: 'light' },
@@ -153,18 +146,6 @@ export function GeneralPanel({
   return (
     <div className="space-y-5">
       <PanelHeading>{strings.generalTitle}</PanelHeading>
-
-      {/* License Status */}
-      {LICENSE_QUOTA_ENABLED ? (
-        <div className="space-y-2">
-          <h3 className="font-medium text-gray-700 text-sm dark:text-gray-300">
-            {m.settings_license_heading()}
-          </h3>
-          <LicenseStatusCard
-            onActivateClick={() => setShowLicenseDialog(true)}
-          />
-        </div>
-      ) : null}
 
       <div className="space-y-4">
         <SettingsSelect
@@ -234,16 +215,6 @@ export function GeneralPanel({
           </p>
         ) : null}
       </div>
-
-      {/* License Activation Dialog */}
-      <LicenseActivationDialog
-        onClose={() => setShowLicenseDialog(false)}
-        onSuccess={() => {
-          // 刷新许可证状态
-          window.location.reload();
-        }}
-        open={showLicenseDialog}
-      />
     </div>
   );
 }

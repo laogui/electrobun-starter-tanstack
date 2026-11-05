@@ -1,20 +1,13 @@
 import { getAppInfoData } from '../../appLifecycle';
 import { trackedClone } from '../../cloneReceipts';
 import {
-  loadExtensionEnablement,
-  setCanvasTypeEnabled,
-} from '../../extensions/enablement';
-import {
   cloneExtensionInstance,
-  countInstancesByCanvasType,
   createExtensionInstance,
-  deleteInstancesByCanvasType,
   loadExtensionInstances,
   updateExtensionInstance,
 } from '../../extensions/instanceStore';
 import {
   cancelExtensionTask,
-  cancelExtensionTasksByInstance,
   ExtensionTaskFileError,
   listExtensionTasks,
   scheduleExtensionTask,
@@ -25,13 +18,10 @@ import type { RpcRequestHandlers } from '../types';
 export function createExtensionsHandlers(
   ctx: RpcContext
 ): RpcRequestHandlers<
-  | 'extensionEnablementList'
-  | 'extensionEnablementSetEnabled'
   | 'extensionInstanceCreate'
   | 'extensionInstanceLoadMany'
   | 'extensionInstanceUpdate'
   | 'extensionInstanceClone'
-  | 'extensionInstanceClearType'
   | 'extensionSchedulerSchedule'
   | 'extensionSchedulerCancel'
   | 'extensionSchedulerAck'
@@ -39,29 +29,6 @@ export function createExtensionsHandlers(
 > {
   const { wsPath, extensionScheduler } = ctx;
   return {
-    extensionEnablementList: async () => {
-      const enablement = await loadExtensionEnablement(wsPath);
-      const instanceCounts = await countInstancesByCanvasType(wsPath);
-      return {
-        disabledCanvasTypes: enablement.disabledCanvasTypes,
-        instanceCounts,
-      };
-    },
-
-    extensionEnablementSetEnabled: async ({ canvasTypeId, enabled }) => {
-      try {
-        const enablement = await setCanvasTypeEnabled(
-          wsPath,
-          canvasTypeId,
-          enabled
-        );
-        return { success: true, enablement };
-      } catch (error) {
-        console.error('[extensions] setEnabled failed', error);
-        return { success: false };
-      }
-    },
-
     extensionInstanceCreate: async ({
       canvasTypeId,
       dataVersion,
@@ -133,17 +100,6 @@ export function createExtensionsHandlers(
       } catch (error) {
         console.error('[extensions] clone instance failed', error);
         return { success: false };
-      }
-    },
-
-    extensionInstanceClearType: async ({ canvasTypeId }) => {
-      try {
-        const deleted = await deleteInstancesByCanvasType(wsPath, canvasTypeId);
-        await cancelExtensionTasksByInstance(wsPath, deleted);
-        return { success: true, deleted: deleted.length };
-      } catch (error) {
-        console.error('[extensions] clear type data failed', error);
-        return { success: false, deleted: 0 };
       }
     },
 

@@ -47,7 +47,6 @@ import {
   rpcRestoreView,
 } from '@/lib/rpc';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import * as m from '../../../paraglide/messages.js';
 import {
   IMAGE_CANVAS_TYPE_ID,
@@ -602,15 +601,9 @@ export function ViewSwitcher({
   // "more" (folder / group / file / checklist). Common are the everyday
   // entry points; everything else is one section header away to keep the
   // popup scannable. F4 in the product detail roadmap.
-  const disabledCanvasTypes = useExtensionEnablementStore(
-    (s) => s.disabledCanvasTypes
-  );
   const createMenuItems = getCreatableMenuItems(
     'short',
-    getCanvasTypeMenuItems(
-      canvasTypeRegistry.listEnabled(disabledCanvasTypes),
-      resolveExtensionMessage
-    )
+    getCanvasTypeMenuItems(canvasTypeRegistry.list(), resolveExtensionMessage)
   );
   const commonCreateItems = createMenuItems.filter((item) =>
     COMMON_CREATE_IDS.has(item.id)

@@ -7,7 +7,7 @@ export type HostCapability =
   | 'external'
   | 'network';
 
-export type ExtensionAvailability = 'available' | 'disabled' | 'unknown';
+export type ExtensionAvailability = 'available' | 'unknown';
 
 export type ExtensionHistoryMode = 'record' | 'ephemeral';
 
@@ -142,7 +142,6 @@ export interface GhostBoardHostAPI {
 }
 
 export interface ExtensionSearchMetadata {
-  availability: ExtensionAvailability;
   canvasTypeId: string;
   instanceId: string;
 }

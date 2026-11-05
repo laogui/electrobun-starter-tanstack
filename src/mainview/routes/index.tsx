@@ -74,7 +74,6 @@ import { cn } from '@/lib/utils';
 import type { WidgetKind } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
@@ -715,10 +714,6 @@ function CanvasComponent() {
       const def = canvasTypeRegistry.get(canvasTypeId);
       if (!def) {
         toast.error(resolveExtensionMessage('toast_extension_unknown_type'));
-        return;
-      }
-      if (!useExtensionEnablementStore.getState().isEnabled(canvasTypeId)) {
-        toast.error(resolveExtensionMessage('toast_extension_type_disabled'));
         return;
       }
       const presentation = def.buildPresentation(

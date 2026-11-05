@@ -11,10 +11,6 @@ vi.mock('sonner', () => {
   });
   return { toast };
 });
-vi.mock('@/lib/rpc-license', () => ({
-  getCachedLicense: vi.fn(() => ({ activated: false })),
-  refreshLicense: vi.fn(async () => ({ activated: false })),
-}));
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   rpcDeleteNote: vi.fn(async () => ({ success: true })),

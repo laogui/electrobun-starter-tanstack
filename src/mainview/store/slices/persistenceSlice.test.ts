@@ -7,10 +7,6 @@ vi.mock('sonner', () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast };
 });
-vi.mock('@/lib/rpc-license', () => ({
-  getCachedLicense: vi.fn(() => ({ activated: true })),
-  refreshLicense: vi.fn(async () => ({ activated: true })),
-}));
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   isRpcAvailable: vi.fn(async () => true),

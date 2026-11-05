@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
-import { closeFocusedView } from '@/lib/focusedItem';
+import { closeFocusedView, openFocusedItem } from '@/lib/focusedItem';
 import { pickFile } from '@/lib/pickFile';
 import {
   rpcCancelExtensionTask,
@@ -76,7 +76,7 @@ export function createExtensionHostApi(input: {
         if (!nodeId) {
           return;
         }
-        const { nodes, setFocusedNode } = useCanvasStore.getState();
+        const { nodes } = useCanvasStore.getState();
         if (folderId) {
           const folder = nodes.find((entry) => entry.id === folderId);
           const children =
@@ -102,7 +102,7 @@ export function createExtensionHostApi(input: {
           ).find(
             (element) => element.dataset.folderExpandedVisualId === child.id
           );
-          setFocusedNode({
+          openFocusedItem({
             id: child.id,
             type: child.type,
             data: child.data,
@@ -117,7 +117,7 @@ export function createExtensionHostApi(input: {
         }
         const el = document.querySelector(`[data-id="${nodeId}"]`);
         const rect = el?.getBoundingClientRect() ?? new DOMRect();
-        setFocusedNode({
+        openFocusedItem({
           id: nodeId,
           type: node.type ?? 'extension',
           data: (node.data ?? {}) as Record<string, unknown>,

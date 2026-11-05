@@ -52,7 +52,7 @@
 
 ## 阶段 1：卡片改在右侧边栏打开，删除转场体系（第 2～6 天）
 
-> **进度（2026-11-05）**：主体已完成，见 slim-changes 第 6 行。已做：`CardSidePanel.tsx`（侧边栏、拖边调宽 360～720 记在本机、全屏写作、看大图灯箱）、`focused/FocusedItemBody.tsx`（从 946 行的 FocusedView 拆出的内容组件）、`lib/focusedItem.ts`（统一打开 / 关闭入口，保留保存冲突保护）、`lib/sidePanelGeometry.ts`（被挡住时自动平移）；单击选中、双击或 `Enter` 打开（Sticky 同样改为双击编辑，Topic 不变）；删除 `focusTransition/`、FocusedView、FocusedViewHost、`.gb-vt-focus` 样式和 focus-transition-variants.md。与上面规格的差异：宽度记在 localStorage 而不是应用设置；`FocusedNotePreview` 保留，作为编辑器加载前的占位，避免白闪。**未做**：插件运行时按需启动（并入阶段 3）。Linux 沙箱已手动走通打开、替换、全屏、看大图、Esc、删除即关、撤销、`[]` 任务列表；未在 Mac 上跑。
+> **进度（2026-11-05）**：主体已完成，见 slim-changes 第 6 行。已做：`CardSidePanel.tsx`（侧边栏、拖边调宽 360～720 记在本机、全屏写作、看大图灯箱）、`focused/FocusedItemBody.tsx`（从 946 行的 FocusedView 拆出的内容组件）、`lib/focusedItem.ts`（统一打开 / 关闭入口，保留保存冲突保护）、`lib/sidePanelGeometry.ts`（被挡住时自动平移）；单击选中、双击或 `Enter` 打开（Sticky 同样改为双击编辑，Topic 不变）；删除 `focusTransition/`、FocusedView、FocusedViewHost、`.gb-vt-focus` 样式和 focus-transition-variants.md。与上面规格的差异：宽度记在 localStorage 而不是应用设置；`FocusedNotePreview` 保留，作为编辑器加载前的占位，避免白闪。剩余入口（文件夹展开子卡、右键菜单、搜索跳转、扩展 `openDetail`）已改走 `openFocusedItem`，文件夹子卡同样单击不打开、双击打开（见 slim-changes 第 7 行）。**未做**：插件运行时按需启动，原因见 1.4 的说明。Linux 沙箱已手动走通打开、替换、全屏、看大图、Esc、删除即关、撤销、`[]` 任务列表；未在 Mac 上跑。
 
 **目标**：打开卡片时画布不被挡住，可以边看边写。删掉形变动画和它带来的一整套代码。
 
@@ -93,6 +93,8 @@
 - 规则写进 `docs/quality/motion.md`。其他地方的动画盘点放到阶段 3，按需要再做。
 
 ### 1.4 顺带：插件运行时按需启动（半天）
+
+> **暂缓（2026-11-05）**：动手前发现插件运行时不只服务插件。`connectPluginHostEvents` 要靠运行时轮询拿到的 `workspaceId` 才会工作，而它负责 `unifiedUndoHistory.setContext`（统一撤销的上下文）、主进程推来的笔记内容变更同步和笔记引用保护；主进程的启动保护也要等渲染端回 `/plugins/startup-ready`，收不到下次启动会进安全模式。直接改成“没插件就不加载”会弄坏撤销。要做得先把 `workspaceId` 和这几项从插件运行时里拆出来，工作量超过半天，按阶段 3 的规则等 Mac 实测证明启动慢再做。
 
 [main.tsx](../src/mainview/main.tsx) 现在无条件启动插件运行时。改为先问主进程有没有已安装的插件，**有才** `import('./plugins/runtime')` 并启动，`PluginWorkbench` 改成懒加载。已装插件照常可用。
 

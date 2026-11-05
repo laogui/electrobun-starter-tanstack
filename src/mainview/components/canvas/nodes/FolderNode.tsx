@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef } from 'react';
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { openFocusedItem } from '@/lib/focusedItem';
 import {
   type FolderChildEntry,
   type FolderExpandedChildData,
@@ -17,7 +18,6 @@ import {
 } from '@/lib/folderExpansion';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
-import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 
@@ -427,8 +427,6 @@ const FolderNode = ({
   id: string;
   width?: number | null;
 }) => {
-  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
-
   const handleMenuClick = useCallback((e: React.MouseEvent) => {
     // Trigger the node context menu by dispatching a contextmenu event on
     // the node DOM element, so the React Flow onNodeContextMenu fires.
@@ -453,10 +451,13 @@ const FolderNode = ({
       item: FolderExpandedChildData
     ) => {
       event.stopPropagation();
-      if (data.isClosing) {
+      // Same click model as the canvas: a single click does nothing here
+      // (the child is selected through its own flow node); a double-click
+      // opens it in the side panel.
+      if (data.isClosing || event.detail < 2) {
         return;
       }
-      // Widgets edit in place; only note-like kinds open FocusedView.
+      // Widgets edit in place; only note-like kinds open in the side panel.
       if (
         !isFocusableNode(
           item.child.type,
@@ -465,7 +466,7 @@ const FolderNode = ({
       ) {
         return;
       }
-      setFocusedNode({
+      openFocusedItem({
         data: item.child.data,
         folderId: id,
         id: item.child.id,
@@ -473,7 +474,7 @@ const FolderNode = ({
         type: item.child.type,
       });
     },
-    [data.isClosing, id, setFocusedNode]
+    [data.isClosing, id]
   );
 
   return (

@@ -1,7 +1,6 @@
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-
 import type { ContextMenuState } from '@/components/canvas/ContextMenu';
 import {
   cycleExtensionColor,
@@ -9,6 +8,7 @@ import {
   runExtensionMenuAction,
 } from '@/extensions/hostMenu';
 import { runAISummarize } from '@/lib/ai/runAISummarize';
+import { revealNodeBesidePanel } from '@/lib/canvasFocus';
 import { isFocusableNode, isLockedNode } from '@/lib/canvasNodePredicates';
 import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { CARD_COLORS, STICKY_COLORS } from '@/lib/colorUtils';
@@ -20,6 +20,7 @@ import {
   type CanvasCreateRequest,
   resolveCreatableKind,
 } from '@/lib/creatableNodes';
+import { openFocusedItem } from '@/lib/focusedItem';
 import type { FolderChildEntry } from '@/lib/folderExpansion';
 import {
   buildImportedCardCreateOptions,
@@ -112,7 +113,6 @@ export function useContextMenu({
   onRequestCreateCanvasType,
   rfInstance,
 }: UseContextMenuOptions) {
-  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
   const deleteEdge = useCanvasStore((s) => s.deleteEdge);
@@ -281,7 +281,7 @@ export function useContextMenu({
             ) {
               return;
             }
-            setFocusedNode({
+            openFocusedItem({
               id: folderChild.id,
               type: folderChild.type,
               data: childData,
@@ -607,14 +607,18 @@ export function useContextMenu({
             const node = nodes.find((n) => n.id === nodeId);
             if (
               node &&
-              isFocusableNode(node.type, node.data as Record<string, unknown>)
-            ) {
-              setFocusedNode({
+              isFocusableNode(
+                node.type,
+                node.data as Record<string, unknown>
+              ) &&
+              openFocusedItem({
                 id: nodeId,
                 type: node.type,
                 data: node.data,
                 rect,
-              });
+              })
+            ) {
+              revealNodeBesidePanel(nodeId, rfInstance.current);
             }
           }
           break;
@@ -1041,7 +1045,6 @@ export function useContextMenu({
     [
       contextMenu,
       rfInstance,
-      setFocusedNode,
       setFocusedFolder,
       onDeleteNodes,
       onReplaceNodeFile,

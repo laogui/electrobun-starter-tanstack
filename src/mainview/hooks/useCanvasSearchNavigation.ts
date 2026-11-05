@@ -2,6 +2,7 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import type { RefObject } from 'react';
 import { useEffect, useMemo } from 'react';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { openFocusedItem } from '@/lib/focusedItem';
 import {
   buildFolderExpansionNodes,
   type FolderExpandedChildData,
@@ -171,7 +172,7 @@ export function useCanvasSearchNavigation({
 
       const child = expandedChild.data.child;
       if (isFocusableNode(child.type, child.data)) {
-        setFocusedNode({
+        openFocusedItem({
           id: child.id,
           folderId: folder.id,
           type: child.type,

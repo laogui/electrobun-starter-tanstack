@@ -84,5 +84,5 @@
 
 - 每一步都过了 tsc（无项目内报错）、biome 和相关测试。第 4 步：workspace、canvasPersistence、templates、searchIntegrity 共 41 项通过。
 - 第 12 步：tsc 无报错、vite build 通过、全量 vitest 46 个文件 444 项通过（1 项跳过）。
-- 第 14–16 步：tsc 无报错、biome 通过、vite build 通过、全量 vitest 45 个文件 431 项通过（1 项跳过）。
+- 第 14–16 步：tsc 无报错、biome 通过、vite build 通过、全量 vitest 45 个文件 430 项通过（1 项跳过）。
 - 都**没有在 Mac 上实际运行过**。

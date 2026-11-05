@@ -131,7 +131,7 @@ it('turns a retired checklist instance into a note with a task list', async () =
   });
   const disk = JSON.parse(
     await readFile(join(ws, '.ghostboard/views/default.canvas.json'), 'utf8')
-  );
+  ) as { nodes: unknown[] };
   expect(disk.nodes[0]).toMatchObject({
     id: 'ext',
     type: 'card',

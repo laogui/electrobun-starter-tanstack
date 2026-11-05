@@ -27,7 +27,6 @@ import { CardColorPopover } from '@/components/canvas/CardColorPopover';
 import { CardSidePanelHost } from '@/components/canvas/CardSidePanel';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
-import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
@@ -165,37 +164,6 @@ function CanvasSearchNavigation(
   useCanvasSearchNavigation(props);
   return null;
 }
-
-/** Empty-state overlay with a boolean selector, so the shell does not have to
- *  subscribe to the node list just to know whether it is empty. */
-const CanvasEmptyState = memo(function CanvasEmptyState({
-  onCreateNode,
-  onOpenNoteLibrary,
-}: {
-  onCreateNode: (kind: CreatableCanvasNodeKind) => Promise<unknown>;
-  onOpenNoteLibrary: () => void;
-}) {
-  const isEmpty = useCanvasStore(
-    (s) =>
-      !(
-        (s.topicDraft && s.topicDraft.viewId === s.activeViewId) ||
-        s.nodes.some(
-          (node) => !(node.data as { detached?: unknown } | undefined)?.detached
-        )
-      )
-  );
-  if (!isEmpty) {
-    return null;
-  }
-  return (
-    <EmptyCanvasOverlay
-      onCreateNote={async () => {
-        await onCreateNode('card');
-      }}
-      onOpenNoteLibrary={onOpenNoteLibrary}
-    />
-  );
-});
 
 // The canvas route wires React Flow, drag/drop, keyboard shortcuts, and modals.
 // react-doctor-disable-next-line react-doctor/no-giant-component
@@ -931,11 +899,6 @@ function CanvasComponent() {
           spacePanActive={spacePanActive}
         />
       </div>
-
-      <CanvasEmptyState
-        onCreateNode={onCreateNode}
-        onOpenNoteLibrary={onOpenNoteLibrary}
-      />
 
       <CardSidePanelHost />
       <CardColorPopover />

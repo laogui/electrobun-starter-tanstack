@@ -169,7 +169,9 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
 1. **（0.5 天）先验证**：`@blocknote/server-util` 能否在 Bun 主进程里生成 HTML。
    - 能用：用它替换手写的 [blocknotePreview.ts](../src/bun/blocknotePreview.ts)（409 行），卡片预览和编辑器出自同一套渲染。
    - 不能用：保留手写转换器。它已经是唯一的生成路径，问题不大。
-2. **（新增，必须先做）卡片上的改标题、改颜色改为直接写笔记**。现在这两项是先改节点 data，再由 `saveManifest` → [persistManifestCardNote](../src/bun/canvasHydration.ts) 写回笔记 sidecar。第 5 步停止往节点写笔记字段后，这条路会断，改标题会悄悄失效。改成调用笔记的 RPC，并补测试。
+2. **（新增，必须先做）卡片上的改标题、改颜色改为直接写笔记**。
+   > **核对（2026-11-05）**：笔记卡在画布上没有改标题的入口。标题只在编辑器里改，已经通过 `saveBlockNote` 直接写笔记；画布上的“重命名”只对素材、图片、录音生效，这几类不是笔记。所以这一步实际只剩颜色：`changeNodeColor` 先写节点，再由 `saveManifest` 调 `mergeNoteMeta` 写回笔记。按 4.3，颜色算画布操作，第 5 步之前要先定颜色放哪：继续存在笔记里（改成直接调 RPC），还是改成每张画布各自记录的放置属性（同一篇笔记在两张画布上可以不同色）。不做第 5 步，现在这条路就能用。
+现在这两项是先改节点 data，再由 `saveManifest` → [persistManifestCardNote](../src/bun/canvasHydration.ts) 写回笔记 sidecar。第 5 步停止往节点写笔记字段后，这条路会断，改标题会悄悄失效。改成调用笔记的 RPC，并补测试。
 3. **新增 `store/noteRecordStore.ts`**。`loadCanvas` 的返回值从"把笔记数据合并进节点 data"（[noteRecordToCardData](../src/bun/noteStore.ts#L208-L240)）改成"节点 + 另附一份 `notes` 表"。保存结果、`noteBodySync`、插件 `hostEvents` 都改为更新这个 store。
 4. **读取方改成按 `noteId` 读**：`CardNode`、`NotePreview`、笔记库、搜索结果、导出、AI 总结。过渡期保留"读不到就回退到 `node.data`"的兜底。
 5. **不再往节点 data 里写笔记字段**，然后删掉相关机制：`canvasNoteHistory` 的剥离、补回、缓存逻辑；`noteMetadataProjection` 修改节点的部分；`nodesSlice` 和 `folderSlice` 里对 `NOTE_CONTENT_KEYS` 的判断；`replaceNoteSources`。

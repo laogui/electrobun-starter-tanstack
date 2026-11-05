@@ -11,6 +11,7 @@
 | — | `5c7fa31` | 整改方案按评审调整顺序；PRD-slim 记下“卡片改为侧边栏打开” | 仅文档，见 [`../remediation-plan.md`](../remediation-plan.md) |
 | 5 | `ef05a12` | 整改阶段 0：性能样本脚本、计时打点、基线表与 bug 清单 | 见 [`../quality/`](../quality/perf-baseline.md)；打点默认关闭，不影响用户 |
 | 6 | `73ac03d` | 整改阶段 1：卡片改在右侧边栏打开，删除转场体系；单击选中、双击打开 | 见 [`../remediation-plan.md`](../remediation-plan.md) 阶段 1 进度；恢复：`git revert` 本提交 |
+| 7 | `a444b48` | 阶段 1 收尾：文件夹子卡、右键菜单、搜索跳转、扩展 `openDetail` 统一走 `openFocusedItem`；插件按需启动暂缓 | 4 个文件，+25 / −20；原因见 remediation-plan 1.4 |
 
 原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 

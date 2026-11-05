@@ -18,6 +18,7 @@
 | 10 | `578d757` | 改卡片颜色改为弹出取色器，与画布背景同一套；颜色仍存笔记里 | 新增 `ui/ColorSwatchPanel.tsx`、`canvas/CardColorPopover.tsx`、`store/colorPickerStore.ts`；`useContextMenu` 改为打开取色器；`canvasBackgroundCustoms` 抽出 `loadColorCustoms/saveColorCustoms`；自定义卡片色存 localStorage `ghostboard.card-color-customs` |
 | 11 | `dabfe46` | 分组改颜色也改为弹出取色器：5 种原色调作预设，支持自定义色值 | `GroupNode.tsx` 支持 hex（`group-custom` 类 + `--group-custom`）；`index.css` 新增 `.canvas-group.group-custom`；`CardColorPopover` 新增 group 色板；`useContextMenu` 混选时只改与首项同色板的卡 |
 | 12 | `22ff5c3` | 删除插件系统（用户 2026-11-05 决定）：运行时、主进程宿主、SDK、脚手架、文档站副本、签名与授权、T0–T5 探针、插件 CI、设置页 | 323 个文件，+364 / −39213。笔记保存同步画布改由 `lib/noteChangeSync.ts`（主进程只推 `noteChanged`）；统一撤销只留画布、小组件、扩展实例；删掉笔记意图事务、扩展迁移备份、`createNote` 等只给插件用的 RPC 与 HTTP 路由。恢复：`git revert 22ff5c3` |
+| 13 | `96aca60` | 单击打开卡片，单击/拖拽不再选中，选中只靠框选（用户 2026-11-05 改回 73ac03d 的点击模型） | 单击（双击同效）打开侧边栏、编辑便签、进入文件夹，文件夹子卡也单击打开；`Shift/Cmd+Click` 不再选中；框选后 `Enter` 打开、Delete 删除。新手提示与 PRD 同步。恢复：`git revert 96aca60` |
 
 原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、Checklist 照常显示、搜索、打开。真正删掉的代码是第 2 步的游离笔记侧栏和第 12 步的插件系统（用户 2026-11-05 决定）；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 

@@ -1022,17 +1022,35 @@ function CanvasComponent() {
     [setFocusedFolder]
   );
 
-  // Click model (docs/remediation-plan.md, phase 1): a plain click selects,
-  // a double-click (or Enter) opens. Opening another card while the side
-  // panel shows one replaces it.
+  // Click model (user, 2026-11-05): a click opens the card in the side panel
+  // (or replaces the one shown there) and never selects it; selection comes
+  // only from a marquee drag (see CanvasFlowLayer). Double-click is a
+  // redundant open path for a first click swallowed by the drag threshold.
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const state = useCanvasStore.getState();
       if (state.focusedFolder?.id === node.id && node.type === 'folder') {
         closeFolderWithTransition();
+        return;
       }
+      const isOpenable =
+        node.type === 'folder' ||
+        (isFolderExpandedChildNode(node)
+          ? isFocusableNode(node.data.child.type, node.data.child.data)
+          : isFocusableNode(node.type, node.data as Record<string, unknown>));
+      const openId = isFolderExpandedChildNode(node)
+        ? node.data.child.id
+        : node.id;
+      if (
+        !isOpenable ||
+        state.focusedNode?.id === openId ||
+        state.focusedFolder?.id === node.id
+      ) {
+        return;
+      }
+      openNodeFocusedView(node);
     },
-    [closeFolderWithTransition]
+    [closeFolderWithTransition, openNodeFocusedView]
   );
 
   const onNodeDoubleClick = useCallback(

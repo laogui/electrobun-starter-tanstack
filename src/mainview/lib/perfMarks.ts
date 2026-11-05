@@ -128,7 +128,7 @@ function watchColdStart(): void {
 let pendingOpen: number | null = null;
 
 /**
- * Call where an open request starts (a double-click, Enter, a library or
+ * Call where an open request starts (a click, Enter, a library or
  * search hit). Repeated calls while one is pending are ignored, so it is safe
  * to call from more than one layer of the same open.
  */

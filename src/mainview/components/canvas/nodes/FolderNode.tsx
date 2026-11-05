@@ -451,10 +451,9 @@ const FolderNode = ({
       item: FolderExpandedChildData
     ) => {
       event.stopPropagation();
-      // Same click model as the canvas: a single click does nothing here
-      // (the child is selected through its own flow node); a double-click
-      // opens it in the side panel.
-      if (data.isClosing || event.detail < 2) {
+      // Same click model as the canvas: a click opens the child in the
+      // side panel.
+      if (data.isClosing) {
         return;
       }
       // Widgets edit in place; only note-like kinds open in the side panel.

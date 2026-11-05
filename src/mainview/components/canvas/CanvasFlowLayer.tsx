@@ -29,6 +29,7 @@ import {
   nodeTypes,
 } from '@/lib/canvasConstants';
 import { isPinnedSticky } from '@/lib/canvasNodePredicates';
+import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import {
   buildFolderExpansionNodes,
@@ -186,14 +187,43 @@ function CanvasFlowLayerComponent({
     [closingFolderId, focusedFolderId, nodes]
   );
 
-  // Drop the pure-selection changes a plain node click produces so clicking a
-  // node opens it without selecting it. Batches that also carry position/
-  // dimension changes (drags, resizes) and marquee/modifier selections pass
-  // through untouched. A dropped batch clears the flag; mixed batches (e.g.
-  // drags) leave it set, but that is harmless — the next pointerdown resets it
-  // before any selection change can be misattributed.
+  // Click model: a click on a card opens it and never selects it; selection
+  // comes only from a marquee drag on the pane. React Flow still emits a
+  // select-only batch when a card is pressed, so a press on a node arms this
+  // flag and that batch is dropped (clearing any marquee selection instead).
+  // The flag disarms right after the click finishes, so keyboard or marquee
+  // selections later are never mistaken for it.
+  const suppressClickSelectRef = useRef(false);
+  const onPointerDownCapture = useCallback((event: React.PointerEvent) => {
+    const onNode = Boolean(
+      (event.target as Element | null)?.closest?.('.react-flow__node')
+    );
+    suppressClickSelectRef.current = onNode;
+    if (!onNode) {
+      return;
+    }
+    window.addEventListener(
+      'pointerup',
+      () => {
+        setTimeout(() => {
+          suppressClickSelectRef.current = false;
+        }, 0);
+      },
+      { once: true }
+    );
+  }, []);
+
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      if (
+        suppressClickSelectRef.current &&
+        changes.length > 0 &&
+        changes.every((change) => change.type === 'select')
+      ) {
+        suppressClickSelectRef.current = false;
+        clearCanvasGraphSelection();
+        return;
+      }
       onNodesChange(changes);
     },
     [onNodesChange]
@@ -477,6 +507,7 @@ function CanvasFlowLayerComponent({
       fitView={!sessionViewport}
       maxZoom={4}
       minZoom={0.1}
+      multiSelectionKeyCode={null}
       nodes={displayNodes}
       nodesDraggable={interactive}
       nodesFocusable={false}
@@ -500,11 +531,13 @@ function CanvasFlowLayerComponent({
       onNodesChange={handleNodesChange}
       onPaneClick={onPaneClick}
       onPaneContextMenu={onPaneContextMenu}
+      onPointerDownCapture={onPointerDownCapture}
       panOnDrag={spacePanActive}
       panOnScroll={true}
       proOptions={REACT_FLOW_PRO_OPTIONS}
       selectionMode={SelectionMode.Partial}
       selectionOnDrag={interactive}
+      selectNodesOnDrag={false}
       style={{ backgroundColor: canvasBackground }}
       zoomOnDoubleClick={false}
       zoomOnPinch={true}

@@ -13,6 +13,7 @@
 | 6 | `73ac03d` | 整改阶段 1：卡片改在右侧边栏打开，删除转场体系；单击选中、双击打开 | 见 [`../remediation-plan.md`](../remediation-plan.md) 阶段 1 进度；恢复：`git revert` 本提交 |
 | 7 | `a444b48` | 阶段 1 收尾：文件夹子卡、右键菜单、搜索跳转、扩展 `openDetail` 统一走 `openFocusedItem`；插件按需启动暂缓 | 4 个文件，+25 / −20；原因见 remediation-plan 1.4 |
 | — | `4b5effc` + `3158b8f` | 整改方案：更正 1.4 关于撤销的说法；新增 4.3 撤销对齐 Heptabase | 仅文档，见 [`../remediation-plan.md`](../remediation-plan.md) |
+| 8 | `4096020` | 撤销 4.3 第一步：卡片颜色算画布操作，可撤销 | `canvasNoteHistory.ts` 新增 `HISTORY_NOTE_KEYS`；`nodesSlice`、`folderSlice` 改用它；`canvasStore.test.ts` +2 项 |
 
 原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 

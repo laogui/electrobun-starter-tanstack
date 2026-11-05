@@ -2,20 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TransactionRecoveryEntry } from '../shared/transactionRecovery';
-import {
-  inspectNoteTransaction,
-  NOTE_INTENT_PATH,
-  readOptionalText,
-  retryNoteRecovery,
-  withNoteWorkspace,
-} from './noteTransactions';
+import { readOptionalText, withNoteWorkspace } from './noteTransactions';
 import {
   FILE_JOURNAL,
   inspectWorkspaceFileJournal,
   recoverWorkspaceFileJournal,
 } from './workspaceFileJournal';
 
-const files = { canvas: FILE_JOURNAL, notes: NOTE_INTENT_PATH } as const;
+const files = { canvas: FILE_JOURNAL } as const;
 const tokenFor = (raw: string) =>
   createHash('sha256').update(raw).digest('hex');
 export async function listTransactionRecovery(
@@ -36,9 +30,7 @@ export async function listTransactionRecovery(
         let conflicts: string[] = [];
         let error: string | undefined;
         try {
-          conflicts = await (id === 'canvas'
-            ? inspectWorkspaceFileJournal(workspace, raw)
-            : inspectNoteTransaction(workspace, raw));
+          conflicts = await inspectWorkspaceFileJournal(workspace, raw);
         } catch (cause) {
           error = cause instanceof Error ? cause.message : String(cause);
         }
@@ -65,11 +57,7 @@ export async function resolveTransactionRecovery(
       }
       if (action === 'retry') {
         try {
-          if (id === 'canvas') {
-            await recoverWorkspaceFileJournal(workspace);
-          } else {
-            await retryNoteRecovery(workspace);
-          }
+          await recoverWorkspaceFileJournal(workspace);
           return { success: true };
         } catch {
           return { success: false };

@@ -2,10 +2,9 @@ import { isRpcValidationFailure } from '../../shared/rpcFailure';
 
 export const RPC_MAX_WAIT_MS = 30 * 60_000;
 const INTERACTIVE_REQUEST =
-  /^(import|export|select|pick|choose|switchWorkspace)|^pluginPrepare.*(File|Directory)|^pluginFilesPick/;
-const WRITE_REQUEST =
-  /^(save|create|delete|restore|quarantine|resolve|pluginCommit|pluginRollback)/;
-const AI_REQUEST = /^(ai|pluginPrepare)/;
+  /^(import|export|select|pick|choose|switchWorkspace)/;
+const WRITE_REQUEST = /^(save|create|delete|restore|quarantine|resolve)/;
+const AI_REQUEST = /^ai/;
 export class RpcTimeoutError extends Error {
   readonly method: string;
   constructor(method: string) {

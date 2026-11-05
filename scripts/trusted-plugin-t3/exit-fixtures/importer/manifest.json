@@ -1,9 +1,0 @@
-{
-  "manifestVersion": 2,
-  "id": "t3.exit.importer",
-  "name": "T3 independent CSV importer",
-  "version": "0.1.0",
-  "engines": { "ghostboard": ">=1.0.0 <2.0.0" },
-  "entrypoints": { "app": "app.js" },
-  "capabilities": ["files"]
-}

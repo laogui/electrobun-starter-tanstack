@@ -39,6 +39,10 @@ import type {
   WorkspaceInfo,
 } from '@/settingsClient';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
+import {
+  NOTE_CHANGED_EVENT,
+  type NoteChangedEvent,
+} from '../../shared/contentEvents';
 import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
   ExtensionInstanceLoadError,
@@ -46,25 +50,6 @@ import type {
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
-import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
-import type {
-  PluginDirectoryListRequest,
-  PluginDirectoryListResult,
-  PluginFilePickRequest,
-  PluginFilePickResult,
-  PluginFileReadRequest,
-  PluginFileReadResult,
-  PluginFileReleaseRequest,
-} from '../../shared/plugins/files';
-import type {
-  InstalledPluginSummary,
-  PluginInstallCommitResult,
-  PluginInstallPreparationResult,
-  PluginMigrationRestoreResult,
-  PluginSafeModePreparationResult,
-  PluginSafeModeState,
-  PluginUpdatePreparationResult,
-} from '../../shared/plugins/management';
 import type {
   DiagnosticsStatus,
   FeedbackInput,
@@ -140,9 +125,9 @@ async function initElectrobun(): Promise<ElectrobunClient | null> {
               })
             );
           },
-          pluginContentChanged: (event: HostContentChangedEvent) => {
+          noteChanged: (event: NoteChangedEvent) => {
             globalThis.dispatchEvent(
-              new CustomEvent('plugin-content-changed', { detail: event })
+              new CustomEvent(NOTE_CHANGED_EVENT, { detail: event })
             );
           },
           extensionTaskFired: (delivery: ExtensionTaskDelivery) => {
@@ -251,7 +236,7 @@ export async function rpcListTransactionRecovery(): Promise<
   return eb?.rpc ? eb.rpc.request.listTransactionRecovery({}) : [];
 }
 export async function rpcResolveTransactionRecovery(
-  id: 'canvas' | 'notes',
+  id: 'canvas',
   token: string,
   action: 'retry' | 'quarantine'
 ): Promise<{ success: boolean; archivedFile?: string }> {
@@ -398,227 +383,6 @@ export async function rpcDeleteWidget(widgetId: string) {
     return { success: false };
   }
   return eb.rpc.request.deleteWidget({ widgetId });
-}
-
-export async function rpcListPluginPackages(): Promise<{
-  available: boolean;
-  plugins: InstalledPluginSummary[];
-  safeMode: PluginSafeModeState;
-}> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return {
-      available: false,
-      plugins: [],
-      safeMode: { active: false, nextStart: 'normal' },
-    };
-  }
-  return { available: true, ...(await eb.rpc.request.pluginInstallList({})) };
-}
-
-export async function rpcPrepareNormalPluginStart(): Promise<PluginSafeModePreparationResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  return eb.rpc.request.pluginSafeModePrepareNormalStart({});
-}
-
-export async function rpcPreparePluginInstallFromFile(): Promise<PluginInstallPreparationResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  return eb.rpc.request.pluginPrepareInstallFromFile({});
-}
-
-export async function rpcPreparePluginDevelopmentDirectory(): Promise<PluginInstallPreparationResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  return eb.rpc.request.pluginPrepareDevelopmentDirectory({});
-}
-
-export async function rpcPreparePluginInstallFromUrl(
-  url: string
-): Promise<PluginInstallPreparationResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  return eb.rpc.request.pluginPrepareInstallFromUrl({ url });
-}
-
-export async function rpcPreparePluginUpdate(input: {
-  digest: string;
-  pluginId: string;
-}): Promise<PluginUpdatePreparationResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  return eb.rpc.request.pluginPrepareUpdate(input);
-}
-
-export async function rpcCommitPluginInstall(
-  transactionId: string
-): Promise<PluginInstallCommitResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginCommitInstall({ transactionId });
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcCancelPluginInstall(
-  transactionId: string
-): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginCancelInstall({ transactionId });
-}
-
-export async function rpcEnablePlugin(input: {
-  digest: string;
-  pluginId: string;
-}): Promise<PluginInstallCommitResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginEnable(input);
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcDisablePlugin(input: {
-  digest: string;
-  pluginId: string;
-}): Promise<PluginInstallCommitResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginDisable(input);
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcRemovePlugin(input: {
-  digest: string;
-  pluginId: string;
-}): Promise<{ success: boolean; error?: string }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginRemove(input);
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcRollbackPlugin(input: {
-  digest: string;
-  pluginId: string;
-}): Promise<PluginInstallCommitResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginRollback(input);
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcRestorePluginMigrationBackup(
-  pluginId: string
-): Promise<PluginMigrationRestoreResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin management is unavailable.' };
-  }
-  const result = await eb.rpc.request.pluginRestoreMigrationBackup({
-    pluginId,
-  });
-  if (result?.success) {
-    globalThis.dispatchEvent(new Event('plugins-changed'));
-  }
-  return result;
-}
-
-export async function rpcPickPluginFiles(
-  request: PluginFilePickRequest
-): Promise<PluginFilePickResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin file service is unavailable.' };
-  }
-  return eb.rpc.request.pluginFilesPick(request);
-}
-
-export async function rpcListPluginPermissions(): Promise<
-  import('../../bun/plugins/permissions').PluginPermissionGrant[]
-> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return [];
-  }
-  return (await eb.rpc.request.pluginPermissionsList({})).grants ?? [];
-}
-export async function rpcRevokePluginPermission(
-  pluginId: string,
-  permission?: string
-): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginPermissionsRevoke({ pluginId, permission });
-}
-
-export async function rpcReadPluginFileText(
-  request: PluginFileReadRequest
-): Promise<PluginFileReadResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin file service is unavailable.' };
-  }
-  return eb.rpc.request.pluginFilesReadText(request);
-}
-
-export async function rpcListPluginDirectory(
-  request: PluginDirectoryListRequest
-): Promise<PluginDirectoryListResult> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false, error: 'Plugin file service is unavailable.' };
-  }
-  return eb.rpc.request.pluginFilesListDirectory(request);
-}
-
-export async function rpcReleasePluginFiles(
-  request: PluginFileReleaseRequest
-): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.pluginFilesRelease(request);
 }
 
 export async function rpcListExtensionEnablement(): Promise<{
@@ -829,18 +593,6 @@ export async function rpcSaveBlockNote(
       revision,
     })
   );
-}
-
-export async function rpcCreateNote(
-  id: string,
-  title: string,
-  displayHint: string
-) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return null;
-  }
-  return eb.rpc.request.createNote({ id, title, displayHint });
 }
 
 export async function rpcDeleteNote(noteId: string) {

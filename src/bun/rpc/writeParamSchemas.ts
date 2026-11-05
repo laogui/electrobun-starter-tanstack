@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { AI_PROVIDERS } from '../../shared/ai/providerConfig';
 
 /**
- * Runtime shape checks for RPC handlers that write to disk. The renderer and
- * trusted plugins share one realm, so a renderer bug (or a plugin poking the
- * bridge) must not be able to persist structurally broken data.
+ * Runtime shape checks for RPC handlers that write to disk, so a renderer bug
+ * cannot persist structurally broken data.
  *
  * Schemas are deliberately structural and `loose()`: they pin the fields the
  * main process relies on and let unknown/forward-compatible keys through, so
@@ -86,10 +85,6 @@ const nodeMetadata = z
 const presentation = record;
 
 export const RPC_WRITE_PARAM_SCHEMAS = {
-  pluginRemove: z.object({
-    pluginId: id,
-    digest: z.string().regex(/^[a-f0-9]{64}$/),
-  }),
   quarantineDamagedTrash: z.object({ trashId: id, token: id }),
   restoreCanvasSnapshot: z.object({
     name: id,
@@ -102,7 +97,7 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
     liveReferences: z.array(id),
   }),
   resolveTransactionRecovery: z.object({
-    id: z.enum(['canvas', 'notes']),
+    id: z.literal('canvas'),
     token: id,
     action: z.enum(['retry', 'quarantine']),
   }),
@@ -155,9 +150,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
       revision: z.number().int().optional(),
     })
     .loose(),
-  createNote: z
-    .object({ displayHint: z.string(), id, title: z.string() })
-    .loose(),
   deleteNote: z.object({ noteId: id }).loose(),
   saveAttachment: z
     .object({
@@ -192,9 +184,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
   deleteNodeMetadata: z.object({ id }).loose(),
   createViewFromTemplate: z
     .object({ name: z.string().max(512), templateId: id })
-    .loose(),
-  pluginPermissionsRevoke: z
-    .object({ permission: z.string().optional(), pluginId: id })
     .loose(),
   saveTemplateThumbnail: z
     .object({ pngBase64: z.string().min(1), templateId: id })

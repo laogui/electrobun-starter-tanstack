@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "./plugins/theme.css";
 @plugin "@tailwindcss/typography";
 
 /* ── Design tokens ── */

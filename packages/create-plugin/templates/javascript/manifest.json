@@ -1,9 +1,0 @@
-{
-  "manifestVersion": 2,
-  "id": "example.hello",
-  "name": "Hello GhostBoard",
-  "version": "0.1.0",
-  "engines": { "ghostboard": ">=1.0.0 <2.0.0" },
-  "entrypoints": { "app": "app.js" },
-  "capabilities": []
-}

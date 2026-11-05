@@ -5,6 +5,7 @@ import {
   saveBlockNoteSidecar,
 } from '../../blocknote';
 import { blocksToPlainText } from '../../blocknotePreview';
+import { workspaceIdForPath } from '../../contentEvents';
 import { buildNoteMarkdown } from '../../markdownExport';
 import { buildNoteIndex, loadNoteRecord } from '../../noteStore';
 import {
@@ -17,7 +18,6 @@ import {
   saveNote,
 } from '../../notes';
 import { withNoteWorkspace } from '../../noteTransactions';
-import { pluginWorkspaceId } from '../../plugins/contentEvents';
 import {
   buildNotePreviewFromBlocks,
   writeNoteWithPreview,
@@ -31,7 +31,6 @@ export function createNotesHandlers(
   | 'saveNote'
   | 'loadBlockNote'
   | 'saveBlockNote'
-  | 'createNote'
   | 'deleteNote'
   | 'importMarkdownFiles'
 > {
@@ -58,7 +57,7 @@ export function createNotesHandlers(
 
     loadBlockNote: async ({ noteId, workspaceId, includeMarkdown }) => {
       const workspace = wsPath;
-      const currentWorkspaceId = pluginWorkspaceId(workspace);
+      const currentWorkspaceId = workspaceIdForPath(workspace);
       if (workspaceId && workspaceId !== currentWorkspaceId) {
         return { success: false };
       }
@@ -212,11 +211,6 @@ export function createNotesHandlers(
         console.warn('[persistence] Note save rejected:', error);
         return { success: false };
       }),
-
-    createNote: async ({ id, title, displayHint }) => {
-      const filePath = await createNote(wsPath, id, title, displayHint);
-      return { noteId: id, file: filePath };
-    },
 
     deleteNote: async ({ noteId }) =>
       withNoteWorkspace(wsPath, async () => {

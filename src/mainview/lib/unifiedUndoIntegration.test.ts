@@ -75,7 +75,7 @@ describe('unified undo across canvas, widget and extension stores', () => {
   beforeEach(() => {
     useCanvasStore.getState().reset();
     unifiedUndoHistory.reset();
-    unifiedUndoHistory.setContext('ws', 'view-1');
+    unifiedUndoHistory.setNativeView('view-1');
     useCanvasStore.setState({
       activeViewId: 'view-1',
       nodes: [card('a', 'c0')],
@@ -212,24 +212,6 @@ describe('unified undo across canvas, widget and extension stores', () => {
     });
     useCanvasStore.getState().undo();
     expect(useCanvasStore.getState().focusedNode).toBeNull();
-  });
-
-  it('keeps native history when the plugin workspace first becomes available', () => {
-    unifiedUndoHistory.reset();
-    useCanvasStore.getState().reset();
-    useCanvasStore.getState().hydrate([card('a', 'c0')], []);
-    renameWidget('w1');
-    useCanvasStore.getState().commitNodeData('a', { title: 'c1' });
-    expect(unifiedUndoHistory.getSnapshot().past).toHaveLength(2);
-    unifiedUndoHistory.setContext('ws', 'view-1');
-    expect(
-      unifiedUndoHistory.getSnapshot().past.map((entry) => entry.kind)
-    ).toEqual(['widget', 'canvas']);
-    expect(
-      unifiedUndoHistory
-        .getSnapshot()
-        .past.every((entry) => entry.workspaceId === 'ws')
-    ).toBe(true);
   });
 
   it('leaves keyboard undo to a focused text editor', () => {

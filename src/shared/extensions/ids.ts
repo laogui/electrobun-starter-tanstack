@@ -4,7 +4,7 @@ export const EXTENSION_NODE_TYPE = 'extension' as const;
 
 export const INSTANCE_ID_PREFIX = 'extinst_';
 
-/** `<pluginId>/<typeId>` — pluginId is dotted kebab-case; typeId is kebab-case. */
+/** `<namespace>/<typeId>` — namespace is dotted kebab-case; typeId is kebab-case. */
 export const CANVAS_TYPE_ID_RE =
   /^([a-z][a-z0-9-]{0,31}(?:\.[a-z][a-z0-9-]{0,31})+)\/([a-z][a-z0-9-]{0,63})$/;
 

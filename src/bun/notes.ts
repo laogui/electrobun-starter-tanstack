@@ -4,7 +4,6 @@ import { join } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
 import { withNoteWorkspace } from './noteTransactions';
-import { notifyContentChanged } from './plugins/contentEvents';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
 export interface NoteFrontmatter {
@@ -200,13 +199,6 @@ export async function saveNote(
     const { fullPath } = assertWorkspaceNotePath(wsPath, filePath);
     const content = `---\n${serializeFrontmatter(frontmatter)}\n---\n${body}`;
     await atomicWrite(fullPath, content);
-    if (typeof frontmatter.id === 'string' && frontmatter.id) {
-      notifyContentChanged(wsPath, {
-        kind: 'note',
-        ids: [frontmatter.id],
-        operation: 'upsert',
-      });
-    }
   });
 }
 
@@ -304,15 +296,7 @@ export async function deleteNoteFile(
     if (!(await file.exists())) {
       return false;
     }
-    const note = await loadNote(wsPath, filePath).catch(() => null);
     await unlink(fullPath);
-    if (note?.frontmatter.id) {
-      notifyContentChanged(wsPath, {
-        kind: 'note',
-        ids: [note.frontmatter.id],
-        operation: 'delete',
-      });
-    }
     return true;
   });
 }

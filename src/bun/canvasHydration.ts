@@ -1,4 +1,4 @@
-import type { NoteMetadataChange } from '../../packages/plugin-sdk';
+import type { NoteMetadataChange } from '../shared/contentEvents';
 import {
   assertWorkspaceAttachmentPath,
   attachmentExists,

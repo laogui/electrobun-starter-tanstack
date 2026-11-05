@@ -112,7 +112,7 @@ export function registerHistoryNoteCache(cache: NoteContentCache) {
   caches.add(new WeakRef(cache));
 }
 export function updateHistoryNoteMetadata(
-  changes: readonly import('../../../packages/plugin-sdk').NoteMetadataChange[]
+  changes: readonly import('../../shared/contentEvents').NoteMetadataChange[]
 ) {
   for (const reference of caches) {
     const cache = reference.deref();

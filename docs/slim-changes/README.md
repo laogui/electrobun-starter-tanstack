@@ -18,7 +18,7 @@
 | 10 | `578d757` | 改卡片颜色改为弹出取色器，与画布背景同一套；颜色仍存笔记里 | 新增 `ui/ColorSwatchPanel.tsx`、`canvas/CardColorPopover.tsx`、`store/colorPickerStore.ts`；`useContextMenu` 改为打开取色器；`canvasBackgroundCustoms` 抽出 `loadColorCustoms/saveColorCustoms`；自定义卡片色存 localStorage `ghostboard.card-color-customs` |
 | 11 | `dabfe46` | 分组改颜色也改为弹出取色器：5 种原色调作预设，支持自定义色值 | `GroupNode.tsx` 支持 hex（`group-custom` 类 + `--group-custom`）；`index.css` 新增 `.canvas-group.group-custom`；`CardColorPopover` 新增 group 色板；`useContextMenu` 混选时只改与首项同色板的卡 |
 
-原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
+原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、Checklist 照常显示、搜索、打开。真正删掉的代码是第 2 步的游离笔记侧栏和第 12 步的插件系统（用户 2026-11-05 决定）；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 
 ## 1. 隐藏入口（`fceed6f`）
 
@@ -27,7 +27,7 @@
 | 改动 | 开关 / 位置 | 恢复方法 |
 | --- | --- | --- |
 | 新建菜单和右键菜单不再出现番茄钟、提醒、录音 | `HIDDEN_CREATE_CANVAS_TYPE_IDS`，`extensions/createMenu.ts` 读取 | 从集合中移除对应 id |
-| 设置里隐藏“插件”页 | `SHOW_PLUGINS_SETTINGS = false`，`settings/SettingsApp.tsx` | 改为 `true` |
+| ~~设置里隐藏“插件”页~~ | 第 12 步已整块删除插件，开关一并删掉 | 不可恢复（需 revert 第 12 步） |
 | 设置里隐藏“画布类型”页 | `SHOW_CANVAS_TYPES_SETTINGS = false`，同上 | 改为 `true` |
 | 关闭 100 张免费额度和许可证卡片 | `LICENSE_QUOTA_ENABLED = false`，`lib/nodeQuota.ts` 直接放行，`settings/panels/GeneralPanel.tsx` 不渲染卡片 | 改为 `true` |
 | 模板库隐藏看板、冲刺复盘、周计划、四象限、开一家店 | `HIDDEN_TEMPLATE_IDS`，`src/bun/templates.ts` | 从集合中移除 |
@@ -71,7 +71,7 @@
 
 ## 冻结（未改代码，只是停止开发）
 
-公开插件平台；网站 App、API 与登录；付费与订阅。解冻条件见 PRD-slim。
+网站 App、API 与登录；付费与订阅。解冻条件见 PRD-slim。（公开插件平台原在此列，第 12 步已删除。）
 
 ## 验证状态
 

@@ -5,12 +5,6 @@ import {
 } from './attachments';
 import { unfurlLink } from './linkPreview';
 import { LocalHttpCredentials, type LocalHttpPrincipal } from './localHttpAuth';
-import { type PluginDirectoryMount, servePluginAsset } from './pluginAssets';
-import type { PluginFileStore } from './plugins/files';
-import type { PluginHostController } from './plugins/hostController';
-import type { NoteContentService } from './plugins/noteContent';
-import type { PluginStorageHost } from './plugins/storage';
-import { createT0Host } from './plugins/t0Host';
 import { generateFileMetadata } from './thumbnail';
 import { serveYouTubePlayer } from './youtubePlayer';
 
@@ -21,7 +15,6 @@ export interface LocalHttpServerHandle {
    * `src`). Only accepted for GET/HEAD on `/attachment` and `/youtube`.
    */
   mediaToken: string;
-  resolvePluginCaller: (token: string) => string | null;
   stop: () => void;
   /** Main renderer token. Accepted only as an `Authorization` header. */
   token: string;
@@ -34,24 +27,14 @@ export interface LocalHttpServerOptions {
    */
   allowedOrigins?: readonly string[];
   getAIConfig: () => AIServerConfig | null;
-  getPluginMounts?: () => readonly PluginDirectoryMount[];
   getWorkspacePath: () => string;
-  // Narrowed to the members the server calls so tests can pass light fakes.
-  pluginContent?: Pick<NoteContentService, 'handle'>;
-  pluginFiles?: Pick<PluginFileStore, 'handle'>;
-  pluginRuntime?: Pick<
-    PluginHostController,
-    'bindCredentials' | 'dispose' | 'getMounts' | 'handle'
-  >;
-  pluginStorage?: Pick<PluginStorageHost, 'handle'>;
 }
 
 // The renderer webview (http://localhost:5173 in dev, views://mainview in
 // prod) calls this 127.0.0.1 endpoint cross-origin with an Authorization
-// header, which triggers a CORS preflight; plugin modules are also loaded
-// cross-origin with `import()`. Only the app's own origins are reflected.
-// `null` is kept because WebKit may report an opaque origin for custom
-// schemes; every non-asset route still requires a token, so CORS is a second
+// header, which triggers a CORS preflight. Only the app's own origins are
+// reflected. `null` is kept because WebKit may report an opaque origin for
+// custom schemes; every route still requires a token, so CORS is a second
 // line of defence rather than the authentication boundary.
 export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = Object.freeze([
   'views://mainview',
@@ -81,16 +64,6 @@ function corsHeadersFor(
   };
 }
 
-// Routes a plugin-scoped token may call. Everything else is renderer-only.
-const PLUGIN_DATA_ROUTES = new Set(['/plugins/storage', '/plugins/content']);
-const PLUGIN_FILES_PREFIX = '/plugins/files/';
-
-function isPluginDataRoute(pathname: string): boolean {
-  return (
-    PLUGIN_DATA_ROUTES.has(pathname) || pathname.startsWith(PLUGIN_FILES_PREFIX)
-  );
-}
-
 function isMediaRoute(request: Request, pathname: string): boolean {
   return (
     (request.method === 'GET' || request.method === 'HEAD') &&
@@ -109,8 +82,6 @@ export function isRouteAllowed(
       return true;
     case 'media':
       return isMediaRoute(request, pathname);
-    case 'plugin':
-      return isPluginDataRoute(pathname);
     default:
       return false;
   }
@@ -232,9 +203,7 @@ async function serveWorkspaceAttachment(
  * unfurls, and workspace attachment streaming for media playback. The random
  * port is bound to 127.0.0.1. Credentials are minted per launch (see
  * `LocalHttpCredentials`): the renderer token (header only, every route), a
- * read-only media token (query allowed, `/attachment` + `/youtube`), an
- * asset-only path token for plugin modules, and per-plugin host tokens that
- * only reach that plugin's storage/content/files routes.
+ * read-only media token (query allowed, `/attachment` + `/youtube`).
  */
 export function startLocalHttpServer(
   options: LocalHttpServerOptions
@@ -244,8 +213,6 @@ export function startLocalHttpServer(
   const allowedOrigins = new Set(
     options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
   );
-  const t0 = createT0Host();
-  options.pluginRuntime?.bindCredentials(credentials);
 
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -257,21 +224,6 @@ export function startLocalHttpServer(
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: cors });
       }
-      // Static plugin modules: asset-only token in the path, no other
-      // credential, and nothing but files inside an active plugin mount.
-      const pluginAsset = await servePluginAsset(
-        req,
-        credentials.assetToken,
-        [
-          ...(options.pluginRuntime?.getMounts() ?? []),
-          ...(options.getPluginMounts?.() ?? []),
-          ...(t0?.mounts ?? []),
-        ],
-        cors
-      );
-      if (pluginAsset) {
-        return pluginAsset;
-      }
       const principal = credentials.authenticate(req, url);
       if (!principal) {
         return new Response('Unauthorized', { status: 401, headers: cors });
@@ -279,55 +231,8 @@ export function startLocalHttpServer(
       if (!isRouteAllowed(principal, req, url.pathname)) {
         return new Response('Forbidden', { status: 403, headers: cors });
       }
-      const scope =
-        principal.kind === 'plugin' ? { pluginId: principal.pluginId } : {};
-      if (url.pathname.startsWith(PLUGIN_FILES_PREFIX)) {
-        if (
-          scope.pluginId !== undefined &&
-          url.searchParams.get('pluginId') !== scope.pluginId
-        ) {
-          return new Response('Forbidden', { status: 403, headers: cors });
-        }
-        return (
-          (await options.pluginFiles?.handle(req, cors)) ??
-          new Response('Not found', { status: 404, headers: cors })
-        );
-      }
       if (url.pathname === '/youtube') {
         return serveYouTubePlayer(req, url);
-      }
-      const contentResponse = await options.pluginContent?.handle(
-        req,
-        cors,
-        scope
-      );
-      if (contentResponse) {
-        return contentResponse;
-      }
-      const storageResponse = await options.pluginStorage?.handle(
-        req,
-        cors,
-        scope
-      );
-      if (storageResponse) {
-        return storageResponse;
-      }
-      const runtimeResponse = await options.pluginRuntime?.handle(
-        req,
-        token,
-        cors
-      );
-      if (runtimeResponse) {
-        return runtimeResponse;
-      }
-      const t0Response = await t0?.handle(
-        req,
-        token,
-        cors,
-        credentials.assetToken
-      );
-      if (t0Response) {
-        return t0Response;
       }
       if (url.pathname === '/ai/chat' && req.method === 'POST') {
         const config = options.getAIConfig();
@@ -435,16 +340,11 @@ export function startLocalHttpServer(
     },
   });
 
-  const diagnostics = t0?.diagnose(`http://127.0.0.1:${server.port}`, token);
   return {
     baseUrl: `http://127.0.0.1:${server.port}`,
-    resolvePluginCaller: (callerToken) =>
-      credentials.resolvePluginToken(callerToken),
     mediaToken: credentials.mediaToken,
     token,
     stop: () => {
-      clearTimeout(diagnostics);
-      options.pluginRuntime?.dispose();
       server.stop(true);
     },
   };

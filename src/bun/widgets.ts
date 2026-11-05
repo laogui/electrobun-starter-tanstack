@@ -3,7 +3,6 @@ import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { atomicWrite } from './atomicWrite';
 import { withNoteWorkspace } from './noteTransactions';
-import { notifyContentChanged } from './plugins/contentEvents';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
 /** Schema version for widget JSON files. */
@@ -360,11 +359,6 @@ async function saveWidgetUnlocked(
   const fullPath = assertWorkspaceWidgetPath(wsPath, relativePath);
   const serialized = JSON.stringify(validated, null, 2);
   await atomicWrite(fullPath, serialized);
-  notifyContentChanged(wsPath, {
-    kind: 'widget',
-    ids: [validated.id],
-    operation: 'upsert',
-  });
 }
 
 /** Delete the widget file for a given id. Returns true if a file was removed. */
@@ -378,11 +372,6 @@ async function deleteWidgetUnlocked(
     return false;
   }
   await unlink(fullPath);
-  notifyContentChanged(wsPath, {
-    kind: 'widget',
-    ids: [widgetId],
-    operation: 'delete',
-  });
   return true;
 }
 

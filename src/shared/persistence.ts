@@ -1,4 +1,4 @@
-import type { NoteMetadataChange } from '../../packages/plugin-sdk';
+import type { NoteMetadataChange } from './contentEvents';
 import type { PreviewArtifacts } from './markdown/preview';
 
 /** A rejected save leaves the renderer dirty; recovery errors are not success. */

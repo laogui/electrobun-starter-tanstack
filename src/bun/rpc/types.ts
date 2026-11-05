@@ -5,6 +5,7 @@ import type {
   AITestResult,
 } from '../../shared/ai/providerConfig';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
+import type { NoteChangedEvent } from '../../shared/contentEvents';
 import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
   ExtensionInstanceLoadError,
@@ -16,21 +17,6 @@ import type {
   BlockNoteSaveResult,
   CanvasSaveResult,
 } from '../../shared/persistence';
-import type { HostContentChangedEvent } from '../../shared/plugins/contentHistory';
-import type {
-  PluginDirectoryListResult,
-  PluginFilePickResult,
-  PluginFileReadResult,
-} from '../../shared/plugins/files';
-import type {
-  InstalledPluginSummary,
-  PluginInstallCommitResult,
-  PluginInstallPreparationResult,
-  PluginMigrationRestoreResult,
-  PluginSafeModePreparationResult,
-  PluginSafeModeState,
-  PluginUpdatePreparationResult,
-} from '../../shared/plugins/management';
 import type {
   DiagnosticsStatus,
   FeedbackInput,
@@ -47,7 +33,6 @@ import type {
   TagMutationResult,
   TagSummary,
 } from '../nodeMetadata';
-import type { PluginPermissionGrant } from '../plugins/permissions';
 import type { PreviewArtifacts } from '../preview';
 import type { SearchResult } from '../search';
 import type { AppSettings } from '../settings';
@@ -97,7 +82,7 @@ export interface CanvasRPC {
       };
       resolveTransactionRecovery: {
         params: {
-          id: 'canvas' | 'notes';
+          id: 'canvas';
           token: string;
           action: 'retry' | 'quarantine';
         };
@@ -153,110 +138,6 @@ export interface CanvasRPC {
       };
       deleteWidget: {
         params: { widgetId: string };
-        response: { success: boolean };
-      };
-      pluginInstallList: {
-        params: Record<string, unknown>;
-        response: {
-          plugins: InstalledPluginSummary[];
-          safeMode: PluginSafeModeState;
-        };
-      };
-      pluginPrepareInstallFromFile: {
-        params: Record<string, unknown>;
-        response: PluginInstallPreparationResult;
-      };
-      pluginPrepareDevelopmentDirectory: {
-        params: Record<string, unknown>;
-        response: PluginInstallPreparationResult;
-      };
-      pluginPrepareInstallFromUrl: {
-        params: { url: string };
-        response: PluginInstallPreparationResult;
-      };
-      pluginPrepareUpdate: {
-        params: { digest: string; pluginId: string };
-        response: PluginUpdatePreparationResult;
-      };
-      pluginCommitInstall: {
-        params: { transactionId: string };
-        response: PluginInstallCommitResult;
-      };
-      pluginCancelInstall: {
-        params: { transactionId: string };
-        response: { success: boolean };
-      };
-      pluginEnable: {
-        params: { digest: string; pluginId: string };
-        response: PluginInstallCommitResult;
-      };
-      pluginDisable: {
-        params: { digest: string; pluginId: string };
-        response: PluginInstallCommitResult;
-      };
-      pluginRemove: {
-        params: { digest: string; pluginId: string };
-        response: { success: boolean; error?: string };
-      };
-      pluginRollback: {
-        params: { digest: string; pluginId: string };
-        response: PluginInstallCommitResult;
-      };
-      pluginRestoreMigrationBackup: {
-        params: { pluginId: string };
-        response: PluginMigrationRestoreResult;
-      };
-      pluginSafeModePrepareNormalStart: {
-        params: Record<string, unknown>;
-        response: PluginSafeModePreparationResult;
-      };
-      pluginFilesPick: {
-        params: {
-          hostToken?: string;
-          activationId: string;
-          extensions: string[];
-          kind?: 'directory' | 'file';
-          multiple?: boolean;
-          pluginId: string;
-          workspaceId: string;
-        };
-        response: PluginFilePickResult;
-      };
-      pluginFilesReadText: {
-        params: {
-          activationId: string;
-          handleId: string;
-          pluginId: string;
-          workspaceId: string;
-        };
-        response: PluginFileReadResult;
-      };
-      pluginFilesListDirectory: {
-        params: {
-          activationId: string;
-          cursor?: string;
-          handleId: string;
-          limit?: number;
-          pluginId: string;
-          workspaceId: string;
-        };
-        response: PluginDirectoryListResult;
-      };
-      pluginPermissionsList: {
-        params: Record<string, unknown>;
-        response: { grants: PluginPermissionGrant[] };
-      };
-      pluginPermissionsRevoke: {
-        params: { permission?: string; pluginId: string };
-        response: { success: boolean };
-      };
-      pluginFilesRelease: {
-        params: {
-          activationId: string;
-          handleIds: string[];
-          pluginId: string;
-          workspaceId: string;
-        };
         response: { success: boolean };
       };
       extensionEnablementList: {
@@ -388,10 +269,6 @@ export interface CanvasRPC {
           revision?: number;
         };
         response: BlockNoteSaveResult;
-      };
-      createNote: {
-        params: { id: string; title: string; displayHint: string };
-        response: { noteId: string; file: string };
       };
       deleteNote: {
         params: { noteId: string };
@@ -685,7 +562,7 @@ export interface CanvasRPC {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
       extensionTaskFired: ExtensionTaskDelivery;
-      pluginContentChanged: HostContentChangedEvent;
+      noteChanged: NoteChangedEvent;
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;
       trashUpdated: Record<never, unknown>;

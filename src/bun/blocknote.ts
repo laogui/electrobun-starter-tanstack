@@ -4,8 +4,8 @@ import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { atomicWrite } from './atomicWrite';
+import { notifyNoteChanged } from './contentEvents';
 import { withNoteWorkspace } from './noteTransactions';
-import { notifyContentChanged } from './plugins/contentEvents';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
 /** Schema version for the BlockNote JSON sidecar file. */
@@ -168,32 +168,23 @@ export async function saveBlockNoteSidecar(
     };
     const serialized = JSON.stringify(sidecar, null, 2);
     await atomicWrite(fullPath, serialized);
-    notifyContentChanged(wsPath, {
-      kind: 'note',
-      ids: [noteId],
-      operation: 'upsert',
-      noteChanges:
-        before && !before.corrupted
-          ? [
-              {
-                id: noteId,
-                before: {
-                  title: before.title ?? '',
-                  color: before.color ?? '',
-                  revision: before.revision,
-                },
-                after: {
-                  title: sidecar.title ?? '',
-                  color: sidecar.color ?? '',
-                  revision: sidecar.revision,
-                },
-                metadataOnly:
-                  JSON.stringify(before.blocks) ===
-                  JSON.stringify(sidecar.blocks),
-              },
-            ]
-          : undefined,
-    });
+    if (before && !before.corrupted) {
+      notifyNoteChanged(wsPath, {
+        id: noteId,
+        before: {
+          title: before.title ?? '',
+          color: before.color ?? '',
+          revision: before.revision,
+        },
+        after: {
+          title: sidecar.title ?? '',
+          color: sidecar.color ?? '',
+          revision: sidecar.revision,
+        },
+        metadataOnly:
+          JSON.stringify(before.blocks) === JSON.stringify(sidecar.blocks),
+      });
+    }
     return { relativePath, hash: contentHash(serialized) };
   });
 }
@@ -224,11 +215,6 @@ export async function deleteBlockNoteSidecar(
       return false;
     }
     await unlink(fullPath);
-    notifyContentChanged(wsPath, {
-      kind: 'note',
-      ids: [noteId],
-      operation: 'delete',
-    });
     return true;
   });
 }

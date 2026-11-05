@@ -2,7 +2,7 @@ export interface TransactionRecoveryEntry {
   conflicts: string[];
   error?: string;
   file: string;
-  id: 'canvas' | 'notes';
+  id: 'canvas';
   raw: string;
   token: string;
 }

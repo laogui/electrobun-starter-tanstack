@@ -16,6 +16,7 @@ import {
 } from './appLifecycle';
 import { getAppChannel, getAppDataRoot } from './appPaths';
 import { appState } from './appState';
+import { subscribeNoteChanges } from './contentEvents';
 import {
   DiagnosticsService,
   initialReportAppInfo,
@@ -25,28 +26,6 @@ import { createExtensionSchedulerService } from './extensions/schedulerService';
 import { startLocalHttpServer } from './localHttpServer';
 import { getMainViewUrl } from './mainView';
 import { migrateLegacyTagsFromNotes } from './nodeMetadata';
-import {
-  pluginWorkspaceId,
-  subscribeContentChanges,
-} from './plugins/contentEvents';
-import { PluginFileStore } from './plugins/files';
-import { PluginHostController } from './plugins/hostController';
-import { PluginManagementService } from './plugins/management';
-import { NoteContentService } from './plugins/noteContent';
-import { createPluginPermissionGate } from './plugins/permissionPrompt';
-import {
-  probeEnv,
-  probeHostActive,
-  scriptedProbesActive,
-} from './plugins/probeGate';
-import { PluginStartupGuard } from './plugins/safeMode';
-import { PluginStorageHost } from './plugins/storage';
-import { T1HostController } from './plugins/t1Host';
-import { T2A4HostController } from './plugins/t2A4Host';
-import { T2ContentHostController } from './plugins/t2ContentHost';
-import { T3HostController } from './plugins/t3Host';
-import { T4HostController } from './plugins/t4Host';
-import { T5HostController } from './plugins/t5Host';
 import type { RpcContext } from './rpc/context';
 import { createAIHandlers } from './rpc/handlers/ai';
 import { createAppHandlers } from './rpc/handlers/app';
@@ -58,7 +37,6 @@ import { createExtensionsHandlers } from './rpc/handlers/extensions';
 import { createLicenseHandlers } from './rpc/handlers/license';
 import { createMetadataHandlers } from './rpc/handlers/metadata';
 import { createNotesHandlers } from './rpc/handlers/notes';
-import { createPluginsHandlers } from './rpc/handlers/plugins';
 import { createSettingsHandlers } from './rpc/handlers/settings';
 import { createTemplatesHandlers } from './rpc/handlers/templates';
 import { createTrashHandlers } from './rpc/handlers/trash';
@@ -172,25 +150,6 @@ async function main() {
       : undefined;
   const wsPath = initWorkspace(preferredPath);
   await seedFirstRunIfNeeded(wsPath);
-  const pluginManagement = new PluginManagementService(wsPath);
-  const pluginFiles = new PluginFileStore(pluginWorkspaceId(wsPath));
-  // T1–T5 probe variables are ignored unless probesAllowed() (never stable).
-  const probe = probeEnv();
-  const pluginStartupGuard = probeHostActive(probe)
-    ? undefined
-    : await PluginStartupGuard.start({
-        appDataRoot: getAppDataRoot(),
-        argv: process.argv,
-        env: process.env,
-      });
-  const pluginPermissions = createPluginPermissionGate({
-    appDataRoot: getAppDataRoot(),
-    listPlugins: () => pluginManagement.list(),
-    scriptedProbes: scriptedProbesActive(probe),
-  });
-  pluginManagement.recover().catch((error) => {
-    console.warn('[plugins] Failed to recover package transactions:', error);
-  });
   const [, , aiCredentials] = await Promise.all([
     migrateLegacyTagsFromNotes(wsPath),
     loadSettings(wsPath),
@@ -216,96 +175,9 @@ async function main() {
   appState.localHttpServer = startLocalHttpServer({
     getAIConfig: () => buildAIConfig(),
     getWorkspacePath: () => wsPath,
-    pluginContent: new NoteContentService(wsPath, pluginWorkspaceId(wsPath), {
-      permissions: pluginPermissions,
-    }),
-    pluginFiles,
-    pluginStorage: new PluginStorageHost({
-      appDataRoot: getAppDataRoot(),
-      workspacePath: wsPath,
-      workspaceId: pluginWorkspaceId(wsPath),
-    }),
-    pluginRuntime: probe.GHOSTBOARD_PLUGIN_T5_DIR
-      ? new T5HostController(
-          pluginManagement,
-          pluginWorkspaceId(wsPath),
-          probe.GHOSTBOARD_PLUGIN_T5_DIR,
-          {
-            safeMode: pluginStartupGuard?.getState(),
-            markStartupReady: () =>
-              pluginStartupGuard?.markReady() ?? Promise.resolve(),
-          }
-        )
-      : probe.GHOSTBOARD_PLUGIN_T4_DIR
-        ? new T4HostController(
-            pluginManagement,
-            pluginWorkspaceId(wsPath),
-            probe.GHOSTBOARD_PLUGIN_T4_DIR,
-            wsPath,
-            {
-              safeMode: pluginStartupGuard?.getState(),
-              markStartupReady: () =>
-                pluginStartupGuard?.markReady() ?? Promise.resolve(),
-            }
-          )
-        : probe.GHOSTBOARD_PLUGIN_T3_DIR
-          ? new T3HostController(
-              pluginManagement,
-              pluginWorkspaceId(wsPath),
-              probe.GHOSTBOARD_PLUGIN_T3_DIR
-            )
-          : probe.GHOSTBOARD_PLUGIN_T1_DIR
-            ? new T1HostController(
-                pluginManagement,
-                pluginWorkspaceId(wsPath),
-                probe.GHOSTBOARD_PLUGIN_T1_DIR
-              )
-            : probe.GHOSTBOARD_PLUGIN_T2_A4_DIR
-              ? new T2A4HostController(
-                  pluginManagement,
-                  pluginWorkspaceId(wsPath),
-                  probe.GHOSTBOARD_PLUGIN_T2_A4_DIR
-                )
-              : probe.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
-                ? new T2ContentHostController(
-                    pluginManagement,
-                    pluginWorkspaceId(wsPath),
-                    probe.GHOSTBOARD_PLUGIN_T2_CONTENT_DIR
-                  )
-                : probe.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR
-                  ? new T2ContentHostController(
-                      pluginManagement,
-                      pluginWorkspaceId(wsPath),
-                      probe.GHOSTBOARD_PLUGIN_T2_HISTORY_DIR,
-                      'history'
-                    )
-                  : probe.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR
-                    ? new T2ContentHostController(
-                        pluginManagement,
-                        pluginWorkspaceId(wsPath),
-                        probe.GHOSTBOARD_PLUGIN_T2_CANVAS_DIR,
-                        'canvas'
-                      )
-                    : probe.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR
-                      ? new T2ContentHostController(
-                          pluginManagement,
-                          pluginWorkspaceId(wsPath),
-                          probe.GHOSTBOARD_PLUGIN_T2_SELECTION_DIR,
-                          'selection'
-                        )
-                      : new PluginHostController(
-                          pluginManagement,
-                          pluginWorkspaceId(wsPath),
-                          {
-                            safeMode: pluginStartupGuard?.getState(),
-                            markStartupReady: () =>
-                              pluginStartupGuard?.markReady() ??
-                              Promise.resolve(),
-                          }
-                        ),
   });
-  subscribeContentChanges(wsPath, (event) => {
-    appState.mainRpc?.send?.pluginContentChanged(event);
+  subscribeNoteChanges((event) => {
+    appState.mainRpc?.send?.noteChanged(event);
   });
   const extensionScheduler = createExtensionSchedulerService({
     wsPath,
@@ -317,13 +189,7 @@ async function main() {
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpcContext: RpcContext = {
-    resolvePluginCaller: (token) =>
-      appState.localHttpServer?.resolvePluginCaller(token) ?? null,
     wsPath,
-    pluginManagement,
-    pluginFiles,
-    pluginPermissions,
-    pluginStartupGuard,
     extensionScheduler,
     isDevChannel,
   };
@@ -334,7 +200,6 @@ async function main() {
   > = {
     ...createCanvasHandlers(rpcContext),
     ...createWidgetsHandlers(rpcContext),
-    ...createPluginsHandlers(rpcContext),
     ...createExtensionsHandlers(rpcContext),
     ...createNotesHandlers(rpcContext),
     ...createAttachmentsHandlers(rpcContext),

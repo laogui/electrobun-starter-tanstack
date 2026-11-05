@@ -3,7 +3,7 @@
 > 本文档描述 GhostBoard 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
 > 产品需求与交互设计请参阅 [PRD](./PRD.md)。
 >
-> 最近同步：2026-10 对照源码补上 Canvas Type 行为、高信任插件运行时、许可证、诊断、发布和 BlockNote AI 配置（§12–§17）。更早的正文仍以 2026-06 至 2026-07 的 sidecar、附件、widget、Folder waterfall 与 FocusedView 为主；和代码冲突时以源码为准。
+> 最近同步：2026-10 对照源码补上 Canvas Type 行为、本地 HTTP 端点、许可证、诊断、发布和 BlockNote AI 配置（§12–§17）。更早的正文仍以 2026-06 至 2026-07 的 sidecar、附件、widget、Folder waterfall 与 FocusedView 为主；和代码冲突时以源码为准。
 
 ---
 
@@ -69,7 +69,7 @@
 ```
 src/
   bun/                                     # Bun 主进程
-    index.ts                               # 薄启动层：诊断初始化、workspace/插件宿主/本地 HTTP 启动、组装 RPC handler、创建窗口
+    index.ts                               # 薄启动层：诊断初始化、workspace/本地 HTTP 启动、组装 RPC handler、创建窗口
     appState.ts                            # 进程级可变状态（mainWindow / mainRpc / diagnostics / localHttpServer / AI key 缓存）
     settings.ts                            # AppSettings 规范化 + settings.json 读写（getCachedSettings）
     aiConfig.ts                            # 按当前设置 + 凭据组装 AIServerConfig
@@ -81,14 +81,14 @@ src/
       types.ts                             # CanvasRPC schema + RpcRequestHandlers<K> 辅助类型
       context.ts                           # RpcContext：handler 工厂共享的 workspace 级服务
       writeParamSchemas.ts                 # 写入类 RPC 的 zod 参数校验（withRpcWriteValidation）
-      handlers/<domain>.ts                 # 按业务域拆分的 handler 工厂：canvas / widgets / plugins / extensions / notes / attachments / export / settings / diagnostics / ai / trash / app / views / metadata / templates / license
+      handlers/<domain>.ts                 # 按业务域拆分的 handler 工厂：canvas / widgets / extensions / notes / attachments / export / settings / diagnostics / ai / trash / app / views / metadata / templates / license
     workspace.ts                           # workspace 初始化 + 读写 workspace.json + 画布视图 CRUD (addView/removeView/renameView)
     manifest.ts                            # canvas manifest 读写 + 原子写入
     notes.ts                               # legacy .md 文件 CRUD + frontmatter 解析/序列化
     noteStore.ts                           # sidecar-first note record 读取抽象，合并 legacy .md 索引
     attachments.ts                         # attachments/ 附件保存、streaming upload、读取、打开/Reveal 与路径校验
-    localHttpServer.ts                     # localhost HTTP bridge：附件上传、附件 byte range stream、AI proxy、插件模块/宿主服务
-    localHttpAuth.ts                       # 本地 HTTP 凭据：主渲染端 / 媒体 / 资源 / 插件作用域 token
+    localHttpServer.ts                     # localhost HTTP bridge：附件上传、附件 byte range stream、AI proxy、链接预览
+    localHttpAuth.ts                       # 本地 HTTP 凭据：主渲染端 / 媒体 token
     blocknote.ts                           # BlockNote JSON sidecar 读写、schema 校验、revision 管理
     thumbnail.ts                           # 文本 excerpt / archive summary 元数据生成（saveAttachment 后调用）
     linkPreview.ts                         # Link unfurl：抓取网页 title/description/icon/image
@@ -202,10 +202,11 @@ src/
     searchTypes.ts                         # 搜索结果 kind / target 契约
     ai/                                    # AI 上下文与 provider 共享类型
     markdown/                              # Markdown 解析/渲染共享 helper
-    extensions/ · plugins/                 # Canvas Type 与插件运行时共享契约
+    extensions/                            # Canvas Type 共享契约
+    contentEvents.ts                       # 笔记保存后主进程推给渲染端的变更事件（画布同步标题/颜色/正文）
 ```
 
-上面的树停在 2026-07。插件与内置扩展的现行代码在 `src/mainview/extensions/`、`src/shared/extensions/`、`src/bun/plugins/`、`src/mainview/plugins/`、`src/shared/plugins/`、`packages/plugin-sdk/`、`packages/create-plugin/`。行为与契约见 §12、§13。
+上面的树停在 2026-07。内置扩展的现行代码在 `src/mainview/extensions/`、`src/shared/extensions/`、`src/bun/extensions/`，行为见 §12。插件系统已删除（§13 末尾）。
 
 ---
 
@@ -1575,87 +1576,18 @@ Topic 是宿主核心类型，不是扩展。层级只存在于 `data.kind: 'top
 
 第三方 `extension` 节点是否可进 Group / Folder、如何打开，读该 Canvas Type 自己的声明，默认不进 Folder。右键菜单由 `ContextMenu.tsx` 与 `src/mainview/extensions/hostMenu.ts` 按宿主动作和类型动作拼出。
 
-## 13. 高信任插件运行时
+## 13. 本地 HTTP 端点
 
-已启用插件与宿主前端同一个 JavaScript realm，用本地 HTTP 的资源专用路径（`/plugin-assets/<assetToken>/…`）提供模块，经 import map 共享宿主的 React 19.2.x（当前 `package.json` 为 `19.2.5`）、`react-dom` 和 `@ghostboard/sdk`。npm 上的 SDK 只提供类型、fake host、参考和 packer，不在插件包里再带一份运行时。插件不得打包第二个 React。`globalThis.__ghostboardPluginRuntime` 是冻结的共享运行时对象。
-
-本地 HTTP 凭据（`src/bun/localHttpAuth.ts`，每次启动在内存中随机生成，不落盘）：
+主进程在 `127.0.0.1` 随机端口起一个 HTTP 服务（`src/bun/localHttpServer.ts`），处理不适合走 Electrobun RPC 的请求：AI 流式对话、链接预览、附件上传与播放、YouTube 嵌入。凭据在 `src/bun/localHttpAuth.ts`，每次启动在内存中随机生成，不落盘：
 
 | 凭据 | 携带方式 | 可访问 |
 | --- | --- | --- |
-| 主渲染端 token（`getLocalHttpEndpoint().token`） | 仅 `Authorization: Bearer` 头；query 中出现一律 401 | 全部路由：`/ai/chat`、`/attachment*`、`/unfurl`、`/youtube`、`/plugins/runtime|reload|release|startup-ready`、插件数据路由 |
+| 主渲染端 token（`getLocalHttpEndpoint().token`） | 仅 `Authorization: Bearer` 头；query 中出现一律 401 | 全部路由：`/ai/chat`、`/attachment*`、`/unfurl`、`/youtube` |
 | 媒体 token（`mediaToken`） | `?token=`，仅 GET/HEAD（`<video src>`、iframe 无法带头） | 只读：`GET/HEAD /attachment`、`GET /youtube` |
-| 资源 token（`assetToken`） | 模块 URL 路径段 | 仅 `/plugin-assets/<assetToken>/<id>/<version>/<generation>/…` 下活跃挂载的静态文件；不能作为 bearer 使用 |
-| 插件作用域 token（`PluginRuntimeDescriptor.hostToken`） | `Authorization: Bearer` 头 | 仅 `/plugins/storage`、`/plugins/content`、`/plugins/files/*`，且请求里的 `pluginId` 必须等于签发对象，否则 403；插件停用/移除时吊销 |
 
-渲染端 `PluginRuntime` 用 `scopeHostTransport` 把每个插件的 storage / content / files 传输绑定到其 `hostToken`；描述符缺少 `hostToken`（旧宿主或探针）时退回主渲染端 token。CORS 只回显 `views://mainview`、`http://localhost:5173`、`http://127.0.0.1:5173` 与 `null`（WebKit 自定义 scheme 可能上报不透明来源），其他来源不返回 `Access-Control-Allow-*`。这是作用域收窄：同 realm 插件仍可调用 Electrobun RPC 桥（含 `getLocalHttpEndpoint`）或包装 `fetch`，见 PRD §2.14.0 / §6。
+CORS 只回显应用自己的来源（`views://mainview`、开发服务器 5173），CORS 是第二道防线，鉴权以 token 为准。
 
-安装根目录是应用数据目录下的 `plugins/`（`pluginInstallRoot`）。启用按工作区记录。包入口是 `manifest.json`，不是 `ghostboard.plugin.json`。`manifestVersion: 1` 一律拒绝，提示「旧契约，需重新安装 v2 版本」，保留用户数据。仓库里没有 QuickJS 运行时。
-
-`engines.ghostboard` 必须写成 `>=a.b.c <x.y.z`。加载前比较宿主版本，范围外返回 `incompatible-host-api`，不执行插件代码。`capabilities` 只接受 `network`、`files`、`clipboard`，只展示，不拦截调用。
-
-作者签名是 Ed25519 TOFU：未签名包可以安装，但不能原地更新；已签名包在首次安装时固定公钥和 `update.url`，之后同 ID 更新必须版本前进、同一把密钥、同一个来源。registry 保留 current 和一份 previous，回退前重新校验旧代码，回退和数据恢复都让插件保持停用。自定义画布类型在 `dataVersion` 上升前保存 preimage，备份失败则不迁移。持久 KV（`storage.app` / `storage.workspace`）没有版本迁移 API。
-
-安全模式在发布第三方代码之前生效。启动标记未完成、显式进入或标记损坏时，宿主返回空运行时，设置页仍可停用插件。
-
-公开 URL 安装只接受 HTTPS，并拒绝 loopback、私网解析、非 ZIP 和超限响应。本地 ZIP 不执行包内代码，也不跑依赖安装。
-
-同一宿主 major 内公开 SDK 只做加法。破坏性变更同时提高 `manifestVersion` 或默认 `engines` 范围、SDK major 和脚手架 major。运行时由宿主注入，不做 polyfill。
-
-`scripts/trusted-plugin-t5/verify-compat-docs.ts` 校验下面两张表与 `package.json`、SDK、脚手架和四个模板的 `manifest.json` 一致。改版本时先改代码和这两张表，再改 `packages/plugin-sdk/AI_REFERENCE.md` 与 README 的 Compatibility 节。
-
-### 13.0 主进程插件授权（`src/bun/plugins/permissions.ts`）
-
-插件与渲染端同 realm，渲染端画的确认框可以被插件代码跳过，所以敏感操作的确认放在 Bun 主进程，用 Electrobun 原生对话框 `Utils.showMessageBox`（`src/bun/plugins/permissionPrompt.ts`）询问。按钮为「Allow Once / Always Allow / Deny」，默认与 Esc 都是 Deny。
-
-| 权限 | 触发点 | 归属依据 |
-| --- | --- | --- |
-| `files.read` | RPC `pluginFilesPick`（`kind: 'file'`），在原生文件选择器打开**之前** | 宿主解析有效插件 `hostToken`，并验证与请求 `pluginId` 一致；不是独立 realm 的身份隔离 |
-| `files.directory` | RPC `pluginFilesPick`（`kind: 'directory'`），同上；目录句柄用于列目录与写入 | 同上 |
-| `content.delete` | `/plugins/content` 撤销「创建」批次且将删除至少 1 条笔记时，拆成单条也须授权 | **插件作用域 token**（`scope.pluginId`）；主渲染端 token 发起的宿主撤销不弹窗 |
-
-规则：
-
-- 授权按「插件 × 权限 × 来源身份」存于应用数据根的 `plugin-permissions.json`（`atomicWrite`，0600，zod 校验；损坏时按无授权处理并保留副本）。签名包绑定首次信任的公钥，未签名包绑定 digest，开发来源绑定连接及 manifest 作者字段；旧无绑定授权须重审。只有 Always Allow 会持久化；Allow Once 只放行本次。设置 → 插件可逐项撤销，文件句柄随撤销关闭；撤销或身份变化后，旧弹窗答案不得新增授权。
-- 普通附件导入只上传用户选择 / 拖入的 File 字节流；renderer 不再具有接受任意 `sourcePath` 的附件 RPC。插件 picker 的 `hostToken` 由宿主解析，必须与请求插件匹配，选择完成后再次检查凭据及启用状态；正常 SDK 调用不能只改 `pluginId` 冒领其他插件身份。
-- Deny 在本次启动内记住（防止插件刷弹窗），不落盘，下次启动会再问。同一插件同一权限的并发请求共享一个对话框，对话框串行显示。
-- 未安装或未启用的插件 ID 直接拒绝、不弹窗，避免调用方把任意名称放到用户面前。无原生对话框、对话框异常一律拒绝。
-- 只有原生对话框能写入授权。RPC 只提供 `pluginPermissionsList` 与 `pluginPermissionsRevoke`（只减不增），没有授予接口。设置 → 插件展示权限及撤销入口，包括已移除插件遗留的旧授权。
-- 文件句柄只能由通过授权的 `pluginFilesPick` 签发，`/plugins/files/read|write` 与 `pluginFilesReadText` / `pluginFilesListDirectory` 依赖句柄归属，不再逐次弹窗。
-- 自动化探针（`GHOSTBOARD_PLUGIN_T*_DIR` 启动）使用自动 Allow Once 的门，因为探针插件不是已安装包且无人应答；能设置这些环境变量的人已控制进程。
-
-仍然存在的缺口（如实记录）：
-
-- AI 对话、附件读写/上传、`/unfurl`、打开外部 URL、导出、批量删除用户笔记：插件作用域 token **根本不能调用**（`isRouteAllowed` 403，Electrobun RPC 也不接受该 token），因此不需要授权——这比授权更严格。但同 realm 的恶意插件可以经 Electrobun RPC 桥调用 `getLocalHttpEndpoint` 取得主渲染端 token，或直接调用 `openExternalUrl`、`exportNotesMarkdown`、`deleteNote`、`aiRunTask` 等 RPC。Electrobun 的 webview RPC 不携带调用者身份，主进程无法区分这些调用来自宿主 UI 还是插件，所以无法在主进程对其做按插件的授权；给这些宿主自身操作统一加原生确认会打扰用户本人的正常操作，未采用。
-- `pluginFilesPick` 已核验插件作用域凭据，单改 `pluginId` 会拒绝；但同 realm 恶意代码仍可窃取其他实例的凭据。原生选择器仍要求用户选择文件，这不是恶意插件隔离保证。
-- 因此本授权层防的是「正常使用 SDK 的插件在未经用户同意时触达本机文件 / 批量删除」，不是对恶意同 realm 代码的隔离；后者仍由「是否安装该插件」决定。真正的隔离需要把插件移出渲染端 realm（独立 iframe/worker + 仅作用域 token 的消息通道），不在本次范围。
-
-### 13.1 当前版本标识
-
-| 标识 | 当前值 | 来源 | 作用 |
-| --- | --- | --- | --- |
-| 宿主版本 | `1.0.0` | 根 `package.json` `version`，经 `GHOSTBOARD_VERSION` 暴露 | `engines.ghostboard` 的比较值 |
-| manifest 版本 | `2` | `PLUGIN_MANIFEST_VERSION` | 唯一会被加载的 manifest |
-| SDK npm 版本 | `0.1.1` | `packages/plugin-sdk/package.json` | 类型、fake host、packer、参考 |
-| 脚手架版本 | `0.1.0` | `packages/create-plugin/package.json` | `create-ghostboard-plugin` |
-| 模板默认 `engines.ghostboard` | `>=1.0.0 <2.0.0` | 四个模板的 `manifest.json` | 新插件声明的宿主范围 |
-
-### 13.2 SDK 与宿主版本对应
-
-| `@ghostboard/sdk` | 宿主范围 | `create-ghostboard-plugin` | 说明 |
-| --- | --- | --- | --- |
-| `0.1.x` | `>=1.0.0 <2.0.0` | `0.1.x` | 当前公开 API；没有 Bun 后端入口 |
-
-### 13.3 支持范围
-
-| 项目 | 状态 |
-| --- | --- |
-| macOS arm64 | 支持。`test:plugin-t0` 至 `test:plugin-t4` 是发行包探针 |
-| macOS x64 | 工作流在 `macos-15-intel` 上，尚未把实跑结果记为已支持 |
-| Windows x64、Linux | 应用可以构建，插件系统未验证，不支持 |
-| 每插件 Bun Worker、应用内 Plugin Guide、插件市场 | 没有实现，不在首版 |
-
-探针脚本是 `bun run test:plugin-t0` 至 `test:plugin-t5`。`test:plugin-t5-compat` 只核对本节版本表。这些脚本不是日常启动路径。
+> 插件系统已于 2026-11-05 删除（减法版），包括运行时、SDK、脚手架、签名与授权、探针脚本。旧版本留在应用数据目录的 `plugins/`、`plugin-data/`、`plugin-permissions.json` 不再读取，可手动删除。之前由插件运行时顺带承担的“主进程笔记变更同步到画布”改由 `src/mainview/lib/noteChangeSync.ts` 负责。
 
 ## 14. 许可证
 

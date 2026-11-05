@@ -12,17 +12,6 @@ export default {
         __GHOSTBOARD_SUPPORT_API_URL__: JSON.stringify(
           process.env.GHOSTBOARD_SUPPORT_API_URL ?? ''
         ),
-        // The T0 plugin experiment exposes arbitrary file and network access;
-        // only harness builds (scripts/trusted-plugin-t0) compile it in.
-        __GHOSTBOARD_ENABLE_PLUGIN_T0__: JSON.stringify(
-          process.env.GHOSTBOARD_ENABLE_PLUGIN_T0 === '1'
-        ),
-        // T1–T5 probe hosts (loopback installs, scripted consent, no safe
-        // mode); only the trusted-plugin harness builds compile them in, and
-        // the stable channel ignores them regardless (plugins/probeGate.ts).
-        __GHOSTBOARD_ENABLE_PLUGIN_PROBES__: JSON.stringify(
-          process.env.GHOSTBOARD_ENABLE_PLUGIN_PROBES === '1'
-        ),
       },
     },
     artifactFolder: process.env.GHOSTBOARD_BUILD_ARTIFACT_DIR ?? 'artifacts',

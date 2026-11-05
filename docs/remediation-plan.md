@@ -92,15 +92,13 @@
 - 支持系统的“减少动态效果”（`prefers-reduced-motion`）：开启时侧边栏直接出现。
 - 规则写进 `docs/quality/motion.md`。其他地方的动画盘点放到阶段 3，按需要再做。
 
-### 1.4 顺带：插件运行时按需启动（半天）
+### 1.4 顺带：插件运行时按需启动（作废）
 
-> **暂缓（2026-11-05）**：动手前发现插件运行时不只服务插件。`connectPluginHostEvents` 要靠运行时轮询拿到的 `workspaceId` 才会工作，而它负责主进程推来的笔记内容变更同步、笔记引用保护，以及把统一撤销从本地上下文（`setNativeView`）切到按工作区记录；主进程的启动保护也要等渲染端回 `/plugins/startup-ready`，收不到下次启动会进安全模式。画布撤销本身不依赖它（更正：先前写“会弄坏撤销”不准确），但内容同步和启动确认要先拆出来。要做得先把 `workspaceId` 和这几项从插件运行时里拆出来，工作量超过半天，按阶段 3 的规则等 Mac 实测证明启动慢再做。
-
-[main.tsx](../src/mainview/main.tsx) 现在无条件启动插件运行时。改为先问主进程有没有已安装的插件，**有才** `import('./plugins/runtime')` 并启动，`PluginWorkbench` 改成懒加载。已装插件照常可用。
+> **作废（2026-11-05）**：插件系统已整块删除（见 PRD-slim“删除”一节），不再有运行时要按需启动。原先挂在运行时上的笔记变更同步已移到 `lib/noteChangeSync.ts`，启动握手与安全模式随插件一起删除。
 
 **验收**：
 - type-check、check、test 通过。
-- 手动走一遍：每种卡片都能在侧边栏打开、编辑、切换、关闭；切换时上一张笔记没有丢字；全屏写作能进能退；笔记库、搜索、右键菜单都走侧边栏入口；扩展的 detail 视图正常；已装插件照常运行。
+- 手动走一遍：每种卡片都能在侧边栏打开、编辑、切换、关闭；切换时上一张笔记没有丢字；全屏写作能进能退；笔记库、搜索、右键菜单都走侧边栏入口；扩展的 detail 视图正常。
 - “打开卡片到可以输入”的耗时不比基线差。
 - 删掉的代码行数写进提交说明（`focusTransition/` 含测试约 1200 行，加上 `FocusedView` 外壳部分，预计 1500 行以上）。
 
@@ -174,7 +172,7 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
    >
    > **决定（2026-11-05，用户）**：颜色继续存在笔记里，不改成放置属性，旧数据不用迁移。同时把“改颜色”从点一下换下一种，改成弹出和画布背景同一套取色器（预设色 + 自定义色 + 取色器）；一次弹出算一步撤销。扩展卡仍按原来轮换。分组随后也改成同一弹窗：5 种原有色调作预设，另支持自定义色值（`group-custom`，按 22% 半透明铺底）。
 现在这两项是先改节点 data，再由 `saveManifest` → [persistManifestCardNote](../src/bun/canvasHydration.ts) 写回笔记 sidecar。第 5 步停止往节点写笔记字段后，这条路会断，改标题会悄悄失效。改成调用笔记的 RPC，并补测试。
-3. **新增 `store/noteRecordStore.ts`**。`loadCanvas` 的返回值从"把笔记数据合并进节点 data"（[noteRecordToCardData](../src/bun/noteStore.ts#L208-L240)）改成"节点 + 另附一份 `notes` 表"。保存结果、`noteBodySync`、插件 `hostEvents` 都改为更新这个 store。
+3. **新增 `store/noteRecordStore.ts`**。`loadCanvas` 的返回值从"把笔记数据合并进节点 data"（[noteRecordToCardData](../src/bun/noteStore.ts#L208-L240)）改成"节点 + 另附一份 `notes` 表"。保存结果、`noteBodySync`、`noteChangeSync` 都改为更新这个 store。
 4. **读取方改成按 `noteId` 读**：`CardNode`、`NotePreview`、笔记库、搜索结果、导出、AI 总结。过渡期保留"读不到就回退到 `node.data`"的兜底。
 5. **不再往节点 data 里写笔记字段**，然后删掉相关机制：`canvasNoteHistory` 的剥离、补回、缓存逻辑；`noteMetadataProjection` 修改节点的部分；`nodesSlice` 和 `folderSlice` 里对 `NOTE_CONTENT_KEYS` 的判断；`replaceNoteSources`。
 6. **兼容旧数据**：读取时如果 manifest 里有旧的标题或预览字段，就忽略并在下次保存时去掉。旧 `.md` 笔记照常通过 `noteStore` 读取。
@@ -189,7 +187,7 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
 **目标规则**：
 - **编辑器**管正文和标题。撤销范围只到当前这篇笔记。
 - **画布**管位置、尺寸、连线、分组、增删卡片、卡片颜色。
-- **统一时间线**只留给插件和扩展，写作路径上不再经过它。
+- **统一时间线**只留给小组件和扩展实例，写作路径上不再经过它（插件已删除）。
 
 **和现在相比要改的三处**：
 1. **切换卡片后编辑历史会丢**：现在 `CardSidePanel` 按卡片 id 重建编辑器。改成按 `noteId` 缓存编辑器实例或历史，至少保留最近几张，切回来还能撤销。先确认 BlockNote 能不能只把 history 状态单独存下来。
@@ -206,7 +204,6 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
 - 画布上改颜色，按 Cmd+Z 能撤回。
 - 撤销画布操作不改正文和标题。
 - 光标在编辑器里时，Cmd+Z 只撤这篇笔记的内容。
-- 没装插件时，撤销行为和装了插件时一样。
 
 **验收**：
 - type-check、check、test 通过。

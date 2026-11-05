@@ -26,9 +26,6 @@ export const HIDDEN_CREATE_CANVAS_TYPE_IDS: ReadonlySet<string> = new Set([
   RECORDING_CANVAS_TYPE_ID,
 ]);
 
-/** Settings → Plugins (install, develop, manage). Runtime code is frozen, not removed. */
-export const SHOW_PLUGINS_SETTINGS = false;
-
 /** Settings → Canvas types (per-type enable toggles). */
 export const SHOW_CANVAS_TYPES_SETTINGS = false;
 

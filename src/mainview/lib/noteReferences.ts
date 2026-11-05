@@ -1,17 +1,3 @@
-const providers = new Set<(workspaceId: string) => string[]>();
-export function registerNoteReferences(
-  provider: (workspaceId: string) => string[]
-): () => void {
-  providers.add(provider);
-  return () => {
-    providers.delete(provider);
-  };
-}
-export function getLiveNoteReferences(workspaceId: string): string[] {
-  return [
-    ...new Set([...providers].flatMap((provider) => provider(workspaceId))),
-  ];
-}
 export function collectNoteReferences(value: unknown): string[] {
   const ids = new Set<string>();
   const seen = new WeakSet<object>();

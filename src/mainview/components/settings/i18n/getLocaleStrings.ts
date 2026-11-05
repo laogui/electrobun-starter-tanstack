@@ -37,7 +37,6 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     navGeneral: t('settings_nav_general'),
     navWorkspace: t('settings_nav_workspace'),
     navCanvasTypes: t('settings_nav_canvas_types'),
-    navPlugins: t('settings_nav_plugins'),
     navAi: t('settings_nav_ai'),
     navShortcuts: t('settings_nav_shortcuts'),
     navAbout: t('settings_nav_about'),
@@ -158,116 +157,6 @@ function createSettingsLocaleStrings(catalog: MessageCatalog) {
     canvasTypesClearConfirm: (count: number, name: string) =>
       f('settings_canvas_types_clear_confirm', { count, name }),
     canvasTypesClearFailed: t('settings_canvas_types_clear_failed'),
-
-    pluginsTitle: t('settings_plugins_title'),
-    pluginsCapabilities: t('settings_plugins_capabilities'),
-    pluginsNoCapabilities: t('settings_plugins_no_capabilities'),
-    pluginsSignatureUnsigned: t('settings_plugins_signature_unsigned'),
-    pluginsSignatureVerified: t('settings_plugins_signature_verified'),
-    pluginsNoUpdateSource: t('settings_plugins_no_update_source'),
-    pluginsUpdateSource: (source: string) =>
-      f('settings_plugins_update_source', { source }),
-    pluginsCheckUpdate: t('settings_plugins_check_update'),
-    pluginsCheckingUpdate: t('settings_plugins_checking_update'),
-    pluginsUpdateFound: (version: string) =>
-      f('settings_plugins_update_found', { version }),
-    pluginsRollback: (version: string) =>
-      f('settings_plugins_rollback', { version }),
-    pluginsRollingBack: t('settings_plugins_rolling_back'),
-    pluginsRollbackSuccess: (version: string) =>
-      f('settings_plugins_rollback_success', { version }),
-    pluginsMigrationRestore: (count: number) =>
-      f('settings_plugins_migration_restore', { count }),
-    pluginsMigrationRestoreTitle: t('settings_plugins_migration_restore_title'),
-    pluginsMigrationRestoreWarning: t(
-      'settings_plugins_migration_restore_warning'
-    ),
-    pluginsMigrationRestoreConfirm: t(
-      'settings_plugins_migration_restore_confirm'
-    ),
-    pluginsMigrationRestoring: t('settings_plugins_migration_restoring'),
-    pluginsMigrationRestoreSuccess: (count: number) =>
-      f('settings_plugins_migration_restore_success', { count }),
-    pluginsLegacy: t('settings_plugins_legacy'),
-    pluginsDescription: t('settings_plugins_description'),
-    pluginsRuntimeNotice: t('settings_plugins_runtime_notice'),
-    pluginsSafeModeTitle: t('settings_plugins_safe_mode_title'),
-    pluginsSafeModeDescription: t('settings_plugins_safe_mode_description'),
-    pluginsSafeModePreviousStartup: t(
-      'settings_plugins_safe_mode_previous_startup'
-    ),
-    pluginsSafeModeDamagedState: t('settings_plugins_safe_mode_damaged_state'),
-    pluginsSafeModeExplicit: t('settings_plugins_safe_mode_explicit'),
-    pluginsSafeModeTryNextLaunch: t(
-      'settings_plugins_safe_mode_try_next_launch'
-    ),
-    pluginsSafeModePreparing: t('settings_plugins_safe_mode_preparing'),
-    pluginsSafeModeNextLaunchReady: t(
-      'settings_plugins_safe_mode_next_launch_ready'
-    ),
-    pluginsInstallTitle: t('settings_plugins_install_title'),
-    pluginsChooseFile: t('settings_plugins_choose_file'),
-    pluginsChooseDirectory: t('settings_plugins_choose_directory'),
-    pluginsDevelopmentNotice: t('settings_plugins_development_notice'),
-    pluginsDirectoryPreview: t('settings_plugins_directory_preview'),
-    pluginsConfirmDirectory: t('settings_plugins_confirm_directory'),
-    pluginsDirectoryFingerprint: (digest: string) =>
-      f('settings_plugins_directory_fingerprint', { digest }),
-    pluginsDevelopmentSource: (source: string) =>
-      f('settings_plugins_development_source', { source }),
-    pluginsUrlLabel: t('settings_plugins_url_label'),
-    pluginsUrlPlaceholder: t('settings_plugins_url_placeholder'),
-    pluginsInspectUrl: t('settings_plugins_inspect_url'),
-    pluginsInspecting: t('settings_plugins_inspecting'),
-    pluginsUrlRequired: t('settings_plugins_url_required'),
-    pluginsPreviewTitle: t('settings_plugins_preview_title'),
-    pluginsPreviewDescription: t('settings_plugins_preview_description'),
-    pluginsPreviewSource: (source: string) =>
-      f('settings_plugins_preview_source', { source }),
-    pluginsPreviewDigest: (digest: string) =>
-      f('settings_plugins_preview_digest', { digest }),
-    pluginsConfirmInstall: t('settings_plugins_confirm_install'),
-    pluginsCancelInstall: t('settings_plugins_cancel_install'),
-    pluginsInstalling: t('settings_plugins_installing'),
-    pluginsInstallSuccess: (name: string) =>
-      f('settings_plugins_install_success', { name }),
-    pluginsInstalledTitle: t('settings_plugins_installed_title'),
-    pluginsEmpty: t('settings_plugins_empty'),
-    pluginsStored: t('settings_plugins_stored'),
-    pluginsEnabled: t('settings_plugins_enabled'),
-    pluginsEnable: t('settings_plugins_enable'),
-    pluginsDisable: t('settings_plugins_disable'),
-    pluginsRemove: t('settings_plugins_remove'),
-    pluginsPermissionsTitle: t('settings_plugins_permissions_title'),
-    pluginsPermissionsDescription: t(
-      'settings_plugins_permissions_description'
-    ),
-    pluginsPermissionsEmpty: t('settings_plugins_permissions_empty'),
-    pluginsPermissionFiles: t('settings_plugins_permission_files'),
-    pluginsPermissionDirectory: t('settings_plugins_permission_directory'),
-    pluginsPermissionDelete: t('settings_plugins_permission_delete'),
-    pluginsRevoke: t('settings_plugins_revoke'),
-    pluginsDisconnect: t('settings_plugins_disconnect'),
-    pluginsRemoveWarning: t('settings_plugins_remove_warning'),
-    pluginsRemoveConfirm: t('settings_plugins_remove_confirm'),
-    pluginsRemoveSuccess: t('settings_plugins_remove_success'),
-    pluginsRemoving: t('settings_plugins_removing'),
-    pluginsEnableReviewTitle: (name: string) =>
-      f('settings_plugins_enable_review_title', { name }),
-    pluginsEnableReviewDescription: t(
-      'settings_plugins_enable_review_description'
-    ),
-    pluginsConfirmEnable: t('settings_plugins_confirm_enable'),
-    pluginsCancelEnable: t('settings_plugins_cancel_enable'),
-    pluginsEnabling: t('settings_plugins_enabling'),
-    pluginsDisabling: t('settings_plugins_disabling'),
-    pluginsEnableSuccess: (name: string) =>
-      f('settings_plugins_enable_success', { name }),
-    pluginsDisableSuccess: (name: string) =>
-      f('settings_plugins_disable_success', { name }),
-    pluginsInvalid: t('settings_plugins_invalid'),
-    pluginsUnavailable: t('settings_plugins_unavailable'),
-    pluginsUnknownError: t('settings_plugins_unknown_error'),
 
     cleanupTitle: t('settings_cleanup_title'),
     cleanupDescription: t('settings_cleanup_description'),

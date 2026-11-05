@@ -7,7 +7,7 @@ import type { WidgetNodeData } from './WidgetNode';
 /**
  * Runtime narrowing for loosely typed node data (`Record<string, unknown>`)
  * before it reaches a component with a precise prop type. Canvas data comes
- * from disk, plugins and folder children, so the shape is validated instead
+ * from disk and folder children, so the shape is validated instead
  * of asserted. The `to*` helpers keep the original object (and its identity)
  * when it is valid and fall back to a copy holding only well-typed fields.
  */

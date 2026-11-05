@@ -1,7 +1,6 @@
-import type { NoteMetadataChange } from '../../../packages/plugin-sdk';
+import type { NoteMetadataChange } from '../../shared/contentEvents';
 import { invalidateBlockNotePrefetch } from './blockNotePrefetch';
 import { applyNoteMetadataChanges } from './noteMetadataProjection';
-import { registerNoteReferences } from './noteReferences';
 import { rpcLoadBlockNote } from './rpc';
 
 export interface NoteBodySnapshot {
@@ -26,13 +25,9 @@ export function registerNoteBodyEditor(
 ): () => void {
   const key = `${workspaceId}\0${id}`;
   const group = editors.get(key) ?? new Set<Editor>();
-  const unprotect = registerNoteReferences((current) =>
-    current === workspaceId ? [id] : []
-  );
   group.add(editor);
   editors.set(key, group);
   return () => {
-    unprotect();
     group.delete(editor);
     if (!group.size) {
       editors.delete(key);

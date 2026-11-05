@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
-// Curated subset: security trust boundaries (plugin install/signature/URL
-// policy, local HTTP auth) and data-integrity invariants (import/export
+// Curated subset: security trust boundaries (local HTTP auth) and
+// data-integrity invariants (import/export
 // round-trips, corruption recovery, undo history). Node environment by
 // default; individual files opt into jsdom via a docblock.
 export default defineConfig({

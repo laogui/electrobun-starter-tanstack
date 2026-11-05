@@ -100,29 +100,6 @@ it('exposes conflicts, refuses stale decisions and archives evidence without rew
     )
   );
 });
-it('lets a corrupt legacy note intent be exported and quarantined instead of permanently wedging writes', async () => {
-  await mkdir(join(ws, 'content/.ghostboard'));
-  await writeFile(
-    join(ws, 'content/.ghostboard/plugin-content-intent.json'),
-    '{broken'
-  );
-  const [entry] = await listTransactionRecovery(ws);
-  expect(entry?.error).toBeTruthy();
-  expect(entry?.raw).toBe('{broken');
-  const result = await resolveTransactionRecovery(
-    ws,
-    'notes',
-    entry!.token,
-    'quarantine'
-  );
-  expect(result.success).toBe(true);
-  await withNoteWorkspace(ws, async () =>
-    atomicWrite(join(ws, 'content/new.md'), 'Writable again')
-  );
-  expect(await readFile(join(ws, 'content/new.md'), 'utf8')).toBe(
-    'Writable again'
-  );
-});
 it('rejects journal paths escaping the workspace without writing outside it', async () => {
   await writeFile(
     join(ws, FILE_JOURNAL),

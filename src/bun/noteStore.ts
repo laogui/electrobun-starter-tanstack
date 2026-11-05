@@ -238,7 +238,7 @@ export function noteRecordToCardData(
   return data;
 }
 
-/** Merge metadata under the same revision discipline as editor/plugin writes. */
+/** Merge metadata under the same revision discipline as editor writes. */
 export async function mergeNoteMeta(
   wsPath: string,
   noteId: string,

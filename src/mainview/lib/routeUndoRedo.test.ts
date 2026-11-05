@@ -29,8 +29,7 @@ describe('routeUndoRedo (undo stack routing)', () => {
 
   beforeEach(() => {
     useCanvasStore.getState().reset();
-    unifiedUndoHistory.clear();
-    unifiedUndoHistory.setContext('', '');
+    unifiedUndoHistory.reset();
     undoInstance = vi.fn<IdHandler>(() => true);
     redoInstance = vi.fn<IdHandler>(() => true);
     undoWidget = vi.fn<IdHandler>(() => true);
@@ -93,7 +92,7 @@ describe('routeUndoRedo (undo stack routing)', () => {
   });
 
   it('replays canvas entries through the unified timeline when active', async () => {
-    unifiedUndoHistory.setContext('ws', 'view-1');
+    unifiedUndoHistory.setNativeView('view-1');
     useCanvasStore.setState({
       activeViewId: 'view-1',
       nodes: [card('a', 'v0')],

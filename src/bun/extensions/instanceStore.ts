@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, unlink } from 'node:fs/promises';
+import { readdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
   generateInstanceId,
@@ -17,149 +17,9 @@ import {
   serializeExtensionInstance,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
-import { isPluginId } from '../../shared/plugins/ids';
 import { atomicWrite } from '../atomicWrite';
 import { withNoteWorkspace } from '../noteTransactions';
-import { notifyContentChanged } from '../plugins/contentEvents';
 import { resolveWorkspaceSubpath } from '../workspacePaths';
-
-const MIGRATION_BACKUP_SCHEMA = 'ghostboard-plugin-migration-backup/v1';
-const MIGRATION_BACKUP_MAX_BYTES = INSTANCE_JSON_MAX_BYTES + 16 * 1024;
-
-interface PluginMigrationBackup {
-  createdAt: string;
-  instance: ParsedExtensionInstance;
-  kind: 'migration' | 'restore-guard';
-  pluginId: string;
-  schema: typeof MIGRATION_BACKUP_SCHEMA;
-}
-
-export interface PluginMigrationBackupSummary {
-  count: number;
-  latestAt?: string;
-}
-
-function pluginIdForCanvasType(canvasTypeId: string): string | undefined {
-  const separator = canvasTypeId.lastIndexOf('/');
-  const pluginId = separator > 0 ? canvasTypeId.slice(0, separator) : '';
-  return isPluginId(pluginId) ? pluginId : undefined;
-}
-
-function migrationBackupDirectory(wsPath: string, pluginId: string): string {
-  if (!isPluginId(pluginId)) {
-    throw new Error('Invalid pluginId for migration backup.');
-  }
-  return resolve(
-    wsPath,
-    '.ghostboard',
-    'plugin-migrations',
-    encodeURIComponent(pluginId)
-  );
-}
-
-function parseMigrationBackup(
-  value: unknown
-): PluginMigrationBackup | undefined {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('schema' in value) ||
-    value.schema !== MIGRATION_BACKUP_SCHEMA ||
-    !('kind' in value) ||
-    !['migration', 'restore-guard'].includes(String(value.kind)) ||
-    !('pluginId' in value) ||
-    typeof value.pluginId !== 'string' ||
-    !isPluginId(value.pluginId) ||
-    !('createdAt' in value) ||
-    typeof value.createdAt !== 'string' ||
-    !('instance' in value) ||
-    !value.instance ||
-    typeof value.instance !== 'object' ||
-    !('record' in value.instance) ||
-    !('extras' in value.instance) ||
-    !value.instance.extras ||
-    typeof value.instance.extras !== 'object' ||
-    Array.isArray(value.instance.extras)
-  ) {
-    return;
-  }
-  const parsed = parseExtensionInstanceRecord(
-    serializeExtensionInstance(value.instance as ParsedExtensionInstance)
-  );
-  if (parsedToError(parsed)) {
-    return;
-  }
-  if (pluginIdForCanvasType(parsed.record.canvasTypeId) !== value.pluginId) {
-    return;
-  }
-  return {
-    schema: MIGRATION_BACKUP_SCHEMA,
-    kind: value.kind as PluginMigrationBackup['kind'],
-    pluginId: value.pluginId,
-    createdAt: value.createdAt,
-    instance: parsed,
-  };
-}
-
-async function writeMigrationBackup(
-  wsPath: string,
-  parsed: ParsedExtensionInstance,
-  kind: PluginMigrationBackup['kind']
-): Promise<void> {
-  const pluginId = pluginIdForCanvasType(parsed.record.canvasTypeId);
-  if (!pluginId) {
-    return;
-  }
-  const directory = migrationBackupDirectory(wsPath, pluginId);
-  await mkdir(directory, { recursive: true });
-  const backup: PluginMigrationBackup = {
-    schema: MIGRATION_BACKUP_SCHEMA,
-    kind,
-    pluginId,
-    createdAt: new Date().toISOString(),
-    instance: parsed,
-  };
-  const text = JSON.stringify(backup, null, 2);
-  if (new TextEncoder().encode(text).byteLength > MIGRATION_BACKUP_MAX_BYTES) {
-    throw new Error('Extension migration backup exceeds the size limit.');
-  }
-  await atomicWrite(
-    resolve(
-      directory,
-      `${parsed.record.id}-v${parsed.record.dataVersion}-r${parsed.record.revision}-${kind}.json`
-    ),
-    text
-  );
-}
-
-async function readPluginMigrationBackups(
-  wsPath: string,
-  pluginId: string,
-  kind: PluginMigrationBackup['kind'] = 'migration'
-): Promise<PluginMigrationBackup[]> {
-  const directory = migrationBackupDirectory(wsPath, pluginId);
-  const backups: PluginMigrationBackup[] = [];
-  for (const name of await readdir(directory).catch(() => [])) {
-    if (!name.endsWith('.json')) {
-      continue;
-    }
-    try {
-      const text = await readFile(resolve(directory, name), 'utf8');
-      if (
-        new TextEncoder().encode(text).byteLength > MIGRATION_BACKUP_MAX_BYTES
-      ) {
-        continue;
-      }
-      const backup = parseMigrationBackup(JSON.parse(text) as unknown);
-      if (backup?.pluginId === pluginId && backup.kind === kind) {
-        backups.push(backup);
-      }
-    } catch {
-      // A damaged backup is ignored; it never makes live instance data worse.
-    }
-  }
-  return backups;
-}
 
 export function instanceRelativePath(instanceId: string): string {
   if (!isInstanceId(instanceId)) {
@@ -274,93 +134,6 @@ async function loadExtensionInstancesUnlocked(
   return Object.fromEntries(results);
 }
 
-function newestMigrationByInstance(
-  backups: PluginMigrationBackup[]
-): PluginMigrationBackup[] {
-  const newest = new Map<string, PluginMigrationBackup>();
-  for (const backup of backups) {
-    const current = newest.get(backup.instance.record.id);
-    if (
-      !current ||
-      backup.instance.record.dataVersion >
-        current.instance.record.dataVersion ||
-      (backup.instance.record.dataVersion ===
-        current.instance.record.dataVersion &&
-        backup.instance.record.revision > current.instance.record.revision)
-    ) {
-      newest.set(backup.instance.record.id, backup);
-    }
-  }
-  return [...newest.values()];
-}
-
-async function pluginMigrationBackupSummaryUnlocked(
-  wsPath: string,
-  pluginId: string
-): Promise<PluginMigrationBackupSummary> {
-  const available: PluginMigrationBackup[] = [];
-  for (const backup of newestMigrationByInstance(
-    await readPluginMigrationBackups(wsPath, pluginId)
-  )) {
-    const current = await loadExtensionInstance(
-      wsPath,
-      backup.instance.record.id
-    );
-    if (
-      !parsedToError(current) &&
-      current.record.canvasTypeId === backup.instance.record.canvasTypeId &&
-      current.record.dataVersion > backup.instance.record.dataVersion
-    ) {
-      available.push(backup);
-    }
-  }
-  const latestAt = available
-    .map((backup) => backup.createdAt)
-    .sort()
-    .at(-1);
-  return {
-    count: available.length,
-    ...(latestAt ? { latestAt } : {}),
-  };
-}
-
-async function restorePluginMigrationBackupsUnlocked(
-  wsPath: string,
-  pluginId: string
-): Promise<{ restored: number; skipped: number }> {
-  let restored = 0;
-  let skipped = 0;
-  for (const backup of newestMigrationByInstance(
-    await readPluginMigrationBackups(wsPath, pluginId)
-  )) {
-    const current = await loadExtensionInstance(
-      wsPath,
-      backup.instance.record.id
-    );
-    if (
-      parsedToError(current) ||
-      current.record.canvasTypeId !== backup.instance.record.canvasTypeId ||
-      current.record.dataVersion <= backup.instance.record.dataVersion
-    ) {
-      skipped += 1;
-      continue;
-    }
-    await writeMigrationBackup(wsPath, current, 'restore-guard');
-    const now = new Date().toISOString();
-    await saveExtensionInstance(wsPath, {
-      extras: backup.instance.extras,
-      record: {
-        ...backup.instance.record,
-        appVersion: current.record.appVersion,
-        revision: current.record.revision + 1,
-        updatedAt: now,
-      },
-    });
-    restored += 1;
-  }
-  return { restored, skipped };
-}
-
 async function saveExtensionInstanceUnlocked(
   wsPath: string,
   parsed: ParsedExtensionInstance
@@ -382,11 +155,6 @@ async function saveExtensionInstanceUnlocked(
     instanceRelativePath(validated.record.id)
   );
   await atomicWrite(fullPath, JSON.stringify(payload, null, 2));
-  notifyContentChanged(wsPath, {
-    kind: 'extension',
-    ids: [validated.record.id],
-    operation: 'upsert',
-  });
 }
 
 async function updateExtensionInstanceUnlocked(
@@ -429,12 +197,6 @@ async function updateExtensionInstanceUnlocked(
       presentation: input.presentation,
     },
   };
-  if (
-    input.dataVersion !== undefined &&
-    input.dataVersion > current.record.dataVersion
-  ) {
-    await writeMigrationBackup(wsPath, current, 'migration');
-  }
   await saveExtensionInstance(wsPath, next);
   return next;
 }
@@ -484,11 +246,6 @@ async function deleteExtensionInstanceUnlocked(
     return false;
   }
   await unlink(fullPath);
-  notifyContentChanged(wsPath, {
-    kind: 'extension',
-    ids: [instanceId],
-    operation: 'delete',
-  });
   return true;
 }
 
@@ -575,20 +332,6 @@ export const deleteExtensionInstance = (
 export const loadExtensionInstances = (
   ...args: Parameters<typeof loadExtensionInstancesUnlocked>
 ) => withNoteWorkspace(args[0], () => loadExtensionInstancesUnlocked(...args));
-
-export const pluginMigrationBackupSummary = (
-  ...args: Parameters<typeof pluginMigrationBackupSummaryUnlocked>
-) =>
-  withNoteWorkspace(args[0], () =>
-    pluginMigrationBackupSummaryUnlocked(...args)
-  );
-
-export const restorePluginMigrationBackups = (
-  ...args: Parameters<typeof restorePluginMigrationBackupsUnlocked>
-) =>
-  withNoteWorkspace(args[0], () =>
-    restorePluginMigrationBackupsUnlocked(...args)
-  );
 
 export const deleteInstancesByCanvasType = (
   ...args: Parameters<typeof deleteInstancesByCanvasTypeUnlocked>

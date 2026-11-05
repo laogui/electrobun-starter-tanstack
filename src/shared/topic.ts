@@ -1,7 +1,7 @@
 /**
  * Topic (主题) data contract, shared by the renderer and the Bun main process.
  *
- * A Topic is a core canvas node — not a plugin extension — holding a single
+ * A Topic is a core canvas node — not an extension — holding a single
  * compact title. Hierarchy is expressed exclusively by `labeledEdge` records
  * tagged with `data.kind: 'topic-child'`; nothing about the tree is duplicated
  * onto the node, so the edge set is the only source of truth for parentage.

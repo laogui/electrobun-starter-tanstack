@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { RpcContext } from './rpc/context';
 
@@ -379,19 +379,18 @@ it('retains newly created notes that have not yet gained a manifest reference', 
   });
 });
 
-it('keeps the view list readable when note recovery blocks writes', async () => {
+it('keeps the view list readable when write recovery blocks writes', async () => {
   const { loadWorkspaceConfig } = await import('./workspace');
-  const { NOTE_INTENT_PATH } = await import('./noteTransactions');
-  await writeFile(join(ws, NOTE_INTENT_PATH), 'damaged intent');
+  const { FILE_JOURNAL } = await import('./workspaceFileJournal');
+  await mkdir(dirname(join(ws, FILE_JOURNAL)), { recursive: true });
+  await writeFile(join(ws, FILE_JOURNAL), 'damaged intent');
   expect(await loadWorkspaceConfig(ws)).toMatchObject({
     activeViewId: 'default',
   });
   expect(
     await handlers().saveManifest({ viewId: 'default', nodes: [], edges: [] })
   ).toMatchObject({ success: false });
-  expect(await readFile(join(ws, NOTE_INTENT_PATH), 'utf8')).toBe(
-    'damaged intent'
-  );
+  expect(await readFile(join(ws, FILE_JOURNAL), 'utf8')).toBe('damaged intent');
 });
 
 it('rejects disagreeing legacy references before either body overwrites the other', async () => {

@@ -140,7 +140,7 @@ function measureSubtreeHeights(
 /**
  * Position every Topic in the tree rooted at `rootId`.
  *
- * Only this tree is touched. Notes, images, plugin cards, and other trees are
+ * Only this tree is touched. Notes, images, extension cards, and other trees are
  * never moved to make room — the plan treats them as obstacles to route around,
  * not things to push aside.
  */

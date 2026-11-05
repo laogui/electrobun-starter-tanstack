@@ -2,7 +2,6 @@ import {
   Info,
   Keyboard,
   MessageSquare,
-  Package,
   Puzzle,
   Settings as SettingsIcon,
   Sparkles,
@@ -10,10 +9,7 @@ import {
 } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  SHOW_CANVAS_TYPES_SETTINGS,
-  SHOW_PLUGINS_SETTINGS,
-} from '@/lib/productScope';
+import { SHOW_CANVAS_TYPES_SETTINGS } from '@/lib/productScope';
 import { cn } from '@/lib/utils';
 import {
   type AppSettings,
@@ -29,7 +25,6 @@ import { AIPanel } from './panels/AIPanel';
 import { CanvasTypesPanel } from './panels/CanvasTypesPanel';
 import { FeedbackPanel } from './panels/FeedbackPanel';
 import { GeneralPanel } from './panels/GeneralPanel';
-import { PluginsPanel } from './panels/PluginsPanel';
 import { ShortcutsPanel } from './panels/ShortcutsPanel';
 import { WorkspacePanel } from './panels/WorkspacePanel';
 import { applyTheme, normalizeSettings } from './settingsState';
@@ -40,7 +35,6 @@ type SettingsSection =
   | 'canvasTypes'
   | 'feedback'
   | 'general'
-  | 'plugins'
   | 'shortcuts'
   | 'workspace';
 
@@ -54,7 +48,6 @@ interface NavItem {
     | 'navCanvasTypes'
     | 'navFeedback'
     | 'navGeneral'
-    | 'navPlugins'
     | 'navShortcuts'
     | 'navWorkspace'
   >;
@@ -64,7 +57,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { id: 'general', icon: SettingsIcon, labelKey: 'navGeneral' },
   { id: 'workspace', icon: Wrench, labelKey: 'navWorkspace' },
   { id: 'canvasTypes', icon: Puzzle, labelKey: 'navCanvasTypes' },
-  { id: 'plugins', icon: Package, labelKey: 'navPlugins' },
   { id: 'ai', icon: Sparkles, labelKey: 'navAi' },
   { id: 'shortcuts', icon: Keyboard, labelKey: 'navShortcuts' },
   { id: 'feedback', icon: MessageSquare, labelKey: 'navFeedback' },
@@ -72,9 +64,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
 ];
 
 const NAV_ITEMS: NavItem[] = ALL_NAV_ITEMS.filter(
-  (item) =>
-    (item.id !== 'plugins' || SHOW_PLUGINS_SETTINGS) &&
-    (item.id !== 'canvasTypes' || SHOW_CANVAS_TYPES_SETTINGS)
+  (item) => item.id !== 'canvasTypes' || SHOW_CANVAS_TYPES_SETTINGS
 );
 
 const SETTINGS_SCROLLBAR_OPTIONS = {
@@ -344,7 +334,6 @@ function SettingsContent({
       {activeSection === 'canvasTypes' ? (
         <CanvasTypesPanel locale={locale} strings={strings} />
       ) : null}
-      {activeSection === 'plugins' ? <PluginsPanel strings={strings} /> : null}
       {activeSection === 'ai' ? (
         <AIPanel
           client={client}

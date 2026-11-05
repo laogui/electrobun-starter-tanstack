@@ -1,7 +1,7 @@
 import type {
   NoteMetadata,
   NoteMetadataChange,
-} from '../../../packages/plugin-sdk';
+} from '../../shared/contentEvents';
 import { updateHistoryNoteMetadata } from './canvasNoteHistory';
 
 interface Item {
@@ -28,7 +28,7 @@ export function subscribeNoteMetadataChanges(
   };
 }
 
-// Called only by the workspace-filtered host bridge, before React can render.
+// Called only by lib/noteChangeSync, before React can render.
 export function publishNoteMetadataChanges(
   changes: readonly NoteMetadataChange[]
 ): readonly NoteMetadataChange[] {

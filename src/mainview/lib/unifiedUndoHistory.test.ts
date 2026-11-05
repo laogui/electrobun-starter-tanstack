@@ -1,137 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  type PluginNoteHistoryEntry,
-  UnifiedUndoHistory,
-} from '@/lib/unifiedUndoHistory';
-
-const pluginEvent = (
-  action: 'record' | 'redo' | 'undo',
-  operationId = `${action}-operation`
-) => ({
-  action,
-  batchId: 'batch-a',
-  label: 'Rename notes',
-  operationId,
-  pluginId: 'example.notes',
-});
+import { UnifiedUndoHistory } from './unifiedUndoHistory';
 
 describe('UnifiedUndoHistory', () => {
-  it('orders canvas and committed plugin events and replays them symmetrically', async () => {
+  it('clears redo on a new branch and resets on view changes', () => {
     const history = new UnifiedUndoHistory();
-    const calls: string[] = [];
-    history.setContext('workspace-a', 'view-a');
+    history.setNativeView('view-a');
     history.recordCanvas('view-a');
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
+    history.perform('undo', { canvas: () => true });
+    expect(history.getSnapshot().future).toHaveLength(1);
     history.recordCanvas('view-a');
-    const handlers = {
-      canvas: (action: 'redo' | 'undo') => {
-        calls.push(`${action}:canvas`);
-        return true;
-      },
-      plugin: async (
-        entry: PluginNoteHistoryEntry,
-        action: 'redo' | 'undo'
-      ) => {
-        calls.push(`${action}:${entry.batchId}`);
-      },
-    };
-
-    await history.perform('undo', handlers);
-    await history.perform('undo', handlers);
-    await history.perform('undo', handlers);
-    await history.perform('redo', handlers);
-    await history.perform('redo', handlers);
-    await history.perform('redo', handlers);
-
-    expect(calls).toEqual([
-      'undo:canvas',
-      'undo:batch-a',
-      'undo:canvas',
-      'redo:canvas',
-      'redo:batch-a',
-      'redo:canvas',
-    ]);
-    expect(history.getSnapshot()).toMatchObject({
-      past: [{ kind: 'canvas' }, { kind: 'plugin-note' }, { kind: 'canvas' }],
-      future: [],
-      pending: false,
-    });
-  });
-
-  it('keeps the cursor fixed on failure and consumes concurrent requests', async () => {
-    const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
-    let reject!: (error: Error) => void;
-    const plugin = vi.fn(
-      () =>
-        new Promise<void>((_resolve, rejectPromise) => {
-          reject = rejectPromise;
-        })
-    );
-    const handlers = { canvas: () => true, plugin };
-    const first = history.perform('undo', handlers);
-
-    await expect(history.perform('undo', handlers)).resolves.toBe('pending');
-    reject(new Error('revision conflict'));
-    await expect(first).rejects.toThrow('revision conflict');
-    expect(history.getSnapshot()).toMatchObject({
-      past: [{ kind: 'plugin-note' }],
-      future: [],
-      pending: false,
-    });
-  });
-
-  it('deduplicates response/event confirmation in either order', async () => {
-    const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
-    const plugin = vi.fn(
-      async (
-        _entry: PluginNoteHistoryEntry,
-        action: 'redo' | 'undo',
-        operationId: string
-      ) => {
-        history.observePluginTransition(
-          'workspace-a',
-          pluginEvent(action, operationId)
-        );
-      }
-    );
-
-    await history.perform('undo', { canvas: () => true, plugin });
-    expect(history.getSnapshot()).toMatchObject({
-      past: [],
-      future: [{ kind: 'plugin-note' }],
-    });
-  });
-
-  it('clears the mixed cursor for a non-linear explicit plugin transition', () => {
-    const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
-    history.recordCanvas('view-a');
-
-    history.observePluginTransition('workspace-a', pluginEvent('undo'));
-
-    expect(history.getSnapshot()).toMatchObject({ past: [], future: [] });
-  });
-
-  it('clears redo on a new branch and resets on workspace or view changes', async () => {
-    const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
-    history.recordCanvas('view-a');
-    await history.perform('undo', {
-      canvas: () => true,
-      plugin: async () => undefined,
-    });
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
     expect(history.getSnapshot().future).toEqual([]);
 
-    history.setContext('workspace-a', 'view-b');
-    expect(history.getSnapshot()).toMatchObject({ past: [], future: [] });
-    history.recordCanvas('view-b');
-    history.setContext('workspace-b', 'view-b');
+    history.setNativeView('view-b');
     expect(history.getSnapshot()).toMatchObject({ past: [], future: [] });
   });
 });
@@ -139,7 +19,7 @@ describe('UnifiedUndoHistory', () => {
 describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () => {
   const setup = () => {
     const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
+    history.setNativeView('view-a');
     const calls: string[] = [];
     const handlers = {
       canvas: vi.fn((action: 'redo' | 'undo') => {
@@ -159,11 +39,6 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
           return true;
         }
       ),
-      plugin: vi.fn(
-        async (entry: PluginNoteHistoryEntry, action: 'redo' | 'undo') => {
-          calls.push(`${action}:${entry.batchId}`);
-        }
-      ),
     };
     const kinds = () => ({
       past: history.getSnapshot().past.map((entry) => entry.kind),
@@ -172,35 +47,32 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     return { calls, handlers, history, kinds };
   };
 
-  it('undoes the most recent action regardless of origin and redoes in order', async () => {
+  it('undoes the most recent action regardless of origin and redoes in order', () => {
     const { calls, handlers, history } = setup();
     history.recordCanvas('view-a');
     history.recordWidget('w-1');
-    history.observePluginTransition('workspace-a', pluginEvent('record'));
     history.recordExtensionInstance('inst-1');
 
-    for (let i = 0; i < 4; i++) {
-      await history.perform('undo', handlers);
+    for (let i = 0; i < 3; i++) {
+      history.perform('undo', handlers);
     }
-    for (let i = 0; i < 4; i++) {
-      await history.perform('redo', handlers);
+    for (let i = 0; i < 3; i++) {
+      history.perform('redo', handlers);
     }
 
     expect(calls).toEqual([
       'undo:instance:inst-1',
-      'undo:batch-a',
       'undo:widget:w-1',
       'undo:canvas',
       'redo:canvas',
       'redo:widget:w-1',
-      'redo:batch-a',
       'redo:instance:inst-1',
     ]);
     expect(history.getSnapshot().future).toEqual([]);
-    expect(history.getSnapshot().past).toHaveLength(4);
+    expect(history.getSnapshot().past).toHaveLength(3);
   });
 
-  it('moves the matching entry when a focused source undoes on its own', async () => {
+  it('moves the matching entry when a focused source undoes on its own', () => {
     const { calls, handlers, history, kinds } = setup();
     history.recordWidget('w-1');
     history.recordCanvas('view-a');
@@ -214,12 +86,12 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     });
 
     // The next global undo reverts the canvas edit, not the widget again.
-    await history.perform('undo', handlers);
+    history.perform('undo', handlers);
     expect(calls).toEqual(['undo:canvas']);
 
     // Redo replays the most recently undone entry first.
-    await history.perform('redo', handlers);
-    await history.perform('redo', handlers);
+    history.perform('redo', handlers);
+    history.perform('redo', handlers);
     expect(calls).toEqual(['undo:canvas', 'redo:canvas', 'redo:widget:w-1']);
   });
 
@@ -238,7 +110,7 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     expect(kinds()).toEqual({ past: ['canvas'], future: [] });
   });
 
-  it('skips stale entries whose source has nothing left to undo', async () => {
+  it('skips stale entries whose source has nothing left to undo', () => {
     const { calls, handlers, history } = setup();
     history.recordCanvas('view-a');
     history.recordWidget('w-1');
@@ -248,7 +120,7 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
       return false;
     });
 
-    await expect(history.perform('undo', handlers)).resolves.toBe('applied');
+    expect(history.perform('undo', handlers)).toBe('applied');
 
     expect(calls).toEqual(['undo:widget:w-1:empty', 'undo:canvas']);
     expect(history.getSnapshot()).toMatchObject({
@@ -258,14 +130,12 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     });
   });
 
-  it('treats a missing source handler as stale instead of wedging', async () => {
+  it('treats a missing source handler as stale instead of wedging', () => {
     const history = new UnifiedUndoHistory();
-    history.setContext('workspace-a', 'view-a');
+    history.setNativeView('view-a');
     history.recordWidget('w-1');
     const canvas = vi.fn(() => true);
-    await expect(
-      history.perform('undo', { canvas, plugin: async () => undefined })
-    ).resolves.toBe('empty');
+    expect(history.perform('undo', { canvas })).toBe('empty');
     expect(canvas).not.toHaveBeenCalled();
     expect(history.getSnapshot().past).toEqual([]);
   });
@@ -294,7 +164,7 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     expect(kinds()).toEqual({ past: [], future: [] });
   });
 
-  it('ignores stack records without an active context and falls back to canvas', async () => {
+  it('ignores stack records without an active context and falls back to canvas', () => {
     const history = new UnifiedUndoHistory();
     history.recordWidget('w-1');
     history.recordExtensionInstance('inst-1');
@@ -302,17 +172,15 @@ describe('UnifiedUndoHistory stack sources (widget / extension / canvas)', () =>
     expect(history.getSnapshot().past).toEqual([]);
 
     const canvas = vi.fn(() => true);
-    await expect(
-      history.perform('undo', { canvas, plugin: async () => undefined })
-    ).resolves.toBe('applied');
+    expect(history.perform('undo', { canvas })).toBe('applied');
     expect(canvas).toHaveBeenCalledWith('undo');
   });
 
-  it('a new record of any origin abandons the redo branch', async () => {
+  it('a new record of any origin abandons the redo branch', () => {
     const { handlers, history, kinds } = setup();
     history.recordCanvas('view-a');
     history.recordExtensionInstance('inst-1');
-    await history.perform('undo', handlers);
+    history.perform('undo', handlers);
     expect(kinds().future).toEqual(['extension-instance']);
 
     history.recordWidget('w-9');

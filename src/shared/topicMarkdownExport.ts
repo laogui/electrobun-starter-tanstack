@@ -2,7 +2,7 @@
  * Topic outline → Markdown.
  *
  * This is a deliberately narrow projection: titles and hierarchy, nothing
- * else. Notes, stickies, media, plugin cards and ordinary connections are not
+ * else. Notes, stickies, media, extension cards and ordinary connections are not
  * part of an outline, and the existing Note Markdown export keeps its own
  * separate behaviour.
  *

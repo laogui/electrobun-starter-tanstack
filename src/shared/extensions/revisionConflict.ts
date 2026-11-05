@@ -5,7 +5,7 @@ import type { ExtensionStateSnapshot } from './protocol';
  * longer matches the instance.
  *
  * The message matches the host's `updateExtensionInstance` rejection so a
- * plugin sees the same failure whether the conflict is caught in the renderer
+ * caller sees the same failure whether the conflict is caught in the renderer
  * or on disk. `snapshot` is the state the caller should rebase onto.
  */
 export class ExtensionRevisionConflictError extends Error {

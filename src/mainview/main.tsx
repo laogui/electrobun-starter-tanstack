@@ -9,11 +9,9 @@ import {
   reportRendererError,
   startRendererDiagnostics,
 } from '@/lib/diagnostics';
+import { connectNoteChangeSync } from '@/lib/noteChangeSync';
 import { startPerfMarks } from '@/lib/perfMarks';
 import { router } from '@/router';
-import { PluginWorkbench, startPluginRuntime } from './plugins/runtime';
-import { connectPluginHostEvents } from './plugins/runtime/hostEvents';
-import { pluginRuntime } from './plugins/runtime/PluginRuntime';
 
 import '@xyflow/react/dist/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
@@ -25,16 +23,6 @@ const stopDiagnostics = startRendererDiagnostics();
 import.meta.hot?.dispose(stopDiagnostics);
 
 registerBuiltinCanvasTypes();
-
-// Trusted-plugin verification probes (scripts/trusted-plugin-t*/run.ts) are
-// compiled in only when a harness sets a VITE_PLUGIN_T* flag or in the dev
-// server; see vite.config.ts. Release `vite build` folds the constant to
-// false so neither the loader nor any probe chunk ships.
-if (__GHOSTBOARD_PLUGIN_PROBES__) {
-  import('./plugins/probes')
-    .then(({ startPluginProbes }) => startPluginProbes())
-    .catch(console.error);
-}
 
 const rootElement = document.querySelector('#root');
 
@@ -56,18 +44,13 @@ root.render(
         provide the animation features or they stay frozen at `initial`. */}
     <LazyMotion features={domAnimation}>
       <RouterProvider router={router} />
-      {import.meta.env.VITE_PLUGIN_T0 !== '1' ? <PluginWorkbench /> : null}
     </LazyMotion>
   </ThemeProvider>
 );
 
-if (import.meta.env.VITE_PLUGIN_T0 !== '1') {
-  const disconnectEvents = connectPluginHostEvents(pluginRuntime);
-  const disconnectTasks = connectExtensionTaskDispatcher();
-  const stopPlugins = startPluginRuntime();
-  import.meta.hot?.dispose(() => {
-    disconnectEvents();
-    disconnectTasks();
-    stopPlugins();
-  });
-}
+const disconnectNoteSync = connectNoteChangeSync();
+const disconnectTasks = connectExtensionTaskDispatcher();
+import.meta.hot?.dispose(() => {
+  disconnectNoteSync();
+  disconnectTasks();
+});

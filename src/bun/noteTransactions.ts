@@ -1,20 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { mkdir, readFile, unlink } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import {
-  isPluginContentHistoryEvent,
-  type PluginContentHistoryEvent,
-} from '../shared/plugins/contentHistory';
-import { atomicWrite } from './atomicWrite';
-import { notifyContentChanged } from './plugins/contentEvents';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { recoverWorkspaceFileJournal } from './workspaceFileJournal';
 
-export const NOTE_HISTORY_PATH =
-  'content/.ghostboard/plugin-content-history.json';
-export const NOTE_INTENT_PATH =
-  'content/.ghostboard/plugin-content-intent.json';
-const NOTE_ID = /^[A-Za-z0-9_-]+$/;
-const MAX_INTENT_BYTES = 32 * 1024 * 1024;
 const queues = new Map<string, Promise<unknown>>();
 const ownership = new AsyncLocalStorage<{ active: boolean; path: string }>();
 
@@ -29,26 +17,6 @@ export class NoteTransactionError extends Error {
   }
 }
 
-export interface NoteFileChange {
-  after: string | null;
-  before: string | null;
-  id: string;
-}
-interface Intent {
-  changes: NoteFileChange[];
-  historyAfter: string;
-  historyBefore: string | null;
-  hostHistory?: PluginContentHistoryEvent;
-  schema: 'ghostboard-note-intent/v1';
-}
-
-export function noteFilePath(workspace: string, id: string): string {
-  if (!NOTE_ID.test(id)) {
-    throw new NoteTransactionError('invalid-input', 'Invalid note id');
-  }
-  return join(workspace, 'content/.ghostboard/blocknote', `${id}.json`);
-}
-
 export async function readOptionalText(path: string): Promise<string | null> {
   try {
     return await readFile(path, 'utf8');
@@ -60,188 +28,11 @@ export async function readOptionalText(path: string): Promise<string | null> {
   }
 }
 
-function parseIntent(text: string): Intent {
-  if (Buffer.byteLength(text) > MAX_INTENT_BYTES) {
-    throw new NoteTransactionError(
-      'recovery-required',
-      'Note transaction intent exceeds size limit'
-    );
-  }
-  const value = JSON.parse(text) as Partial<Intent> | null;
-  if (
-    value?.schema !== 'ghostboard-note-intent/v1' ||
-    !Array.isArray(value.changes) ||
-    value.changes.length > 100 ||
-    typeof value.historyAfter !== 'string' ||
-    !(value.historyBefore === null || typeof value.historyBefore === 'string')
-  ) {
-    throw new NoteTransactionError(
-      'recovery-required',
-      'Invalid note transaction intent; original files retained'
-    );
-  }
-  if (
-    value.hostHistory !== undefined &&
-    !isPluginContentHistoryEvent(value.hostHistory)
-  ) {
-    throw new NoteTransactionError(
-      'recovery-required',
-      'Invalid note transaction host history metadata'
-    );
-  }
-  const ids = new Set<string>();
-  for (const change of value.changes) {
-    if (
-      !change ||
-      typeof change.id !== 'string' ||
-      !NOTE_ID.test(change.id) ||
-      ids.has(change.id) ||
-      ![change.before, change.after].every(
-        (item) => item === null || typeof item === 'string'
-      )
-    ) {
-      throw new NoteTransactionError(
-        'recovery-required',
-        'Invalid note transaction entry'
-      );
-    }
-    ids.add(change.id);
-    for (const data of [change.before, change.after]) {
-      if (data !== null) {
-        const note = JSON.parse(data) as Record<string, unknown> | null;
-        if (
-          note?.schema !== 'ghostboard-blocknote/v1' ||
-          note.noteId !== change.id ||
-          !Array.isArray(note.blocks) ||
-          !Number.isSafeInteger(note.revision) ||
-          (note.revision as number) < 0
-        ) {
-          throw new NoteTransactionError(
-            'recovery-required',
-            'Invalid note transaction content'
-          );
-        }
-      }
-    }
-  }
-  const history = JSON.parse(value.historyAfter) as Record<
-    string,
-    unknown
-  > | null;
-  if (
-    (history?.schema !== 'ghostboard-content-history/v1' &&
-      history?.schema !== 'ghostboard-content-history/v2' &&
-      history?.schema !== 'ghostboard-content-history/v3') ||
-    !Array.isArray(history.operations)
-  ) {
-    throw new NoteTransactionError(
-      'recovery-required',
-      'Invalid note transaction history'
-    );
-  }
-  return value as Intent;
-}
-
-async function recoverUnlocked(workspace: string): Promise<void> {
-  const path = join(workspace, NOTE_INTENT_PATH);
-  const text = await readOptionalText(path);
-  if (text === null) {
-    return;
-  }
-  const intent = parseIntent(text);
-  const changes = [
-    ...intent.changes.map((change) => ({
-      ...change,
-      path: noteFilePath(workspace, change.id),
-    })),
-    {
-      path: join(workspace, NOTE_HISTORY_PATH),
-      before: intent.historyBefore,
-      after: intent.historyAfter,
-    },
-  ];
-  for (const change of changes) {
-    const current = await readOptionalText(change.path);
-    if (current !== change.before && current !== change.after) {
-      throw new NoteTransactionError(
-        'recovery-conflict',
-        'A pending note transaction conflicts with externally changed files; preserve the intent for recovery'
-      );
-    }
-  }
-  for (const change of changes) {
-    if ((await readOptionalText(change.path)) === change.after) {
-      continue;
-    }
-    if (change.after === null) {
-      await unlink(change.path).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOENT') {
-          throw error;
-        }
-      });
-    } else {
-      await mkdir(dirname(change.path), { recursive: true });
-      await atomicWrite(change.path, change.after);
-    }
-  }
-  await unlink(path);
-  if (intent.changes.length) {
-    const noteChanges = intent.changes.flatMap((change) => {
-      if (change.before === null || change.after === null) {
-        return [];
-      }
-      const before = JSON.parse(change.before) as {
-        title?: string;
-        color?: string;
-        revision: number;
-        blocks: unknown[];
-      };
-      const after = JSON.parse(change.after) as typeof before;
-      return [
-        {
-          id: change.id,
-          before: {
-            title: before.title ?? '',
-            color: before.color ?? '',
-            revision: before.revision,
-          },
-          after: {
-            title: after.title ?? '',
-            color: after.color ?? '',
-            revision: after.revision,
-          },
-          metadataOnly:
-            JSON.stringify(before.blocks) === JSON.stringify(after.blocks),
-        },
-      ];
-    });
-    const upserts = intent.changes
-      .filter((change) => change.after !== null)
-      .map((change) => change.id);
-    const removed = intent.changes
-      .filter((change) => change.after === null)
-      .map((change) => change.id);
-    if (upserts.length) {
-      notifyContentChanged(workspace, {
-        kind: 'note',
-        ids: upserts,
-        operation: 'upsert',
-        noteChanges,
-        hostHistory: intent.hostHistory,
-      });
-    }
-    if (removed.length) {
-      notifyContentChanged(workspace, {
-        kind: 'note',
-        ids: removed,
-        operation: 'delete',
-        hostHistory: intent.hostHistory,
-      });
-    }
-  }
-}
-
-/** Reentrant only while the owning operation still holds the workspace queue. */
+/**
+ * Serialise note/canvas writes per workspace. Reentrant only while the owning
+ * operation still holds the workspace queue. Before running, a pending canvas
+ * write journal is recovered so no write lands on half-committed files.
+ */
 export async function withNoteWorkspace<T>(
   workspace: string,
   work: () => Promise<T>,
@@ -267,7 +58,6 @@ export async function withNoteWorkspace<T>(
                 error instanceof Error ? error.message : String(error)
               );
             }
-            await recoverUnlocked(path);
           }
           return await work();
         } finally {
@@ -283,56 +73,4 @@ export async function withNoteWorkspace<T>(
       queues.delete(path);
     }
   }
-}
-
-export async function commitNoteFiles(
-  workspace: string,
-  changes: NoteFileChange[],
-  historyAfter: string,
-  hostHistory?: PluginContentHistoryEvent
-): Promise<void> {
-  if (
-    !ownership.getStore()?.active ||
-    ownership.getStore()?.path !== resolve(workspace)
-  ) {
-    throw new Error('Note transactions require workspace ownership');
-  }
-  const historyBefore = await readOptionalText(
-    join(workspace, NOTE_HISTORY_PATH)
-  );
-  const text = JSON.stringify({
-    schema: 'ghostboard-note-intent/v1',
-    changes,
-    ...(hostHistory ? { hostHistory } : {}),
-    historyBefore,
-    historyAfter,
-  });
-  parseIntent(text);
-  await mkdir(join(workspace, 'content/.ghostboard'), { recursive: true });
-  await atomicWrite(join(workspace, NOTE_INTENT_PATH), text);
-  // After intent publication, completion may require recovery. Never undo a
-  // partial commit by restoring stale bytes over an independently changed file.
-  await recoverUnlocked(workspace);
-}
-
-export async function inspectNoteTransaction(
-  workspace: string,
-  text: string
-): Promise<string[]> {
-  const intent = parseIntent(text);
-  const conflicts: string[] = [];
-  for (const change of intent.changes) {
-    const current = await readOptionalText(noteFilePath(workspace, change.id));
-    if (current !== change.before && current !== change.after) {
-      conflicts.push(change.id);
-    }
-  }
-  const history = await readOptionalText(join(workspace, NOTE_HISTORY_PATH));
-  if (history !== intent.historyBefore && history !== intent.historyAfter) {
-    conflicts.push(NOTE_HISTORY_PATH);
-  }
-  return conflicts;
-}
-export async function retryNoteRecovery(workspace: string): Promise<void> {
-  await recoverUnlocked(workspace);
 }

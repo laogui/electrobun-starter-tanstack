@@ -1,5 +1,4 @@
 import { toast } from 'sonner';
-import { createPluginContent } from '@/plugins/runtime/content';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import { useWidgetStore } from '@/store/widgetStore';
@@ -11,7 +10,7 @@ import { unifiedUndoHistory } from './unifiedUndoHistory';
  * -----------------
  * Every history source registers its entries with the unified coordinator
  * (lib/unifiedUndoHistory.ts): canvas snapshots, legacy widget edits,
- * canvas-type extension instance edits and committed plugin note batches.
+ * and canvas-type extension instance edits.
  * This module decides who handles a Cmd+Z / menu Undo. First match wins:
  *
  * 1. Focused extension instance (`[data-extension-instance]` ancestor of the
@@ -24,9 +23,9 @@ import { unifiedUndoHistory } from './unifiedUndoHistory';
  *    BlockNote) has focus, keyboard shortcuts return false so the editor's own
  *    stack runs; the native menu path calls document.execCommand instead.
  * 4. Otherwise the unified timeline: the most recent entry from any source is
- *    reverted, so canvas edits, inline widget/extension edits and plugin
- *    batches undo in the order they happened. With no active workspace/view
- *    context it falls back to the canvas snapshot stack directly.
+ *    reverted, so canvas edits and inline widget/extension edits undo in the
+ *    order they happened. With no active view it falls back to the canvas
+ *    snapshot stack directly.
  *
  * Covered by routeUndoRedo.test.ts and unifiedUndoHistory.test.ts.
  */
@@ -60,8 +59,8 @@ function focusedExtensionInstanceId(
 }
 
 function routeUnifiedHistory(kind: 'redo' | 'undo'): void {
-  unifiedUndoHistory
-    .perform(kind, {
+  try {
+    unifiedUndoHistory.perform(kind, {
       canvas: (action) => useCanvasStore.getState()[action](),
       widget: (widgetId, action) => {
         const widgets = useWidgetStore.getState();
@@ -75,24 +74,16 @@ function routeUnifiedHistory(kind: 'redo' | 'undo'): void {
           ? instances.undoInstance(instanceId)
           : instances.redoInstance(instanceId);
       },
-      plugin: async (entry, action, operationId) => {
-        const content = createPluginContent({
-          pluginId: entry.pluginId,
-          workspaceId: entry.workspaceId,
-          signal: new AbortController().signal,
-        });
-        await content[action](entry.batchId, { operationId });
-      },
-    })
-    .catch((error) => {
-      console.error(
-        `[history] ${kind === 'undo' ? 'Undo' : 'Redo'} failed:`,
-        error
-      );
-      toast.error(
-        kind === 'undo' ? m.toast_undo_failed() : m.toast_redo_failed()
-      );
     });
+  } catch (error) {
+    console.error(
+      `[history] ${kind === 'undo' ? 'Undo' : 'Redo'} failed:`,
+      error
+    );
+    toast.error(
+      kind === 'undo' ? m.toast_undo_failed() : m.toast_redo_failed()
+    );
+  }
 }
 
 /**

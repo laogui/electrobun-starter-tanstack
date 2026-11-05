@@ -422,11 +422,6 @@ export function createCanvasHandlers(
             if (existing) {
               return existing;
             }
-            if (noteId.startsWith('plugin_note_')) {
-              throw new Error(
-                'Plugin-created note is missing; restore it before saving a placement'
-              );
-            }
             const markdownFile = await createNote(
               workspace,
               noteId,

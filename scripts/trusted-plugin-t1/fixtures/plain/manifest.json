@@ -1,9 +1,0 @@
-{
-  "manifestVersion": 2,
-  "id": "t1.plain",
-  "name": "T1 no-build external plugin",
-  "version": "0.1.0",
-  "engines": { "ghostboard": ">=1.0.0 <2.0.0" },
-  "entrypoints": { "app": "app.js" },
-  "capabilities": []
-}

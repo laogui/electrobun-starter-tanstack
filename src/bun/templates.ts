@@ -17,36 +17,21 @@ import blankManifest from './templates/blank/manifest.canvas.json';
 import blankMeta from './templates/blank/meta.json';
 import brainstormMindmapManifest from './templates/brainstorm-mindmap/manifest.canvas.json';
 import brainstormMindmapMeta from './templates/brainstorm-mindmap/meta.json';
-import cafeAssets from './templates/cafe/assets.json';
-import cafeManifest from './templates/cafe/manifest.canvas.json';
-import cafeMeta from './templates/cafe/meta.json';
-import demoManifest from './templates/demo/manifest.canvas.json';
-import demoMeta from './templates/demo/meta.json';
-import eisenhowerMatrixManifest from './templates/eisenhower-matrix/manifest.canvas.json';
-import eisenhowerMatrixMeta from './templates/eisenhower-matrix/meta.json';
 import featureStoryAssets from './templates/feature-story/assets.json';
 import featureStoryManifest from './templates/feature-story/manifest.canvas.json';
 import featureStoryMeta from './templates/feature-story/meta.json';
 import interviewNotesAssets from './templates/interview-notes/assets.json';
 import interviewNotesManifest from './templates/interview-notes/manifest.canvas.json';
 import interviewNotesMeta from './templates/interview-notes/meta.json';
-import kanbanManifest from './templates/kanban/manifest.canvas.json';
-import kanbanMeta from './templates/kanban/meta.json';
 import novelBibleAssets from './templates/novel-bible/assets.json';
 import novelBibleManifest from './templates/novel-bible/manifest.canvas.json';
 import novelBibleMeta from './templates/novel-bible/meta.json';
-import quickStartManifest from './templates/quick-start/manifest.canvas.json';
-import quickStartMeta from './templates/quick-start/meta.json';
 import readingNotesAssets from './templates/reading-notes/assets.json';
 import readingNotesManifest from './templates/reading-notes/manifest.canvas.json';
 import readingNotesMeta from './templates/reading-notes/meta.json';
-import sprintRetroManifest from './templates/sprint-retro/manifest.canvas.json';
-import sprintRetroMeta from './templates/sprint-retro/meta.json';
 import topicPoolAssets from './templates/topic-pool/assets.json';
 import topicPoolManifest from './templates/topic-pool/manifest.canvas.json';
 import topicPoolMeta from './templates/topic-pool/meta.json';
-import weeklyPlannerManifest from './templates/weekly-planner/manifest.canvas.json';
-import weeklyPlannerMeta from './templates/weekly-planner/meta.json';
 
 export interface TemplateMeta {
   category: 'planning' | 'thinking' | 'knowledge' | 'blank';
@@ -231,20 +216,6 @@ const TEMPLATE_SOURCES: Record<string, TemplateSource> = {
     meta: brainstormMindmapMeta,
     manifest: brainstormMindmapManifest,
   },
-  // Hidden from the gallery (HIDDEN_TEMPLATE_IDS), still loadable by id.
-  'quick-start': { meta: quickStartMeta, manifest: quickStartManifest },
-  demo: { meta: demoMeta, manifest: demoManifest },
-  'weekly-planner': {
-    meta: weeklyPlannerMeta,
-    manifest: weeklyPlannerManifest,
-  },
-  kanban: { meta: kanbanMeta, manifest: kanbanManifest },
-  'sprint-retro': { meta: sprintRetroMeta, manifest: sprintRetroManifest },
-  'eisenhower-matrix': {
-    meta: eisenhowerMatrixMeta,
-    manifest: eisenhowerMatrixManifest,
-  },
-  cafe: { meta: cafeMeta, manifest: { ...cafeManifest, assets: cafeAssets } },
 };
 
 const parsedMeta = new Map<string, TemplateMeta>();
@@ -272,29 +243,11 @@ function templateBody(id: string, source: TemplateSource): TemplateBody {
   return body;
 }
 
-/**
- * Templates that don't serve the writer workflow are hidden from the gallery
- * in the slim release (docs/PRD-slim.md): the old tutorial / demo canvases
- * and the planning templates. They stay bundled and loadable by id, so
- * nothing that already references them breaks.
- */
-export const HIDDEN_TEMPLATE_IDS: ReadonlySet<string> = new Set([
-  'quick-start',
-  'demo',
-  'kanban',
-  'sprint-retro',
-  'weekly-planner',
-  'eisenhower-matrix',
-  'cafe',
-]);
-
 /** List the built-in templates shown in the gallery. */
 export function listAllTemplates(): TemplateMeta[] {
-  return Object.entries(TEMPLATE_SOURCES)
-    .filter(([id]) => !HIDDEN_TEMPLATE_IDS.has(id))
-    .map(([id, source]) => ({
-      ...templateMeta(id, source),
-    }));
+  return Object.entries(TEMPLATE_SOURCES).map(([id, source]) => ({
+    ...templateMeta(id, source),
+  }));
 }
 
 /** Load a single template by id. Returns null if not found. */

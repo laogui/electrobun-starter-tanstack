@@ -40,45 +40,17 @@ const TEMPLATE_I18N: Record<
     name: () => m.template_novel_bible_name(),
     description: () => m.template_novel_bible_description(),
   },
-  'quick-start': {
-    name: () => m.template_quick_start_name(),
-    description: () => m.template_quick_start_description(),
-  },
   blank: {
     name: () => m.template_blank_name(),
     description: () => m.template_blank_description(),
-  },
-  'weekly-planner': {
-    name: () => m.template_weekly_planner_name(),
-    description: () => m.template_weekly_planner_description(),
-  },
-  kanban: {
-    name: () => m.template_kanban_name(),
-    description: () => m.template_kanban_description(),
-  },
-  'sprint-retro': {
-    name: () => m.template_sprint_retro_name(),
-    description: () => m.template_sprint_retro_description(),
   },
   'brainstorm-mindmap': {
     name: () => m.template_brainstorm_mindmap_name(),
     description: () => m.template_brainstorm_mindmap_description(),
   },
-  'eisenhower-matrix': {
-    name: () => m.template_eisenhower_matrix_name(),
-    description: () => m.template_eisenhower_matrix_description(),
-  },
   'reading-notes': {
     name: () => m.template_reading_notes_name(),
     description: () => m.template_reading_notes_description(),
-  },
-  demo: {
-    name: () => m.template_demo_name(),
-    description: () => m.template_demo_description(),
-  },
-  cafe: {
-    name: () => m.template_cafe_name(),
-    description: () => m.template_cafe_description(),
   },
 };
 

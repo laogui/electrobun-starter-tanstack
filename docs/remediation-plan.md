@@ -194,6 +194,8 @@ noteRecordStore     Map<noteId, { title, color, revision, preview, updatedAt }> 
    - 标题在卡片上改时直接写笔记，就是 4.2 第 2 步。撤销走笔记这一侧，画布不管。
 3. **统一时间线收窄**：`routeUndoRedo` 第 4 步改为只走画布快照栈；小组件和扩展实例保持现在“聚焦时用自己的栈”。插件批量修改只在插件触发后的那一步撤销里生效，或者放进插件自己的撤销入口。`unifiedUndoHistory` 保留给插件，待插件按需启动（1.4）时一起评估能否整体下线。
 
+> **进度（2026-11-05）**：第 2 条的颜色部分已完成（见 slim-changes 第 8 行）。新增 `HISTORY_NOTE_KEYS`（`NOTE_CONTENT_KEYS` 去掉 `color`），画布快照保留颜色，`changeNodeColor` 和带颜色的 `commitNodeData` / `commitFolderChildData` 都能撤销；冲突恢复 `replaceNoteSources` 仍按完整字段（含颜色）取磁盘版本。已知边界：插件改了颜色后，再撤销一步无关的画布操作，颜色会回到那一步之前的值。
+
 **顺序**：先做第 2 条（小，可独立提交，补 `historySlice` 测试）；第 3 条跟在 4.2 第 5 步之后；第 1 条视阶段 2 里是否真碰到“切卡后撤不回”再做。
 
 **验收**：

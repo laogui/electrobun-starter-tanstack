@@ -62,6 +62,42 @@ describe('canvasStore actions + undo restore (smoke)', () => {
     expect(state().canRedo()).toBe(true);
   });
 
+  it('changing a note card colour is a canvas edit: undo reverts it, content stays', () => {
+    useCanvasStore.setState({
+      nodes: [
+        node('n1', 'card', {
+          data: { noteId: 'note-1', title: 'n1', color: '#FFFFFF' },
+        }),
+      ],
+    });
+    state().changeNodeColor('n1');
+    const changed = state().nodes[0]?.data.color;
+    expect(changed).not.toBe('#FFFFFF');
+    // A note-side edit after the colour change must survive the canvas undo.
+    state().updateNodeData('n1', { title: 'typed later' });
+
+    expect(state().undo()).toBe(true);
+    expect(state().nodes[0]?.data.color).toBe('#FFFFFF');
+    expect(state().nodes[0]?.data.title).toBe('typed later');
+
+    expect(state().redo()).toBe(true);
+    expect(state().nodes[0]?.data.color).toBe(changed);
+  });
+
+  it('commitNodeData with a colour on a note card is undoable', () => {
+    useCanvasStore.setState({
+      nodes: [
+        node('n1', 'card', {
+          data: { noteId: 'note-1', title: 'n1', color: '#FFFFFF' },
+        }),
+      ],
+    });
+    state().commitNodeData('n1', { color: '#FFE4E1' });
+    expect(state().canUndo()).toBe(true);
+    state().undo();
+    expect(state().nodes[0]?.data.color).toBe('#FFFFFF');
+  });
+
   it('updateNodeData keeps the focused-view snapshot in sync', () => {
     state().setFocusedNode({
       id: 'n1',

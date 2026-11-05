@@ -16,6 +16,16 @@ export const NOTE_CONTENT_KEYS = [
   'blocks',
   'markdown',
 ] as const;
+
+/**
+ * Note fields the canvas undo history leaves to the note side. `color` is
+ * deliberately absent: a card's colour is a canvas operation (same as
+ * Heptabase's whiteboard), so canvas undo snapshots keep it and Cmd+Z on the
+ * canvas reverts it. See docs/remediation-plan.md, 4.3.
+ */
+export const HISTORY_NOTE_KEYS: readonly string[] = NOTE_CONTENT_KEYS.filter(
+  (key) => key !== 'color'
+);
 export type NoteContentCache = Map<string, Record<string, unknown>>;
 function visitData(
   data: Record<string, unknown>,
@@ -49,7 +59,11 @@ function visitData(
   }
   return next;
 }
-export function rememberNoteContent(nodes: Node[], cache: NoteContentCache) {
+export function rememberNoteContent(
+  nodes: Node[],
+  cache: NoteContentCache,
+  keys: readonly string[] = HISTORY_NOTE_KEYS
+) {
   for (const node of nodes) {
     visitData(node.data, (data, id) => {
       const known = cache.get(id) ?? {};
@@ -61,7 +75,7 @@ export function rememberNoteContent(nodes: Node[], cache: NoteContentCache) {
         return data;
       }
       const content = { ...known };
-      for (const key of NOTE_CONTENT_KEYS) {
+      for (const key of keys) {
         if (key in data) {
           content[key] = data[key];
         }
@@ -75,7 +89,7 @@ export function stripHistoryNoteContent(nodes: Node[]): Node[] {
   return nodes.map((node) => {
     const data = visitData(node.data, (value) => {
       const next = { ...value };
-      for (const key of NOTE_CONTENT_KEYS) {
+      for (const key of HISTORY_NOTE_KEYS) {
         delete next[key];
       }
       return next;
@@ -118,7 +132,6 @@ export function updateHistoryNoteMetadata(
       const next = {
         ...known,
         title: change.after.title,
-        color: change.after.color,
         blocknoteRevision: change.after.revision,
       };
       if (!change.metadataOnly) {
@@ -145,7 +158,7 @@ export function replaceNoteSources(
   ids: readonly string[]
 ): Node[] {
   const cache: NoteContentCache = new Map();
-  rememberNoteContent(sources, cache);
+  rememberNoteContent(sources, cache, NOTE_CONTENT_KEYS);
   return nodes.map((node) => ({
     ...node,
     data: visitData(node.data, (data, id) => {

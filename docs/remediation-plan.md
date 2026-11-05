@@ -7,7 +7,7 @@
 
 ## 为什么改交互
 
-卡片打开时从画布形变到全屏，文字要在两种字号、两种排版之间过渡，在 WebKit 下怎么调都做不到无缝（见 [focus-transition-variants.md](./focus-transition-variants.md) 的多轮尝试）。这是自用中最大的阻断点，符合 PRD-slim §6“新需求必须来自真实阻断点”的要求。
+卡片打开时从画布形变到全屏，文字要在两种字号、两种排版之间过渡，在 WebKit 下怎么调都做不到无缝（多轮尝试的记录 focus-transition-variants.md 已随阶段 1 删除，可在 git 历史中查看）。这是自用中最大的阻断点，符合 PRD-slim §6“新需求必须来自真实阻断点”的要求。
 
 改成右侧边栏后：只需滑入一块面板、只动 `transform`，容易做顺；画布不被挡住，可以边看素材边写。
 
@@ -51,6 +51,8 @@
 ---
 
 ## 阶段 1：卡片改在右侧边栏打开，删除转场体系（第 2～6 天）
+
+> **进度（2026-11-05）**：主体已完成，见 slim-changes 第 6 行。已做：`CardSidePanel.tsx`（侧边栏、拖边调宽 360～720 记在本机、全屏写作、看大图灯箱）、`focused/FocusedItemBody.tsx`（从 946 行的 FocusedView 拆出的内容组件）、`lib/focusedItem.ts`（统一打开 / 关闭入口，保留保存冲突保护）、`lib/sidePanelGeometry.ts`（被挡住时自动平移）；单击选中、双击或 `Enter` 打开（Sticky 同样改为双击编辑，Topic 不变）；删除 `focusTransition/`、FocusedView、FocusedViewHost、`.gb-vt-focus` 样式和 focus-transition-variants.md。与上面规格的差异：宽度记在 localStorage 而不是应用设置；`FocusedNotePreview` 保留，作为编辑器加载前的占位，避免白闪。**未做**：插件运行时按需启动（并入阶段 3）。Linux 沙箱已手动走通打开、替换、全屏、看大图、Esc、删除即关、撤销、`[]` 任务列表；未在 Mac 上跑。
 
 **目标**：打开卡片时画布不被挡住，可以边看边写。删掉形变动画和它带来的一整套代码。
 

@@ -36,13 +36,13 @@ export function FocusedNotePreview({
     >
       <div className="min-h-0 flex-1 overflow-hidden">
         <div
-          className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12"
+          className="mx-auto w-full max-w-[min(88ch,100%)] @2xl:px-12 px-2 @2xl:pt-12 pt-2 pb-12"
           data-focus-surface
           style={colorToStyle(colorValue)}
         >
           <h1
             className={cn(
-              'mb-2 block w-full whitespace-pre-wrap break-words pl-[54px] font-bold text-4xl leading-tight tracking-normal',
+              'mb-2 block w-full whitespace-pre-wrap break-words pl-[54px] font-bold @2xl:text-4xl text-2xl leading-tight tracking-normal',
               !titleText && (isDark ? 'text-white/40' : 'text-gray-600/60')
             )}
             data-focus-title

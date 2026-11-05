@@ -2,13 +2,11 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { type MutableRefObject, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
-import {
-  closeFocusedViewWithTransition,
-  runFocusTransition,
-} from '@/components/canvas/focusTransition/runFocusTransition';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
+import { revealNodeBesidePanel } from '@/lib/canvasFocus';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { buildAbsoluteRects, getNodeSize } from '@/lib/collision';
+import { closeFocusedView, openFocusedItem } from '@/lib/focusedItem';
 import { VIEWPORT_ZOOM_MS, viewportMotion } from '@/lib/motion';
 import { routeUndoRedo } from '@/lib/routeUndoRedo';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
@@ -83,7 +81,6 @@ export function useCanvasKeyboard({
   // `focusedNode` is read from the store at event time (not subscribed) so
   // opening a note does not re-render the canvas route that hosts this hook.
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
-  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const setNodes = useCanvasStore((s) => s.setNodes);
   const deleteNodes = useCanvasStore((s) => s.deleteNodes);
@@ -117,8 +114,16 @@ export function useCanvasKeyboard({
   rfInstanceRef.current = rfInstance;
 
   useEffect(() => {
-    const isModal = () =>
-      useCanvasStore.getState().focusedNode || focusedFolderRef.current;
+    // The side panel leaves the canvas usable; full-screen writing, the
+    // image lightbox and an expanded folder cover it.
+    const isModal = () => {
+      const { focusedNode, focusedMode } = useCanvasStore.getState();
+      return Boolean(
+        focusedFolderRef.current || (focusedNode && focusedMode !== 'panel')
+      );
+    };
+    const inCardPanel = (target: Element | null) =>
+      Boolean(target?.closest('[data-card-panel]'));
     const isEditing = () => {
       const el = document.activeElement;
       return (
@@ -158,7 +163,7 @@ export function useCanvasKeyboard({
           return;
         }
         if (useCanvasStore.getState().focusedNode) {
-          closeFocusedViewWithTransition();
+          closeFocusedView();
           return;
         }
         if (focusedFolderRef.current) {
@@ -194,7 +199,7 @@ export function useCanvasKeyboard({
         return;
       }
 
-      if (isModal() || isEditing()) {
+      if (isModal() || isEditing() || inCardPanel(target)) {
         return;
       }
 
@@ -411,17 +416,19 @@ export function useCanvasKeyboard({
           setFocusedFolder({ id: node.id, data: node.data, rect });
         } else {
           prefetchBlockNoteForData(node.data as Record<string, unknown>);
-          runFocusTransition(
-            () => {
-              setFocusedNode({
-                id: node.id,
-                type: node.type,
-                data: node.data,
-                rect,
-              });
-            },
-            { direction: 'open', source: el }
-          );
+          if (
+            openFocusedItem({
+              id: node.id,
+              type: node.type,
+              data: node.data,
+              rect,
+            })
+          ) {
+            revealNodeBesidePanel(
+              node.id,
+              rfInstanceRef.current?.current ?? null
+            );
+          }
         }
         return;
       }
@@ -471,7 +478,6 @@ export function useCanvasKeyboard({
     // up once for the lifetime of the component. The focus/search/instance
     // values are read through refs above, so they intentionally do NOT appear
     // here (they would tear down & rebuild the keydown listener on every nav).
-    setFocusedNode,
     setFocusedFolder,
     setNodes,
     deleteNodes,

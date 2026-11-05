@@ -9,7 +9,8 @@
 | 3 | `3f9000d` + `9229296` | 写作模板、首次打开成品板、Checklist 并入 Note | 见 [`../template-redesign/`](../template-redesign/README.md) |
 | 4 | `dbc1468` | 标签只剩一种 | [`03-tags-dbc1468.diff`](03-tags-dbc1468.diff) |
 | — | `5c7fa31` | 整改方案按评审调整顺序；PRD-slim 记下“卡片改为侧边栏打开” | 仅文档，见 [`../remediation-plan.md`](../remediation-plan.md) |
-| 5 | 本次 | 整改阶段 0：性能样本脚本、计时打点、基线表与 bug 清单 | 见 [`../quality/`](../quality/perf-baseline.md)；打点默认关闭，不影响用户 |
+| 5 | `ef05a12` | 整改阶段 0：性能样本脚本、计时打点、基线表与 bug 清单 | 见 [`../quality/`](../quality/perf-baseline.md)；打点默认关闭，不影响用户 |
+| 6 | 本次 | 整改阶段 1：卡片改在右侧边栏打开，删除转场体系；单击选中、双击打开 | 见 [`../remediation-plan.md`](../remediation-plan.md) 阶段 1 进度；恢复：`git revert` 本提交 |
 
 原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 

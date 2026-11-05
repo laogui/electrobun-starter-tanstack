@@ -29,7 +29,6 @@ import {
   nodeTypes,
 } from '@/lib/canvasConstants';
 import { isPinnedSticky } from '@/lib/canvasNodePredicates';
-import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import {
   buildFolderExpansionNodes,
@@ -106,8 +105,6 @@ export interface CanvasFlowLayerProps {
   onPaneContextMenu: ReturnType<typeof useContextMenu>['onPaneContextMenu'];
   rfInstance: RefObject<ReactFlowInstance<any, any> | null>;
   spacePanActive: boolean;
-  /** Set by the shell's pointerdown capture for plain node presses. */
-  suppressClickSelectRef: RefObject<boolean>;
 }
 
 function nodeZIndex(node: Node): number {
@@ -143,7 +140,6 @@ function CanvasFlowLayerComponent({
   onPaneContextMenu,
   rfInstance,
   spacePanActive,
-  suppressClickSelectRef,
 }: CanvasFlowLayerProps) {
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -198,18 +194,9 @@ function CanvasFlowLayerComponent({
   // before any selection change can be misattributed.
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      if (
-        suppressClickSelectRef.current &&
-        changes.length > 0 &&
-        changes.every((change) => change.type === 'select')
-      ) {
-        suppressClickSelectRef.current = false;
-        clearCanvasGraphSelection();
-        return;
-      }
       onNodesChange(changes);
     },
-    [onNodesChange, suppressClickSelectRef]
+    [onNodesChange]
   );
 
   // The in-flight Topic draft is rendered like a node but lives outside the
@@ -260,7 +247,7 @@ function CanvasFlowLayerComponent({
       isClosing: boolean;
       isDropTarget: boolean;
       isExpanded: boolean;
-      isHidden: boolean;
+      isOpenInPanel: boolean;
       isRejectingDrop: boolean;
       renderZIndex: number | undefined;
       result: Node;
@@ -307,7 +294,7 @@ function CanvasFlowLayerComponent({
         isClosing: boolean;
         isDropTarget: boolean;
         isExpanded: boolean;
-        isHidden: boolean;
+        isOpenInPanel: boolean;
         isRejectingDrop: boolean;
         renderZIndex: number | undefined;
         result: Node;
@@ -320,7 +307,8 @@ function CanvasFlowLayerComponent({
         continue;
       }
       const isExpansionChild = isFolderExpandedChildNode(node);
-      const isHidden = !isExpansionChild && focusedNodeId === node.id;
+      // The card open in the side panel stays visible, outlined.
+      const isOpenInPanel = !isExpansionChild && focusedNodeId === node.id;
       const folderPeekClass = focusedFolderId
         ? focusedFolderId === node.id
           ? 'folder-peek-anchor'
@@ -345,7 +333,7 @@ function CanvasFlowLayerComponent({
         cached &&
         cached.source.type === node.type &&
         cached.source.data === node.data &&
-        cached.isHidden === isHidden &&
+        cached.isOpenInPanel === isOpenInPanel &&
         cached.folderPeekClass === folderPeekClass &&
         cached.expansionChildren === expansionChildren &&
         cached.isExpanded === isExpanded &&
@@ -370,6 +358,7 @@ function CanvasFlowLayerComponent({
         node.className,
         locked ? 'is-locked' : '',
         folderPeekClass,
+        isOpenInPanel ? 'is-open-in-panel' : '',
         isNodeEntering(node.id) ? 'node-entering' : '',
       ]
         .filter(Boolean)
@@ -381,7 +370,6 @@ function CanvasFlowLayerComponent({
           ? cached.result.data
           : {
               ...node.data,
-              isHidden,
               isDropTarget,
               isRejectingDrop,
               ...(node.type === 'folder'
@@ -411,7 +399,7 @@ function CanvasFlowLayerComponent({
         isClosing,
         isDropTarget,
         isExpanded,
-        isHidden,
+        isOpenInPanel,
         isRejectingDrop,
         renderZIndex,
         result: decorated,
@@ -423,7 +411,7 @@ function CanvasFlowLayerComponent({
     return result;
   }, [
     renderSourceNodes,
-    // The memo body only reads `focusedNodeId` (to hide the focused node on
+    // The memo body only reads `focusedNodeId` (to outline the open card on
     // canvas), so depending on the whole object would re-run this O(n) loop on
     // every rect/data change to the focused item even though the id is stable.
     focusedNodeId,

@@ -972,5 +972,10 @@
   "data_diagnostics_quarantine": "归档损坏的已删除画布…",
   "data_diagnostics_warning": "是否将此损坏画布移出“已删除画布”，并把原文件保留到恢复目录？笔记和附件均保留，它们可能在后续手动清理中显示为未引用文件。",
   "data_diagnostics_confirm": "归档并移出已删除画布",
-  "data_diagnostics_done": "损坏的已删除画布已归档，可重新扫描未引用文件。"
+  "data_diagnostics_done": "损坏的已删除画布已归档，可重新扫描未引用文件。",
+  "panel_fullscreen": "全屏写作",
+  "panel_exit_fullscreen": "回到侧边栏",
+  "panel_previous": "上一张卡片",
+  "panel_next": "下一张卡片",
+  "panel_view_large": "看大图"
 }

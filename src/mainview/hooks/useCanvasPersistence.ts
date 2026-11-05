@@ -275,6 +275,7 @@ export function useCanvasPersistence() {
       latest.saveSnapshot();
       useCanvasStore.setState({
         focusedNode: null,
+        focusedMode: 'panel',
         focusedFolder: null,
         topicDraft: null,
         editingTopicId: null,

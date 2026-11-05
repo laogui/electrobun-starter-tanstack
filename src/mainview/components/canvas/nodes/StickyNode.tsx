@@ -219,31 +219,8 @@ const StickyNode = ({
     }
   }, [editing, focusEditable]);
 
-  // Single-click-to-edit model (mirrors the canvas' single-click-to-open): a
-  // plain click enters edit mode directly, since editing IS a sticky's "open".
-  // Modifier-clicks are reserved for selection and a drag never emits a click,
-  // so neither starts editing.
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (
-        editing ||
-        locked ||
-        e.shiftKey ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey
-      ) {
-        return;
-      }
-      e.stopPropagation();
-      enterEditing({ x: e.clientX, y: e.clientY });
-    },
-    [editing, enterEditing, locked]
-  );
-
-  // Double-click stays as a redundant edit path in case the first click is
-  // swallowed (e.g. by a drag threshold). Harmless once the click already
-  // entered editing.
+  // Click model (mirrors the canvas): a click selects, a double-click (or
+  // Enter) starts editing, since editing IS a sticky's "open".
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (editing || locked) {
@@ -313,7 +290,6 @@ const StickyNode = ({
               ? 'cursor-default'
               : 'cursor-grab'
         )}
-        onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onKeyDown={(event) => {
           if (!locked && (event.key === 'Enter' || event.key === ' ')) {

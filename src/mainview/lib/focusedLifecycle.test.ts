@@ -1,27 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const callbacks = vi.hoisted(() => ({
-  open: [] as Array<() => void>,
-  close: [] as Array<() => void>,
-}));
-vi.mock(
-  '@/components/canvas/focusTransition/viewTransitionController',
-  async (original) => ({
-    ...(await original<
-      typeof import('@/components/canvas/focusTransition/viewTransitionController')
-    >()),
-    openWithViewTransition: (update: () => void) => callbacks.open.push(update),
-    closeWithViewTransition: (update: () => void) =>
-      callbacks.close.push(update),
-  })
-);
-const { runFocusTransition, closeFocusedViewWithTransition } = await import(
-  '@/components/canvas/focusTransition/runFocusTransition'
-);
+const { closeFocusedView, openFocusedItem } = await import('./focusedItem');
 const { registerFocusedClose } = await import('./focusedCloseRequest');
 const { useCanvasStore } = await import('@/store/canvasStore');
 const { openFocusedById } = await import('./canvasFocus');
+const { revealShift, sidePanelLeft } = await import('./sidePanelGeometry');
+
 const node = {
   id: 'a',
   type: 'card',
@@ -32,68 +17,74 @@ beforeEach(() => {
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   useCanvasStore.getState().reset();
   useCanvasStore.getState().hydrate([node], []);
-  callbacks.open = [];
-  callbacks.close = [];
 });
+
 it('routes external close requests through editor conflict handling', () => {
   useCanvasStore
     .getState()
     .setFocusedNode({ id: 'a', data: node.data, rect: new DOMRect() });
   const guardedClose = vi.fn();
   const unregister = registerFocusedClose('a', guardedClose);
-  closeFocusedViewWithTransition();
+  closeFocusedView();
   expect(guardedClose).toHaveBeenCalledOnce();
-  expect(callbacks.close).toHaveLength(0);
   expect(useCanvasStore.getState().focusedNode?.id).toBe('a');
+  closeFocusedView(true);
+  expect(useCanvasStore.getState().focusedNode).toBeNull();
   unregister();
 });
-it('a delayed open cannot resurrect an item in another canvas', () => {
-  runFocusTransition(
-    () =>
-      useCanvasStore
-        .getState()
-        .setFocusedNode({ id: 'a', data: node.data, rect: new DOMRect() }),
-    { direction: 'open', source: null }
-  );
-  useCanvasStore.getState().setActiveView('other');
-  useCanvasStore.getState().hydrate([node], []);
-  callbacks.open[0]!();
-  expect(useCanvasStore.getState().focusedNode).toBeNull();
-});
-it('a delayed open refreshes live data and refuses a deleted item', () => {
-  const update = () =>
-    useCanvasStore
-      .getState()
-      .setFocusedNode({ id: 'a', data: node.data, rect: new DOMRect() });
-  runFocusTransition(update, { direction: 'open', source: null });
+
+it('opens with live data and refuses a deleted item', () => {
   useCanvasStore.getState().updateNodeData('a', { title: 'Current' });
-  callbacks.open[0]!();
+  const opened = openFocusedItem({
+    id: 'a',
+    data: node.data,
+    rect: new DOMRect(),
+  });
+  expect(opened).toBe(true);
   expect(useCanvasStore.getState().focusedNode?.data.title).toBe('Current');
-  runFocusTransition(update, { direction: 'open', source: null });
+  useCanvasStore.getState().setFocusedNode(null);
   useCanvasStore.setState({ nodes: [] });
-  callbacks.open[1]!();
+  expect(
+    openFocusedItem({ id: 'a', data: node.data, rect: new DOMRect() })
+  ).toBe(false);
   expect(useCanvasStore.getState().focusedNode).toBeNull();
 });
-it('a delayed close does not close a different item', () => {
+
+it('opening another card replaces the open one', () => {
   useCanvasStore
     .getState()
-    .setFocusedNode({ id: 'a', data: {}, rect: new DOMRect() });
-  closeFocusedViewWithTransition(true);
-  useCanvasStore
-    .getState()
-    .setFocusedNode({ id: 'b', data: {}, rect: new DOMRect() });
-  callbacks.close[0]!();
+    .hydrate([node, { ...node, id: 'b', data: { title: 'B' } }], []);
+  openFocusedItem({ id: 'a', data: {}, rect: new DOMRect() });
+  openFocusedItem({ id: 'b', data: {}, rect: new DOMRect() });
   expect(useCanvasStore.getState().focusedNode?.id).toBe('b');
 });
-it('a delayed close cannot close a newly reopened session of the same item', () => {
-  const item = { id: 'a', data: {}, rect: new DOMRect() };
-  useCanvasStore.getState().setFocusedNode(item);
-  closeFocusedViewWithTransition(true);
-  useCanvasStore.getState().setFocusedNode(null);
-  useCanvasStore.getState().setFocusedNode(item);
-  callbacks.close[0]!();
-  expect(useCanvasStore.getState().focusedNode).toBe(item);
+
+it('closing resets full-screen writing to the side panel', () => {
+  openFocusedItem({ id: 'a', data: {}, rect: new DOMRect() });
+  useCanvasStore.getState().setFocusedMode('fullscreen');
+  closeFocusedView(true);
+  expect(useCanvasStore.getState().focusedMode).toBe('panel');
 });
+
+it('opens folder children from the folder, not the canvas', () => {
+  const folder = {
+    ...node,
+    id: 'f',
+    type: 'folder',
+    data: { children: [{ id: 'c', type: 'card', data: { title: 'Child' } }] },
+  };
+  useCanvasStore.getState().hydrate([folder], []);
+  expect(
+    openFocusedItem({ id: 'c', folderId: 'f', data: {}, rect: new DOMRect() })
+  ).toBe(true);
+  expect(useCanvasStore.getState().focusedNode?.data.title).toBe('Child');
+});
+
+it('opens a card from the library at once', async () => {
+  await openFocusedById({ nodeId: 'a', rfInstance: null });
+  expect(useCanvasStore.getState().focusedNode?.id).toBe('a');
+});
+
 it('only the latest pending folder navigation can open', async () => {
   vi.useFakeTimers();
   const folder = { ...node, type: 'folder', data: { children: [] } };
@@ -113,6 +104,7 @@ it('only the latest pending folder navigation can open', async () => {
   expect(useCanvasStore.getState().focusedFolder?.id).toBe('b');
   vi.useRealTimers();
 });
+
 it('a pending folder pan cannot reopen a folder after a view switch', async () => {
   vi.useFakeTimers();
   useCanvasStore
@@ -128,4 +120,21 @@ it('a pending folder pan cannot reopen a folder after a view switch', async () =
   await pending;
   expect(useCanvasStore.getState().focusedFolder).toBeNull();
   vi.useRealTimers();
+});
+
+it('reveals a card the panel covers, and leaves a visible one alone', () => {
+  const viewport = { width: 1440, height: 900 };
+  const panelLeft = sidePanelLeft(viewport.width);
+  expect(
+    revealShift({ left: 100, top: 100, right: 400, bottom: 300 }, viewport)
+  ).toBeNull();
+  const shift = revealShift(
+    { left: panelLeft - 100, top: 100, right: panelLeft + 200, bottom: 300 },
+    viewport
+  );
+  expect(shift?.dy).toBe(0);
+  expect((shift?.dx ?? 0) < 0).toBe(true);
+  expect(panelLeft - 100 + (shift?.dx ?? 0) + 300).toBeLessThanOrEqual(
+    panelLeft - 32
+  );
 });

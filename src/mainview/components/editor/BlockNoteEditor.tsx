@@ -910,14 +910,14 @@ function BlockNoteSurface({
         }}
       >
         <div
-          className="mx-auto w-full max-w-[min(88ch,90%)] px-4 py-12 sm:px-8 lg:px-12"
+          className="mx-auto w-full max-w-[min(88ch,100%)] @2xl:px-12 px-2 @2xl:pt-12 pt-2 pb-12"
           data-focus-surface
           style={colorToStyle(color)}
         >
           <TextareaAutosize
             aria-label={m.a11y_note_title()}
             className={cn(
-              'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold text-4xl leading-tight tracking-normal outline-hidden',
+              'mb-2 block w-full resize-none border-none bg-transparent pl-[54px] font-bold @2xl:text-4xl text-2xl leading-tight tracking-normal outline-hidden',
               titlePlaceholderStyle
             )}
             data-focus-title

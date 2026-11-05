@@ -23,11 +23,10 @@ import { toast } from 'sonner';
 import { CanvasFlowLayer } from '@/components/canvas/CanvasFlowLayer';
 import { CanvasLoadErrorScreen } from '@/components/canvas/CanvasLoadErrorScreen';
 import { CanvasPanels } from '@/components/canvas/CanvasPanels';
+import { CardSidePanelHost } from '@/components/canvas/CardSidePanel';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
 import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
-import { FocusedViewHost } from '@/components/canvas/FocusedViewHost';
-import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
 import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
@@ -55,12 +54,14 @@ import {
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { resolveCanvasBackground } from '@/lib/canvasBackground';
+import { revealNodeBesidePanel } from '@/lib/canvasFocus';
 import { isFocusableNode, isLockedNode } from '@/lib/canvasNodePredicates';
 import {
   type CreatableCanvasNodeKind,
   extractLinkUrl,
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
+import { openFocusedItem } from '@/lib/focusedItem';
 import { isFolderExpandedChildNode } from '@/lib/folderExpansion';
 import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import { saveRecording } from '@/lib/recordingFiles';
@@ -282,13 +283,12 @@ function CanvasComponent() {
   // near the cursor, since paste events carry no coordinates of their own.
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const { theme, systemTheme } = useTheme();
-  // `focusedNode` is deliberately NOT subscribed here: FocusedViewHost owns
+  // `focusedNode` is deliberately NOT subscribed here: CardSidePanelHost owns
   // it so opening a note does not re-render the route shell.
   const focusedFolder = useCanvasStore((s) => s.focusedFolder);
   const focusedFolderId = focusedFolder?.id;
   const createMenuOpen = useCanvasStore((s) => s.createMenuOpen);
   const setCreateMenuOpen = useCanvasStore((s) => s.setCreateMenuOpen);
-  const setFocusedNode = useCanvasStore((s) => s.setFocusedNode);
   const setFocusedFolder = useCanvasStore((s) => s.setFocusedFolder);
   const applyEdgesChange = useCanvasStore((s) => s.applyEdgesChange);
   const addConnection = useCanvasStore((s) => s.addConnection);
@@ -980,7 +980,7 @@ function CanvasComponent() {
 
   const openNodeFocusedView = useCallback(
     (node: Node) => {
-      const el = document.querySelector(`[data-id="${node.id}"]`);
+      const el = document.querySelector(`[data-id="${CSS.escape(node.id)}"]`);
       const rect = el?.getBoundingClientRect();
       if (!rect) {
         return;
@@ -993,92 +993,47 @@ function CanvasComponent() {
           return;
         }
         prefetchBlockNoteForData(child.data);
-        runFocusTransition(
-          () => {
-            setFocusedNode({
-              id: child.id,
-              folderId,
-              type: child.type,
-              data: child.data,
-              rect,
-            });
-          },
-          { direction: 'open', source: el }
-        );
+        openFocusedItem({
+          id: child.id,
+          folderId,
+          type: child.type,
+          data: child.data,
+          rect,
+        });
       } else if (node.type === 'folder') {
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (
         isFocusableNode(node.type, node.data as Record<string, unknown>)
       ) {
         prefetchBlockNoteForData(node.data as Record<string, unknown>);
-        runFocusTransition(
-          () => {
-            setFocusedNode({
-              id: node.id,
-              type: node.type,
-              data: node.data,
-              rect,
-            });
-          },
-          { direction: 'open', source: el }
-        );
+        if (
+          openFocusedItem({
+            id: node.id,
+            type: node.type,
+            data: node.data,
+            rect,
+          })
+        ) {
+          revealNodeBesidePanel(node.id, rfInstance.current);
+        }
       }
     },
-    [setFocusedNode, setFocusedFolder]
+    [setFocusedFolder]
   );
 
-  // Single-click-to-open model: a plain (no-modifier) click on a node opens
-  // its focused view directly. Selection is reserved for marquee drag and
-  // modifier-clicks, so a plain click must NOT leave the node selected. We
-  // detect a plain node press on pointerdown and suppress the pure-selection
-  // changes React Flow would otherwise emit for it (see handleNodesChange).
-  // Marquee starts on the pane (not a node) and modifier-clicks are allowed
-  // through, so both keep working.
-  const suppressClickSelectRef = useRef(false);
-  const onCanvasPointerDownCapture = useCallback((e: React.PointerEvent) => {
-    const hasModifier = e.shiftKey || e.metaKey || e.ctrlKey || e.altKey;
-    const onNode = Boolean(
-      (e.target as Element | null)?.closest?.('.react-flow__node')
-    );
-    suppressClickSelectRef.current = onNode && !hasModifier;
-  }, []);
-
+  // Click model (docs/remediation-plan.md, phase 1): a plain click selects,
+  // a double-click (or Enter) opens. Opening another card while the side
+  // panel shows one replaces it.
   const onNodeClick = useCallback(
-    (e: React.MouseEvent, node: Node) => {
-      // Modifier-clicks toggle selection (handled by React Flow); only a plain
-      // click opens. Folders open their focused view too. Skip nodes that have
-      // no focused view and the one that is already open.
+    (_: React.MouseEvent, node: Node) => {
       const state = useCanvasStore.getState();
       if (state.focusedFolder?.id === node.id && node.type === 'folder') {
         closeFolderWithTransition();
-        return;
       }
-      const isOpenable =
-        node.type === 'folder' ||
-        (isFolderExpandedChildNode(node)
-          ? isFocusableNode(node.data.child.type, node.data.child.data)
-          : isFocusableNode(node.type, node.data as Record<string, unknown>));
-      const alreadyOpen =
-        state.focusedNode?.id === node.id ||
-        state.focusedFolder?.id === node.id;
-      if (
-        e.shiftKey ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey ||
-        !isOpenable ||
-        alreadyOpen
-      ) {
-        return;
-      }
-      openNodeFocusedView(node);
     },
-    [closeFolderWithTransition, openNodeFocusedView]
+    [closeFolderWithTransition]
   );
 
-  // Double-click stays as a redundant open path in case a first click is
-  // swallowed (e.g. by a drag threshold); for already-open nodes the plain
-  // click handled it, so skip to avoid restarting the focus animation.
   const onNodeDoubleClick = useCallback(
     (_: any, node: Node) => {
       const state = useCanvasStore.getState();
@@ -1086,8 +1041,11 @@ function CanvasComponent() {
         closeFolderWithTransition();
         return;
       }
+      const openId = isFolderExpandedChildNode(node)
+        ? node.data.child.id
+        : node.id;
       if (
-        state.focusedNode?.id === node.id ||
+        state.focusedNode?.id === openId ||
         state.focusedFolder?.id === node.id
       ) {
         return;
@@ -1142,7 +1100,6 @@ function CanvasComponent() {
       onDragEnter={onDragEnterWindow}
       onDragLeave={onDragLeaveWindow}
       onMouseMove={onPointerMoveCanvas}
-      onPointerDownCapture={onCanvasPointerDownCapture}
     >
       <div
         aria-label={activeViewName}
@@ -1177,7 +1134,6 @@ function CanvasComponent() {
           onPaneContextMenu={onPaneContextMenu}
           rfInstance={rfInstance}
           spacePanActive={spacePanActive}
-          suppressClickSelectRef={suppressClickSelectRef}
         />
       </div>
 
@@ -1194,7 +1150,7 @@ function CanvasComponent() {
         />
       ) : null}
 
-      <FocusedViewHost canvasContainerRef={canvasContainerRef} />
+      <CardSidePanelHost />
 
       {pendingFolderDeleteIds ? (
         <DeleteFolderConfirmDialog

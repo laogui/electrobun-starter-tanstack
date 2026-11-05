@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
-import { closeFocusedViewWithTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { saveAssetFileWithProgressToast } from '@/lib/assetImportProgress';
 import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
+import { closeFocusedView } from '@/lib/focusedItem';
 import { pickFile } from '@/lib/pickFile';
 import {
   rpcCancelExtensionTask,
@@ -125,7 +125,7 @@ export function createExtensionHostApi(input: {
         });
       },
       closeDetail: async () => {
-        closeFocusedViewWithTransition();
+        closeFocusedView();
       },
       requestTitleEdit: async () => {
         if (nodeId) {

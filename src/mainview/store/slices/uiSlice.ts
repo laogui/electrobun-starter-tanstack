@@ -29,6 +29,11 @@ export interface UiSlice {
   editingTagNodeId: string | null;
   focusedFolder: FocusedItem | null;
 
+  /**
+   * How the open card is shown: beside the canvas in the side panel, or
+   * full screen for writing. Resets to `panel` when the card closes.
+   */
+  focusedMode: FocusedMode;
   focusedNode: FocusedItem | null;
 
   // Library popup (browse notes on the current canvas)
@@ -48,6 +53,7 @@ export interface UiSlice {
   setEditingTagNodeId: (id: string | null) => void;
   setFocusedFolder: (v: FocusedItem | null) => void;
 
+  setFocusedMode: (mode: FocusedMode) => void;
   setFocusedNode: (v: FocusedItem | null) => void;
   setLibraryOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   setPendingSearchQuery: (query: string | null) => void;
@@ -68,11 +74,15 @@ export interface UiSlice {
   toggleTagSidebar: () => void;
 }
 
+/** `lightbox` is the full-screen image viewer opened from the panel. */
+export type FocusedMode = 'panel' | 'fullscreen' | 'lightbox';
+
 export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   set,
   get
 ) => ({
   _focusSession: 0,
+  focusedMode: 'panel',
   focusedNode: null,
   focusedFolder: null,
   createMenuOpen: false,
@@ -162,6 +172,7 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
     }
     set((s) => ({
       focusedNode: v,
+      ...(v ? {} : { focusedMode: 'panel' as const }),
       _focusSession:
         s.focusedNode?.id !== v?.id ||
         s.focusedNode?.folderId !== v?.folderId ||
@@ -169,6 +180,10 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
           ? s._focusSession + 1
           : s._focusSession,
     }));
+  },
+
+  setFocusedMode: (mode) => {
+    set({ focusedMode: mode });
   },
 
   setFocusedFolder: (v) => {

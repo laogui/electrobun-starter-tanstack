@@ -972,5 +972,10 @@
   "data_diagnostics_quarantine": "Archive damaged deleted canvas…",
   "data_diagnostics_warning": "Remove this damaged canvas from Deleted Canvases and retain its original file in the recovery directory? Its notes and attachments remain. They may appear as unlinked files in a future manual cleanup.",
   "data_diagnostics_confirm": "Archive and remove from Deleted Canvases",
-  "data_diagnostics_done": "Damaged deleted canvas archived. Retry the file cleanup scan."
+  "data_diagnostics_done": "Damaged deleted canvas archived. Retry the file cleanup scan.",
+  "panel_fullscreen": "Full-screen writing",
+  "panel_exit_fullscreen": "Back to side panel",
+  "panel_previous": "Previous card",
+  "panel_next": "Next card",
+  "panel_view_large": "View large"
 }

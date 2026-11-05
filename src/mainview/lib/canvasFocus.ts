@@ -1,8 +1,9 @@
 import type { Node, ReactFlowInstance } from '@xyflow/react';
-import { runFocusTransition } from '@/components/canvas/focusTransition/runFocusTransition';
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
+import { openFocusedItem } from '@/lib/focusedItem';
 import { VIEWPORT_PAN_MS, viewportMotion } from '@/lib/motion';
 import { markOpenRequested } from '@/lib/perfMarks';
+import { revealShift } from '@/lib/sidePanelGeometry';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import { useCanvasStore } from '@/store/canvasStore';
 import { absoluteNodePosition } from '../../shared/canvasGeometry';
@@ -14,6 +15,8 @@ const DEFAULT_NODE_HEIGHT = 160;
 /** Extra padding (ms) waited after setCenter resolves the flight animation,
  *  so React Flow's measured layout has a chance to flush before we read DOM. */
 const POST_CENTER_LAYOUT_FRAME_MS = 16;
+/** Pan that keeps an opened card beside the panel (motion rule: 150–180ms). */
+const PANEL_REVEAL_MS = 160;
 let navigationRequest = 0;
 
 export interface OpenFocusedOptions {
@@ -82,31 +85,59 @@ function getFlowPaneRect(): DOMRect {
 }
 
 /**
- * Where a node of `width`×`height` (flow units) lands on screen once
- * `setCenter` has centered it in `pane` at `zoom`. Lets the focus open start
- * from the pan's destination while the pan is still running.
+ * Pan the canvas so the node sits fully left of the side panel. With
+ * `center`, centre it in that area (search / library jumps). No-op when the
+ * node is already visible there or is not on the canvas (folder children).
  */
-export function computeCenteredNodeRect(
-  width: number,
-  height: number,
-  zoom: number,
-  pane: { height: number; left: number; top: number; width: number }
-): DOMRect {
-  const w = width * zoom;
-  const h = height * zoom;
-  return new DOMRect(
-    pane.left + (pane.width - w) / 2,
-    pane.top + (pane.height - h) / 2,
-    w,
-    h
+export function revealNodeBesidePanel(
+  nodeId: string,
+  rfInstance: ReactFlowInstance<any, any> | null,
+  { center = false, durationMs = PANEL_REVEAL_MS } = {}
+): void {
+  const viewport = rfInstance?.getViewport?.();
+  if (!(viewport && rfInstance?.setViewport)) {
+    return;
+  }
+  const { nodes } = useCanvasStore.getState();
+  const node = nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) {
+    return;
+  }
+  const { width, height } = getNodeBoxMetrics(node);
+  const rect = computeRectFromViewport(node, rfInstance, width, height);
+  const shift = revealShift(
+    {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+    },
+    {
+      width: typeof window === 'undefined' ? 1024 : window.innerWidth,
+      height: typeof window === 'undefined' ? 768 : window.innerHeight,
+    },
+    center
+  );
+  if (!shift) {
+    return;
+  }
+  const motion = viewportMotion(durationMs);
+  suppressViewportPersist(motion.duration + 50);
+  rfInstance.setViewport(
+    {
+      x: viewport.x + shift.dx,
+      y: viewport.y + shift.dy,
+      zoom: viewport.zoom,
+    },
+    motion
   );
 }
 
 /**
- * Center the canvas on `nodeId` and open the matching FocusedView (or the
- * focused folder view for folders). Notes open in parallel with the pan, animating
- * from the node's computed destination rect; folders still await the flight
- * because their expansion reads the live canvas DOM.
+ * Open `nodeId` from outside the canvas (library, search): notes and other
+ * focusable cards open in the side panel at once while the canvas pans them
+ * into view beside it; folders centre first and then expand, because their
+ * expansion reads the live canvas DOM.
  */
 export async function openFocusedById({
   nodeId,
@@ -115,7 +146,7 @@ export async function openFocusedById({
 }: OpenFocusedOptions): Promise<void> {
   markOpenRequested();
   const request = ++navigationRequest;
-  const { nodes, setFocusedNode, setFocusedFolder, _canvasGeneration } =
+  const { nodes, setFocusedFolder, _canvasGeneration } =
     useCanvasStore.getState();
   const stillCurrent = () =>
     request === navigationRequest &&
@@ -127,16 +158,26 @@ export async function openFocusedById({
 
   const { width, height } = getNodeBoxMetrics(node);
   const isFolder = node.type === 'folder';
-  const focusable =
-    !isFolder &&
-    isFocusableNode(node.type, node.data as Record<string, unknown>);
-  if (focusable) {
-    // Start the body load before the pan so it is ready when the editor
-    // mounts at the end of the open animation.
+
+  if (!isFolder) {
+    if (!isFocusableNode(node.type, node.data as Record<string, unknown>)) {
+      return;
+    }
     prefetchBlockNoteForData(node.data as Record<string, unknown>);
+    openFocusedItem({
+      id: node.id,
+      type: node.type,
+      data: node.data,
+      rect: computeRectFromViewport(node, rfInstance, width, height),
+    });
+    revealNodeBesidePanel(node.id, rfInstance, {
+      center: true,
+      durationMs: centerDurationMs,
+    });
+    return;
   }
 
-  // 1. Trigger flight animation.
+  // 1. Centre the folder.
   const viewport = rfInstance?.getViewport?.();
   const zoom = viewport?.zoom ?? 1;
   const flight = viewportMotion(centerDurationMs);
@@ -146,45 +187,6 @@ export async function openFocusedById({
     ...flight,
     zoom,
   });
-
-  // 2a. Notes: open now, from where the pan will put the card.
-  if (!isFolder) {
-    if (!focusable) {
-      return;
-    }
-    const rect = computeCenteredNodeRect(
-      width,
-      height,
-      zoom,
-      getFlowPaneRect()
-    );
-    runFocusTransition(
-      () => {
-        const current = useCanvasStore
-          .getState()
-          .nodes.find((item) => item.id === node.id);
-        if (!(stillCurrent() && current)) {
-          return;
-        }
-        setFocusedNode({
-          id: current.id,
-          type: current.type,
-          data: current.data,
-          rect,
-        });
-      },
-      {
-        direction: 'open',
-        source:
-          typeof document === 'undefined'
-            ? null
-            : document.querySelector(
-                `.react-flow__node[data-id="${CSS.escape(node.id)}"]`
-              ),
-      }
-    );
-    return;
-  }
 
   // 2b. Folders: wait for the flight to settle + one frame for layout flush.
   await new Promise<void>((resolve) => {

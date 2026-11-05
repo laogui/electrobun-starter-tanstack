@@ -40,13 +40,17 @@ import {
 } from './focused/FocusedItemBody';
 
 /*
- * Motion rules (docs/remediation-plan.md): two durations only, 120ms for
- * fades and 160ms for the panel slide; only transform and opacity animate;
- * nothing animates under prefers-reduced-motion.
+ * Motion rules (docs/remediation-plan.md, adjusted by the user 2026-11-05 to
+ * make opening visible): the panel slides in from the right over 220ms,
+ * switching cards fades the new content in over 160ms with a short slide,
+ * fades are 120ms; only transform and opacity animate; nothing animates
+ * under prefers-reduced-motion.
  */
 const FADE_S = 0.12;
-const SLIDE_S = 0.16;
-const SLIDE_PX = 24;
+const SLIDE_S = 0.22;
+const SLIDE_PX = 56;
+const SWITCH_S = 0.16;
+const SWITCH_PX = 12;
 
 interface FolderChildEntry {
   data: Record<string, unknown>;
@@ -287,6 +291,13 @@ function SidePanel({ node }: OpenItemProps) {
   const { handleClose, handleSaveStatusChange, lastSavedAt, saveStatus } =
     useOpenItemControls(node);
   const [scope, animate] = useAnimate<HTMLElement>();
+  // The first card rides in with the panel's own slide; only a switch to
+  // another card animates the content.
+  const firstItemKeyRef = useRef(`${node.folderId ?? ''}:${node.id}`);
+  const hasSwitchedRef = useRef(false);
+  if (`${node.folderId ?? ''}:${node.id}` !== firstItemKeyRef.current) {
+    hasSwitchedRef.current = true;
+  }
 
   // Switching between panel and full screen is a 120ms fade, never a morph.
   const previousModeRef = useRef(mode);
@@ -398,11 +409,22 @@ function SidePanel({ node }: OpenItemProps) {
           isLightbox && 'overflow-hidden bg-zinc-950 px-0 pb-0'
         )}
       >
-        <FocusedItemBody
+        <motion.div
+          animate={{ opacity: 1, x: 0 }}
+          className={isText || isLightbox ? 'size-full' : 'min-h-full'}
+          initial={
+            reduceMotion || !hasSwitchedRef.current
+              ? false
+              : { opacity: 0, x: SWITCH_PX }
+          }
           key={`${node.folderId ?? ''}:${node.id}`}
-          node={node}
-          onSaveStatusChange={handleSaveStatusChange}
-        />
+          transition={{ duration: SWITCH_S, ease: EASE_OUT }}
+        >
+          <FocusedItemBody
+            node={node}
+            onSaveStatusChange={handleSaveStatusChange}
+          />
+        </motion.div>
       </div>
     </motion.aside>
   );

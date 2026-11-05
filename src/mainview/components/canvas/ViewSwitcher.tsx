@@ -1,20 +1,13 @@
 import { Menu } from '@base-ui/react/menu';
-import { Link as RouterLink } from '@tanstack/react-router';
 import {
   BookOpen,
   Check,
-  ChevronRight,
   ChevronUp,
   Download,
-  Feather,
   FileImage,
   FileJson,
   FilePlus,
   Layers,
-  Lightbulb,
-  Mic,
-  Network,
-  Newspaper,
   Pencil,
   Plus,
   Trash2,
@@ -39,7 +32,6 @@ import {
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import {
   rpcCreateView,
-  rpcCreateViewFromTemplate,
   rpcDeleteView,
   rpcImportMarkdownFiles,
   rpcListViews,
@@ -179,39 +171,6 @@ function renderCreateMenuItem(
     </Menu.Item>
   );
 }
-
-const getQuickTemplateItems = () => [
-  {
-    id: 'feature-story',
-    label: m.template_feature_story_name(),
-    icon: Newspaper,
-  },
-  {
-    id: 'topic-pool',
-    label: m.template_topic_pool_name(),
-    icon: Lightbulb,
-  },
-  {
-    id: 'interview-notes',
-    label: m.template_interview_notes_name(),
-    icon: Mic,
-  },
-  {
-    id: 'reading-notes',
-    label: m.template_reading_notes_name(),
-    icon: BookOpen,
-  },
-  {
-    id: 'novel-bible',
-    label: m.template_novel_bible_name(),
-    icon: Feather,
-  },
-  {
-    id: 'brainstorm-mindmap',
-    label: m.template_brainstorm_mindmap_name(),
-    icon: Network,
-  },
-];
 
 // View switching keeps the menu, restore flow, and import actions in one control.
 // react-doctor-disable-next-line react-doctor/no-giant-component
@@ -380,24 +339,6 @@ export function ViewSwitcher({
     await handleSwitchView(result.id, { keepOpen: true });
     beginInlineRename(result);
   }, [appendCreatedView, handleSwitchView, beginInlineRename]);
-
-  const handleCreateFromTemplate = useCallback(
-    async (templateId: string) => {
-      const name = `Canvas ${String(useCanvasStore.getState().views.length + 1)}`;
-      const result = (await rpcCreateViewFromTemplate(name, templateId)) as {
-        id: string;
-        name: string;
-      } | null;
-      if (result === null) {
-        return;
-      }
-
-      appendCreatedView({ id: result.id, name: result.name });
-      await handleSwitchView(result.id, { keepOpen: true });
-      beginInlineRename(result);
-    },
-    [appendCreatedView, handleSwitchView, beginInlineRename]
-  );
 
   const handleRestore = useCallback(
     async (
@@ -942,59 +883,14 @@ export function ViewSwitcher({
 
               <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
 
-              <Menu.SubmenuRoot>
-                <Menu.SubmenuTrigger className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5">
-                  <Plus className="opacity-50" size={16} />
-                  <span className="flex-1">{m.view_new_canvas()}</span>
-                  <ChevronRight className="opacity-40" size={14} />
-                </Menu.SubmenuTrigger>
-                <Menu.Portal>
-                  <Menu.Positioner
-                    align="start"
-                    className="z-50 outline-hidden"
-                    side="right"
-                    sideOffset={4}
-                  >
-                    <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
-                      <Menu.Item
-                        className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
-                        closeOnClick={false}
-                        onClick={handleCreate}
-                      >
-                        <Plus size={16} />
-                        {m.view_blank_canvas()}
-                      </Menu.Item>
-
-                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
-
-                      <div className="px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:text-gray-400">
-                        {m.view_from_template()}
-                      </div>
-
-                      {getQuickTemplateItems().map((template) => (
-                        <Menu.Item
-                          className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
-                          closeOnClick={false}
-                          key={template.id}
-                          onClick={() => handleCreateFromTemplate(template.id)}
-                        >
-                          <template.icon size={16} />
-                          {template.label}
-                        </Menu.Item>
-                      ))}
-
-                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
-
-                      <Menu.Item
-                        className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-xs outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/10"
-                        render={<RouterLink to="/templates" />}
-                      >
-                        {m.templates_browse_all()}
-                      </Menu.Item>
-                    </Menu.Popup>
-                  </Menu.Positioner>
-                </Menu.Portal>
-              </Menu.SubmenuRoot>
+              <Menu.Item
+                className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5"
+                closeOnClick={false}
+                onClick={handleCreate}
+              >
+                <Plus className="opacity-50" size={16} />
+                <span className="flex-1">{m.view_new_canvas()}</span>
+              </Menu.Item>
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>

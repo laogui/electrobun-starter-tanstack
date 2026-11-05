@@ -33,6 +33,7 @@ import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
 import {
   buildFolderExpansionNodes,
+  FOLDER_EXPANDED_CHILD_NODE_TYPE,
   FOLDER_EXPANSION_GAP,
   type FolderExpandedChildData,
   isFolderExpandedChildNode,
@@ -175,6 +176,22 @@ function CanvasFlowLayerComponent({
     dragAnchorIdRef
   );
 
+  // The card open in the side panel carries a highlight on the canvas so it
+  // is clear which card is being previewed. A style rule keyed by node id
+  // avoids touching the node array (and re-rendering every node) on open.
+  const previewingNodeId = useCanvasStore((s) => {
+    const open = s.focusedNode;
+    if (!open) {
+      return null;
+    }
+    return open.folderId
+      ? `${FOLDER_EXPANDED_CHILD_NODE_TYPE}:${open.folderId}:${open.id}`
+      : open.id;
+  });
+  const previewHighlightCss = previewingNodeId
+    ? `.react-flow__node[data-id="${CSS.escape(previewingNodeId)}"] .node-visual{outline:2px solid var(--color-accent);outline-offset:-2px;box-shadow:0 0 0 5px color-mix(in oklch,var(--color-accent) 22%,transparent),var(--shadow-card-hover,0 12px 32px rgb(0 0 0/0.12));}`
+    : null;
+
   const folderExpansionNodes = useMemo(
     () =>
       focusedFolderId
@@ -187,6 +204,41 @@ function CanvasFlowLayerComponent({
     [closingFolderId, focusedFolderId, nodes]
   );
 
+  // An expanded folder collapses on any click outside its child cards: the
+  // blank canvas, another card, or an edge. A drag (marquee, pan, moving a
+  // card) is not a click and leaves the folder open. The folder card itself
+  // keeps its own toggle in onNodeClick.
+  const armFolderOutsideClose = useCallback(
+    (event: React.PointerEvent, nodeElement: Element | null) => {
+      const folderId = useCanvasStore.getState().focusedFolder?.id;
+      if (!folderId || event.button !== 0) {
+        return;
+      }
+      const nodeId = nodeElement?.getAttribute('data-id') ?? null;
+      if (
+        nodeId === folderId ||
+        nodeId?.startsWith(`${FOLDER_EXPANDED_CHILD_NODE_TYPE}:`)
+      ) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      window.addEventListener(
+        'pointerup',
+        (up) => {
+          if (Math.hypot(up.clientX - startX, up.clientY - startY) > 4) {
+            return;
+          }
+          if (useCanvasStore.getState().focusedFolder?.id === folderId) {
+            closeFolderWithTransition();
+          }
+        },
+        { once: true }
+      );
+    },
+    [closeFolderWithTransition]
+  );
+
   // Click model: a click on a card opens it and never selects it; selection
   // comes only from a marquee drag on the pane. React Flow still emits a
   // select-only batch when a card is pressed, so a press on a node arms this
@@ -194,24 +246,28 @@ function CanvasFlowLayerComponent({
   // The flag disarms right after the click finishes, so keyboard or marquee
   // selections later are never mistaken for it.
   const suppressClickSelectRef = useRef(false);
-  const onPointerDownCapture = useCallback((event: React.PointerEvent) => {
-    const onNode = Boolean(
-      (event.target as Element | null)?.closest?.('.react-flow__node')
-    );
-    suppressClickSelectRef.current = onNode;
-    if (!onNode) {
-      return;
-    }
-    window.addEventListener(
-      'pointerup',
-      () => {
-        setTimeout(() => {
-          suppressClickSelectRef.current = false;
-        }, 0);
-      },
-      { once: true }
-    );
-  }, []);
+  const onPointerDownCapture = useCallback(
+    (event: React.PointerEvent) => {
+      const target = event.target as Element | null;
+      const nodeElement = target?.closest?.('.react-flow__node') ?? null;
+      const onNode = Boolean(nodeElement);
+      armFolderOutsideClose(event, nodeElement);
+      suppressClickSelectRef.current = onNode;
+      if (!onNode) {
+        return;
+      }
+      window.addEventListener(
+        'pointerup',
+        () => {
+          setTimeout(() => {
+            suppressClickSelectRef.current = false;
+          }, 0);
+        },
+        { once: true }
+      );
+    },
+    [armFolderOutsideClose]
+  );
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -484,11 +540,6 @@ function CanvasFlowLayerComponent({
     },
     [rfInstance]
   );
-  const onPaneClick = useCallback(() => {
-    if (useCanvasStore.getState().focusedFolder) {
-      closeFolderWithTransition();
-    }
-  }, [closeFolderWithTransition]);
   const onShowMinimapChange = useCallback((show: boolean) => {
     persistAppSettingsPatch({ canvasShowMinimap: show }).catch(() => undefined);
   }, []);
@@ -529,7 +580,6 @@ function CanvasFlowLayerComponent({
       onNodeDragStart={onNodeDragStart}
       onNodeDragStop={onNodeDragStop}
       onNodesChange={handleNodesChange}
-      onPaneClick={onPaneClick}
       onPaneContextMenu={onPaneContextMenu}
       onPointerDownCapture={onPointerDownCapture}
       panOnDrag={spacePanActive}
@@ -548,6 +598,7 @@ function CanvasFlowLayerComponent({
         size={1.5}
         variant={BackgroundVariant.Dots}
       />
+      {previewHighlightCss ? <style>{previewHighlightCss}</style> : null}
       <HelperLines horizontal={helperLineH} vertical={helperLineV} />
       <SelectionAIToolbar />
       <CanvasViewportChrome

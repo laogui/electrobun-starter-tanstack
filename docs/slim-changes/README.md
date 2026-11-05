@@ -14,6 +14,8 @@
 | 7 | `a444b48` | 阶段 1 收尾：文件夹子卡、右键菜单、搜索跳转、扩展 `openDetail` 统一走 `openFocusedItem`；插件按需启动暂缓 | 4 个文件，+25 / −20；原因见 remediation-plan 1.4 |
 | — | `4b5effc` + `3158b8f` | 整改方案：更正 1.4 关于撤销的说法；新增 4.3 撤销对齐 Heptabase | 仅文档，见 [`../remediation-plan.md`](../remediation-plan.md) |
 | 8 | `4096020` | 撤销 4.3 第一步：卡片颜色算画布操作，可撤销 | `canvasNoteHistory.ts` 新增 `HISTORY_NOTE_KEYS`；`nodesSlice`、`folderSlice` 改用它；`canvasStore.test.ts` +2 项 |
+| 9 | `150608b` | 方案 4.2 第 2 步核对（只改文档） | `docs/remediation-plan.md` |
+| 10 | `578d757` | 改卡片颜色改为弹出取色器，与画布背景同一套；颜色仍存笔记里 | 新增 `ui/ColorSwatchPanel.tsx`、`canvas/CardColorPopover.tsx`、`store/colorPickerStore.ts`；`useContextMenu` 改为打开取色器；`canvasBackgroundCustoms` 抽出 `loadColorCustoms/saveColorCustoms`；自定义卡片色存 localStorage `ghostboard.card-color-customs` |
 
 原则：**只关入口，不删数据。** 旧画布里的番茄钟、提醒、录音、插件内容、Checklist 照常显示、搜索、打开。真正删掉的代码只有第 2 步的游离笔记侧栏；第 4 步会把旧的主标签字段改写进标签列表（无损）。
 

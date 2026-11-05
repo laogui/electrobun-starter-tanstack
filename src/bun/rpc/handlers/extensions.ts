@@ -6,12 +6,6 @@ import {
   loadExtensionInstances,
   updateExtensionInstance,
 } from '../../extensions/instanceStore';
-import {
-  cancelExtensionTask,
-  ExtensionTaskFileError,
-  listExtensionTasks,
-  scheduleExtensionTask,
-} from '../../extensions/scheduler';
 import type { RpcContext } from '../context';
 import type { RpcRequestHandlers } from '../types';
 
@@ -22,12 +16,8 @@ export function createExtensionsHandlers(
   | 'extensionInstanceLoadMany'
   | 'extensionInstanceUpdate'
   | 'extensionInstanceClone'
-  | 'extensionSchedulerSchedule'
-  | 'extensionSchedulerCancel'
-  | 'extensionSchedulerAck'
-  | 'extensionSchedulerList'
 > {
-  const { wsPath, extensionScheduler } = ctx;
+  const { wsPath } = ctx;
   return {
     extensionInstanceCreate: async ({
       canvasTypeId,
@@ -100,51 +90,6 @@ export function createExtensionsHandlers(
       } catch (error) {
         console.error('[extensions] clone instance failed', error);
         return { success: false };
-      }
-    },
-
-    extensionSchedulerSchedule: async (task) => {
-      try {
-        await scheduleExtensionTask(wsPath, task);
-        await extensionScheduler.notifyTasksChanged();
-        return { success: true };
-      } catch (error) {
-        console.error('[extensions] schedule failed', error);
-        return { success: false };
-      }
-    },
-
-    extensionSchedulerCancel: async ({ instanceId, taskId }) => {
-      try {
-        await cancelExtensionTask(wsPath, instanceId, taskId);
-        await extensionScheduler.notifyTasksChanged();
-        return { success: true };
-      } catch (error) {
-        console.error('[extensions] cancel task failed', error);
-        return { success: false };
-      }
-    },
-
-    extensionSchedulerAck: async ({ deliveryId }) => {
-      try {
-        await extensionScheduler.ack(deliveryId);
-        return { success: true };
-      } catch (error) {
-        console.error('[extensions] scheduler ack failed', error);
-        return { success: false };
-      }
-    },
-
-    extensionSchedulerList: async ({ instanceId }) => {
-      try {
-        return { tasks: await listExtensionTasks(wsPath, instanceId) };
-      } catch (error) {
-        if (error instanceof ExtensionTaskFileError) {
-          // Listing degrades to empty, but scheduling still fails loudly
-          // so nobody overwrites the preserved file.
-          return { diagnostic: error.message, tasks: [] };
-        }
-        throw error;
       }
     },
   };

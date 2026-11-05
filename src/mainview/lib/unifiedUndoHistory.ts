@@ -5,7 +5,6 @@
  * in the active canvas view, whatever its origin:
  *
  *   - `canvas`              one canvas snapshot push (store/slices/historySlice)
- *   - `widget`              one recorded legacy widget edit (widgetStore)
  *   - `extension-instance`  one recorded canvas-type instance edit
  *                           (extensionInstanceStore)
  *
@@ -13,10 +12,10 @@
  * the coordinator only decides *which* source the next Undo/Redo goes to, so
  * Cmd+Z reverts the most recent action regardless of origin.
  *
- * Invariant for every source (canvas, widget, extension-instance): for every
+ * Invariant for every source (canvas, extension-instance): for every
  * source key, the entries of that key in `past` are a suffix of the source's
  * own past, and the entries in `future` are a prefix of its own future. It is
- * maintained even when a source moves on its own (focused widget undo, a
+ * maintained even when a source moves on its own (focused instance undo, a
  * direct store call): `observe*Transition` moves the matching entry, or drops
  * that key's entries on the other side when no matching entry is left. A
  * stack entry whose source reports nothing to undo/redo is stale; it and the
@@ -39,11 +38,6 @@ export interface CanvasHistoryEntry extends HistoryEntryScope {
   kind: 'canvas';
 }
 
-export interface WidgetHistoryEntry extends HistoryEntryScope {
-  kind: 'widget';
-  widgetId: string;
-}
-
 export interface ExtensionInstanceHistoryEntry extends HistoryEntryScope {
   instanceId: string;
   kind: 'extension-instance';
@@ -51,8 +45,7 @@ export interface ExtensionInstanceHistoryEntry extends HistoryEntryScope {
 
 export type UnifiedHistoryEntry =
   | CanvasHistoryEntry
-  | ExtensionInstanceHistoryEntry
-  | WidgetHistoryEntry;
+  | ExtensionInstanceHistoryEntry;
 
 export type HistoryAction = 'redo' | 'undo';
 
@@ -68,8 +61,6 @@ export interface UnifiedHistoryHandlers {
   canvas(action: HistoryAction): boolean;
   /** Apply an extension-instance transition; false when nothing moved. */
   extensionInstance?(instanceId: string, action: HistoryAction): boolean;
-  /** Apply a widget transition; false when nothing moved. */
-  widget?(widgetId: string, action: HistoryAction): boolean;
 }
 
 export type UnifiedHistoryResult = 'applied' | 'empty' | 'pending';
@@ -80,19 +71,13 @@ interface PendingTransition {
   transitioned: boolean;
 }
 
-type StackSourceKey =
-  | `canvas`
-  | `extension-instance:${string}`
-  | `widget:${string}`;
+type StackSourceKey = `canvas` | `extension-instance:${string}`;
 
 function sameEntry(left: UnifiedHistoryEntry, right: UnifiedHistoryEntry) {
   return left.id === right.id && left.kind === right.kind;
 }
 
 function stackSourceKey(entry: UnifiedHistoryEntry): StackSourceKey {
-  if (entry.kind === 'widget') {
-    return `widget:${entry.widgetId}`;
-  }
   if (entry.kind === 'extension-instance') {
     return `extension-instance:${entry.instanceId}`;
   }
@@ -108,9 +93,6 @@ function applyStackEntry(
   action: HistoryAction,
   handlers: UnifiedHistoryHandlers
 ): boolean {
-  if (entry.kind === 'widget') {
-    return handlers.widget?.(entry.widgetId, action) ?? false;
-  }
   if (entry.kind === 'extension-instance') {
     return handlers.extensionInstance?.(entry.instanceId, action) ?? false;
   }
@@ -165,13 +147,6 @@ export class UnifiedUndoHistory {
     this.push({ ...this.scope('canvas'), kind: 'canvas' });
   }
 
-  recordWidget(widgetId: string): void {
-    if (!this.isActive()) {
-      return;
-    }
-    this.push({ ...this.scope('widget'), kind: 'widget', widgetId });
-  }
-
   recordExtensionInstance(instanceId: string): void {
     if (!this.isActive()) {
       return;
@@ -192,12 +167,6 @@ export class UnifiedUndoHistory {
     this.observeStackTransition('canvas', action);
   }
 
-  observeWidgetTransition(widgetId: string, action: HistoryAction): void {
-    if (this.isActive()) {
-      this.observeStackTransition(`widget:${widgetId}`, action);
-    }
-  }
-
   observeExtensionInstanceTransition(
     instanceId: string,
     action: HistoryAction
@@ -208,10 +177,6 @@ export class UnifiedUndoHistory {
   }
 
   /** A source discarded its whole stack (e.g. re-hydrated from disk). */
-  forgetWidget(widgetId: string): void {
-    this.dropSource(`widget:${widgetId}`, 'both');
-  }
-
   forgetExtensionInstance(instanceId: string): void {
     this.dropSource(`extension-instance:${instanceId}`, 'both');
   }

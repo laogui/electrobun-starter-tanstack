@@ -26,7 +26,6 @@ import {
   FILE_CANVAS_TYPE_ID,
   IMAGE_CANVAS_TYPE_ID,
   LINK_CANVAS_TYPE_ID,
-  RECORDING_CANVAS_TYPE_ID,
 } from '../../../shared/extensions/builtinIds';
 import {
   type ExtensionInstanceLoadError,
@@ -54,7 +53,7 @@ const FILTER_KIND_MAP: Record<
   Exclude<SearchFilter, 'all'>,
   SearchResultKind[]
 > = {
-  notes: ['note', 'card', 'widget'],
+  notes: ['note', 'card'],
   folders: ['folder'],
   links: ['link'],
   images: ['image'],
@@ -181,9 +180,6 @@ function contentNodeKind(
     if (canvasTypeId === LINK_CANVAS_TYPE_ID) {
       return 'link';
     }
-    if (canvasTypeId === RECORDING_CANVAS_TYPE_ID) {
-      return 'recording';
-    }
     return 'extension';
   }
   switch (type) {
@@ -197,8 +193,6 @@ function contentNodeKind(
       return 'asset';
     case 'link':
       return 'link';
-    case 'widget':
-      return 'widget';
     default:
       return 'card';
   }
@@ -907,7 +901,7 @@ function ResultRow({
   onClick: () => void;
   onMouseEnter: () => void;
 }) {
-  const Icon = iconFor(result.kind, result.widgetKind);
+  const Icon = iconFor(result.kind);
   const title = result.title || 'Untitled';
   return (
     <button

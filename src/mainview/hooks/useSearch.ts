@@ -177,10 +177,6 @@ function nodeKindFor(
       return 'asset';
     case 'link':
       return 'link';
-    case 'recording':
-      return 'recording';
-    case 'widget':
-      return 'widget';
     default:
       return 'card';
   }
@@ -199,20 +195,12 @@ function contentReferenceForNode(
     const noteId = typeof data.noteId === 'string' ? data.noteId : '';
     return noteId ? { kind: 'note', id: noteId } : undefined;
   }
-  if (nodeType === 'widget') {
-    const widgetId = typeof data.widgetId === 'string' ? data.widgetId : '';
-    return widgetId ? { kind: 'widget', id: widgetId } : undefined;
-  }
   if (nodeType === 'extension') {
     const instanceId =
       typeof data.instanceId === 'string' ? data.instanceId : '';
     return instanceId ? { kind: 'extension', id: instanceId } : undefined;
   }
-  if (
-    nodeType === 'image' ||
-    nodeType === 'asset' ||
-    nodeType === 'recording'
-  ) {
+  if (nodeType === 'image' || nodeType === 'asset') {
     const attachmentId =
       (typeof data.attachmentFile === 'string' && data.attachmentFile) ||
       (typeof data.imageFile === 'string' && data.imageFile) ||
@@ -398,20 +386,6 @@ export function searchCurrentView(
         candidates.push({
           field: 'siteName',
           value: typeof data.siteName === 'string' ? data.siteName : '',
-        });
-        break;
-      case 'recording':
-        candidates.push({
-          field: 'title',
-          value: typeof data.title === 'string' ? data.title : '',
-        });
-        candidates.push({
-          field: 'fileName',
-          value: typeof data.fileName === 'string' ? data.fileName : '',
-        });
-        candidates.push({
-          field: 'mimeType',
-          value: typeof data.mimeType === 'string' ? data.mimeType : '',
         });
         break;
       case 'extension': {

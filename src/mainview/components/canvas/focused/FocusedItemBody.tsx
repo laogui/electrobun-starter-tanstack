@@ -9,21 +9,13 @@ import {
 } from '@/extensions/registry';
 import { getLinkHost } from '@/lib/contentTypes';
 import { FLAGS } from '@/lib/flags';
-import type {
-  ChecklistWidgetData,
-  ChecklistWidgetItem,
-} from '@/lib/widgetTypes';
-import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type FocusedItem, useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 import { isExtensionInstanceLoadError } from '../../../../shared/extensions/instance';
-import { ChecklistFocusedView } from '../ChecklistFocusedView';
 import { FocusedNoteBody } from '../FocusedNoteBody';
 import { ImageZoomPan } from '../ImageZoomPan';
 import { AssetContent } from '../nodes/AssetNode';
-import type { CardContentData, ChecklistItem } from '../nodes/CardNode';
 import { CardContent } from '../nodes/CardNode';
 import { ImageContent } from '../nodes/ImageNode';
 import { LinkContent } from '../nodes/LinkNode';
@@ -37,33 +29,6 @@ export interface FocusedItemLayout {
   isText: boolean;
   /** Title for chrome (lightbox caption, panel header fallback). */
   title: string | undefined;
-}
-
-function generateChecklistWidgetItemId(): string {
-  return `item_${crypto.randomUUID().slice(0, 8)}`;
-}
-
-function normalizeChecklistWidgetItems(
-  items: ChecklistItem[] | undefined
-): ChecklistWidgetItem[] {
-  return (items ?? []).map((item) => {
-    const source = item as ChecklistItem & Partial<ChecklistWidgetItem>;
-    return {
-      id:
-        typeof source.id === 'string' && source.id
-          ? source.id
-          : generateChecklistWidgetItemId(),
-      text: typeof source.text === 'string' ? source.text : '',
-      checked: Boolean(source.checked),
-      ...(source.isHeader ? { isHeader: true } : {}),
-      ...(typeof source.createdAt === 'string'
-        ? { createdAt: source.createdAt }
-        : {}),
-      ...(typeof source.completedAt === 'string'
-        ? { completedAt: source.completedAt }
-        : {}),
-    };
-  });
 }
 
 /** Layout facts for an item, shared by the panel shell and the body. */
@@ -95,7 +60,6 @@ export function useFocusedItemLayout(node: FocusedItem): FocusedItemLayout {
       node.type === 'image' ||
       extensionType?.surface.detailLayout === 'lightbox',
     isText:
-      node.type !== 'widget' &&
       node.type !== 'image' &&
       node.type !== 'extension' &&
       (dataTypeRaw === 'text' || dataTypeRaw == null) &&
@@ -115,14 +79,14 @@ interface FocusedItemBodyProps {
 /**
  * The editing surface of one open item, whatever shell shows it (side panel,
  * full-screen writing, lightbox). Owns the per-kind data plumbing: note body,
- * checklist, link, image, asset and extension detail surfaces.
+ * link, image, asset and extension detail surfaces.
  */
 // react-doctor-disable-next-line react-doctor/no-giant-component
 export function FocusedItemBody({
   node,
   onSaveStatusChange,
 }: FocusedItemBodyProps) {
-  const { isLightbox, isText, title } = useFocusedItemLayout(node);
+  const { isText, title } = useFocusedItemLayout(node);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const updateFolderChildData = useCanvasStore((s) => s.updateFolderChildData);
@@ -135,31 +99,6 @@ export function FocusedItemBody({
     typeof node.data.color === 'string' ? node.data.color : undefined;
   const content =
     typeof node.data.content === 'string' ? node.data.content : undefined;
-  const dataTypeRaw = node.data.type;
-
-  const widgetId =
-    node.type === 'widget' && typeof node.data.widgetId === 'string'
-      ? node.data.widgetId
-      : undefined;
-  const widgetRecord = useWidgetStore((s) =>
-    widgetId ? s.records[widgetId] : undefined
-  );
-  const updateWidget = useWidgetStore((s) => s.updateWidget);
-  const checklistWidgetRecord =
-    widgetRecord &&
-    !isWidgetLoadError(widgetRecord) &&
-    widgetRecord.kind === 'checklist'
-      ? widgetRecord
-      : null;
-  const checklistWidgetData: CardContentData | null = checklistWidgetRecord
-    ? {
-        ...(node.data as CardContentData),
-        type: 'checklist',
-        title: checklistWidgetRecord.title,
-        items: (checklistWidgetRecord.data as ChecklistWidgetData).items,
-      }
-    : null;
-
   const updateFocusedData = useCallback(
     (updates: Record<string, unknown>) => {
       if (folderId) {
@@ -180,33 +119,6 @@ export function FocusedItemBody({
       commitNodeData(node.id, updates);
     },
     [commitFolderChildData, commitNodeData, folderId, node.id]
-  );
-
-  const commitChecklistWidgetData = useCallback(
-    (updates: Partial<CardContentData>) => {
-      if (!widgetId) {
-        return;
-      }
-      updateWidget(widgetId, (current) => {
-        if (current.kind !== 'checklist') {
-          return current;
-        }
-        const currentData = current.data as ChecklistWidgetData;
-        return {
-          ...current,
-          title:
-            typeof updates.title === 'string' ? updates.title : current.title,
-          data: {
-            ...currentData,
-            ...(updates.items
-              ? { items: normalizeChecklistWidgetItems(updates.items) }
-              : {}),
-          },
-          updatedAt: new Date().toISOString(),
-        };
-      });
-    },
-    [updateWidget, widgetId]
   );
 
   const handleLinkUrlChange = useCallback(
@@ -367,14 +279,6 @@ export function FocusedItemBody({
       />
     );
   }
-  if (checklistWidgetData && widgetId) {
-    return (
-      <ChecklistFocusedView
-        data={checklistWidgetData}
-        onCommit={commitChecklistWidgetData}
-      />
-    );
-  }
   if (isText) {
     return (
       <FocusedNoteBody
@@ -402,23 +306,5 @@ export function FocusedItemBody({
       />
     );
   }
-  if (!isLightbox && dataTypeRaw === 'checklist') {
-    return (
-      <ChecklistFocusedView
-        data={toCardContentData(node.data)}
-        onCommit={(updates) => {
-          commitFocusedData(updates);
-        }}
-      />
-    );
-  }
-  return (
-    <CardContent
-      data={toCardContentData(node.data)}
-      isFocused={true}
-      onChange={(newData) => {
-        commitFocusedData(newData);
-      }}
-    />
-  );
+  return <CardContent data={toCardContentData(node.data)} />;
 }

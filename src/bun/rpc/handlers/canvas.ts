@@ -1,12 +1,10 @@
 import { collectExtensionInstanceIds } from '../../../shared/extensions/refs';
 import { getAppInfoData } from '../../appLifecycle';
 import {
-  buildManifestNodesAfterWidgetMigration,
   hasAttachmentRuntimeData,
   hydrateAssetData,
   hydrateCardNoteData,
   hydrateImageData,
-  migrateChecklistCardToWidgetReference,
   persistManifestCardNote,
   serializeImageDataForManifest,
   serializeWidgetReference,
@@ -39,7 +37,6 @@ import {
   listTransactionRecovery,
   resolveTransactionRecovery,
 } from '../../transactionRecovery';
-import { loadWidgets, type WidgetRecord } from '../../widgets';
 import { loadWorkspaceConfig } from '../../workspace';
 import { withWorkspaceFileTransaction } from '../../workspaceFileJournal';
 import type { RpcContext } from '../context';
@@ -88,7 +85,7 @@ export function createCanvasHandlers(
   | 'listTransactionRecovery'
   | 'resolveTransactionRecovery'
 > {
-  const { wsPath, extensionScheduler } = ctx;
+  const { wsPath } = ctx;
   return {
     finishCanvasClones: async ({ tokens, liveReferences }) =>
       finishClones(wsPath, tokens, liveReferences),
@@ -124,7 +121,6 @@ export function createCanvasHandlers(
         const { manifest, recovered } = loaded;
 
         const noteIndex = await buildNoteIndex(wsPath);
-        const migratedWidgets: Record<string, WidgetRecord> = {};
 
         let hydratedNodes = await mapSerial(manifest.nodes, async (node) => {
           if (hasAttachmentRuntimeData(node.type)) {
@@ -155,20 +151,6 @@ export function createCanvasHandlers(
               node.data
             );
             if (hydrated) {
-              const widgetReference =
-                await migrateChecklistCardToWidgetReference(
-                  wsPath,
-                  node.data.noteId as string,
-                  hydrated,
-                  migratedWidgets
-                );
-              if (widgetReference) {
-                return {
-                  ...node,
-                  type: 'widget',
-                  data: widgetReference,
-                };
-              }
               return { ...node, data: hydrated };
             }
             console.warn(
@@ -228,21 +210,6 @@ export function createCanvasHandlers(
                   childData
                 );
                 if (hydrated) {
-                  const widgetReference =
-                    await migrateChecklistCardToWidgetReference(
-                      wsPath,
-                      existingNoteId,
-                      hydrated,
-                      migratedWidgets
-                    );
-                  if (widgetReference) {
-                    return {
-                      ...child,
-                      noteId: existingNoteId,
-                      type: 'widget',
-                      data: widgetReference,
-                    };
-                  }
                   return {
                     ...child,
                     noteId: existingNoteId,
@@ -270,66 +237,7 @@ export function createCanvasHandlers(
           return node;
         });
 
-        // Collect widgetIds referenced by top-level widget nodes and
-        // folder-child widget entries, then batch-load their records.
-        const widgetIds = new Set<string>();
-        for (const node of hydratedNodes) {
-          if (node.type === 'widget' && node.data?.widgetId) {
-            widgetIds.add(node.data.widgetId as string);
-          }
-          if (node.type === 'folder') {
-            const nodeData = node.data as Record<string, unknown>;
-            const children = (nodeData.children ?? []) as Array<{
-              data?: Record<string, unknown>;
-              type?: string;
-            }>;
-            for (const child of children) {
-              if (
-                child.type === 'widget' &&
-                (child.data?.widgetId as string | undefined)
-              ) {
-                widgetIds.add(child.data?.widgetId as string);
-              }
-            }
-          }
-        }
-        const widgets =
-          widgetIds.size > 0
-            ? await loadWidgets(wsPath, [...widgetIds])
-            : undefined;
-        const hydratedWidgets =
-          Object.keys(migratedWidgets).length > 0
-            ? { ...(widgets ?? {}), ...migratedWidgets }
-            : widgets;
-
-        // Persist the migration so the on-disk manifest matches the hydrated
-        // widget references. Without this, search and other loadManifest
-        // consumers still see legacy checklist cards, and a mid-session crash
-        // re-runs the migration on every load. Only rewrite when a migration
-        // actually occurred — and only patch migrated refs so hydrated
-        // runtime content never pollutes the canvas JSON.
-        // A canvas recovered from a backup is not rewritten here: the user has
-        // not seen it yet, and the renderer decides whether to keep it.
-        let diskNodes = manifest.nodes;
-        if (!recovered && Object.keys(migratedWidgets).length > 0) {
-          try {
-            const persistedNodes = buildManifestNodesAfterWidgetMigration(
-              manifest.nodes,
-              hydratedNodes
-            );
-            await writeManifest(wsPath, viewEntry.file, {
-              ...manifest,
-              nodes: persistedNodes,
-            });
-            diskNodes = persistedNodes;
-          } catch (error) {
-            console.warn(
-              '[persistence] Failed to persist checklist migration:',
-              error
-            );
-          }
-        }
-
+        const diskNodes = manifest.nodes;
         const appVersion = (await getAppInfoData()).version;
         const extensionMigration = await migrateLegacyCanvasNodes(
           wsPath,
@@ -357,13 +265,6 @@ export function createCanvasHandlers(
           }
         }
 
-        // Catch up on anything that came due while the app was closed. The
-        // service owns the timer from here; this only shortens the wait for
-        // overdue tasks when a canvas opens.
-        extensionScheduler.tick().catch((error) => {
-          console.warn('[extensions] scheduler tick failed', error);
-        });
-
         const instanceIds = collectExtensionInstanceIds(hydratedNodes);
         const extensionInstances =
           instanceIds.length > 0
@@ -376,7 +277,6 @@ export function createCanvasHandlers(
           nodes: hydratedNodes,
           edges: manifest.edges,
           loadIssues: getManifestIssues(manifest),
-          widgets: hydratedWidgets,
           extensionInstances,
           ...(recovered
             ? {

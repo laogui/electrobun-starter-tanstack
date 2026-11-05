@@ -10,10 +10,8 @@ vi.mock('sonner', () => {
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   rpcDeleteNote: vi.fn(async () => ({ success: true })),
-  rpcDeleteWidget: vi.fn(async () => ({ success: true })),
 }));
 
-const { rpcDeleteWidget } = await import('@/lib/rpc');
 const { useCanvasStore } = await import('@/store/canvasStore');
 const { STICKY_COLORS } = await import('@/lib/colorUtils');
 const { createTopicChildEdgeData, TOPIC_NODE_TYPE } = await import(
@@ -212,18 +210,6 @@ describe('nodesSlice', () => {
           .nodes.map((n) => n.id)
           .sort()
       ).toEqual(['folder', 'g', 'inner']);
-    });
-
-    it('keeps the backing file of a removed widget so undo can restore it', () => {
-      useCanvasStore.setState({
-        nodes: [node('w', { type: 'widget', data: { widgetId: 'widget_1' } })],
-      });
-      state().deleteNodes(['w']);
-      expect(byId('w')).toBeUndefined();
-      expect(rpcDeleteWidget).not.toHaveBeenCalled();
-
-      state().undo();
-      expect(byId('w')?.data).toMatchObject({ widgetId: 'widget_1' });
     });
   });
 

@@ -14,17 +14,13 @@
 /** Every node kind the canvas can construct or render. */
 export type CanvasNodeKind =
   | 'card'
-  | 'checklist'
-  | 'pomodoro'
-  | 'reminder'
   | 'sticky'
   | 'topic'
   | 'folder'
   | 'group'
   | 'image'
   | 'asset'
-  | 'link'
-  | 'recording';
+  | 'link';
 
 /**
  * Subset of `CanvasNodeKind` that user-facing creation entry points (menus,
@@ -86,45 +82,6 @@ export interface LinkNodeData {
 
   unfurlStatus?: 'idle' | 'loading' | 'ready' | 'failed';
   url: string;
-}
-
-/**
- * Persisted shape of a `recording` node's data. A recording is captured from
- * the microphone and stored as a regular audio attachment file, so it reuses
- * the same `attachmentFile` / `waveform` persistence contract as audio assets.
- * The dedicated node type only changes the *presentation* (a voice-memo card)
- * and the *creation flow* (live mic capture instead of a file picker).
- */
-export interface RecordingNodeData {
-  // Persisted attachment reference (relative path inside workspace).
-  attachmentFile?: string;
-  color: string;
-  duration?: number;
-  fileName: string;
-  mimeType: string;
-  // Runtime-only hydrated stream URL / status. NEVER persist these.
-  missing?: boolean;
-  previewUrl?: string;
-  /** Monotonic, user-facing label number, e.g. "New Recording #256". */
-  recordingNumber: number;
-  size?: number;
-  title: string;
-  /** Normalized peak summary (0..1) used to draw the waveform. */
-  waveform?: number[];
-}
-
-/**
- * Resolve a user-facing title for a recording node. Falls back to the
- * "New Recording #N" label when the user has not renamed it.
- */
-export function getRecordingDisplayTitle(
-  data: Pick<RecordingNodeData, 'title' | 'recordingNumber'>,
-  defaultTitle = 'New Recording'
-): string {
-  if (data.title?.trim()) {
-    return data.title.trim();
-  }
-  return `${defaultTitle} #${data.recordingNumber}`;
 }
 
 // ---------------------------------------------------------------------------

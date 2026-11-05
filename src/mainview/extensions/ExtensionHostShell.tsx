@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import * as m from '../../paraglide/messages.js';
-import { RECORDING_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
 import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
@@ -202,12 +201,7 @@ export function ExtensionHostShell({
         className={
           isDetail
             ? 'relative size-full overflow-hidden'
-            : cn(
-                'node-visual relative size-full overflow-hidden bg-white text-neutral-900 shadow-card dark:bg-neutral-900 dark:text-neutral-50',
-                canvasTypeId === RECORDING_CANVAS_TYPE_ID
-                  ? 'rounded-2xl'
-                  : 'rounded-3xl'
-              )
+            : 'node-visual relative size-full overflow-hidden rounded-3xl bg-white text-neutral-900 shadow-card dark:bg-neutral-900 dark:text-neutral-50'
         }
       >
         {showFallback ? (

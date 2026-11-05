@@ -10,7 +10,6 @@ import { toBlob } from 'html-to-image';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { collectNoteReferences } from '@/lib/noteReferences';
 import { rpcExportJson, rpcExportPng, rpcLoadBlockNote } from '@/lib/rpc';
-import type { WidgetLoadError, WidgetRecord } from '@/lib/widgetTypes';
 import type { ExtensionInstanceRecord } from '../../shared/extensions/instance';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
 
@@ -32,7 +31,6 @@ export interface CanvasExportDocument {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
-  widgets?: Record<string, WidgetRecord>;
 }
 
 export function isCanvasExportSchema(
@@ -455,62 +453,10 @@ interface BuildCanvasExportJsonInput {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
-  widgets?: Record<string, WidgetRecord | WidgetLoadError>;
-}
-
-function isWidgetRecord(
-  record: WidgetRecord | WidgetLoadError | undefined
-): record is WidgetRecord {
-  return !!record && !('error' in record);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function widgetIdOf(data: unknown): string | null {
-  if (!isPlainRecord(data)) {
-    return null;
-  }
-  const widgetId = data.widgetId;
-  return typeof widgetId === 'string' && widgetId ? widgetId : null;
-}
-
-/**
- * Widget ids referenced by top-level widget nodes and widget folder children.
- * Accepts untyped manifest nodes (straight from disk) as well as live nodes.
- */
-export function collectWidgetIdsFromNodes(nodes: readonly unknown[]): string[] {
-  const ids = new Set<string>();
-  for (const node of nodes) {
-    if (!isPlainRecord(node)) {
-      continue;
-    }
-    if (node.type === 'widget') {
-      const widgetId = widgetIdOf(node.data);
-      if (widgetId) {
-        ids.add(widgetId);
-      }
-      continue;
-    }
-    if (node.type !== 'folder' || !isPlainRecord(node.data)) {
-      continue;
-    }
-    const children = node.data.children;
-    if (!Array.isArray(children)) {
-      continue;
-    }
-    for (const child of children) {
-      if (!isPlainRecord(child) || child.type !== 'widget') {
-        continue;
-      }
-      const widgetId = widgetIdOf(child.data);
-      if (widgetId) {
-        ids.add(widgetId);
-      }
-    }
-  }
-  return [...ids];
 }
 
 /**
@@ -524,7 +470,6 @@ export function buildCanvasExportJson({
   viewId,
   viewName,
   viewport,
-  widgets = {},
   extensionInstances = {},
 }: BuildCanvasExportJsonInput): CanvasExportDocument {
   const visibleNodes = nodes.filter((node) => {
@@ -537,14 +482,6 @@ export function buildCanvasExportJson({
   );
 
   const sanitized = sanitizeForPersistence(visibleNodes, visibleEdges);
-  const exportedWidgets: Record<string, WidgetRecord> = {};
-  for (const widgetId of collectWidgetIdsFromNodes(visibleNodes)) {
-    const record = widgets[widgetId];
-    if (isWidgetRecord(record)) {
-      exportedWidgets[widgetId] = record;
-    }
-  }
-
   const exportedInstances: Record<string, ExtensionInstanceRecord> = {};
   const referencedCanvasTypes = new Set<string>();
   for (const instanceId of collectExtensionInstanceIds(visibleNodes)) {
@@ -564,9 +501,6 @@ export function buildCanvasExportJson({
     ...(viewport ? { viewport } : {}),
     nodes: sanitized.nodes,
     edges: sanitized.edges,
-    ...(Object.keys(exportedWidgets).length > 0
-      ? { widgets: exportedWidgets }
-      : {}),
     ...(Object.keys(exportedInstances).length > 0
       ? { extensionInstances: exportedInstances }
       : {}),
@@ -619,7 +553,6 @@ interface ExportCanvasJsonOptions {
   viewId?: string;
   viewName?: string;
   viewport?: Viewport;
-  widgets?: Record<string, WidgetRecord | WidgetLoadError>;
 }
 
 /**
@@ -683,7 +616,6 @@ export async function exportReactFlowCanvasToJson({
   viewId,
   viewName,
   viewport,
-  widgets,
   extensionInstances,
 }: ExportCanvasJsonOptions) {
   const document_ = buildCanvasExportJson({
@@ -694,7 +626,6 @@ export async function exportReactFlowCanvasToJson({
     viewId,
     viewName,
     viewport,
-    widgets,
     extensionInstances,
   });
 

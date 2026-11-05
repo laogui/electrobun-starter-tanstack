@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { ManifestEdge, ManifestNode } from './manifest';
 import type { NodeMetadata } from './nodeMetadata';
-import { parseWidgetRecord, type WidgetRecord } from './widgets';
 
 // ---------------------------------------------------------------------------
 // Inline template data — imported at build time so the bundler embeds them
@@ -79,7 +78,6 @@ export interface TemplateManifest {
   nodeMetadata?: Record<string, NodeMetadata>;
   nodes: ManifestNode[];
   noteContents?: Record<string, TemplateNoteContent>;
-  widgets?: Record<string, WidgetRecord>;
 }
 // ---------------------------------------------------------------------------
 // Schemas — bundled JSON is parsed (not cast) into the template types. Object
@@ -157,16 +155,6 @@ const extensionSeedSchema = z
   })
   .loose() satisfies z.ZodType<TemplateExtensionSeed>;
 
-/** Widget seeds go through the same validator the workspace loader uses. */
-const widgetSeedSchema = z.unknown().transform((value, ctx): WidgetRecord => {
-  const parsed = parseWidgetRecord(value);
-  if ('error' in parsed) {
-    ctx.addIssue({ code: 'custom', message: 'Invalid widget record' });
-    return z.NEVER;
-  }
-  return parsed;
-});
-
 const templateBodySchema = z.object({
   assets: z.record(z.string(), z.string()).optional(),
   edges: z.array(manifestEdgeSchema).default([]),
@@ -174,7 +162,6 @@ const templateBodySchema = z.object({
   nodeMetadata: z.record(z.string(), nodeMetadataSchema).optional(),
   nodes: z.array(manifestNodeSchema).default([]),
   noteContents: z.record(z.string(), noteContentSchema).optional(),
-  widgets: z.record(z.string(), widgetSeedSchema).optional(),
 }) satisfies z.ZodType<Omit<TemplateManifest, 'meta'>>;
 
 type TemplateBody = Omit<TemplateManifest, 'meta'>;
@@ -269,7 +256,6 @@ export function loadTemplate(id: string): TemplateManifest | null {
     nodeMetadata: entry.manifest.nodeMetadata,
     assets: entry.manifest.assets,
     extensionInstances: entry.manifest.extensionInstances,
-    widgets: entry.manifest.widgets,
   };
 }
 

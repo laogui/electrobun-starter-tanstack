@@ -156,7 +156,7 @@ function renderCreateMenuItem(
         const flow = canvasTypeId
           ? canvasTypeRegistry.get(canvasTypeId)?.createFlow
           : undefined;
-        return flow !== 'url' && flow !== 'file' && flow !== 'recording';
+        return flow !== 'url' && flow !== 'file';
       })()}
       disabled={!item.enabled}
       key={item.id}

@@ -26,7 +26,6 @@ import {
 
 import { flushRegisteredCanvas } from '@/lib/canvasFlushRegistry';
 import { collectNoteReferences } from '@/lib/noteReferences';
-import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import type {
   AICredentialStatus,
   AppInfo,
@@ -48,7 +47,6 @@ import type {
   ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
-import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
 import type {
   DiagnosticsStatus,
   FeedbackInput,
@@ -120,11 +118,6 @@ async function initElectrobun(): Promise<ElectrobunClient | null> {
           noteChanged: (event: NoteChangedEvent) => {
             globalThis.dispatchEvent(
               new CustomEvent(NOTE_CHANGED_EVENT, { detail: event })
-            );
-          },
-          extensionTaskFired: (delivery: ExtensionTaskDelivery) => {
-            globalThis.dispatchEvent(
-              new CustomEvent('extension-task-fired', { detail: delivery })
             );
           },
           openSearch: () => {
@@ -322,14 +315,6 @@ export async function rpcSaveNote(
   return eb.rpc.request.saveNote({ noteId, frontmatter, body });
 }
 
-export async function rpcCreateWidget(kind: WidgetKind, title?: string) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false as const };
-  }
-  return eb.rpc.request.createWidget({ kind, title });
-}
-
 const pendingCloneTokens = new Map<string, string>();
 export async function rpcFinishCanvasClones(
   ids: string[],
@@ -349,34 +334,6 @@ export async function rpcFinishCanvasClones(
   }
   return result;
 }
-export async function rpcCloneWidget(widgetId: string) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false as const };
-  }
-  const result = await eb.rpc.request.cloneWidget({ widgetId });
-  if (result.success && result.cloneToken) {
-    pendingCloneTokens.set(result.widget.id, result.cloneToken);
-  }
-  return result;
-}
-
-export async function rpcSaveWidget(widget: WidgetRecord) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.saveWidget({ widget });
-}
-
-export async function rpcDeleteWidget(widgetId: string) {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.deleteWidget({ widgetId });
-}
-
 export async function rpcCreateExtensionInstance(input: {
   canvasTypeId: string;
   dataVersion: number;
@@ -438,59 +395,6 @@ export async function rpcCloneExtensionInstance(
     pendingCloneTokens.set(result.record.id, result.cloneToken);
   }
   return result;
-}
-
-export async function rpcScheduleExtensionTask(task: {
-  canvasTypeId: string;
-  fireAt: string;
-  id: string;
-  instanceId: string;
-  payload?: unknown;
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
-}): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.extensionSchedulerSchedule(task);
-}
-
-export async function rpcCancelExtensionTask(
-  instanceId: string,
-  taskId: string
-): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.extensionSchedulerCancel({ instanceId, taskId });
-}
-
-export async function rpcAckExtensionTasks(
-  deliveryId: string
-): Promise<{ success: boolean }> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { success: false };
-  }
-  return eb.rpc.request.extensionSchedulerAck({ deliveryId });
-}
-
-export async function rpcListExtensionTasks(instanceId?: string): Promise<{
-  tasks: Array<{
-    canvasTypeId: string;
-    fireAt: string;
-    id: string;
-    instanceId: string;
-    payload?: unknown;
-    repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
-  }>;
-}> {
-  const eb = await getElectrobun();
-  if (!eb?.rpc) {
-    return { tasks: [] };
-  }
-  return eb.rpc.request.extensionSchedulerList({ instanceId });
 }
 
 export async function rpcLoadBlockNote(

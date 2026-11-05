@@ -1,5 +1,4 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { ChecklistWidgetData } from '@/lib/widgetTypes';
 
 /**
  * Renderer-side fallback for the default canvas when the backend did not
@@ -7,14 +6,6 @@ import type { ChecklistWidgetData } from '@/lib/widgetTypes';
  * in `src/bun/workspace.ts`). Kept deliberately small: one welcome sticky
  * that points at the template gallery.
  */
-
-export interface InitialWidgetSeed {
-  data: ChecklistWidgetData;
-  kind: 'checklist';
-  title: string;
-}
-
-export const initialWidgetSeeds: Record<string, InitialWidgetSeed> = {};
 
 export const initialNodes: Node[] = [
   {

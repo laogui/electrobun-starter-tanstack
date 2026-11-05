@@ -28,17 +28,10 @@ import type { ImageData } from './ImageNode';
 import { ImageContent } from './ImageNode';
 import type { LinkNodeRuntimeData } from './LinkNode';
 import { LinkContent } from './LinkNode';
-import type { RecordingRuntimeData } from './RecordingNode';
-import { RecordingContent } from './RecordingNode';
 import type { StickyData } from './StickyNode';
 import { StickyContent } from './StickyNode';
 import type { TopicData } from './TopicNode';
 import { TopicContent } from './TopicNode';
-import type { WidgetNodeData } from './WidgetNode';
-import { WidgetNodeReadOnly } from './WidgetNode';
-
-export type { WidgetNodeData };
-export { WidgetNodeReadOnly };
 
 const handleClassName = 'conn-handle nodrag';
 
@@ -116,18 +109,6 @@ export const AssetNodeReadOnly = memo(
   )
 );
 AssetNodeReadOnly.displayName = 'AssetNodeReadOnly';
-
-export const RecordingNodeReadOnly = memo(
-  ({ data }: { data: RecordingRuntimeData }) => (
-    <div className="size-full">
-      <ReadOnlyHandles />
-      <div className="node-visual size-full overflow-hidden rounded-2xl shadow-card">
-        <RecordingContent data={data} />
-      </div>
-    </div>
-  )
-);
-RecordingNodeReadOnly.displayName = 'RecordingNodeReadOnly';
 
 export const StickyNodeReadOnly = memo(({ data }: { data: StickyData }) => (
   <div className="size-full">

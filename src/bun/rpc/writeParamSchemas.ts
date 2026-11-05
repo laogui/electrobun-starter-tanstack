@@ -62,17 +62,6 @@ const manifestEdge = z
   .loose();
 
 const attachmentKind = z.enum(['audio', 'file', 'image', 'video']);
-const widgetKind = z.enum(['checklist', 'pomodoro', 'reminder']);
-
-const widgetRecord = z
-  .object({
-    data: record,
-    id,
-    kind: widgetKind,
-    title: z.string(),
-  })
-  .loose();
-
 const nodeMetadata = z
   .object({
     tag: z.string().nullish(),
@@ -109,12 +98,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
       viewId: id,
     })
     .loose(),
-  createWidget: z
-    .object({ kind: widgetKind, title: z.string().optional() })
-    .loose(),
-  cloneWidget: z.object({ widgetId: id }).loose(),
-  saveWidget: z.object({ widget: widgetRecord }).loose(),
-  deleteWidget: z.object({ widgetId: id }).loose(),
   extensionInstanceCreate: z
     .object({
       canvasTypeId: id,

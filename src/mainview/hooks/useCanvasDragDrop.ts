@@ -25,7 +25,6 @@ import {
 } from '@/lib/importCanvasFiles';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
 import {
   FILE_CANVAS_TYPE_ID,
@@ -80,9 +79,6 @@ export function useCanvasDragDrop({
   const { screenToFlowPosition } = useReactFlow();
   const createExtensionNode = useCanvasStore((s) => s.createExtensionNode);
   const pinNoteToCanvas = useCanvasStore((s) => s.pinNoteToCanvas);
-  const createWidgetRecord = useWidgetStore((s) => s.createWidget);
-  const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
-  const saveWidgetNow = useWidgetStore((s) => s.saveWidgetNow);
   const createExtensionInstance = useExtensionInstanceStore(
     (s) => s.createInstance
   );
@@ -135,42 +131,11 @@ export function useCanvasDragDrop({
       document_: CanvasExportDocument,
       anchorCenter: { x: number; y: number }
     ) => {
+      // Checklist / Pomodoro / Reminder widgets were retired; widget nodes
+      // in an imported file are dropped (an empty id map drops them all).
       const widgetIdMap = new Map<string, string>();
-      const allWidgetIds = collectWidgetIdsFromCanvasExport(document_);
-      for (const widgetId of allWidgetIds) {
-        const sourceWidget = document_.widgets?.[widgetId];
-        if (!sourceWidget) {
-          continue;
-        }
-
-        // Imported widgets must be independent of the source canvas, matching
-        // duplicate/paste semantics for widget-backed nodes.
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop
-        const createdWidget = await createWidgetRecord(
-          sourceWidget.kind,
-          sourceWidget.title
-        );
-        if (!createdWidget) {
-          continue;
-        }
-
-        const now = new Date().toISOString();
-        updateWidgetRecord(
-          createdWidget.id,
-          () => ({
-            ...sourceWidget,
-            id: createdWidget.id,
-            createdAt: now,
-            updatedAt: now,
-          }),
-          { recordHistory: false }
-        );
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop
-        await saveWidgetNow(createdWidget.id);
-        widgetIdMap.set(widgetId, createdWidget.id);
-      }
-
-      const skippedWidgetCount = allWidgetIds.length - widgetIdMap.size;
+      const skippedWidgetCount =
+        collectWidgetIdsFromCanvasExport(document_).length;
 
       const instanceIdMap = new Map<string, string>();
       const exportedInstances = document_.extensionInstances ?? {};
@@ -223,12 +188,7 @@ export function useCanvasDragDrop({
         toast.success(m.toast_canvas_json_imported());
       }
     },
-    [
-      createExtensionInstance,
-      createWidgetRecord,
-      saveWidgetNow,
-      updateWidgetRecord,
-    ]
+    [createExtensionInstance]
   );
 
   const createAssetsFromFiles = useCallback(

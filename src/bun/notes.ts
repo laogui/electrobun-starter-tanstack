@@ -258,7 +258,9 @@ export async function createNote(
   wsPath: string,
   noteId: string,
   title: string,
-  displayHint: string
+  displayHint: string,
+  body = '',
+  color?: string
 ): Promise<string> {
   return withNoteWorkspace(wsPath, async () => {
     const slug = title
@@ -277,10 +279,11 @@ export async function createNote(
       id: noteId,
       title,
       displayHint,
+      ...(color ? { color } : {}),
       createdAt: now,
       updatedAt: now,
     };
-    await saveNote(wsPath, filePath, frontmatter, '');
+    await saveNote(wsPath, filePath, frontmatter, body);
     return filePath;
   });
 }
@@ -321,28 +324,6 @@ export function serializeChecklistItems(
     .join('\n');
 }
 
-/** Parse GFM checkbox markdown back to structured checklist items. */
-export function parseChecklistBody(
-  body: string
-): Array<{ text: string; checked: boolean; isHeader?: boolean }> {
-  const items: Array<{ text: string; checked: boolean; isHeader?: boolean }> =
-    [];
-  for (const line of body.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-    if (trimmed.startsWith('## ')) {
-      items.push({ text: trimmed.slice(3), checked: false, isHeader: true });
-    } else if (trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ')) {
-      items.push({ text: trimmed.slice(6), checked: true });
-    } else if (trimmed.startsWith('- [ ] ')) {
-      items.push({ text: trimmed.slice(6), checked: false });
-    }
-  }
-  return items;
-}
-
 // ---------------------------------------------------------------------------
 // Card node ↔ Note document helpers
 // ---------------------------------------------------------------------------
@@ -356,11 +337,15 @@ function typeToDisplayHint(type: string | undefined): string {
 }
 
 /** Map frontmatter displayHint back to renderer data.type. */
+/**
+ * Card `type` for a note's display hint. Checklist notes were retired: their
+ * markdown body is already a GFM task list, so they render as ordinary notes.
+ */
 export function displayHintToType(hint?: string): string {
-  if (hint === 'note') {
+  if (!hint || hint === 'note' || hint === 'checklist') {
     return 'text';
   }
-  return hint || 'text';
+  return hint;
 }
 
 const MAX_TAGS = 8;
@@ -455,15 +440,7 @@ export function cardDataToNote(
 
   // Body
   let body = existingBody;
-  if (data.type === 'checklist' && Array.isArray(data.items)) {
-    body = serializeChecklistItems(
-      data.items as Array<{
-        text?: string;
-        checked?: boolean;
-        isHeader?: boolean;
-      }>
-    );
-  } else if (typeof data.content === 'string') {
+  if (typeof data.content === 'string') {
     body = data.content;
   }
 
@@ -499,11 +476,7 @@ export function noteToCardData(doc: NoteDocument): Record<string, unknown> {
   normalizeOptionalNumber(data, 'previewBlocks');
   normalizeOptionalNumber(data, 'previewVersion');
 
-  if (type === 'checklist') {
-    data.items = parseChecklistBody(body);
-  } else {
-    data.content = body;
-  }
+  data.content = body;
 
   return data;
 }

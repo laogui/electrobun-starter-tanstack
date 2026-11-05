@@ -7,6 +7,8 @@
 >
 > **插件**：插件系统已于 2026-11-05 删除，见 §2.14。
 >
+> **已删除的卡片类型（2026-11-05）**：Checklist、番茄钟、提醒、录音，以及旧小组件体系（`widget` 节点、`widgetStore`）、许可证额度、“画布类型”设置页。下文凡写到它们的段落均为历史描述，以 [PRD-slim](./PRD-slim.md) §2“已删除的旧功能”为准：旧清单打开时转成带任务列表的笔记，旧录音转成音频文件卡，番茄钟和提醒显示“已移除”占位。
+>
 > **文档基线（2026-11-03）**：本文描述当前产品行为与仍未决定的范围。基础项目流程、Topic、Checklist / 恢复验收已有记录；已完成任务不再保留在待办中。正式官网、双语文档、Web App 与 API 已部署到 `ghostboard.21blog.com`，后端继续使用 Neon。网站 Google OAuth / Resend / OpenAI 配置由用户明确暂缓。尚待安全核验、产品决策与条件需求集中在 §8；构建、测试与原生验收过程见 [结项记录](./8.5-closeout.md)。
 
 ## 1. 产品概述
@@ -62,7 +64,7 @@ Topic 是用于思路展开的轻量主题节点，标题为纯文本。支持 T
 
 | 核查项 | 当前代码事实 | 产品处理 |
 | --- | --- | --- |
-| 内置类型 | [registerBuiltins](../src/mainview/extensions/registerBuiltins.ts) 注册 Checklist / Pomodoro / Reminder / Image / File / Link / Recording，Counter 仅开发环境注册 | 用用户可见类型描述功能，不把 React Flow 的 `node.type` 当产品分类 |
+| 内置类型 | [registerBuiltins](../src/mainview/extensions/registerBuiltins.ts) 注册 Image / File / Link，Counter 仅开发环境注册（Checklist / Pomodoro / Reminder / Recording 已于 2026-11-05 删除） | 用用户可见类型描述功能，不把 React Flow 的 `node.type` 当产品分类 |
 | 打开与容器能力 | [Canvas Type 契约](../src/mainview/extensions/types.ts) 声明 `openBehavior`、Group/Folder 能力、详情布局、通用交互与类型菜单 | 创建、右键、聚焦、文库等入口必须使用同一能力规则 |
 | 媒体与链接 | 当前内置 Image / File / Link 声明详情视图，Recording 声明画布内操作；四者均声明可进入 Group / Folder | 迁移后继续验收预览、媒体操作、收纳、搜索、导出和错误回退，不只验收能显示 |
 | Productivity | Checklist 声明 `openBehavior: 'detail'`，Pomodoro / Reminder 声明 `openBehavior: 'none'`；三者均可进入 Group、不可进入 Folder，见 [Checklist](../src/mainview/extensions/builtin/productivity/checklist.tsx)、[Pomodoro](../src/mainview/extensions/builtin/productivity/pomodoro.tsx)、[Reminder](../src/mainview/extensions/builtin/productivity/reminder.tsx) | 已冻结的行为规则：Checklist 保留完整详情编辑，Pomodoro / Reminder 保持画布内操作；禁止新放入 Folder，旧 Folder 内条目可预览、搜索、打开并无损取回 |
@@ -319,7 +321,7 @@ Topic 是用于思路展开的轻量主题节点，标题为纯文本。支持 T
 
 ### 2.14 插件系统（已删除）
 
-2026-11-05 起不再提供插件。运行时、SDK、脚手架、签名与更新、授权、探针与文档站一并删除，原因见 [PRD-slim](./PRD-slim.md) §2：目标用户是写稿的人，不会装插件；插件面带来启动开销和无法补齐的同 realm 安全缺口。内置的清单、番茄钟、提醒、录音等扩展卡是另一套机制，不受影响。旧版本留在应用数据目录的插件文件不再读取。
+2026-11-05 起不再提供插件。运行时、SDK、脚手架、签名与更新、授权、探针与文档站一并删除，原因见 [PRD-slim](./PRD-slim.md) §2：目标用户是写稿的人，不会装插件；插件面带来启动开销和无法补齐的同 realm 安全缺口。内置扩展卡现在只有图片、文件、链接（另有仅开发环境的 Counter）。旧版本留在应用数据目录的插件文件不再读取。
 
 ### 2.15 首次启动引导 (Onboarding) ✅
 

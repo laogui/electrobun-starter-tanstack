@@ -6,7 +6,6 @@ import { routeUndoRedo } from '@/lib/routeUndoRedo';
 import { unifiedUndoHistory } from '@/lib/unifiedUndoHistory';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 
 const card = (id: string, title: string): Node => ({
   id,
@@ -24,18 +23,13 @@ describe('routeUndoRedo (undo stack routing)', () => {
   type IdHandler = (id: string) => boolean;
   let undoInstance: ReturnType<typeof vi.fn<IdHandler>>;
   let redoInstance: ReturnType<typeof vi.fn<IdHandler>>;
-  let undoWidget: ReturnType<typeof vi.fn<IdHandler>>;
-  let redoWidget: ReturnType<typeof vi.fn<IdHandler>>;
 
   beforeEach(() => {
     useCanvasStore.getState().reset();
     unifiedUndoHistory.reset();
     undoInstance = vi.fn<IdHandler>(() => true);
     redoInstance = vi.fn<IdHandler>(() => true);
-    undoWidget = vi.fn<IdHandler>(() => true);
-    redoWidget = vi.fn<IdHandler>(() => true);
     useExtensionInstanceStore.setState({ undoInstance, redoInstance });
-    useWidgetStore.setState({ undoWidget, redoWidget });
   });
 
   afterEach(() => {
@@ -48,7 +42,6 @@ describe('routeUndoRedo (undo stack routing)', () => {
     const target = document.querySelector('#b');
     expect(routeUndoRedo('undo', { eventTarget: target })).toBe(true);
     expect(undoInstance).toHaveBeenCalledWith('inst-1');
-    expect(undoWidget).not.toHaveBeenCalled();
   });
 
   it('sends redo to the focused extension instance', () => {
@@ -57,22 +50,12 @@ describe('routeUndoRedo (undo stack routing)', () => {
     expect(redoInstance).toHaveBeenCalledWith('inst-2');
   });
 
-  it('sends undo/redo to the focused legacy widget stack', () => {
-    focus('widget', { widgetId: 'w-1' });
-    routeUndoRedo('undo');
-    routeUndoRedo('redo');
-    expect(undoWidget).toHaveBeenCalledWith('w-1');
-    expect(redoWidget).toHaveBeenCalledWith('w-1');
-    expect(undoInstance).not.toHaveBeenCalled();
-  });
-
   it('leaves keyboard undo to the browser while a text field is focused', () => {
     document.body.innerHTML = '<input id="i" />';
     (document.querySelector('#i') as HTMLInputElement).focus();
     const canvasUndo = vi.spyOn(useCanvasStore.getState(), 'undo');
     expect(routeUndoRedo('undo', { fromKeyboard: true })).toBe(false);
     expect(canvasUndo).not.toHaveBeenCalled();
-    expect(undoWidget).not.toHaveBeenCalled();
   });
 
   it('falls through to the canvas snapshot stack and restores the graph', async () => {

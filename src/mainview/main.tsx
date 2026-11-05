@@ -4,7 +4,6 @@ import { domAnimation, LazyMotion } from 'motion/react';
 import ReactDOM from 'react-dom/client';
 
 import { registerBuiltinCanvasTypes } from '@/extensions/registerBuiltins';
-import { connectExtensionTaskDispatcher } from '@/extensions/taskDispatcher';
 import {
   reportRendererError,
   startRendererDiagnostics,
@@ -49,8 +48,6 @@ root.render(
 );
 
 const disconnectNoteSync = connectNoteChangeSync();
-const disconnectTasks = connectExtensionTaskDispatcher();
 import.meta.hot?.dispose(() => {
   disconnectNoteSync();
-  disconnectTasks();
 });

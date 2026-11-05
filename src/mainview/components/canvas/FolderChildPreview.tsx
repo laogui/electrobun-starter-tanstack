@@ -10,13 +10,10 @@ import type { LinkNodeRuntimeData } from './nodes/LinkNode';
 import { LinkContent } from './nodes/LinkNode';
 import {
   isExtensionNodeData,
-  isWidgetNodeData,
   toCardContentData,
   toImageData,
 } from './nodes/nodeDataGuards';
-import type { RecordingRuntimeData } from './nodes/RecordingNode';
-import { RecordingContent } from './nodes/RecordingNode';
-import { WidgetNodeReadOnly } from './nodes/WidgetNode';
+import { RetiredNode } from './nodes/RetiredNode';
 
 export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
   if (child.type === 'image') {
@@ -33,11 +30,8 @@ export function FolderChildPreview({ child }: { child: FolderChildEntry }) {
   if (child.type === 'asset') {
     return <AssetContent data={child.data as AssetNodeRuntimeData} />;
   }
-  if (child.type === 'recording') {
-    return <RecordingContent data={child.data as RecordingRuntimeData} />;
-  }
-  if (child.type === 'widget' && isWidgetNodeData(child.data)) {
-    return <WidgetNodeReadOnly data={child.data} />;
+  if (child.type === 'recording' || child.type === 'widget') {
+    return <RetiredNode data={child.data} type={child.type} />;
   }
   if (child.type === 'extension' && isExtensionNodeData(child.data)) {
     return <ExtensionNodeReadOnly data={child.data} />;

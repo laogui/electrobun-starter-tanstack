@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { Utils } from 'electrobun/bun';
 import { collectExtensionInstanceIds } from '../shared/extensions/refs';
 import { blocknoteSidecarDir } from './blocknote';
-import { cancelExtensionTasksByInstance } from './extensions/scheduler';
 import { loadManifestsStrict, type ManifestNode } from './manifest';
 import { listFilesRecursiveAsync, parseFrontmatter } from './notes';
 import { withNoteWorkspace } from './noteTransactions';
@@ -346,20 +345,6 @@ export async function deleteUnlinkedNotes(
         deleted.push(result.rel);
       } else {
         skipped.push(result.rel);
-      }
-    }
-
-    // Deleting an instance file orphans its scheduled tasks; without this they
-    // keep firing at a record that no longer exists until MAX_TASKS is hit.
-    const deletedInstanceIds = deleted
-      .filter((rel) => INSTANCE_PATH_RE.test(rel))
-      .map((rel) => rel.split('/').pop()?.replace(JSON_EXT_RE, '') ?? '')
-      .filter(Boolean);
-    if (deletedInstanceIds.length > 0) {
-      try {
-        await cancelExtensionTasksByInstance(wsPath, deletedInstanceIds);
-      } catch (error) {
-        console.warn('[cleanup] Failed to cancel scheduled tasks:', error);
       }
     }
 

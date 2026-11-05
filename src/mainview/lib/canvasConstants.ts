@@ -6,7 +6,7 @@ import FolderNode from '@/components/canvas/nodes/FolderNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import ImageNode from '@/components/canvas/nodes/ImageNode';
 import LinkNode from '@/components/canvas/nodes/LinkNode';
-import RecordingNode from '@/components/canvas/nodes/RecordingNode';
+import { RetiredNode } from '@/components/canvas/nodes/RetiredNode';
 import {
   AssetNodeReadOnly,
   CardNodeReadOnly,
@@ -14,14 +14,11 @@ import {
   GroupNodeReadOnly,
   ImageNodeReadOnly,
   LinkNodeReadOnly,
-  RecordingNodeReadOnly,
   StickyNodeReadOnly,
   TopicNodeReadOnly,
-  WidgetNodeReadOnly,
 } from '@/components/canvas/nodes/readOnlyNodes';
 import StickyNode from '@/components/canvas/nodes/StickyNode';
 import TopicNode from '@/components/canvas/nodes/TopicNode';
-import WidgetNode from '@/components/canvas/nodes/WidgetNode';
 import ExtensionNode, {
   ExtensionNodeReadOnly,
 } from '@/extensions/ExtensionNode';
@@ -58,13 +55,12 @@ export const nodeTypes = {
   sticky: StickyNode,
   topic: TopicNode,
   extension: ExtensionNode,
-  // Failed or paused migrations retain legacy references. Keep their real
-  // renderers available rather than showing React Flow's empty default node.
-  widget: WidgetNode,
   image: ImageNode,
   asset: AssetNode,
   link: LinkNode,
-  recording: RecordingNode,
+  // Removed types whose on-load migration could not run.
+  widget: RetiredNode,
+  recording: RetiredNode,
 };
 
 /**
@@ -80,11 +76,11 @@ export const readOnlyNodeTypes = {
   sticky: StickyNodeReadOnly,
   topic: TopicNodeReadOnly,
   extension: ExtensionNodeReadOnly,
-  widget: WidgetNodeReadOnly,
   image: ImageNodeReadOnly,
   asset: AssetNodeReadOnly,
   link: LinkNodeReadOnly,
-  recording: RecordingNodeReadOnly,
+  widget: RetiredNode,
+  recording: RetiredNode,
 };
 
 export const edgeTypes = {

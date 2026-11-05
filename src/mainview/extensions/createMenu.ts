@@ -1,5 +1,4 @@
 import type { CreatableMenuItem } from '@/lib/creatableNodes';
-import { HIDDEN_CREATE_CANVAS_TYPE_IDS } from '@/lib/productScope';
 
 import {
   canvasTypeMenuActionId,
@@ -13,10 +12,7 @@ export function getCanvasTypeMenuItems(
   labelForKey: (key: string) => string
 ): CreatableMenuItem[] {
   return types
-    .filter(
-      (type) =>
-        isCanvasTypeId(type.id) && !HIDDEN_CREATE_CANVAS_TYPE_IDS.has(type.id)
-    )
+    .filter((type) => isCanvasTypeId(type.id))
     .map((type) => ({
       enabled: true,
       icon: type.icon,

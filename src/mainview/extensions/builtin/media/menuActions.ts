@@ -10,7 +10,6 @@ import { resolveExtensionMessage } from '@/extensions/messages';
 import type {
   FileState,
   ImageState,
-  RecordingState,
 } from '../../../../shared/extensions/media/state';
 import type { CanvasTypeMenuAction } from '../../types';
 
@@ -158,6 +157,3 @@ export const fileMenuActions: readonly CanvasTypeMenuAction<FileState>[] = [
   replaceFileAction(),
   renameAssetAction(),
 ];
-
-export const recordingMenuActions: readonly CanvasTypeMenuAction<RecordingState>[] =
-  [revealInFinderAction((state) => state.attachmentFile), renameAssetAction()];

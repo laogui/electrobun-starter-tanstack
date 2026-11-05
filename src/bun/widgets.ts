@@ -1,7 +1,8 @@
-import { existsSync } from 'node:fs';
-import { unlink } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { atomicWrite } from './atomicWrite';
+/**
+ * Legacy widget files (`.ghostboard/widgets/*.json`). Checklist / Pomodoro /
+ * Reminder widgets are retired; this module only reads old files so the
+ * canvas loader can migrate them (see extensions/migration.ts).
+ */
 import { withNoteWorkspace } from './noteTransactions';
 import { resolveWorkspaceSubpath } from './workspacePaths';
 
@@ -226,76 +227,6 @@ function assertWorkspaceWidgetPath(
   }).fullPath;
 }
 
-function defaultDataForKind(kind: WidgetKind): WidgetData {
-  switch (kind) {
-    case 'checklist':
-      return { items: [] } satisfies ChecklistWidgetData;
-    case 'pomodoro':
-      return {
-        clockKind: 'pomodoro',
-        mode: 'focus',
-        focusMinutes: 25,
-        shortBreakMinutes: 5,
-        longBreakMinutes: 15,
-        sessionsBeforeLongBreak: 4,
-        completedSessions: 0,
-        timer: { state: 'idle' },
-        stopwatch: { state: 'idle' },
-      } satisfies PomodoroWidgetData;
-    case 'reminder':
-      return {
-        dueAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        status: 'scheduled',
-      } satisfies ReminderWidgetData;
-    default: {
-      const _exhaustive: never = kind;
-      return _exhaustive;
-    }
-  }
-}
-
-function defaultTitleForKind(kind: WidgetKind): string {
-  switch (kind) {
-    case 'checklist':
-      return 'Checklist';
-    case 'pomodoro':
-      return 'Pomodoro';
-    case 'reminder':
-      return 'Reminder';
-    default: {
-      const _exhaustive: never = kind;
-      return _exhaustive;
-    }
-  }
-}
-
-function generateWidgetId(): string {
-  return `widget_${crypto.randomUUID().replaceAll('-', '')}`;
-}
-
-/** Create a new widget file with default data for its kind and return the record. */
-async function createWidgetUnlocked(
-  wsPath: string,
-  kind: WidgetKind,
-  title?: string,
-  widgetId?: string
-): Promise<WidgetRecord> {
-  const id = widgetId ?? generateWidgetId();
-  const now = new Date().toISOString();
-  const record: WidgetRecord = {
-    schema: WIDGET_SCHEMA,
-    id,
-    kind,
-    title: title ?? defaultTitleForKind(kind),
-    createdAt: now,
-    updatedAt: now,
-    data: defaultDataForKind(kind),
-  };
-  await saveWidget(wsPath, record);
-  return record;
-}
-
 /**
  * Load a single widget by id. Never throws: missing file or corrupted JSON
  * are reported as a {@link WidgetLoadError} instead.
@@ -325,104 +256,5 @@ async function loadWidgetUnlocked(
   }
 }
 
-/** Batch-load widgets concurrently; a single corrupted/missing widget never fails the batch. */
-async function loadWidgetsUnlocked(
-  wsPath: string,
-  widgetIds: string[]
-): Promise<Record<string, WidgetRecord | WidgetLoadError>> {
-  const uniqueIds = [...new Set(widgetIds)];
-  const results = await Promise.all(
-    uniqueIds.map(async (id) => {
-      try {
-        return [id, await loadWidget(wsPath, id)] as const;
-      } catch (error) {
-        console.warn(`[widgets] Failed to load ${id}:`, error);
-        return [id, { id, error: 'corrupted' as const }] as const;
-      }
-    })
-  );
-  return Object.fromEntries(results);
-}
-
-/** Atomically write the widget JSON file. Throws when the record is invalid. */
-async function saveWidgetUnlocked(
-  wsPath: string,
-  widget: WidgetRecord
-): Promise<void> {
-  const validated = parseWidgetRecord(widget);
-  if ('error' in validated) {
-    throw new Error(
-      `Refusing to save invalid widget record: ${validated.error}`
-    );
-  }
-  const relativePath = widgetRelativePath(validated.id);
-  const fullPath = assertWorkspaceWidgetPath(wsPath, relativePath);
-  const serialized = JSON.stringify(validated, null, 2);
-  await atomicWrite(fullPath, serialized);
-}
-
-/** Delete the widget file for a given id. Returns true if a file was removed. */
-async function deleteWidgetUnlocked(
-  wsPath: string,
-  widgetId: string
-): Promise<boolean> {
-  const relativePath = widgetRelativePath(widgetId);
-  const fullPath = assertWorkspaceWidgetPath(wsPath, relativePath);
-  if (!existsSync(fullPath)) {
-    return false;
-  }
-  await unlink(fullPath);
-  return true;
-}
-
-/**
- * Clone an existing widget's content into a brand new widget file/id. Used by
- * duplicate/paste so cloned nodes never share the same underlying file.
- */
-async function cloneWidgetUnlocked(
-  wsPath: string,
-  widgetId: string
-): Promise<WidgetRecord | null> {
-  const source = await loadWidget(wsPath, widgetId);
-  if ('error' in source) {
-    return null;
-  }
-  const now = new Date().toISOString();
-  const cloned: WidgetRecord = {
-    ...source,
-    id: generateWidgetId(),
-    createdAt: now,
-    updatedAt: now,
-  };
-  if (
-    existsSync(assertWorkspaceWidgetPath(wsPath, widgetRelativePath(cloned.id)))
-  ) {
-    throw new Error('Clone id already exists');
-  }
-  await saveWidget(wsPath, cloned);
-  return cloned;
-}
-
-export function widgetDir(wsPath: string): string {
-  return resolve(wsPath, '.ghostboard', 'widgets');
-}
-
-export const createWidget = (
-  ...args: Parameters<typeof createWidgetUnlocked>
-) => withNoteWorkspace(args[0], () => createWidgetUnlocked(...args));
-
 export const loadWidget = (...args: Parameters<typeof loadWidgetUnlocked>) =>
   withNoteWorkspace(args[0], () => loadWidgetUnlocked(...args));
-
-export const saveWidget = (...args: Parameters<typeof saveWidgetUnlocked>) =>
-  withNoteWorkspace(args[0], () => saveWidgetUnlocked(...args));
-
-export const deleteWidget = (
-  ...args: Parameters<typeof deleteWidgetUnlocked>
-) => withNoteWorkspace(args[0], () => deleteWidgetUnlocked(...args));
-
-export const cloneWidget = (...args: Parameters<typeof cloneWidgetUnlocked>) =>
-  withNoteWorkspace(args[0], () => cloneWidgetUnlocked(...args));
-
-export const loadWidgets = (...args: Parameters<typeof loadWidgetsUnlocked>) =>
-  withNoteWorkspace(args[0], () => loadWidgetsUnlocked(...args));

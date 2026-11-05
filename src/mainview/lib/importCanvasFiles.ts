@@ -7,7 +7,6 @@ import { IMAGE_H, IMAGE_W } from '@/lib/canvasNodeRegistry';
 import { classifyFile } from '@/lib/contentTypes';
 import { rpcSaveAttachment } from '@/lib/rpc';
 import { createImageThumbnail } from '@/lib/thumbnail';
-import { parseUntrustedWidgetRecord } from '@/lib/widgetTypes';
 import {
   type ExtensionInstanceRecord,
   parseExtensionInstanceRecord,
@@ -151,7 +150,7 @@ function parseViewport(value: unknown): Viewport | undefined {
 
 /**
  * Parse an exported canvas file. The file is untrusted: nodes / edges must be
- * objects, and embedded widget / extension-instance records are validated
+ * objects, and embedded extension-instance records are validated
  * individually (invalid ones are dropped, so their nodes import as skipped).
  */
 export function parseCanvasExportJson(
@@ -174,12 +173,11 @@ export function parseCanvasExportJson(
   if (!(Array.isArray(parsed.nodes) && Array.isArray(parsed.edges))) {
     return null;
   }
-  const widgets = parseRecordMap(parsed.widgets, parseUntrustedWidgetRecord);
   const extensionInstances = parseRecordMap(
     parsed.extensionInstances,
     parseExportedInstance
   );
-  if (!(widgets && extensionInstances)) {
+  if (!extensionInstances) {
     return null;
   }
   const viewport = parseViewport(parsed.viewport);
@@ -193,7 +191,6 @@ export function parseCanvasExportJson(
     exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : '',
     nodes: parsed.nodes.filter(isPlainObject),
     edges: parsed.edges.filter(isPlainObject),
-    ...(parsed.widgets === undefined ? {} : { widgets }),
     ...(parsed.extensionInstances === undefined ? {} : { extensionInstances }),
     ...(referencedCanvasTypes ? { referencedCanvasTypes } : {}),
     ...(typeof parsed.viewId === 'string' ? { viewId: parsed.viewId } : {}),

@@ -2,7 +2,6 @@ import type { ExtensionPresentation } from './presentation';
 
 export type HostCapability =
   | 'assets'
-  | 'scheduler'
   | 'notifications'
   | 'external'
   | 'network';
@@ -71,24 +70,6 @@ export interface AssetImportOptions {
   accept?: string;
 }
 
-export interface ScheduledTask {
-  fireAt: string;
-  id: string;
-  payload?: unknown;
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
-}
-
-/**
- * Handed to a canvas type when one of its tasks comes due. `missedCount` is
- * greater than one when repeats elapsed while the app was closed; they
- * collapse into a single delivery.
- */
-export interface ScheduledTaskFiredEvent {
-  lastDueAt: string;
-  missedCount: number;
-  task: ScheduledTask;
-}
-
 export interface ExtensionNotification {
   body?: string;
   title: string;
@@ -133,11 +114,6 @@ export interface GhostBoardHostAPI {
   };
   notifications: {
     show(notification: ExtensionNotification): Promise<void>;
-  };
-  scheduler: {
-    cancel(taskId: string): Promise<void>;
-    list(): Promise<ScheduledTask[]>;
-    schedule(task: ScheduledTask): Promise<void>;
   };
 }
 

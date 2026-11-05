@@ -5,13 +5,9 @@ import { formatRelativeTime } from '@/lib/formatRelative';
 import { cn } from '@/lib/utils';
 import * as m from '../../../paraglide/messages.js';
 import {
-  CHECKLIST_CANVAS_TYPE_ID,
   FILE_CANVAS_TYPE_ID,
   IMAGE_CANVAS_TYPE_ID,
   LINK_CANVAS_TYPE_ID,
-  POMODORO_CANVAS_TYPE_ID,
-  RECORDING_CANVAS_TYPE_ID,
-  REMINDER_CANVAS_TYPE_ID,
 } from '../../../shared/extensions/builtinIds';
 import { LibraryItemPreview } from './LibraryItemPreview';
 import type { LibraryItem } from './useLibraryData';
@@ -38,24 +34,6 @@ function typeLabelFor(type: string, data: Record<string, unknown>): string {
   if (type === 'asset') {
     return assetTypeLabel(data);
   }
-  if (type === 'card' && data.type === 'checklist') {
-    return 'Checklist';
-  }
-  if (type === 'widget') {
-    if (data.kind === 'checklist') {
-      return 'Checklist';
-    }
-    if (data.kind === 'pomodoro') {
-      return 'Timer';
-    }
-    if (data.kind === 'reminder') {
-      return 'Reminder';
-    }
-    return 'Widget';
-  }
-  if (type === 'recording') {
-    return 'Recording';
-  }
   if (type === 'sticky') {
     return 'Sticky';
   }
@@ -68,20 +46,8 @@ function typeLabelFor(type: string, data: Record<string, unknown>): string {
     if (canvasTypeId === LINK_CANVAS_TYPE_ID) {
       return 'Link';
     }
-    if (canvasTypeId === RECORDING_CANVAS_TYPE_ID) {
-      return 'Recording';
-    }
     if (canvasTypeId === FILE_CANVAS_TYPE_ID) {
       return assetTypeLabel(data);
-    }
-    if (canvasTypeId === CHECKLIST_CANVAS_TYPE_ID) {
-      return 'Checklist';
-    }
-    if (canvasTypeId === POMODORO_CANVAS_TYPE_ID) {
-      return 'Timer';
-    }
-    if (canvasTypeId === REMINDER_CANVAS_TYPE_ID) {
-      return 'Reminder';
     }
   }
   return 'Note';

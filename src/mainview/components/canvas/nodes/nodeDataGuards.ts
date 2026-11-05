@@ -1,8 +1,6 @@
-import type { WidgetKind } from '@/lib/widgetTypes';
 import type { ExtensionNodeData } from '../../../../shared/extensions/protocol';
-import type { CardContentData, ChecklistItem } from './CardNode';
+import type { CardContentData } from './CardNode';
 import type { ImageData } from './ImageNode';
-import type { WidgetNodeData } from './WidgetNode';
 
 /**
  * Runtime narrowing for loosely typed node data (`Record<string, unknown>`)
@@ -13,12 +11,6 @@ import type { WidgetNodeData } from './WidgetNode';
  */
 
 type UnknownRecord = Record<string, unknown>;
-
-const WIDGET_KINDS: readonly WidgetKind[] = [
-  'checklist',
-  'pomodoro',
-  'reminder',
-];
 
 export function isUnknownRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -34,15 +26,6 @@ function isOptionalBoolean(value: unknown): value is boolean | undefined {
 
 function isOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || typeof value === 'number';
-}
-
-function isChecklistItem(value: unknown): value is ChecklistItem {
-  return (
-    isUnknownRecord(value) &&
-    isOptionalBoolean(value.checked) &&
-    isOptionalBoolean(value.isHeader) &&
-    isOptionalString(value.text)
-  );
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -69,15 +52,8 @@ const CARD_STRING_FIELDS = [
   'title',
 ] as const;
 
-function isCardItems(value: unknown): value is ChecklistItem[] | undefined {
-  return (
-    value === undefined ||
-    (Array.isArray(value) && value.every(isChecklistItem))
-  );
-}
-
 function isCardType(value: unknown): value is CardContentData['type'] {
-  return value === undefined || value === 'checklist' || value === 'text';
+  return value === undefined || value === 'text';
 }
 
 export function isCardContentData(
@@ -87,7 +63,6 @@ export function isCardContentData(
     CARD_STRING_FIELDS.every((key) => isOptionalString(data[key])) &&
     isOptionalBoolean(data.isHidden) &&
     isOptionalNumber(data.previewVersion) &&
-    isCardItems(data.items) &&
     (data.tagColors === undefined || isStringRecord(data.tagColors)) &&
     (data.tags === undefined || isStringArray(data.tags)) &&
     isCardType(data.type)
@@ -115,16 +90,13 @@ export function toCardContentData(data: UnknownRecord): CardContentData {
   if (data.previewBlocks !== undefined) {
     result.previewBlocks = data.previewBlocks;
   }
-  if (Array.isArray(data.items)) {
-    result.items = data.items.filter(isChecklistItem);
-  }
   if (isStringRecord(data.tagColors)) {
     result.tagColors = data.tagColors;
   }
   if (isStringArray(data.tags)) {
     result.tags = data.tags;
   }
-  if (data.type === 'checklist' || data.type === 'text') {
+  if (data.type === 'text') {
     result.type = data.type;
   }
   return result;
@@ -170,20 +142,6 @@ export function toImageData(data: UnknownRecord): ImageData {
     result.isHidden = data.isHidden;
   }
   return result;
-}
-
-export function isWidgetKind(value: unknown): value is WidgetKind {
-  return WIDGET_KINDS.some((kind) => kind === value);
-}
-
-export function isWidgetNodeData(
-  data: UnknownRecord
-): data is UnknownRecord & WidgetNodeData {
-  return (
-    typeof data.widgetId === 'string' &&
-    data.widgetId.length > 0 &&
-    isWidgetKind(data.kind)
-  );
 }
 
 export function isExtensionNodeData(

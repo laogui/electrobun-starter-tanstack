@@ -1,4 +1,8 @@
-/** Stable built-in canvas type ids. Meanings must not change after publish. */
+/**
+ * Stable built-in canvas type ids. Meanings must not change after publish.
+ * Checklist, Pomodoro, Reminder and Recording are retired: their ids remain
+ * only so the canvas loader can recognise and migrate old data.
+ */
 
 export const CHECKLIST_CANVAS_TYPE_ID =
   'ghostboard.productivity/checklist' as const;
@@ -20,47 +24,14 @@ export type BuiltinCanvasTypeId =
   | typeof FILE_CANVAS_TYPE_ID
   | typeof RECORDING_CANVAS_TYPE_ID;
 
-export const PRODUCTIVITY_CANVAS_TYPE_IDS = [
-  CHECKLIST_CANVAS_TYPE_ID,
-  POMODORO_CANVAS_TYPE_ID,
-  REMINDER_CANVAS_TYPE_ID,
-] as const;
+export type BuiltinSearchKind = 'asset' | 'extension' | 'image' | 'link';
 
-export const MEDIA_CANVAS_TYPE_IDS = [
-  IMAGE_CANVAS_TYPE_ID,
-  FILE_CANVAS_TYPE_ID,
-  RECORDING_CANVAS_TYPE_ID,
-] as const;
-
-export type BuiltinSearchKind =
-  | 'asset'
-  | 'extension'
-  | 'image'
-  | 'link'
-  | 'recording'
-  | 'widget';
-
-export type LegacyProductivityKind = 'checklist' | 'pomodoro' | 'reminder';
-
-const SEARCH_KIND_BY_CANVAS_TYPE_ID: Record<
-  BuiltinCanvasTypeId,
-  Exclude<BuiltinSearchKind, 'extension'>
+const SEARCH_KIND_BY_CANVAS_TYPE_ID: Partial<
+  Record<BuiltinCanvasTypeId, Exclude<BuiltinSearchKind, 'extension'>>
 > = {
-  [CHECKLIST_CANVAS_TYPE_ID]: 'widget',
-  [POMODORO_CANVAS_TYPE_ID]: 'widget',
-  [REMINDER_CANVAS_TYPE_ID]: 'widget',
   [LINK_CANVAS_TYPE_ID]: 'link',
   [IMAGE_CANVAS_TYPE_ID]: 'image',
   [FILE_CANVAS_TYPE_ID]: 'asset',
-  [RECORDING_CANVAS_TYPE_ID]: 'recording',
-};
-
-const WIDGET_KIND_BY_CANVAS_TYPE_ID: Partial<
-  Record<BuiltinCanvasTypeId, LegacyProductivityKind>
-> = {
-  [CHECKLIST_CANVAS_TYPE_ID]: 'checklist',
-  [POMODORO_CANVAS_TYPE_ID]: 'pomodoro',
-  [REMINDER_CANVAS_TYPE_ID]: 'reminder',
 };
 
 /** Host display adapter for search results; not part of the extension protocol. */
@@ -73,13 +44,7 @@ export function searchKindForCanvasType(
   );
 }
 
-/** Legacy Productivity badge adapter for migrated extension search results. */
-export function widgetKindForCanvasType(
-  canvasTypeId: string
-): LegacyProductivityKind | undefined {
-  return WIDGET_KIND_BY_CANVAS_TYPE_ID[canvasTypeId as BuiltinCanvasTypeId];
-}
-
+/** Canvas type a retired legacy widget kind was migrated to. */
 export function canvasTypeIdForWidgetKind(
   kind: string
 ):
@@ -109,8 +74,6 @@ export function canvasTypeIdForLegacyNodeType(
       return IMAGE_CANVAS_TYPE_ID;
     case 'asset':
       return FILE_CANVAS_TYPE_ID;
-    case 'recording':
-      return RECORDING_CANVAS_TYPE_ID;
     default:
       return;
   }

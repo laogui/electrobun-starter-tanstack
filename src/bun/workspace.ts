@@ -24,7 +24,6 @@ import { readJsonOrEmpty } from './persistence/corruptFile';
 import { withFileQueue } from './persistence/fileQueue';
 import type { TemplateManifest } from './templates';
 import { loadTemplate } from './templates';
-import { saveWidget } from './widgets';
 
 function resolveManagedManifestPath(
   wsPath: string,
@@ -93,7 +92,6 @@ export function initWorkspace(workspacePath?: string): string {
     join(wsPath, '.ghostboard'),
     join(wsPath, '.ghostboard', 'views'),
     join(wsPath, '.ghostboard', 'trash'),
-    join(wsPath, '.ghostboard', 'widgets'),
     join(wsPath, '.ghostboard', 'extension-instances'),
     join(wsPath, 'content'),
     join(wsPath, 'attachments'),
@@ -828,8 +826,6 @@ export async function populateViewFromTemplate(
   return withNoteWorkspace(wsPath, async () => {
     const noteIdMap = new Map<string, string>();
     const noteContents = template.noteContents ?? {};
-    const widgetIdMap = new Map<string, string>();
-    const widgetSeeds = template.widgets ?? {};
     const extensionSeeds = template.extensionInstances ?? {};
     const instanceIdMap = new Map<string, string>();
     const assetPaths: Record<string, string> = {};
@@ -838,10 +834,6 @@ export async function populateViewFromTemplate(
     for (const placeholderId of Object.keys(noteContents)) {
       const realId = `note_${crypto.randomUUID().slice(0, 8)}`;
       noteIdMap.set(placeholderId, realId);
-    }
-    for (const placeholderId of Object.keys(widgetSeeds)) {
-      const realId = `widget_${crypto.randomUUID().slice(0, 8)}`;
-      widgetIdMap.set(placeholderId, realId);
     }
 
     await finishTemplateWrites(
@@ -872,21 +864,6 @@ export async function populateViewFromTemplate(
             content.body
           );
         }
-      })
-    );
-    await finishTemplateWrites(
-      Array.from(widgetIdMap, async ([placeholderId, realId]) => {
-        const seed = widgetSeeds[placeholderId];
-        if (!seed) {
-          return;
-        }
-        const now = new Date().toISOString();
-        await saveWidget(wsPath, {
-          ...seed,
-          id: realId,
-          createdAt: now,
-          updatedAt: now,
-        });
       })
     );
 
@@ -935,13 +912,9 @@ export async function populateViewFromTemplate(
 
     const nodes = template.nodes.map((node) => {
       const noteId = node.data.noteId as string | undefined;
-      const widgetId = node.data.widgetId as string | undefined;
       const nextData = { ...node.data };
       if (noteId && noteIdMap.has(noteId)) {
         nextData.noteId = noteIdMap.get(noteId);
-      }
-      if (widgetId && widgetIdMap.has(widgetId)) {
-        nextData.widgetId = widgetIdMap.get(widgetId);
       }
       if (
         typeof nextData.instanceId === 'string' &&
@@ -965,12 +938,8 @@ export async function populateViewFromTemplate(
             const childData = { ...(child.data ?? {}) };
             const childNoteId =
               child.noteId ?? (childData.noteId as string | undefined);
-            const childWidgetId = childData.widgetId as string | undefined;
             if (childNoteId && noteIdMap.has(childNoteId)) {
               childData.noteId = noteIdMap.get(childNoteId);
-            }
-            if (childWidgetId && widgetIdMap.has(childWidgetId)) {
-              childData.widgetId = widgetIdMap.get(childWidgetId);
             }
             if (
               typeof childData.instanceId === 'string' &&
@@ -999,10 +968,7 @@ export async function populateViewFromTemplate(
     if (template.nodeMetadata) {
       await finishTemplateWrites(
         Object.entries(template.nodeMetadata).map(([placeholderKey, meta]) => {
-          const realKey =
-            noteIdMap.get(placeholderKey) ??
-            widgetIdMap.get(placeholderKey) ??
-            placeholderKey;
+          const realKey = noteIdMap.get(placeholderKey) ?? placeholderKey;
           return setNodeMetadata(wsPath, realKey, meta);
         })
       );

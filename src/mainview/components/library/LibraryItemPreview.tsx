@@ -1,6 +1,4 @@
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
-import { CardContent } from '@/components/canvas/nodes/CardNode';
-import { toCardContentData } from '@/components/canvas/nodes/nodeDataGuards';
 import {
   type FolderChildEntry,
   getFolderChildPreviewSize,
@@ -66,15 +64,7 @@ export function LibraryItemPreview({ item }: { item: LibraryItem }) {
           width: natural.width,
         }}
       >
-        {item.type === 'widget' ? (
-          // WidgetNodeReadOnly carries React Flow Handle elements that need a
-          // ReactFlowProvider; the library popup must render without one. The
-          // enriched widget data (title + excerpt) still yields a faithful
-          // note-style miniature through CardContent.
-          <CardContent data={toCardContentData(item.data)} readOnly />
-        ) : (
-          <FolderChildPreview child={entry} />
-        )}
+        <FolderChildPreview child={entry} />
       </div>
     </div>
   );

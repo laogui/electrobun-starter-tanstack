@@ -117,8 +117,7 @@ function extractFromData(
       };
     }
     case 'image':
-    case 'asset':
-    case 'recording': {
+    case 'asset': {
       const title = asString(data.title) ?? asString(data.fileName);
       if (!title) {
         return null;

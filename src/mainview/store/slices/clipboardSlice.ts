@@ -12,10 +12,8 @@ import {
 } from '../canvas/clipboardGraph';
 import {
   cloneExtensionReferences,
-  cloneWidgetReferences,
   finishCreatedClones,
   graphContainsExtensionReference,
-  graphContainsWidgetReference,
 } from '../canvas/cloneReferences';
 import type { CanvasState } from '../canvasStore';
 
@@ -73,17 +71,7 @@ export const createClipboardSlice: StateCreator<
     );
     const createdIds = new Set<string>();
     try {
-      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-        ? await cloneWidgetReferences(pasted.nodes, (id) => {
-            createdIds.add(id);
-            if (!isCurrent()) {
-              throw new DOMException('Canvas changed', 'AbortError');
-            }
-          })
-        : pasted.nodes;
-      if (!isCurrent()) {
-        return;
-      }
+      let pastedNodes = pasted.nodes;
       if (graphContainsExtensionReference(pastedNodes)) {
         pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
           createdIds.add(id);
@@ -128,9 +116,6 @@ export const createClipboardSlice: StateCreator<
       return;
     }
     const latest = get();
-    if (!isCurrent()) {
-      return;
-    }
     const selectedIds = new Set(selected.map((node) => node.id));
     const pasted = buildPastedClipboard(
       selected.map(cleanNodeForClipboard),
@@ -140,17 +125,7 @@ export const createClipboardSlice: StateCreator<
     );
     const createdIds = new Set<string>();
     try {
-      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-        ? await cloneWidgetReferences(pasted.nodes, (id) => {
-            createdIds.add(id);
-            if (!isCurrent()) {
-              throw new DOMException('Canvas changed', 'AbortError');
-            }
-          })
-        : pasted.nodes;
-      if (!isCurrent()) {
-        return;
-      }
+      let pastedNodes = pasted.nodes;
       if (graphContainsExtensionReference(pastedNodes)) {
         pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
           createdIds.add(id);

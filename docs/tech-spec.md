@@ -3,6 +3,8 @@
 > 本文档描述 GhostBoard 的技术实现细节，包括架构、状态管理、渲染引擎、数据持久化、RPC 协议等。
 > 产品需求与交互设计请参阅 [PRD](./PRD.md)。
 >
+> **2026-11-05 删除**：Checklist / Pomodoro / Reminder / Recording 卡片、legacy widget 体系（`widgetStore`、`WidgetNode`、widget RPC）、扩展定时调度（scheduler）、许可证（`license.ts`）与画布类型启用开关。本文中描述它们的章节为历史记录。现状：`src/bun/extensions/migration.ts` 在 `loadCanvas` 时把旧清单转为笔记卡（GFM 任务列表）、旧录音转为文件卡，番茄钟/提醒保留为未知类型占位；`src/bun/widgets.ts` 只剩只读加载供迁移使用。
+>
 > 最近同步：2026-10 对照源码补上 Canvas Type 行为、本地 HTTP 端点、许可证、诊断、发布和 BlockNote AI 配置（§12–§17）。更早的正文仍以 2026-06 至 2026-07 的 sidecar、附件、widget、Folder waterfall 与 FocusedView 为主；和代码冲突时以源码为准。
 
 ---

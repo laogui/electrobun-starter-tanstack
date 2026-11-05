@@ -4,10 +4,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { Utils } from 'electrobun/bun';
 import { assertWorkspaceAttachmentPath } from './attachments';
 import type { CanvasManifest } from './manifest';
-import type { ExportedNote } from './markdownExport';
-import { serializeChecklistItems } from './notes';
 import type { ExportArchiveResponse } from './rpc/types';
-import type { ChecklistWidgetData, WidgetRecord } from './widgets';
 import { assertInside } from './workspacePaths';
 
 export const PNG_DATA_URL_RE = /^data:image\/png;base64,(.+)$/i;
@@ -114,22 +111,16 @@ export async function copyExportAttachments(
 
 export interface ViewExportRefs {
   noteIds: string[];
-  widgetIds: string[];
 }
 
-/** Collect note and widget references from a canvas manifest. */
+/** Collect note references from a canvas manifest. */
 export function collectViewExportRefs(
   manifest: CanvasManifest | null
 ): ViewExportRefs {
   const noteIds = new Set<string>();
-  const widgetIds = new Set<string>();
   for (const node of manifest?.nodes ?? []) {
     const data = (node.data ?? {}) as Record<string, unknown>;
-    if (node.type === 'widget') {
-      if (typeof data.widgetId === 'string' && data.widgetId) {
-        widgetIds.add(data.widgetId);
-      }
-    } else if (typeof data.noteId === 'string' && data.noteId) {
+    if (typeof data.noteId === 'string' && data.noteId) {
       noteIds.add(data.noteId);
     }
     const children = data.children;
@@ -139,12 +130,6 @@ export function collectViewExportRefs(
     for (const child of children) {
       const c = (child ?? {}) as Record<string, unknown>;
       const childData = c.data as Record<string, unknown> | undefined;
-      if (c.type === 'widget') {
-        if (typeof childData?.widgetId === 'string' && childData.widgetId) {
-          widgetIds.add(childData.widgetId);
-        }
-        continue;
-      }
       if (typeof c.noteId === 'string' && c.noteId) {
         noteIds.add(c.noteId);
       }
@@ -153,49 +138,7 @@ export function collectViewExportRefs(
       }
     }
   }
-  return { noteIds: [...noteIds], widgetIds: [...widgetIds] };
-}
-
-export function buildChecklistWidgetMarkdown(
-  record: WidgetRecord,
-  options: {
-    exportedAt: string;
-    includeFrontmatter?: boolean;
-  }
-): ExportedNote | null {
-  if (record.kind !== 'checklist') {
-    return null;
-  }
-
-  const title = record.title || record.id;
-  const body = serializeChecklistItems(
-    (record.data as ChecklistWidgetData).items
-  );
-  const includeFrontmatter = options.includeFrontmatter !== false;
-  const markdown = includeFrontmatter
-    ? [
-        '---',
-        `id: ${record.id}`,
-        `title: ${JSON.stringify(title)}`,
-        'source: ghostboard',
-        'widgetKind: checklist',
-        `createdAt: ${record.createdAt}`,
-        `updatedAt: ${record.updatedAt}`,
-        `exportedAt: ${options.exportedAt}`,
-        '---',
-        '',
-        body,
-        '',
-      ].join('\n')
-    : `# ${title}\n\n${body}\n`;
-
-  return {
-    noteId: record.id,
-    title,
-    fileName: safeExportFileName(`${title}-${record.id}.md`, 'md'),
-    markdown,
-    attachments: [],
-  };
+  return { noteIds: [...noteIds] };
 }
 
 export async function pickExportFolder(): Promise<string | null> {

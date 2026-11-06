@@ -1009,7 +1009,7 @@ body.resizing-nwse * {
 
 /* The card open in the side panel stays on the canvas, outlined. */
 .react-flow__node.is-open-in-panel {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-accent);
   outline-offset: 3px;
   border-radius: 14px;
 }
@@ -1017,8 +1017,8 @@ body.resizing-nwse * {
 /* Keep the overview toggle visibly selected while the map is expanded. */
 .canvas-viewport-chrome .canvas-viewport-controls
   .canvas-minimap-toggle[aria-pressed="true"] {
-  color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  color: var(--color-accent);
+  background: color-mix(in oklch, var(--color-accent) 12%, transparent);
 }
 
 .canvas-viewport-chrome .canvas-minimap-toggle svg {

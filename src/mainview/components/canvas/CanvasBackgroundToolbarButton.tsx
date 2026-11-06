@@ -106,12 +106,12 @@ export function CanvasBackgroundToolbarButton() {
             the buttons stacked above it. Right/bottom-aligned end stays clear
             of every sibling and within the lower-left canvas region. */}
         <Popover.Positioner align="end" side="right" sideOffset={10}>
-          <Popover.Popup className="floating-menu-popup z-50 w-[23rem] rounded-3xl border border-black/5 bg-white/90 p-4 shadow-xl outline-hidden backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
-            <div className="mb-3 text-center">
-              <Popover.Title className="font-medium text-lg">
+          <Popover.Popup className="floating-menu-popup z-50 w-[17.5rem] rounded-2xl border border-black/5 bg-white/95 p-3.5 shadow-xl outline-hidden backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/95 dark:text-neutral-100">
+            <div className="mb-3 px-0.5">
+              <Popover.Title className="font-semibold text-[13px] text-gray-900 dark:text-gray-100">
                 {m.canvas_bg_picker_title()}
               </Popover.Title>
-              <Popover.Description className="mt-0.5 text-neutral-500 text-sm dark:text-neutral-400">
+              <Popover.Description className="mt-0.5 text-gray-500 text-xs dark:text-gray-400">
                 {m.canvas_bg_picker_description()}
               </Popover.Description>
             </div>

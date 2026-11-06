@@ -10,6 +10,7 @@ import {
   FileImage,
   FileJson,
   FilePlus,
+  FileText,
   Layers,
   Lightbulb,
   Mic,
@@ -36,6 +37,14 @@ import {
   buildImportedCardCreateOptions,
   handleMarkdownImportResult,
 } from '@/lib/importMarkdownCards';
+import {
+  MENU_ICON_SIZE,
+  MENU_ITEM,
+  MENU_ITEM_ICON,
+  MENU_POPUP,
+  MENU_SECTION_LABEL,
+  MENU_SEPARATOR,
+} from '@/lib/menuStyles';
 import { clearPendingFlushBackup } from '@/lib/pendingFlushBackup';
 import {
   rpcCreateViewFromTemplate,
@@ -45,6 +54,7 @@ import {
   rpcRenameView,
   rpcRestoreView,
 } from '@/lib/rpc';
+import { cn } from '@/lib/utils';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../paraglide/messages.js';
 import {
@@ -143,11 +153,7 @@ function renderCreateMenuItem(
   return (
     <Menu.Item
       aria-label={item.label}
-      className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-sm outline-hidden ${
-        item.enabled
-          ? 'text-gray-800 data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10'
-          : 'cursor-not-allowed text-gray-400 dark:text-gray-600'
-      } border-gray-100 border-b dark:border-neutral-700`}
+      className={MENU_ITEM}
       closeOnClick={(() => {
         const canvasTypeId = item.id.startsWith('ext:')
           ? item.id.slice('ext:'.length)
@@ -173,7 +179,7 @@ function renderCreateMenuItem(
         }
       }}
     >
-      <item.icon size={18} />
+      <item.icon className={MENU_ITEM_ICON} size={MENU_ICON_SIZE} />
       {item.label}
     </Menu.Item>
   );
@@ -681,54 +687,71 @@ export function ViewSwitcher({
                   side="top"
                   sideOffset={12}
                 >
-                  <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
+                  <Menu.Popup
+                    className={`floating-menu-popup min-w-48 ${MENU_POPUP}`}
+                  >
                     {onExportCanvas ? (
                       <Menu.Item
                         aria-label={m.a11y_export_png()}
-                        className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                        className={MENU_ITEM}
                         onClick={onExportCanvas}
                       >
                         <FileImage
-                          className="text-gray-500 dark:text-gray-400"
-                          size={16}
+                          className={MENU_ITEM_ICON}
+                          size={MENU_ICON_SIZE}
                         />
                         <span>{m.a11y_export_png()}</span>
                       </Menu.Item>
                     ) : null}
-                    {onExportMarkdown ? (
-                      <>
-                        <Menu.Item
-                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
-                          onClick={() => onExportMarkdown('view')}
-                        >
-                          {m.menu_export_canvas_markdown()}
-                        </Menu.Item>
-                        <Menu.Item
-                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
-                          onClick={() => onExportMarkdown('selected')}
-                        >
-                          {m.menu_export_selected_markdown()}
-                        </Menu.Item>
-                        <Menu.Item
-                          className="cursor-default px-3 py-2.5 text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
-                          onClick={() => onExportMarkdown('all')}
-                        >
-                          {m.menu_export_all_markdown()}
-                        </Menu.Item>
-                      </>
-                    ) : null}
                     {onExportCanvasJson ? (
                       <Menu.Item
                         aria-label={m.a11y_export_json()}
-                        className="flex cursor-default items-center gap-3 px-3 py-2.5 font-medium text-gray-700 text-sm outline-hidden hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700/80"
+                        className={MENU_ITEM}
                         onClick={onExportCanvasJson}
                       >
                         <FileJson
-                          className="text-gray-500 dark:text-gray-400"
-                          size={16}
+                          className={MENU_ITEM_ICON}
+                          size={MENU_ICON_SIZE}
                         />
                         <span>{m.a11y_export_json()}</span>
                       </Menu.Item>
+                    ) : null}
+                    {onExportMarkdown ? (
+                      <>
+                        {onExportCanvas || onExportCanvasJson ? (
+                          <Menu.Separator className={MENU_SEPARATOR} />
+                        ) : null}
+                        <Menu.Item
+                          className={MENU_ITEM}
+                          onClick={() => onExportMarkdown('view')}
+                        >
+                          <FileText
+                            className={MENU_ITEM_ICON}
+                            size={MENU_ICON_SIZE}
+                          />
+                          {m.menu_export_canvas_markdown()}
+                        </Menu.Item>
+                        <Menu.Item
+                          className={MENU_ITEM}
+                          onClick={() => onExportMarkdown('selected')}
+                        >
+                          <FileText
+                            className={MENU_ITEM_ICON}
+                            size={MENU_ICON_SIZE}
+                          />
+                          {m.menu_export_selected_markdown()}
+                        </Menu.Item>
+                        <Menu.Item
+                          className={MENU_ITEM}
+                          onClick={() => onExportMarkdown('all')}
+                        >
+                          <FileText
+                            className={MENU_ITEM_ICON}
+                            size={MENU_ICON_SIZE}
+                          />
+                          {m.menu_export_all_markdown()}
+                        </Menu.Item>
+                      </>
                     ) : null}
                   </Menu.Popup>
                 </Menu.Positioner>
@@ -758,43 +781,47 @@ export function ViewSwitcher({
                 side="top"
                 sideOffset={12}
               >
-                <Menu.Popup className="floating-menu-popup min-w-50 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
+                <Menu.Popup
+                  className={`floating-menu-popup min-w-52 ${MENU_POPUP}`}
+                >
                   {commonCreateItems.map((item) =>
                     renderCreateMenuItem(item, {
                       onCreateCanvasType,
                       onCreateNode,
                     })
                   )}
-                  <div className="border-gray-100 border-b px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:border-neutral-700 dark:text-gray-400">
-                    {m.menu_more()}
-                  </div>
+                  <Menu.Separator className={MENU_SEPARATOR} />
+                  <div className={MENU_SECTION_LABEL}>{m.menu_more()}</div>
                   {moreCreateItems.map((item) =>
                     renderCreateMenuItem(item, {
                       onCreateCanvasType,
                       onCreateNode,
                     })
                   )}
+                  <Menu.Separator className={MENU_SEPARATOR} />
                   <Menu.Item
                     aria-label={m.menu_import_markdown()}
-                    className={`flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10 ${
-                      onOpenNoteLibrary
-                        ? 'border-gray-100 border-b dark:border-neutral-700'
-                        : ''
-                    }`}
+                    className={MENU_ITEM}
                     closeOnClick={false}
                     onClick={handleImportMarkdown}
                   >
-                    <FilePlus size={18} />
+                    <FilePlus
+                      className={MENU_ITEM_ICON}
+                      size={MENU_ICON_SIZE}
+                    />
                     {m.menu_import_markdown()}
                   </Menu.Item>
                   {onOpenNoteLibrary ? (
                     <Menu.Item
                       aria-label={m.menu_note_library()}
-                      className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                      className={MENU_ITEM}
                       closeOnClick
                       onClick={onOpenNoteLibrary}
                     >
-                      <BookOpen size={18} />
+                      <BookOpen
+                        className={MENU_ITEM_ICON}
+                        size={MENU_ICON_SIZE}
+                      />
                       {m.menu_note_library()}
                     </Menu.Item>
                   ) : null}
@@ -811,169 +838,200 @@ export function ViewSwitcher({
             side="top"
             sideOffset={8}
           >
-            <Menu.Popup className="floating-menu-popup min-w-65 overflow-hidden rounded-2xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
-              {views.map((view, index) => {
-                const isLast = index === views.length - 1;
-                const rowBorder = isLast
-                  ? ''
-                  : 'border-gray-100 border-b dark:border-neutral-700';
-
-                if (editingId === view.id) {
-                  const hasError = renameValidationError !== null;
-                  return (
-                    <div
-                      className={`flex flex-col gap-1 px-4 py-3 ${rowBorder}`}
-                      key={view.id}
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          aria-invalid={hasError}
-                          aria-label={m.a11y_view_name()}
-                          className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-accent dark:bg-neutral-700 dark:text-white ${
-                            hasError
-                              ? 'border-red-400 dark:border-red-500'
-                              : 'border-gray-200 dark:border-neutral-600'
-                          }`}
-                          maxLength={VIEW_NAME_MAX_LENGTH}
-                          onChange={(e) => {
-                            setEditingName(e.target.value);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleRenameConfirm();
-                            }
-                          }}
-                          ref={inputRef}
-                          type="text"
-                          value={editingName}
-                        />
-                        <button
-                          aria-label={m.a11y_confirm_rename()}
-                          className="rounded-sm p-1 text-green-600 transition-opacity hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/30"
-                          disabled={hasError}
-                          onClick={handleRenameConfirm}
-                          type="button"
-                        >
-                          <Check size={14} />
-                        </button>
-                        <button
-                          aria-label={m.a11y_cancel_rename()}
-                          className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
-                          onClick={handleRenameCancel}
-                          type="button"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {hasError ? (
-                        <p
-                          className="px-1 text-2xs text-red-500 dark:text-red-400"
-                          role="alert"
-                        >
-                          {renameValidationError}
-                        </p>
-                      ) : null}
-                    </div>
-                  );
-                }
-
-                const isActive = view.id === activeViewId;
-                return (
-                  <Menu.Item
-                    aria-label={view.name}
-                    className={`group flex cursor-default items-center gap-3 px-4 py-3 text-sm outline-hidden data-highlighted:bg-black/5 dark:data-highlighted:bg-white/5 ${
-                      isActive
-                        ? 'font-semibold text-gray-900 dark:text-white'
-                        : 'text-gray-600 dark:text-gray-300'
-                    } ${rowBorder}`}
-                    closeOnClick={false}
-                    key={view.id}
-                    onClick={async () => {
-                      await handleSwitchView(view.id);
-                    }}
-                  >
-                    <Layers className="shrink-0 opacity-50" size={16} />
-                    <span className="flex-1 truncate text-left">
-                      {view.name}
-                    </span>
-                    <button
-                      aria-label={`Rename ${view.name}`}
-                      className="rounded-sm p-1 text-gray-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRenameStart(view.id);
-                      }}
-                      type="button"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    {views.length > 1 ? (
-                      <button
-                        aria-label={`Delete ${view.name}`}
-                        className="rounded-sm p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 group-data-highlighted:opacity-100 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-300"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(view.id);
-                        }}
-                        type="button"
+            <Menu.Popup className={`floating-menu-popup w-64 ${MENU_POPUP}`}>
+              <div className="custom-scrollbar -m-1 max-h-[min(60vh,26rem)] overflow-y-auto p-1">
+                {views.map((view) => {
+                  if (editingId === view.id) {
+                    const hasError = renameValidationError !== null;
+                    return (
+                      <div
+                        className="flex flex-col gap-1 px-1 py-1"
+                        key={view.id}
                       >
-                        <Trash2 size={13} />
-                      </button>
-                    ) : null}
-                  </Menu.Item>
-                );
-              })}
+                        <div className="flex items-center gap-2">
+                          <input
+                            aria-invalid={hasError}
+                            aria-label={m.a11y_view_name()}
+                            className={`flex-1 rounded-md border bg-white px-2 py-1 text-gray-900 text-sm outline-hidden focus:border-accent dark:bg-neutral-700 dark:text-white ${
+                              hasError
+                                ? 'border-red-400 dark:border-red-500'
+                                : 'border-gray-200 dark:border-neutral-600'
+                            }`}
+                            maxLength={VIEW_NAME_MAX_LENGTH}
+                            onChange={(e) => {
+                              setEditingName(e.target.value);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleRenameConfirm();
+                              }
+                            }}
+                            ref={inputRef}
+                            type="text"
+                            value={editingName}
+                          />
+                          <button
+                            aria-label={m.a11y_confirm_rename()}
+                            className="rounded-sm p-1 text-green-600 transition-opacity hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/30"
+                            disabled={hasError}
+                            onClick={handleRenameConfirm}
+                            type="button"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            aria-label={m.a11y_cancel_rename()}
+                            className="rounded-sm p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-600"
+                            onClick={handleRenameCancel}
+                            type="button"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {hasError ? (
+                          <p
+                            className="px-1 text-2xs text-red-500 dark:text-red-400"
+                            role="alert"
+                          >
+                            {renameValidationError}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  }
 
-              <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+                  const isActive = view.id === activeViewId;
+                  return (
+                    <Menu.Item
+                      aria-label={view.name}
+                      className={cn(
+                        'group',
+                        MENU_ITEM,
+                        isActive
+                          ? 'text-gray-900 dark:text-white'
+                          : 'font-normal text-gray-600 dark:text-gray-300'
+                      )}
+                      closeOnClick={false}
+                      key={view.id}
+                      onClick={async () => {
+                        await handleSwitchView(view.id);
+                      }}
+                    >
+                      <Layers
+                        className={
+                          isActive ? 'shrink-0 text-accent' : MENU_ITEM_ICON
+                        }
+                        size={MENU_ICON_SIZE}
+                      />
+                      <span className="flex-1 truncate text-left">
+                        {view.name}
+                      </span>
+                      {isActive ? (
+                        <Check
+                          aria-hidden
+                          className="shrink-0 text-accent group-hover:hidden group-data-highlighted:hidden"
+                          size={14}
+                          strokeWidth={2.25}
+                        />
+                      ) : null}
+                      <span className="-my-1 -mr-1 hidden shrink-0 items-center gap-0.5 group-hover:flex group-data-highlighted:flex">
+                        <button
+                          aria-label={`Rename ${view.name}`}
+                          className="flex size-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRenameStart(view.id);
+                          }}
+                          type="button"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        {views.length > 1 ? (
+                          <button
+                            aria-label={`Delete ${view.name}`}
+                            className="flex size-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(view.id);
+                            }}
+                            type="button"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        ) : null}
+                      </span>
+                    </Menu.Item>
+                  );
+                })}
+              </div>
+
+              <Menu.Separator className={MENU_SEPARATOR} />
 
               <Menu.SubmenuRoot>
-                <Menu.SubmenuTrigger className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/5">
-                  <Plus className="opacity-50" size={16} />
+                <Menu.SubmenuTrigger
+                  className={cn(
+                    MENU_ITEM,
+                    'data-popup-open:bg-black/5 dark:data-popup-open:bg-white/10'
+                  )}
+                >
+                  <Plus className={MENU_ITEM_ICON} size={MENU_ICON_SIZE} />
                   <span className="flex-1">{m.view_new_canvas()}</span>
-                  <ChevronRight className="opacity-40" size={14} />
+                  <ChevronRight className={MENU_ITEM_ICON} size={14} />
                 </Menu.SubmenuTrigger>
                 <Menu.Portal>
                   <Menu.Positioner
-                    align="start"
+                    align="end"
                     className="z-50 outline-hidden"
                     side="right"
-                    sideOffset={4}
+                    sideOffset={8}
                   >
-                    <Menu.Popup className="floating-menu-popup min-w-44 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-md dark:bg-neutral-800/90">
+                    <Menu.Popup
+                      className={`floating-menu-popup min-w-48 ${MENU_POPUP}`}
+                    >
                       <Menu.Item
-                        className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                        className={MENU_ITEM}
                         closeOnClick={false}
                         onClick={() => handleCreateFromTemplate('blank')}
                       >
-                        <Plus size={16} />
+                        <Plus
+                          className={MENU_ITEM_ICON}
+                          size={MENU_ICON_SIZE}
+                        />
                         {m.view_blank_canvas()}
                       </Menu.Item>
 
-                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+                      <Menu.Separator className={MENU_SEPARATOR} />
 
-                      <div className="px-4 pt-2 pb-1 font-medium text-2xs text-gray-500 uppercase tracking-wide dark:text-gray-400">
+                      <div className={MENU_SECTION_LABEL}>
                         {m.view_from_template()}
                       </div>
 
                       {getQuickTemplateItems().map((template) => (
                         <Menu.Item
-                          className="flex cursor-default items-center gap-3 px-4 py-3 font-medium text-gray-800 text-sm outline-hidden data-highlighted:bg-black/5 dark:text-gray-200 dark:data-highlighted:bg-white/10"
+                          className={MENU_ITEM}
                           closeOnClick={false}
                           key={template.id}
                           onClick={() => handleCreateFromTemplate(template.id)}
                         >
-                          <template.icon size={16} />
+                          <template.icon
+                            className={MENU_ITEM_ICON}
+                            size={MENU_ICON_SIZE}
+                          />
                           {template.label}
                         </Menu.Item>
                       ))}
 
-                      <Menu.Separator className="border-gray-100 border-t dark:border-neutral-700" />
+                      <Menu.Separator className={MENU_SEPARATOR} />
 
                       <Menu.Item
-                        className="flex cursor-default items-center gap-3 px-4 py-3 text-gray-500 text-xs outline-hidden data-highlighted:bg-black/5 dark:text-gray-400 dark:data-highlighted:bg-white/10"
+                        className={cn(
+                          MENU_ITEM,
+                          'justify-between font-normal text-gray-500 text-xs dark:text-gray-400'
+                        )}
                         render={<RouterLink to="/templates" />}
                       >
                         {m.templates_browse_all()}
+                        <ChevronRight className={MENU_ITEM_ICON} size={13} />
                       </Menu.Item>
                     </Menu.Popup>
                   </Menu.Positioner>

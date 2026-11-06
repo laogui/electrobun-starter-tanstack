@@ -164,7 +164,7 @@ function TagSidebarBody() {
         <header className="electrobun-webkit-app-region-drag flex h-10 shrink-0 items-center gap-2 border-black/5 border-b px-4 dark:border-white/5">
           <TagIcon
             aria-hidden
-            className="text-muted-foreground"
+            className="text-gray-500 dark:text-gray-400"
             size={14}
             strokeWidth={1.8}
           />
@@ -173,7 +173,7 @@ function TagSidebarBody() {
           </h2>
           <button
             aria-label={m.tags_sidebar_close()}
-            className="electrobun-webkit-app-region-no-drag flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+            className="electrobun-webkit-app-region-no-drag flex size-6 items-center justify-center rounded text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
             onClick={close}
             type="button"
           >
@@ -188,7 +188,7 @@ function TagSidebarBody() {
             }
             if (tags.length === 0) {
               return (
-                <div className="flex flex-col items-center gap-2 px-3 py-12 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2 px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                   <TagIcon
                     aria-hidden
                     className="opacity-40"
@@ -211,7 +211,7 @@ function TagSidebarBody() {
                   >
                     <input
                       aria-label={m.a11y_tag_name()}
-                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-hidden focus:border-primary dark:border-white/10 dark:bg-neutral-800"
+                      className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] outline-hidden focus:border-accent dark:border-white/10 dark:bg-neutral-800"
                       onChange={(e) => {
                         setEditingName(e.target.value);
                       }}
@@ -239,7 +239,7 @@ function TagSidebarBody() {
                     </button>
                     <button
                       aria-label={m.tags_sidebar_rename_cancel()}
-                      className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
+                      className="flex size-6 items-center justify-center rounded text-gray-500 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
                       onClick={cancelRename}
                       type="button"
                     >
@@ -254,15 +254,15 @@ function TagSidebarBody() {
                   className={cn(
                     'group relative flex items-center gap-1 rounded-md text-[13px] transition-colors',
                     isActive
-                      ? 'bg-primary/10 text-primary dark:bg-primary/15'
-                      : 'text-foreground hover:bg-black/5 dark:hover:bg-white/10'
+                      ? 'bg-accent-softer text-accent-strong'
+                      : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
                   )}
                   key={t.name}
                 >
                   {isActive ? (
                     <span
                       aria-hidden
-                      className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-sm bg-primary"
+                      className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-sm bg-accent"
                     />
                   ) : null}
                   <button
@@ -279,7 +279,7 @@ function TagSidebarBody() {
                     {isActive ? (
                       <Check
                         aria-hidden
-                        className="shrink-0 text-primary"
+                        className="shrink-0 text-accent"
                         size={12}
                         strokeWidth={2.5}
                       />
@@ -295,7 +295,9 @@ function TagSidebarBody() {
                     <span
                       className={cn(
                         'shrink-0 text-xs tabular-nums',
-                        isActive ? 'text-primary/70' : 'text-muted-foreground'
+                        isActive
+                          ? 'text-accent-strong/70'
+                          : 'text-gray-500 dark:text-gray-400'
                       )}
                     >
                       {t.count}
@@ -307,8 +309,8 @@ function TagSidebarBody() {
                       className={cn(
                         'flex size-6 items-center justify-center rounded transition-colors',
                         isActive
-                          ? 'text-primary/70 hover:bg-primary/15 hover:text-primary'
-                          : 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                          ? 'text-accent-strong/70 hover:bg-accent-soft/60 hover:text-accent-strong'
+                          : 'text-gray-500 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100'
                       )}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -323,8 +325,8 @@ function TagSidebarBody() {
                       className={cn(
                         'flex size-6 items-center justify-center rounded transition-colors',
                         isActive
-                          ? 'text-primary/70 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20'
-                          : 'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20'
+                          ? 'text-accent-strong/70 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20'
+                          : 'text-gray-500 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-900/20'
                       )}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -342,14 +344,14 @@ function TagSidebarBody() {
         </div>
 
         {activeFilters.length > 0 ? (
-          <footer className="flex items-center gap-2 border-black/5 border-t bg-primary/5 px-3 py-2 dark:border-white/5 dark:bg-primary/10">
-            <span className="flex-1 truncate text-[12px] text-muted-foreground">
+          <footer className="flex items-center gap-2 border-black/5 border-t bg-accent-softer px-3 py-2 dark:border-white/5">
+            <span className="flex-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
               {m.tags_sidebar_selected_count({
                 count: String(activeFilters.length),
               })}
             </span>
             <button
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
               onClick={clearFilter}
               type="button"
             >

@@ -311,7 +311,7 @@ export function LibraryPopup({ rfInstance }: LibraryPopupProps) {
           />
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
-            className="relative flex max-h-[72vh] w-full max-w-[820px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(15,23,42,0.25)] ring-1 ring-black/[0.04] dark:bg-neutral-900 dark:shadow-[0_24px_64px_-16px_rgba(0,0,0,0.6)] dark:ring-white/[0.06]"
+            className="relative flex max-h-[76vh] w-full max-w-[936px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(15,23,42,0.25)] ring-1 ring-black/[0.04] dark:bg-neutral-900 dark:shadow-[0_24px_64px_-16px_rgba(0,0,0,0.6)] dark:ring-white/[0.06]"
             exit={{ opacity: 0, scale: 0.96 }}
             initial={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.18, ease: EASE_OUT }}

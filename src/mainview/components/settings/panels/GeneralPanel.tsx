@@ -62,8 +62,8 @@ function SettingsSelect<TValue extends string>({
       }}
       value={value}
     >
-      <div className="flex flex-col gap-2">
-        <div>
+      <div className="flex min-h-11 items-center justify-between gap-4 px-3.5 py-2">
+        <div className="min-w-0">
           <SelectLabel>
             <span
               className="font-medium text-[13px] text-neutral-800 dark:text-neutral-100"
@@ -80,7 +80,7 @@ function SettingsSelect<TValue extends string>({
         </div>
         <SelectTrigger
           aria-labelledby={id}
-          className="inline-flex h-8 w-full max-w-[240px] items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-3 font-medium text-[12px] text-neutral-800 shadow-sm transition-colors hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-accent/60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+          className="inline-flex h-7 w-44 shrink-0 items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-2.5 font-medium text-[12px] text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-accent/60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
         >
           <SelectValue>{getSelectedLabel(options, value)}</SelectValue>
         </SelectTrigger>
@@ -144,10 +144,10 @@ export function GeneralPanel({
     }));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PanelHeading>{strings.generalTitle}</PanelHeading>
 
-      <div className="space-y-4">
+      <SettingsGroup>
         <SettingsSelect
           id="settings-language"
           label={strings.language}
@@ -175,6 +175,9 @@ export function GeneralPanel({
           options={fontOptions}
           value={settings.fontFamily}
         />
+      </SettingsGroup>
+
+      <SettingsGroup>
         <SettingsSelect
           id="settings-canvas-snap"
           label={strings.canvasSnapLabel}
@@ -208,13 +211,13 @@ export function GeneralPanel({
           options={autoSaveOptions}
           value={String(settings.autoSaveInterval)}
         />
+      </SettingsGroup>
 
-        {errorMessage ? (
-          <p className="text-red-600 text-sm dark:text-red-400" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
-      </div>
+      {errorMessage ? (
+        <p className="text-red-600 text-sm dark:text-red-400" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -224,5 +227,14 @@ function PanelHeading({ children }: { children: React.ReactNode }) {
     <h2 className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-50">
       {children}
     </h2>
+  );
+}
+
+/** Inset grouped list (macOS-style): one rounded card, hairlines between rows. */
+function SettingsGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="divide-y divide-black/5 overflow-hidden rounded-xl border border-black/5 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-neutral-900/60">
+      {children}
+    </div>
   );
 }

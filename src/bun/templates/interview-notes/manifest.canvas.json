@@ -6,17 +6,13 @@
   },
   "nodeMetadata": {
     "tpl-interview-notes-profile": {
-      "tags": [
-        "受访者"
-      ],
+      "tags": ["受访者"],
       "tagColors": {
         "受访者": "#7C3AED"
       }
     },
     "tpl-interview-notes-verify": {
-      "tags": [
-        "核实"
-      ],
+      "tags": ["核实"],
       "tagColors": {
         "核实": "#DB2777"
       }

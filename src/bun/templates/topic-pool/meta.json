@@ -4,9 +4,5 @@
   "name": "选题库",
   "description": "灵感、正在做、已发三栏，配一套挑选题的标准。想法不再散落在备忘录里。",
   "category": "thinking",
-  "tags": [
-    "writing",
-    "ideas",
-    "pitch"
-  ]
+  "tags": ["writing", "ideas", "pitch"]
 }

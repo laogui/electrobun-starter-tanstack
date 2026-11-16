@@ -6,17 +6,13 @@
   },
   "nodeMetadata": {
     "tpl-novel-bible-premise": {
-      "tags": [
-        "设定"
-      ],
+      "tags": ["设定"],
       "tagColors": {
         "设定": "#7C3AED"
       }
     },
     "tpl-novel-bible-foreshadow": {
-      "tags": [
-        "伏笔"
-      ],
+      "tags": ["伏笔"],
       "tagColors": {
         "伏笔": "#DB2777"
       }

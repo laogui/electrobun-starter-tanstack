@@ -5,6 +5,7 @@ Source of truth for: feature-story, topic-pool, interview-notes,
 reading-notes, novel-bible, brainstorm-mindmap (now "文章结构图").
 
     python3 scripts/templates/build_writer_templates.py
+    bunx biome format --write src/bun/templates
 
 Writes src/bun/templates/<id>/{meta.json,manifest.canvas.json,assets.json}.
 Images live in scripts/templates/images/ and are embedded as base64 JPEG

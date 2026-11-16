@@ -4,10 +4,5 @@
   "name": "文章结构图",
   "description": "主题在中间，每一支是一节，下面挂论据。动笔前先把骨架理顺。",
   "category": "thinking",
-  "tags": [
-    "outline",
-    "structure",
-    "mindmap",
-    "writing"
-  ]
+  "tags": ["outline", "structure", "mindmap", "writing"]
 }

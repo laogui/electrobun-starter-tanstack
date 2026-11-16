@@ -6,9 +6,7 @@
   },
   "nodeMetadata": {
     "tpl-topic-pool-rules": {
-      "tags": [
-        "方法"
-      ],
+      "tags": ["方法"],
       "tagColors": {
         "方法": "#F59E0B"
       }

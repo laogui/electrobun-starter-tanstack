@@ -4,9 +4,5 @@
   "name": "采访整理",
   "description": "受访者、可引用的原话、时间线、待核实清单和拆段文字稿。写稿时随手拖出来用。",
   "category": "knowledge",
-  "tags": [
-    "writing",
-    "interview",
-    "journalism"
-  ]
+  "tags": ["writing", "interview", "journalism"]
 }

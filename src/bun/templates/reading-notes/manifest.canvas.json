@@ -6,17 +6,13 @@
   },
   "nodeMetadata": {
     "tpl-reading-notes-core": {
-      "tags": [
-        "要点"
-      ],
+      "tags": ["要点"],
       "tagColors": {
         "要点": "#F59E0B"
       }
     },
     "tpl-reading-notes-review": {
-      "tags": [
-        "草稿"
-      ],
+      "tags": ["草稿"],
       "tagColors": {
         "草稿": "#2563EB"
       }

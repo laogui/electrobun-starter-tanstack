@@ -6,25 +6,19 @@
   },
   "nodeMetadata": {
     "tpl-feature-story-pitch": {
-      "tags": [
-        "选题"
-      ],
+      "tags": ["选题"],
       "tagColors": {
         "选题": "#F59E0B"
       }
     },
     "tpl-feature-story-todo": {
-      "tags": [
-        "核实"
-      ],
+      "tags": ["核实"],
       "tagColors": {
         "核实": "#DB2777"
       }
     },
     "tpl-feature-story-draft": {
-      "tags": [
-        "草稿"
-      ],
+      "tags": ["草稿"],
       "tagColors": {
         "草稿": "#2563EB"
       }

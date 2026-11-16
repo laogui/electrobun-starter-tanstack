@@ -4,10 +4,5 @@
   "name": "拆书笔记",
   "description": "论点、划线、章节和一篇书评草稿放在一起，读完就能写。",
   "category": "knowledge",
-  "tags": [
-    "reading",
-    "book",
-    "review",
-    "writing"
-  ]
+  "tags": ["reading", "book", "review", "writing"]
 }

@@ -38,6 +38,10 @@ function TemplatesRoute() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<Category>('all');
 
+  const visibleCategories = CATEGORIES.filter(
+    (cat) => cat.id === 'all' || templates.some((t) => t.category === cat.id)
+  );
+
   const filtered = useMemo(() => {
     let result: TemplateMeta[] = templates;
     if (category !== 'all') {
@@ -97,7 +101,7 @@ function TemplatesRoute() {
           className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-neutral-800"
           role="tablist"
         >
-          {CATEGORIES.map((cat) => (
+          {visibleCategories.map((cat) => (
             <button
               aria-selected={category === cat.id}
               className={`rounded-md px-3 py-1.5 font-medium text-xs transition-colors ${

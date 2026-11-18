@@ -62,17 +62,6 @@ const manifestEdge = z
   .loose();
 
 const attachmentKind = z.enum(['audio', 'file', 'image', 'video']);
-const widgetKind = z.enum(['checklist', 'pomodoro', 'reminder']);
-
-const widgetRecord = z
-  .object({
-    data: record,
-    id,
-    kind: widgetKind,
-    title: z.string(),
-  })
-  .loose();
-
 const nodeMetadata = z
   .object({
     tag: z.string().nullish(),
@@ -109,12 +98,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
       viewId: id,
     })
     .loose(),
-  createWidget: z
-    .object({ kind: widgetKind, title: z.string().optional() })
-    .loose(),
-  cloneWidget: z.object({ widgetId: id }).loose(),
-  saveWidget: z.object({ widget: widgetRecord }).loose(),
-  deleteWidget: z.object({ widgetId: id }).loose(),
   extensionInstanceCreate: z
     .object({
       canvasTypeId: id,
@@ -134,10 +117,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
     })
     .loose(),
   extensionInstanceClone: z.object({ instanceId: id }).loose(),
-  extensionInstanceClearType: z.object({ canvasTypeId: id }).loose(),
-  extensionEnablementSetEnabled: z
-    .object({ canvasTypeId: id, enabled: z.boolean() })
-    .loose(),
   saveNote: z
     .object({ body: z.string(), frontmatter: record, noteId: id })
     .loose(),
@@ -170,8 +149,6 @@ export const RPC_WRITE_PARAM_SCHEMAS = {
   restoreTrash: z.object({ trashId: id }).loose(),
   purgeTrash: z.object({ trashId: id }).loose(),
   deleteUnlinkedNotes: z.object({ files: z.array(z.string()) }).loose(),
-  activateLicense: z.object({ key: z.string().max(64) }).loose(),
-  createView: z.object({ name: z.string().max(512) }).loose(),
   deleteView: z.object({ viewId: id }).loose(),
   restoreView: z.object({ trashId: id }).loose(),
   renameView: z.object({ name: z.string().max(512), viewId: id }).loose(),
@@ -256,9 +233,6 @@ export function withRpcWriteValidation<T extends HandlerMap>(handlers: T): T {
         }
         if (method === 'renameTag' || method === 'deleteTag') {
           return Promise.resolve({ ...failure, updated: 0 });
-        }
-        if (method === 'extensionInstanceClearType') {
-          return Promise.resolve({ ...failure, deleted: 0 });
         }
         return Promise.resolve(failure);
       }

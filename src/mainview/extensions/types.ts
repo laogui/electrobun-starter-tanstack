@@ -4,19 +4,13 @@ import type { ExtensionPresentation } from '../../shared/extensions/presentation
 import type {
   GhostBoardHostAPI,
   HostCapability,
-  ScheduledTaskFiredEvent,
   Size,
   SurfaceRenderContext,
 } from '../../shared/extensions/protocol';
 
 export type CanvasTypeCategory = 'media' | 'productivity' | 'web' | 'demo';
 
-export type CanvasTypeCreateFlow =
-  | 'immediate'
-  | 'url'
-  | 'file'
-  | 'image'
-  | 'recording';
+export type CanvasTypeCreateFlow = 'immediate' | 'url' | 'file' | 'image';
 
 export interface IconProps {
   className?: string;
@@ -108,15 +102,6 @@ export interface BuiltinCanvasType<TState> {
   interactions?: CanvasTypeInteractions<TState>;
   menuActions?: readonly CanvasTypeMenuAction<TState>[];
   migrateState(record: ExtensionInstanceRecord): TState;
-  /**
-   * Called when one of the instance's scheduled tasks comes due. Lives on the
-   * type rather than the surface so a task still fires when nothing is
-   * mounted — the whole point of persisting it.
-   */
-  onTaskFired?(
-    event: ScheduledTaskFiredEvent,
-    context: { host: GhostBoardHostAPI; state: TState }
-  ): Promise<void> | void;
   PreviewSurface: ComponentType<PreviewProps<TState>>;
   surface: {
     canEnterFolder: boolean;

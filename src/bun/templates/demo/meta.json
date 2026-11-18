@@ -1,8 +1,0 @@
-{
-  "id": "demo",
-  "name": "Demo Canvas",
-  "description": "A showcase canvas demonstrating GhostBoard's primitives: image-style cards, checklists, folders, sticky notes, and groups.",
-  "category": "knowledge",
-  "tags": ["demo", "showcase", "introduction"],
-  "thumbnail": ""
-}

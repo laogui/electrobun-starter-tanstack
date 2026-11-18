@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type {
   Connection,
+  EdgeChangeset,
   Node,
   OnMoveEnd,
   ReactFlowInstance,
@@ -27,9 +28,7 @@ import { CardColorPopover } from '@/components/canvas/CardColorPopover';
 import { CardSidePanelHost } from '@/components/canvas/CardSidePanel';
 import { CanvasContextMenu } from '@/components/canvas/ContextMenu';
 import { DeleteFolderConfirmDialog } from '@/components/canvas/DeleteFolderConfirmDialog';
-import { EmptyCanvasOverlay } from '@/components/canvas/EmptyCanvasOverlay';
 import { LinkCreatePopover } from '@/components/canvas/LinkCreatePopover';
-import { RecordingRecorder } from '@/components/canvas/RecordingRecorder';
 import { ViewSwitcher } from '@/components/canvas/ViewSwitcher';
 import { Loader } from '@/components/layout/Loader';
 import { resolveExtensionMessage } from '@/extensions/messages';
@@ -38,7 +37,6 @@ import {
   canvasTypeRegistry,
   useCanvasTypeRegistryRevision,
 } from '@/extensions/registry';
-import type { RecordingResult } from '@/hooks/useAudioRecorder';
 import { useCanvasDragDrop } from '@/hooks/useCanvasDragDrop';
 import { useCanvasExport } from '@/hooks/useCanvasExport';
 import { useCanvasInit } from '@/hooks/useCanvasInit';
@@ -62,28 +60,19 @@ import {
   extractLinkUrl,
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
-import { openFocusedItem } from '@/lib/focusedItem';
+import { closeFocusedView, openFocusedItem } from '@/lib/focusedItem';
 import { isFolderExpandedChildNode } from '@/lib/folderExpansion';
 import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
-import { saveRecording } from '@/lib/recordingFiles';
 import {
   type ConnectionStartState,
   shouldReverseEdgeDirection,
 } from '@/lib/shouldReverseEdgeDirection';
 import { cn } from '@/lib/utils';
-import type { WidgetKind } from '@/lib/widgetTypes';
 import { useAppSettingsStore } from '@/store/appSettingsStore';
 import { type CreateNodeOptions, useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
-import {
-  LINK_CANVAS_TYPE_ID,
-  RECORDING_CANVAS_TYPE_ID,
-} from '../../shared/extensions/builtinIds';
-import { isExtensionInstanceLoadError } from '../../shared/extensions/instance';
-import { normalizeRecordingState } from '../../shared/extensions/media/state';
+import { LINK_CANVAS_TYPE_ID } from '../../shared/extensions/builtinIds';
 import { normalizeLinkState } from '../../shared/extensions/web/link';
 
 registerBuiltinCanvasTypes();
@@ -102,16 +91,6 @@ function getFolderTransitionDuration(closing = false): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-const WIDGET_CREATE_KINDS = new Set<CreatableCanvasNodeKind>([
-  'checklist',
-  'pomodoro',
-  'reminder',
-]);
-
-function isWidgetCreateKind(kind: CreatableCanvasNodeKind): kind is WidgetKind {
-  return WIDGET_CREATE_KINDS.has(kind);
-}
 
 export const Route = createFileRoute('/')({
   component: CanvasRoute,
@@ -152,58 +131,6 @@ function isEditablePasteTarget(target: EventTarget | null): boolean {
   );
 }
 
-interface RecordingNumberEntry {
-  data?: unknown;
-  type?: string;
-}
-
-function readRecordingNumber(data: unknown): number {
-  const value = (data as { recordingNumber?: unknown } | undefined)
-    ?.recordingNumber;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : 0;
-}
-
-function maxRecordingNumberFromEntry(entry: RecordingNumberEntry): number {
-  let max = entry.type === 'recording' ? readRecordingNumber(entry.data) : 0;
-
-  if (entry.type === 'extension') {
-    const data = entry.data as
-      | { canvasTypeId?: unknown; instanceId?: unknown }
-      | undefined;
-    if (
-      data?.canvasTypeId === RECORDING_CANVAS_TYPE_ID &&
-      typeof data.instanceId === 'string'
-    ) {
-      const record =
-        useExtensionInstanceStore.getState().records[data.instanceId];
-      if (record && !isExtensionInstanceLoadError(record)) {
-        max = Math.max(max, readRecordingNumber(record.state));
-      }
-    }
-  }
-
-  if (entry.type === 'folder') {
-    const children = (entry.data as { children?: unknown } | undefined)
-      ?.children;
-    if (Array.isArray(children)) {
-      for (const child of children as RecordingNumberEntry[]) {
-        max = Math.max(max, maxRecordingNumberFromEntry(child));
-      }
-    }
-  }
-
-  return max;
-}
-
-function maxRecordingNumberFromNodes(nodes: Node[]): number {
-  return nodes.reduce(
-    (max, node) => Math.max(max, maxRecordingNumberFromEntry(node)),
-    0
-  );
-}
-
 interface CanvasUiState {
   dragPos: { x: number; y: number } | null;
   isDraggingFile: boolean;
@@ -212,7 +139,6 @@ interface CanvasUiState {
     screen?: { x: number; y: number };
   } | null;
   pendingFolderDeleteIds: string[] | null;
-  recorderNumber: number | null;
 }
 
 const initialCanvasUiState: CanvasUiState = {
@@ -220,7 +146,6 @@ const initialCanvasUiState: CanvasUiState = {
   isDraggingFile: false,
   linkPrompt: null,
   pendingFolderDeleteIds: null,
-  recorderNumber: null,
 };
 
 function canvasUiReducer(
@@ -240,37 +165,6 @@ function CanvasSearchNavigation(
   useCanvasSearchNavigation(props);
   return null;
 }
-
-/** Empty-state overlay with a boolean selector, so the shell does not have to
- *  subscribe to the node list just to know whether it is empty. */
-const CanvasEmptyState = memo(function CanvasEmptyState({
-  onCreateNode,
-  onOpenNoteLibrary,
-}: {
-  onCreateNode: (kind: CreatableCanvasNodeKind) => Promise<unknown>;
-  onOpenNoteLibrary: () => void;
-}) {
-  const isEmpty = useCanvasStore(
-    (s) =>
-      !(
-        (s.topicDraft && s.topicDraft.viewId === s.activeViewId) ||
-        s.nodes.some(
-          (node) => !(node.data as { detached?: unknown } | undefined)?.detached
-        )
-      )
-  );
-  if (!isEmpty) {
-    return null;
-  }
-  return (
-    <EmptyCanvasOverlay
-      onCreateNote={async () => {
-        await onCreateNode('card');
-      }}
-      onOpenNoteLibrary={onOpenNoteLibrary}
-    />
-  );
-});
 
 // The canvas route wires React Flow, drag/drop, keyboard shortcuts, and modals.
 // react-doctor-disable-next-line react-doctor/no-giant-component
@@ -367,6 +261,12 @@ function CanvasComponent() {
       return;
     }
     const folderId = focusedFolder.id;
+    if (useCanvasStore.getState().focusedNode?.folderId === folderId) {
+      closeFocusedView();
+      if (useCanvasStore.getState().focusedNode?.folderId === folderId) {
+        return;
+      }
+    }
     setClosingFolderId(focusedFolder.id);
     setFolderTransitionLocked(true);
     // Motion completion owns the normal close path. This longer timer is only
@@ -383,7 +283,6 @@ function CanvasComponent() {
 
   const { onCreateNode } = useNodeCreation({ rfInstance });
   const createExtensionNode = useCanvasStore((s) => s.createExtensionNode);
-  const createWidgetRecord = useWidgetStore((s) => s.createWidget);
   const createExtensionInstance = useExtensionInstanceStore(
     (s) => s.createInstance
   );
@@ -402,22 +301,14 @@ function CanvasComponent() {
     canvasUiReducer,
     initialCanvasUiState
   );
-  const {
-    dragPos,
-    isDraggingFile,
-    linkPrompt,
-    pendingFolderDeleteIds,
-    recorderNumber,
-  } = canvasUi;
+  const { dragPos, isDraggingFile, linkPrompt, pendingFolderDeleteIds } =
+    canvasUi;
   const setLinkPrompt = useCallback(
     (linkPrompt: CanvasUiState['linkPrompt']) => {
       setCanvasUi({ linkPrompt });
     },
     []
   );
-  const setRecorderNumber = useCallback((recorderNumber: number | null) => {
-    setCanvasUi({ recorderNumber });
-  }, []);
   const setPendingFolderDeleteIds = useCallback(
     (pendingFolderDeleteIds: string[] | null) => {
       setCanvasUi({ pendingFolderDeleteIds });
@@ -436,13 +327,6 @@ function CanvasComponent() {
     onDragOverCanvas,
     onDropCanvas,
   } = useCanvasDragDrop({ rfInstance, setDragUi: setCanvasUi });
-  const lastRecordingAnchorRef = useRef<{ x: number; y: number } | undefined>(
-    undefined
-  );
-  const lastRecordingKindRef = useRef<CreatableCanvasNodeKind | undefined>(
-    undefined
-  );
-  const reservedRecordingNumberRef = useRef(0);
   const assetFileInputRef = useRef<HTMLInputElement>(null);
   const pendingAssetAnchorRef = useRef<{ x: number; y: number } | undefined>(
     undefined
@@ -507,84 +391,6 @@ function CanvasComponent() {
     []
   );
 
-  const closeRecorder = useCallback(() => {
-    lastRecordingAnchorRef.current = undefined;
-    lastRecordingKindRef.current = undefined;
-    setRecorderNumber(null);
-  }, [setRecorderNumber]);
-
-  const openRecorder = useCallback(
-    (anchorCenter?: { x: number; y: number }) => {
-      lastRecordingAnchorRef.current = anchorCenter;
-      lastRecordingKindRef.current = 'recording';
-      const maxNumber = Math.max(
-        reservedRecordingNumberRef.current,
-        maxRecordingNumberFromNodes(useCanvasStore.getState().nodes)
-      );
-      const nextNumber = maxNumber + 1;
-      reservedRecordingNumberRef.current = nextNumber;
-      setRecorderNumber(nextNumber);
-      setCreateMenuOpen(false);
-    },
-    [setCreateMenuOpen, setRecorderNumber]
-  );
-
-  const handleRecordingComplete = useCallback(
-    async (result: RecordingResult) => {
-      const number = recorderNumber ?? 1;
-      const anchorCenter = lastRecordingAnchorRef.current;
-      try {
-        const data = await saveRecording({
-          blob: result.blob,
-          durationMs: result.durationMs,
-          mimeType: result.mimeType,
-          recordingNumber: number,
-          ...(result.waveform ? { waveform: result.waveform } : {}),
-        });
-        const def = canvasTypeRegistry.get(RECORDING_CANVAS_TYPE_ID);
-        const state = normalizeRecordingState(data);
-        if (!def) {
-          return;
-        }
-        const record = await createExtensionInstance({
-          canvasTypeId: RECORDING_CANVAS_TYPE_ID,
-          dataVersion: def.dataVersion,
-          presentation: def.buildPresentation(state),
-          state,
-        });
-        if (!record) {
-          return;
-        }
-        await createExtensionNode(
-          RECORDING_CANVAS_TYPE_ID,
-          record.id,
-          rfInstance.current,
-          {
-            size: def.surface.defaultSize,
-            ...(anchorCenter ? { anchorCenter } : {}),
-          }
-        );
-        // Close only after both save and node creation succeed so a failure
-        // can still surface on the overlay (and never leaves a hung spinner).
-        lastRecordingAnchorRef.current = undefined;
-        lastRecordingKindRef.current = undefined;
-        setRecorderNumber(null);
-      } catch (error) {
-        console.error('[index] Failed to save recording:', error);
-        toast.error(m.toast_recording_save_failed());
-        // Re-throw so RecordingRecorder can keep the overlay open and offer
-        // retry instead of leaving the user with a silent no-op.
-        throw error;
-      }
-    },
-    [
-      createExtensionInstance,
-      createExtensionNode,
-      recorderNumber,
-      setRecorderNumber,
-    ]
-  );
-
   // Opens the shared hidden file input used by asset/image creation. The
   // picked file flows through `onAssetFileInputChange` into
   // `createAssetsFromFiles`, whose image branch sizes the card to the
@@ -604,9 +410,8 @@ function CanvasComponent() {
 
   // Unified create entry point shared with the canvas right-click menu. Plain
   // kinds are created immediately; `link` opens the URL popover, `asset` and
-  // `image` open the file picker (image restricted to image files), and
-  // `recording` opens the microphone dialog — mirroring the bottom create
-  // menu's special flows.
+  // `image` open the file picker (image restricted to image files) —
+  // mirroring the bottom create menu's special flows.
   const requestCreate = useCallback(
     async (kind: CreatableCanvasNodeKind, request?: CanvasCreateRequest) => {
       if (kind === 'topic') {
@@ -633,24 +438,6 @@ function CanvasComponent() {
         );
         return;
       }
-      if (kind === 'recording') {
-        openRecorder(request?.anchorCenter);
-        return;
-      }
-      if (isWidgetCreateKind(kind)) {
-        const widget = await createWidgetRecord(kind);
-        if (!widget) {
-          toast.error(m.toast_widget_create_failed());
-          return;
-        }
-        await onCreateNode(kind, {
-          ...(request?.anchorCenter
-            ? { anchorCenter: request.anchorCenter }
-            : {}),
-          data: { widgetId: widget.id, kind: widget.kind },
-        });
-        return;
-      }
       await onCreateNode(
         kind,
         request?.anchorCenter
@@ -658,14 +445,7 @@ function CanvasComponent() {
           : undefined
       );
     },
-    [
-      beginTopicDraft,
-      createWidgetRecord,
-      onCreateNode,
-      openAssetFilePicker,
-      openRecorder,
-      setLinkPrompt,
-    ]
+    [beginTopicDraft, onCreateNode, openAssetFilePicker, setLinkPrompt]
   );
 
   const createFromBottomMenu = useCallback(
@@ -679,29 +459,13 @@ function CanvasComponent() {
         });
         return;
       }
-      if (isWidgetCreateKind(kind)) {
-        const widget = await createWidgetRecord(kind);
-        if (!widget) {
-          toast.error(m.toast_widget_create_failed());
-          return;
-        }
-        await onCreateNode(kind, {
-          ...options,
-          data: {
-            ...(options?.data ?? {}),
-            widgetId: widget.id,
-            kind: widget.kind,
-          },
-        });
-        return;
-      }
       if (options) {
         await onCreateNode(kind, options);
         return;
       }
       await onCreateNode(kind);
     },
-    [beginTopicDraft, createWidgetRecord, onCreateNode]
+    [beginTopicDraft, onCreateNode]
   );
 
   const createCanvasTypeWithState = useCallback(
@@ -715,10 +479,6 @@ function CanvasComponent() {
       const def = canvasTypeRegistry.get(canvasTypeId);
       if (!def) {
         toast.error(resolveExtensionMessage('toast_extension_unknown_type'));
-        return;
-      }
-      if (!useExtensionEnablementStore.getState().isEnabled(canvasTypeId)) {
-        toast.error(resolveExtensionMessage('toast_extension_type_disabled'));
         return;
       }
       const presentation = def.buildPresentation(
@@ -767,22 +527,13 @@ function CanvasComponent() {
         openAssetFilePicker('', request?.anchorCenter);
         return;
       }
-      if (flow === 'recording') {
-        openRecorder(request?.anchorCenter);
-        return;
-      }
       await createCanvasTypeWithState(
         canvasTypeId,
         def.createInitialState(),
         request
       );
     },
-    [
-      createCanvasTypeWithState,
-      openAssetFilePicker,
-      openRecorder,
-      setLinkPrompt,
-    ]
+    [createCanvasTypeWithState, openAssetFilePicker, setLinkPrompt]
   );
 
   const onAssetFileInputChange = useCallback(
@@ -941,7 +692,7 @@ function CanvasComponent() {
   }, []);
 
   const onEdgesChange = useCallback(
-    (changes: any) => {
+    (changes: EdgeChangeset) => {
       applyEdgesChange(changes);
     },
     [applyEdgesChange]
@@ -1002,21 +753,30 @@ function CanvasComponent() {
           rect,
         });
       } else if (node.type === 'folder') {
+        if (useCanvasStore.getState().focusedNode) {
+          closeFocusedView();
+          if (useCanvasStore.getState().focusedNode) {
+            return;
+          }
+        }
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (
         isFocusableNode(node.type, node.data as Record<string, unknown>)
       ) {
         prefetchBlockNoteForData(node.data as Record<string, unknown>);
-        if (
-          openFocusedItem({
+        openFocusedItem(
+          {
             id: node.id,
             type: node.type,
             data: node.data,
             rect,
-          })
-        ) {
-          revealNodeBesidePanel(node.id, rfInstance.current);
-        }
+          },
+          {
+            onOpened: () => {
+              revealNodeBesidePanel(node.id, rfInstance.current);
+            },
+          }
+        );
       }
     },
     [setFocusedFolder]
@@ -1041,11 +801,19 @@ function CanvasComponent() {
       const openId = isFolderExpandedChildNode(node)
         ? node.data.child.id
         : node.id;
+      const openFolderId = isFolderExpandedChildNode(node)
+        ? node.data.folderId
+        : undefined;
       if (
-        !isOpenable ||
-        state.focusedNode?.id === openId ||
-        state.focusedFolder?.id === node.id
+        state.focusedNode?.id === openId &&
+        state.focusedNode?.folderId === openFolderId
       ) {
+        if (!openFolderId) {
+          revealNodeBesidePanel(node.id, rfInstance.current);
+        }
+        return;
+      }
+      if (!isOpenable || state.focusedFolder?.id === node.id) {
         return;
       }
       openNodeFocusedView(node);
@@ -1063,8 +831,12 @@ function CanvasComponent() {
       const openId = isFolderExpandedChildNode(node)
         ? node.data.child.id
         : node.id;
+      const openFolderId = isFolderExpandedChildNode(node)
+        ? node.data.folderId
+        : undefined;
       if (
-        state.focusedNode?.id === openId ||
+        (state.focusedNode?.id === openId &&
+          state.focusedNode?.folderId === openFolderId) ||
         state.focusedFolder?.id === node.id
       ) {
         return;
@@ -1155,19 +927,6 @@ function CanvasComponent() {
           spacePanActive={spacePanActive}
         />
       </div>
-
-      <CanvasEmptyState
-        onCreateNode={onCreateNode}
-        onOpenNoteLibrary={onOpenNoteLibrary}
-      />
-
-      {recorderNumber !== null ? (
-        <RecordingRecorder
-          onCancel={closeRecorder}
-          onComplete={handleRecordingComplete}
-          recordingNumber={recorderNumber}
-        />
-      ) : null}
 
       <CardSidePanelHost />
       <CardColorPopover />

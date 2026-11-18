@@ -1,23 +1,12 @@
 // @vitest-environment jsdom
 
-import type { Node } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast };
 });
-// These suites exercise the free-tier gate, which the slim release turns off.
-vi.mock('@/lib/productScope', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/productScope')>()),
-  LICENSE_QUOTA_ENABLED: true,
-}));
-vi.mock('@/lib/rpc-license', () => ({
-  getCachedLicense: vi.fn(() => ({ activated: false })),
-  refreshLicense: vi.fn(async () => ({ activated: false })),
-}));
 
-const { FREE_NODE_LIMIT } = await import('@/lib/nodeQuota');
 const { useCanvasStore } = await import('@/store/canvasStore');
 const { isTopicTreeEdge, TOPIC_NODE_TYPE } = await import(
   '../../../shared/topic'
@@ -150,29 +139,6 @@ describe('topicsSlice', () => {
     expect(titleOf(root)).toBe('Renamed');
     state().commitTopicTitle(root, '   ');
     expect(titleOf(root)).toBe('Renamed');
-  });
-
-  it('keeps the draft when the free quota refuses the commit', async () => {
-    const full: Node[] = Array.from({ length: FREE_NODE_LIMIT }, (_, i) => ({
-      data: { title: `n${i}` },
-      id: `n${i}`,
-      position: { x: i * 400, y: 0 },
-      type: 'card',
-    }));
-    useCanvasStore.setState({ nodes: full });
-
-    state().beginTopicDraft(null, { anchor: { x: 0, y: 5000 } });
-    expect(await state().commitTopicDraft('Over quota')).toBeUndefined();
-    expect(state().topicDraft).not.toBeNull();
-    expect(topics()).toHaveLength(0);
-  });
-
-  it('discards a commit that resolves after a view switch', async () => {
-    state().beginTopicDraft(null, { anchor: { x: 0, y: 0 } });
-    const pending = state().commitTopicDraft('Late');
-    state().setActiveView('other');
-    expect(await pending).toBeUndefined();
-    expect(state().nodes).toEqual([]);
   });
 
   it('follows explicit selection changes for the Topic command context', async () => {

@@ -1,23 +1,19 @@
 import {
-  Bell,
-  Clock3,
   FileText,
   Folder,
   Group,
   ImageIcon,
   Layers,
   Link2,
-  ListChecks,
   Paperclip,
   StickyNote,
   Workflow,
 } from 'lucide-react';
 
 import type { SearchResultKind } from '@/lib/searchTypes';
-import type { WidgetKind } from '@/lib/widgetTypes';
 
 /** Map a search result kind to its lucide icon component. */
-export function iconFor(kind: SearchResultKind, widgetKind?: WidgetKind) {
+export function iconFor(kind: SearchResultKind) {
   switch (kind) {
     case 'sticky':
       return StickyNote;
@@ -35,19 +31,6 @@ export function iconFor(kind: SearchResultKind, widgetKind?: WidgetKind) {
       return Link2;
     case 'view':
       return Layers;
-    case 'widget':
-      if (widgetKind === 'checklist') {
-        return ListChecks;
-      }
-      if (widgetKind === 'pomodoro') {
-        return Clock3;
-      }
-      if (widgetKind === 'reminder') {
-        return Bell;
-      }
-      return FileText;
-    case 'recording':
-      return FileText;
     case 'extension':
       return FileText;
     default:

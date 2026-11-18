@@ -50,20 +50,42 @@ it('opens with live data and refuses a deleted item', () => {
   expect(useCanvasStore.getState().focusedNode).toBeNull();
 });
 
-it('opening another card replaces the open one', () => {
+it('opening another card replaces the open one and consults the departure guard', () => {
   useCanvasStore
     .getState()
     .hydrate([node, { ...node, id: 'b', data: { title: 'B' } }], []);
   openFocusedItem({ id: 'a', data: {}, rect: new DOMRect() });
-  openFocusedItem({ id: 'b', data: {}, rect: new DOMRect() });
+  let deferredLeave: (() => void) | undefined;
+  const unregister = registerFocusedClose('a', (leave) => {
+    deferredLeave = leave;
+  });
+  expect(openFocusedItem({ id: 'b', data: {}, rect: new DOMRect() })).toBe(
+    false
+  );
+  expect(useCanvasStore.getState().focusedNode?.id).toBe('a');
+  deferredLeave?.();
   expect(useCanvasStore.getState().focusedNode?.id).toBe('b');
+  unregister();
 });
 
-it('closing resets full-screen writing to the side panel', () => {
-  openFocusedItem({ id: 'a', data: {}, rect: new DOMRect() });
+it('closing resets full-screen writing and pin state; switching exits lightbox', () => {
+  useCanvasStore.getState().hydrate(
+    [
+      { ...node, id: 'img', type: 'image', data: {} },
+      { ...node, id: 'b', type: 'card', data: { title: 'B' } },
+    ],
+    []
+  );
+  openFocusedItem({ id: 'img', type: 'image', data: {}, rect: new DOMRect() });
+  useCanvasStore.getState().setFocusedMode('lightbox');
+  useCanvasStore.getState().setPanelPinned(true);
+  openFocusedItem({ id: 'b', type: 'card', data: {}, rect: new DOMRect() });
+  expect(useCanvasStore.getState().focusedMode).toBe('panel');
+  expect(useCanvasStore.getState().panelPinned).toBe(true);
   useCanvasStore.getState().setFocusedMode('fullscreen');
   closeFocusedView(true);
   expect(useCanvasStore.getState().focusedMode).toBe('panel');
+  expect(useCanvasStore.getState().panelPinned).toBe(false);
 });
 
 it('opens folder children from the folder, not the canvas', () => {

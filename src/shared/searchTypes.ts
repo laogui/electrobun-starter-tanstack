@@ -9,7 +9,7 @@ export type SearchTargetPlacement =
   | 'unlinked';
 
 /** Stable content entities that can be referenced by more than one canvas node. */
-export type SearchContentKind = 'note' | 'widget' | 'extension' | 'attachment';
+export type SearchContentKind = 'note' | 'extension' | 'attachment';
 
 export interface SearchContentReference {
   id: string;
@@ -62,9 +62,7 @@ export type SearchResultKind =
   | 'card'
   | 'asset'
   | 'link'
-  | 'recording'
   | 'edge'
-  | 'widget'
   | 'extension'
   | 'view';
 
@@ -97,6 +95,4 @@ export interface SearchResult {
   title: string;
   viewId: string;
   viewName: string;
-  widgetId?: string;
-  widgetKind?: 'checklist' | 'pomodoro' | 'reminder';
 }

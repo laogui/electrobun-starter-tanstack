@@ -55,7 +55,6 @@ import { POPOVER_EXIT, POPOVER_SPRING } from '@/lib/motion';
 import { buildTopicIndex } from '@/lib/topicTree';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 
 import * as m from '../../../paraglide/messages.js';
@@ -103,7 +102,6 @@ type ContextMenuState = {
     | 'group'
     | 'sticky'
     | 'topic'
-    | 'recording'
     | 'widget'
     | 'extension'
     | 'multi'
@@ -125,12 +123,7 @@ const getCanvasItems = (
     icon: Plus,
     submenu: getCreatableMenuItems(
       'short',
-      getCanvasTypeMenuItems(
-        canvasTypeRegistry.listEnabled(
-          useExtensionEnablementStore.getState().disabledCanvasTypes
-        ),
-        resolveExtensionMessage
-      )
+      getCanvasTypeMenuItems(canvasTypeRegistry.list(), resolveExtensionMessage)
     ).map((item) => ({
       id: `new-${item.id}`,
       label: item.label,
@@ -580,26 +573,6 @@ function getExtensionItems(
   });
 }
 
-const getRecordingItems = (locked: boolean): MenuItem[] => [
-  {
-    id: 'reveal-in-finder',
-    label: m.menu_reveal_in_finder(),
-    icon: FolderOpen,
-  },
-  { id: 'rename-asset', label: m.menu_rename_asset(), icon: PenLine },
-  { id: 'copy', label: m.menu_copy(), icon: Copy, shortcut: '⌘C' },
-  { id: 'change-color', label: m.menu_change_color(), icon: Palette },
-  { id: 'edit-tag', label: m.menu_edit_tag(), icon: Tag },
-  lockItem(locked),
-  {
-    id: 'delete',
-    label: m.menu_delete(),
-    icon: Trash2,
-    shortcut: '⌫',
-    danger: true,
-  },
-];
-
 type EdgePathType = 'smoothstep' | 'bezier';
 
 const getEdgeItems = (
@@ -790,7 +763,6 @@ export function CanvasContextMenu({
     image: () => getImageItems(nodeLocked),
     link: () => getLinkItems(nodeLocked),
     asset: () => getAssetItems(nodeLocked),
-    recording: () => getRecordingItems(nodeLocked),
     widget: () => getWidgetItems(nodeLocked),
     extension: () => getExtensionItems(nodeLocked, extensionMenuItems),
     card: () => getCardItems(nodeLocked),
@@ -1086,7 +1058,7 @@ export function CanvasContextMenu({
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
             aria-label={m.a11y_canvas_context_menu()}
-            className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
+            className="fixed z-100 min-w-[200px] overflow-hidden rounded-xl border border-black/5 bg-white/95 p-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
             exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
             initial={{ opacity: 0, scale: 0.95 }}
             onClick={(e) => {
@@ -1111,7 +1083,7 @@ export function CanvasContextMenu({
               <button
                 aria-disabled={item.disabled || undefined}
                 className={cn(
-                  'flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] transition-colors focus-visible:outline-hidden',
+                  'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 font-medium text-[13px] transition-colors focus-visible:outline-hidden',
                   item.disabled
                     ? 'cursor-default text-gray-300 dark:text-gray-600'
                     : item.danger
@@ -1183,7 +1155,7 @@ export function CanvasContextMenu({
               <motion.div
                 animate={{ opacity: 1, scale: 1, x: 0 }}
                 aria-label={m.a11y_new_item_submenu()}
-                className="fixed z-101 min-w-[180px] overflow-y-auto rounded-xl border border-black/5 bg-white/95 py-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
+                className="fixed z-101 min-w-[180px] overflow-y-auto rounded-xl border border-black/5 bg-white/95 p-1 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-800/90"
                 exit={{ opacity: 0, scale: 0.97, transition: POPOVER_EXIT }}
                 initial={{
                   opacity: 0,
@@ -1204,7 +1176,7 @@ export function CanvasContextMenu({
               >
                 {submenuItems.map((subItem, subIndex) => (
                   <button
-                    className="flex w-full items-center gap-3 px-3 py-2 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-hidden dark:text-gray-200 dark:focus-visible:bg-white/5 dark:hover:bg-white/5"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 font-medium text-[13px] text-gray-700 transition-colors hover:bg-black/5 focus-visible:bg-black/5 focus-visible:outline-hidden dark:text-gray-200 dark:focus-visible:bg-white/5 dark:hover:bg-white/5"
                     key={subItem.id}
                     onClick={() => {
                       onAction(subItem.id, menu.nodeId ?? menu.edgeId);

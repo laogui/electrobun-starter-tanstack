@@ -1,5 +1,6 @@
 // Canvas store slice: Transient UI state: dialogs, sidebars, focus targets, tag filters, search.
 import type { StateCreator } from 'zustand';
+import { canvasTypeRegistry } from '@/extensions/registry';
 import { markOpenRequested } from '@/lib/perfMarks';
 import type {
   CanvasState,
@@ -39,6 +40,9 @@ export interface UiSlice {
   // Library popup (browse notes on the current canvas)
   libraryOpen: boolean;
 
+  /** When pinned, clicking blank canvas keeps the side panel open. */
+  panelPinned: boolean;
+
   pendingSearchQuery: string | null;
   pendingSearchTarget: PendingSearchTarget | null;
   /** Asset/image card id whose displayName is in inline-rename mode. */
@@ -56,6 +60,7 @@ export interface UiSlice {
   setFocusedMode: (mode: FocusedMode) => void;
   setFocusedNode: (v: FocusedItem | null) => void;
   setLibraryOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setPanelPinned: (v: boolean | ((prev: boolean) => boolean)) => void;
   setPendingSearchQuery: (query: string | null) => void;
   setPendingSearchTarget: (target: PendingSearchTarget | null) => void;
   setRenamingNodeId: (id: string | null) => void;
@@ -77,6 +82,25 @@ export interface UiSlice {
 /** `lightbox` is the full-screen image viewer opened from the panel. */
 export type FocusedMode = 'panel' | 'fullscreen' | 'lightbox';
 
+function resolveNextFocusedMode(
+  currentMode: FocusedMode,
+  nextItem: FocusedItem | null
+): FocusedMode {
+  if (!nextItem || currentMode === 'lightbox') {
+    return 'panel';
+  }
+  const isLightboxKind =
+    nextItem.type === 'image' ||
+    (nextItem.type === 'extension' &&
+      typeof nextItem.data.canvasTypeId === 'string' &&
+      canvasTypeRegistry.get(nextItem.data.canvasTypeId)?.surface
+        .detailLayout === 'lightbox');
+  if (currentMode === 'fullscreen' && isLightboxKind) {
+    return 'panel';
+  }
+  return currentMode;
+}
+
 export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   set,
   get
@@ -95,6 +119,7 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
   pendingSearchQuery: null,
   pendingSearchTarget: null,
   libraryOpen: false,
+  panelPinned: false,
   tagSidebarOpen: false,
   activeTagFilters: [],
 
@@ -170,20 +195,30 @@ export const createUiSlice: StateCreator<CanvasState, [], [], UiSlice> = (
     if (v) {
       markOpenRequested();
     }
-    set((s) => ({
-      focusedNode: v,
-      ...(v ? {} : { focusedMode: 'panel' as const }),
-      _focusSession:
+    set((s) => {
+      const switched =
         s.focusedNode?.id !== v?.id ||
         s.focusedNode?.folderId !== v?.folderId ||
-        Boolean(s.focusedNode) !== Boolean(v)
-          ? s._focusSession + 1
-          : s._focusSession,
-    }));
+        Boolean(s.focusedNode) !== Boolean(v);
+      return {
+        focusedNode: v,
+        focusedMode: switched
+          ? resolveNextFocusedMode(s.focusedMode, v)
+          : s.focusedMode,
+        ...(v ? {} : { panelPinned: false }),
+        _focusSession: switched ? s._focusSession + 1 : s._focusSession,
+      };
+    });
   },
 
   setFocusedMode: (mode) => {
     set({ focusedMode: mode });
+  },
+
+  setPanelPinned: (v) => {
+    set((s) => ({
+      panelPinned: typeof v === 'function' ? v(s.panelPinned) : v,
+    }));
   },
 
   setFocusedFolder: (v) => {

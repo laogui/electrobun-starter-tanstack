@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readdir, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
   generateInstanceId,
@@ -253,58 +253,6 @@ export function instanceDir(wsPath: string): string {
   return resolve(wsPath, '.ghostboard', 'extension-instances');
 }
 
-async function deleteInstancesByCanvasTypeUnlocked(
-  wsPath: string,
-  canvasTypeId: string
-): Promise<string[]> {
-  if (!isCanvasTypeId(canvasTypeId)) {
-    throw new Error('Invalid canvasTypeId.');
-  }
-  const dir = instanceDir(wsPath);
-  if (!existsSync(dir)) {
-    return [];
-  }
-  const deleted: string[] = [];
-  const names = await readdir(dir);
-  for (const name of names) {
-    if (!name.endsWith('.json')) {
-      continue;
-    }
-    const instanceId = name.slice(0, -5);
-    const loaded = await loadExtensionInstance(wsPath, instanceId);
-    if (parsedToError(loaded) || loaded.record.canvasTypeId !== canvasTypeId) {
-      continue;
-    }
-    if (await deleteExtensionInstance(wsPath, instanceId)) {
-      deleted.push(instanceId);
-    }
-  }
-  return deleted;
-}
-
-async function countInstancesByCanvasTypeUnlocked(
-  wsPath: string
-): Promise<Record<string, number>> {
-  const dir = instanceDir(wsPath);
-  if (!existsSync(dir)) {
-    return {};
-  }
-  const names = await readdir(dir);
-  const counts: Record<string, number> = {};
-  for (const name of names) {
-    if (!name.endsWith('.json')) {
-      continue;
-    }
-    const loaded = await loadExtensionInstance(wsPath, name.slice(0, -5));
-    if (parsedToError(loaded)) {
-      continue;
-    }
-    const key = loaded.record.canvasTypeId;
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return counts;
-}
-
 export const createExtensionInstance = (
   ...args: Parameters<typeof createExtensionInstanceUnlocked>
 ) => withNoteWorkspace(args[0], () => createExtensionInstanceUnlocked(...args));
@@ -332,15 +280,3 @@ export const deleteExtensionInstance = (
 export const loadExtensionInstances = (
   ...args: Parameters<typeof loadExtensionInstancesUnlocked>
 ) => withNoteWorkspace(args[0], () => loadExtensionInstancesUnlocked(...args));
-
-export const deleteInstancesByCanvasType = (
-  ...args: Parameters<typeof deleteInstancesByCanvasTypeUnlocked>
-) =>
-  withNoteWorkspace(args[0], () =>
-    deleteInstancesByCanvasTypeUnlocked(...args)
-  );
-
-export const countInstancesByCanvasType = (
-  ...args: Parameters<typeof countInstancesByCanvasTypeUnlocked>
-) =>
-  withNoteWorkspace(args[0], () => countInstancesByCanvasTypeUnlocked(...args));

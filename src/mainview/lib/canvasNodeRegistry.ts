@@ -29,10 +29,7 @@ export const STICKY_H = 200;
  * default size, default data, and group/folder eligibility. Other modules
  * (store, predicates, drag, placement) should consume this registry instead
  * of redeclaring their own size constants or type unions.
- *
- * Note: `CanvasNodeKind` is the *creation* kind. It does not always match
- * React Flow `node.type`. For example, widget creation kinds produce nodes
- * with `type: 'widget'` and `data.kind` identifying the specific widget.
+
  */
 export interface CanvasNodeSpec {
   canEnterFolder: boolean;
@@ -49,11 +46,7 @@ const DEFAULT_GROUP_H = 300;
 const DEFAULT_ASSET_W = 350;
 const DEFAULT_ASSET_H = 260;
 const DEFAULT_LINK_W = 380;
-const DEFAULT_LINK_H = 360;
-const DEFAULT_RECORDING_W = 380;
-const DEFAULT_RECORDING_H = 150;
-const DEFAULT_WIDGET_W = 320;
-const DEFAULT_WIDGET_H = 380;
+const DEFAULT_LINK_H = 420;
 
 function pickRandom<T>(values: readonly T[]): T {
   // Falls back to first entry when array is empty (which the canvas color
@@ -74,39 +67,6 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
     }),
     canEnterGroup: true,
     canEnterFolder: true,
-  },
-  checklist: {
-    kind: 'checklist',
-    nodeType: 'widget',
-    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
-    defaultData: () => ({
-      widgetId: '',
-      kind: 'checklist',
-    }),
-    canEnterGroup: true,
-    canEnterFolder: false,
-  },
-  pomodoro: {
-    kind: 'pomodoro',
-    nodeType: 'widget',
-    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
-    defaultData: () => ({
-      widgetId: '',
-      kind: 'pomodoro',
-    }),
-    canEnterGroup: true,
-    canEnterFolder: false,
-  },
-  reminder: {
-    kind: 'reminder',
-    nodeType: 'widget',
-    size: { width: DEFAULT_WIDGET_W, height: DEFAULT_WIDGET_H },
-    defaultData: () => ({
-      widgetId: '',
-      kind: 'reminder',
-    }),
-    canEnterGroup: true,
-    canEnterFolder: false,
   },
   sticky: {
     kind: 'sticky',
@@ -192,20 +152,6 @@ export const CANVAS_NODE_SPECS: Record<CanvasNodeKind, CanvasNodeSpec> = {
     canEnterGroup: true,
     canEnterFolder: true,
   },
-  recording: {
-    kind: 'recording',
-    nodeType: 'recording',
-    size: { width: DEFAULT_RECORDING_W, height: DEFAULT_RECORDING_H },
-    defaultData: () => ({
-      color: '#FFFFFF',
-      fileName: '',
-      mimeType: 'audio/mp4',
-      recordingNumber: 1,
-      title: '',
-    }),
-    canEnterGroup: true,
-    canEnterFolder: true,
-  },
 };
 
 /** Look up the spec for a `CanvasNodeKind`. */
@@ -216,8 +162,6 @@ export function getNodeSpec(kind: CanvasNodeKind): CanvasNodeSpec {
 /** Look up a spec by React Flow `node.type`, returns the first matching entry.
  *  Used by helpers like `collision.getNodeSize` that only see `node.type`. */
 export function findSpecByNodeType(nodeType: string): CanvasNodeSpec | null {
-  // Multiple widget creation kinds share `nodeType: 'widget'`; callers that
-  // only have the runtime node type need the shared size/eligibility only.
   for (const spec of Object.values(CANVAS_NODE_SPECS)) {
     if (spec.nodeType === nodeType) {
       return spec;

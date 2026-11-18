@@ -9,6 +9,7 @@ import {
 import {
   type FormEvent,
   memo,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useRef,
@@ -23,6 +24,10 @@ import {
   getLinkHost,
   normalizeLinkUrl,
 } from '@/lib/contentTypes';
+import {
+  classifyLinkPreviewImage,
+  type LinkPreviewImageShape,
+} from '@/lib/linkPreviewImage';
 import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import { rpcUnfurlLink } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
@@ -127,7 +132,27 @@ export const LinkContent = ({
     sourceUrl: link.url,
     urlError: null as string | null,
   }));
-  const [heroImageError, setHeroImageError] = useState(false);
+  const [imageState, setImageState] = useState(() => ({
+    error: false,
+    shape: null as LinkPreviewImageShape | null,
+    sourceUrl: link.imageUrl,
+  }));
+  if (imageState.sourceUrl !== link.imageUrl) {
+    setImageState({ error: false, shape: null, sourceUrl: link.imageUrl });
+  }
+  const heroImageError =
+    imageState.sourceUrl === link.imageUrl ? imageState.error : false;
+  const imageShape =
+    imageState.sourceUrl === link.imageUrl ? imageState.shape : null;
+  const setHeroImageError = (error: boolean) =>
+    setImageState((current) => ({ ...current, error }));
+  const handlePreviewImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget;
+    const shape = classifyLinkPreviewImage(img.naturalWidth, img.naturalHeight);
+    setImageState((current) =>
+      current.shape === shape ? current : { ...current, shape }
+    );
+  };
 
   if (urlState.sourceUrl !== link.url) {
     setUrlState({
@@ -176,10 +201,19 @@ export const LinkContent = ({
               title={title}
               video={youtubeVideo}
             />
+          ) : link.imageUrl && !heroImageError && imageShape !== 'thumb' ? (
+            <img
+              alt=""
+              className="mb-8 aspect-[1.91/1] w-full rounded-2xl border border-black/5 object-cover shadow-sm dark:border-white/10"
+              draggable={false}
+              onError={() => setHeroImageError(true)}
+              onLoad={handlePreviewImageLoad}
+              src={link.imageUrl}
+            />
           ) : link.imageUrl && !heroImageError ? (
             <img
               alt=""
-              className="mb-8 aspect-[21/9] w-full rounded-2xl border border-black/5 object-cover shadow-sm dark:border-white/10"
+              className="mb-8 size-24 rounded-2xl border border-black/5 object-cover shadow-sm dark:border-white/10"
               draggable={false}
               onError={() => setHeroImageError(true)}
               src={link.imageUrl}
@@ -274,7 +308,12 @@ export const LinkContent = ({
     );
   }
 
-  const showHeroImage = Boolean(link.imageUrl) && !heroImageError;
+  const hasPreviewImage = Boolean(link.imageUrl) && !heroImageError;
+  // Until the image has loaded we assume the common case (a 1.91:1 OG image)
+  // and reserve the hero; square logos and small icons switch to a thumbnail.
+  const showHeroImage = hasPreviewImage && imageShape !== 'thumb';
+  const showThumbImage = hasPreviewImage && imageShape === 'thumb';
+  const isLoading = link.unfurlStatus === 'loading';
 
   return (
     <div
@@ -290,49 +329,53 @@ export const LinkContent = ({
           title={title}
           video={youtubeVideo}
         />
-      ) : (
-        <div className="relative h-32 w-full shrink-0 overflow-hidden">
-          {showHeroImage ? (
-            <>
-              <img
-                alt=""
-                className="size-full object-cover"
-                draggable={false}
-                loading="lazy"
-                onError={() => setHeroImageError(true)}
-                src={link.imageUrl}
-              />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/12 to-transparent dark:from-black/30" />
-            </>
-          ) : (
-            <div className="relative size-full overflow-hidden bg-gradient-to-br from-neutral-100 via-neutral-50/70 to-neutral-200 dark:from-neutral-800/90 dark:via-neutral-850 dark:to-neutral-900">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.5),transparent_50%)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.06),transparent_50%)]" />
-              <Globe2
-                className="absolute right-4 bottom-2 text-neutral-200/40 dark:text-neutral-700/40"
-                size={56}
-                strokeWidth={1.2}
-              />
-            </div>
-          )}
+      ) : showHeroImage ? (
+        <div className="relative aspect-[1.91/1] max-h-[55%] w-full shrink-0 overflow-hidden border-black/5 border-b dark:border-white/10">
+          <img
+            alt=""
+            className="size-full object-cover"
+            draggable={false}
+            loading="lazy"
+            onError={() => setHeroImageError(true)}
+            onLoad={handlePreviewImageLoad}
+            src={link.imageUrl}
+          />
           <TypeBadge className="absolute top-3 right-3 z-10 border-black/5 bg-white/80 text-neutral-600 backdrop-blur-sm dark:border-white/10 dark:bg-black/55 dark:text-neutral-200">
             {m.type_badge_link()}
           </TypeBadge>
         </div>
-      )}
+      ) : null}
       <div
         className={cn(
           'flex min-h-0 flex-1 flex-col p-5 pb-4',
-          youtubeVideo && 'p-4 pb-3'
+          youtubeVideo && 'p-4 pb-3',
+          showHeroImage && 'pt-4'
         )}
       >
+        {youtubeVideo || showHeroImage ? null : (
+          <div className="mb-3 flex shrink-0 items-center gap-2.5">
+            <LinkFaviconBadge
+              className="size-7 rounded-lg"
+              faviconUrl={link.faviconUrl}
+            />
+            <p className="min-w-0 flex-1 truncate text-neutral-500 text-xs dark:text-neutral-400">
+              {link.siteName || host}
+            </p>
+            <TypeBadge className="shrink-0 border-black/5 bg-white/80 text-neutral-600 dark:border-white/10 dark:bg-black/30 dark:text-neutral-300">
+              {m.type_badge_link()}
+            </TypeBadge>
+          </div>
+        )}
         <div
           className={cn(
-            'mb-3 flex shrink-0 items-start gap-3',
+            'mb-2 flex shrink-0 items-start gap-3',
             youtubeVideo && 'mb-0'
           )}
         >
-          <LinkFaviconBadge faviconUrl={link.faviconUrl} />
-          {link.unfurlStatus === 'loading' ? (
+          {youtubeVideo || showHeroImage ? (
+            <LinkFaviconBadge faviconUrl={link.faviconUrl} />
+          ) : null}
+          {isLoading ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-neutral-500 text-sm dark:text-neutral-400">
               <Loader2 className="shrink-0 animate-spin" size={16} />
               <span>{m.link_preview_loading()}</span>
@@ -343,22 +386,39 @@ export const LinkContent = ({
                 className={cn(
                   youtubeVideo
                     ? 'line-clamp-2 font-bold text-base leading-5'
-                    : 'line-clamp-3 min-h-[4.5rem] font-bold text-xl leading-6',
+                    : showHeroImage
+                      ? 'line-clamp-2 font-bold text-lg leading-6'
+                      : 'line-clamp-3 font-bold text-xl leading-7',
                   !title && 'text-neutral-400'
                 )}
               >
                 {title || m.link_untitled()}
               </h3>
-              {link.siteName && host && !youtubeVideo ? (
-                <p className="mt-1 truncate text-neutral-400 text-xs dark:text-neutral-500">
-                  {link.siteName}
+              {showHeroImage && (link.siteName || host) ? (
+                <p className="mt-0.5 truncate text-neutral-400 text-xs dark:text-neutral-500">
+                  {link.siteName || host}
                 </p>
               ) : null}
             </div>
           )}
+          {showThumbImage && !isLoading ? (
+            <img
+              alt=""
+              className="size-16 shrink-0 rounded-xl border border-black/5 object-cover dark:border-white/10"
+              draggable={false}
+              loading="lazy"
+              onError={() => setHeroImageError(true)}
+              src={link.imageUrl}
+            />
+          ) : null}
         </div>
-        {description && link.unfurlStatus !== 'loading' && !youtubeVideo ? (
-          <p className="line-clamp-2 min-h-0 text-neutral-600 text-sm/relaxed dark:text-neutral-400">
+        {description && !isLoading && !youtubeVideo ? (
+          <p
+            className={cn(
+              'min-h-0 overflow-hidden text-neutral-600 text-sm/relaxed dark:text-neutral-400',
+              showHeroImage ? 'line-clamp-2' : 'line-clamp-4'
+            )}
+          >
             {description}
           </p>
         ) : null}

@@ -1,29 +1,17 @@
 // @vitest-environment jsdom
 
-import type { Edge, Node } from '@xyflow/react';
+import { type Edge, type Node, NodeChangeset } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast };
 });
-// These suites exercise the free-tier gate, which the slim release turns off.
-vi.mock('@/lib/productScope', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/productScope')>()),
-  LICENSE_QUOTA_ENABLED: true,
-}));
-vi.mock('@/lib/rpc-license', () => ({
-  getCachedLicense: vi.fn(() => ({ activated: false })),
-  refreshLicense: vi.fn(async () => ({ activated: false })),
-}));
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   rpcDeleteNote: vi.fn(async () => ({ success: true })),
-  rpcDeleteWidget: vi.fn(async () => ({ success: true })),
 }));
 
-const { rpcDeleteWidget } = await import('@/lib/rpc');
-const { FREE_NODE_LIMIT } = await import('@/lib/nodeQuota');
 const { useCanvasStore } = await import('@/store/canvasStore');
 const { STICKY_COLORS } = await import('@/lib/colorUtils');
 const { createTopicChildEdgeData, TOPIC_NODE_TYPE } = await import(
@@ -96,22 +84,6 @@ describe('nodesSlice', () => {
         extent: 'parent',
         position: { x: 100, y: 150 },
       });
-    });
-
-    it('refuses a counted node over the free quota without touching history', async () => {
-      const full = Array.from({ length: FREE_NODE_LIMIT }, (_, i) =>
-        node(`n${i}`, { position: { x: i * 400, y: 0 } })
-      );
-      useCanvasStore.setState({ nodes: full });
-
-      const id = await state().createNode('card', null, {
-        anchor: { x: 0, y: 5000 },
-        focusViewport: false,
-      });
-
-      expect(id).toBeUndefined();
-      expect(state().nodes).toHaveLength(FREE_NODE_LIMIT);
-      expect(state().canUndo()).toBe(false);
     });
   });
 
@@ -239,18 +211,6 @@ describe('nodesSlice', () => {
           .sort()
       ).toEqual(['folder', 'g', 'inner']);
     });
-
-    it('keeps the backing file of a removed widget so undo can restore it', () => {
-      useCanvasStore.setState({
-        nodes: [node('w', { type: 'widget', data: { widgetId: 'widget_1' } })],
-      });
-      state().deleteNodes(['w']);
-      expect(byId('w')).toBeUndefined();
-      expect(rpcDeleteWidget).not.toHaveBeenCalled();
-
-      state().undo();
-      expect(byId('w')?.data).toMatchObject({ widgetId: 'widget_1' });
-    });
   });
 
   describe('drag and position updates', () => {
@@ -261,30 +221,34 @@ describe('nodesSlice', () => {
     });
 
     it('applies React Flow position changes without recording history', () => {
-      state().applyNodesChange([
-        {
-          dragging: true,
-          id: 'a',
-          position: { x: 50, y: 60 },
-          type: 'position',
-        },
-      ]);
+      state().applyNodesChange(
+        new NodeChangeset([
+          {
+            dragging: true,
+            id: 'a',
+            position: { x: 50, y: 60 },
+            type: 'position',
+          },
+        ])
+      );
       expect(byId('a')?.position).toEqual({ x: 50, y: 60 });
-      state().applyNodesChange([
-        {
-          dragging: false,
-          id: 'a',
-          position: { x: 70, y: 80 },
-          type: 'position',
-        },
-      ]);
+      state().applyNodesChange(
+        new NodeChangeset([
+          {
+            dragging: false,
+            id: 'a',
+            position: { x: 70, y: 80 },
+            type: 'position',
+          },
+        ])
+      );
       expect(byId('a')?.position).toEqual({ x: 70, y: 80 });
       expect(state().canUndo()).toBe(false);
     });
 
     it('keeps the node array identity when nothing changed', () => {
       const before = state().nodes;
-      state().applyNodesChange([]);
+      state().applyNodesChange(new NodeChangeset([]));
       expect(state().nodes).toBe(before);
     });
 

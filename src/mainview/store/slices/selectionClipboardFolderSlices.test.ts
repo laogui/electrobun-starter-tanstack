@@ -11,26 +11,21 @@ vi.mock('sonner', () => {
   });
   return { toast };
 });
-vi.mock('@/lib/rpc-license', () => ({
-  getCachedLicense: vi.fn(() => ({ activated: false })),
-  refreshLicense: vi.fn(async () => ({ activated: false })),
-}));
 vi.mock('@/lib/rpc', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rpc')>()),
   rpcDeleteNote: vi.fn(async () => ({ success: true })),
-  rpcDeleteWidget: vi.fn(async () => ({ success: true })),
 }));
 
 vi.mock('../canvas/cloneReferences', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../canvas/cloneReferences')>()),
-  cloneWidgetReferences: vi.fn(async (nodes: Node[]) => nodes),
+  cloneExtensionReferences: vi.fn(async (nodes: Node[]) => nodes),
   finishCreatedClones: vi.fn(async () => undefined),
 }));
-const { cloneWidgetReferences, finishCreatedClones } = await import(
+const { cloneExtensionReferences, finishCreatedClones } = await import(
   '../canvas/cloneReferences'
 );
 
-const { rpcDeleteNote, rpcDeleteWidget } = await import('@/lib/rpc');
+const { rpcDeleteNote } = await import('@/lib/rpc');
 const { useCanvasStore } = await import('@/store/canvasStore');
 
 const NOTE_ID_RE = /^note_/;
@@ -168,7 +163,6 @@ describe('clipboardSlice', () => {
 
   it('cut copies then deletes the selection without deleting backing files', () => {
     state().cutSelected();
-    expect(rpcDeleteWidget).not.toHaveBeenCalled();
     expect(state().nodes.map((n) => n.id)).toEqual(['c']);
     expect(state().clipboard.map((n) => n.id)).toEqual(['a', 'b']);
     expect(state().edges).toEqual([]);
@@ -298,7 +292,6 @@ describe('folderSlice', () => {
     state().deleteFolderChild('folder', child!.id);
     expect(children()).toEqual([]);
     expect(rpcDeleteNote).not.toHaveBeenCalled();
-    expect(rpcDeleteWidget).not.toHaveBeenCalled();
 
     state().undo();
     expect(children()).toEqual([
@@ -342,8 +335,8 @@ describe('asynchronous clipboard integrity', () => {
     state().hydrate(
       [
         card('w', 0, 0, {
-          type: 'widget',
-          data: { widgetId: 'widget_1' },
+          type: 'extension',
+          data: { canvasTypeId: 'test.counter', instanceId: 'extinst_1' },
           selected: true,
         }),
       ],
@@ -356,7 +349,7 @@ describe('asynchronous clipboard integrity', () => {
     'duplicateSelected',
   ] as const)('cancels %s after leaving and returning to the same view', async (operation) => {
     let finish!: (nodes: Node[]) => void;
-    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+    vi.mocked(cloneExtensionReferences).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -376,7 +369,7 @@ describe('asynchronous clipboard integrity', () => {
 
   it('settles clones created before a canceled paste without inserting them or reserving history', async () => {
     let finish!: (nodes: Node[]) => void;
-    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+    vi.mocked(cloneExtensionReferences).mockImplementationOnce(
       (_nodes, onCreated) => {
         onCreated?.('owned-clone');
         return new Promise((resolve) => {
@@ -390,7 +383,10 @@ describe('asynchronous clipboard integrity', () => {
     state().setActiveView('other');
     state().hydrate([], []);
     finish([
-      card('copy', 0, 0, { type: 'widget', data: { widgetId: 'owned-clone' } }),
+      card('copy', 0, 0, {
+        type: 'extension',
+        data: { canvasTypeId: 'test.counter', instanceId: 'owned-clone' },
+      }),
     ]);
     await pending;
     expect(finishCreatedClones).toHaveBeenCalledWith(
@@ -407,12 +403,12 @@ describe('asynchronous clipboard integrity', () => {
     await state().pasteClipboard();
     expect(state().nodes).toEqual([]);
     expect(state().canUndo()).toBe(false);
-    expect(cloneWidgetReferences).not.toHaveBeenCalled();
+    expect(cloneExtensionReferences).not.toHaveBeenCalled();
   });
 
   it('does not reserve an undo entry while cloning', async () => {
     let finish!: (nodes: Node[]) => void;
-    vi.mocked(cloneWidgetReferences).mockImplementationOnce(
+    vi.mocked(cloneExtensionReferences).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           finish = resolve;

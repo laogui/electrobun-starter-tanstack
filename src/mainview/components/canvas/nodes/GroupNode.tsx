@@ -88,7 +88,10 @@ export const GroupContent = ({
   >
     {children}
 
-    <div className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2">
+    <div
+      className="absolute top-0 left-0 flex items-center gap-1.5 px-3 pt-2"
+      data-group-header
+    >
       <div
         className={cn(
           'nodrag nopan font-semibold text-xs tracking-wide outline-hidden',

@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  HIDDEN_TEMPLATE_IDS,
-  listAllTemplates,
-  loadTemplate,
-} from './templates';
+import { listAllTemplates, loadTemplate } from './templates';
 import { parseWidgetRecord, WIDGET_SCHEMA } from './widgets';
 
 describe('built-in templates', () => {
   it('parses every bundled template meta and manifest', () => {
     const metas = listAllTemplates();
     expect(metas.length).toBeGreaterThan(0);
-    const ids = [...metas.map((meta) => meta.id), ...HIDDEN_TEMPLATE_IDS];
+    const ids = metas.map((meta) => meta.id);
     for (const id of ids) {
       const template = loadTemplate(id);
       expect(template?.meta.id).toBe(id);
@@ -21,20 +17,9 @@ describe('built-in templates', () => {
   });
 
   it('keeps fields the template types do not name', () => {
-    const ids = [
-      ...listAllTemplates().map((meta) => meta.id),
-      ...HIDDEN_TEMPLATE_IDS,
-    ];
+    const ids = listAllTemplates().map((meta) => meta.id);
     const edges = ids.flatMap((id) => loadTemplate(id)?.edges ?? []);
     expect(edges.some((edge) => 'markerEnd' in edge)).toBe(true);
-  });
-
-  it('hides planning templates from the gallery but keeps them loadable', () => {
-    const listed = new Set(listAllTemplates().map((meta) => meta.id));
-    for (const id of HIDDEN_TEMPLATE_IDS) {
-      expect(listed.has(id)).toBe(false);
-      expect(loadTemplate(id)).not.toBeNull();
-    }
   });
 
   it('lists the writer templates and keeps checklists out of them', () => {
@@ -60,9 +45,9 @@ describe('built-in templates', () => {
     expect(loadTemplate('does-not-exist')).toBeNull();
   });
 
-  it('ships the cafe template with embedded assets', () => {
-    const cafe = loadTemplate('cafe');
-    expect(Object.keys(cafe?.assets ?? {}).length).toBeGreaterThan(0);
+  it('ships the feature-story template with embedded assets', () => {
+    const story = loadTemplate('feature-story');
+    expect(Object.keys(story?.assets ?? {}).length).toBeGreaterThan(0);
   });
 });
 

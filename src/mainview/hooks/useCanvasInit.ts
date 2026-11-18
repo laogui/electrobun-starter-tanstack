@@ -1,12 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
-import {
-  initialEdges,
-  initialNodes,
-  initialWidgetSeeds,
-} from '@/data/initialNodes';
-import { collectWidgetIdsFromNodes } from '@/lib/canvasExport';
+import { initialEdges, initialNodes } from '@/data/initialNodes';
 import { sanitizeForPersistence } from '@/lib/canvasNodeSerialization';
 import { confirmCanvasRecovery } from '@/lib/confirmCanvasRecovery';
 import { queryClient } from '@/lib/queryClient';
@@ -14,73 +9,14 @@ import {
   isRpcAvailable,
   loadCanvas,
   rpcConfirmCanvasRecovery,
-  rpcListExtensionEnablement,
   rpcListViews,
   rpcSaveManifest,
 } from '@/lib/rpc';
-import type { WidgetKind, WidgetRecord } from '@/lib/widgetTypes';
 import { useCanvasStore } from '@/store/canvasStore';
-import { useExtensionEnablementStore } from '@/store/extensionEnablementStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
 import type { CanvasLoadError } from '@/store/slices/persistenceSlice';
-import { useWidgetStore, type WidgetStoreState } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
 import { collectExtensionInstanceIds } from '../../shared/extensions/refs';
-
-async function materializeInitialWidgetSeeds(
-  nodes: Node[],
-  createWidgetRecord: (
-    kind: WidgetKind,
-    title?: string
-  ) => Promise<WidgetRecord | null>,
-  updateWidgetRecord: WidgetStoreState['updateWidget'],
-  saveWidgetNow: WidgetStoreState['saveWidgetNow']
-): Promise<Node[]> {
-  const seededNodes: Node[] = [];
-  for (const node of nodes) {
-    if (node.type !== 'widget') {
-      seededNodes.push(node);
-      continue;
-    }
-    const seed = initialWidgetSeeds[node.id];
-    if (!seed) {
-      seededNodes.push(node);
-      continue;
-    }
-    const existingWidgetId =
-      typeof node.data.widgetId === 'string' ? node.data.widgetId : '';
-    if (existingWidgetId) {
-      seededNodes.push(node);
-      continue;
-    }
-
-    const widget = await createWidgetRecord(seed.kind, seed.title);
-    if (!widget) {
-      throw new Error(`Failed to create initial widget for node ${node.id}.`);
-    }
-    updateWidgetRecord(
-      widget.id,
-      (current) => ({
-        ...current,
-        title: seed.title,
-        data: seed.data,
-        updatedAt: new Date().toISOString(),
-      }),
-      { recordHistory: false }
-    );
-    await saveWidgetNow(widget.id);
-
-    seededNodes.push({
-      ...node,
-      data: {
-        ...node.data,
-        widgetId: widget.id,
-        kind: widget.kind,
-      },
-    });
-  }
-  return seededNodes;
-}
 
 /** View id seeded with demo content when its manifest does not exist yet. */
 const FIRST_RUN_VIEW_ID = 'default';
@@ -98,8 +34,7 @@ function errorMessage(error: unknown): string {
 
 /**
  * Load (or first-run seed) the active view's canvas into the stores whenever
- * the canvas is not hydrated: nodes/edges, widget records, extension
- * instances and canvas-type enablement. Stale loads are discarded when the
+ * the canvas is not hydrated: nodes/edges and extension instances. Stale loads are discarded when the
  * active view changes mid-flight.
  *
  * A load that fails (corrupt manifest, RPC error, unknown view) sets
@@ -115,14 +50,7 @@ export function useCanvasInit(): void {
   const setCanvasLoadError = useCanvasStore((s) => s.setCanvasLoadError);
   const setActiveView = useCanvasStore((s) => s.setActiveView);
   const setViews = useCanvasStore((s) => s.setViews);
-  const hydrateWidgets = useWidgetStore((s) => s.hydrate);
-  const createWidgetRecord = useWidgetStore((s) => s.createWidget);
-  const updateWidgetRecord = useWidgetStore((s) => s.updateWidget);
-  const saveWidgetNow = useWidgetStore((s) => s.saveWidgetNow);
   const hydrateExtensionInstances = useExtensionInstanceStore((s) => s.hydrate);
-  const hydrateExtensionEnablement = useExtensionEnablementStore(
-    (s) => s.hydrate
-  );
 
   useEffect(() => {
     if (hydrated || canvasLoadError) {
@@ -173,15 +101,7 @@ export function useCanvasInit(): void {
       // First run: seed workspace with initialNodes + initialEdges.
       // fitView frames the seed nodes; the user's first pan/zoom fills the
       // session camera cache for this view.
-      const seededNodes = await materializeInitialWidgetSeeds(
-        initialNodes,
-        createWidgetRecord,
-        updateWidgetRecord,
-        saveWidgetNow
-      );
-      if (cancelled) {
-        return;
-      }
+      const seededNodes = initialNodes;
       const sanitized = sanitizeForPersistence(seededNodes, initialEdges);
       const saved = await rpcSaveManifest(
         activeViewId,
@@ -203,11 +123,6 @@ export function useCanvasInit(): void {
         if (cancelled) {
           return;
         }
-        const enablement = await rpcListExtensionEnablement();
-        if (cancelled) {
-          return;
-        }
-        hydrateExtensionEnablement(enablement.disabledCanvasTypes);
         if (data) {
           if (!(Array.isArray(data.nodes) && Array.isArray(data.edges))) {
             fail('corrupt');
@@ -255,13 +170,8 @@ export function useCanvasInit(): void {
               }
             );
           }
-          // Always hydrate (even when widgets is absent/empty) so switching to
-          // a canvas with zero widgets still prunes records from the previous
-          // view. Pass the referenced id set so unreferenced entries are dropped.
-          const referencedWidgetIds = new Set(
-            collectWidgetIdsFromNodes(data.nodes)
-          );
-          hydrateWidgets(data.widgets ?? {}, referencedWidgetIds);
+          // Always hydrate (even when empty) so switching canvases prunes
+          // records from the previous view.
           const referencedExtensionIds = new Set(
             collectExtensionInstanceIds(data.nodes)
           );
@@ -304,8 +214,6 @@ export function useCanvasInit(): void {
     };
   }, [
     hydrate,
-    hydrateWidgets,
-    hydrateExtensionEnablement,
     hydrateExtensionInstances,
     hydrated,
     activeViewId,
@@ -313,8 +221,5 @@ export function useCanvasInit(): void {
     setCanvasLoadError,
     setActiveView,
     setViews,
-    createWidgetRecord,
-    updateWidgetRecord,
-    saveWidgetNow,
   ]);
 }

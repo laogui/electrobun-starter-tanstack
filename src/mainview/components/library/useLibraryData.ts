@@ -3,16 +3,8 @@ import { useMemo } from 'react';
 
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import type { Size } from '@/lib/collision';
-import type {
-  ChecklistWidgetData,
-  ReminderWidgetData,
-  WidgetLoadError,
-  WidgetRecord,
-} from '@/lib/widgetTypes';
-import { isWidgetLoadError } from '@/lib/widgetTypes';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 import {
   type ExtensionInstanceLoadError,
   type ExtensionInstanceRecord,
@@ -97,55 +89,6 @@ function dateMs(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function checklistExcerpt(data: ChecklistWidgetData): string {
-  return data.items
-    .map((item) => item.text.trim())
-    .filter(Boolean)
-    .join('\n');
-}
-
-function widgetRecordToLibraryData(
-  data: Record<string, unknown>,
-  widgets: Record<string, WidgetRecord | WidgetLoadError>
-): Record<string, unknown> {
-  const widgetId = readString(data, 'widgetId');
-  const record = widgetId ? widgets[widgetId] : undefined;
-  if (!record || isWidgetLoadError(record)) {
-    return data;
-  }
-
-  const next: Record<string, unknown> = {
-    ...data,
-    title: record.title,
-    createdAt: dateMs(record.createdAt),
-    updatedAt: dateMs(record.updatedAt),
-  };
-
-  switch (record.kind) {
-    case 'checklist':
-      next.previewExcerpt = checklistExcerpt(
-        record.data as ChecklistWidgetData
-      );
-      break;
-    case 'pomodoro':
-      next.previewExcerpt = '';
-      break;
-    case 'reminder': {
-      const reminder = record.data as ReminderWidgetData;
-      next.previewExcerpt = [reminder.note, reminder.dueAt]
-        .filter(Boolean)
-        .join('\n');
-      break;
-    }
-    default: {
-      const _exhaustive: never = record.kind;
-      return _exhaustive;
-    }
-  }
-
-  return next;
-}
-
 function isStateRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -204,26 +147,15 @@ function toItem(params: {
     string,
     ExtensionInstanceRecord | ExtensionInstanceLoadError
   >;
-  widgets: Record<string, WidgetRecord | WidgetLoadError>;
   folderId?: string;
   childId?: string;
   size?: Size;
 }): LibraryItem {
-  const {
-    nodeId,
-    type,
-    folderId,
-    childId,
-    widgets,
-    extensions = {},
-    size,
-  } = params;
+  const { nodeId, type, folderId, childId, extensions = {}, size } = params;
   const data =
-    type === 'widget'
-      ? widgetRecordToLibraryData(params.data, widgets)
-      : type === 'extension'
-        ? extensionRecordToLibraryData(params.data, extensions)
-        : params.data;
+    type === 'extension'
+      ? extensionRecordToLibraryData(params.data, extensions)
+      : params.data;
   const id =
     folderId && childId ? `child:${folderId}:${childId}` : `node:${nodeId}`;
   const title = fallbackTitle(data, type);
@@ -274,16 +206,13 @@ export function useLibraryData(
 ): UseLibraryDataResult {
   const { enabled = true, query = '', sort = 'recent' } = options;
   const nodes = useCanvasStore((s) => (enabled ? s.nodes : undefined));
-  const widgets = useWidgetStore((s) => (enabled ? s.records : undefined));
   const extensions = useExtensionInstanceStore((s) =>
     enabled ? s.records : undefined
   );
   return useMemo(
     () =>
-      nodes
-        ? buildLibrary(nodes, query, sort, widgets, extensions)
-        : EMPTY_LIBRARY,
-    [nodes, query, sort, widgets, extensions]
+      nodes ? buildLibrary(nodes, query, sort, extensions) : EMPTY_LIBRARY,
+    [nodes, query, sort, extensions]
   );
 }
 
@@ -291,7 +220,6 @@ export function buildLibrary(
   nodes: Node[],
   query: string,
   sort: LibrarySortKey,
-  widgets: Record<string, WidgetRecord | WidgetLoadError> = {},
   extensions: Record<
     string,
     ExtensionInstanceRecord | ExtensionInstanceLoadError
@@ -325,7 +253,6 @@ export function buildLibrary(
           nodeId: node.id,
           type: child.type as string,
           data: child.data,
-          widgets,
           extensions,
           folderId: node.id,
           childId: child.id,
@@ -354,7 +281,6 @@ export function buildLibrary(
       nodeId: node.id,
       type: node.type as string,
       data,
-      widgets,
       extensions,
       size: toValidSize(node.measured),
     });

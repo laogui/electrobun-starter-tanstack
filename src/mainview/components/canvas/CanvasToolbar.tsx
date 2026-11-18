@@ -42,7 +42,7 @@ export function CanvasToolbar() {
         {hasTagFilters ? (
           <span
             aria-hidden
-            className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary"
+            className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-accent"
           />
         ) : null}
       </ToolbarButton>
@@ -85,7 +85,7 @@ function ToolbarButton({
         // floating bars read as one family of rounded icon buttons with the
         // same focus treatment.
         'relative flex size-8 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-neutral-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent/60 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white',
-        active && 'text-primary dark:text-primary'
+        active && 'text-accent dark:text-accent'
       )}
       onClick={onClick}
       title={label}

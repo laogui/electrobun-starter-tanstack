@@ -196,7 +196,7 @@ export const linkCanvasType: BuiltinCanvasType<LinkState> = {
   },
   menuActions: linkMenuActions,
   surface: {
-    defaultSize: { width: 380, height: 360 },
+    defaultSize: { width: 380, height: 420 },
     minSize: { width: 320, height: 320 },
     maxSize: { width: 800, height: 600 },
     resizable: true,

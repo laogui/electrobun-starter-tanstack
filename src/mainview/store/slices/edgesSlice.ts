@@ -1,6 +1,6 @@
 // Canvas store slice: Edge state and edge mutations (connect, label, delete).
-import type { Connection, Edge, EdgeChange } from '@xyflow/react';
-import { addEdge, applyEdgeChanges } from '@xyflow/react';
+import type { Connection, Edge, EdgeChangeset } from '@xyflow/react';
+import { addEdge } from '@xyflow/react';
 import { nanoid } from 'nanoid';
 import type { StateCreator } from 'zustand';
 import { buildLegacyEdgeCompatPatch } from '../../../shared/canvasEdgeFields';
@@ -12,7 +12,7 @@ export interface EdgesSlice {
     connection: Connection,
     options?: AddConnectionOptions
   ) => void;
-  applyEdgesChange: (changes: EdgeChange[]) => void;
+  applyEdgesChange: (changes: EdgeChangeset) => void;
   /** Snapshots history then updates edge data — for discrete user edits (label commit, etc.). */
   commitEdgeData: (edgeId: string, updates: Record<string, unknown>) => void;
   deleteEdge: (edgeId: string) => void;
@@ -39,10 +39,10 @@ export const createEdgesSlice: StateCreator<CanvasState, [], [], EdgesSlice> = (
   },
 
   applyEdgesChange: (changes) => {
-    if (changes.length === 0) {
+    if (changes.isEmpty()) {
       return;
     }
-    set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
+    set((s) => ({ edges: changes.applyTo(s.edges) }));
   },
 
   addConnection: (connection, options) => {

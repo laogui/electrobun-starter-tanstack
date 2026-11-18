@@ -1,24 +1,15 @@
-import type { Node, NodeChange, NodeDimensionChange } from '@xyflow/react';
-import { applyNodeChanges } from '@xyflow/react';
+import { type DimensionChange, type Node, NodeChangeset } from '@xyflow/react';
 import type { CSSProperties } from 'react';
 import { isTopicNodeType } from '../../shared/topic';
 import { isPinnedSticky } from './canvasNodePredicates';
 
-function isDimensionChange(
-  change: NodeChange
-): change is NodeDimensionChange & {
-  dimensions: { width: number; height: number };
-} {
-  return change.type === 'dimensions' && change.dimensions !== undefined;
-}
-
 /** React Flow always returns a fresh array; keep the input when no node changed
  *  so the store can skip publishing a no-op update. */
-function applyNodeChangesStable(changes: NodeChange[], nodes: Node[]): Node[] {
-  if (changes.length === 0) {
+function applyNodeChangesStable(changes: NodeChangeset, nodes: Node[]): Node[] {
+  if (changes.isEmpty()) {
     return nodes;
   }
-  const next = applyNodeChanges(changes, nodes);
+  const next = changes.applyTo(nodes);
   if (next.length !== nodes.length) {
     return next;
   }
@@ -35,20 +26,22 @@ function applyNodeChangesStable(changes: NodeChange[], nodes: Node[]): Node[] {
  * Mirror those dimensions into node.style so persistence keeps the latest size.
  */
 export function applyCanvasNodeChanges(
-  changes: NodeChange[],
+  changes: NodeChangeset,
   nodes: Node[]
 ): Node[] {
   const pinnedIds = new Set(
     nodes.filter(isPinnedSticky).map((node) => node.id)
   );
   const allowedChanges = pinnedIds.size
-    ? changes.filter(
-        (change) => change.type !== 'position' || !pinnedIds.has(change.id)
+    ? new NodeChangeset(
+        changes
+          .toArray()
+          .filter(
+            (change) => change.type !== 'position' || !pinnedIds.has(change.id)
+          )
       )
     : changes;
-  const hasDimensionChange = allowedChanges.some(
-    (change) => change.type === 'dimensions'
-  );
+  const hasDimensionChange = allowedChanges.getByType('dimensions').length > 0;
   if (!hasDimensionChange) {
     return applyNodeChangesStable(allowedChanges, nodes);
   }
@@ -59,17 +52,23 @@ export function applyCanvasNodeChanges(
   const topicIds = new Set(
     nodes.filter((node) => isTopicNodeType(node.type)).map((node) => node.id)
   );
-  const savedChanges = allowedChanges.filter(
-    (change) => change.type !== 'dimensions' || !topicIds.has(change.id)
-  );
-  if (savedChanges.length === 0) {
+  const savedChanges = topicIds.size
+    ? new NodeChangeset(
+        allowedChanges
+          .toArray()
+          .filter(
+            (change) => change.type !== 'dimensions' || !topicIds.has(change.id)
+          )
+      )
+    : allowedChanges;
+  if (savedChanges.isEmpty()) {
     return nodes;
   }
   const updatedNodes = applyNodeChangesStable(savedChanges, nodes);
   const dimensionsById = new Map<string, { width: number; height: number }>();
-  for (const change of savedChanges) {
-    if (isDimensionChange(change)) {
-      dimensionsById.set(change.id, change.dimensions);
+  for (const change of savedChanges.getByType('dimensions')) {
+    if ((change as DimensionChange).dimensions !== undefined) {
+      dimensionsById.set(change.id, change.dimensions!);
     }
   }
 

@@ -22,7 +22,6 @@ import {
   initialReportAppInfo,
   installDiagnosticLogging,
 } from './diagnostics';
-import { createExtensionSchedulerService } from './extensions/schedulerService';
 import { startLocalHttpServer } from './localHttpServer';
 import { getMainViewUrl } from './mainView';
 import { migrateLegacyTagsFromNotes } from './nodeMetadata';
@@ -34,14 +33,12 @@ import { createCanvasHandlers } from './rpc/handlers/canvas';
 import { createDiagnosticsHandlers } from './rpc/handlers/diagnostics';
 import { createExportHandlers } from './rpc/handlers/export';
 import { createExtensionsHandlers } from './rpc/handlers/extensions';
-import { createLicenseHandlers } from './rpc/handlers/license';
 import { createMetadataHandlers } from './rpc/handlers/metadata';
 import { createNotesHandlers } from './rpc/handlers/notes';
 import { createSettingsHandlers } from './rpc/handlers/settings';
 import { createTemplatesHandlers } from './rpc/handlers/templates';
 import { createTrashHandlers } from './rpc/handlers/trash';
 import { createViewsHandlers } from './rpc/handlers/views';
-import { createWidgetsHandlers } from './rpc/handlers/widgets';
 import type { CanvasRPC, RpcRequestHandlers } from './rpc/types';
 import { withRpcWriteValidation } from './rpc/writeParamSchemas';
 import { getCachedSettings, loadSettings } from './settings';
@@ -179,18 +176,11 @@ async function main() {
   subscribeNoteChanges((event) => {
     appState.mainRpc?.send?.noteChanged(event);
   });
-  const extensionScheduler = createExtensionSchedulerService({
-    wsPath,
-    deliver: (delivery) => {
-      appState.mainRpc?.send?.extensionTaskFired(delivery);
-    },
-  });
   const url = await getMainViewUrl();
   const isDevChannel = (await Updater.localInfo.channel()) === 'dev';
 
   const rpcContext: RpcContext = {
     wsPath,
-    extensionScheduler,
     isDevChannel,
   };
   // Typed against every CanvasRPC bun request so a handler dropped during a
@@ -199,7 +189,6 @@ async function main() {
     keyof CanvasRPC['bun']['requests']
   > = {
     ...createCanvasHandlers(rpcContext),
-    ...createWidgetsHandlers(rpcContext),
     ...createExtensionsHandlers(rpcContext),
     ...createNotesHandlers(rpcContext),
     ...createAttachmentsHandlers(rpcContext),
@@ -212,7 +201,6 @@ async function main() {
     ...createViewsHandlers(rpcContext),
     ...createMetadataHandlers(rpcContext),
     ...createTemplatesHandlers(rpcContext),
-    ...createLicenseHandlers(rpcContext),
   };
   const rpc = (appState.mainRpc = BrowserView.defineRPC<CanvasRPC>({
     maxRequestTime: Number.POSITIVE_INFINITY,
@@ -233,12 +221,6 @@ async function main() {
       x: 200,
       y: 200,
     },
-  });
-
-  // Arm the host timer for this workspace. Tasks that come due before the
-  // renderer is listening are re-delivered until it acks.
-  extensionScheduler.tick().catch((error) => {
-    console.warn('[extensions] scheduler start failed', error);
   });
 
   return appState.mainWindow;

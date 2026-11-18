@@ -56,32 +56,12 @@ export function createFileInitialState(): FileState {
   };
 }
 
-export function createRecordingInitialState(
-  recordingNumber = 1
-): RecordingState {
-  return {
-    title: '',
-    color: '#FFFFFF',
-    fileName: '',
-    mimeType: 'audio/wav',
-    recordingNumber,
-  };
-}
-
 export function isImageState(value: unknown): value is ImageState {
   return isRecord(value);
 }
 
 export function isFileState(value: unknown): value is FileState {
   return isRecord(value) && typeof value.fileName === 'string';
-}
-
-export function isRecordingState(value: unknown): value is RecordingState {
-  return (
-    isRecord(value) &&
-    typeof value.fileName === 'string' &&
-    typeof value.recordingNumber === 'number'
-  );
 }
 
 export function normalizeImageState(value: unknown): ImageState {
@@ -147,8 +127,15 @@ export function normalizeFileState(value: unknown): FileState {
   };
 }
 
+/** Recording cards were retired; this only reads old recording state. */
 export function normalizeRecordingState(value: unknown): RecordingState {
-  const defaults = createRecordingInitialState();
+  const defaults: RecordingState = {
+    title: '',
+    color: '#FFFFFF',
+    fileName: '',
+    mimeType: 'audio/wav',
+    recordingNumber: 1,
+  };
   if (!isRecord(value)) {
     return defaults;
   }
@@ -198,17 +185,21 @@ export function buildFilePresentation(state: FileState): ExtensionPresentation {
   };
 }
 
-export function buildRecordingPresentation(
-  state: RecordingState
-): ExtensionPresentation {
-  const title = state.title.trim() || `New Recording #${state.recordingNumber}`;
+/**
+ * Recording cards were retired; an old recording becomes an ordinary audio
+ * file card that points at the same attachment, so nothing recorded is lost.
+ */
+export function fileStateFromRecording(state: RecordingState): FileState {
   return {
-    ...emptyPresentation(title),
-    subtitle: state.fileName || undefined,
-    plainText: [title, state.fileName, state.mimeType]
-      .filter(Boolean)
-      .join('\n'),
-    accessibilityLabel: title,
+    title: state.title.trim() || `Recording #${state.recordingNumber}`,
+    color: state.color,
+    fileName: state.fileName,
+    mimeType: state.mimeType,
+    kind: 'audio',
+    ...(state.attachmentFile ? { attachmentFile: state.attachmentFile } : {}),
+    ...(state.duration !== undefined ? { duration: state.duration } : {}),
+    ...(state.size !== undefined ? { size: state.size } : {}),
+    ...(state.waveform ? { waveform: state.waveform } : {}),
   };
 }
 

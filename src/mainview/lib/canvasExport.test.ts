@@ -2,7 +2,6 @@
 
 import type { Node } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetRecord } from '@/lib/widgetTypes';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T/;
 const IMAGE_PLACEHOLDER_RE = /^data:image\/gif;base64,/;
@@ -156,7 +155,7 @@ describe('canvas export helpers', () => {
 
     expect(exported).toBe(true);
     expect(instance.fitView).toHaveBeenCalledWith(
-      expect.objectContaining({ padding: 0.08, duration: 0 })
+      expect.objectContaining({ padding: '8%', duration: 0 })
     );
     expect(instance.setViewport).toHaveBeenCalledWith(
       { x: 0, y: 0, zoom: 1 },
@@ -294,106 +293,6 @@ describe('canvas export helpers', () => {
       data: { title: 'Hello', content: '## Body' },
     });
     expect(doc.edges.map((e) => (e as { id: string }).id)).toEqual(['e-keep']);
-  });
-
-  it('includes widget records referenced by exported nodes and folder children', () => {
-    const checklistWidget = {
-      schema: 'ghostboard-widget/v1',
-      id: 'widget_check',
-      kind: 'checklist',
-      title: 'Checklist',
-      createdAt: '2026-07-08T00:00:00.000Z',
-      updatedAt: '2026-07-08T00:00:00.000Z',
-      data: {
-        items: [{ id: 'item_1', text: 'Keep me', checked: false }],
-      },
-    } satisfies WidgetRecord;
-    const reminderWidget = {
-      schema: 'ghostboard-widget/v1',
-      id: 'widget_reminder',
-      kind: 'reminder',
-      title: 'Reminder',
-      createdAt: '2026-07-08T00:00:00.000Z',
-      updatedAt: '2026-07-08T00:00:00.000Z',
-      data: {
-        dueAt: '2026-07-09T09:30:00.000Z',
-        timezone: 'Asia/Singapore',
-        status: 'scheduled',
-      },
-    } satisfies WidgetRecord;
-    const hiddenWidget = {
-      ...checklistWidget,
-      id: 'widget_hidden',
-      title: 'Hidden',
-    } satisfies WidgetRecord;
-    const widgetNode = {
-      id: 'widget-node',
-      type: 'widget',
-      position: { x: 0, y: 0 },
-      data: {
-        widgetId: 'widget_check',
-        kind: 'checklist',
-        items: [{ id: 'leak', text: 'Do not export in node data' }],
-      },
-    } satisfies Node;
-    const folderNode = {
-      id: 'folder-node',
-      type: 'folder',
-      position: { x: 10, y: 10 },
-      data: {
-        children: [
-          {
-            id: 'child-widget',
-            type: 'widget',
-            data: {
-              widgetId: 'widget_reminder',
-              kind: 'reminder',
-              note: 'Do not export in child data',
-            },
-          },
-        ],
-      },
-    } satisfies Node;
-
-    const doc = buildCanvasExportJson({
-      nodes: [
-        widgetNode,
-        folderNode,
-        {
-          ...widgetNode,
-          id: 'hidden-widget',
-          data: {
-            widgetId: 'widget_hidden',
-            kind: 'checklist',
-            isHidden: true,
-          },
-        } satisfies Node,
-      ],
-      edges: [],
-      widgets: {
-        widget_check: checklistWidget,
-        widget_reminder: reminderWidget,
-        widget_hidden: hiddenWidget,
-      },
-    });
-
-    expect(doc.widgets).toEqual({
-      widget_check: checklistWidget,
-      widget_reminder: reminderWidget,
-    });
-    expect(doc.nodes[0]).toMatchObject({
-      type: 'widget',
-      data: { widgetId: 'widget_check', kind: 'checklist' },
-    });
-    expect(
-      (doc.nodes[0] as { data: Record<string, unknown> }).data
-    ).not.toHaveProperty('items');
-    const exportedChild = (doc.nodes[1] as { data: { children: unknown[] } })
-      .data.children[0] as { data: Record<string, unknown> };
-    expect(exportedChild.data).toEqual({
-      widgetId: 'widget_reminder',
-      kind: 'reminder',
-    });
   });
 
   it('opens the browser save picker and writes the JSON document', async () => {

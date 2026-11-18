@@ -111,7 +111,9 @@ export function ColorSwatch({
       >
         <span
           className={cn(
-            'relative flex size-8 items-center justify-center rounded-full border border-black/10 dark:border-white/15'
+            'relative flex size-8 items-center justify-center rounded-full border border-black/10 transition-shadow dark:border-white/15',
+            selected &&
+              'ring-2 ring-accent ring-offset-2 ring-offset-white dark:ring-offset-neutral-800'
           )}
           style={{ backgroundColor: color }}
         >

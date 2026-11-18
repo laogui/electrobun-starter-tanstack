@@ -1,6 +1,5 @@
 import { join, resolve } from 'node:path';
 import {
-  buildChecklistWidgetMarkdown,
   collectViewExportRefs,
   copyExportAttachments,
   createMarkdownExportDirectory,
@@ -21,7 +20,6 @@ import {
   listNoteRecords,
   loadNoteRecord,
 } from '../../noteStore';
-import { loadWidgets } from '../../widgets';
 import { loadWorkspaceConfig } from '../../workspace';
 import type { RpcContext } from '../context';
 import type { RpcRequestHandlers } from '../types';
@@ -131,7 +129,6 @@ export function createExportHandlers(
     }) => {
       // Resolve the set of notes to export based on the requested scope.
       let ids: string[] = [];
-      let widgetIds: string[] = [];
       let source = 'All notes';
       if (scope === 'selected') {
         ids = Array.isArray(noteIds) ? noteIds : [];
@@ -147,7 +144,6 @@ export function createExportHandlers(
             await loadManifest(wsPath, view.file)
           );
           ids = refs.noteIds;
-          widgetIds = refs.widgetIds;
           source = `Canvas: ${view.name}`;
         } else {
           return { success: false, exported: 0, failed: 0 };
@@ -159,7 +155,7 @@ export function createExportHandlers(
         return { success: false, exported: 0, failed: 0 };
       }
       ids = [...new Set(ids)];
-      if (ids.length === 0 && widgetIds.length === 0) {
+      if (ids.length === 0) {
         return { success: false, exported: 0, failed: 0 };
       }
 
@@ -233,76 +229,6 @@ export function createExportHandlers(
           failures.push(result.failure);
         } else if (result.exported) {
           exportedNotes.push(result.exported);
-        }
-      }
-
-      if (widgetIds.length > 0) {
-        const widgetRecords = await loadWidgets(wsPath, widgetIds);
-        const widgetExportResults = await Promise.all(
-          widgetIds.map(async (widgetId): Promise<ExportNoteResult> => {
-            try {
-              const record = widgetRecords[widgetId];
-              if (!record) {
-                return {
-                  failure: {
-                    noteId: widgetId,
-                    reason: 'widget record not found',
-                  },
-                };
-              }
-              if ('error' in record) {
-                return {
-                  failure: {
-                    noteId: widgetId,
-                    reason:
-                      record.error === 'corrupted'
-                        ? 'corrupted widget'
-                        : 'widget record not found',
-                  },
-                };
-              }
-              // Non-checklist widgets (pomodoro/reminder) have no markdown
-              // representation; skip them instead of counting as failures.
-              if (record.kind !== 'checklist') {
-                return {
-                  skipped: {
-                    noteId: widgetId,
-                    reason: `non-markdown widget kind: ${record.kind}`,
-                  },
-                };
-              }
-              const exported = buildChecklistWidgetMarkdown(record, {
-                includeFrontmatter,
-                exportedAt,
-              });
-              if (!exported) {
-                return {
-                  failure: {
-                    noteId: widgetId,
-                    reason: `unsupported widget kind: ${record.kind}`,
-                  },
-                };
-              }
-              await Bun.write(
-                join(notesDir, exported.fileName),
-                exported.markdown
-              );
-              return { exported };
-            } catch (error) {
-              return {
-                failure: { noteId: widgetId, reason: String(error) },
-              };
-            }
-          })
-        );
-        for (const result of widgetExportResults) {
-          if (result.failure) {
-            failures.push(result.failure);
-          } else if (result.exported) {
-            exportedNotes.push(result.exported);
-          }
-          // result.skipped is intentionally ignored: non-markdown widgets
-          // are neither exported nor failed.
         }
       }
 

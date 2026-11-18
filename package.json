@@ -38,7 +38,7 @@
     "@blocknote/xl-ai": "^0.51.4",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.170.45",
-    "@xyflow/react": "^12.10.2",
+    "@xyflow/react": "^13.0.0",
     "ai": "^6.0.312",
     "better-themes": "^1.1.0",
     "clsx": "^2.1.1",

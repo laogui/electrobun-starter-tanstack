@@ -79,7 +79,6 @@ type NodeContextTarget =
   | 'topic'
   | 'image'
   | 'link'
-  | 'recording'
   | 'widget'
   | 'extension';
 
@@ -96,7 +95,8 @@ const NODE_CONTEXT_TARGET: Record<string, NodeContextTarget> = {
   topic: 'topic',
   image: 'image',
   link: 'link',
-  recording: 'recording',
+  // Removed types (leftover placeholders) get the minimal widget menu.
+  recording: 'widget',
   widget: 'widget',
   extension: 'extension',
 };

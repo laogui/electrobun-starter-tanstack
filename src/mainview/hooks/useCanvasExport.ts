@@ -12,7 +12,6 @@ import { collectNoteReferences } from '@/lib/noteReferences';
 import { isRpcAvailable, rpcExportNotesMarkdown } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useExtensionInstanceStore } from '@/store/extensionInstanceStore';
-import { useWidgetStore } from '@/store/widgetStore';
 import * as m from '../../paraglide/messages.js';
 
 /** Export the active canvas or scoped Markdown after pending note saves finish. */
@@ -88,7 +87,6 @@ export function useCanvasExport({
         viewId: activeViewId,
         viewName: activeViewName,
         viewport: instance.getViewport?.(),
-        widgets: useWidgetStore.getState().records,
         extensionInstances: useExtensionInstanceStore.getState().records,
       });
       if (exported) {

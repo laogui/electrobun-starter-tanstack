@@ -1,3 +1,4 @@
+@layer theme, base, xyflow, components, utilities;
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -1007,18 +1008,11 @@ body.resizing-nwse * {
   --level: 1.15em;
 }
 
-/* The card open in the side panel stays on the canvas, outlined. */
-.react-flow__node.is-open-in-panel {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 3px;
-  border-radius: 14px;
-}
-
 /* Keep the overview toggle visibly selected while the map is expanded. */
 .canvas-viewport-chrome .canvas-viewport-controls
   .canvas-minimap-toggle[aria-pressed="true"] {
-  color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  color: var(--color-accent);
+  background: color-mix(in oklch, var(--color-accent) 12%, transparent);
 }
 
 .canvas-viewport-chrome .canvas-minimap-toggle svg {

@@ -5,11 +5,6 @@ import { isGroupChildNode, isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { buildNewNodeSpec, getNodeSpec } from '@/lib/canvasNodeRegistry';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects } from '@/lib/collision';
-import {
-  COUNTED_NODE_TYPES,
-  FREE_NODE_LIMIT,
-  hasNodeQuota,
-} from '@/lib/nodeQuota';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import { topicCanvasWritePaused } from '@/lib/topicTree';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -61,21 +56,10 @@ export async function applyAIActions(
 // Batch path
 // ---------------------------------------------------------------------------
 
-/** Number of creates in `actions` that count against the free-tier quota. */
-export function countQuotaCountedCreates(actions: readonly AIAction[]): number {
-  return actions.filter(
-    (a) =>
-      a.type === 'create_node' &&
-      COUNTED_NODE_TYPES.has(getNodeSpec(a.nodeKind).nodeType)
-  ).length;
-}
-
 async function applyActionBatch(
   actions: AIAction[],
   warnings: string[]
 ): Promise<ApplyAIActionsResult> {
-  // License gate for batch creation, shared with every other create path
-  // (nodeQuota.ts): existing notes/stickies/topics all count.
   const initial = useCanvasStore.getState();
   if (!initial._hydrated || initial.topicWritePaused) {
     return {
@@ -88,23 +72,6 @@ async function applyActionBatch(
     };
   }
   const generation = initial._canvasGeneration;
-  const quotaCreates = countQuotaCountedCreates(actions);
-  if (
-    quotaCreates > 0 &&
-    !(await hasNodeQuota(useCanvasStore.getState().nodes, quotaCreates))
-  ) {
-    return {
-      applied: 0,
-      createdNodeIds: [],
-      warnings: [
-        ...warnings,
-        `Free version limited to ${FREE_NODE_LIMIT} cards. Activate a license to continue.`,
-      ],
-    };
-  }
-
-  // Re-read after the (possibly async) license check: the graph may have
-  // changed while it ran.
   const store = useCanvasStore.getState();
   if (
     store._canvasGeneration !== generation ||

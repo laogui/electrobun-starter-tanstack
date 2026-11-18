@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, PenLine } from 'lucide-react';
+import { PenLine } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { NodeTagChips } from '@/components/card/NodeTagChips';
 import { TagEditor, type TagEditorChange } from '@/components/card/TagEditor';
@@ -13,21 +13,13 @@ import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
 import { useCanvasStore } from '@/store/canvasStore';
-import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 import { ResizeHandle } from './_shared/ResizeHandle';
-
-export interface ChecklistItem {
-  checked?: boolean;
-  isHeader?: boolean;
-  text?: string;
-}
 
 export interface CardContentData {
   color?: string;
   content?: string;
   isHidden?: boolean;
-  items?: ChecklistItem[];
   noteId?: string;
   previewBlocks?: unknown;
   previewExcerpt?: string;
@@ -38,32 +30,16 @@ export interface CardContentData {
   tagColors?: Record<string, string>;
   tags?: string[];
   title?: string;
-  /**
-   * Discriminator for non-default card variants. Default text cards leave
-   * this undefined; checklist cards set 'checklist'.
-   */
-  type?: 'checklist' | 'text';
+  /** Legacy discriminator; every card is a text note now. */
+  type?: 'text';
 }
 
 export interface CardContentProps {
   data: CardContentData;
-  isFocused?: boolean;
-  onChange?: (next: Partial<CardContentData>) => void;
   readOnly?: boolean;
 }
 
-const checklistItemKey = (item: ChecklistItem) =>
-  `${item.isHeader ? 'header' : 'item'}:${item.text ?? ''}:${
-    item.checked ? 'checked' : 'unchecked'
-  }`;
-
-export const CardContent = ({
-  data,
-  isFocused,
-  onChange,
-  readOnly = false,
-}: CardContentProps) => {
-  const [newItem, setNewItem] = useState('');
+export const CardContent = ({ data, readOnly = false }: CardContentProps) => {
   const isDark = isColorDark(data.color);
   const tagChips = (
     <NodeTagChips
@@ -75,145 +51,6 @@ export const CardContent = ({
       tags={data.tags}
     />
   );
-
-  if (data.type === 'checklist') {
-    return (
-      <div
-        className={cn(
-          'flex h-full flex-col p-6',
-          isColorDark(data.color) && 'text-white'
-        )}
-        style={colorToStyle(data.color)}
-      >
-        {tagChips}
-        {data.title ? (
-          <h2
-            className={cn('mb-4 font-bold', isFocused ? 'text-3xl' : 'text-xl')}
-          >
-            {data.title}
-          </h2>
-        ) : null}
-        <div className="flex-1 space-y-1 overflow-hidden">
-          {data.items?.map((item: ChecklistItem, i: number) =>
-            item.isHeader ? (
-              <div
-                className={cn(
-                  'mt-4 mb-2 font-semibold',
-                  isDark ? 'text-white/95' : 'text-gray-800'
-                )}
-                key={checklistItemKey(item)}
-              >
-                {item.text}
-              </div>
-            ) : (
-              <button
-                className={cn(
-                  'nodrag nopan group flex w-full items-start gap-3 py-1 text-left',
-                  readOnly ? '' : 'cursor-pointer'
-                )}
-                disabled={readOnly}
-                key={checklistItemKey(item)}
-                onClick={
-                  readOnly
-                    ? undefined
-                    : (e) => {
-                        // Keep checklist toggles from bubbling into the node
-                        // click, which opens the focused view when the card
-                        // is already the sole selection.
-                        e.stopPropagation();
-                        if (onChange) {
-                          const newItems = (data.items ?? []).map(
-                            (entry, index) =>
-                              index === i
-                                ? { ...entry, checked: !entry.checked }
-                                : entry
-                          );
-                          onChange({ items: newItems });
-                        }
-                      }
-                }
-                type="button"
-              >
-                <div
-                  className={cn(
-                    'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
-                    item.checked
-                      ? isDark
-                        ? 'border-white bg-white'
-                        : 'border-neutral-950 bg-neutral-950'
-                      : isDark
-                        ? 'border-white/40 group-hover:border-white'
-                        : 'border-gray-400 group-hover:border-black'
-                  )}
-                >
-                  {item.checked ? (
-                    <Check
-                      className={isDark ? 'text-black' : 'text-white'}
-                      size={12}
-                    />
-                  ) : null}
-                </div>
-                <span
-                  className={cn(
-                    'text-sm/tight transition-colors',
-                    item.checked
-                      ? isDark
-                        ? 'text-white/50 line-through'
-                        : 'text-gray-400 line-through'
-                      : isDark
-                        ? 'text-white/95'
-                        : 'text-gray-800'
-                  )}
-                >
-                  {item.text}
-                </span>
-              </button>
-            )
-          )}
-          {/* Add new item input — hidden in readOnly (e.g., template previews) */}
-          {readOnly ? null : (
-            <div
-              className="mt-2 flex items-center gap-3 opacity-50 transition-opacity focus-within:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <div
-                className={cn(
-                  'size-4 shrink-0 rounded-sm border',
-                  isDark ? 'border-white/40' : 'border-gray-400'
-                )}
-              />
-              <input
-                aria-label={m.a11y_checklist_new_item()}
-                className={cn(
-                  'nodrag nopan w-full border-none bg-transparent text-sm outline-hidden',
-                  isDark ? 'placeholder-white/40' : 'placeholder-gray-500'
-                )}
-                onChange={(e) => {
-                  setNewItem(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newItem.trim() && onChange) {
-                    onChange({
-                      items: [
-                        ...(data.items ?? []),
-                        { text: newItem.trim(), checked: false },
-                      ],
-                    });
-                    setNewItem('');
-                  }
-                }}
-                placeholder={m.checklist_add_item_placeholder()}
-                type="text"
-                value={newItem}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // Default text card — editable only in focused (expanded) view.
   // readOnly forces the non-editable preview regardless of focus.
@@ -259,7 +96,6 @@ export const CardContent = ({
 };
 
 const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
-  const commitNodeData = useCanvasStore((s) => s.commitNodeData);
   const saveSnapshot = useCanvasStore((s) => s.saveSnapshot);
   const editingTagNodeId = useCanvasStore((s) => s.editingTagNodeId);
   const setEditingTagNodeId = useCanvasStore((s) => s.setEditingTagNodeId);
@@ -370,12 +206,7 @@ const CardNode = ({ id, data }: { id: string; data: CardContentData }) => {
           'node-visual size-full cursor-pointer overflow-hidden rounded-3xl shadow-card transition-shadow duration-200 ease-out hover:shadow-card-hover'
         )}
       >
-        <CardContent
-          data={viewData}
-          onChange={(newData) => {
-            commitNodeData(id, newData);
-          }}
-        />
+        <CardContent data={viewData} />
       </div>
     </div>
   );

@@ -6,13 +6,11 @@ import type {
 } from '../../shared/ai/providerConfig';
 import type { AIRunTaskParams, AIRunTaskResponse } from '../../shared/ai/types';
 import type { NoteChangedEvent } from '../../shared/contentEvents';
-import type { ExtensionEnablementFile } from '../../shared/extensions/enablement';
 import type {
   ExtensionInstanceLoadError,
   ExtensionInstanceRecord,
 } from '../../shared/extensions/instance';
 import type { ExtensionPresentation } from '../../shared/extensions/presentation';
-import type { ExtensionTaskDelivery } from '../../shared/extensions/scheduling';
 import type {
   BlockNoteSaveResult,
   CanvasSaveResult,
@@ -25,7 +23,6 @@ import type {
 } from '../../shared/support/reports';
 import type { OpenAttachmentResult } from '../attachments';
 import type { UnlinkedFileEntry } from '../cleanup';
-import type { LicenseInfo } from '../license';
 import type { ManifestEdge, ManifestNode } from '../manifest';
 import type {
   NodeMetadataMap,
@@ -41,7 +38,6 @@ import type {
   TemplateMeta,
   WriteTemplateThumbnailResult,
 } from '../templates';
-import type { WidgetKind, WidgetLoadError, WidgetRecord } from '../widgets';
 import type { TrashEntry } from '../workspace';
 
 export interface CanvasRPC {
@@ -97,7 +93,6 @@ export interface CanvasRPC {
         response: {
           nodes: ManifestNode[];
           edges: ManifestEdge[];
-          widgets?: Record<string, WidgetRecord | WidgetLoadError>;
           extensionInstances?: Record<
             string,
             ExtensionInstanceRecord | ExtensionInstanceLoadError
@@ -121,38 +116,6 @@ export interface CanvasRPC {
           edges: ManifestEdge[];
         };
         response: CanvasSaveResult;
-      };
-      createWidget: {
-        params: { kind: WidgetKind; title?: string };
-        response: { success: true; widget: WidgetRecord } | { success: false };
-      };
-      cloneWidget: {
-        params: { widgetId: string };
-        response:
-          | { success: true; cloneToken?: string; widget: WidgetRecord }
-          | { success: false };
-      };
-      saveWidget: {
-        params: { widget: WidgetRecord };
-        response: { success: boolean };
-      };
-      deleteWidget: {
-        params: { widgetId: string };
-        response: { success: boolean };
-      };
-      extensionEnablementList: {
-        params: Record<string, unknown>;
-        response: {
-          disabledCanvasTypes: string[];
-          instanceCounts: Record<string, number>;
-        };
-      };
-      extensionEnablementSetEnabled: {
-        params: { canvasTypeId: string; enabled: boolean };
-        response: {
-          enablement?: ExtensionEnablementFile;
-          success: boolean;
-        };
       };
       extensionInstanceCreate: {
         params: {
@@ -196,43 +159,6 @@ export interface CanvasRPC {
               success: true;
             }
           | { success: false };
-      };
-      extensionInstanceClearType: {
-        params: { canvasTypeId: string };
-        response: { deleted: number; success: boolean };
-      };
-      extensionSchedulerSchedule: {
-        params: {
-          canvasTypeId: string;
-          fireAt: string;
-          id: string;
-          instanceId: string;
-          payload?: unknown;
-          repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
-        };
-        response: { success: boolean };
-      };
-      extensionSchedulerCancel: {
-        params: { instanceId: string; taskId: string };
-        response: { success: boolean };
-      };
-      extensionSchedulerAck: {
-        params: { deliveryId: string };
-        response: { success: boolean };
-      };
-      extensionSchedulerList: {
-        params: { instanceId?: string };
-        response: {
-          diagnostic?: string;
-          tasks: Array<{
-            canvasTypeId: string;
-            fireAt: string;
-            id: string;
-            instanceId: string;
-            payload?: unknown;
-            repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
-          }>;
-        };
       };
       saveNote: {
         params: {
@@ -453,14 +379,6 @@ export interface CanvasRPC {
         params: Record<string, unknown>;
         response: UpdateCheckResponse;
       };
-      checkLicense: {
-        params: Record<string, unknown>;
-        response: LicenseInfo;
-      };
-      activateLicense: {
-        params: { key: string };
-        response: { success: boolean; error?: string };
-      };
       getLocalHttpEndpoint: {
         params: Record<string, unknown>;
         response: {
@@ -476,10 +394,6 @@ export interface CanvasRPC {
           views: Array<{ id: string; name: string; file: string }>;
           activeViewId: string;
         };
-      };
-      createView: {
-        params: { name: string };
-        response: { id: string; name: string; file: string };
       };
       deleteView: {
         params: { viewId: string };
@@ -561,7 +475,6 @@ export interface CanvasRPC {
     messages: {
       canvasRedo: Record<never, unknown>;
       canvasUndo: Record<never, unknown>;
-      extensionTaskFired: ExtensionTaskDelivery;
       noteChanged: NoteChangedEvent;
       openSearch: Record<never, unknown>;
       settingsUpdated: AppSettings;

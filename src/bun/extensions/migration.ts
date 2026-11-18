@@ -1,11 +1,18 @@
 import {
+  CHECKLIST_CANVAS_TYPE_ID,
   canvasTypeIdForLegacyNodeType,
   canvasTypeIdForWidgetKind,
+  FILE_CANVAS_TYPE_ID,
+  RECORDING_CANVAS_TYPE_ID,
 } from '../../shared/extensions/builtinIds';
+import {
+  type ChecklistState,
+  normalizeChecklistState,
+} from '../../shared/extensions/legacyChecklist';
 import {
   buildFilePresentation,
   buildImagePresentation,
-  buildRecordingPresentation,
+  fileStateFromRecording,
   normalizeFileState,
   normalizeImageState,
   normalizeRecordingState,
@@ -19,21 +26,16 @@ import {
   instanceIdFromInlineNode,
   instanceIdFromWidgetId,
   LEGACY_MIGRATION_ENABLED,
+  stableHex,
 } from '../../shared/extensions/migrationIds';
-import {
-  buildChecklistPresentation,
-  buildPomodoroPresentation,
-  buildReminderPresentation,
-  normalizeChecklistState,
-  normalizePomodoroState,
-  normalizeReminderState,
-} from '../../shared/extensions/productivity/state';
 import {
   buildLinkPresentation,
   normalizeLinkState,
 } from '../../shared/extensions/web/link';
 import type { ManifestNode } from '../manifest';
-import { copyLegacyWidgetTagsOnce } from '../nodeMetadata';
+import { copyLegacyWidgetTagsOnce, moveNodeMetadataKey } from '../nodeMetadata';
+import { loadNoteRecord, noteRecordToCardData } from '../noteStore';
+import { createNote, serializeChecklistItems } from '../notes';
 import {
   loadWidget,
   type WidgetLoadError,
@@ -108,38 +110,57 @@ async function ensureInstance(
   }
 }
 
-function presentationForWidget(kind: string, state: unknown) {
-  switch (kind) {
-    case 'checklist':
-      return buildChecklistPresentation(normalizeChecklistState(state));
-    case 'pomodoro':
-      return buildPomodoroPresentation(normalizePomodoroState(state));
-    case 'reminder':
-      return buildReminderPresentation(normalizeReminderState(state));
-    default:
-      return { title: kind };
-  }
-}
+/** Titles for retired widget kinds, which render as a "removed" placeholder. */
+const RETIRED_WIDGET_TITLES: Record<string, string> = {
+  pomodoro: 'Pomodoro',
+  reminder: 'Reminder',
+};
 
-function stateForWidget(kind: string, record: WidgetRecord): unknown {
-  switch (kind) {
-    case 'checklist':
-      return normalizeChecklistState({
-        title: record.title,
-        ...(isRecord(record.data) ? record.data : {}),
-      });
-    case 'pomodoro':
-      return normalizePomodoroState({
-        title: record.title,
-        ...(isRecord(record.data) ? record.data : {}),
-      });
-    case 'reminder':
-      return normalizeReminderState({
-        title: record.title,
-        ...(isRecord(record.data) ? record.data : {}),
-      });
-    default:
-      return record.data;
+/**
+ * Checklist cards were retired in favour of task lists inside a note. An old
+ * checklist (widget or extension instance) becomes a note whose body is the
+ * same items as GFM task-list markdown. The note id is derived from the old
+ * id, so a load that fails to persist re-uses the same note next time.
+ * Returns the card node (hydrated with the note) or null on failure.
+ */
+async function checklistToNoteCard(
+  wsPath: string,
+  node: Record<string, unknown>,
+  sourceId: string,
+  checklist: ChecklistState,
+  color?: string
+): Promise<Record<string, unknown> | null> {
+  const noteId = `note_${stableHex(`checklist:${sourceId}`)}`;
+  try {
+    let record = await loadNoteRecord(wsPath, noteId);
+    let file: string | undefined;
+    if (!record) {
+      file = await createNote(
+        wsPath,
+        noteId,
+        checklist.title,
+        'note',
+        serializeChecklistItems(checklist.items ?? []),
+        color
+      );
+      record = await loadNoteRecord(wsPath, noteId, file);
+    }
+    if (!record) {
+      return null;
+    }
+    if (typeof node.id === 'string') {
+      await moveNodeMetadataKey(wsPath, node.id, noteId);
+    }
+    const { data: _data, type: _type, ...rest } = node;
+    return {
+      ...rest,
+      type: 'card',
+      noteId,
+      data: { ...noteRecordToCardData(record), noteId },
+    };
+  } catch (error) {
+    console.warn('[extensions] checklist → note migration failed', error);
+    return null;
   }
 }
 
@@ -162,14 +183,27 @@ async function migrateWidgetLike(
   if (isWidgetLoadError(record)) {
     return null;
   }
-  const state = stateForWidget(record.kind, record);
+  const recordData = isRecord(record.data) ? record.data : {};
+  if (record.kind === 'checklist') {
+    if (typeof node.id === 'string') {
+      await copyLegacyWidgetTagsOnce(wsPath, widgetId, node.id);
+    }
+    return checklistToNoteCard(
+      wsPath,
+      node,
+      instanceIdFromWidgetId(widgetId),
+      normalizeChecklistState({ title: record.title, ...recordData })
+    );
+  }
   const ok = await ensureInstance(wsPath, {
     id: instanceIdFromWidgetId(widgetId),
     appVersion,
     canvasTypeId,
     dataVersion: 1,
-    state,
-    presentation: presentationForWidget(record.kind, state),
+    state: { title: record.title, ...recordData },
+    presentation: {
+      title: record.title || RETIRED_WIDGET_TITLES[record.kind] || record.kind,
+    },
   });
   if (!ok) {
     return null;
@@ -192,7 +226,11 @@ async function migrateInlineNode(
   childPath?: string
 ): Promise<Record<string, unknown> | null> {
   const type = typeof node.type === 'string' ? node.type : '';
-  const canvasTypeId = canvasTypeIdForLegacyNodeType(type);
+  // Recording cards were retired: legacy recordings land as audio files.
+  const canvasTypeId =
+    type === 'recording'
+      ? FILE_CANVAS_TYPE_ID
+      : canvasTypeIdForLegacyNodeType(type);
   if (!canvasTypeId) {
     return null;
   }
@@ -238,8 +276,9 @@ async function migrateInlineNode(
       break;
     }
     case 'recording': {
-      state = normalizeRecordingState(data);
-      presentation = buildRecordingPresentation(normalizeRecordingState(data));
+      const file = fileStateFromRecording(normalizeRecordingState(data));
+      state = file;
+      presentation = buildFilePresentation(file);
       break;
     }
     default:
@@ -259,6 +298,77 @@ async function migrateInlineNode(
   return persistableExtensionNode(node, canvasTypeId, instanceId);
 }
 
+/**
+ * A recording instance from before recordings were retired becomes a file
+ * instance (new deterministic id) holding the same audio attachment.
+ */
+async function migrateRecordingInstance(
+  wsPath: string,
+  appVersion: string,
+  node: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  const data = nodeData(node);
+  if (
+    data.canvasTypeId !== RECORDING_CANVAS_TYPE_ID ||
+    typeof data.instanceId !== 'string'
+  ) {
+    return null;
+  }
+  const loaded = await loadExtensionInstance(wsPath, data.instanceId);
+  if ('error' in loaded) {
+    return null;
+  }
+  const file = fileStateFromRecording(
+    normalizeRecordingState(loaded.record.state)
+  );
+  const instanceId = `${data.instanceId}_file`;
+  const ok = await ensureInstance(wsPath, {
+    id: instanceId,
+    appVersion,
+    canvasTypeId: FILE_CANVAS_TYPE_ID,
+    dataVersion: 1,
+    state: file,
+    presentation: buildFilePresentation(file),
+  });
+  if (!ok) {
+    return null;
+  }
+  return persistableExtensionNode(node, FILE_CANVAS_TYPE_ID, instanceId);
+}
+
+async function migrateChecklistInstance(
+  wsPath: string,
+  node: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  const data = nodeData(node);
+  if (
+    data.canvasTypeId !== CHECKLIST_CANVAS_TYPE_ID ||
+    typeof data.instanceId !== 'string'
+  ) {
+    return null;
+  }
+  const instanceId = data.instanceId;
+  if (typeof node.id === 'string' && instanceId.startsWith('extinst_widget_')) {
+    await copyLegacyWidgetTagsOnce(
+      wsPath,
+      instanceId.slice('extinst_'.length),
+      node.id
+    );
+  }
+  const loaded = await loadExtensionInstance(wsPath, instanceId);
+  if ('error' in loaded) {
+    return null;
+  }
+  const state = loaded.record.state;
+  return checklistToNoteCard(
+    wsPath,
+    node,
+    instanceId,
+    normalizeChecklistState(state),
+    isRecord(state) && typeof state.color === 'string' ? state.color : undefined
+  );
+}
+
 async function migrateOneNode(
   wsPath: string,
   appVersion: string,
@@ -269,6 +379,14 @@ async function migrateOneNode(
   // Repair references migrated by older hosts, including Folder children.
   // Only built-in widget migrations use this deterministic instance prefix.
   if (node.type === 'extension') {
+    const recording = await migrateRecordingInstance(wsPath, appVersion, node);
+    if (recording) {
+      return { changed: true, node: recording };
+    }
+    const checklist = await migrateChecklistInstance(wsPath, node);
+    if (checklist) {
+      return { changed: true, node: checklist };
+    }
     const data = nodeData(node);
     if (
       typeof node.id === 'string' &&
@@ -376,6 +494,43 @@ export async function migrateLegacyCanvasNodes(
   return { changed, nodes: next };
 }
 
+/** Thin manifest reference for a card a retired type was converted into. */
+function persistableCardFrom(
+  original: Record<string, unknown>,
+  migrated: { data?: unknown }
+): Record<string, unknown> | null {
+  const data = nodeData(migrated);
+  if (typeof data.noteId !== 'string') {
+    return null;
+  }
+  const { data: _data, ...rest } = original;
+  return {
+    ...rest,
+    type: 'card',
+    noteId: data.noteId,
+    data: {
+      noteId: data.noteId,
+      ...(typeof data.title === 'string' ? { title: data.title } : {}),
+      ...(typeof data.color === 'string' ? { color: data.color } : {}),
+    },
+  };
+}
+
+function extensionRefChanged(
+  original: { data?: unknown; type?: unknown },
+  migrated: { data?: unknown }
+): boolean {
+  if (original.type !== 'extension') {
+    return true;
+  }
+  const before = nodeData(original);
+  const after = nodeData(migrated);
+  return (
+    before.canvasTypeId !== after.canvasTypeId ||
+    before.instanceId !== after.instanceId
+  );
+}
+
 export function buildManifestNodesAfterExtensionMigration(
   originalNodes: ManifestNode[],
   migratedNodes: ManifestNode[]
@@ -390,7 +545,12 @@ export function buildManifestNodesAfterExtensionMigration(
       return node;
     }
 
-    if (node.type !== 'extension' && migrated.type === 'extension') {
+    if (node.type !== 'card' && migrated.type === 'card') {
+      const card = persistableCardFrom({ ...node }, migrated);
+      return card ? (card as unknown as ManifestNode) : node;
+    }
+
+    if (migrated.type === 'extension' && extensionRefChanged(node, migrated)) {
       const data = nodeData(migrated);
       if (
         typeof data.canvasTypeId === 'string' &&
@@ -427,7 +587,19 @@ export function buildManifestNodesAfterExtensionMigration(
       let childChanged = false;
       const nextChildren = originalChildren.map((child) => {
         const next = migratedChildById.get(String(child.id));
-        if (!next || next.type !== 'extension' || child.type === 'extension') {
+        if (next && child.type !== 'card' && next.type === 'card') {
+          const card = persistableCardFrom(child, next);
+          if (card) {
+            childChanged = true;
+            return card;
+          }
+          return child;
+        }
+        if (
+          !next ||
+          next.type !== 'extension' ||
+          !extensionRefChanged(child, next)
+        ) {
           return child;
         }
         const data = nodeData(next);

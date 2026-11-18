@@ -12,7 +12,6 @@ import {
   VIEWPORT_PAN_MS,
   viewportMotion,
 } from '@/lib/motion';
-import { COUNTED_NODE_TYPES, hasNodeQuota } from '@/lib/nodeQuota';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import { suppressViewportPersist } from '@/lib/viewportPersist';
 import * as m from '../../../paraglide/messages.js';
@@ -47,13 +46,6 @@ export const createNodeCreationSlice: StateCreator<
   createNode: async (type, rfInstance, options) => {
     const spec = buildNewNodeSpec(type);
     const size = options?.size ?? spec.size;
-    if (
-      COUNTED_NODE_TYPES.has(spec.base.type ?? '') &&
-      !(await hasNodeQuota(get().nodes))
-    ) {
-      return;
-    }
-
     const center = options?.anchorCenter ?? getViewportCenter(rfInstance);
     const anchor = options?.anchor ?? {
       x: center.x - size.width / 2,

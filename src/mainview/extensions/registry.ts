@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-import { isCanvasTypeEnabled } from '../../shared/extensions/enablement';
 import { isCanvasTypeId } from '../../shared/extensions/ids';
 import type { ExtensionAvailability } from '../../shared/extensions/protocol';
 
@@ -126,22 +125,8 @@ export class CanvasTypeRegistry {
     return [...this.types.values()].map((entry) => entry.type);
   }
 
-  listEnabled(disabledCanvasTypes: readonly string[]): AnyBuiltinCanvasType[] {
-    return this.list().filter((type) =>
-      isCanvasTypeEnabled(type.id, disabledCanvasTypes)
-    );
-  }
-
-  availability(
-    canvasTypeId: string,
-    disabledCanvasTypes: readonly string[]
-  ): ExtensionAvailability {
-    if (!this.types.has(canvasTypeId)) {
-      return 'unknown';
-    }
-    return isCanvasTypeEnabled(canvasTypeId, disabledCanvasTypes)
-      ? 'available'
-      : 'disabled';
+  availability(canvasTypeId: string): ExtensionAvailability {
+    return this.types.has(canvasTypeId) ? 'available' : 'unknown';
   }
 }
 

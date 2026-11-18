@@ -1,4 +1,4 @@
-import '@xyflow/react/dist/style.css';
+import '@xyflow/react/style.css';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -271,7 +271,7 @@ function TemplatePreviewContent() {
         edgeTypes={edgeTypes}
         elementsSelectable={false}
         fitView
-        fitViewOptions={{ padding: 0.15 }}
+        fitViewOptions={{ padding: '15%' }}
         maxZoom={1}
         minZoom={0.1}
         nodes={nodes}

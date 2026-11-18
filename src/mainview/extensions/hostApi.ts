@@ -4,13 +4,10 @@ import { type AssetNodeData, normalizeLinkUrl } from '@/lib/contentTypes';
 import { closeFocusedView, openFocusedItem } from '@/lib/focusedItem';
 import { pickFile } from '@/lib/pickFile';
 import {
-  rpcCancelExtensionTask,
-  rpcListExtensionTasks,
   rpcLoadAttachment,
   rpcOpenAttachment,
   rpcOpenExternalUrl,
   rpcRevealAttachment,
-  rpcScheduleExtensionTask,
   rpcUnfurlLink,
 } from '@/lib/rpc';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -49,7 +46,7 @@ export function createExtensionHostApi(input: {
   nodeId?: string;
   onRequestResize?: (size: Partial<Size>) => Promise<Size>;
 }): GhostBoardHostAPI {
-  const { canvasTypeId, folderId, instanceId, nodeId, onRequestResize } = input;
+  const { folderId, instanceId, nodeId, onRequestResize } = input;
 
   return {
     instance: {
@@ -181,27 +178,6 @@ export function createExtensionHostApi(input: {
         if (!result?.success) {
           toast(m.toast_reveal_failed());
         }
-      },
-    },
-    scheduler: {
-      schedule: async (task) => {
-        await rpcScheduleExtensionTask({
-          ...task,
-          canvasTypeId,
-          instanceId,
-        });
-      },
-      cancel: async (taskId) => {
-        await rpcCancelExtensionTask(instanceId, taskId);
-      },
-      list: async () => {
-        const result = await rpcListExtensionTasks(instanceId);
-        return result.tasks.map((task) => ({
-          id: task.id,
-          fireAt: task.fireAt,
-          ...(task.repeat ? { repeat: task.repeat } : {}),
-          ...(task.payload !== undefined ? { payload: task.payload } : {}),
-        }));
       },
     },
     notifications: {

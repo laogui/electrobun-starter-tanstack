@@ -2,13 +2,8 @@ import type { Node } from '@xyflow/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
-vi.mock('@/lib/nodeQuota', async (original) => ({
-  ...(await original<typeof import('@/lib/nodeQuota')>()),
-  hasNodeQuota: vi.fn(async () => true),
-}));
 const { applyAIActions } = await import('./applyAIActions');
 const { useCanvasStore } = await import('@/store/canvasStore');
-const { hasNodeQuota } = await import('@/lib/nodeQuota');
 const card: Node = {
   id: 'a',
   type: 'card',
@@ -61,29 +56,6 @@ it('rejects all actions when Topic writes are paused', async () => {
     ).applied
   ).toBe(0);
   expect(useCanvasStore.getState().nodes[0]?.position.x).toBe(0);
-});
-it('does not write a batch into a view reopened during a quota request', async () => {
-  let finish!: (allowed: boolean) => void;
-  vi.mocked(hasNodeQuota).mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      })
-  );
-  const pending = applyAIActions(null, [
-    {
-      type: 'create_node',
-      tempId: 'new',
-      nodeKind: 'card',
-      position: { x: 800, y: 800 },
-      data: { title: 'New' },
-    },
-  ]);
-  useCanvasStore.getState().setActiveView('other');
-  useCanvasStore.getState().hydrate([], []);
-  finish(true);
-  expect((await pending).applied).toBe(0);
-  expect(useCanvasStore.getState().nodes).toEqual([]);
 });
 it('protects locked nodes and creates only one history step for a valid batch', async () => {
   useCanvasStore.setState({

@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { buildAbsoluteRects, getNodeSize, type Size } from '@/lib/collision';
-import { hasNodeQuota } from '@/lib/nodeQuota';
 import { resolveNodePlacement } from '@/lib/resolvePlacement';
 import { measureTopicSize } from '@/lib/topicMeasure';
 import {
@@ -384,16 +383,6 @@ export const createTopicsSlice: StateCreator<
       return;
     }
 
-    if (!(await hasNodeQuota(get().nodes))) {
-      // The draft survives a rejected quota check so the user's typing is not
-      // thrown away behind an error toast.
-      return;
-    }
-
-    // Re-read after the await: the license check can span a view switch, a
-    // container deletion, or another commit. Everything below runs
-    // synchronously off this fresh state so the graph the transaction is built
-    // from is the graph it is written to.
     const state = get();
     if (state.topicDraft?.id !== draft.id) {
       return;

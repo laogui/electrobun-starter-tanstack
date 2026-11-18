@@ -29,7 +29,7 @@ const card = (id: string, data: Record<string, unknown>) => ({
 const handlers = () =>
   createCanvasHandlers({
     wsPath: ws,
-    extensionScheduler: { tick: async () => undefined },
+    isDevChannel: false,
   } as RpcContext);
 beforeEach(async () => {
   ws = await mkdtemp(join(tmpdir(), 'canvas-persistence-'));
@@ -59,14 +59,49 @@ afterEach(async () => {
   await rm(ws, { recursive: true, force: true });
 });
 
-it('preserves legacy checklist tags on every migrated placement and after explicit clearing', async () => {
+it('loads a legacy checklist note as an ordinary note that keeps its tags', async () => {
   await writeFile(
     join(ws, 'content/legacy.md'),
     '---\nid: note_legacy\ntitle: Tasks\ndisplayHint: checklist\n---\n- [x] Keep checked\n- [ ] Keep open'
   );
-  await metadata.setNodeMetadata(ws, 'note_legacy', {
-    tag: 'Acceptance',
-    tags: ['Legacy'],
+  await metadata.setNodeMetadata(ws, 'note_legacy', { tags: ['Legacy'] });
+  await writeFile(
+    join(ws, '.ghostboard/views/default.canvas.json'),
+    JSON.stringify({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [card('top', { noteId: 'note_legacy', type: 'checklist' })],
+      edges: [],
+    })
+  );
+  const loaded = await handlers().loadCanvas({ viewId: 'default' });
+  const top = loaded?.nodes[0];
+  expect(top?.type).toBe('card');
+  expect(top?.data).toMatchObject({
+    type: 'text',
+    content: '- [x] Keep checked\n- [ ] Keep open',
+  });
+  expect(metadata.getNodeMetadata(ws, 'note_legacy')?.tags).toEqual(['Legacy']);
+});
+
+it('turns a retired checklist instance into a note with a task list', async () => {
+  const { createExtensionInstance } = await import(
+    './extensions/instanceStore'
+  );
+  await mkdir(join(ws, '.ghostboard/extension-instances'), { recursive: true });
+  await createExtensionInstance(ws, {
+    id: 'extinst_check1',
+    appVersion: '1.0.0',
+    canvasTypeId: 'ghostboard.productivity/checklist',
+    dataVersion: 1,
+    presentation: { title: 'Todo' },
+    state: {
+      title: 'Todo',
+      items: [
+        { id: 'a', text: 'Call source', checked: true },
+        { id: 'b', text: 'Check numbers', checked: false },
+      ],
+    },
   });
   await writeFile(
     join(ws, '.ghostboard/views/default.canvas.json'),
@@ -74,38 +109,91 @@ it('preserves legacy checklist tags on every migrated placement and after explic
       schema: 'ghostboard-canvas/v1',
       viewId: 'default',
       nodes: [
-        card('top', { noteId: 'note_legacy', type: 'checklist' }),
         {
-          id: 'folder',
-          type: 'folder',
-          position: { x: 400, y: 0 },
+          id: 'ext',
+          type: 'extension',
+          position: { x: 0, y: 0 },
           data: {
-            children: [
-              { id: 'child', type: 'card', data: { noteId: 'note_legacy' } },
-            ],
+            canvasTypeId: 'ghostboard.productivity/checklist',
+            instanceId: 'extinst_check1',
           },
         },
       ],
       edges: [],
     })
   );
-  await handlers().loadCanvas({ viewId: 'default' });
-  // The legacy primary tag folds into the single tag list, first position.
-  expect(metadata.getNodeMetadata(ws, 'top')).toEqual({
-    tags: ['Acceptance', 'Legacy'],
+  const loaded = await handlers().loadCanvas({ viewId: 'default' });
+  const node = loaded?.nodes[0];
+  expect(node?.type).toBe('card');
+  expect(node?.data).toMatchObject({
+    title: 'Todo',
+    content: '- [x] Call source\n- [ ] Check numbers',
   });
-  expect(metadata.getNodeMetadata(ws, 'child')).toEqual(
-    metadata.getNodeMetadata(ws, 'top')
+  const disk = JSON.parse(
+    await readFile(join(ws, '.ghostboard/views/default.canvas.json'), 'utf8')
+  ) as { nodes: unknown[] };
+  expect(disk.nodes[0]).toMatchObject({
+    id: 'ext',
+    type: 'card',
+    data: { noteId: node?.data.noteId },
+  });
+  // A second load re-uses the same note instead of creating another.
+  const again = await handlers().loadCanvas({ viewId: 'default' });
+  expect(again?.nodes[0]?.data.noteId).toBe(node?.data.noteId);
+});
+
+it('turns a retired recording into an audio file card on the same attachment', async () => {
+  const { createExtensionInstance } = await import(
+    './extensions/instanceStore'
   );
-  await metadata.setNodeMetadata(ws, 'top', { tag: null, tags: null });
-  await metadata.flushNodeMetadata(ws);
-  metadata.resetNodeMetadataCacheForTests(ws);
-  await handlers().loadCanvas({ viewId: 'default' });
-  expect(metadata.getNodeMetadata(ws, 'top')).toBeUndefined();
-  expect(metadata.getNodeMetadata(ws, 'child')?.tags).toEqual([
-    'Acceptance',
-    'Legacy',
-  ]);
+  await mkdir(join(ws, '.ghostboard/extension-instances'), { recursive: true });
+  await createExtensionInstance(ws, {
+    id: 'extinst_rec1',
+    appVersion: '1.0.0',
+    canvasTypeId: 'ghostboard.media/recording',
+    dataVersion: 1,
+    presentation: { title: '' },
+    state: {
+      title: '',
+      color: '#FFFFFF',
+      fileName: 'memo.m4a',
+      mimeType: 'audio/mp4',
+      recordingNumber: 3,
+      attachmentFile: 'attachments/memo.m4a',
+      duration: 12,
+    },
+  });
+  await writeFile(
+    join(ws, '.ghostboard/views/default.canvas.json'),
+    JSON.stringify({
+      schema: 'ghostboard-canvas/v1',
+      viewId: 'default',
+      nodes: [
+        {
+          id: 'rec',
+          type: 'extension',
+          position: { x: 0, y: 0 },
+          data: {
+            canvasTypeId: 'ghostboard.media/recording',
+            instanceId: 'extinst_rec1',
+          },
+        },
+      ],
+      edges: [],
+    })
+  );
+  const loaded = await handlers().loadCanvas({ viewId: 'default' });
+  const node = loaded?.nodes[0];
+  expect(node?.data).toMatchObject({
+    canvasTypeId: 'ghostboard.media/file',
+    instanceId: 'extinst_rec1_file',
+  });
+  const record = loaded?.extensionInstances?.extinst_rec1_file;
+  expect(record && 'state' in record ? record.state : null).toMatchObject({
+    kind: 'audio',
+    title: 'Recording #3',
+    attachmentFile: 'attachments/memo.m4a',
+  });
 });
 
 it('repairs stranded widget tags on existing extension references without replacing newer placement tags', async () => {

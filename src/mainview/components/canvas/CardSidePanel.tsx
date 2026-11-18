@@ -1,5 +1,5 @@
 import { useReactFlow } from '@xyflow/react';
-import { Expand, Maximize2, Minimize2, X } from 'lucide-react';
+import { Expand, Maximize2, Minimize2, Pin, X } from 'lucide-react';
 import {
   AnimatePresence,
   useAnimate,
@@ -22,6 +22,7 @@ import type { BlockNoteSaveStatus } from '@/components/editor/useBlockNoteSaver'
 import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { revealNodeBesidePanel } from '@/lib/canvasFocus';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
+import { colorToStyle, isColorDark } from '@/lib/colorUtils';
 import { registerFocusedClose } from '@/lib/focusedCloseRequest';
 import { closeFocusedView, findLiveItem } from '@/lib/focusedItem';
 import { EASE_OUT } from '@/lib/motion';
@@ -40,13 +41,17 @@ import {
 } from './focused/FocusedItemBody';
 
 /*
- * Motion rules (docs/remediation-plan.md): two durations only, 120ms for
- * fades and 160ms for the panel slide; only transform and opacity animate;
- * nothing animates under prefers-reduced-motion.
+ * Motion rules (docs/remediation-plan.md, adjusted by the user 2026-11-05 to
+ * make opening visible): the panel slides in from the right over 220ms,
+ * switching cards fades the new content in over 160ms with a short slide,
+ * fades are 120ms; only transform and opacity animate; nothing animates
+ * under prefers-reduced-motion.
  */
 const FADE_S = 0.12;
-const SLIDE_S = 0.16;
-const SLIDE_PX = 24;
+const SLIDE_S = 0.22;
+const SLIDE_PX = 56;
+const SWITCH_S = 0.16;
+const SWITCH_PX = 12;
 
 interface FolderChildEntry {
   data: Record<string, unknown>;
@@ -186,9 +191,16 @@ function useOpenItemControls(node: FocusedItem) {
     requestDeparture(() => closeFocusedView(true));
   }, [requestDeparture]);
 
+  const handleRegisteredLeave = useCallback(
+    (leave?: () => void) => {
+      requestDeparture(leave ?? (() => closeFocusedView(true)));
+    },
+    [requestDeparture]
+  );
+
   useEffect(
-    () => registerFocusedClose(node.id, handleClose),
-    [node.id, handleClose]
+    () => registerFocusedClose(node.id, handleRegisteredLeave),
+    [node.id, handleRegisteredLeave]
   );
 
   const navigate = useCallback(
@@ -282,11 +294,20 @@ function SidePanel({ node }: OpenItemProps) {
   }
   const mode = presentModeRef.current;
   const setFocusedMode = useCanvasStore((s) => s.setFocusedMode);
+  const pinned = useCanvasStore((s) => s.panelPinned);
+  const setPanelPinned = useCanvasStore((s) => s.setPanelPinned);
   const fullscreen = mode === 'fullscreen';
   const { onResizeStart, width } = usePanelWidth();
   const { handleClose, handleSaveStatusChange, lastSavedAt, saveStatus } =
     useOpenItemControls(node);
   const [scope, animate] = useAnimate<HTMLElement>();
+  // The first card rides in with the panel's own slide; only a switch to
+  // another card animates the content.
+  const firstItemKeyRef = useRef(`${node.folderId ?? ''}:${node.id}`);
+  const hasSwitchedRef = useRef(false);
+  if (`${node.folderId ?? ''}:${node.id}` !== firstItemKeyRef.current) {
+    hasSwitchedRef.current = true;
+  }
 
   // Switching between panel and full screen is a 120ms fade, never a morph.
   const previousModeRef = useRef(mode);
@@ -307,6 +328,16 @@ function SidePanel({ node }: OpenItemProps) {
     setFocusedMode(fullscreen ? 'panel' : 'fullscreen');
   }, [fullscreen, setFocusedMode]);
 
+  const rawColor =
+    typeof node.data.color === 'string' && node.data.color.startsWith('#')
+      ? node.data.color
+      : undefined;
+  const panelColor =
+    !isLightbox && node.type !== 'extension'
+      ? (rawColor ?? '#FFFFFF')
+      : undefined;
+  const panelColorStyle = colorToStyle(panelColor);
+
   return (
     <motion.aside
       animate={{ opacity: 1, x: 0 }}
@@ -318,6 +349,9 @@ function SidePanel({ node }: OpenItemProps) {
       )}
       data-card-panel
       data-card-panel-mode={mode}
+      data-surface-theme={
+        panelColor ? (isColorDark(panelColor) ? 'dark' : 'light') : undefined
+      }
       exit={{
         opacity: 0,
         x: reduceMotion ? 0 : SLIDE_PX,
@@ -327,12 +361,13 @@ function SidePanel({ node }: OpenItemProps) {
       ref={scope}
       style={
         fullscreen
-          ? undefined
+          ? panelColorStyle
           : {
               top: SIDE_PANEL_MARGIN,
               right: SIDE_PANEL_MARGIN,
               bottom: SIDE_PANEL_MARGIN,
               width,
+              ...panelColorStyle,
             }
       }
       transition={{ duration: reduceMotion ? 0 : SLIDE_S, ease: EASE_OUT }}
@@ -356,6 +391,22 @@ function SidePanel({ node }: OpenItemProps) {
             <SaveIndicator lastSavedAt={lastSavedAt} status={saveStatus} />
           ) : null}
         </div>
+        {fullscreen ? null : (
+          <button
+            aria-label={pinned ? m.panel_unpin() : m.panel_pin()}
+            aria-pressed={pinned}
+            className={cn(
+              chromeButton,
+              pinned &&
+                'bg-black/6 text-zinc-900 hover:bg-black/10 dark:bg-white/12 dark:text-zinc-100 dark:hover:bg-white/18'
+            )}
+            onClick={() => setPanelPinned((prev) => !prev)}
+            title={pinned ? m.panel_unpin() : m.panel_pin()}
+            type="button"
+          >
+            <Pin className={cn(pinned && 'fill-current')} size={15} />
+          </button>
+        )}
         {isLightbox ? (
           <button
             aria-label={m.panel_view_large()}
@@ -398,11 +449,22 @@ function SidePanel({ node }: OpenItemProps) {
           isLightbox && 'overflow-hidden bg-zinc-950 px-0 pb-0'
         )}
       >
-        <FocusedItemBody
+        <motion.div
+          animate={{ opacity: 1, x: 0 }}
+          className={isText || isLightbox ? 'size-full' : 'min-h-full'}
+          initial={
+            reduceMotion || !hasSwitchedRef.current
+              ? false
+              : { opacity: 0, x: SWITCH_PX }
+          }
           key={`${node.folderId ?? ''}:${node.id}`}
-          node={node}
-          onSaveStatusChange={handleSaveStatusChange}
-        />
+          transition={{ duration: SWITCH_S, ease: EASE_OUT }}
+        >
+          <FocusedItemBody
+            node={node}
+            onSaveStatusChange={handleSaveStatusChange}
+          />
+        </motion.div>
       </div>
     </motion.aside>
   );

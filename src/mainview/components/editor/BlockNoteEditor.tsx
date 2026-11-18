@@ -733,8 +733,13 @@ function BlockNoteSurface({
       markDirty();
       titleDirtyRef.current = true;
       onTitleChange(nextTitle);
+      if (noteId) {
+        const blocks = editor.document as Block[];
+        latestBlocksRef.current = blocks;
+        saveDebounced({ blocks });
+      }
     },
-    [markDirty, onTitleChange]
+    [editor, latestBlocksRef, markDirty, noteId, onTitleChange, saveDebounced]
   );
 
   const handleUseSavedVersion = useCallback(() => {

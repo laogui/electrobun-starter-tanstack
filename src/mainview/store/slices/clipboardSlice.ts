@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { sortNodesByParent } from '@/lib/canvasUtils';
 import { markNodesEntering } from '@/lib/motion';
-import { countCountedNodes, hasNodeQuota } from '@/lib/nodeQuota';
 import * as m from '../../../paraglide/messages.js';
 import {
   buildPastedClipboard,
@@ -13,10 +12,8 @@ import {
 } from '../canvas/clipboardGraph';
 import {
   cloneExtensionReferences,
-  cloneWidgetReferences,
   finishCreatedClones,
   graphContainsExtensionReference,
-  graphContainsWidgetReference,
 } from '../canvas/cloneReferences';
 import type { CanvasState } from '../canvasStore';
 
@@ -56,13 +53,8 @@ export const createClipboardSlice: StateCreator<
   },
 
   pasteClipboard: async (offset = 30) => {
-    const {
-      clipboard,
-      clipboardEdges,
-      nodes: currentNodes,
-      activeViewId,
-      _canvasGeneration,
-    } = get();
+    const { clipboard, clipboardEdges, activeViewId, _canvasGeneration } =
+      get();
     const isCurrent = () =>
       get()._hydrated &&
       get().activeViewId === activeViewId &&
@@ -70,13 +62,7 @@ export const createClipboardSlice: StateCreator<
     if (!isCurrent() || clipboard.length === 0) {
       return;
     }
-    if (!(await hasNodeQuota(currentNodes, countCountedNodes(clipboard)))) {
-      return;
-    }
     const latest = get();
-    if (!isCurrent()) {
-      return;
-    }
     const pasted = buildPastedClipboard(
       clipboard,
       clipboardEdges,
@@ -85,17 +71,7 @@ export const createClipboardSlice: StateCreator<
     );
     const createdIds = new Set<string>();
     try {
-      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-        ? await cloneWidgetReferences(pasted.nodes, (id) => {
-            createdIds.add(id);
-            if (!isCurrent()) {
-              throw new DOMException('Canvas changed', 'AbortError');
-            }
-          })
-        : pasted.nodes;
-      if (!isCurrent()) {
-        return;
-      }
+      let pastedNodes = pasted.nodes;
       if (graphContainsExtensionReference(pastedNodes)) {
         pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
           createdIds.add(id);
@@ -139,13 +115,7 @@ export const createClipboardSlice: StateCreator<
     if (!isCurrent() || selected.length === 0) {
       return;
     }
-    if (!(await hasNodeQuota(nodes, countCountedNodes(selected)))) {
-      return;
-    }
     const latest = get();
-    if (!isCurrent()) {
-      return;
-    }
     const selectedIds = new Set(selected.map((node) => node.id));
     const pasted = buildPastedClipboard(
       selected.map(cleanNodeForClipboard),
@@ -155,17 +125,7 @@ export const createClipboardSlice: StateCreator<
     );
     const createdIds = new Set<string>();
     try {
-      let pastedNodes = graphContainsWidgetReference(pasted.nodes)
-        ? await cloneWidgetReferences(pasted.nodes, (id) => {
-            createdIds.add(id);
-            if (!isCurrent()) {
-              throw new DOMException('Canvas changed', 'AbortError');
-            }
-          })
-        : pasted.nodes;
-      if (!isCurrent()) {
-        return;
-      }
+      let pastedNodes = pasted.nodes;
       if (graphContainsExtensionReference(pastedNodes)) {
         pastedNodes = await cloneExtensionReferences(pastedNodes, (id) => {
           createdIds.add(id);

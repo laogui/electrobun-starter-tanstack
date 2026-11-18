@@ -51,7 +51,7 @@ export function SaveIndicator({
       <div
         aria-live="polite"
         className={cn(
-          'inline-flex items-center gap-2 rounded-full px-3 py-1 text-white/80 text-xs',
+          'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-zinc-500 dark:text-white/80',
           className
         )}
       >
@@ -66,11 +66,11 @@ export function SaveIndicator({
       <div
         aria-live="assertive"
         className={cn(
-          'inline-flex items-center gap-2 rounded-full bg-red-500/20 px-3 py-1 text-red-200 text-xs',
+          'inline-flex items-center gap-2 rounded-full bg-red-500/12 px-3 py-1 text-red-700 text-xs dark:bg-red-500/20 dark:text-red-200',
           className
         )}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-400" />
         <span>{m.save_status_error()}</span>
       </div>
     );
@@ -81,11 +81,11 @@ export function SaveIndicator({
       <div
         aria-live="assertive"
         className={cn(
-          'inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-amber-200 text-xs',
+          'inline-flex items-center gap-2 rounded-full bg-amber-500/15 px-3 py-1 text-amber-800 text-xs dark:bg-amber-500/20 dark:text-amber-200',
           className
         )}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
         <span>{m.save_status_conflict()}</span>
       </div>
     );
@@ -96,11 +96,11 @@ export function SaveIndicator({
       <div
         aria-live="polite"
         className={cn(
-          'inline-flex items-center gap-2 rounded-full px-3 py-1 text-white/60 text-xs',
+          'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-zinc-500 dark:text-white/60',
           className
         )}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
         <span>
           {m.save_status_saved_at({ time: formatClock(lastSavedAt) })}
         </span>

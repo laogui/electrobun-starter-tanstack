@@ -155,7 +155,7 @@ describe('canvas export helpers', () => {
 
     expect(exported).toBe(true);
     expect(instance.fitView).toHaveBeenCalledWith(
-      expect.objectContaining({ padding: 0.08, duration: 0 })
+      expect.objectContaining({ padding: '8%', duration: 0 })
     );
     expect(instance.setViewport).toHaveBeenCalledWith(
       { x: 0, y: 0, zoom: 1 },

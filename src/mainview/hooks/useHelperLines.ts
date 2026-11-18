@@ -1,7 +1,7 @@
-import type {
-  NodeChange,
-  NodeDimensionChange,
-  NodePositionChange,
+import {
+  type DimensionChange,
+  NodeChangeset,
+  type PositionChange,
 } from '@xyflow/react';
 import { type MutableRefObject, useCallback, useRef, useState } from 'react';
 
@@ -15,25 +15,22 @@ import {
 } from '@/lib/repulsion';
 import { useCanvasStore } from '@/store/canvasStore';
 
-function isResizingChange(change: NodeChange): change is NodeDimensionChange & {
+function isResizingChange(
+  change: DimensionChange
+): change is DimensionChange & {
   dimensions: { width: number; height: number };
   resizing: true;
 } {
   return (
-    change.type === 'dimensions' &&
     (change as any).resizing === true &&
     (change as any).dimensions !== undefined
   );
 }
 
-function isPositionChange(change: NodeChange): change is NodePositionChange {
-  return change.type === 'position';
-}
-
 function pickDraggingReference(
-  draggingChanges: NodePositionChange[],
+  draggingChanges: PositionChange[],
   anchorId: string | null | undefined
-): NodePositionChange {
+): PositionChange {
   return (
     (anchorId
       ? draggingChanges.find((change) => change.id === anchorId)
@@ -57,22 +54,21 @@ export function useHelperLines(
   const alignedAxesRef = useRef({ x: false, y: false });
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
+    (changes: NodeChangeset) => {
+      const dimensionChanges = changes.getByType('dimensions');
       // Detect active resize
-      const resizeChange = changes.find(isResizingChange);
+      const resizeChange = dimensionChanges.find(isResizingChange);
 
       // Detect resize end (dimensions change with resizing not true)
-      const resizeEnd = changes.find(
-        (c): c is NodeDimensionChange =>
-          c.type === 'dimensions' &&
-          (c as any).resizing === false &&
-          activeResizeIdRef.current !== null
+      const resizeEnd = dimensionChanges.find(
+        (c) =>
+          (c as any).resizing === false && activeResizeIdRef.current !== null
       );
 
       // Node-drag position changes always carry an explicit `dragging`
       // boolean (from XYDrag). Resize-induced position changes do not, and
       // fall through to the resize branch below.
-      const positionChanges = changes.filter(isPositionChange);
+      const positionChanges = changes.getByType('position');
       const draggingChanges = positionChanges.filter(
         (c) => c.dragging === true && c.position !== undefined
       );
@@ -111,16 +107,18 @@ export function useHelperLines(
               ? 0
               : snapPosition.y - reference.position!.y;
           // Preserve React Flow's drag-state positions across frames.
-          const snapped = changes.map((change) =>
-            isPositionChange(change) && change.dragging && change.position
-              ? {
-                  ...change,
-                  position: {
-                    x: change.position.x + dx,
-                    y: change.position.y + dy,
-                  },
-                }
-              : change
+          const snapped = new NodeChangeset(
+            changes.toArray().map((change) =>
+              change.type === 'position' && change.dragging && change.position
+                ? {
+                    ...change,
+                    position: {
+                      x: change.position.x + dx,
+                      y: change.position.y + dy,
+                    },
+                  }
+                : change
+            )
           );
 
           // Drag repulsion is handled by useNodeDrag (onNodeDrag), which
@@ -132,10 +130,14 @@ export function useHelperLines(
         // raw pointer position. Grid snapping is applied once on release.
         setHelperLineH(undefined);
         setHelperLineV(undefined);
-        const stripped = changes.map((c) =>
-          isPositionChange(c) && c.dragging === false
-            ? { ...c, position: undefined }
-            : c
+        const stripped = new NodeChangeset(
+          changes
+            .toArray()
+            .map((c) =>
+              c.type === 'position' && c.dragging === false
+                ? { ...c, position: undefined }
+                : c
+            )
         );
         setNodes((nds) => {
           const next = applyCanvasNodeChanges(stripped, nds);

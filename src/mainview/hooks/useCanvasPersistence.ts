@@ -276,6 +276,7 @@ export function useCanvasPersistence() {
       useCanvasStore.setState({
         focusedNode: null,
         focusedMode: 'panel',
+        panelPinned: false,
         focusedFolder: null,
         topicDraft: null,
         editingTopicId: null,

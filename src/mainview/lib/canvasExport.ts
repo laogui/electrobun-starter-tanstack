@@ -50,10 +50,10 @@ const EXPORT_MAX_ZOOM = 2;
 const EXPORT_SCREENSHOT_PIXEL_RATIO = 2;
 
 /**
- * Padding ratio for fitView when capturing the screenshot export.
+ * Padding for fitView when capturing the screenshot export.
  * Gives a small margin around all nodes in the captured frame.
  */
-const EXPORT_FIT_VIEW_PADDING = 0.08;
+const EXPORT_FIT_VIEW_PADDING = '8%';
 
 /**
  * Time in ms to wait after programmatic viewport changes before capturing.

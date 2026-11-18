@@ -1,3 +1,4 @@
+@layer theme, base, xyflow, components, utilities;
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -1005,13 +1006,6 @@ body.resizing-nwse * {
 }
 [data-card-panel-mode="panel"] [data-content-type="heading"][data-level="3"] {
   --level: 1.15em;
-}
-
-/* The card open in the side panel stays on the canvas, outlined. */
-.react-flow__node.is-open-in-panel {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-  border-radius: 14px;
 }
 
 /* Keep the overview toggle visibly selected while the map is expanded. */

@@ -1,5 +1,5 @@
 // Canvas store slice: Node state and node-level mutations (data, lock, z-order, colour, delete).
-import type { Node, NodeChange } from '@xyflow/react';
+import type { Node, NodeChangeset } from '@xyflow/react';
 import { toast } from 'sonner';
 import type { StateCreator } from 'zustand';
 import { applyCanvasNodeChanges } from '@/lib/applyCanvasNodeChanges';
@@ -23,7 +23,7 @@ function nodeZIndex(node: Node): number {
 }
 
 export interface NodesSlice {
-  applyNodesChange: (changes: NodeChange[]) => void;
+  applyNodesChange: (changes: NodeChangeset) => void;
   applyNoteTitles: (
     titles: Record<string, string>,
     options?: { snapshot?: boolean }

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { FolderChildPreview } from '@/components/canvas/FolderChildPreview';
 import { FolderExpandedChildVisual } from '@/components/canvas/nodes/FolderExpandedChildNode';
+import { prefetchBlockNoteForData } from '@/lib/blockNotePrefetch';
 import { isFocusableNode } from '@/lib/canvasNodePredicates';
 import { openFocusedItem } from '@/lib/focusedItem';
 import {
@@ -18,6 +19,7 @@ import {
 } from '@/lib/folderExpansion';
 import { nodeRenderPropsEqual } from '@/lib/nodeRenderPropsEqual';
 import { cn } from '@/lib/utils';
+import { useCanvasStore } from '@/store/canvasStore';
 import * as m from '../../../../paraglide/messages.js';
 import { NodeHandles } from './_shared/NodeHandles';
 
@@ -457,14 +459,15 @@ const FolderNode = ({
         return;
       }
       // Widgets edit in place; only note-like kinds open in the side panel.
-      if (
-        !isFocusableNode(
-          item.child.type,
-          item.child.data as Record<string, unknown>
-        )
-      ) {
+      const childData = item.child.data as Record<string, unknown>;
+      if (!isFocusableNode(item.child.type, childData)) {
         return;
       }
+      const open = useCanvasStore.getState().focusedNode;
+      if (open?.id === item.child.id && open?.folderId === id) {
+        return;
+      }
+      prefetchBlockNoteForData(childData);
       openFocusedItem({
         data: item.child.data,
         folderId: id,

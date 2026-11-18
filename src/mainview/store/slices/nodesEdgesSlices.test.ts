@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { Edge, Node } from '@xyflow/react';
+import { type Edge, type Node, NodeChangeset } from '@xyflow/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => {
@@ -221,30 +221,34 @@ describe('nodesSlice', () => {
     });
 
     it('applies React Flow position changes without recording history', () => {
-      state().applyNodesChange([
-        {
-          dragging: true,
-          id: 'a',
-          position: { x: 50, y: 60 },
-          type: 'position',
-        },
-      ]);
+      state().applyNodesChange(
+        new NodeChangeset([
+          {
+            dragging: true,
+            id: 'a',
+            position: { x: 50, y: 60 },
+            type: 'position',
+          },
+        ])
+      );
       expect(byId('a')?.position).toEqual({ x: 50, y: 60 });
-      state().applyNodesChange([
-        {
-          dragging: false,
-          id: 'a',
-          position: { x: 70, y: 80 },
-          type: 'position',
-        },
-      ]);
+      state().applyNodesChange(
+        new NodeChangeset([
+          {
+            dragging: false,
+            id: 'a',
+            position: { x: 70, y: 80 },
+            type: 'position',
+          },
+        ])
+      );
       expect(byId('a')?.position).toEqual({ x: 70, y: 80 });
       expect(state().canUndo()).toBe(false);
     });
 
     it('keeps the node array identity when nothing changed', () => {
       const before = state().nodes;
-      state().applyNodesChange([]);
+      state().applyNodesChange(new NodeChangeset([]));
       expect(state().nodes).toBe(before);
     });
 

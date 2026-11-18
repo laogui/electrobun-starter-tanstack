@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type {
   Connection,
+  EdgeChangeset,
   Node,
   OnMoveEnd,
   ReactFlowInstance,
@@ -59,7 +60,7 @@ import {
   extractLinkUrl,
 } from '@/lib/contentTypes';
 import type { CanvasCreateRequest } from '@/lib/creatableNodes';
-import { openFocusedItem } from '@/lib/focusedItem';
+import { closeFocusedView, openFocusedItem } from '@/lib/focusedItem';
 import { isFolderExpandedChildNode } from '@/lib/folderExpansion';
 import { applyIfNodeUnchanged, captureNodeData } from '@/lib/nodeWriteGuard';
 import {
@@ -260,6 +261,12 @@ function CanvasComponent() {
       return;
     }
     const folderId = focusedFolder.id;
+    if (useCanvasStore.getState().focusedNode?.folderId === folderId) {
+      closeFocusedView();
+      if (useCanvasStore.getState().focusedNode?.folderId === folderId) {
+        return;
+      }
+    }
     setClosingFolderId(focusedFolder.id);
     setFolderTransitionLocked(true);
     // Motion completion owns the normal close path. This longer timer is only
@@ -685,7 +692,7 @@ function CanvasComponent() {
   }, []);
 
   const onEdgesChange = useCallback(
-    (changes: any) => {
+    (changes: EdgeChangeset) => {
       applyEdgesChange(changes);
     },
     [applyEdgesChange]
@@ -746,21 +753,30 @@ function CanvasComponent() {
           rect,
         });
       } else if (node.type === 'folder') {
+        if (useCanvasStore.getState().focusedNode) {
+          closeFocusedView();
+          if (useCanvasStore.getState().focusedNode) {
+            return;
+          }
+        }
         setFocusedFolder({ id: node.id, data: node.data, rect });
       } else if (
         isFocusableNode(node.type, node.data as Record<string, unknown>)
       ) {
         prefetchBlockNoteForData(node.data as Record<string, unknown>);
-        if (
-          openFocusedItem({
+        openFocusedItem(
+          {
             id: node.id,
             type: node.type,
             data: node.data,
             rect,
-          })
-        ) {
-          revealNodeBesidePanel(node.id, rfInstance.current);
-        }
+          },
+          {
+            onOpened: () => {
+              revealNodeBesidePanel(node.id, rfInstance.current);
+            },
+          }
+        );
       }
     },
     [setFocusedFolder]
@@ -785,11 +801,19 @@ function CanvasComponent() {
       const openId = isFolderExpandedChildNode(node)
         ? node.data.child.id
         : node.id;
+      const openFolderId = isFolderExpandedChildNode(node)
+        ? node.data.folderId
+        : undefined;
       if (
-        !isOpenable ||
-        state.focusedNode?.id === openId ||
-        state.focusedFolder?.id === node.id
+        state.focusedNode?.id === openId &&
+        state.focusedNode?.folderId === openFolderId
       ) {
+        if (!openFolderId) {
+          revealNodeBesidePanel(node.id, rfInstance.current);
+        }
+        return;
+      }
+      if (!isOpenable || state.focusedFolder?.id === node.id) {
         return;
       }
       openNodeFocusedView(node);
@@ -807,8 +831,12 @@ function CanvasComponent() {
       const openId = isFolderExpandedChildNode(node)
         ? node.data.child.id
         : node.id;
+      const openFolderId = isFolderExpandedChildNode(node)
+        ? node.data.folderId
+        : undefined;
       if (
-        state.focusedNode?.id === openId ||
+        (state.focusedNode?.id === openId &&
+          state.focusedNode?.folderId === openFolderId) ||
         state.focusedFolder?.id === node.id
       ) {
         return;

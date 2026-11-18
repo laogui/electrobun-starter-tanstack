@@ -1,4 +1,4 @@
-import type { Node, NodePositionChange } from '@xyflow/react';
+import type { Node, PositionChange } from '@xyflow/react';
 
 interface HelperLineResult {
   horizontal: number | undefined;
@@ -31,7 +31,7 @@ function getNodeDimensions(node: Node) {
 }
 
 export function getHelperLines(
-  change: NodePositionChange,
+  change: PositionChange,
   nodes: Node[],
   excludeIds?: Set<string>
 ): HelperLineResult {

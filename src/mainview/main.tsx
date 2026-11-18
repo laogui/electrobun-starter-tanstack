@@ -12,7 +12,7 @@ import { connectNoteChangeSync } from '@/lib/noteChangeSync';
 import { startPerfMarks } from '@/lib/perfMarks';
 import { router } from '@/router';
 
-import '@xyflow/react/dist/style.css';
+import '@xyflow/react/style.css';
 import 'overlayscrollbars/overlayscrollbars.css';
 import './index.css';
 

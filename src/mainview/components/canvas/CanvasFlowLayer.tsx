@@ -1,8 +1,8 @@
 import type {
   Connection,
-  EdgeChange,
+  EdgeChangeset,
   Node,
-  NodeChange,
+  NodeChangeset,
   OnMoveEnd,
   ReactFlowInstance,
 } from '@xyflow/react';
@@ -31,6 +31,7 @@ import {
 import { isPinnedSticky } from '@/lib/canvasNodePredicates';
 import { clearCanvasGraphSelection } from '@/lib/clearCanvasGraphSelection';
 import { resolveEdgeMarkers } from '@/lib/edgeMarkers';
+import { closeFocusedView } from '@/lib/focusedItem';
 import {
   buildFolderExpansionNodes,
   FOLDER_EXPANDED_CHILD_NODE_TYPE,
@@ -96,7 +97,7 @@ export interface CanvasFlowLayerProps {
   onDragOver: (event: React.DragEvent) => void;
   onDrop: (event: React.DragEvent) => void;
   onEdgeContextMenu: ReturnType<typeof useContextMenu>['onEdgeContextMenu'];
-  onEdgesChange: (changes: EdgeChange[]) => void;
+  onEdgesChange: (changes: EdgeChangeset) => void;
   onFolderChildContextMenu: ReturnType<
     typeof useContextMenu
   >['onFolderChildContextMenu'];
@@ -136,6 +137,34 @@ function swallowNextClick() {
   }, 100);
 }
 
+/**
+ * True when the press landed on blank canvas or the empty interior of a Group
+ * container (excluding floating chrome, edges, handles, resize controls, and
+ * the group's own label header).
+ */
+function isBlankCanvasSurfaceTarget(
+  target: Element | null,
+  nodeElement: Element | null
+): boolean {
+  if (!target) {
+    return false;
+  }
+  if (
+    target.closest(
+      '.react-flow__panel, .react-flow__edge, .react-flow__edgelabel-renderer, .react-flow__handle, .react-flow__resize-control, .react-flow__nodesselection-rect, button, input, textarea, [contenteditable="true"]'
+    )
+  ) {
+    return false;
+  }
+  if (!nodeElement) {
+    return Boolean(target.closest('.react-flow__pane'));
+  }
+  return (
+    nodeElement.classList.contains('react-flow__node-group') &&
+    !target.closest('[data-group-header]')
+  );
+}
+
 function CanvasFlowLayerComponent({
   canvasBackground,
   closeFolderWithTransition,
@@ -164,7 +193,6 @@ function CanvasFlowLayerComponent({
   const topicDraft = useCanvasStore((s) => s.topicDraft);
   const topicEditPreviews = useCanvasStore((s) => s.topicEditPreviews);
   const activeViewId = useCanvasStore((s) => s.activeViewId);
-  const focusedNodeId = useCanvasStore((s) => s.focusedNode?.id);
   const focusedFolderId = useCanvasStore((s) => s.focusedFolder?.id);
   const sessionViewport = useCanvasStore((s) => s.sessionViewport);
   const canvasShowMinimap = useAppSettingsStore((s) => s.canvasShowMinimap);
@@ -260,6 +288,53 @@ function CanvasFlowLayerComponent({
     [closeFolderWithTransition]
   );
 
+  // A stationary click (<= 4px) on blank canvas or a Group's empty interior
+  // closes the unpinned side panel; drags (marquee, Space-pan, resizing) and
+  // clicks on cards, stickies, topics, edges, or chrome leave it open.
+  const armPanelOutsideClose = useCallback(
+    (
+      event: React.PointerEvent,
+      target: Element | null,
+      nodeElement: Element | null
+    ) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const initial = useCanvasStore.getState();
+      if (
+        !initial.focusedNode ||
+        initial.focusedMode !== 'panel' ||
+        initial.panelPinned ||
+        initial.focusedFolder ||
+        !isBlankCanvasSurfaceTarget(target, nodeElement)
+      ) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      window.addEventListener(
+        'pointerup',
+        (up) => {
+          if (Math.hypot(up.clientX - startX, up.clientY - startY) > 4) {
+            return;
+          }
+          const latest = useCanvasStore.getState();
+          if (
+            !latest.focusedNode ||
+            latest.focusedMode !== 'panel' ||
+            latest.panelPinned ||
+            latest.focusedFolder
+          ) {
+            return;
+          }
+          closeFocusedView();
+        },
+        { once: true }
+      );
+    },
+    []
+  );
+
   // Click model: a click on a card opens it and never selects it; selection
   // comes only from a marquee drag on the pane. React Flow still emits a
   // select-only batch when a card is pressed, so a press on a node arms this
@@ -273,6 +348,7 @@ function CanvasFlowLayerComponent({
       const nodeElement = target?.closest?.('.react-flow__node') ?? null;
       const onNode = Boolean(nodeElement);
       armFolderOutsideClose(event, nodeElement);
+      armPanelOutsideClose(event, target, nodeElement);
       suppressClickSelectRef.current = onNode;
       if (!onNode) {
         return;
@@ -287,15 +363,15 @@ function CanvasFlowLayerComponent({
         { once: true }
       );
     },
-    [armFolderOutsideClose]
+    [armFolderOutsideClose, armPanelOutsideClose]
   );
 
   const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
+    (changes: NodeChangeset) => {
       if (
         suppressClickSelectRef.current &&
-        changes.length > 0 &&
-        changes.every((change) => change.type === 'select')
+        !changes.isEmpty() &&
+        changes.toArray().every((change) => change.type === 'select')
       ) {
         suppressClickSelectRef.current = false;
         clearCanvasGraphSelection();
@@ -354,7 +430,6 @@ function CanvasFlowLayerComponent({
       isClosing: boolean;
       isDropTarget: boolean;
       isExpanded: boolean;
-      isOpenInPanel: boolean;
       isRejectingDrop: boolean;
       renderZIndex: number | undefined;
       result: Node;
@@ -401,7 +476,6 @@ function CanvasFlowLayerComponent({
         isClosing: boolean;
         isDropTarget: boolean;
         isExpanded: boolean;
-        isOpenInPanel: boolean;
         isRejectingDrop: boolean;
         renderZIndex: number | undefined;
         result: Node;
@@ -414,8 +488,6 @@ function CanvasFlowLayerComponent({
         continue;
       }
       const isExpansionChild = isFolderExpandedChildNode(node);
-      // The card open in the side panel stays visible, outlined.
-      const isOpenInPanel = !isExpansionChild && focusedNodeId === node.id;
       const folderPeekClass = focusedFolderId
         ? focusedFolderId === node.id
           ? 'folder-peek-anchor'
@@ -440,7 +512,6 @@ function CanvasFlowLayerComponent({
         cached &&
         cached.source.type === node.type &&
         cached.source.data === node.data &&
-        cached.isOpenInPanel === isOpenInPanel &&
         cached.folderPeekClass === folderPeekClass &&
         cached.expansionChildren === expansionChildren &&
         cached.isExpanded === isExpanded &&
@@ -465,7 +536,6 @@ function CanvasFlowLayerComponent({
         node.className,
         locked ? 'is-locked' : '',
         folderPeekClass,
-        isOpenInPanel ? 'is-open-in-panel' : '',
         isNodeEntering(node.id) ? 'node-entering' : '',
       ]
         .filter(Boolean)
@@ -506,7 +576,6 @@ function CanvasFlowLayerComponent({
         isClosing,
         isDropTarget,
         isExpanded,
-        isOpenInPanel,
         isRejectingDrop,
         renderZIndex,
         result: decorated,
@@ -518,10 +587,6 @@ function CanvasFlowLayerComponent({
     return result;
   }, [
     renderSourceNodes,
-    // The memo body only reads `focusedNodeId` (to outline the open card on
-    // canvas), so depending on the whole object would re-run this O(n) loop on
-    // every rect/data change to the focused item even though the id is stable.
-    focusedNodeId,
     focusedFolderId,
     closingFolderId,
     dropTargetId,
